@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+
+// The LINKS_TO projection is the graph mirror; its own SQL is covered in
+// packages/db/src/graph-sync.test.ts. Here it only has to be called.
+const graph = vi.hoisted(() => ({ replaceGraphEdgesFromSource: vi.fn(async () => undefined) }));
+vi.mock("@dpf/db/graph-sync", () => graph);
 import {
   commitIngestProposal,
   type CommitProposalInput,
@@ -72,7 +77,19 @@ function makeMockClient(seed: FakePage[] = []) {
     throw new Error(`update: page not found ${args.where.id}`);
   });
 
-  const wikiPage = { findFirst, create, update, findUnique: vi.fn(), findMany: vi.fn() };
+  // The shared link writer (BI-23900D0A) resolves targets in one batch:
+  // the page's own organization, then the null-organization corpus.
+  const findMany = vi.fn(async (args: { where: { slug?: { in: string[] }; OR?: Array<{ organizationId: string | null }>; organizationId?: null } }) => {
+    const w = args.where;
+    return [...pages.values()].filter((p) => {
+      if (w.slug && !w.slug.in.includes(p.slug)) return false;
+      if (w.OR) return w.OR.some((c) => c.organizationId === p.organizationId);
+      if (w.organizationId === null) return p.organizationId === null;
+      return true;
+    });
+  });
+
+  const wikiPage = { findFirst, create, update, findUnique: vi.fn(), findMany };
 
   const revisionCreate = vi.fn(async (args: { data: Record<string, unknown> }) => {
     revisions.push(args.data);
@@ -85,7 +102,23 @@ function makeMockClient(seed: FakePage[] = []) {
     links.push(args.create);
     return args.create;
   });
-  const wikiPageLink = { upsert: linkUpsert };
+  const wikiPageLink = {
+    upsert: linkUpsert,
+    findMany: vi.fn(async (args: { where: { fromPageId: string } }) =>
+      links.filter((l) => l.fromPageId === args.where.fromPageId).map((l) => ({ toPageId: l.toPageId })),
+    ),
+    deleteMany: vi.fn(async (args: { where: { fromPageId: string; toPageId: { in: string[] } } }) => {
+      for (let i = links.length - 1; i >= 0; i--) {
+        const l = links[i]!;
+        if (l.fromPageId === args.where.fromPageId && args.where.toPageId.in.includes(l.toPageId)) links.splice(i, 1);
+      }
+      return { count: 0 };
+    }),
+    createMany: vi.fn(async (args: { data: Array<{ fromPageId: string; toPageId: string }> }) => {
+      links.push(...args.data);
+      return { count: args.data.length };
+    }),
+  };
 
   const sourceUpsert = vi.fn(async (args: { create: { pageId: string; sourceId: string } }) => {
     sources.push(args.create);
@@ -498,5 +531,53 @@ describe("commitIngestProposal — audit event", () => {
       "wp_existing",
     ]);
     expect(result.touchedPageIds).toEqual(["wp_existing"]);
+  });
+});
+
+describe("commitIngestProposal — link rows follow the body (BI-23900D0A)", () => {
+  it("stores a labelled link to a kernel page, drops a removed link, and projects LINKS_TO", async () => {
+    graph.replaceGraphEdgesFromSource.mockClear();
+    const { db, links } = makeMockClient([
+      {
+        id: "wp_existing",
+        slug: "entities/portfolio",
+        body: `## Definition
+
+See [[principles/no-assumptions|never assume]].
+
+${"existing-content ".repeat(80)}`,
+        title: "Portfolio",
+        pageKind: "entity",
+        status: "published",
+        isKernel: false,
+        organizationId: "org_test",
+      },
+      {
+        id: "wp_kernel_principle",
+        slug: "principles/no-assumptions",
+        body: "kernel",
+        title: "No assumptions",
+        pageKind: "principle",
+        status: "published",
+        isKernel: true,
+        organizationId: null,
+      },
+    ]);
+    // A link left over from an earlier body that no longer names it.
+    links.push({ fromPageId: "wp_existing", toPageId: "wp_gone_from_body" });
+
+    const result = await commitIngestProposal(
+      db,
+      makeInput({
+        ...emptyProposal(),
+        claims: [claimSample({ targetSlug: "entities/portfolio", confidence: 0.9 })],
+      }),
+    );
+
+    expect(result.errors).toEqual([]);
+    expect(links.filter((l) => l.fromPageId === "wp_existing")).toEqual([
+      { fromPageId: "wp_existing", toPageId: "wp_kernel_principle" },
+    ]);
+    expect(graph.replaceGraphEdgesFromSource).toHaveBeenCalledWith("wp_existing", "LINKS_TO", ["wp_kernel_principle"]);
   });
 });

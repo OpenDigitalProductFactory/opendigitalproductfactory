@@ -436,7 +436,17 @@ export {
   syncDocumentReference,
   syncEaElement,
   syncEaRelationship,
+  replaceGraphEdgesFromSource,
 } from "./graph-sync";
+// BI-23900D0A: the one writer for a wiki page's out-links, and its backfill.
+export {
+  replaceWikiPageOutLinks,
+  reconcileWikiPageLinks,
+  type WikiLinkClient,
+  type ProjectWikiLinks,
+  type ReplaceWikiPageOutLinksResult,
+  type ReconcileWikiPageLinksResult,
+} from "./wiki-links";
 export {
   CODE_GRAPH_KEY,
   DOC_GRAPH_KEY,

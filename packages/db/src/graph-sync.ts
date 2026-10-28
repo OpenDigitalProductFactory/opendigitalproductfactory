@@ -85,6 +85,30 @@ export async function upsertGraphEdge(
   );
 }
 
+/** Make `srcKey`'s outgoing `relType` edges exactly `dstKeys` (BI-23900D0A).
+ *
+ *  Upsert alone can only add, so an edge whose source body no longer names its
+ *  target stayed in the mirror between two live pages. This deletes the edges
+ *  of that one type from that one source that are no longer wanted, then
+ *  upserts the rest. Edges of other types, and edges from other sources, are
+ *  never touched. */
+export async function replaceGraphEdgesFromSource(
+  srcKey: string,
+  relType: string,
+  dstKeys: string[],
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge
+      WHERE src_key = $1 AND rel_type = $2 AND NOT (dst_key = ANY($3::text[]))`,
+    srcKey,
+    relType,
+    dstKeys,
+  );
+  for (const dstKey of dstKeys) {
+    await upsertGraphEdge(srcKey, dstKey, relType);
+  }
+}
+
 /** Resolve a Prisma TaxonomyNode FK (= TaxonomyNode.id, stored as the `pgId`
  *  property) to its semantic `nodeId`, which is the graph_node.key the read side
  *  uses. Returns null when the taxonomy row is absent. */
@@ -236,13 +260,6 @@ export async function syncWikiPage(page: {
   }
 }
 
-/** Upsert the page-to-page link edge (`WikiPageLink`). */
-export async function syncWikiPageLink(link: {
-  fromPageId: string;
-  toPageId: string;
-}): Promise<void> {
-  await upsertGraphEdge(link.fromPageId, link.toPageId, "LINKS_TO");
-}
 
 export async function syncDocumentNode(doc: {
   documentId: string;

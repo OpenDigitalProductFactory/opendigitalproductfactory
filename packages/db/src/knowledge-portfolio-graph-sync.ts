@@ -19,9 +19,9 @@ import {
   syncPortfolio,
   syncTaxonomyNode,
   syncWikiPage,
-  syncWikiPageLink,
   wikiPageLabel,
 } from "./graph-sync";
+import { reconcileWikiPageLinks } from "./wiki-links";
 
 /** Remove mirrored wiki nodes whose source page is gone, and the derived edges
  *  that no longer exist. Scoped by the `Wiki__` label prefix and by the two
@@ -74,15 +74,15 @@ async function rebuildKnowledge(): Promise<void> {
       .join(", ")})`,
   );
 
-  // Page-to-page links. `WikiPageLink` is a pure join table, so both endpoints are
-  // guaranteed present by the loop above.
-  const links = await prisma.wikiPageLink.findMany({
-    select: { fromPageId: true, toPageId: true },
-  });
-  for (const link of links) {
-    await syncWikiPageLink(link);
-  }
-  console.log(`Synced ${links.length} WikiPageLinks`);
+  // Page-to-page links (BI-23900D0A). Re-derive every page's `WikiPageLink` rows
+  // from its body, which is also the backfill, and replace its `LINKS_TO` edges
+  // to match. Upserting from the rows alone left a link removed from a body in
+  // both stores for as long as both pages lived.
+  const links = await reconcileWikiPageLinks(prisma);
+  console.log(
+    `Reconciled WikiPageLinks from ${links.pages} page bodies: +${links.added} -${links.removed}` +
+      (links.projectionErrors > 0 ? `, ${links.projectionErrors} LINKS_TO projection error(s)` : ""),
+  );
 
   const overrides = pages.filter((p) => p.kernelPageId).length;
   console.log(`Synced ${overrides} kernel-override edges`);

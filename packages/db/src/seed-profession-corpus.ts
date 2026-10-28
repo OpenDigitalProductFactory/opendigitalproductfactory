@@ -12,7 +12,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { Prisma, PrismaClient } from "../generated/client/client";
 import { extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
-import { appendRevision, attachSource, linkPages, upsertWikiPage } from "./wiki-store";
+import { appendRevision, attachSource, upsertWikiPage } from "./wiki-store";
+import { replaceWikiPageOutLinks } from "./wiki-links";
 import { extractWikilinks, professionCorpusPageSlug } from "./wiki-frontmatter";
 import type { WikiPageFrontmatter } from "./wiki-frontmatter";
 import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "./provider-compliance-source-registry";
@@ -2084,13 +2085,11 @@ export async function seedProfessionCorpus(
     const fromId = slugToId.get(fromSlug);
     if (!fromId) continue;
     for (const toSlug of extractWikilinks(body)) {
-      const toId = slugToId.get(toSlug);
-      if (!toId) {
-        orphanLinks.push({ from: fromSlug, to: toSlug });
-        continue;
-      }
-      await linkPages(prisma, { fromPageId: fromId, toPageId: toId });
+      if (!slugToId.has(toSlug)) orphanLinks.push({ from: fromSlug, to: toSlug });
     }
+    // Replace semantics (BI-23900D0A): the stored links become exactly what the
+    // body says, so a link removed from the file is removed from the install.
+    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body });
   }
 
   if (orphanLinks.length > 0) {
