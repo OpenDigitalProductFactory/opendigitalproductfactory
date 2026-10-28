@@ -26,3 +26,20 @@ describe("engagement native image composition", () => {
     expect(() => interpretEngagementNativeRuntime({ ...raw, configurations: [{ ...configuration(), Config: {} }] })).toThrow();
   });
 });
+
+it("accepts the existing canonical ngram-mod/residency tuple while binding every observed configuration byte", () => {
+  const raw = observations();
+  const observed = { ...configuration(), Config: { "context-size": 40960, "runtime-flags": ["--spec-type", "ngram-mod"], keep_alive: "-1" } };
+  const result = interpretEngagementNativeRuntime({ ...raw, configurations: [observed] });
+  expect(result.contextTokens).toBe(40960);
+  expect(result.runtimeConfigurationDigest).not.toBe(interpretEngagementNativeRuntime(raw).runtimeConfigurationDigest);
+});
+it.each([
+  { "runtime-flags": ["--chat-template", "substitute"] },
+  { "runtime-flags": ["--spec-type", "draft"] },
+  { "runtime-flags": ["--spec-type", "ngram-mod", "--other"] },
+  { keep_alive: 1 }, { keep_alive: "10m" }, { unknown: true },
+])("refuses unqualified native configuration options %j", extra => {
+  const raw = observations();
+  expect(() => interpretEngagementNativeRuntime({ ...raw, configurations: [{ ...configuration(), Config: { ...configuration().Config, ...extra } }] })).toThrow();
+});

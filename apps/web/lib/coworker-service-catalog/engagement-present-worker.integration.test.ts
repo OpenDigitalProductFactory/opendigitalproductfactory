@@ -117,7 +117,7 @@ beforeEach(() => {
     let value: unknown;
     if (url.endsWith("/version")) value = { version: catalog.runtimeVersion };
     else if (url.endsWith("/engines/status")) value = { "llama.cpp": `Running: llama.cpp ${catalog.engineBuild} (sha256:${catalog.engineArchiveDigest}) ${catalog.engineSourceCommit.slice(0, 7)}` };
-    else if (url.includes("/engines/_configure?")) value = [{ Backend: "llama.cpp", Mode: "completion", Model: catalog.logicalModelRef, ModelID: catalog.modelDigest, Config: { "context-size": 40960 } }];
+    else if (url.includes("/engines/_configure?")) value = [{ Backend: "llama.cpp", Mode: "completion", Model: catalog.logicalModelRef, ModelID: catalog.modelDigest, Config: { "context-size": 40960, "runtime-flags": ["--spec-type", "ngram-mod"], keep_alive: "-1" } }];
     else if (url.includes("/models/")) value = { ...structuredClone(metadata), id: catalog.modelDigest };
     else if (url.endsWith("/engines/ps")) value = [];
     else if (url.endsWith("/count_tokens")) { value = { input_tokens: 100 }; if (m.scenario === "deny-after-count") m.allowed = false;

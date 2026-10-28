@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { canonicalLocalModelKey } from "../inference/local-model-management";
+import { isQualifiedSpeculativeFlags, LOCAL_RUNNER_KEEP_ALIVE } from "../inference/dmr-runtime-config";
 const hash = (v: unknown) => createHash("sha256").update(canonicalJson(v)).digest("hex");
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 /** Retained administrator observation of this physical native composition. This
@@ -15,7 +16,7 @@ export const ENGAGEMENT_NATIVE_COMPOSITION = Object.freeze({
   modelDigest: "sha256:b9c79f8f56a90a86860d20d8025fde1ac0c03ef282b4f439b271abb7e8c72624",
   logicalModelConfigurationDigest: "f2cad47727f7d07e4a51f11c4499d90252ee96b530d7a508a06359ecec91dd40",
   templateDigest: "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041", templateCharacters: 8952,
-  inputs: "text-images-and-one-response-function", thinking: false, responseModelIdentity: "dmr-content-addressed-bundle-v1",
+  inputs: "text-images-and-one-response-function", runtimeOptions: "canonical-ngram-mod-and-residency-v1", thinking: false, responseModelIdentity: "dmr-content-addressed-bundle-v1",
   trustBoundary: "native-runtime-and-privileged-host-administrator",
 } as const);
 export const engagementNativeCatalogDigest = () => hash(ENGAGEMENT_NATIVE_COMPOSITION);
@@ -29,7 +30,9 @@ export function interpretEngagementNativeRuntime(raw: { version: unknown; engine
   const config = raw.configurations[0];
   if (config.Backend !== "llama.cpp" || config.Mode !== "completion" || typeof config.Model !== "string"
     || canonicalLocalModelKey(config.Model) !== canonicalLocalModelKey(c.logicalModelRef) || config.ModelID !== c.modelDigest
-    || !object(config.Config) || Object.keys(config.Config).some(k => k !== "context-size")
+    || !object(config.Config) || Object.entries(config.Config).some(([key,value]) => key !== "context-size"
+      && !(key === "keep_alive" && value === LOCAL_RUNNER_KEEP_ALIVE)
+      && !(key === "runtime-flags" && isQualifiedSpeculativeFlags(value)))
     || !Number.isSafeInteger(config.Config["context-size"]) || Number(config.Config["context-size"]) <= 0) return fail();
   if (!object(raw.metadata) || raw.metadata.id !== c.modelDigest || !object(raw.metadata.config)
     || hash(raw.metadata.config) !== c.logicalModelConfigurationDigest || !object(raw.metadata.config.gguf)) return fail();

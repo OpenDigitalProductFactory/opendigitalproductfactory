@@ -471,3 +471,16 @@ Relevant primary source:
 - [DMR native arguments](https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/backends/llamacpp/llamacpp_config.go)
 - [DMR bundle identity](https://github.com/docker/model-runner/blob/v1.2.9/pkg/distribution/internal/store/bundles.go)
 - [llama.cpp response model](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp)
+
+### Current runtime options, October 28
+
+The existing BI-0D208EBB runtime owner qualified the exact n-gram pair on the
+same pinned b9879 engine. The Critic catalog reuses its pure
+isQualifiedSpeculativeFlags predicate and LOCAL_RUNNER_KEEP_ALIVE constant.
+Only context-size, that exact optional pair and optional keep_alive=-1 are
+accepted; unknown keys, other flags and other residency values still refuse.
+The full observed configuration remains hashed and must match before generation.
+No setting is dropped, rewritten or activated by this adapter. Speculation can
+change numerical decoding behavior; this is not a bit-stable output claim.
+Model, engine archive/source, template, actual image/body count, native authority
+and budget checks remain separate and unchanged. This adds no execution grant.
