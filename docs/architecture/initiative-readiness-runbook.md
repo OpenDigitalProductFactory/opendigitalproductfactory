@@ -275,6 +275,11 @@ authenticated human and acting coworker; another user's or coworker's request
 returns the same unavailable response as an unknown ID. It reveals no arguments
 or raw tool results and confers no workroom admission or reviewer authority.
 
+`get_my_approval_status(mode: "pending")` lists requests from the acting
+coworker only. Its result carries `scope.coversOwnerInbox: false` and
+`ownerInboxTotal: null`. Never report its count, including zero, as the owner's
+Inbox total; other coworkers' requests are excluded (BI-83638ACC).
+
 An approved request without execution evidence remains unknown. Confirm the
 target operation's actual state before retrying; HTTP success from the approval
 route alone is not delivery or acceptance evidence. The Inbox projects the same
