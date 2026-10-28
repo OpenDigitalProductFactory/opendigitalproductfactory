@@ -270,7 +270,7 @@ describe("dispatchDueDemand", () => {
 
     expect(result).toEqual({
       attempted: 1, delivered: 1, deferred: 0, deadLettered: 0,
-      unreachable: 0, quarantinedLinks: [], withdrawn: 0,
+      unreachable: 0, quarantinedLinks: [], withdrawn: 0, rebased: 0,
     });
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
       syncStatus: "synced", acknowledgedVersion: 7,
@@ -557,5 +557,136 @@ describe("dispatchDueDemand head-of-line (BI-26E3B9C9)", () => {
     }) });
     const scheduled = workItemUpdate.mock.calls[0][0].data.nextAttemptAt as Date;
     expect(scheduled.getTime()).toBeGreaterThan(now.getTime());
+  });
+});
+
+describe("origin version must advance with content (BI-3B0657C2)", () => {
+  // originVersion is the item's updatedAt. A projection whose content changed
+  // without updatedAt moving (a body rewrite through a path that leaves the
+  // timestamp alone, a projection-rule change) was re-sent at the version the
+  // peer already held, and the peer answered 409 origin-version-not-advancing on
+  // every retry. Observed 2026-10-27 on this operator install: 202 envelopes pending
+  // since 2026-09-06 with acknowledgedVersion equal to version.
+  const contract = DEMAND_PROJECTION_TEMPLATES["same-organization"];
+  async function projected(input: typeof source) {
+    const create = vi.fn().mockResolvedValue({});
+    const db = {
+      ...queueDelegates(),
+      federationLink: { findMany: vi.fn() },
+      federatedRecordMirror: { findUnique: vi.fn().mockResolvedValue(null), create, update: vi.fn(), findMany: vi.fn() },
+    } as unknown as DemandDeliveryDb;
+    await queueDemandProjection(db, { link, source: input, identity, contract, audience: "internal", attribution: "organization" });
+    return create.mock.calls[0][0].data.payload;
+  }
+  function existingDb(row: Record<string, unknown>) {
+    const update = vi.fn().mockResolvedValue({});
+    const db = {
+      ...queueDelegates(),
+      federationLink: { findMany: vi.fn() },
+      federatedRecordMirror: { findUnique: vi.fn().mockResolvedValue(row), create: vi.fn(), update, findMany: vi.fn() },
+    } as unknown as DemandDeliveryDb;
+    return { db, update };
+  }
+
+  it("advances past the acknowledged version when content changes but updatedAt does not", async () => {
+    const payload = await projected(source);
+    const version = source.updatedAt.getTime();
+    const { db, update } = existingDb({ mirrorId: "fdmo_1", version, syncStatus: "synced", payload });
+
+    await expect(queueDemandProjection(db, {
+      link, source: { ...source, summary: "A rewritten explanation" }, identity, contract,
+      audience: "internal", attribution: "organization",
+    })).resolves.toMatchObject({ action: "queued" });
+
+    const data = update.mock.calls[0][0].data;
+    expect(data.version).toBeGreaterThan(version);
+    expect(data.payload.envelope.originVersion).toBe(data.version);
+  });
+
+  it("does not re-advance an already-advanced projection whose content is unchanged", async () => {
+    const payload = await projected(source);
+    const version = source.updatedAt.getTime();
+    const first = existingDb({ mirrorId: "fdmo_1", version, syncStatus: "synced", payload });
+    const changed = { ...source, summary: "A rewritten explanation" };
+    await queueDemandProjection(first.db, { link, source: changed, identity, contract, audience: "internal", attribution: "organization" });
+    const advanced = first.update.mock.calls[0][0].data;
+
+    const { db, update } = existingDb({
+      mirrorId: "fdmo_1", version: advanced.version, syncStatus: "synced", payload: advanced.payload,
+    });
+    await expect(queueDemandProjection(db, {
+      link, source: changed, identity, contract, audience: "internal", attribution: "organization",
+    })).resolves.toMatchObject({ action: "noop" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("rebases an envelope the peer refused as not advancing, without spending the dead-letter budget", async () => {
+    const payload = await projected(source);
+    const version = payload.envelope.originVersion as number;
+    const mirrorUpdate = vi.fn().mockResolvedValue({});
+    const workItemUpdate = vi.fn().mockResolvedValue({});
+    const job = { itemId: "job-1", sourceId: "fdmo_1", attemptCount: 7, createdAt: new Date("2026-09-06T00:00:00.000Z"), claimedAt: null };
+    const db = {
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn(), update: workItemUpdate,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findMany: vi.fn().mockResolvedValue([job]),
+      },
+      federationLink: { findMany: vi.fn().mockResolvedValue([link]) },
+      federatedRecordMirror: {
+        findMany: vi.fn()
+          .mockResolvedValueOnce([{ mirrorId: "fdmo_1" }])
+          .mockResolvedValueOnce([{ mirrorId: "fdmo_1", federationLinkId: "link_1", recordType: "demand-envelope", version, payload }]),
+        update: mirrorUpdate, findUnique: vi.fn(), create: vi.fn(),
+      },
+    } as unknown as DemandDeliveryDb;
+    const send = vi.fn().mockResolvedValue({
+      ok: false, status: 409,
+      body: { ok: false, action: "conflict", mirrorId: "fdm_peer", originVersion: version, reason: "origin-version-not-advancing" },
+    });
+    const now = new Date("2026-10-27T18:00:00.000Z");
+
+    const result = await dispatchDueDemand(db, { now, send, decryptToken: () => "dpflink_token" });
+
+    expect(result.deadLettered).toBe(0);
+    expect(result.rebased).toBe(1);
+    const data = mirrorUpdate.mock.calls[0][0].data;
+    expect(data.syncStatus).toBe("pending");
+    expect(data.version).toBeGreaterThan(version);
+    expect(data.payload.envelope.originVersion).toBe(data.version);
+    expect(data.payload.envelope.payloadDigest).not.toBe(payload.envelope.payloadDigest);
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-1" }, data: { status: "queued", nextAttemptAt: now } });
+  });
+
+  it("leaves a concurrent-update conflict on the ordinary retry path", async () => {
+    const payload = await projected(source);
+    const version = payload.envelope.originVersion as number;
+    const mirrorUpdate = vi.fn().mockResolvedValue({});
+    const workItemUpdate = vi.fn().mockResolvedValue({});
+    const db = {
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn(), update: workItemUpdate,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findMany: vi.fn().mockResolvedValue([{ itemId: "job-1", sourceId: "fdmo_1", attemptCount: 1, createdAt: new Date(), claimedAt: null }]),
+      },
+      federationLink: { findMany: vi.fn().mockResolvedValue([link]) },
+      federatedRecordMirror: {
+        findMany: vi.fn()
+          .mockResolvedValueOnce([{ mirrorId: "fdmo_1" }])
+          .mockResolvedValueOnce([{ mirrorId: "fdmo_1", federationLinkId: "link_1", recordType: "demand-envelope", version, payload }]),
+        update: mirrorUpdate, findUnique: vi.fn(), create: vi.fn(),
+      },
+    } as unknown as DemandDeliveryDb;
+    const send = vi.fn().mockResolvedValue({
+      ok: false, status: 409, body: { ok: false, action: "conflict", originVersion: version, reason: "concurrent-update" },
+    });
+
+    const result = await dispatchDueDemand(db, { now: new Date("2026-10-27T18:00:00.000Z"), send, decryptToken: () => "dpflink_token" });
+
+    expect(result.rebased).toBe(0);
+    expect(result.deferred).toBe(1);
+    expect(mirrorUpdate).not.toHaveBeenCalled();
   });
 });
