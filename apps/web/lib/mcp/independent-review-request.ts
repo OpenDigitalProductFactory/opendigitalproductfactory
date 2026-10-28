@@ -17,6 +17,9 @@ import { reviewDocumentPreflight } from "@/lib/mcp-task-review-document";
 import { isCurrentDeliveredBodyAuthor } from "@/lib/backlog/initiative-readiness/body-baseline-author-room";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 
+/** A delivery room in one of these states is retired: its work is over. */
+const RETIRED_ROOM_STATUSES: ReadonlySet<string> = new Set(["archived", "complete"]);
+
 /** Match the durable request identity, never a caller's task-handle assertion. */
 async function matchingReviewRequest(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
@@ -113,7 +116,7 @@ export async function authorizeCoworkerRequest(
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes backlogItem.id); an adopted room records the BI- id.
   const bodyAcceptance = binding.gate === "objective-mapping" && binding.artifactRef.kind === "document-version";
-  const roomSelect = { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true,
+  const roomSelect = { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, status: true,
     repositoryFullName: true, headBranch: true, baseSha: true, headSha: true,
     featureBuild: { select: { createdById: true } } } as const;
   let room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null,
@@ -133,15 +136,21 @@ export async function authorizeCoworkerRequest(
   // merged, to a reviewer outside every delivery actor.
   let headlessPirAnchor = false;
   let retiredPirAnchor = false;
-  if (!room && binding.gate === "post-implementation-review"
-    && binding.writerToolName === "record_initiative_post_implementation_review") {
+  const pirRequest = binding.gate === "post-implementation-review"
+    && binding.writerToolName === "record_initiative_post_implementation_review";
+  if (!room && pirRequest) {
     room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId,
       status: { notIn: ["abandoned", "superseded"] } }, select: roomSelect });
     retiredPirAnchor = Boolean(room);
-    // BI-46E344FE: an anchor that never recorded its head carries the merged
-    // head the issuer read from the trunk; the packet re-issue below proves it.
-    headlessPirAnchor = Boolean(room) && room!.headSha === null;
+  } else if (room && pirRequest && RETIRED_ROOM_STATUSES.has(room.status)) {
+    // BI-AA47C672: delivery rooms are retired by status while archivedAt stays
+    // null (every merged break-fix anchor on the live install, 2026-10-28), so
+    // the live read above finds them. Such a room is the same retired anchor.
+    retiredPirAnchor = true;
   }
+  // BI-46E344FE: an anchor that never recorded its head carries the merged
+  // head the issuer read from the trunk; the packet re-issue below proves it.
+  headlessPirAnchor = retiredPirAnchor && room!.headSha === null;
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
   const buildStudioRoom = roomOwnsItem && room!.executorKind === "build-studio";
@@ -192,22 +201,32 @@ export async function authorizeCoworkerRequest(
   const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>;
     planBaselinePrerequisite?: ReadinessRequirementResult | null } | undefined;
   if (!item.success || !readiness?.decisions) return deny("This item's readiness could not be resolved.");
-  const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
-  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions, readiness.planBaselinePrerequisite);
-  if (!decision) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
-    ? { bounded: true } : deny("This item has no pending review for the requested lane.");
-  if (decision.verdict === "allowed") return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
-    ? { bounded: true } : deny("This item has no pending independent completion review.");
   // A Build Studio build's routes come from the same resolver the server
   // dispatcher uses, with the same author identity, so the packets are equal.
-  const issued = buildStudioRoom
+  // BI-27519C1A: that resolver also decides what the build owes. It prefers
+  // the build's own plan gate decision, which can owe a plan review the item
+  // projection below does not see (a plan that raised the build's shape), so
+  // pendency is the issuer's, never the projection's: ~100 plan rooms were
+  // refused "no pending review" on every dispatch until this.
+  const buildStudioIssued = buildStudioRoom
     ? await (async () => {
       const result = await buildStudioOwedRoutes({ itemId: binding.itemId, capsuleId: binding.workroomRef!.workroomId, authorAgentId: BUILD_STUDIO_ASSISTANT_AGENT_ID });
       return result.routed ? result.routes.map((route) => route.requestCoworker) : [];
     })()
-    : await (async () => {
+    : null;
+  if (buildStudioIssued?.length === 0) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
+    ? { bounded: true } : deny("This item has no pending review for the requested lane.");
+  const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
+  const decision = buildStudioIssued ? null
+    : decisionForIndependentReview(binding.writerToolName, readiness.decisions, readiness.planBaselinePrerequisite);
+  if (!buildStudioIssued && !decision) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
+    ? { bounded: true } : deny("This item has no pending review for the requested lane.");
+  if (decision?.verdict === "allowed") return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
+    ? { bounded: true } : deny("This item has no pending independent completion review.");
+  const issued = buildStudioIssued
+    ?? await (async () => {
       const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");
-      const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null, currentUserId: userId,
+      const recovery = await resolveTerminalInitiativeRecovery({ decision: decision!, currentAgentId: context!.agentId ?? null, currentUserId: userId,
         refusedWorkroomId: binding.workroomRef!.workroomId,
         taskAuthority: ["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(binding.gate) ? await (async () => {
           const taskAuthorityKey = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId!, userId, source: "oauth" });

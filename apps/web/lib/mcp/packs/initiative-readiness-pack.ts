@@ -357,6 +357,34 @@ async function resolveStewardRoomBinding(
   return { binding: { ...binding, artifactRef: binding.artifactRef as InitiativeArtifactRef } };
 }
 
+/**
+ * BI-AA47C672: a platform post-implementation review room's scheduled run may
+ * write only the review the platform issued that room, for its item, while
+ * readiness still issues it (platform-review-room.ts). Null for every other
+ * run, which is untouched.
+ */
+async function resolvePlatformReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+): Promise<{ binding: ExternalInitiativeReviewBinding } | { refusal: ToolResult } | null> {
+  const { PLATFORM_REVIEW_WRITER } = await import("@/lib/work-management/platform-review-shape");
+  if (actionKey !== PLATFORM_REVIEW_WRITER) return null;
+  const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+  const platform = await resolvePlatformReviewRunBinding(taskRunId);
+  if (!platform) return null;
+  if (!platform.ok) {
+    return { refusal: { success: false, error: "platform-review-packet-unavailable", message: `This room holds no current platform-issued review it may record (${platform.reason}). Record what blocked you with record_workroom_evidence; the reviewer dispatch issues a current packet while the review is owed.` } };
+  }
+  const { binding } = platform.data;
+  return { binding: {
+    itemId: binding.itemId,
+    gate: binding.gate,
+    artifactRef: binding.artifactRef as InitiativeArtifactRef,
+    ...(binding.workroomRef ? { workroomRef: binding.workroomRef } : {}),
+    ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId") ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId ?? null } : {}),
+  } };
+}
+
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
     const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
@@ -371,6 +399,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
       if (steward && "refusal" in steward) return steward.refusal;
       if (steward) binding = steward.binding;
+    }
+    // BI-AA47C672: the platform's own reviewer, dispatched with no client token.
+    let platformReview = false;
+    if (!binding) {
+      const platform = await resolvePlatformReviewBinding(actionKey, context?.taskRunId);
+      if (platform && "refusal" in platform) return platform.refusal;
+      if (platform) { binding = platform.binding; platformReview = true; }
     }
     if (binding) {
       params = {
@@ -528,7 +563,10 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       reviewerUserId: userId,
       reviewerAgentId: context?.agentId ?? null,
       authorityDecisionId: context?.authorityDecisionId ?? null,
-      tokenScope: context?.tokenScope ?? null,
+      // A platform review run carries no client token: it writes under the
+      // platform's own authority, recorded as such (platform-review-room.ts).
+      tokenScope: context?.tokenScope ?? (platformReview
+        ? (await import("@/lib/backlog/initiative-readiness/platform-review-room")).PLATFORM_REVIEW_TOKEN_SCOPE : null),
       requiresIndependentReviewer: lane.independent,
       authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,

@@ -23,9 +23,13 @@ import "server-only";
 // - the request key makes it idempotent: a client dispatch and a server
 //   dispatch of the same review are one TaskRun.
 //
-// A room with no live consent-bound connection is left for its author, and the
-// reason is recorded on the room once per request, re-attempted on a growing
-// back-off (BI-CD53F5F5).
+// A room with no live consent-bound connection used to be left for its author.
+// BI-AA47C672: a merged break-fix's post-implementation review is then handed
+// to the platform's own in-platform reviewer through a platform review room
+// (platform-review-room.ts), with the same packet, independence and admission
+// re-derivation. Any other review, or one no in-platform reviewer can take, is
+// recorded on the room once per request with the reason, re-attempted on a
+// growing back-off (BI-CD53F5F5).
 
 import { prisma } from "@dpf/db";
 import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/shared/execution-uncertainty";
@@ -34,6 +38,8 @@ import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-gover
 import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";
 
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "./build-studio-owed-routes";
+import { completionOwedRoutes } from "./completion-review-issuer";
+import type { PlatformReviewRouteOutcome, ReviewIssuerIdentity } from "./platform-review-room";
 import type { ReadinessReviewRoute } from "@/lib/work-management/readiness-review-stages";
 
 /** A dispatch for the same request is not repeated within this window. */
@@ -76,7 +82,7 @@ type RouteOutcome = {
   itemId: string;
   capsuleId: string;
   requestKey: string | null;
-  outcome: "dispatched" | "refused" | "cooling-down" | "no-author-connection" | "no-author" | "nothing-owed" | "readiness-unavailable";
+  outcome: "dispatched" | "platform-reviewer" | "refused" | "cooling-down" | "no-author-connection" | "no-author" | "nothing-owed" | "readiness-unavailable";
   detail?: string;
   /** The assistant whose connection carried the request (a Build Studio room's own assistant holds none). */
   carriedByAgentId?: string;
@@ -91,6 +97,8 @@ type Deps = {
   execute?: (args: GovernedExecuteArgs) => Promise<GovernedExecuteResult>;
   random?: () => number;
   owedRoutes?: (itemId: string, authorAgentId: string | null, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
+  /** BI-AA47C672: hand an owed post-implementation review to the platform's own reviewer. */
+  routeToPlatformReviewer?: (input: { itemId: string; requestCoworker: Record<string, unknown>; issuer: ReviewIssuerIdentity; now: Date }) => Promise<PlatformReviewRouteOutcome>;
 };
 
 function aliasValue(principal: { aliases: Array<{ aliasValue: string }> } | null | undefined): string | null {
@@ -301,19 +309,7 @@ async function defaultOwedRoutes(itemId: string, authorAgentId: string | null, c
     const routes = await designPhaseOwedRecoveryRoutes(itemId, authorAgentId);
     return routes && routes.map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
   }
-  const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
-  const currentUserId = candidate?.room.userId ?? undefined;
-  const item = await getBacklogItem({ itemId }, authorAgentId, currentUserId);
-  const decision = (item.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion as
-    | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
-    | undefined;
-  if (!item.success || !decision) return null;
-  if (decision.verdict === "allowed") return [];
-  const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
-  const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: authorAgentId, currentUserId, refusedWorkroomId: null });
-  return recovery.reviewerRoutes
-    .filter((route) => route.independent)
-    .map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
+  return completionOwedRoutes(itemId, authorAgentId, candidate?.room.userId ?? undefined);
 }
 
 /**
@@ -354,6 +350,12 @@ type DispatchRecord = { id: string; recordedAt: Date; payload: Record<string, un
 
 /** Outcomes that leave the request unsent, so it is attempted again later. */
 const STANDING_REFUSALS: ReadonlySet<RouteOutcome["outcome"]> = new Set(["no-author-connection", "refused"]);
+/**
+ * Outcomes whose repeats are one fact on the room: a standing refusal, and a
+ * hand-off to the platform reviewer (BI-AA47C672) that is re-confirmed until the
+ * review lands. Each repeat grows the back-off.
+ */
+const COLLAPSING_OUTCOMES: ReadonlySet<RouteOutcome["outcome"]> = new Set([...STANDING_REFUSALS, "platform-reviewer"]);
 
 /** The newest dispatch record of this request in this room. */
 async function latestDispatchRecord(roomId: string, requestKey: string): Promise<DispatchRecord | null> {
@@ -393,7 +395,7 @@ export function reviewDispatchBackoffMs(attempts: number): number {
  */
 async function record(room: RoomAuthor, outcome: RouteOutcome, summary: string, previous: DispatchRecord | null, now: Date): Promise<void> {
   const base = { ...outcome, source: "platform-reviewer-dispatch" };
-  const refused = STANDING_REFUSALS.has(outcome.outcome);
+  const refused = COLLAPSING_OUTCOMES.has(outcome.outcome);
   const repeats = refused && previous !== null
     && previous.payload.outcome === outcome.outcome && (previous.payload.detail ?? null) === (outcome.detail ?? null);
   const attempts = repeats ? attemptsOf(previous!) + 1 : 1;
@@ -434,7 +436,14 @@ export async function dispatchReviewerRequest(args: {
   now?: Date;
   /** What the room records when no connection may carry the request. */
   noConnectionSummary?: string;
-  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute">;
+  /**
+   * BI-AA47C672: who readiness issued this packet for. With it, a post-
+   * implementation review no connection can carry goes to the platform's own
+   * reviewer; without it (a caller that did not read readiness as the author)
+   * nothing changes.
+   */
+  issuer?: ReviewIssuerIdentity;
+  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute" | "routeToPlatformReviewer">;
 }): Promise<RouteOutcome> {
   const { room, requestCoworker } = args;
   const now = args.now ?? new Date();
@@ -454,10 +463,23 @@ export async function dispatchReviewerRequest(args: {
     ? await findUserConnection(room.userId)
     : await findConnection(room.userId, room.agentId!);
   if (!connection) {
-    const outcome: RouteOutcome = { ...at, outcome: "no-author-connection" };
+    const platform: PlatformReviewRouteOutcome = args.issuer
+      ? await (args.deps?.routeToPlatformReviewer ?? defaultRouteToPlatformReviewer)({
+        itemId: args.itemId, requestCoworker, issuer: args.issuer, now,
+      }).catch((error: unknown): PlatformReviewRouteOutcome => ({ kind: "ineligible",
+        detail: `The platform could not open its review room: ${error instanceof Error ? error.message : "unknown error"}.` }))
+      : { kind: "not-applicable" };
+    if (platform.kind === "routed") {
+      const detail = `The platform asked ${platform.targetAgent} to review it in ${platform.capsuleId}.`;
+      const outcome: RouteOutcome = { ...at, outcome: "platform-reviewer", detail, carriedByAgentId: platform.targetAgent };
+      await record(room, outcome, `No assistant of the author is connected, so the platform asked its own reviewer, ${platform.targetAgent}, for the independent review this work owes (room ${platform.capsuleId}).`, previous, now);
+      return outcome;
+    }
+    const outcome: RouteOutcome = { ...at, outcome: "no-author-connection", ...(platform.kind === "ineligible" ? { detail: platform.detail } : {}) };
     await record(room, outcome, args.noConnectionSummary ?? (args.carrier === "requesting-user"
       ? "An independent review of this work is owed, but the person it is for has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it."
-      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant."), previous, now);
+      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant.")
+      + (outcome.detail ? ` The platform's own reviewer cannot take it either: ${outcome.detail}` : ""), previous, now);
     return outcome;
   }
   const execute = args.deps?.execute ?? (await import("@/lib/mcp-governed-execute")).governedExecuteTool;
@@ -519,8 +541,29 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         carrier,
         workroomId: route.workroomId, now, deps: { ...deps, findConnection, findUserConnection },
         ...(candidate.target === "implementation" ? { noConnectionSummary: BUILD_STUDIO_NO_CONNECTION_SUMMARY } : {}),
+        // The identity owedRoutes read readiness as: the platform reviewer's
+        // writer re-derives the packet for exactly this issuer.
+        ...(candidate.target === "completion" && candidate.room.userId
+          ? { issuer: { userId: candidate.room.userId, agentId: candidate.room.agentId } } : {}),
       }));
     }
   }
   return outcomes;
+}
+
+/** The live platform hand-off: the item's platform review room, bound to the packet's reviewer. */
+async function defaultRouteToPlatformReviewer(input: { itemId: string; requestCoworker: Record<string, unknown>; issuer: ReviewIssuerIdentity; now: Date }): Promise<PlatformReviewRouteOutcome> {
+  const [{ routeReviewToPlatformReviewer }, { loadItemDeliveryActorIds }, { resolveWorkOwner }] = await Promise.all([
+    import("./platform-review-room"),
+    import("@/lib/backlog/acceptance-sweep/delivery-actors"),
+    import("@/lib/portfolio/accountable-owner"),
+  ]);
+  return routeReviewToPlatformReviewer({
+    ...input,
+    deps: {
+      db: prisma as never,
+      loadDeliveryActorIds: (itemId) => loadItemDeliveryActorIds(prisma as never, itemId),
+      resolveOwnerUserId: async () => (await resolveWorkOwner(prisma as never, {})).userId,
+    },
+  });
 }

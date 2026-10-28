@@ -414,6 +414,27 @@ describe("consent-bound independent review request", () => {
     humanAccess.mockResolvedValue({ decision: { level: "action" } });
     expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.success).toBe(false);
   });
+  // Live install 2026-10-28: merged break-fix rooms are retired by status
+  // ("archived") while archivedAt stays null, so the live-room read found them
+  // and the retired-anchor rules never applied. Six carried PIRs were refused
+  // "You and this coworker must both be admitted", and a headless one "immutable
+  // source changed".
+  it("treats a room retired by status, with no archivedAt, as the retired PIR anchor", async () => {
+    const statusRetired = { ...await mocks.room(), status: "archived" };
+    mocks.room.mockResolvedValue(statusRetired);
+    mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+    humanAccess.mockResolvedValue({ decision: { level: "action" } });
+    expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
+    expect(humanAccess).toHaveBeenCalledWith({ userId: "human", workroomId: "room-row", requested: "action" });
+    // Headless: the anchor never recorded its head; the issuer's re-issue proves the merged head.
+    mocks.room.mockResolvedValue({ ...statusRetired, headSha: null });
+    expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
+    // Only for the PIR writer: a design lane on the same room still needs its assistant.
+    const design = { ...packet, initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec" },
+      requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };
+    mocks.room.mockResolvedValue(statusRetired);
+    expect((await authorizeCoworkerRequest(design, "human", context)).refusal?.message).toContain("must both be admitted");
+  });
   it("accepts only a regenerated packet after current human, consent, grants and exact room checks", async () => {
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
     expect(mocks.access).toHaveBeenCalledWith({ userId: "human", agentId: "AGT-AUTHOR", workroomId: "room-row", requested: "action" });
@@ -559,7 +580,23 @@ describe("Build Studio rooms (BI-926A7E90)", () => {
     mocks.alias.mockResolvedValue({ principalId: "prn-other" });
     expect((await authorizeCoworkerRequest(revisionPacket, "human", context)).refusal?.message).toContain("person who requested this Build Studio build");
     mocks.alias.mockResolvedValue({ principalId: "prn-human" });
-    mocks.buildStudioRoutes.mockResolvedValue({ routed: true, routes: [] });
+    mocks.buildStudioRoutes.mockResolvedValue({ routed: true, routes: [{ workroomId: "WC-BS", requestCoworker: { ...revisionPacket, objective: "another review" } }] });
     expect((await authorizeCoworkerRequest(revisionPacket, "human", context)).refusal?.message).toContain("changed or is no longer eligible");
+  });
+
+  // BI-27519C1A: the build's plan raised its shape, so its own plan gate owes a
+  // plan review the item's projection does not see. Admission asked the
+  // projection and refused every dispatch as "no pending review"; it now asks
+  // the same Build Studio issuer the dispatcher sent the packet from.
+  it("admits the issuer's packet when the item projection sees no pending design-phase review", async () => {
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation: { ...implementation, verdict: "allowed", unmet: [] } } } } });
+    expect(await authorizeCoworkerRequest(revisionPacket, "human", context)).toEqual({ bounded: true });
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: {} } } });
+    expect(await authorizeCoworkerRequest(revisionPacket, "human", context)).toEqual({ bounded: true });
+  });
+
+  it("still refuses when the Build Studio issuer owes nothing", async () => {
+    mocks.buildStudioRoutes.mockResolvedValue({ routed: true, routes: [] });
+    expect((await authorizeCoworkerRequest(revisionPacket, "human", context)).refusal?.message).toContain("no pending review");
   });
 });
