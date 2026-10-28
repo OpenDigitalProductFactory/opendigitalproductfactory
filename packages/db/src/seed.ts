@@ -84,6 +84,7 @@ import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-
 import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep.js";
 import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward.js";
 import { ensureClientCapabilityReverifyScheduledTask } from "./seed-client-capability-reverify.js";
+import { ensureHarnessEvolutionLoopScheduledTask } from "./seed-harness-evolution-loop.js";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
@@ -2575,6 +2576,8 @@ async function main(): Promise<void> {
   await step("demandScoringStewardScheduledTask", () => ensureDemandScoringStewardScheduledTask(prisma));
   // BI-64795FD0: weekly client-capability re-verification (proposals only).
   await step("clientCapabilityReverifyScheduledTask", () => ensureClientCapabilityReverifyScheduledTask(prisma));
+  // BI-49BC21C1: the daily harness evolution loop (ranked, evidence-backed harness-edit candidates).
+  await step("harnessEvolutionLoopScheduledTask", () => ensureHarnessEvolutionLoopScheduledTask(prisma));
   await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
   await step("selfOptimizationSweepScheduledTask", () => ensureSelfOptimizationSweepScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
