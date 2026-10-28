@@ -33,3 +33,11 @@ After deploy, verify:
 - **Slice 2 (AC-6).** Per-room bounded editor, and a harness-text variant kind for the WorkPattern runtime keyed on `promptOrSkillDigest`. Hermetic baseline-versus-candidate replay on the room's traces, within the room's caps.
 - **Slice 3 (AC-7, AC-8).** Governed adoption, either a shape version bump or a seed PR. EXPERIENCE records keyed by room, shape and layer. Promotion when an edit wins in two or more rooms.
 - **Slice 4 (AC-9).** Weekly before/after recurrence rollup per miss key, room and shape.
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-49BC21C1
+- Receipt: blocked-by: no initiative scope baseline exists yet; record_plan_backlog_coverage needs the design's spec-approval gate passed by an independent reviewer, and this authoring session has no authenticated dpf MCP connection
+- Rationale: this plan delivers slice 1 only; its kind, core, store, room record and seed are one deployable unit (the kind is useless without the seed, the seed is inert without the executor), so they ship as one change under the umbrella item. Slices 2–4 are filed as children of BI-49BC21C1 when the design passes spec approval.
+- Dependencies: none
