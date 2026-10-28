@@ -1,7 +1,7 @@
 import type { DispatcherAction, DispatchNotificationIntent } from "@dpf/validators";
 
 import { resolveFieldDispatchNotificationProactivity } from "./field-dispatch-proactivity";
-import type { ProactivityPlan, ProactivityResolverInput } from "./proactivity-types";
+import type { ProactivityPlan, ProactivityResolverInput } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export const FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION = "field_dispatch_customer_notification" as const;
 

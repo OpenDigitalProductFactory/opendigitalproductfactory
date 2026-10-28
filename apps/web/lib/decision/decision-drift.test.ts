@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import type { DecisionPrinciple } from "./option-scoring";
+import type { DecisionPrinciple } from "@dpf/validators/judgment/option-scoring";
 import { evaluateGoldenDrift, driftedScenarios } from "./decision-drift";
 import { GOLDEN_SCENARIOS } from "./golden-decisions";
 

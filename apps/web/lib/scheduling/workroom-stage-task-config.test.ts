@@ -3,12 +3,20 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readScheduledWorkTrigger, withScheduledWorkTrigger } from "./scheduled-work-trigger";
-import { WORKROOM_STAGE_TASK_CONFIG_KEY, readWorkroomStageTaskConfig, withWorkroomStageTaskConfig,
-  workroomStageToolsFromTaskConfig } from "./workroom-stage-task-config";
+import { readScheduledWorkTrigger, withScheduledWorkTrigger } from "@dpf/validators/workroom-policy/scheduled-work-trigger";
+import {
+  WORKROOM_STAGE_TASK_CONFIG_KEY,
+  readWorkroomStageTaskConfig,
+  withWorkroomStageTaskConfig,
+  workroomStageToolsFromTaskConfig,
+} from "./workroom-stage-task-config";
 
-const STAGE = { shapeKey: "dependency-advisory-watch", shapeVersion: "1.0.0", stageKey: "sweep",
-  tools: ["read_codebase_manifest", "list_patch_posture"] };
+const STAGE = {
+  shapeKey: "dependency-advisory-watch",
+  shapeVersion: "1.0.0",
+  stageKey: "sweep",
+  tools: ["read_codebase_manifest", "list_patch_posture"],
+};
 const QUALIFICATION = { schemaVersion: 1 as const, phase: "prepare" as const, itemId: "BI-1", workroomId: "WC-1",
   repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40),
   protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },

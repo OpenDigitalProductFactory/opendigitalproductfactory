@@ -12,7 +12,7 @@ import { prisma } from "@dpf/db";
 import { notifyAttentionLiveOrThrow } from "@/lib/attention/notify-live";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 
-import { driveDeviationCodes, type WorkroomDriveHold } from "./workroom-drive-hold";
+import { driveDeviationCodes, type WorkroomDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 import { resolveNestedRoomStallRecipient } from "./nested-room-coordination.server";
 
 export async function notifyWorkroomStall(input: {

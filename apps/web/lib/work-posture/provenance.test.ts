@@ -5,9 +5,9 @@ import {
   driverForReasonCode,
   layerForReasonCode,
   POSTURE_LAYER_ORDER,
-} from "./provenance";
-import { resolveWorkPosture } from "./resolve";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy/provenance";
+import { resolveWorkPosture } from "@dpf/validators/workroom-policy/resolve";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 
 function plan(overrides: Partial<ProactivityPlan> = {}): ProactivityPlan {
   return {

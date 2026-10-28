@@ -11,8 +11,8 @@
 // different pace for the coworkers it carries.
 
 import { prisma } from "@dpf/db";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
+import { isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 
 // A finished room does not drive anything; reading its posture would keep a
