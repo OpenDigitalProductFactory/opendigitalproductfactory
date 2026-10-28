@@ -133,7 +133,7 @@ describe("relation-vocabulary guard (AC-TRV-3)", () => {
     );
     expect(files.length).toBeGreaterThan(100);
     expect(findRelationVocabularyViolations(files)).toEqual([]);
-  });
+  }, 30_000); // walks the source tree; the 5 s default timed out under parallel gate load
 });
 
 describe("graph_relation_type migrations (AC-TRV-4)", () => {
