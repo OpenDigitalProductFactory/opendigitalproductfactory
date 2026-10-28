@@ -1,3 +1,4 @@
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { ownedRowBodyWhere, intakeOriginMarkers, isFederatedMirror } from "@/lib/federation/federated-twins";
@@ -463,7 +464,11 @@ export async function fileAcceptanceMiss(args: {
     data: {
       itemId: `BI-ACC-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
       title: args.title,
-      body: `${args.body}\n\n${marker}\nservedSha: ${args.servedSha}\nsupersedes: ${original.itemId}\n`,
+      // BI-458CCA8D: the miss is done when what the original promised works on the served build.
+      body: composeIntakeBody({
+        outcome: `What ${original.itemId} delivers works on the served build, and this acceptance miss does not come back.`,
+        body: `${args.body}\n\n${marker}\nservedSha: ${args.servedSha}\nsupersedes: ${original.itemId}\n`,
+      }),
       status: "open",
       type: "portfolio",
       workType: "bug",

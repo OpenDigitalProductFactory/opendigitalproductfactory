@@ -20,6 +20,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 
+import { composeIntakeBody, recurringFailureOutcome } from "@/lib/backlog/intake-outcome";
+
 /**
  * Every source this module may write.
  *
@@ -83,6 +85,19 @@ function correctiveRecoveryActivityId(backlogItemId: string, runId: string): str
   return `recovery_${digest}`;
 }
 
+/** What will be true once a captured failure is fixed (BI-458CCA8D). */
+export function correctiveFailureOutcome(source: CorrectiveFailureSource, title: string): string {
+  const what = title.trim().slice(0, 200);
+  switch (source) {
+    case "build-failure":
+      return recurringFailureOutcome(`The Build Studio build failure "${what}"`);
+    case "self-upgrade-failure":
+      return recurringFailureOutcome(`The self-upgrade failure "${what}"`);
+    case "data-growth":
+      return `The growth behind "${what}" is back within its expected bounds, and the nightly steward stops reporting it.`;
+  }
+}
+
 export async function captureCorrectiveFailureBI(
   input: CorrectiveFailureInput,
 ): Promise<CorrectiveCaptureResult> {
@@ -119,7 +134,11 @@ export async function captureCorrectiveFailureBI(
         submittedById: input.submittedById ?? null,
         agentId: input.agentId ?? null,
         lastSeenAt: new Date(),
-        body: `failureFingerprint: ${fingerprint}\n${input.body}`,
+        // BI-458CCA8D: the captured failure is done when it stops recurring.
+        body: composeIntakeBody({
+          outcome: correctiveFailureOutcome(input.source, input.title),
+          body: `failureFingerprint: ${fingerprint}\n${input.body}`,
+        }),
       },
       select: { itemId: true },
     });

@@ -705,6 +705,10 @@ async function proposeImprovementHandler(
       );
       const ingest = await ingestBacklogItem({
         title: proposal.title,
+        // BI-458CCA8D: done when the friction the proposal names stops, or the proposal is in place.
+        outcome: proposal.observedFriction
+          ? `The friction this proposal names no longer happens: ${proposal.observedFriction.trim()}`
+          : `"${proposal.title.trim()}" is in place, as proposed in ${proposal.proposalId}.`,
         body: [
           proposal.description,
           proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
