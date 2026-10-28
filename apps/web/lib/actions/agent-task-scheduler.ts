@@ -382,7 +382,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       const { loadStageDispatchAnswered } = await import("@/lib/work-management/stage-dispatch-answered");
       const answer = await loadStageDispatchAnswered(task);
       if (answer.answered) {
-        console.info(`[agent-task-scheduler] ${taskId}: stage ${answer.stageKey} already has completing evidence for this dispatch (${answer.evidenceRecordedAt.toISOString()}); not running it again.`);
+        const { sanitizeForLog } = await import("@/lib/security/safe-log");
+        console.info(`[agent-task-scheduler] ${sanitizeForLog(taskId)}: stage ${sanitizeForLog(answer.stageKey)} already has completing evidence for this dispatch (${answer.evidenceRecordedAt.toISOString()}); not running it again.`);
         return await recordUnchangedScheduledRun(task, now);
       }
     }
