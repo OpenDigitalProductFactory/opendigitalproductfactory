@@ -12,62 +12,56 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+import type { HarnessEvolutionStore } from "./harness-evolution-store";
 import {
-  HARNESS_EVOLUTION_ARTIFACT_KIND,
   executeHarnessEvolutionLoopTask,
   harnessEvolutionPeriodKey,
   runHarnessEvolutionLoop,
-  type HarnessEvolutionDb,
 } from "./harness-evolution-task";
 
-// BI-49BC21C1 slice 1 (AC-2/AC-3): one TaskRun per UTC day carrying budget and
-// spend, the ranked candidates in a typed artifact, and no model call anywhere.
+// BI-49BC21C1 slice 1: rooms own their candidates (AC-2/AC-3); the aggregator
+// rolls them up, records budget and spend once per day, and never edits a
+// room's harness (AC-4).
 
 const NOW = new Date("2026-10-28T04:17:00Z");
+const ago = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
+const shape = (ref: string) => [{ workShape: ref }];
 
-function fakeDb(overrides: { existingRun?: boolean } = {}) {
-  const db = {
-    improvementSignal: {
-      findMany: vi.fn().mockResolvedValue([
-        {
-          signalId: "IS-1",
-          sourceType: "mcp-call-efficiency",
-          title: "Thrash: claim_nonprod_environment_lease",
-          recurrenceCount: 71,
-          lastSeenAt: NOW,
-          toolName: "claim_nonprod_environment_lease",
-          backlogItemId: "BI-MCP-EFF-9640010E",
-          evidence: { severity: "critical", sampleIds: ["te-1", "te-2"] },
-        },
-        {
-          signalId: "IS-2",
-          sourceType: "platform_issue_report",
-          title: "no evidence",
-          recurrenceCount: 1,
-          lastSeenAt: NOW,
-          toolName: null,
-          backlogItemId: null,
-          evidence: {},
-        },
-      ]),
-    },
-    backlogItem: {
-      findMany: vi.fn().mockResolvedValue([{ itemId: "BI-2C73B434", title: "seed", status: "open" }]),
-    },
-    taskRun: {
-      findFirst: vi.fn().mockResolvedValue(overrides.existingRun ? { taskRunId: "TR-HEV-EXISTING" } : null),
-      create: vi.fn().mockResolvedValue({ id: "tr-row-1", taskRunId: "TR-HEV-NEW" }),
-    },
-    taskArtifact: { create: vi.fn().mockResolvedValue({}) },
+function fakeStore(overrides: Partial<Record<keyof HarnessEvolutionStore, ReturnType<typeof vi.fn>>> = {}) {
+  const defaults = {
+    findRun: vi.fn().mockResolvedValue(null),
+    listActiveRooms: vi.fn().mockResolvedValue([
+      { id: "r1", capsuleId: "WC-1", scopeClaims: shape("delivery-medium@1.0.0") },
+      { id: "r2", capsuleId: "WC-2", scopeClaims: shape("delivery-medium@1.0.0") },
+      { id: "r3", capsuleId: "WC-3", scopeClaims: shape("acceptance-verification@1.1.0") },
+      { id: "r4", capsuleId: "WC-4", scopeClaims: [] },
+    ]),
+    listToolFailures: vi.fn().mockResolvedValue([
+      { capsuleId: "WC-1", id: "te-1", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(1) },
+      { capsuleId: "WC-1", id: "te-2", toolName: "record_workroom_evidence", error: "authority_denied: x", createdAt: ago(2) },
+      { capsuleId: "WC-2", id: "te-3", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(3) },
+      { capsuleId: "WC-2", id: "te-4", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(4) },
+    ]),
+    listRoomActivities: vi.fn().mockResolvedValue([
+      { workCapsuleId: "r2", id: "a-1", kind: "status-override", recordedAt: ago(5) },
+      { workCapsuleId: "r2", id: "a-2", kind: "status-override", recordedAt: ago(6) },
+    ]),
+    listShapeSignals: vi.fn().mockResolvedValue([
+      { signalId: "IS-F1", title: "piles up", recurrenceCount: 12, evidence: { shapeRef: "delivery-medium@1.0.0", stageKey: "design-note", cause: "x" } },
+      { signalId: "IS-F2", title: "other", recurrenceCount: 4, evidence: { shapeRef: "acceptance-verification@1.1.0" } },
+    ]),
+    listBacklogItems: vi.fn().mockResolvedValue([{ itemId: "BI-2C73B434", title: "seed", status: "open" }]),
+    recordRoomCandidates: vi.fn().mockResolvedValue(true),
+    recordRun: vi.fn().mockResolvedValue({ taskRunId: "TR-HEV-NEW" }),
   };
-  return db as typeof db & HarnessEvolutionDb;
+  return { ...defaults, ...overrides } as typeof defaults & HarnessEvolutionStore;
 }
 
 const RUN_INPUT = {
   ownerUserId: "user-1",
   agentId: "platform-engineer",
   taskId: "harness-evolution-loop-daily",
-  taskConfig: { maxCandidates: 5, seedItemIds: ["BI-2C73B434", "BI-NOT-HERE"] },
+  taskConfig: { seedItemIds: ["BI-2C73B434", "BI-NOT-HERE"] },
   now: NOW,
 };
 
@@ -80,65 +74,77 @@ describe("harnessEvolutionPeriodKey", () => {
 });
 
 describe("runHarnessEvolutionLoop", () => {
-  it("reads open signals inside the lookback window, newest-recurring first and bounded", async () => {
-    const db = fakeDb();
-    await runHarnessEvolutionLoop(db, RUN_INPUT);
-    const args = db.improvementSignal.findMany.mock.calls[0]![0];
-    expect(args.where).toEqual({ status: "open", lastSeenAt: { gte: new Date("2026-09-28T04:17:00Z") } });
-    expect(args.orderBy).toEqual([{ recurrenceCount: "desc" }, { lastSeenAt: "desc" }]);
-    expect(args.take).toBeGreaterThan(0);
-    expect(db.backlogItem.findMany.mock.calls[0]![0].where).toEqual({ itemId: { in: ["BI-2C73B434", "BI-NOT-HERE"] } });
+  it("reads only ring-0 rooms' misses inside the lookback window", async () => {
+    const store = fakeStore();
+    await runHarnessEvolutionLoop(store, RUN_INPUT);
+    const since = new Date("2026-10-21T04:17:00Z");
+    expect(store.listActiveRooms).toHaveBeenCalledWith(since);
+    expect(store.listToolFailures).toHaveBeenCalledWith(["WC-1", "WC-2"], since);
+    expect(store.listRoomActivities.mock.calls[0]![0]).toEqual(["r1", "r2"]);
+    expect(store.listRoomActivities.mock.calls[0]![1]).toContain("status-override");
   });
 
-  it("records one proactive TaskRun with budget, zero spend and the ranking", async () => {
-    const db = fakeDb();
-    const result = await runHarnessEvolutionLoop(db, RUN_INPUT);
+  it("records each room's own candidates on that room", async () => {
+    const store = fakeStore();
+    const result = await runHarnessEvolutionLoop(store, RUN_INPUT);
 
-    expect(result.idempotent).toBe(false);
-    expect(result.ranked.map((c) => c.candidateKey)).toEqual(["seed:BI-2C73B434", "signal:IS-1"]);
-    expect(result.rejected.map((r) => r.reason)).toEqual(["seed-missing", "no-trajectory"]);
+    expect(store.recordRoomCandidates).toHaveBeenCalledTimes(2);
+    const [room1, room2] = store.recordRoomCandidates.mock.calls.map((call: unknown[]) => call[0] as { roomId: string; payload: Record<string, unknown> });
+    expect(room1).toMatchObject({ roomId: "r1", capsuleId: "WC-1", periodKey: "2026-10-28", agentId: "platform-engineer" });
+    expect((room1!.payload.candidates as Array<{ missKey: string }>).map((c) => c.missKey)).toEqual([
+      "tool:record_workroom_evidence:authority_denied",
+    ]);
+    expect(room1!.payload).toMatchObject({ layer: "ring-0", shapeRef: "delivery-medium@1.0.0" });
+    expect((room2!.payload.candidates as Array<{ missKey: string; actor: string }>).map((c) => [c.missKey, c.actor])).toEqual([
+      // Equal recurrence: the newer miss leads.
+      ["tool:record_workroom_evidence:authority_denied", "coworker"],
+      ["activity:status-override", "human"],
+    ]);
+    expect(result.roomsWithCandidates).toBe(2);
+  });
 
-    const run = db.taskRun.create.mock.calls[0]![0].data;
-    expect(run).toMatchObject({
-      userId: "user-1",
-      source: "proactive",
-      status: "completed",
-      repeatedPatternKey: "harness-evolution:2026-10-28",
-      initiatingAgentId: "platform-engineer",
-      completedAt: NOW,
-    });
+  it("rolls up cross-room recurrences, shape signals and the platform queue with budget and spend", async () => {
+    const store = fakeStore();
+    const result = await runHarnessEvolutionLoop(store, RUN_INPUT);
+    const run = store.recordRun.mock.calls[0]![0];
+
+    expect(run).toMatchObject({ ownerUserId: "user-1", repeatedPatternKey: "harness-evolution:2026-10-28", completedAt: NOW });
     expect(run.progressPayload).toEqual({
       periodKey: "2026-10-28",
-      budget: { maxCandidates: 5, maxProbeReplays: 20, tokenCap: 200_000, lookbackDays: 30 },
-      spend: { candidatesRanked: 2, probeReplays: 0, tokens: 0 },
-      ranked: 2,
-      rejected: 2,
-      deferred: 0,
+      budget: { maxRooms: 50, maxCandidatesPerRoom: 3, maxCandidates: 50, maxProbeReplays: 20, tokenCap: 200_000, lookbackDays: 7, minRecurrence: 2 },
+      spend: { roomsScanned: 2, candidatesRecorded: 3, probeReplays: 0, tokens: 0 },
+      roomsWithCandidates: 2,
+      roomsDeferred: 0,
+      crossRoomRecurrences: 1,
     });
+    const data = run.artifactData as {
+      crossRoomRecurrences: Array<{ missKey: string; rooms: string[] }>;
+      shapeSignals: Array<{ signalId: string }>;
+      platformQueue: { open: unknown[]; rejected: Array<{ itemId: string; reason: string }> };
+    };
+    expect(data.crossRoomRecurrences).toEqual([
+      expect.objectContaining({ shapeKey: "delivery-medium", missKey: "tool:record_workroom_evidence:authority_denied", rooms: ["WC-1", "WC-2"] }),
+    ]);
+    expect(data.shapeSignals.map((s) => s.signalId)).toEqual(["IS-F1"]);
+    expect(data.platformQueue.rejected).toEqual([{ itemId: "BI-NOT-HERE", reason: "missing" }]);
+    expect(result.taskRunId).toBe("TR-HEV-NEW");
+  });
 
-    const artifact = db.taskArtifact.create.mock.calls[0]![0].data;
-    expect(artifact.taskRunId).toBe("tr-row-1");
-    expect(artifact.metadata).toEqual({ kind: HARNESS_EVOLUTION_ARTIFACT_KIND, periodKey: "2026-10-28" });
-    const part = (artifact.parts as Array<{ type: string; data: { ranked: unknown[]; rejected: unknown[] } }>)[0]!;
-    expect(part.type).toBe(HARNESS_EVOLUTION_ARTIFACT_KIND);
-    expect(part.data.ranked).toHaveLength(2);
-    expect(part.data.rejected).toHaveLength(2);
+  it("stops at the run's candidate cap and defers the remaining rooms", async () => {
+    const store = fakeStore();
+    const result = await runHarnessEvolutionLoop(store, { ...RUN_INPUT, taskConfig: { maxCandidates: 1 } });
+    expect(store.recordRoomCandidates).toHaveBeenCalledTimes(1);
+    expect(result.spend.candidatesRecorded).toBe(1);
+    expect(result.roomsDeferred).toBe(1);
   });
 
   it("records nothing new when today's run already exists", async () => {
-    const db = fakeDb({ existingRun: true });
-    const result = await runHarnessEvolutionLoop(db, RUN_INPUT);
+    const store = fakeStore({ findRun: vi.fn().mockResolvedValue({ taskRunId: "TR-HEV-EXISTING" }) });
+    const result = await runHarnessEvolutionLoop(store, RUN_INPUT);
     expect(result).toMatchObject({ idempotent: true, taskRunId: "TR-HEV-EXISTING" });
-    expect(db.taskRun.findFirst.mock.calls[0]![0].where).toEqual({ repeatedPatternKey: "harness-evolution:2026-10-28" });
-    expect(db.taskRun.create).not.toHaveBeenCalled();
-    expect(db.taskArtifact.create).not.toHaveBeenCalled();
-    expect(db.improvementSignal.findMany).not.toHaveBeenCalled();
-  });
-
-  it("skips the backlog read when no seed queue is configured", async () => {
-    const db = fakeDb();
-    await runHarnessEvolutionLoop(db, { ...RUN_INPUT, taskConfig: {} });
-    expect(db.backlogItem.findMany).not.toHaveBeenCalled();
+    expect(store.listActiveRooms).not.toHaveBeenCalled();
+    expect(store.recordRoomCandidates).not.toHaveBeenCalled();
+    expect(store.recordRun).not.toHaveBeenCalled();
   });
 });
 
@@ -148,27 +154,25 @@ describe("executeHarnessEvolutionLoopTask", () => {
     schedule: "17 4 * * *",
     ownerUserId: "user-1",
     agentId: "platform-engineer",
-    taskConfig: { seedItemIds: [] },
+    taskConfig: {},
   };
 
   it("marks the task and its job ok with a one-line summary", async () => {
     mocks.scheduledJobUpdate.mockResolvedValue({});
-    const db = fakeDb();
-    await executeHarnessEvolutionLoopTask(task, { now: NOW, db });
+    await executeHarnessEvolutionLoopTask(task, { now: NOW, store: fakeStore() });
     expect(mocks.scheduledAgentTaskUpdate).toHaveBeenCalledWith({
       where: { taskId: task.taskId },
       data: expect.objectContaining({ lastRunAt: NOW, lastStatus: "ok", lastError: null, taskRunId: "TR-HEV-NEW" }),
     });
-    const job = mocks.scheduledJobUpdate.mock.calls[0]![0];
-    expect(job.data.lastStatus).toBe("ok");
-    expect(job.data.lastRunSummary).toBe("1 candidate ranked; 1 rejected; 0 deferred; spend 0 tokens, 0 probe replays");
+    expect(mocks.scheduledJobUpdate.mock.calls[0]![0].data.lastRunSummary).toBe(
+      "2 of 2 ring-0 rooms hold 3 candidates; 1 cross-room recurrence; spend 0 tokens, 0 probe replays",
+    );
   });
 
   it("records an error instead of throwing into the scheduler", async () => {
     mocks.scheduledJobUpdate.mockResolvedValue({});
-    const db = fakeDb();
-    db.improvementSignal.findMany.mockRejectedValue(new Error("db down"));
-    await expect(executeHarnessEvolutionLoopTask(task, { now: NOW, db })).resolves.toBeUndefined();
+    const store = fakeStore({ listActiveRooms: vi.fn().mockRejectedValue(new Error("db down")) });
+    await expect(executeHarnessEvolutionLoopTask(task, { now: NOW, store })).resolves.toBeUndefined();
     expect(mocks.scheduledAgentTaskUpdate).toHaveBeenCalledWith({
       where: { taskId: task.taskId },
       data: expect.objectContaining({ lastStatus: "error", lastError: "db down" }),

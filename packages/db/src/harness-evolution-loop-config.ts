@@ -2,9 +2,10 @@
 // docs/superpowers/specs/2026-10-28-harness-evolution-loop-design.md).
 //
 // Detectors had filed ~1,370 improvement items with ~28 closed when this was
-// filed: detection exists, closure does not. This task turns recurring agent
-// misses into ranked, evidence-backed harness-edit candidates every day, as a
-// platform job rather than a client cron (WWMD DI-E6FA02FCC221).
+// filed: detection exists, closure does not. Improvement is owned by each
+// Workroom; this task is the daily aggregator. It records each ring-0 room's
+// recurring misses on that room as harness-edit candidates and rolls them up
+// for promotion. It is a platform job, not a client cron (WWMD DI-E6FA02FCC221).
 //
 // Config lives here beside demand-scoring-steward-config.ts because the seed
 // (packages/db) and the deterministic executor (apps/web) both need the kind,
@@ -15,7 +16,7 @@ export const HARNESS_EVOLUTION_LOOP_TASK_ID = "harness-evolution-loop-daily";
 /** AI Ops Engineer: owns platform tool efficiency and its improvement signals. */
 export const HARNESS_EVOLUTION_LOOP_AGENT_ID = "platform-engineer";
 
-export const HARNESS_EVOLUTION_LOOP_TASK_TITLE = "Rank recurring agent misses into harness-edit candidates (daily)";
+export const HARNESS_EVOLUTION_LOOP_TASK_TITLE = "Record each Workroom's recurring misses as harness-edit candidates (daily)";
 
 export const HARNESS_EVOLUTION_LOOP_ROUTE_CONTEXT = "/platform/ai/skills";
 
@@ -30,15 +31,18 @@ export const HARNESS_EVOLUTION_LOOP_TASK_KIND = "harness-evolution-loop";
 
 /**
  * Seeded taskConfig, written on create only so an operator's tuning survives
- * re-seeding. The executor clamps every cap. `seedItemIds` is the first queue:
+ * re-seeding. The executor clamps every cap. `seedItemIds` is the ring-0 platform queue:
  * the plumbing failures mined from 86 Claude sessions on 2026-10-28 and filed
  * under EP-C00F61F4. An id an install does not hold is skipped and reported.
  */
 export const HARNESS_EVOLUTION_LOOP_DEFAULT_CONFIG = {
-  maxCandidates: 10,
+  maxRooms: 50,
+  maxCandidatesPerRoom: 3,
+  maxCandidates: 50,
   maxProbeReplays: 20,
   tokenCap: 200_000,
-  lookbackDays: 30,
+  lookbackDays: 7,
+  minRecurrence: 2,
   seedItemIds: [
     "BI-2C73B434",
     "BI-5DD46FDA",
@@ -57,8 +61,9 @@ export const HARNESS_EVOLUTION_LOOP_DEFAULT_CONFIG = {
  * orchestration is deterministic; the run never edits a harness file itself.
  */
 export const HARNESS_EVOLUTION_LOOP_PROMPT =
-  "Rank the seed queue and open improvement signals (MCP efficiency, skill curator, work-pattern "
-  + "observer and other detectors) into harness-edit candidates, each with the trajectory evidence "
-  + "behind it; reject any candidate without recorded evidence. Record the budget and spend on the "
-  + "run. Deterministic: no model judgement, and it never edits a harness file; adoption goes "
-  + "through a probe and a governed PR.";
+  "For each active ring-0 delivery Workroom, record the room's own recurring misses (failed coworker "
+  + "tool calls and miss-kind room activity, human interactions included) on the room as harness-edit "
+  + "candidates with their trajectory evidence. Roll them up: name cross-room recurrences for promotion, "
+  + "list shape-level flow signals and the ring-0 platform queue, and record the budget and spend. "
+  + "Deterministic: no model judgement, and it never edits a harness file; adoption goes through a "
+  + "probe in the room and governed change.";
