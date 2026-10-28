@@ -28,6 +28,8 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
+When a room carries a backlog item, its outcome is that item's outcome. The room reads it from the item each time, so editing the item's outcome updates the room. A room only shows a different outcome when someone declares one in its boundary.
+
 From **Platform > Workrooms**, select a room ID to open its canonical case. A room tied to backlog work resolves to that backlog case while retaining the selected room in the URL. Its process, room journal, reviewer evidence, participants and workforce stay scoped to that room. Shared case messages are labelled **Case context**; case receipts do not prove completion of an individual room step. A stale selection or a room belonging to another case is unavailable rather than silently showing a different room. A room without a backlog item opens its own Work Capsule case.
 
 A delivery room also shows its **Structure**: where its current step sits on the IT4IT value streams, for example *Integrate · Build, Integrate, & Test Stage*, and the next stage it advances to. Each step of a delivery work shape maps to one IT4IT 3.0.1 stage. Design and reproduction steps sit in Design & Develop, building and repairing in Build, Integrate & Test, merging in Accept & Publish Release, and runtime checks and acceptance in Validate Deployment. A room that has not reached a step yet shows no structure rather than a guessed one.

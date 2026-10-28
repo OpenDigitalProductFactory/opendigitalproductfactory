@@ -2,10 +2,11 @@
 // will be true, for whom — because the outcome is how anyone tells it is done.
 // "How will we know?" is asked only when the outcome is not self-evident.
 //
-// The outcome lives in the item body, the field every intake path already
-// writes (kernel decision DI-1263D968DC26: no new substrate). It is a soft
-// prompt, never a gate: an item filed without one is still filed, and the
-// filer is told what is missing at the moment it is cheapest to add.
+// Since BI-8DE5429B the outcome is a field, BacklogItem.outcome (see "The
+// outcome field" below). Routes that still compose an Outcome section into the
+// body are lifted into that field by the hourly reconcile job. It is a soft
+// prompt, never a gate: an item filed without one is still filed, with a
+// derived draft the filer is told about.
 
 export const OUTCOME_HEADING = "## Outcome";
 export const HOW_WE_KNOW_HEADING = "## How we'll know";
@@ -115,4 +116,115 @@ export function improvementProposalOutcome(proposal: {
   return friction
     ? `The friction this proposal names no longer happens: ${friction}`
     : `"${proposal.title.trim()}" is in place, as proposed in ${proposal.proposalId}.`;
+}
+
+// ─── The outcome field (BI-8DE5429B) ─────────────────────────────────────────
+// Founder direction 2026-10-28: "The outcome is an aspect of the BI. No BI
+// should be without a clear outcome." WWMD DI-342D45001EF5 makes it a field:
+// BacklogItem.outcome, with outcomeSource saying who wrote it. A person or
+// agent stating it writes `stated`; when nobody does, the platform derives a
+// draft from the item's own context and writes `derived`, so the gap is
+// visible and anyone can correct it (WWMD DI-D50BBC916B6D: deterministic, no
+// model call, the same input always derives the same draft). Intake is never
+// refused for a missing outcome.
+
+export const OUTCOME_SOURCES = ["stated", "derived"] as const;
+export type OutcomeSource = (typeof OUTCOME_SOURCES)[number];
+
+/** The column's practical ceiling; an outcome is one or two sentences. */
+export const OUTCOME_MAX_LENGTH = 2000;
+
+const OUTCOME_HEADING_LINE = /^\s{0,3}#{1,6}\s+(?:expected\s+|desired\s+|intended\s+)?outcomes?\b.*$/i;
+const OUTCOME_COLON_LINE = /^\s{0,3}[-*+]?\s*\*{0,2}outcome\*{0,2}\s*:\s*\*{0,2}\s*(\S.*)$/i;
+const ANY_HEADING_LINE = /^\s{0,3}#{1,6}\s+\S/;
+
+function clip(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > OUTCOME_MAX_LENGTH ? `${trimmed.slice(0, OUTCOME_MAX_LENGTH - 1).trimEnd()}…` : trimmed;
+}
+
+/**
+ * The outcome a body already states: the text under its Outcome heading (up
+ * to the next heading), or the text of an `Outcome:` line. Null when the body
+ * states none.
+ */
+export function statedOutcomeFromBody(body: string | null | undefined): string | null {
+  if (typeof body !== "string" || !body.trim()) return null;
+  const lines = body.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const colon = OUTCOME_COLON_LINE.exec(line);
+    if (colon && !ANY_HEADING_LINE.test(line)) {
+      const value = colon[1]!.replace(/\*{1,2}$/, "").trim();
+      if (value) return clip(value);
+    }
+    if (OUTCOME_HEADING_LINE.test(line)) {
+      const section: string[] = [];
+      for (let next = index + 1; next < lines.length && !ANY_HEADING_LINE.test(lines[next]!); next += 1) {
+        section.push(lines[next]!);
+      }
+      const value = section.join("\n").trim();
+      if (value) return clip(value);
+    }
+  }
+  return null;
+}
+
+const TITLE_TAG_PREFIX = /^(?:\s*\[[^\]]{1,40}\]\s*)+/;
+
+/** A title reduced to the thing it names: no `[tag]` prefixes, no trailing stop. */
+function subjectOf(title: string): string {
+  const cleaned = title.replace(TITLE_TAG_PREFIX, "").trim().replace(/[.\s]+$/, "");
+  return cleaned || title.trim() || "This item";
+}
+
+/**
+ * A draft outcome derived from the item's own context when nobody stated one.
+ * Deterministic: a defect's draft says the reported problem no longer
+ * happens; any other work's draft says the thing it names is in place and in
+ * use. It is a draft to correct, and is stored as `derived`.
+ */
+export function deriveDraftOutcome(item: { title: string; workType?: string | null }): string {
+  const subject = subjectOf(item.title);
+  if (item.workType === "bug") {
+    return clip(`The reported problem no longer happens: "${subject}".`);
+  }
+  return clip(`"${subject}" is in place and working for the people it is for.`);
+}
+
+/**
+ * The outcome an item is stored with, and who wrote it. An explicit outcome
+ * wins; an Outcome section the filer wrote in the body counts as stated;
+ * otherwise a draft is derived.
+ */
+export function resolveItemOutcome(item: {
+  outcome?: string | null;
+  body?: string | null;
+  title: string;
+  workType?: string | null;
+}): { outcome: string; outcomeSource: OutcomeSource } {
+  const explicit = text(item.outcome);
+  if (explicit) return { outcome: clip(explicit), outcomeSource: "stated" };
+  const fromBody = statedOutcomeFromBody(item.body);
+  if (fromBody) return { outcome: fromBody, outcomeSource: "stated" };
+  return { outcome: deriveDraftOutcome(item), outcomeSource: "derived" };
+}
+
+/** The soft note returned when intake had to derive the outcome. It never refuses the filing. */
+export function derivedOutcomeAdvisory(outcome: string): string {
+  return `No outcome stated, so a draft was derived and marked derived: "${outcome}" `
+    + "Correct it with update_backlog_item (`outcome`) if it is not what will be true, and for whom, once this is done. "
+    + "Delivery closes the item when its change merges. Add \"How we'll know\" only when the outcome is not obvious from the change, "
+    + "and tag the item `contractual` only when a customer commitment needs a separate acceptance step.";
+}
+
+/**
+ * The body the ingest front door stores now that the outcome is a field:
+ * "How we'll know" first when the filer gave it, then the filer's own text.
+ */
+export function composeHowWeKnowBody(args: { body?: string | null; howWeKnow?: string | null }): string | null {
+  const howWeKnow = text(args.howWeKnow);
+  if (!howWeKnow) return args.body ?? null;
+  const body = text(args.body);
+  return body ? `${HOW_WE_KNOW_HEADING}\n${howWeKnow}\n\n${body}` : `${HOW_WE_KNOW_HEADING}\n${howWeKnow}`;
 }
