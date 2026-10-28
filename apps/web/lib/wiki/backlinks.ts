@@ -56,7 +56,7 @@ export type WikiBacklinkRow = {
   via: "this-page" | "kernel-page";
 };
 
-export type WikiBacklinkGroup = { scope: WikiBacklinkScope; label: string; rows: WikiBacklinkRow[] };
+export type WikiBacklinkGroup = { scope: WikiBacklinkScope; rows: WikiBacklinkRow[] };
 
 export type WikiUnlinkedMention = {
   id: string;
@@ -76,12 +76,6 @@ export type WikiBacklinks = {
   unlinkedMentions: WikiUnlinkedMention[];
 };
 
-const SCOPE_LABELS: Record<WikiBacklinkScope, string> = {
-  "profession-own": "Your profession",
-  organization: "Your organization",
-  platform: "Platform",
-  profession: "Professions",
-};
 const SCOPE_ORDER: WikiBacklinkScope[] = ["profession-own", "organization", "platform", "profession"];
 const MENTION_CANDIDATE_CAP = 200;
 const MENTION_CAP = 20;
@@ -216,7 +210,6 @@ export async function loadWikiBacklinks(
   const rows = [...rowsById.values()].sort(bySortKey);
   const linkedFrom: WikiBacklinkGroup[] = SCOPE_ORDER.map((scope) => ({
     scope,
-    label: SCOPE_LABELS[scope],
     rows: rows.filter((r) => r.scope === scope),
   })).filter((g) => g.rows.length > 0);
 

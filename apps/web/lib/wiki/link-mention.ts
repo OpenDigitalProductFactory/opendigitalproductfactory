@@ -73,20 +73,13 @@ export function wrapFirstMention(body: string, slug: string, terms: string[]): s
 
 /**
  * What the overlay editor opens with when a person picks "Link it": the body
- * with the first mention wrapped, a notice saying nothing is saved yet, and a
- * revision summary. When the mention is gone, the body is left as it was.
+ * with the first mention wrapped, or the body unchanged when the mention is
+ * gone. The route words the notice from the `wiki` catalog.
  */
 export function prepareLinkMention(
   body: string,
   target: { slug: string; title: string },
-): { body: string; notice: string; changeSummary: string | undefined } {
+): { body: string; linked: boolean } {
   const wrapped = wrapFirstMention(body, target.slug, mentionTerms(target));
-  if (wrapped === null) {
-    return { body, notice: `No plain mention of "${target.title}" is left on this page to link.`, changeSummary: undefined };
-  }
-  return {
-    body: wrapped,
-    notice: `A link to "${target.title}" has been added to the first mention below. Review it, then save. Nothing has changed yet.`,
-    changeSummary: `Link the mention of ${target.title}`,
-  };
+  return wrapped === null ? { body, linked: false } : { body: wrapped, linked: true };
 }

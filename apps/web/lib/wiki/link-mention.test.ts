@@ -40,16 +40,17 @@ describe("wrapFirstMention", () => {
 });
 
 describe("prepareLinkMention", () => {
-  it("wraps the mention and says nothing is saved yet", () => {
-    const prepared = prepareLinkMention("Our CSDM model.", { slug: "entities/csdm", title: "CSDM" });
-    expect(prepared.body).toBe("Our [[entities/csdm|CSDM]] model.");
-    expect(prepared.notice).toContain("Nothing has changed yet");
-    expect(prepared.changeSummary).toBe("Link the mention of CSDM");
+  it("wraps the mention for the person to review", () => {
+    expect(prepareLinkMention("Our CSDM model.", { slug: "entities/csdm", title: "CSDM" })).toEqual({
+      body: "Our [[entities/csdm|CSDM]] model.",
+      linked: true,
+    });
   });
 
   it("leaves the body alone when the mention is gone", () => {
-    const prepared = prepareLinkMention("Nothing here.", { slug: "entities/csdm", title: "CSDM" });
-    expect(prepared.body).toBe("Nothing here.");
-    expect(prepared.changeSummary).toBeUndefined();
+    expect(prepareLinkMention("Nothing here.", { slug: "entities/csdm", title: "CSDM" })).toEqual({
+      body: "Nothing here.",
+      linked: false,
+    });
   });
 });

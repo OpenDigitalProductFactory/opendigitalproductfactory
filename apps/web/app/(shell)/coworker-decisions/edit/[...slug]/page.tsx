@@ -19,6 +19,7 @@ import {
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
 import { WikiPageEditor } from "@/components/wiki/WikiPageEditor";
+import { getT } from "@/lib/i18n/t.server";
 import { prepareLinkMention } from "@/lib/wiki/link-mention";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,10 @@ export default async function WikiPageEditRoute({
         })
       : null;
     const prepared = target ? prepareLinkMention(overlay.body, target) : null;
+    const t = await getT("wiki");
+    const notice =
+      target && prepared ? t(prepared.linked ? "linkMention.added" : "linkMention.notFound", { title: target.title }) : null;
+    const changeSummary = target && prepared?.linked ? t("linkMention.changeSummary", { title: target.title }) : undefined;
     return (
       <WikiPageEditor
         mode="update"
@@ -79,8 +84,8 @@ export default async function WikiPageEditRoute({
         initialSlug={overlay.slug}
         initialTitle={overlay.title}
         initialBody={prepared?.body ?? overlay.body}
-        notice={prepared?.notice ?? null}
-        initialChangeSummary={prepared?.changeSummary}
+        notice={notice}
+        initialChangeSummary={changeSummary}
         initialPageKind={overlay.pageKind as WikiPageKind}
         initialStatus={overlay.status as WikiPageStatus}
         initialAbstract={overlay.abstract}

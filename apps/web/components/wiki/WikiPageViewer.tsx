@@ -15,7 +15,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 
 import type { WikiBacklinks } from "@/lib/wiki/backlinks";
 
-import { WikiBacklinksPanel } from "./WikiBacklinksPanel";
+import { WikiBacklinksPanel, type WikiBacklinksLabels } from "./WikiBacklinksPanel";
 import { WikiBodyRenderer } from "./WikiBodyRenderer";
 import { WikiPageKindBadge } from "./WikiPageKindBadge";
 import { WikiSourceCitations, type WikiSourceCitation } from "./WikiSourceCitations";
@@ -80,7 +80,7 @@ const APPLIES_TO_LABEL: Record<string, string> = {
 type Props = {
   page: WikiPageDetail;
   /** Inbound links and unlinked mentions, already limited to what the reader may open (BI-4EAFF7AC). */
-  backlinks?: WikiBacklinks;
+  backlinks?: { data: WikiBacklinks; labels: WikiBacklinksLabels };
 };
 
 function formatOrigin(page: WikiPageDetail): string {
@@ -250,9 +250,9 @@ export function WikiPageViewer({ page, backlinks }: Props): ReactNode {
       </footer>
     </article>
     {backlinks ? (
-      <aside aria-label="Backlinks" className="mt-8 lg:mt-0">
+      <aside aria-labelledby="wiki-backlinks-heading" className="mt-8 lg:mt-0">
         <div className="lg:sticky lg:top-6">
-          <WikiBacklinksPanel backlinks={backlinks} />
+          <WikiBacklinksPanel backlinks={backlinks.data} labels={backlinks.labels} />
         </div>
       </aside>
     ) : null}

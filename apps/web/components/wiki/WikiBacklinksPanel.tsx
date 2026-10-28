@@ -7,58 +7,71 @@
 
 import type { ReactNode } from "react";
 
+import { Surface } from "@/components/ui/Surface";
 import type { WikiBacklinkRow, WikiBacklinks, WikiBacklinkScope, WikiUnlinkedMention } from "@/lib/wiki/backlinks";
 
 import { BacklinkGroup, type BacklinkItem } from "./BacklinkGroup";
 
-const SCOPE_BADGES: Record<WikiBacklinkScope, string> = {
-  "profession-own": "Profession",
-  organization: "Organization",
-  platform: "Platform",
-  profession: "Profession",
+/** The panel's copy, resolved from the `wiki` message catalog by the route. */
+export type WikiBacklinksLabels = {
+  heading: string;
+  empty: string;
+  unlinkedMentions: string;
+  linkIt: string;
+  linksPlatformPage: string;
+  groups: Record<WikiBacklinkScope, string>;
+  scopes: Record<WikiBacklinkScope, string>;
 };
 
-function linkedFromItem(row: WikiBacklinkRow): BacklinkItem {
+function linkedFromItem(row: WikiBacklinkRow, labels: WikiBacklinksLabels): BacklinkItem {
+  const scope = labels.scopes[row.scope];
   return {
     id: row.id,
     title: row.title,
     href: row.href,
     pageKind: row.pageKind,
-    badges: row.via === "kernel-page" ? [SCOPE_BADGES[row.scope], "Links the platform page"] : [SCOPE_BADGES[row.scope]],
+    badges: row.via === "kernel-page" ? [scope, labels.linksPlatformPage] : [scope],
     context: row.context,
   };
 }
 
-function mentionItem(mention: WikiUnlinkedMention): BacklinkItem {
+function mentionItem(mention: WikiUnlinkedMention, labels: WikiBacklinksLabels): BacklinkItem {
   return {
     id: mention.id,
     title: mention.title,
     href: mention.href,
     pageKind: mention.pageKind,
-    badges: [SCOPE_BADGES[mention.scope]],
+    badges: [labels.scopes[mention.scope]],
     context: mention.context,
-    action: mention.linkItHref ? { href: mention.linkItHref, label: "Link it" } : null,
+    action: mention.linkItHref ? { href: mention.linkItHref, label: labels.linkIt } : null,
   };
 }
 
-export function WikiBacklinksPanel({ backlinks }: { backlinks: WikiBacklinks }): ReactNode {
+export function WikiBacklinksPanel({
+  backlinks,
+  labels,
+}: {
+  backlinks: WikiBacklinks;
+  labels: WikiBacklinksLabels;
+}): ReactNode {
   const { linkedFrom, linkedFromCount, unlinkedMentions } = backlinks;
   return (
-    <section
-      aria-labelledby="wiki-backlinks-heading"
-      className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-[var(--dpf-text)]"
-    >
+    <Surface as="section" aria-labelledby="wiki-backlinks-heading" className="text-[var(--dpf-text)]">
       <h2 id="wiki-backlinks-heading" className="text-sm font-semibold">
-        Linked from
-        {linkedFromCount > 0 ? <span className="ml-1 font-normal text-[var(--dpf-muted)]">({linkedFromCount})</span> : null}
+        {labels.heading}
+        {linkedFromCount > 0 ? <span className="ms-1 font-normal text-[var(--dpf-muted)]">({linkedFromCount})</span> : null}
       </h2>
 
       {linkedFromCount === 0 ? (
-        <p className="mt-2 text-sm text-[var(--dpf-muted)]">No pages link here yet.</p>
+        <p className="mt-2 text-sm text-[var(--dpf-muted)]">{labels.empty}</p>
       ) : (
         <div className="mt-3 space-y-4">
           {linkedFrom.map((group) => (
-            <BacklinkGroup key={group.scope} label={group.label} items={group.rows.map(linkedFromItem)} />
+            <BacklinkGroup
+              key={group.scope}
+              label={labels.groups[group.scope]}
+              items={group.rows.map((row) => linkedFromItem(row, labels))}
+            />
           ))}
         </div>
       )}
@@ -66,13 +79,13 @@ export function WikiBacklinksPanel({ backlinks }: { backlinks: WikiBacklinks }):
       {unlinkedMentions.length > 0 ? (
         <details className="mt-4 border-t border-[var(--dpf-border)] pt-3">
           <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">
-            Unlinked mentions ({unlinkedMentions.length})
+            {labels.unlinkedMentions}
           </summary>
           <div className="mt-2">
-            <BacklinkGroup items={unlinkedMentions.map(mentionItem)} />
+            <BacklinkGroup items={unlinkedMentions.map((mention) => mentionItem(mention, labels))} />
           </div>
         </details>
       ) : null}
-    </section>
+    </Surface>
   );
 }

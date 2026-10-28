@@ -47,7 +47,7 @@ export function BacklinkGroup({
                 {(item.badges ?? []).map((badge) => (
                   <span
                     key={badge}
-                    className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-muted)]"
+                    className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-dpf-caption text-[var(--dpf-muted)]"
                   >
                     {badge}
                   </span>

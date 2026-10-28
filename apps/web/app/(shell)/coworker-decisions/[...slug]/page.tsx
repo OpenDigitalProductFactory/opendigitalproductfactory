@@ -5,7 +5,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 
+import type { WikiBacklinksLabels } from "@/components/wiki/WikiBacklinksPanel";
 import { WikiPageViewer, type WikiPageDetail } from "@/components/wiki/WikiPageViewer";
+import { getT } from "@/lib/i18n/t.server";
 import { loadWikiBacklinks, type WikiReader } from "@/lib/wiki/backlinks";
 import { resolveReaderOrganizationId } from "@/lib/wiki/reader-organization";
 
@@ -89,6 +91,26 @@ export default async function WikiPageDetailRoute({ params }: { params: Params }
 
   const reader: WikiReader = { organizationId, professionFamilies: null, familyKey: null };
   const backlinks = await loadWikiBacklinks(prisma, { page: row, reader });
+  const t = await getT("wiki");
+  const labels: WikiBacklinksLabels = {
+    heading: t("backlinks.heading"),
+    empty: t("backlinks.empty"),
+    unlinkedMentions: t("backlinks.unlinkedMentions", { count: String(backlinks.unlinkedMentions.length) }),
+    linkIt: t("backlinks.linkIt"),
+    linksPlatformPage: t("backlinks.linksPlatformPage"),
+    groups: {
+      "profession-own": t("backlinks.groups.professionOwn"),
+      organization: t("backlinks.groups.organization"),
+      platform: t("backlinks.groups.platform"),
+      profession: t("backlinks.groups.profession"),
+    },
+    scopes: {
+      "profession-own": t("backlinks.scopes.profession"),
+      organization: t("backlinks.scopes.organization"),
+      platform: t("backlinks.scopes.platform"),
+      profession: t("backlinks.scopes.profession"),
+    },
+  };
 
-  return <WikiPageViewer page={detail} backlinks={backlinks} />;
+  return <WikiPageViewer page={detail} backlinks={{ data: backlinks, labels }} />;
 }
