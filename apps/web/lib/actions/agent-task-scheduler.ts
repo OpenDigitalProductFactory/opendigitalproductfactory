@@ -2,6 +2,7 @@
 
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { auth } from "@/lib/auth";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
   scheduleAgentTaskFor,
@@ -382,8 +383,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       const { loadStageDispatchAnswered } = await import("@/lib/work-management/stage-dispatch-answered");
       const answer = await loadStageDispatchAnswered(task);
       if (answer.answered) {
-        const { sanitizeForLog } = await import("@/lib/security/safe-log");
-        console.info(`[agent-task-scheduler] ${sanitizeForLog(taskId)}: stage ${sanitizeForLog(answer.stageKey)} already has completing evidence for this dispatch (${answer.evidenceRecordedAt.toISOString()}); not running it again.`);
+        console.info("[agent-task-scheduler] %s: stage %s already has completing evidence for this dispatch (%s); not running it again.", sanitizeForLog(taskId), sanitizeForLog(answer.stageKey), answer.evidenceRecordedAt.toISOString());
         return await recordUnchangedScheduledRun(task, now);
       }
     }
