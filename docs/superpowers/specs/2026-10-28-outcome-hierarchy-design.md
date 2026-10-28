@@ -61,10 +61,36 @@ It drops catchball negotiation, the X-matrix, annual planning ceremonies and tar
 
 See `2026-10-27-outcomes-define-done-design.md`, amendment of 2026-10-28.
 
-## Follow-up (filed, not built)
+## The boundary: how an epic links to an instance outcome
 
-Filed under EP-OUTCOME-HIERARCHY:
+A separate delivery stream builds the instance level: the owner entry UI and the step in initial platform setup. This section fixes the contract between that stream and the epic level, so the two can be built apart.
 
-1. BI-916216E7: the instance captures its mission, vision and top-level outcomes at install setup, and the owner can edit them.
+**Instance outcome record (owned by the instance stream).**
+
+- One row per top-level outcome, scoped to an organization: `organizationId`, a stable semantic id such as `IO-XXXXXXXX`, `statement` (what will be true, and for whom), an optional `measure`, `status` (`active` or `retired`), `ordinal`, and audit timestamps.
+- Mission and vision stay on `BusinessContext`. That stream adds `vision` beside the existing `mission`.
+- Only the owner, or an action the owner takes, writes these rows. No agent path derives or invents them.
+- A retired outcome is never deleted. Links that point to it stay readable and are shown as "serves a retired outcome".
+
+**Epic link (owned by the epic stream, BI-7CD178F8).**
+
+- `Epic.servesInstanceOutcomeId`: a nullable foreign key to the instance outcome row's id. It is indexed, with `ON DELETE SET NULL`, and there is at most one per epic.
+- `Epic.outcome` and `Epic.outcomeSource` follow the `BacklogItem` pattern, except that `derived` is not allowed for an epic.
+- Null means "serves no recorded instance outcome yet". It is shown as a gap and never refused.
+- An epic links only to an outcome in its own organization. Platform-scoped epics link to the outcomes of the organization that owns the platform-development work.
+
+**Below the epic (delivered in this change).** These levels already link up through existing columns, and neither stream changes them:
+
+- `BacklogItem.epicId` links an item to its epic.
+- `Workroom.backlogItemId` links a room to its item.
+
+**Read contract for the decision layers (BI-8AB6B4F7).**
+
+- The org context bundle (`apps/web/lib/mcp/org-context-bundle.ts`) gains `vision` and `instanceOutcomes: [{ id, statement, measure }]` for active rows, in `ordinal` order.
+- WWMD, WWWD and WSID read the bundle as context and record on the decision ledger which outcome ids they read.
+
+## Follow-up (filed, not built here)
+
+1. Instance mission, vision and outcomes: entry at setup and owner edit. **This is built by the separate instance stream, not here.** BI-916216E7 was filed under EP-OUTCOME-HIERARCHY before that was decided. Merge it into that stream's item or retire it as covered.
 2. BI-8AB6B4F7: WWMD, WWWD and WSID read those outcomes as their prime context.
-3. BI-7CD178F8: each epic declares its own outcome and the instance outcome it serves. Its #6709 objective becomes a roll-up over it.
+3. BI-7CD178F8: each epic states its outcome and its `servesInstanceOutcomeId`. Its #6709 objective becomes a roll-up over the epic.
