@@ -5,7 +5,7 @@ status: draft
 # Portal outcome convergence
 
 **Backlog:** BI-81AB897A. **Workroom:** WC-6D8C9787.
-**Status:** proposed integration scope; independent approval pending.
+**Status:** proposed integration scope; implementation is outside this investigation task.
 
 The operator reconfirmed investigation and an improvement plan after the October
 28 completion request. Implementation and deployment are outside this task.

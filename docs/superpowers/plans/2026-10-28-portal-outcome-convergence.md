@@ -5,7 +5,7 @@ status: draft
 # Portal outcome convergence delivery plan
 
 **Parent:** BI-81AB897A. **Workroom:** WC-6D8C9787.
-**Status:** proposed decomposition; independent scope/plan approval and coverage receipt pending.
+**Status:** proposed implementation sequence; execution is outside this investigation task.
 
 The operator reconfirmed investigation and an improvement plan. Implementation
 and deployment are outside this task.
@@ -31,13 +31,15 @@ is proposed. Existing Windows COO work keeps its ownership and review gates.
 ## Backlog coverage
 
 Decision: **decomposed**. These deliverables are independently shippable. This
-table is the delivery graph. The governed decomposition receipt is
-`cmvsirovl3emm01s5xu80m667`, recorded against plan blob
-`b5d6b21de27b5bd4855725418933aeb2291e94f0` at commit
-`207f6567a79439d65a352c43370ccd8bef8ea1c6`, with scope baseline
-`baseline-40ea2e65-69af-4493-875d-5a717a918678`. It validates nine live mappings;
-it is neither implementation authorization nor delivery acceptance. Recheck and
-refresh coverage for the final plan amendment before implementation. In that
+table is the delivery graph. Captured governed decomposition receipt
+`cmvsm78ft0p1c01mfyt22h6u3` was recorded against plan blob
+`02a6ef0c4b47350c96eafe32d294706e7f203a10` at commit
+`24591dce10cdb2b46bcaf4b893dbe75505fdc1c4`, with scope baseline
+`baseline-6dbfa402-5762-438f-9767-d707a31704e5`. It validates nine live mappings;
+it is neither implementation authorization nor delivery acceptance. The live BI
+holds subsequent review/coverage receipts; check its latest receipt before any
+future execution. The amendment here records receipt metadata and does not
+change the delivery graph or acceptance obligations. In that
 receipt, requirement references are objective IDs and verification references
 are acceptance IDs; V-* below names the additional test procedure.
 
