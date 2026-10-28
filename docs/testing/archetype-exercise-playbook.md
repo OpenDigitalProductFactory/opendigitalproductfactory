@@ -108,3 +108,37 @@ by both: the simulator projects it into flows, the harness projects it into HTTP
 calls. Until that lands, a change to one must be mirrored in the other, and any
 new archetype should be added to whichever system will actually exercise it —
 not both by default.
+
+## 6. Jurisdiction is a test axis, learned by pattern
+
+**The founder's rule (2026-10-28) applies to every archetype:** jurisdictions vary, and the platform will never know every possibility. It must know the *need*. Gaps close by testing a few jurisdictions and folding the pattern back in, not by enumerating every locale up front.
+
+What that means for an exercise:
+
+- **Model the need, not the country.** Each archetype's measure-of-success outcome declares the rule slots it depends on: documents, eligibility, preconditions, money, windows, records, reporting. Each slot carries a provenance: generic default, operator-attested, or confirmed regulation. Platform code never branches on a country code, and no pack asserts a jurisdiction's law. Law enters only through cited, human-confirmed research (BI-50DF2A92). The pet-rescue adoption design is the first worked example: `docs/superpowers/specs/2026-10-28-rescue-adoption-locale-policy-design.md`.
+- **Run the outcome in a test jurisdiction.** A scenario pack names the jurisdiction it runs in (ISO 3166-1, plus ISO 3166-2 where the rules are sub-national). The exercise drives the outcome end to end and records three things:
+  - a slot that was **missing**: the jurisdiction needed a rule the model had no place for;
+  - a slot that was **wrong**: the default would have produced an unlawful or failed outcome;
+  - a slot that was **fine** on its default.
+- **Fold the pattern back.**
+  - A missing slot is added to the archetype's generic pack, so every deployment gains it.
+  - Values go through the research path for confirmation.
+  - Gaps the slot model itself could not express become BIs scoped `common` or `platform`, not leaf.
+  - A second jurisdiction that surfaces no new slot is the signal the model has converged for that outcome.
+- **English-speaking countries first.** The default test set is:
+  1. United States (sub-national; start with US-TX);
+  2. United Kingdom (GB-ENG);
+  3. Canada (CA-ON);
+  4. Australia (AU-NSW);
+  5. then Ireland (IE) and New Zealand (NZ).
+
+  Language stays constant, so differences are legal and financial, not translation. Non-English jurisdictions follow once a slot set has held across this set.
+- **Archetypes in the queue (§3).** Each exercise of trades, asset rental and professional services runs at least two jurisdictions from the default set. Restaurant and pet rescue are re-run against the set when their next exercise is due.
+
+| Archetype | Outcome under test | Exercised | Jurisdictions run |
+| --- | --- | --- | --- |
+| Restaurant (food-hospitality) | booking + order + stock | 2026-07-29 → 07-31 | none recorded (pre-rule) |
+| Pet rescue (nonprofit-community) | lawful adoption | 2026-10-28 walkthrough (DEV) | none recorded; the design defines the slots |
+| Trades / field service | dispatch → visit → invoice | queued | — |
+| Asset rental | reserve → checkout → return | queued | — |
+| Professional services | inquiry → engagement → delivery | queued | — |

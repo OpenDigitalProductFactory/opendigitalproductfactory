@@ -10559,7 +10559,8 @@
         "2-what-the-next-archetype-costs",
         "3-which-archetype-next",
         "4-the-gap-to-close-before-the-next-run",
-        "5-where-scenario-data-lives"
+        "5-where-scenario-data-lives",
+        "6-jurisdiction-is-a-test-axis-learned-by-pattern"
       ]
     },
     "docs/testing/archetype-job-validation.md": {
