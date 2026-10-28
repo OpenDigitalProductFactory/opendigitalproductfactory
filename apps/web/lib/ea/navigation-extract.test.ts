@@ -43,6 +43,7 @@ describe("buildNavigationModel", () => {
       fromKey: "navigation:entry:platform",
       toKey: "route:/platform",
       relSlug: "traces",
+      traceKind: "navigates-to",
     });
     expect(model.relTypeSlugs).toContain("traces");
   });

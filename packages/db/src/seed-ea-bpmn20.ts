@@ -6,6 +6,7 @@
 // Spec: docs/superpowers/specs/2026-04-03-value-stream-team-architecture-design.md
 
 import { prisma } from "./client.js";
+import { pruneRetiredAssociationRules } from "./seed-ea-archimate4.js";
 import type { Prisma } from "../generated/client/client";
 
 // ─── Lifecycle constraint sets ────────────────────────────────────────────────
@@ -88,7 +89,10 @@ type RelTypeDef = {
 const REL_TYPES: RelTypeDef[] = [
   { slug: "sequence_flow",    name: "Sequence Flow",    neoType: "SEQUENCE_FLOW",    description: "Ordered execution flow between flow objects within a process" },
   { slug: "message_flow",     name: "Message Flow",     neoType: "MESSAGE_FLOW",     description: "Communication between participants (across pools)" },
-  { slug: "association",      name: "Association",       neoType: "ASSOCIATED_WITH",  description: "Link between an artifact and a flow object" },
+  // BI-52280538: BPMN association named by what it does — an artifact annotating a flow node,
+  // or a compensation boundary event naming its compensation activity (BPMN 2.0 §10.6).
+  { slug: "annotates",        name: "Annotates",         neoType: "ANNOTATES",        description: "A text annotation or artifact describes the flow node" },
+  { slug: "compensates_with", name: "Compensates With",  neoType: "COMPENSATES_WITH", description: "A compensation boundary event is handled by the target activity" },
   { slug: "data_association", name: "Data Association",  neoType: "DATA_ASSOCIATION", description: "Data flow to or from an activity" },
   { slug: "default_flow",    name: "Default Flow",      neoType: "DEFAULT_FLOW",     description: "Default path from a gateway when no conditions match" },
   { slug: "conditional_flow", name: "Conditional Flow", neoType: "CONDITIONAL_FLOW", description: "Condition-guarded path from a gateway" },
@@ -201,11 +205,11 @@ const RULES: RuleDef[] = [
   ["bpmn_service_task",  "bpmn_data_store",    "data_association"],
 
   // ── Associations (artifact links) ───────────────────────────────────────
-  ["bpmn_data_object",   "bpmn_task",          "association"],
-  ["bpmn_data_object",   "bpmn_service_task",  "association"],
-  ["bpmn_boundary_event","bpmn_task",          "association"],
-  ["bpmn_boundary_event","bpmn_service_task",  "association"],
-  ["bpmn_boundary_event","bpmn_sub_process",   "association"],
+  ["bpmn_data_object",   "bpmn_task",          "data_association"],
+  ["bpmn_data_object",   "bpmn_service_task",  "data_association"],
+  ["bpmn_boundary_event","bpmn_task",          "compensates_with"],
+  ["bpmn_boundary_event","bpmn_service_task",  "compensates_with"],
+  ["bpmn_boundary_event","bpmn_sub_process",   "compensates_with"],
 ];
 
 // ─── DQ stage-gate rules ──────────────────────────────────────────────────────
@@ -391,6 +395,20 @@ export async function seedEaBpmn20(): Promise<void> {
     ruleCount++;
   }
   console.log(`Seeded ${ruleCount} EaRelationshipRules for BPMN 2.0`);
+
+  // The legacy generic "association" type (neoType ASSOCIATED_WITH) is retyped and its rules
+  // pruned: new models use annotates / compensates_with / data_association (BI-52280538).
+  const legacyAssociation = await prisma.eaRelationshipType.findUnique({
+    where: { notationId_slug: { notationId: notation.id, slug: "association" } },
+    select: { id: true },
+  });
+  if (legacyAssociation) {
+    await prisma.eaRelationshipType.update({
+      where: { id: legacyAssociation.id },
+      data: { neoType: "ANNOTATES", description: "Legacy BPMN association, read as an annotation; new models use annotates or compensates_with" },
+    });
+    await pruneRetiredAssociationRules(notation.id, legacyAssociation.id, RULES, etMap, "association");
+  }
 
   // 5. Upsert DQ rules
   for (const dq of DQ_RULES) {

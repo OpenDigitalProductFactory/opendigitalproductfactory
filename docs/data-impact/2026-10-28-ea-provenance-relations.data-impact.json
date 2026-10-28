@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-52280538 (EP-5F6369AB). The EA metamodel's generic associations become typed relationships: ArchiMate realizes / serves / aggregates / influences / assigned_to where ArchiMate defines one, and three W3C PROV-O extension types (evidenced_by, generates, attributed_to) for governance evidence. BPMN association becomes annotates / compensates_with / data_association. Cross-layer SysML traces carry a traceKind. Migration 20261028090000_register_ea_provenance_relations registers the five new graph relation types.",
+  "affectedCopies": [
+    "graph_relation_type: five new reference rows",
+    "EaRelationshipType, EaRelationshipRule, EaDqRule, EaTraversalPattern, ViewpointDefinition (archimate4, bpmn20): rewritten by the seeds on every container start; association rules no longer declared are deleted by pruneRetiredAssociationRules",
+    "EaRelationship rows written by sysml-model-seed cross-layer projections: properties.traceKind added on their next reconcile"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "public: metamodel vocabulary and rules.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Reference data shipped with the platform."
+  },
+  "migration": {
+    "name": "20261028090000_register_ea_provenance_relations",
+    "backfill": "None for the migration. No live EaRelationship row used the retired metamodel associations on the dev install (2026-10-27: all 2,123 associated_with rows were data-model mirror rows, retyped by BI-28C22BE3).",
+    "rollback": "Forward-only and additive for the migration; the seeds' rule prune removes only association rules the current seed no longer declares."
+  },
+  "tests": [
+    "packages/db/src/seed-ea-archimate4.test.ts",
+    "packages/db/src/sysml-model-seed.test.ts",
+    "packages/db/src/relation-vocabulary.test.ts",
+    "apps/web/lib/ea/navigation-extract.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:graph-relation-type",
+      "prismaModel": "GraphRelationType",
+      "lifecycleDisposition": "Reference data; five rows added.",
+      "fields": [
+        { "fieldId": "data:graph-relation-type#key", "resolution": "not-applicable", "reason": "EVIDENCED_BY, GENERATES, ATTRIBUTED_TO (PROV-O) and ANNOTATES, COMPENSATES_WITH (BPMN 2.0).", "provenance": "Migration 20261028090000_register_ea_provenance_relations; BI-52280538.", "flags": [] }
+      ]
+    }
+  ]
+}

@@ -92,38 +92,38 @@ export const ARCHIMATE_VIEWPOINTS: ViewpointSpec[] = [
       "application_component",
       "event_evidence",
     ],
-    relSlugs: ["realizes", "associated_with"],
+    relSlugs: ["realizes", "evidenced_by"],
   },
   {
     name: "Application Architecture",
     description: "Application components, services, data objects, and their relationships.",
     elementSlugs: ["application_component", "application_service", "data_object", "technology_node", "technology_service", "system_software"],
-    relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
+    relSlugs: ["realizes", "assigned_to", "composed_of", "aggregates", "serves", "accesses", "has_foreign_key_to"],
   },
   {
     name: "Business Architecture",
     description: "Business capabilities, roles, actors, and value streams.",
     elementSlugs: ["business_capability", "business_role", "business_actor", "business_object", "value_stream", "value_stream_stage"],
-    relSlugs: ["realizes", "assigned_to", "influences", "composed_of", "associated_with"],
+    relSlugs: ["realizes", "assigned_to", "influences", "composed_of", "aggregates", "serves"],
   },
   {
     name: "Technology Architecture",
     description: "Infrastructure nodes, services, and their deployment relationships.",
     elementSlugs: ["technology_node", "technology_service", "system_software", "application_component"],
-    relSlugs: ["realizes", "assigned_to", "composed_of", "associated_with"],
+    relSlugs: ["realizes", "assigned_to", "composed_of", "aggregates", "depends_on"],
   },
   {
     name: "Capability Map",
     description: "Business capability hierarchy.",
     elementSlugs: ["business_capability"],
-    relSlugs: ["composed_of", "associated_with"],
+    relSlugs: ["composed_of", "aggregates"],
   },
   {
     // EP-DATA-ARCH: live ERD mirrored from the Prisma schema (data objects).
     name: "Data Model",
     description: "Logical data model mirrored from the Prisma schema as a live ERD.",
     elementSlugs: ["data_object"],
-    relSlugs: ["associated_with"],
+    relSlugs: ["has_foreign_key_to", "composed_of"],
   },
 ];
 
@@ -141,7 +141,7 @@ export const BPMN_VIEWPOINTS: ViewpointSpec[] = [
       "bpmn_pool", "bpmn_lane",
       "bpmn_data_object", "bpmn_data_input", "bpmn_data_output",
     ],
-    relSlugs: ["sequence_flow", "message_flow", "data_association", "conditional_flow", "default_flow", "association"],
+    relSlugs: ["sequence_flow", "message_flow", "data_association", "conditional_flow", "default_flow", "annotates", "compensates_with"],
   },
 ];
 

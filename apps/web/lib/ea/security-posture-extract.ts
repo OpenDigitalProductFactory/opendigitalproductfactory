@@ -107,7 +107,7 @@ export function buildSecurityPostureModel(): SysmlDesiredModel {
     });
     relationships.push({ fromKey: SECURITY_PACKAGE_KEY, toKey: plane.key, relSlug: "contains" });
     for (const model of plane.dataModels) {
-      crossLayerRelationships.push({ fromKey: plane.key, toKey: dataModelKey(model), relSlug: "traces" });
+      crossLayerRelationships.push({ fromKey: plane.key, toKey: dataModelKey(model), relSlug: "traces", traceKind: "protects" });
     }
   }
 

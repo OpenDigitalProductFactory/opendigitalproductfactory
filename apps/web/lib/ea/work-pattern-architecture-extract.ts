@@ -193,7 +193,7 @@ export function buildWorkPatternArchitectureModel(input: {
       relationships.push({ fromKey: actionKey, toKey: pattern.codeAllocationKey, relSlug: "allocates" });
     }
     if (pattern.sourceKey) {
-      crossLayerRelationships.push({ fromKey: actionKey, toKey: `source:${safeKey}`, relSlug: "traces" });
+      crossLayerRelationships.push({ fromKey: actionKey, toKey: `source:${safeKey}`, relSlug: "traces", traceKind: "implemented-by" });
     }
   }
 
