@@ -283,6 +283,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "process-identity.mjs"), join(temp, "scripts", "lib", "process-identity.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "gate-execution-checkpoint.mjs"), join(temp, "scripts", "lib", "gate-execution-checkpoint.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "ci-evidence-plan.mjs"), join(temp, "scripts", "lib", "ci-evidence-plan.mjs"));
+  // The docs-only classifier reads the evidence policy (BI-78176241).
+  cpSync(join(repoRoot, "config", "ci-evidence-policy.json"), join(temp, "config", "ci-evidence-policy.json"));
   cpSync(join(repoRoot, "scripts", "lib", "derived-artifacts-registry.mjs"), join(temp, "scripts", "lib", "derived-artifacts-registry.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
