@@ -218,7 +218,7 @@ export const scheduledFunctions = [
   substrateReconciler,   // BI-903FB5F9/BI-547B788D: restart stopped required substrate; report a wedged Docker VM, every 5 min
   edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
-  worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
+  worktreeJanitor, // BI-42FA7DD8/BI-99395B29: platform-owned worktree reaper (Tier-A); daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
   regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00
