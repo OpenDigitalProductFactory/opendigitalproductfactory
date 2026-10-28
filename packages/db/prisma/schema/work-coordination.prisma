@@ -154,6 +154,12 @@ model BacklogItem {
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?
+  // BI-8DE5429B (WWMD DI-342D45001EF5): the outcome the item delivers, in one
+  // field. outcomeSource is "stated" (a person or agent said it) or "derived"
+  // (the platform drafted it from the item's context; visible and correctable).
+  // Closed set and pairing enforced by BacklogItem_outcomeSource_closed_set.
+  outcome                 String?                       @db.Text
+  outcomeSource           String?
   // BI-E3FBB0C4: operational eligibility survives pruning of activity audit.
   triageAssessmentFingerprint String?
   triageAssessmentOutcome BacklogTriageAssessmentOutcome?
@@ -266,6 +272,7 @@ model BacklogItem {
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
   founderDemandClusters   FounderDemandCluster[]
   productObjectiveWork    ProductObjectiveWork[]
+  outcomeObservations     ProductOutcomeObservation[]   @relation("ProductOutcomeObservationItem")
 
   @@index([portfolioId])
   @@index([organizationId])

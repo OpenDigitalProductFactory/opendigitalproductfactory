@@ -581,6 +581,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       triageOutcome: item.triageOutcome,
       deferral: deferralData(item),
       ...scopeData(item),
+      // BI-8DE5429B: the item's own outcome, and whether a person or agent
+      // stated it or the platform derived a draft that is still to be confirmed.
+      outcome: item.outcome ?? null,
+      outcomeSource: item.outcomeSource ?? null,
       body: item.body ?? null,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),

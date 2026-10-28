@@ -46,6 +46,7 @@ import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
 import { subscriptionOAuthRenewal } from "./subscription-oauth-renewal";
 import { legacyProposalExpirySweep } from "./legacy-proposal-expiry-sweep";
+import { backlogOutcomeReconcile } from "./backlog-outcome-reconcile";
 import {
   contributorInventorySyncCron,
   contributorInventorySyncOnDemand,
@@ -198,6 +199,7 @@ export const scheduledFunctions = [
   tokenExpiryMonitor,
   subscriptionOAuthRenewal, // BI-A53C594E: renew subscription OAuth sign-ins ahead of expiry, retry with backoff
   legacyProposalExpirySweep, // BI-753D69A9: expire undecided legacy proposals under the approval lifetime
+  backlogOutcomeReconcile, // BI-8DE5429B: every open item gets an outcome; reopens and failures measured against it
   contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,

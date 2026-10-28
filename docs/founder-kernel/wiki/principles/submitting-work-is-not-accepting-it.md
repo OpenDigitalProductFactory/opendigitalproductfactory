@@ -2,7 +2,7 @@
 title: Submitting Work Is Not Accepting It
 pageKind: principle
 status: published
-abstract: Opening a pull request with its evidence ends the delivering thread. Merge and live verification run on a different clock. Delivery closes the item by default; a separate acceptance by whoever asked is owed only for contractual work, a customer who reported the problem is asked once whether it is fixed, and a regression found in use becomes a new item.
+abstract: Opening a pull request with its evidence ends the delivering thread. Merge and live verification run on a different clock. Every item carries its own outcome, derived when nobody states one, and its room and measurement use that outcome. Delivery closes the item by default; a separate acceptance by whoever asked is owed only for contractual work, a customer who reported the problem is asked once whether it is fixed, and a regression found in use becomes a new item.
 principleDirection: End the thread when the pull request is open and its evidence recorded; never hold a session to watch a merge or deploy. Let the merge close non-contractual work, never self-accept work tagged contractual, ask a customer submitter one question with a bounded window, and never leave an obligation open without a bound.
 principleTier: core
 principleDimensionVector: {"governance_compliance": 0.7, "operator_effort": -0.3, "evidence_density": 0.5}
@@ -49,6 +49,17 @@ A separate acceptance step had turned into an administrative black hole. On 2026
 
 The authorised acceptance sweep reads the same completion gate, so it closes merged non-contractual items without any further step.
 
+## The outcome is an aspect of the item (founder direction, 2026-10-28)
+
+> "The outcome is an aspect of the BI. No BI should be without a clear outcome. The room also has an outcome for each iteration. It doesn't need to be a separate thing really; it's in context of the work to be done."
+> — Mark Bodman, 2026-10-28 (BI-8DE5429B)
+
+The outcome belongs to the work, not to a structure beside it:
+
+- **Every item has an outcome, in one field.** `BacklogItem.outcome` holds it (kernel decision DI-342D45001EF5), not prose in the body. When the person or agent filing it gives none, the platform derives a draft from the item's own context and marks it `derived` (DI-D50BBC916B6D). The draft is visible and anyone can correct it, which marks it `stated`. Intake is never refused for a missing outcome.
+- **A room's outcome is its item's outcome.** A Workroom shows the outcome of the item it carries, read live so it never drifts (DI-139981F74A44). Nobody writes a separate room objective for it. An explicit boundary claim can still say otherwise.
+- **Measure the item's own outcome.** The platform records it at delivery (achieved), at a reopen from done (regressed), and when failing evidence lands on a done item (not achieved). Each observation names the item and the outcome it measured (DI-19ED69C312FC). A Product or objective roll-up is the mean of those item observations. It is never authored separately.
+
 ## Nothing waits on a person indefinitely (operator direction, 2026-10-27)
 
 > "We seem to have more process gates than needed, the actual closure is predicated on seeing results, which unless it's automatable, we don't want to have open items hanging out forever. [...] getting validation is really only required if there is a customer reported thing, and even then a simple question and response would do it."
@@ -63,7 +74,8 @@ A watcher armed to do this may also simply not work, and a silent watcher looks 
 ## How to apply
 
 - Open the pull request with its evidence, name what is unproven, end the thread.
-- State the outcome when you file the item. Add how you will know only when it is not obvious; if it can be checked automatically, declare the check.
+- State the outcome when you file the item. Add how you will know only when it is not obvious; if it can be checked automatically, declare the check. If the platform derived a draft, correct it when it is wrong.
+- Take a room's outcome from the item it carries. Do not invent a separate objective for the room or for a Product.
 - Let the merge close the item. Do not hold it open for a sign-off nobody asked for.
 - Declaring a customer's outcome good on their behalf is not yours to do. The platform asks them, once.
 - If acceptance genuinely matters because a customer was promised it, tag the item `contractual` and say what the check is or who accepts. That item waits for its accepter, and declaring its outcome good is not yours to do.
