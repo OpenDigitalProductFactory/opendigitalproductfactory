@@ -286,11 +286,12 @@ export async function mergeBacklogItemsHandler(
     survivorOccurrenceCount: canonical.occurrenceCount,
     duplicateOccurrenceCount: duplicate.occurrenceCount,
   });
+  const claimedFrom = duplicate.status;
   const folded = await prisma.$transaction(async (tx) => {
     // Claim the duplicate first: a concurrent merge of the same row loses here
     // and writes nothing, rather than adding the reach a second time.
     const claimed = await tx.backlogItem.updateMany({
-      where: { itemId: duplicateItemId, duplicateOfId: null, status: duplicate.status },
+      where: { itemId: duplicateItemId, duplicateOfId: null, status: claimedFrom },
       data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
     });
     if (claimed.count !== 1) return false;
