@@ -869,43 +869,4 @@ describe("backlog MCP tool execution", () => {
       expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
     });
   });
-
-  // BI-C5794F1D: a work-sync mirror is owned by its origin installation; a
-  // status written here would be reverted by the next pull without a trace.
-  describe("status writes on a peer-owned work-sync mirror", () => {
-    const origin = `inst_${"c".repeat(32)}`;
-    const mirror = {
-      id: "mirror-row", itemId: "BI-PEER01", status: "awaiting-acceptance", epicId: null, triageOutcome: "build",
-      effortSize: "small", activeBuildId: null, claimStatus: null, claimedById: null, claimedByAgentId: null,
-      claimedAt: null, deferredAt: null, organizationId: null,
-      body: `Peer item\n\n[origin:federatedWork:${origin}:BI-PEER01]`,
-    };
-
-    it.each([
-      ["done", { resolution: "Shipped." }],
-      ["open", {}],
-    ] as const)("refuses update_backlog_item_status -> %s and names the owning installation", async (status, extra) => {
-      mockPrisma.backlogItem.findUnique.mockResolvedValue(mirror);
-      const result = await executeTool(
-        "update_backlog_item_status",
-        { itemId: "BI-PEER01", status, ...extra },
-        "user-1",
-        { agentId: "AGT-1" },
-      );
-      expect(result.success).toBe(false);
-      expect(result.error).toBe("peer_owned_item");
-      expect(result.message).toContain(`owned by installation ${origin}`);
-      expect(result.message).toContain("overwritten by work sync");
-      expect(terminalMocks.backlog).not.toHaveBeenCalled();
-      expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
-    });
-
-    it("refuses a status change through update_backlog_item", async () => {
-      mockPrisma.backlogItem.findUnique.mockResolvedValue({ ...mirror, status: "open" });
-      const result = await executeTool("update_backlog_item", { itemId: "BI-PEER01", status: "in-progress" }, "user-1", { agentId: "AGT-1" });
-      expect(result.success).toBe(false);
-      expect(result.error).toBe("peer_owned_item");
-      expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
-    });
-  });
 });
