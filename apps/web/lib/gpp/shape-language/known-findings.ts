@@ -1,4 +1,4 @@
-import type { GppDiagnostic, GppDiagnosticCode, GppRuleId } from "./diagnostics";
+import type { GppDiagnostic, GppDiagnosticCode, GppRuleId } from "@dpf/validators/gpp/diagnostics";
 
 /** DI-EFCFA7596534: this list may shrink, never silently widen. Offline declared flows only. */
 export const KNOWN_FINDING_ELIGIBLE_RULES = [

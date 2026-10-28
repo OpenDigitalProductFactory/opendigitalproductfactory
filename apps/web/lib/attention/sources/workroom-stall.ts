@@ -16,12 +16,12 @@
 import type { prisma } from "@dpf/db";
 
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
-import { WORKROOM_DRIVE_STALL_TICKS } from "@/lib/work-management/workroom-drive-hold";
+import { WORKROOM_DRIVE_STALL_TICKS } from "@dpf/validators/workroom-policy/drive-hold";
 import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-owner-ladder";
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
-import { openDeadlines } from "@/lib/work-management/drive-deadlines";
-import { readStoredDriveMarking } from "@/lib/work-management/drive-marking";
+import { openDeadlines } from "@dpf/validators/workroom-policy/drive-deadlines";
+import { readStoredDriveMarking } from "@dpf/validators/workroom/marking";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import type { AttentionItem, AttentionPortfolio } from "../types";

@@ -16,7 +16,7 @@ import { authoredHeadSha } from "@/lib/work-capsules/authored-head";
 import type { CapsuleDb, WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
 import type { ReaperCapsuleRow } from "@/lib/work-capsules/work-capsule-reaper";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
-import { readDriveHold } from "@/lib/work-management/workroom-drive-hold";
+import { readDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 import {
   emptyOverseerSummary,
   formatOverseerSummary,

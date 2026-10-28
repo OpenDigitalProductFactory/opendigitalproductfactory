@@ -58,7 +58,7 @@ export async function finalizeHiveContribution(input: {
   totalFiles: number;
   dcoAttestation: string;
 }): Promise<void> {
-  await prisma.improvementProposal
+  if (input.prUrl) await prisma.improvementProposal
     .updateMany({
       where: { buildId: input.buildId, contributionStatus: "local" },
       data: { contributionStatus: "contributed" },

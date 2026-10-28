@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "label-in-existing-pickers",
+  "decisionInteractionId": "DI-75BBD5DBD2D0",
+  "scope": {
+    "files": [
+      "apps/web/components/animal-welfare/IntakeOperations.tsx",
+      "apps/web/components/animal-welfare/AdoptionOperations.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "label-in-existing-pickers",
+      "separate-backfill-panel",
+      "approval-opens-custody"
+    ]
+  }
+}

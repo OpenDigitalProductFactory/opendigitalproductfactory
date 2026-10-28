@@ -48,7 +48,7 @@ it("a receipt CAS loser reads the winner's completed task without a live uncerta
   expect(result.result.progressPayload).toMatchObject({ reviewOutcome: { receiptId: "original-receipt" },
     executionUncertaintyResolution: { prior: { executionUncertainty: uncertainty } } });
   expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ where: {
-    taskRunId: original.taskRunId, status: original.status, updatedAt: original.updatedAt } }));
+    taskRunId: original.taskRunId, status: original.status, updatedAt: original.updatedAt, archivedAt: null } }));
   expect(mocks.execute).not.toHaveBeenCalled();
   expect(mocks.create).not.toHaveBeenCalled();
   expect(original.progressPayload.executionUncertainty.settlement).toBe("unknown");
