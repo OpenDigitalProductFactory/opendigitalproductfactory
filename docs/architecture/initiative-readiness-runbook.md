@@ -395,6 +395,16 @@ describes the current-authority checks, generation reservation and approval
 continuation. Completion still requires the original task's genuine governed
 writer receipt and the readiness finding it actually records.
 
+### Bounded qualification research admission
+
+`RESEARCH_REQUIRED` can expose a `qualificationAdmission` recovery route when the refused Workroom has one exact immutable qualification protocol. The route carries an opaque, signed token for `claim_workroom_scope`; replaying it admits one bounded test-only experiment and does not satisfy research or authorize ordinary implementation.
+
+The protocol is deliberately two-phase. **Prepare** is pinned to the item, Workroom, repository, base/head, protocol path/commit/blob, installation, accountable principal, authority decision, shape/stage, production blob set, exact test/helper paths, allowed tools, expiry, duration, and one start. It may produce only a test-only candidate and cannot run tests. A separate independent semantic review must accept that exact candidate head, diff digest, test blobs, and unchanged production blobs before terminal recovery can issue **Verify**. Verify receives a fresh signed one-start binding for the reviewed candidate; it may run the exact qualification test, cannot edit, and rejects `auto_fix`.
+
+The scheduled task, stage mandate, Workroom state, tool effects, and recorded evidence all recheck the same binding digest. A token cannot be rearmed after start or settlement, and pages from another identity, path, phase, attempt, or outcome never combine into evidence. Only complete positive terminal Verify evidence can be selected for the governed research writer. Negative, inconclusive, blocked, stale, conflicting, or failed-only evidence remains audit history and readiness stays closed. The design author must still persist the normal `record_initiative_evidence(gate:"research")` receipt; qualification evidence never writes that receipt directly.
+
+The source contract is [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts); routing and progression live in [terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts). The design is [qualification research admission](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
+
 ### A present assessment authorized by an approved policy
 
 Original recovery cannot restart uncertain or exhausted work. A separately
