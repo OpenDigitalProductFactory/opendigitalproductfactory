@@ -1370,6 +1370,9 @@
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
     ],
+    "apps/web/lib/self-upgrade/release-image-reference.ts": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "apps/web/lib/self-upgrade/run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -2612,6 +2615,9 @@
     "scripts/regen-lockfile.mjs": [
       "docs/architecture/agent-skill-index.md",
       "docs/architecture/contributor-procedure-runbook.md"
+    ],
+    "scripts/release-image-reference.docker.test.mjs": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "scripts/restore-postgres.sh": [
       "docs/operations/disaster-recovery.md"
@@ -3913,7 +3919,9 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
-      "dpf-start.ps1"
+      "apps/web/lib/self-upgrade/release-image-reference.ts",
+      "dpf-start.ps1",
+      "scripts/release-image-reference.docker.test.mjs"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
       ".github/workflows/ci.yml",

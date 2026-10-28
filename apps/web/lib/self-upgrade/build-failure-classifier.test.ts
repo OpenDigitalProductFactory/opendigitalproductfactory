@@ -482,3 +482,25 @@ describe("formatClassifiedExcerpt", () => {
     expect(excerpt).toContain("Cannot find module '@opentelemetry/api'");
   });
 });
+
+// BI-578131A3: SUR-F2A0D477 fell through to "unknown" and auto-filed an
+// unactionable "[self-upgrade] unknown" item.
+describe("reassessment-compatibility-unproven", () => {
+  it("is its own class, never unknown, even for the bare legacy code", () => {
+    expect(classifyBuildFailure({ log: "reassessment-compatibility-unproven" }).class).toBe("reassessment-compatibility-unproven");
+  });
+
+  it("names the subcode and blames image addressing when Docker could not find the image", () => {
+    const c = classifyBuildFailure({ log: `reassessment-compatibility-unproven: release-image-unresolved: sha256:${"d".repeat(64)} -> No such image` });
+    expect(c.class).toBe("reassessment-compatibility-unproven");
+    expect(c.summary).toContain("release-image-unresolved");
+    expect(c.summary).toContain("image store");
+    expect(c.isMainDefectVsEnvironment).toBe("main-defect");
+  });
+
+  it("does not guess an owner for a refusal that is not about addressing", () => {
+    const c = classifyBuildFailure({ log: "reassessment-compatibility-unproven: probe-source-mismatch: expected a, image reports b" });
+    expect(c.summary).toContain("probe-source-mismatch");
+    expect(c.isMainDefectVsEnvironment).toBeNull();
+  });
+});
