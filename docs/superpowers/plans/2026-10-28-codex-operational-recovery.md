@@ -32,4 +32,4 @@ The code, tests and documentation form one repair, not independent deliverables.
 
 ## Backlog coverage
 
-Atomic deliverable SELECT-1 maps to BI-4A28B171. Research receipt: initiative-6b0d7ed8-7fe7-4fed-9c73-213ec49df62b. Plan coverage will bind this immutable document before implementation.
+Atomic deliverable SELECT-1 maps to BI-4A28B171. Research receipt: initiative-6b0d7ed8-7fe7-4fed-9c73-213ec49df62b. Atomic plan coverage receipt cmvshwpud367s01s5hurv8bdz binds the pre-implementation plan at bd3607b758ce48a523f83d6c66ae69e8d1e5326d.

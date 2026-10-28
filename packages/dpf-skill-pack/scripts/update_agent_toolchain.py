@@ -2768,7 +2768,7 @@ def _main(argv: list[str]) -> int:
         permission_runtime_unavailable = routine_permissions.tomllib is None
         if permission_runtime_unavailable:
             print('Routine permissions UNRUN: Python 3.11+ or tomli is required; no permission configuration changed.')
-    selected_permission_clients = ('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
+    selected_permission_clients = ('codex',) if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
     unrun_permission_rows = [{'client': client, 'scope': 'permissions:' + str(args.project_root.resolve()),
         'action': 'unrun', 'sessionVerified': False, 'restartRequired': False,
         'detail': 'TOML parser unavailable; existing permissions retained. Use a supported Python runtime.'}
@@ -2852,7 +2852,8 @@ def _main(argv: list[str]) -> int:
     print(f"  Codex source : {codex_managed}")
     print(f"  shared source: {shared_managed}")
     if declarations is not None:
-        convergence.declare_grok_descriptor(shared_managed, declarations, args.dry_run)
+        if not args.codex_only and not args.claude_only:
+            convergence.declare_grok_descriptor(shared_managed, declarations, args.dry_run)
         print(f"  declares   : pack {declarations.pack}, digest {declarations.digest[:16]}")
     if report:
         report.add("shared", "copy", "copied")
@@ -2907,6 +2908,12 @@ def _main(argv: list[str]) -> int:
                 codex_status = f"failed: {error}"
                 codex_install_failed = True
             print(f"  Codex      : {codex_status}")
+        if report:
+            report.add("codex", "user", codex_status)
+
+    # Client selection applies to adapters and permission planning alike. A
+    # Codex repair must not read another client's settings or refresh its tokens.
+    if not args.codex_only and not args.claude_only:
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
             grok_status = install_grok_plugin(shared_managed, args.dry_run)
@@ -2935,7 +2942,6 @@ def _main(argv: list[str]) -> int:
         )
         print(f"  Grok credential: {grok_credential_status}")
         if report:
-            report.add("codex", "user", codex_status)
             report.add("grok", "user", grok_status)
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
@@ -3012,7 +3018,7 @@ def _main(argv: list[str]) -> int:
         try:
             permission_rows = routine_permissions.apply_permissions(
                 routine_permissions.plan_permissions(args.project_root, home, skill_pack,
-                    clients=('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')),
+                    clients=selected_permission_clients),
                 args.dry_run, native=True)
             permission_failed = any(row['action'] == 'failed' for row in permission_rows)
             if report:
