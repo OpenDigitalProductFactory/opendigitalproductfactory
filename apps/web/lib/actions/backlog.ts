@@ -1,7 +1,7 @@
 "use server";
 
 import * as crypto from "crypto";
-import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
+import { OUTCOME_MAX_LENGTH, resolveItemOutcome } from "@/lib/backlog/intake-outcome";
 import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 import { prisma, attributeBacklogPortfolio } from "@dpf/db";
 import { auth } from "@/lib/auth";
@@ -135,10 +135,10 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     archetypeIds:        cleanStringArray(input.archetypeIds),
     scopeRationale:      input.scopeRationale?.trim() || null,
     lifecycleTags:       cleanStringArray(input.lifecycleTags),
-    // BI-B1B44777: the outcome leads the body; an item without one is still filed.
-    ...(input.body !== undefined || input.outcome?.trim()
-      ? { body: composeIntakeBody({ body: input.body?.trim() || null, outcome: input.outcome }) || null }
-      : {}),
+    // BI-8DE5429B: the outcome is the item's own field; with none given, a
+    // draft is derived and marked derived. The item is always filed.
+    ...resolveItemOutcome({ outcome: input.outcome, body: input.body, title: input.title.trim(), workType: input.workType }),
+    ...(input.body !== undefined ? { body: input.body?.trim() || null } : {}),
     ...deferralProjection,
   };
   const created = await prisma.$transaction(async (tx) => {
@@ -174,6 +174,7 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
     select: {
       itemId: true,
       body: true,
+      outcome: true,
       status: true,
       scopeKind: true,
       archetypeCategories: true,
@@ -203,7 +204,13 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
       }
     : CLEAR_DEFERRAL_PROJECTION;
 
+  // BI-8DE5429B: an edited outcome is stated; a blank field never clears it.
+  const editedOutcome = input.outcome?.trim();
+  const outcomeEdit = editedOutcome && editedOutcome !== existing?.outcome
+    ? { outcome: editedOutcome.slice(0, OUTCOME_MAX_LENGTH), outcomeSource: "stated" }
+    : {};
   const updateData = {
+    ...outcomeEdit,
     title:            input.title.trim(),
     type:             input.type,
     workType:         input.workType,

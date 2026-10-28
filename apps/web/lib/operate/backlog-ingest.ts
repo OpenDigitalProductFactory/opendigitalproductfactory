@@ -41,7 +41,7 @@ import {
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
 import { routingAnswerProblem, type RoutingAnswer } from "@/lib/improvement-flywheel/routing-answer";
-import { composeIntakeBody, statesOutcome } from "@/lib/backlog/intake-outcome";
+import { composeHowWeKnowBody, resolveItemOutcome } from "@/lib/backlog/intake-outcome";
 import {
   backlogOriginMarker,
   reconcileOrigin,
@@ -66,9 +66,10 @@ export interface BacklogIngestInput {
   title: string;
   body?: string | null;
   /**
-   * What will be true, and for whom, once this is done (BI-B1B44777). Written
-   * into the body as "## Outcome". Optional: an item without one is still
-   * filed, and `outcomeStated` tells the caller to prompt for it.
+   * What will be true, and for whom, once this is done (BI-B1B44777). Stored
+   * in BacklogItem.outcome as `stated` (BI-8DE5429B). Optional: with none, an
+   * Outcome section in the body is lifted, else a draft is derived and stored
+   * as `derived`; the filing is never refused.
    */
   outcome?: string | null;
   /** How we will know — given only when the outcome is not obvious from the change. */
@@ -167,10 +168,12 @@ export interface BacklogIngestResult {
   duplicateSemanticUnavailable?: string | null;
 
   /**
-   * Whether the stored body states the outcome the item delivers
-   * (BI-B1B44777). Advisory: false never refuses the filing.
+   * Whether the filer stated the outcome (BI-B1B44777). Advisory: false never
+   * refuses the filing; the item then carries `derivedOutcome`.
    */
   outcomeStated?: boolean;
+  /** The draft outcome derived because nobody stated one (BI-8DE5429B). */
+  derivedOutcome?: string | null;
 }
 
 /**
@@ -500,7 +503,12 @@ export async function ingestBacklogItem(
   }
 
   const itemId = input.itemId?.trim() || generateBacklogItemId(input.itemIdPrefix);
-  const intakeBody = composeIntakeBody({ body: input.body, outcome: input.outcome, howWeKnow: input.howWeKnow });
+  // BI-8DE5429B: the outcome is a field, written once here; the body keeps
+  // only "How we'll know" when the filer gave it.
+  const itemOutcome = resolveItemOutcome({
+    outcome: input.outcome, body: input.body, title: input.title || "Untitled", workType: input.workType,
+  });
+  const intakeBody = composeHowWeKnowBody({ body: input.body, howWeKnow: input.howWeKnow });
   const body = composeIngestBody(intakeBody, marker);
   const demandStage = initialDemandStageForInput(input);
 
@@ -513,6 +521,8 @@ export async function ingestBacklogItem(
       workType: input.workType,
       source: input.source,
       lastSeenAt: new Date(),
+      outcome: itemOutcome.outcome,
+      outcomeSource: itemOutcome.outcomeSource,
       ...(body !== null ? { body } : {}),
       ...(triageOutcome ? { triageOutcome } : {}),
       ...(input.proposedOutcome ? { proposedOutcome: input.proposedOutcome } : {}),
@@ -552,7 +562,7 @@ export async function ingestBacklogItem(
       },
     });
   }
-  indexKnowledge({ entityId: item.itemId, title: input.title, content: input.outcome ? intakeBody ?? "" : input.body ?? "" });
+  indexKnowledge({ entityId: item.itemId, title: input.title, content: [itemOutcome.outcome, intakeBody ?? ""].filter(Boolean).join("\n\n") });
 
   // ─── Implementation scan (BI-1A1EC5EC) ──────────────────────────────────────
   // Runs AFTER the create, deliberately. It is advisory, and a filing surface
@@ -673,6 +683,7 @@ export async function ingestBacklogItem(
     implementationCandidates,
     duplicateCandidates,
     duplicateSemanticUnavailable,
-    outcomeStated: statesOutcome(body),
+    outcomeStated: itemOutcome.outcomeSource === "stated",
+    derivedOutcome: itemOutcome.outcomeSource === "derived" ? itemOutcome.outcome : null,
   };
 }
