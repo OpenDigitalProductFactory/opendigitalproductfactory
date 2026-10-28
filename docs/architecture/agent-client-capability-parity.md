@@ -1,3 +1,19 @@
+---
+# Doc-impact edges (BI-742D707B). Changing any file below flags this page in the
+# Docs Impact Gate: it states which hooks each client runs and how they reach it.
+# Without these edges the Grok hook plane lost two guards and this page never knew.
+relatedCode:
+  - packages/dpf-skill-pack/hooks/hooks.json
+  - packages/dpf-skill-pack/hooks/client-hook-planes.json
+  - packages/dpf-skill-pack/scripts/update_agent_toolchain.py
+  - packages/dpf-skill-pack/client-capabilities.json
+  - apps/web/lib/build/sandbox/grok-governance-seed.ts
+  - packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs
+  - packages/dpf-skill-pack/hooks/lib/hook-io.mjs
+  - packages/dpf-skill-pack/scripts/toolchain_convergence.py
+  - packages/dpf-skill-pack/scripts/grok_credential.py
+---
+
 # Agent-Client Capability Parity Tracker
 
 **Status:** Living record — the external coding clients change weekly; this is the dated, owned source of truth for what each does and what DPF depends on / should adopt.
@@ -44,7 +60,7 @@ Rendered from [`packages/dpf-skill-pack/client-capabilities.json`](../../package
 | `codex` | cli | fires: PreToolUse shell; does not fire: PreToolUse ask; unproven: SessionStart, PreToolUse write, UserPromptSubmit, Stop, SessionEnd | hookSpecificOutput | codex exec with hook trust granted | 2026-07-07, v0.142.5 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11 (BI-883FC2FC): a lease-punt probe ran without hook trust and was denied with it. The ask tool is not named AskUserQuestion, so that matcher never fires (BI-B22DE548). Single plugin plane since #5636 (BI-2B634E68, codex-cli 0.155.0-alpha.16). |
 | `codex` | desktop | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the Codex desktop host. |
 | `codex` | ide | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the Codex IDE extension host. |
-| `grok` | cli | fires: SessionStart, PreToolUse shell, Stop; unproven: PreToolUse ask, PreToolUse write, UserPromptSubmit, SessionEnd | dual | headless grok -p | 2026-07-07, v0.2.87 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11.1 (BI-883FC2FC): a prisma migrate probe was denied in a DPF worktree and ran in a bare folder. Grok ignores plugin-bundled hooks. The SessionStart and Stop session plane is wired globally (BI-BCA23DBB) and was sampled live on 2026-07-26. |
+| `grok` | cli | fires: SessionStart, PreToolUse shell, PreToolUse write, Stop; unproven: PreToolUse ask, UserPromptSubmit, SessionEnd | dual | headless grok -p --always-approve | 2026-10-14, v1.0.52 | BI-742D707B live probe 2026-10-14, Grok 1.0.52 headless -p --always-approve: `npx tsc --version` was denied by raw-tool-guard (PreToolUse on run_terminal_command); a `write` of a root-clone file with the session rooted there was denied by root-clone-guard (Grok names its write tools write and search_replace, so the Write\|Edit\|MultiEdit matcher alone never fired); worktree-session-heartbeat wrote its marker at SessionStart and refreshed it at Stop. The marker was still present after exit, so SessionEnd stays unproven in headless mode. ask_user_question was not probed. Earlier: BI-883FC2FC (0.2.87) prisma migrate deny; Grok ignores plugin-bundled hooks. |
 | `grok` | desktop | hooks unproven | dual | none | no | No probe recorded for the Grok desktop app. |
 | `grok` | ide | hooks unproven | unknown | none | no | No Grok IDE host is known to DPF. |
 | `antigravity` | cli | hooks unproven | unknown | none | no | docs/architecture/agent-client-capability-parity.md governance table G3: hooks unproven, an honest gap |
@@ -102,6 +118,27 @@ Reconciles the "Functional proof on Codex/Grok still pending" line above (2026-0
 - **MCP token var:** re-confirmed clean — no active setup snippet references bare `DPF_MCP_TOKEN`; the one surviving reference (`e2e/fixtures/evidence.ts`) is a deliberate `DPF_MCP_BEARER_TOKEN ?? DPF_MCP_TOKEN` back-compat fallback landed by PR #2455, not drift.
 
 **Refresh ritual — operationalization (BI-4B8EABF8 follow-up).** The monthly ritual below is documented; wiring it as an actual `scheduledAgentTask` on the existing `agent-task-scheduler.ts` / `agent-task-dispatch.ts` substrate (read official docs → diff this tracker → file a BI per material drift → record sources + verification age) is the remaining code slice. No new cron — reuse the cognitive-load-migration scan substrate.
+
+## 2026-10-14 refresh (BI-742D707B — which hooks each client runs)
+
+The founder saw 33 DPF hooks in Codex and a different number elsewhere. All three plugin caches carried the same `hooks/hooks.json` (34 entries); the difference was in delivery:
+
+- **Claude Code** runs the plugin `hooks.json`: 34 of 34.
+- **Codex** loads the same file from its plugin cache and trusts 33. It does not run `WorktreeCreate`.
+- **Grok** ignores plugin-bundled hooks and ran a hand-kept list of 17. Two blocking guards never reached it: `raw-tool-guard.mjs` was listed for Grok but put in no matcher group, and the write-path `root-clone-guard.mjs` was missing. The drift test passed because it checked list membership, not the payload Grok receives.
+- **Antigravity** has no proven hook plane, so it runs none.
+
+Since this refresh, [`hooks/client-hook-planes.json`](../../packages/dpf-skill-pack/hooks/client-hook-planes.json) records, for each client, what delivers hooks and every entry left out, with its reason. Grok's `~/.grok/hooks/dpf-guards.json` is generated from `hooks.json` minus those exclusions (25 wired, 3 run inside `grok-session-start.mjs`, 6 excluded). A test fails when an entry is neither wired nor excluded with a reason for any client. The per-client table is generated into [`hooks/README.md`](../../packages/dpf-skill-pack/hooks/README.md#by-client); read the current counts there, not from this dated note.
+
+A live probe on Grok 1.0.52 found a second, older gap. Grok names its tools `write`, `search_replace` and `ask_user_question`, so the `Write|Edit|MultiEdit` and `AskUserQuestion` matchers never fired there, and the guards' own tool-name checks were Claude-only. Every write-path guard and the decision-routing guard had been failing open on Grok. The Grok matcher aliases and the shared `isFileWriteTool` / `isDecisionTool` sets in `hooks/lib/hook-io.mjs` now include those names. With that fix, raw-tool-guard and the write-path root-clone-guard denied live, and the session heartbeat was written at SessionStart and refreshed at Stop. The probe is recorded in `client-capabilities.json` (Grok cli hook plane).
+
+**Every client kind is named (2026-10-27).** `client-hook-planes.json` now covers each client kind the host run discovers (`toolchain_convergence.DISCOVERY`: Claude Code, Codex, Grok, Antigravity, VS Code, Cursor, Gemini CLI, OpenCode) plus the Build Studio sandbox, and a test fails when that list and `DISCOVERY` differ. The sandbox seed (`apps/web/lib/build/sandbox/grok-governance-seed.ts`) no longer keeps its own six-guard list (BI-413882E5). The sandbox has Node and no Python, so it runs the pack's `hooks/lib/grok-hook-plane.mjs` against the workspace pack; a test pins that output equal to the host generator's.
+
+**How existing installs get it.** The release pack carries every file in the pack tree, and its content digest changes with any hook or plane change (BI-4F9E3221). The hourly toolchain agent (a Windows scheduled task, a launchd agent on macOS, a systemd user unit on Linux; BI-65C17737) runs the signed updater when the digest changes. That run refreshes the Claude and Codex plugin caches and rewrites `~/.grok/hooks/dpf-guards.json`; a test covers an old hand-kept Grok file converging in one run. Each client loads the new hooks on its next restart. A Build Studio dispatch regenerates the sandbox file from the branch under build every time.
+
+**Grok's own config was breaking that upgrade (BI-E7806C0F).** Grok rewrites `~/.grok/config.toml` with fully quoted keys (`["mcp_servers"."dpf"]`). The updater's Grok credential step matched only `[mcp_servers.dpf]`, appended a second table, and Grok then refused to start ("duplicate key"). It now matches any spelling of the key and folds an existing duplicate back into one table on the next run.
+
+Still open: Grok SessionEnd is not shown to fire in headless mode, and `ask_user_question` was not probed live. Antigravity, VS Code, Cursor, Gemini CLI and OpenCode have no DPF hook adapter; the server-side controls stay their guarantee.
 
 ## Governance outcomes (G1–G9) — multi-client parity
 

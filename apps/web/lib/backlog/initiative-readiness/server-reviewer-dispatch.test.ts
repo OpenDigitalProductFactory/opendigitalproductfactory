@@ -370,6 +370,37 @@ describe("dispatchReviewerRequest — a standing refusal is recorded once, with 
     }));
   });
 
+  // BI-D1DAB5AF: a refusal recorded by the code the portal ran before this
+  // process started may already be fixed (47 Build Studio plan rooms waited up
+  // to 5.5h after #6707 booted on 2026-10-28). Retry it once on the new code.
+  it("re-attempts a standing refusal recorded before this process started, even inside its back-off", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(5, at(-60 * 60 * 1000), at(3 * 60 * 60 * 1000)));
+    const d = deps({ processStartedAt: at(-5 * 60 * 1000) });
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "no-author-connection" });
+    expect(d.findUserConnection).toHaveBeenCalledWith("user-1");
+    expect(prismaMock.workroomActivity.update).toHaveBeenCalledWith({
+      where: { id: "act-standing" },
+      data: { payload: expect.objectContaining({
+        attempts: 6, lastAttemptAt: NOW.toISOString(), nextAttemptAt: at(REVIEW_DISPATCH_MAX_BACKOFF_MS).toISOString(),
+      }) },
+    });
+  });
+
+  it("keeps the back-off for a refusal this process recorded itself", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(5, at(-60_000), at(3 * 60 * 60 * 1000)));
+    const d = deps({ processStartedAt: at(-5 * 60 * 1000) });
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "cooling-down" });
+    expect(d.findUserConnection).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps the ordinary cooldown after a dispatch, whatever the process start", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(RECENT_DISPATCH);
+    const d = deps({ processStartedAt: at(-1000) });
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "cooling-down" });
+    expect(d.findUserConnection).not.toHaveBeenCalled();
+  });
+
   it("records a new row when the outcome changes: the request is finally sent", async () => {
     prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(4, at(-REVIEW_DISPATCH_COOLDOWN_MS * 8), at(-1)));
     const d = deps({ findUserConnection: vi.fn(async () => connection as never) });

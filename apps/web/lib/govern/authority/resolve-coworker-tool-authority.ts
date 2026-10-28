@@ -181,14 +181,26 @@ export async function resolveTrustedInitiativeItemId(input: {
   task: InitiativeReviewTask | null;
   toolName: string;
   boundItemId: string | null;
-  loadStewardItemId: (taskRunId: string) => Promise<string | null>;
+  loadStewardItemId: (taskRunId: string, toolName: string) => Promise<string | null>;
 }): Promise<string | null> {
   if (input.boundItemId) return input.boundItemId;
-  if (input.toolName !== "record_initiative_evidence" || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
-  return input.loadStewardItemId(input.task.taskRunId);
+  if (!STEWARD_WRITERS.has(input.toolName) || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId, input.toolName);
 }
 
-async function loadAcceptanceStewardItemId(taskRunId: string): Promise<string | null> {
+/**
+ * Writers a platform-issued room packet binds for a token-less scheduled run:
+ * the acceptance steward's objective mapping (BI-099A0BA3) and the platform
+ * post-implementation review (BI-AA47C672).
+ */
+const STEWARD_WRITERS: ReadonlySet<string> = new Set(["record_initiative_evidence", "record_initiative_post_implementation_review"]);
+
+async function loadAcceptanceStewardItemId(taskRunId: string, toolName: string): Promise<string | null> {
+  if (toolName === "record_initiative_post_implementation_review") {
+    const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+    const platform = await resolvePlatformReviewRunBinding(taskRunId);
+    return platform?.ok ? platform.data.itemId : null;
+  }
   const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
   const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
   return steward?.ok ? steward.data.itemId : null;

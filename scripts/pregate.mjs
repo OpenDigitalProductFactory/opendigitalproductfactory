@@ -21,7 +21,6 @@ import { runForegroundGate, withForegroundCancellation } from "./lib/foreground-
 export { runForegroundGate } from "./lib/foreground-gate-process.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
-import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -898,18 +897,11 @@ async function main() {
   const preflightStatus = await runHostPreflight({ args });
   if (preflightStatus !== 0) process.exit(preflightStatus);
 
-  // BI-A254A94C: the pre-push gate already exempts a docs-only diff. Do not
-  // spend the single sandbox slot on that diff. A mixed code file is named.
-  if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
-    const sandbox = sandboxDecisionForHead();
-    if (sandbox) {
-      process.stdout.write(`pregate: ${sandbox.message}\n`);
-      if (!sandbox.claim) {
-        process.exit(0); // exit-0: docs-only diff; same predicate as pre-push; no lease claimed
-      }
-    }
-  }
-
+  // BI-78176241: a docs-only diff goes to the gate like any other. Its
+  // pre-admission documentation lane verifies the docs without a lease or the
+  // sandbox slot and writes the SHA-bound PASS that pregate:status and the
+  // publish guard read. Exiting here (BI-A254A94C) left no record, so every
+  // docs-only push needed an override.
   const useShell = shouldUseShell();
   const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {

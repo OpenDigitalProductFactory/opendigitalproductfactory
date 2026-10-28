@@ -38,7 +38,11 @@ import {
   setServedContextTokens,
   getLocalThinkingBudgetEvidence,
   ensureLocalEmbedderOffGpu,
+  getLlamaCppEngineIdentity,
+  isQualifiedSpeculativeFlags,
+  isSpeculationQualifiedEngine,
   LOCAL_RUNNER_KEEP_ALIVE,
+  LOCAL_SPECULATIVE_RUNTIME_FLAGS,
   type EmbedderPlacementResult,
 } from "./dmr-runtime-config";
 import { canonicalLocalModelKey } from "./local-model-management";
@@ -73,6 +77,39 @@ export async function resolveHostMemoryProfile(): Promise<
  * so the heaviest coworkers fit).
  */
 export const LOCAL_SERVED_CONTEXT_CONFIG_KEY = "local.servedContextTokens";
+
+/**
+ * PlatformConfig key that turns n-gram speculative decoding off ("off"); any
+ * other value or no row leaves it on for the qualified engine (BI-0D208EBB).
+ * The next reconcile removes the flags, which is the rollback.
+ */
+export const LOCAL_SPECULATIVE_DECODING_CONFIG_KEY = "local.speculativeDecoding";
+
+async function isSpeculationSwitchedOff(): Promise<boolean> {
+  try {
+    const row = await prisma.platformConfig.findUnique({ where: { key: LOCAL_SPECULATIVE_DECODING_CONFIG_KEY } });
+    return row?.value === "off";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The stored non-lifecycle config with speculation applied: the qualified
+ * flags are added on the qualified engine and removed when switched off or on
+ * any other engine. Operator-chosen runtime flags are never rewritten.
+ */
+async function withSpeculationPolicy(
+  apiRoot: string,
+  retained: Record<string, unknown>,
+  fetchImpl: typeof fetch,
+): Promise<Record<string, unknown>> {
+  const { "runtime-flags": flags, ...rest } = retained;
+  if (flags !== undefined && !isQualifiedSpeculativeFlags(flags)) return retained;
+  const wanted = !(await isSpeculationSwitchedOff()) &&
+    isSpeculationQualifiedEngine(await getLlamaCppEngineIdentity(apiRoot, fetchImpl));
+  return wanted ? { ...rest, "runtime-flags": [...LOCAL_SPECULATIVE_RUNTIME_FLAGS] } : rest;
+}
 
 /**
  * The reconcile target, RESOURCE-AWARE (BI-3E614946, revised BI-F4D3B9E9):
@@ -166,7 +203,7 @@ export async function resolveServedContextInfo(fetchImpl: typeof fetch = fetch):
 
 export type ContextReconcileStatus =
   | "raised" // was below target; override applied (and ModelProfile synced)
-  | "pinned" // context already met target; only the resident keep_alive was missing (BI-34F71E9D)
+  | "pinned" // context already met target; only residency (BI-34F71E9D) or speculation flags (BI-0D208EBB) changed
   | "ok" // already at/above target and resident; no write
   | "deferred" // below target but DMR refused the write (runner active); applies on next load
   | "no-model" // no local generation model installed
@@ -231,11 +268,14 @@ export async function reconcileLocalModelContext(
     }
     const before = served.contextTokens; // null = no override set (DMR default ~4k)
     const contextMet = before !== null && before >= target;
-    if (contextMet && served.keepAlive !== LOCAL_RUNNER_KEEP_ALIVE) {
+    const retained = await withSpeculationPolicy(apiRoot, served.retained ?? {}, fetchImpl);
+    const runnerDrift = JSON.stringify(retained) !== JSON.stringify(served.retained ?? {});
+    if (contextMet && (served.keepAlive !== LOCAL_RUNNER_KEEP_ALIVE || runnerDrift)) {
       // Context is fine but DMR's 5-minute idle unload is in force (a DMR
-      // restart drops it, and so did every context write before BI-34F71E9D).
-      // Re-pin residency without lowering a larger served window.
-      const pinned = await setServedContextTokens(apiRoot, modelId, before, fetchImpl, served.retained);
+      // restart drops it, and so did every context write before BI-34F71E9D),
+      // or the speculation flags need adding or removing (BI-0D208EBB).
+      // Re-pin without lowering a larger served window.
+      const pinned = await setServedContextTokens(apiRoot, modelId, before, fetchImpl, retained);
       if (!pinned.ok) {
         return { status: "deferred", modelId, before, after: null, reason: pinned.reason };
       }
@@ -258,7 +298,7 @@ export async function reconcileLocalModelContext(
       return { status: "ok", modelId, before, after: before, reason: null };
     }
 
-    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl, served.retained);
+    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl, retained);
     if (!applied.ok) {
       // DMR refuses while a runner is active; the override applies on next load.
       return { status: "deferred", modelId, before, after: null, reason: applied.reason };

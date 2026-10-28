@@ -23,9 +23,13 @@ import "server-only";
 // - the request key makes it idempotent: a client dispatch and a server
 //   dispatch of the same review are one TaskRun.
 //
-// A room with no live consent-bound connection is left for its author, and the
-// reason is recorded on the room once per request, re-attempted on a growing
-// back-off (BI-CD53F5F5).
+// A room with no live consent-bound connection used to be left for its author.
+// BI-AA47C672: a merged break-fix's post-implementation review is then handed
+// to the platform's own in-platform reviewer through a platform review room
+// (platform-review-room.ts), with the same packet, independence and admission
+// re-derivation. Any other review, or one no in-platform reviewer can take, is
+// recorded on the room once per request with the reason, re-attempted on a
+// growing back-off (BI-CD53F5F5).
 
 import { prisma } from "@dpf/db";
 import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/shared/execution-uncertainty";
@@ -34,6 +38,8 @@ import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-gover
 import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";
 
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "./build-studio-owed-routes";
+import { completionOwedRoutes } from "./completion-review-issuer";
+import type { PlatformReviewRouteOutcome, ReviewIssuerIdentity } from "./platform-review-room";
 import type { ReadinessReviewRoute } from "@/lib/work-management/readiness-review-stages";
 
 /** A dispatch for the same request is not repeated within this window. */
@@ -60,7 +66,14 @@ type RoomAuthor = {
  */
 type CandidateTarget = "completion" | "implementation" | "design";
 
-type Candidate = { itemId: string; room: RoomAuthor; target: CandidateTarget };
+/**
+ * Whose connection carries the request: the authoring assistant's own, or any
+ * live connection of the person the work is for (a Build Studio build, or
+ * BI-D3BAF945 a merged repair whose room a person opened with no assistant).
+ */
+type Carrier = "author-assistant" | "requesting-user";
+
+type Candidate = { itemId: string; room: RoomAuthor; target: CandidateTarget; carrier?: Carrier };
 
 /** Connections the platform prefers to carry a Build Studio room's request (spec §4). */
 export const BUILD_STUDIO_PREFERRED_CARRIER_AGENT_IDS = ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX"] as const;
@@ -69,7 +82,7 @@ type RouteOutcome = {
   itemId: string;
   capsuleId: string;
   requestKey: string | null;
-  outcome: "dispatched" | "refused" | "cooling-down" | "no-author-connection" | "no-author" | "nothing-owed" | "readiness-unavailable";
+  outcome: "dispatched" | "platform-reviewer" | "refused" | "cooling-down" | "no-author-connection" | "no-author" | "nothing-owed" | "readiness-unavailable";
   detail?: string;
   /** The assistant whose connection carried the request (a Build Studio room's own assistant holds none). */
   carriedByAgentId?: string;
@@ -83,7 +96,11 @@ type Deps = {
   findUserConnection?: (userId: string) => Promise<StandingConnection | null>;
   execute?: (args: GovernedExecuteArgs) => Promise<GovernedExecuteResult>;
   random?: () => number;
-  owedRoutes?: (itemId: string, authorAgentId: string, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
+  owedRoutes?: (itemId: string, authorAgentId: string | null, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
+  /** BI-AA47C672: hand an owed post-implementation review to the platform's own reviewer. */
+  routeToPlatformReviewer?: (input: { itemId: string; requestCoworker: Record<string, unknown>; issuer: ReviewIssuerIdentity; now: Date }) => Promise<PlatformReviewRouteOutcome>;
+  /** BI-D1DAB5AF: when this portal process started; tests inject it. */
+  processStartedAt?: Date;
 };
 
 function aliasValue(principal: { aliases: Array<{ aliasValue: string }> } | null | undefined): string | null {
@@ -102,7 +119,7 @@ const principalAliases = (aliasType: string) => ({
 export async function loadRoomAuthors(
   where: { capsuleId?: string | { in: string[] }; backlogItemId?: { not: null } | { in: string[] } },
   options: { includeRetired?: boolean } = {},
-): Promise<Array<RoomAuthor & { itemId: string | null }>> {
+): Promise<Array<RoomAuthor & { itemId: string | null; personUserId: string | null }>> {
   const rooms = await prisma.workroom.findMany({
     // BI-CE661173: a merged repair's room is retired by the time its
     // post-implementation review is owed; its author still carries the request.
@@ -115,7 +132,10 @@ export async function loadRoomAuthors(
       capsuleId: true,
       backlogItemId: true,
       requestedByPrincipal: principalAliases("user"),
-      createdByPrincipal: principalAliases("agent"),
+      // BI-D3BAF945: the creator is the authoring assistant, or the person who
+      // opened the room with none.
+      createdByPrincipal: { select: { kind: true, aliases: { where: { aliasType: { in: ["agent", "user"] }, issuer: "" },
+        select: { aliasType: true, aliasValue: true }, take: 2 } } },
       participants: {
         where: { lifecycle: "active", roles: { has: "contributor" } },
         select: { principal: principalAliases("agent") },
@@ -124,12 +144,17 @@ export async function loadRoomAuthors(
   });
   return rooms.map((room) => {
     const participantAgent = room.participants.map((entry) => entry.principal).find((principal) => principal?.kind === "agent");
+    const creator = room.createdByPrincipal;
+    // An alias row without its type is read as the principal's own kind.
+    const creatorAlias = (type: "agent" | "user") => creator?.aliases
+      .find((alias) => ((alias as { aliasType?: string }).aliasType ?? (creator.kind === "agent" ? "agent" : "user")) === type)?.aliasValue ?? null;
     return {
       roomId: room.id,
       capsuleId: room.capsuleId,
       itemId: room.backlogItemId,
       userId: aliasValue(room.requestedByPrincipal),
-      agentId: aliasValue(room.createdByPrincipal?.kind === "agent" ? room.createdByPrincipal : participantAgent),
+      agentId: creator?.kind === "agent" ? creatorAlias("agent") : aliasValue(participantAgent),
+      personUserId: aliasValue(room.requestedByPrincipal) ?? (creator?.kind === "human" ? creatorAlias("user") : null),
     };
   });
 }
@@ -145,10 +170,10 @@ export async function loadRoomAuthors(
  * (BI-D35B85BF on 2026-09-24). Shuffled, so a bounded tick does not re-check
  * the same items forever (111 of 502 awaiting items had a live room).
  */
-async function loadAwaitingCandidates(): Promise<Candidate[]> {
+async function loadAwaitingCandidates(): Promise<{ live: Candidate[]; merged: Candidate[] }> {
   const rooms = await loadRoomAuthors({ backlogItemId: { not: null } });
   const itemIds = [...new Set(rooms.flatMap((room) => (room.itemId ? [room.itemId] : [])))];
-  if (itemIds.length === 0) return loadMergedBreakFixCandidates(new Set());
+  if (itemIds.length === 0) return { live: [], merged: await loadMergedBreakFixCandidates(new Set()) };
   const targetByItem = new Map((await prisma.backlogItem.findMany({
     where: { itemId: { in: itemIds }, status: { in: ["awaiting-acceptance", "open", "in-progress"] } },
     select: { itemId: true, status: true },
@@ -159,7 +184,7 @@ async function loadAwaitingCandidates(): Promise<Candidate[]> {
     if (!newestByItem.has(room.itemId)) newestByItem.set(room.itemId, room);
   }
   const candidates = [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: targetByItem.get(itemId)! }));
-  return [...candidates, ...await loadMergedBreakFixCandidates(new Set(newestByItem.keys()))];
+  return { live: candidates, merged: await loadMergedBreakFixCandidates(new Set(newestByItem.keys())) };
 }
 
 /**
@@ -199,10 +224,16 @@ async function loadMergedBreakFixCandidates(covered: ReadonlySet<string>): Promi
   if (roomByItem.size === 0) return [];
   const authors = new Map((await loadRoomAuthors({ capsuleId: { in: [...roomByItem.values()] } }, { includeRetired: true }))
     .map((room) => [room.capsuleId, room]));
-  return [...roomByItem.entries()].flatMap(([itemId, capsuleId]) => {
+  return [...roomByItem.entries()].flatMap(([itemId, capsuleId]): Candidate[] => {
     const room = authors.get(capsuleId);
-    return room?.userId && room.agentId
-      ? [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.userId, agentId: room.agentId }, target: "completion" as const }]
+    if (room?.userId && room.agentId) {
+      return [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.userId, agentId: room.agentId }, target: "completion" }];
+    }
+    // BI-D3BAF945: a person opened the room with no assistant (28 of the 35
+    // merged break-fixes on 2026-10-28). The review travels on that person's
+    // own live connection, as a Build Studio build's does.
+    return room?.personUserId
+      ? [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.personUserId, agentId: null }, target: "completion", carrier: "requesting-user" }]
       : [];
   });
 }
@@ -256,35 +287,31 @@ async function loadBuildStudioCandidates(): Promise<Candidate[]> {
   });
 }
 
+/**
+ * A shuffled bounded sample. BI-D3BAF945: merged break-fixes owe their review
+ * within 48 hours of merge, and the general pool is mostly items owing
+ * nothing, so they are sampled on their own budget rather than competing in it
+ * (one in 37 was drawn in 12 ticks on 2026-10-28).
+ */
 async function loadCandidates(limit: number, random: () => number): Promise<Candidate[]> {
-  const candidates = [...await loadAwaitingCandidates(), ...await loadBuildStudioCandidates()]
-    .map((candidate) => ({ candidate, order: random() }));
-  return candidates.sort((a, b) => a.order - b.order).slice(0, limit).map(({ candidate }) => candidate);
+  const sample = (candidates: Candidate[]) => candidates.map((candidate) => ({ candidate, order: random() }))
+    .sort((a, b) => a.order - b.order).slice(0, limit).map(({ candidate }) => candidate);
+  const awaiting = await loadAwaitingCandidates();
+  return [...sample([...awaiting.live, ...await loadBuildStudioCandidates()]), ...sample(awaiting.merged)];
 }
 
 /** The independent reviewer requests readiness issues for this item right now. */
-async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidate?: Candidate) {
+async function defaultOwedRoutes(itemId: string, authorAgentId: string | null, candidate?: Candidate) {
   if (candidate?.target === "implementation") {
-    const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId, authorAgentId });
+    const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId,
+      authorAgentId: authorAgentId ?? BUILD_STUDIO_ASSISTANT_AGENT_ID });
     return result.routed ? result.routes : null;
   }
   if (candidate?.target === "design") {
     const routes = await designPhaseOwedRecoveryRoutes(itemId, authorAgentId);
     return routes && routes.map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
   }
-  const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
-  const currentUserId = candidate?.room.userId ?? undefined;
-  const item = await getBacklogItem({ itemId }, authorAgentId, currentUserId);
-  const decision = (item.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion as
-    | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
-    | undefined;
-  if (!item.success || !decision) return null;
-  if (decision.verdict === "allowed") return [];
-  const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
-  const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: authorAgentId, currentUserId, refusedWorkroomId: null });
-  return recovery.reviewerRoutes
-    .filter((route) => route.independent)
-    .map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
+  return completionOwedRoutes(itemId, authorAgentId, candidate?.room.userId ?? undefined);
 }
 
 /**
@@ -325,6 +352,12 @@ type DispatchRecord = { id: string; recordedAt: Date; payload: Record<string, un
 
 /** Outcomes that leave the request unsent, so it is attempted again later. */
 const STANDING_REFUSALS: ReadonlySet<RouteOutcome["outcome"]> = new Set(["no-author-connection", "refused"]);
+/**
+ * Outcomes whose repeats are one fact on the room: a standing refusal, and a
+ * hand-off to the platform reviewer (BI-AA47C672) that is re-confirmed until the
+ * review lands. Each repeat grows the back-off.
+ */
+const COLLAPSING_OUTCOMES: ReadonlySet<RouteOutcome["outcome"]> = new Set([...STANDING_REFUSALS, "platform-reviewer"]);
 
 /** The newest dispatch record of this request in this room. */
 async function latestDispatchRecord(roomId: string, requestKey: string): Promise<DispatchRecord | null> {
@@ -344,10 +377,28 @@ function attemptsOf(record: DispatchRecord): number {
   return typeof attempts === "number" && Number.isInteger(attempts) && attempts > 0 ? attempts : 1;
 }
 
-/** When this request may be attempted again: a standing refusal's next attempt, else one cooldown after the record. */
-function nextAttemptDue(record: DispatchRecord): number {
+/** When this portal process started. A deploy or restart starts a new one. */
+const PROCESS_STARTED_AT = new Date();
+
+/**
+ * When this request may be attempted again: a standing refusal's next attempt,
+ * else one cooldown after the record.
+ *
+ * BI-D1DAB5AF: a standing refusal last attempted before this process started
+ * was decided by the code that ran before it, which a deploy may have fixed. It
+ * is due at once; refused again, the same row resumes its back-off. The build
+ * resume loop's unchanged-refusal hold applies the same rule (WWMD
+ * DI-A1DB91A1755E).
+ */
+function nextAttemptDue(record: DispatchRecord, processStartedAt: Date, now: Date): number {
   const next = typeof record.payload.nextAttemptAt === "string" ? Date.parse(record.payload.nextAttemptAt) : NaN;
-  return Number.isFinite(next) ? next : record.recordedAt.getTime() + REVIEW_DISPATCH_COOLDOWN_MS;
+  if (!Number.isFinite(next)) return record.recordedAt.getTime() + REVIEW_DISPATCH_COOLDOWN_MS;
+  const lastAttempt = typeof record.payload.lastAttemptAt === "string" ? Date.parse(record.payload.lastAttemptAt) : NaN;
+  const attemptedAt = Number.isFinite(lastAttempt) ? lastAttempt : record.recordedAt.getTime();
+  const standing = STANDING_REFUSALS.has(record.payload.outcome as RouteOutcome["outcome"]);
+  const started = processStartedAt.getTime();
+  if (standing && started <= now.getTime() && attemptedAt < started) return started;
+  return next;
 }
 
 /** Wait before attempt `attempts + 1`: the cooldown, doubled per repeated refusal, capped. */
@@ -364,7 +415,7 @@ export function reviewDispatchBackoffMs(attempts: number): number {
  */
 async function record(room: RoomAuthor, outcome: RouteOutcome, summary: string, previous: DispatchRecord | null, now: Date): Promise<void> {
   const base = { ...outcome, source: "platform-reviewer-dispatch" };
-  const refused = STANDING_REFUSALS.has(outcome.outcome);
+  const refused = COLLAPSING_OUTCOMES.has(outcome.outcome);
   const repeats = refused && previous !== null
     && previous.payload.outcome === outcome.outcome && (previous.payload.detail ?? null) === (outcome.detail ?? null);
   const attempts = repeats ? attemptsOf(previous!) + 1 : 1;
@@ -405,7 +456,14 @@ export async function dispatchReviewerRequest(args: {
   now?: Date;
   /** What the room records when no connection may carry the request. */
   noConnectionSummary?: string;
-  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute">;
+  /**
+   * BI-AA47C672: who readiness issued this packet for. With it, a post-
+   * implementation review no connection can carry goes to the platform's own
+   * reviewer; without it (a caller that did not read readiness as the author)
+   * nothing changes.
+   */
+  issuer?: ReviewIssuerIdentity;
+  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute" | "routeToPlatformReviewer" | "processStartedAt">;
 }): Promise<RouteOutcome> {
   const { room, requestCoworker } = args;
   const now = args.now ?? new Date();
@@ -414,7 +472,9 @@ export async function dispatchReviewerRequest(args: {
   if (!requestKey) return { ...at, outcome: "refused", detail: "The reviewer packet carries no request key." };
   if (!room.userId || (args.carrier === "author-assistant" && !room.agentId)) return { ...at, outcome: "no-author" };
   const previous = await latestDispatchRecord(room.roomId, requestKey);
-  if (previous && now.getTime() < nextAttemptDue(previous)) return { ...at, outcome: "cooling-down" };
+  if (previous && now.getTime() < nextAttemptDue(previous, args.deps?.processStartedAt ?? PROCESS_STARTED_AT, now)) {
+    return { ...at, outcome: "cooling-down" };
+  }
   const findConnection = args.deps?.findConnection
     ?? ((userId: string, agentId: string) => findStandingConnection(userId, agentId, "request_coworker", "platform-reviewer-dispatch"));
   const findUserConnection = args.deps?.findUserConnection
@@ -425,10 +485,23 @@ export async function dispatchReviewerRequest(args: {
     ? await findUserConnection(room.userId)
     : await findConnection(room.userId, room.agentId!);
   if (!connection) {
-    const outcome: RouteOutcome = { ...at, outcome: "no-author-connection" };
+    const platform: PlatformReviewRouteOutcome = args.issuer
+      ? await (args.deps?.routeToPlatformReviewer ?? defaultRouteToPlatformReviewer)({
+        itemId: args.itemId, requestCoworker, issuer: args.issuer, now,
+      }).catch((error: unknown): PlatformReviewRouteOutcome => ({ kind: "ineligible",
+        detail: `The platform could not open its review room: ${error instanceof Error ? error.message : "unknown error"}.` }))
+      : { kind: "not-applicable" };
+    if (platform.kind === "routed") {
+      const detail = `The platform asked ${platform.targetAgent} to review it in ${platform.capsuleId}.`;
+      const outcome: RouteOutcome = { ...at, outcome: "platform-reviewer", detail, carriedByAgentId: platform.targetAgent };
+      await record(room, outcome, `No assistant of the author is connected, so the platform asked its own reviewer, ${platform.targetAgent}, for the independent review this work owes (room ${platform.capsuleId}).`, previous, now);
+      return outcome;
+    }
+    const outcome: RouteOutcome = { ...at, outcome: "no-author-connection", ...(platform.kind === "ineligible" ? { detail: platform.detail } : {}) };
     await record(room, outcome, args.noConnectionSummary ?? (args.carrier === "requesting-user"
       ? "An independent review of this work is owed, but the person it is for has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it."
-      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant."), previous, now);
+      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant.")
+      + (outcome.detail ? ` The platform's own reviewer cannot take it either: ${outcome.detail}` : ""), previous, now);
     return outcome;
   }
   const execute = args.deps?.execute ?? (await import("@/lib/mcp-governed-execute")).governedExecuteTool;
@@ -472,7 +545,8 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
   const outcomes: RouteOutcome[] = [];
   for (const candidate of await loadCandidates(deps.limit ?? 5, deps.random ?? Math.random)) {
     const base = { itemId: candidate.itemId, capsuleId: candidate.room.capsuleId, requestKey: null };
-    const routes = await owedRoutes(candidate.itemId, candidate.room.agentId!, candidate).catch(() => null);
+    const routes = await owedRoutes(candidate.itemId, candidate.room.agentId, candidate).catch(() => null);
+    const carrier: Carrier = candidate.target === "implementation" ? "requesting-user" : candidate.carrier ?? "author-assistant";
     if (routes === null) { outcomes.push({ ...base, outcome: "readiness-unavailable" }); continue; }
     if (routes.length === 0) { outcomes.push({ ...base, outcome: "nothing-owed" }); continue; }
     for (const route of routes) {
@@ -483,14 +557,35 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         ? candidate.room
         : (await loadRoomAuthors({ capsuleId: route.workroomId }, { includeRetired: true }))[0] ?? null;
       const at = { itemId: candidate.itemId, capsuleId: route.workroomId, requestKey };
-      if (!room?.userId || !room.agentId) { outcomes.push({ ...at, outcome: "no-author" }); continue; }
+      if (!room?.userId || (carrier === "author-assistant" && !room.agentId)) { outcomes.push({ ...at, outcome: "no-author" }); continue; }
       outcomes.push(await dispatchReviewerRequest({
         room, itemId: candidate.itemId, requestCoworker: route.requestCoworker,
-        carrier: candidate.target === "implementation" ? "requesting-user" : "author-assistant",
+        carrier,
         workroomId: route.workroomId, now, deps: { ...deps, findConnection, findUserConnection },
         ...(candidate.target === "implementation" ? { noConnectionSummary: BUILD_STUDIO_NO_CONNECTION_SUMMARY } : {}),
+        // The identity owedRoutes read readiness as: the platform reviewer's
+        // writer re-derives the packet for exactly this issuer.
+        ...(candidate.target === "completion" && candidate.room.userId
+          ? { issuer: { userId: candidate.room.userId, agentId: candidate.room.agentId } } : {}),
       }));
     }
   }
   return outcomes;
+}
+
+/** The live platform hand-off: the item's platform review room, bound to the packet's reviewer. */
+async function defaultRouteToPlatformReviewer(input: { itemId: string; requestCoworker: Record<string, unknown>; issuer: ReviewIssuerIdentity; now: Date }): Promise<PlatformReviewRouteOutcome> {
+  const [{ routeReviewToPlatformReviewer }, { loadItemDeliveryActorIds }, { resolveWorkOwner }] = await Promise.all([
+    import("./platform-review-room"),
+    import("@/lib/backlog/acceptance-sweep/delivery-actors"),
+    import("@/lib/portfolio/accountable-owner"),
+  ]);
+  return routeReviewToPlatformReviewer({
+    ...input,
+    deps: {
+      db: prisma as never,
+      loadDeliveryActorIds: (itemId) => loadItemDeliveryActorIds(prisma as never, itemId),
+      resolveOwnerUserId: async () => (await resolveWorkOwner(prisma as never, {})).userId,
+    },
+  });
 }

@@ -34,7 +34,7 @@ const markerFor = (branch, expiresAt, capsuleId = "WC-0FF5B0E9") =>
 // ── what counts as work ──────────────────────────────────────────────────────
 
 test("edit tools count as work", () => {
-  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit", "write", "search_replace"]) {
     assert.equal(isWorkInvocation(tool, {}), true, tool);
   }
 });

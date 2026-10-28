@@ -115,6 +115,11 @@ export type AcceptanceSweepSummary = {
   closing: AcceptanceSweepClosing;
   /** BI-C899BB40: done items whose one bounded post-delivery step was advanced. */
   confirmation: AcceptanceSweepConfirmation;
+  /**
+   * BI-C5794F1D: obligations not evaluated or closed because a peer
+   * installation owns them (work-sync mirrors). Only the origin may change them.
+   */
+  peerOwned: { skipped: number };
   cursor: string | null;
 };
 
@@ -156,6 +161,7 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
     `Acceptance sweep: ${pool.size} acceptance obligations, ${pool.aged} aged ${agedDays}+ days`,
     `${pool.agedOverTrend} over ${pool.trendDays} days`,
     `${pool.ageBasisCreated} aged from creation (no entry record)`,
+    ...(summary.peerOwned.skipped > 0 ? [`${summary.peerOwned.skipped} skipped: owned by peer installation`] : []),
     `page of ${page.evaluated}: ${page.snapshotsWritten} changed, ${page.closable} closable, ${page.owned} with an owner, ${page.unroutableItems} unroutable`,
     summary.closing.enabled
       ? `${summary.closing.closed.length} closed under operator pre-authorisation`
@@ -306,6 +312,7 @@ export async function runAcceptanceSweep(
     routing,
     closing,
     confirmation,
+    peerOwned: { skipped: ages.peerOwnedSkipped ?? 0 },
     cursor: nextCursor,
   };
   const summary: AcceptanceSweepSummary = { ...withoutHeadline, headline: headline(withoutHeadline, config.agedDays) };
