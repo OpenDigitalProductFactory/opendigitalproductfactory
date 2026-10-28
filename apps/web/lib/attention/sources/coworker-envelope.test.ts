@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 const { humanRoomAccess } = vi.hoisted(() => ({ humanRoomAccess: vi.fn() }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: humanRoomAccess }));
+vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [] }));
 
 import {
   coworkerEnvelopeToAttentionItem,
