@@ -7,13 +7,43 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PROBES, runProbes, declaredCommandProblems, formatNotice } from "./pretooluse-guard-selftest.mjs";
+import { PROBES, runProbes, declaredCommandProblems, formatNotice, installedOutputProblems } from "./pretooluse-guard-selftest.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+// BI-5DD46FDA: the same per-client output check the exhaustive walk runs in CI,
+// run against the INSTALLED copy at session start.
+test("the installed copy's tool hooks emit output Claude and Codex honour", async () => {
+  assert.deepEqual(await installedOutputProblems({ pluginRoot: dirname(HERE), hooksDir: HERE }), []);
+});
+
+test("an installed hook that emits an invalid decision is named with its client", async () => {
+  const root = mkdtempSync(join(tmpdir(), "selftest-installed-"));
+  mkdirSync(join(root, "hooks"));
+  writeFileSync(join(root, "hooks", "bad-guard.mjs"), 'process.stdout.write(JSON.stringify({ decision: "deny", reason: "no" }));\n');
+  writeFileSync(join(root, "hooks", "client-hook-planes.json"), readFileSync(join(HERE, "client-hook-planes.json")));
+  writeFileSync(
+    join(root, "hooks", "hooks.json"),
+    JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/hooks/bad-guard.mjs"' }] }] } }),
+  );
+  const problems = await installedOutputProblems({ pluginRoot: root, hooksDir: join(root, "hooks") });
+  assert.ok(problems.some((p) => p.startsWith("bad-guard.mjs on claude-code PreToolUse")), problems.join("\n"));
+  assert.ok(problems.some((p) => p.startsWith("bad-guard.mjs on codex PreToolUse")), problems.join("\n"));
+  assert.match(formatNotice([], problems), /client would ignore/);
+
+  // The verdict is cached per content hash: unchanged files reuse it, a changed hook re-walks.
+  const cacheFile = join(root, "cache", "selftest.json");
+  const first = await installedOutputProblems({ pluginRoot: root, hooksDir: join(root, "hooks"), cacheFile });
+  assert.deepEqual(JSON.parse(readFileSync(cacheFile, "utf8")).problems, first);
+  writeFileSync(cacheFile, JSON.stringify({ ...JSON.parse(readFileSync(cacheFile, "utf8")), problems: ["from cache"] }));
+  assert.deepEqual(await installedOutputProblems({ pluginRoot: root, hooksDir: join(root, "hooks"), cacheFile }), ["from cache"]);
+  writeFileSync(join(root, "hooks", "bad-guard.mjs"), "\n");
+  assert.deepEqual(await installedOutputProblems({ pluginRoot: root, hooksDir: join(root, "hooks"), cacheFile }), []);
+});
 
 test("every probe denies through the real guards in a form the Claude host honours", () => {
   assert.ok(PROBES.length >= 4);

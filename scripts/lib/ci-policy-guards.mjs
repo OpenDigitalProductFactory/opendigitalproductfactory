@@ -1092,7 +1092,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
       // checked-in routine named, instead of costing an OOM and a retry.
-      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
+      // BI-F17F2188: where the package resolves, Claude gets the rewritten command instead.
+      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs", "packages/dpf-skill-pack/hooks/raw-tool-guard-rewrite.test.mjs"),
+      // BI-5DD46FDA: every hooks.json hook, per client, emits output that client honours.
+      node("--test", "packages/dpf-skill-pack/hooks/hook-output-contract.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       conformanceTest("packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-77BE1389: install-folder sessions get the source contract at start.
