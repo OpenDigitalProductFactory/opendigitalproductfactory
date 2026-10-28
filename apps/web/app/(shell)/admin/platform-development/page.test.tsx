@@ -60,6 +60,8 @@ it("keeps client setup messages available through the page's local admin provide
   expect(screen.getByText("Current assistant permissions still apply.")).toBeTruthy();
   expect(screen.queryByText(/setup\.sourceCredentials\./)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  // BI-DB506554: with no account named, the agent access panel stays closed on arrival.
+  expect(screen.getByText("Agent access for one account", { selector: "summary" }).closest("details")?.open).toBe(false);
   expect(screen.queryByRole("form", { name: "Add a client" })).toBeNull();
 });
 
@@ -71,7 +73,9 @@ it("opens the agent access panel on the account a link names", async () => {
       {await Page({ searchParams: Promise.resolve({ account: "admin@dpf.local" }) })}
     </MessagesProvider>,
   );
-  expect(screen.getByRole("heading", { name: "Agent access for one account" }).closest("section")?.id).toBe("agent-access");
+  const panel = screen.getByText("Agent access for one account", { selector: "summary" }).closest("details");
+  expect(panel?.open).toBe(true);
+  expect(panel?.closest("#agent-access")).toBeTruthy();
   expect((screen.getByLabelText(/Account email/) as HTMLInputElement).value).toBe("admin@dpf.local");
   expect(await screen.findByText("No account matches admin@dpf.local.")).toBeTruthy();
 });

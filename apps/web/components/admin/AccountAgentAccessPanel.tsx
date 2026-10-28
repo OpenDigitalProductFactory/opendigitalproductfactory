@@ -32,6 +32,9 @@ export function AccountAgentAccessPanel({ initialAccount }: { initialAccount?: s
   const [view, setView] = useState<AccountAgentAccess | null>(null);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  // Closed on arrival (lib/ux-budget disclosure region): the page is already
+  // long. A link that names an account opens it.
+  const [open, setOpen] = useState(Boolean(initialAccount));
 
   function load(key: string, keepNotice = false) {
     if (!key.trim()) return;
@@ -103,9 +106,13 @@ export function AccountAgentAccessPanel({ initialAccount }: { initialAccount?: s
   const anyLive = !!totals && totals.personalTokens + totals.oauthAccessTokens + totals.refreshGrants + totals.credentialsClients > 0;
 
   return (
-    <Surface as="section" id={AGENT_ACCESS_PANEL.anchor} level={1} padding="md" rounded="xl" className="mt-6 scroll-mt-6" aria-labelledby="agent-access-heading">
-      <h2 id="agent-access-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("accountAgentAccess.heading")}</h2>
-      <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">{t("accountAgentAccess.intro")}</p>
+    <Surface id={AGENT_ACCESS_PANEL.anchor} level={1} padding="none" rounded="xl" className="mt-6 scroll-mt-6">
+      <details open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer select-none px-4 py-3 text-base font-semibold text-[var(--dpf-text)]">
+        {t("accountAgentAccess.heading")}
+      </summary>
+      <div className="px-4 pb-4">
+      <p className="max-w-3xl text-sm text-[var(--dpf-muted)]">{t("accountAgentAccess.intro")}</p>
 
       <form
         className="mt-3 flex flex-wrap items-end gap-3"
@@ -176,6 +183,8 @@ export function AccountAgentAccessPanel({ initialAccount }: { initialAccount?: s
           )}
         </div>
       ) : null}
+      </div>
+      </details>
     </Surface>
   );
 }

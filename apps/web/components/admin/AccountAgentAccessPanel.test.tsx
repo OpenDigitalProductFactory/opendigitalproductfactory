@@ -73,6 +73,10 @@ describe("AccountAgentAccessPanel", () => {
   it("looks up an account typed by the operator", async () => {
     renderPanel();
     expect(listMock).not.toHaveBeenCalled();
+    // Closed on arrival when no account is named; opening it reveals the lookup.
+    const summary = screen.getByText("Agent access for one account", { selector: "summary" });
+    expect(summary.closest("details")?.open).toBe(false);
+    fireEvent.click(summary);
     fireEvent.change(screen.getByLabelText(/Account email/), { target: { value: "admin@dpf.local" } });
     fireEvent.click(screen.getByRole("button", { name: "Show access" }));
     await waitFor(() => expect(listMock).toHaveBeenCalledWith({ account: "admin@dpf.local" }));
