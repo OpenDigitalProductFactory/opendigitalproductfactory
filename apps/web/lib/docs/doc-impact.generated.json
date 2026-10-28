@@ -999,6 +999,9 @@
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/inference/local-model-context-reconcile.ts": [
+      "docs/user-guide/ai-workforce/provider-developer-notes.md"
+    ],
     "apps/web/lib/inference/local-model-operations.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -4155,6 +4158,7 @@
       "apps/web/app/auth/callback/route.ts",
       "apps/web/app/callback/route.ts",
       "apps/web/lib/actions/provider-oauth.ts",
+      "apps/web/lib/inference/local-model-context-reconcile.ts",
       "apps/web/lib/provider-oauth.ts"
     ],
     "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md": [

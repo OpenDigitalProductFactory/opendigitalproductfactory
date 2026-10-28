@@ -1074,6 +1074,8 @@ export async function register() {
             console.log(
               `[local-model-context] raised ${r.modelId} ${r.before ?? "unset"} → ${r.after} tokens`,
             );
+          } else if (r.status === "pinned") {
+            console.log(`[local-model-context] pinned ${r.modelId} resident (keep_alive -1, BI-34F71E9D)`);
           } else if (r.status === "deferred") {
             console.warn(
               `[local-model-context] raise deferred (${r.reason ?? "unknown"}); applies on next model load`,
@@ -1082,6 +1084,18 @@ export async function register() {
         };
         logCtx(await reconcileLocalModelContext());
         setInterval(() => void reconcileLocalModelContext().then(logCtx), 20 * 60 * 1000);
+        // Same net for the embedder's placement (BI-B60AFE7B): on the GPU beside
+        // a card-filling generation model, each embedder load spills VRAM and
+        // stalls generation for minutes; DMR forgets the CPU pin on restart.
+        const { reconcileLocalEmbedderPlacement } = await import(
+          "@/lib/inference/local-model-context-reconcile"
+        );
+        const logEmbed = (r: Awaited<ReturnType<typeof reconcileLocalEmbedderPlacement>>) => {
+          if (r.status === "applied") console.log(`[local-model-context] embedder ${r.modelId} pinned to CPU, resident`);
+          else if (r.status === "deferred") console.warn(`[local-model-context] embedder placement deferred (${r.reason ?? "unknown"})`);
+        };
+        logEmbed(await reconcileLocalEmbedderPlacement());
+        setInterval(() => void reconcileLocalEmbedderPlacement().then(logEmbed), 20 * 60 * 1000);
         // Same boot + periodic net for the provider ↔ default-connection status
         // split (BI-04E4F111): routing filters on AiProviderConnection.status
         // while the UI renders ModelProvider.status — see the module header.
