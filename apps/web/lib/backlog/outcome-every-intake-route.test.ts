@@ -200,6 +200,7 @@ const EXEMPT: Record<string, string> = {
   "lib/operate/issue-report-triage-runner.ts": "writes data built by triageIssueReports, which states the outcome",
   "lib/queue/functions/issue-report-triage.ts": "writes data built by checkForSpike, which states the outcome",
   "lib/operate/process-observer-hook.ts": "writes data built by buildBacklogItemData, which states the outcome",
+  "lib/gpp/efficacy/guard-outcome-jobs.ts": "passes ingest through; fileRetirementReviews (gpp/efficacy/guard-retirement-filing.ts) states the outcome",
 };
 
 function sourceFiles(dir: string): string[] {

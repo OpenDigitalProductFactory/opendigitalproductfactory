@@ -74,6 +74,15 @@ describe("fileRetirementReviews — AC-GOE-05", () => {
     expect(result.filed).toEqual([{ guardId: FIXTURE, itemId: "BI-GUARD-1", created: true, rule: "R-2" }]);
   });
 
+  it("states the outcome that closes each review item (BI-458CCA8D)", async () => {
+    const backlog = fakeBacklog();
+    await fileRetirementReviews({ now: NOW, guards: evidenceFor(), file: backlog.file });
+    const perGuard = backlog.filed.find((item) => item.origin?.kind === "guard-retirement-review");
+    const digest = backlog.filed.find((item) => item.origin?.kind === "guard-retirement-digest");
+    expect(perGuard?.outcome).toBe(`\`${FIXTURE}\` is retired, narrowed so it stops refusing correct work, or kept with an owner and an expiry.`);
+    expect(digest?.outcome).toBe("Each guard listed is retired, narrowed, or kept with an owner and an expiry.");
+  });
+
   it("a second evaluation files nothing new", async () => {
     const backlog = fakeBacklog();
     await fileRetirementReviews({ now: NOW, guards: evidenceFor(), file: backlog.file });

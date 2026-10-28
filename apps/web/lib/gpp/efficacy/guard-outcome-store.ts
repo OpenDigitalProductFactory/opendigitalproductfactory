@@ -17,7 +17,6 @@ export const RETENTION_DAYS = 365;
 export const MAX_SERIES_ROWS = 5_000;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const OPERATION_PREFIX = "guard-outcome.";
 
 export type GuardOutcomeStoreDb = Pick<PrismaClient, "$queryRaw" | "externalEvidenceRecord">;
 

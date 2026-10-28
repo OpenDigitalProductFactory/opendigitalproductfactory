@@ -132,6 +132,7 @@ export async function fileRetirementReviews(input: {
     const result = await input.file({
       title: `[Guard review] ${finding.guardId}: ${finding.measure}`.slice(0, 200),
       body: `${describe(finding)}\n${CHOICES}`,
+      outcome: `\`${finding.guardId}\` is retired, narrowed so it stops refusing correct work, or kept with an owner and an expiry.`,
       workType: "chore",
       source: "automated-detection",
       type: "portfolio",
@@ -158,6 +159,7 @@ export async function fileRetirementReviews(input: {
         ...lines,
         CHOICES,
       ].join("\n"),
+      outcome: "Each guard listed is retired, narrowed, or kept with an owner and an expiry.",
       workType: "chore",
       source: "automated-detection",
       type: "portfolio",
