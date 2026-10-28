@@ -182,6 +182,18 @@ function resultDb(row: { actionKey: string; status: string; edgeNodeId: string |
 }
 
 describe("recordActionResult", () => {
+  it("settles a bound source-mismatch nonexecution receipt while rejecting the same refusal without its original binding", async () => {
+    const base = { actionKey: "ra_1", status: "claimed", edgeNodeId: "node_1", actionType: "inference.runtime.transition", parameters: nativeParameters(),
+      evidence: { nativeAdmission: { quiescenceRunId: "QR-original" }, nativeDispatch: { requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), operation: "activate" } } };
+    const { db, update } = resultDb(base);
+    const refusal = { schemaVersion: 1, actionKey: "ra_1", nativeStatus: "not-started", settlement: "confirmed" };
+    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: refusal })).toEqual({ ok: false, reason: "native-report-unbound" });
+    expect(update).not.toHaveBeenCalled();
+    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed",
+      evidence: { ...refusal, requestDigest: "a".repeat(64), sourceSha: "a".repeat(40) } })).toEqual({ ok: true, status: "failed" });
+    expect(update.mock.calls[0][0].data.evidence).toMatchObject({ nativeStatus: "not-started", settlement: "confirmed", nativeAdmission: { quiescenceRunId: "QR-original" } });
+  });
+
   it("retains native admission provenance and never lets a host replace it in its result", async () => {
     const { db, update } = resultDb({ actionKey: "ra_1", status: "running", edgeNodeId: "node_1",
       actionType: "inference.runtime.transition", parameters: nativeParameters(), evidence: {

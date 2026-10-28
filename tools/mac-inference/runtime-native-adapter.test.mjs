@@ -140,3 +140,10 @@ test('an originally resident default embedding model is recognized and restored 
   assert.ok(f.calls.some(call => call.method === 'POST' && call.url.endsWith('/v1/embeddings')));
   assert.ok(!f.calls.some(call => call.method === 'POST' && call.url.endsWith('/engines/_configure') && JSON.parse(call.body).model === f.models[1].model));
 });
+
+test('default embedding recognition still rejects an unqualified resident mode before effects', async t => {
+  const f = await fixture(t, { defaultEmbedding: true });
+  f.rows[1].mode = 'completion';
+  await assert.rejects(f.adapter.preflight(f.authority.action), /Unrelated/);
+  assert.ok(f.calls.every(row => row.method === 'GET'));
+});
