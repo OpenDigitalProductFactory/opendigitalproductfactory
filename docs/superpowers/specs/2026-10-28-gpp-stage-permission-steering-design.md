@@ -1,3 +1,8 @@
+---
+status: draft
+backlog: BI-6B610D94
+---
+
 # Stage permissions steer connected clients
 
 Status: draft for independent review. Backlog: BI-6B610D94. Workroom: WC-E70788DE.
