@@ -117,7 +117,7 @@ export async function runHarnessEvolutionLoop(
       ...(activitiesByRoom.get(room.id) ?? []).flatMap((row) => roomMissFromActivity(row, room.layer) ?? []),
     ];
     const derived = deriveRoomCandidates({
-      room: { capsuleId: room.capsuleId, shapeRef: room.shapeRef },
+      room: { capsuleId: room.capsuleId, shapeRef: room.shapeRef, decisionScope: room.decisionScope },
       layer: room.layer,
       misses,
       minRecurrence: budget.minRecurrence,

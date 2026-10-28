@@ -70,9 +70,11 @@ describe("room misses", () => {
     expect(toolMiss("te-1", "record_workroom_evidence", "authority_denied: room not yours")).toMatchObject({
       missKey: "tool:record_workroom_evidence:authority_denied",
       actor: "coworker",
-      componentHint: "skill-tool",
+      // No authority for the action: the fix is a narrow GPP permit, not an approval.
+      componentHint: "gpp-permit",
       ref: { kind: "tool-execution", id: "te-1" },
     });
+    expect(toolMiss("te-4", "claim_workroom_scope", "scope_conflict").componentHint).toBe("skill-tool");
     expect(toolMiss("te-2", "claim_workroom_scope", null).missKey).toBe("tool:claim_workroom_scope:unknown");
     expect(toolMiss("te-3", "x", "e".repeat(200)).missKey).toBe(`tool:x:${"e".repeat(60)}`);
   });
@@ -91,6 +93,7 @@ describe("room misses", () => {
   it("lets another layer supply its own miss kinds without a second code path", () => {
     const archetype: HarnessLayer = {
       key: "archetype:vet-clinic",
+      decisionScope: "wwwd",
       shapeKeyPrefixes: ["vet-intake"],
       missKinds: { "question": { actor: "human", componentHint: "coworker-prompt" } },
     };
@@ -112,9 +115,10 @@ describe("deriveRoomCandidates", () => {
         capsuleId: "WC-ROOM1",
         shapeRef: "delivery-medium@1.0.0",
         layer: "ring-0",
+        decisionScope: "wwmd",
         missKey: "tool:record_workroom_evidence:authority_denied",
         actor: "coworker",
-        componentHint: "skill-tool",
+        componentHint: "gpp-permit",
         recurrence: 6,
         lastSeenAt: at(0).toISOString(),
         trajectory: ["a", "b", "c", "d", "e"].map((id) => ({ kind: "tool-execution", id })),
@@ -133,6 +137,16 @@ describe("deriveRoomCandidates", () => {
     const result = deriveRoomCandidates({ room: ROOM, layer: RING0_LAYER, misses, minRecurrence: 2, maxCandidates: 3 });
     expect(result.candidates.map((c) => c.missKey)).toEqual(["tool:t_d:x", "tool:t_c:x", "tool:t_a:x"]);
     expect(result.overCap).toBe(1);
+  });
+
+  it("takes the room's own decision scope, falling back to the layer's", () => {
+    const misses = [toolMiss("1", "t", "x"), toolMiss("2", "t", "x")];
+    const derive = (decisionScope: string | null) =>
+      deriveRoomCandidates({ room: { ...ROOM, decisionScope }, layer: RING0_LAYER, misses, minRecurrence: 2, maxCandidates: 3 })
+        .candidates[0]!.decisionScope;
+    expect(derive("wsid")).toBe("wsid");
+    expect(derive(null)).toBe("wwmd");
+    expect(derive("not-a-scope")).toBe("wwmd");
   });
 });
 

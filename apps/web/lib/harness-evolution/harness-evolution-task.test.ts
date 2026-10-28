@@ -31,10 +31,10 @@ function fakeStore(overrides: Partial<Record<keyof HarnessEvolutionStore, Return
   const defaults = {
     findRun: vi.fn().mockResolvedValue(null),
     listActiveRooms: vi.fn().mockResolvedValue([
-      { id: "r1", capsuleId: "WC-1", scopeClaims: shape("delivery-medium@1.0.0") },
-      { id: "r2", capsuleId: "WC-2", scopeClaims: shape("delivery-medium@1.0.0") },
-      { id: "r3", capsuleId: "WC-3", scopeClaims: shape("acceptance-verification@1.1.0") },
-      { id: "r4", capsuleId: "WC-4", scopeClaims: [] },
+      { id: "r1", capsuleId: "WC-1", scopeClaims: shape("delivery-medium@1.0.0"), decisionScope: "wwmd" },
+      { id: "r2", capsuleId: "WC-2", scopeClaims: shape("delivery-medium@1.0.0"), decisionScope: null },
+      { id: "r3", capsuleId: "WC-3", scopeClaims: shape("acceptance-verification@1.1.0"), decisionScope: null },
+      { id: "r4", capsuleId: "WC-4", scopeClaims: [], decisionScope: null },
     ]),
     listToolFailures: vi.fn().mockResolvedValue([
       { capsuleId: "WC-1", id: "te-1", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(1) },
@@ -95,6 +95,10 @@ describe("runHarnessEvolutionLoop", () => {
       "tool:record_workroom_evidence:authority_denied",
     ]);
     expect(room1!.payload).toMatchObject({ layer: "ring-0", shapeRef: "delivery-medium@1.0.0" });
+    expect((room1!.payload.candidates as Array<{ decisionScope: string; componentHint: string }>)[0]).toMatchObject({
+      decisionScope: "wwmd",
+      componentHint: "gpp-permit",
+    });
     expect((room2!.payload.candidates as Array<{ missKey: string; actor: string }>).map((c) => [c.missKey, c.actor])).toEqual([
       // Equal recurrence: the newer miss leads.
       ["tool:record_workroom_evidence:authority_denied", "coworker"],

@@ -51,6 +51,28 @@ This design reads that as five rules:
    records, spots cross-room recurrences for promotion and enforces budget. It
    never rewrites a room's harness from outside.
 
+A further direction from the founder on the same day:
+
+> "A few key aspects on the improvements is use of WWMD, WWWD and WSID to
+> guide decisions. The GPP standard was implemented for the most part to
+> re-factor this as advisory prose, and to make sure we are getting specific
+> permissions for specific actions without needing to ask a human for
+> guidance. This prose to vector maintenance and improvements is a key aspect
+> that the research doesn't currently tackle."
+
+It adds three rules:
+
+6. **Each edit is decided in its owning scope.** WWMD decides platform edits,
+   WWWD decides business and archetype edits, and WSID decides craft edits.
+   This follows `decisions-belong-to-their-scope`.
+7. **Authority comes from a permit, not a person.** A room adopts an edit under
+   a narrow GPP permit for that specific action. An approval card is not the
+   path.
+8. **Prose-to-vector is a first-class improvement.** The loop does more than
+   add text. It moves enforcement out of advisory prose into vectors: gates,
+   permits and decision vectors. The prose stays as the advisory reasoning
+   behind them. Harness² does not model this; it edits only text.
+
 ## Why
 
 Detection already exists; closure does not. On 2026-10-28 detectors had filed
@@ -114,6 +136,8 @@ slice 2, each with its own budget.
 
 **OBJ-5:** A daily platform aggregator, with no client installed, rolls up room records, names cross-room recurrences for promotion, enforces the budget and records spend; a weekly rollup shows each targeted signal's recurrence before and after adoption.
 
+**OBJ-6:** Each edit is guided by the doctrine of its owning scope (WWMD, WWWD or WSID), adopted under a narrow GPP permit for that specific action rather than a person's approval, and preferred when it converts advisory prose into an enforced vector while keeping the prose as its reasoning.
+
 ## Acceptance
 
 | ID | Objectives | Statement |
@@ -127,6 +151,10 @@ slice 2, each with its own budget.
 | AC-7 | OBJ-4 | Slice 3: an ADOPT verdict changes the room's harness only through governed change (a shape version bump or a seed PR via `seed-pull-request.ts`), and every outcome writes an EXPERIENCE record keyed by room, shape and layer to the work-pattern effective ledger, which later runs in the same shape read. |
 | AC-8 | OBJ-4 | Slice 3: the aggregator proposes an edit for the shape or core layer only when the same edit has won its probe in at least two rooms. |
 | AC-9 | OBJ-5 | Slice 4: a weekly rollup lists each targeted miss key's recurrence per room and shape before and after its edit landed. |
+| AC-10 | OBJ-6 | Every candidate carries the room's decision scope (falling back to the layer's: WWMD for ring 0), and a tool miss whose refusal code means missing authority (`authority_denied`, `approval_required`, `permission_denied`, `grant_missing`, `workroom_access_denied`) is hinted `gpp-permit`. |
+| AC-11 | OBJ-6 | Slice 2: before proposing an edit, the editor runs `principle_decide` in the candidate's scope and records the decision id on the candidate; an edit the scope does not support is KEEP_BASE without a probe. |
+| AC-12 | OBJ-6 | Slice 3: adoption executes under a GPP permit scoped to the edit's action and room, and the run asks no person; a `gpp-permit` candidate's edit is the permit grant itself, probed like any other edit. |
+| AC-13 | OBJ-6 | Slice 3: an edit that replaces always-on advisory prose with a gate, permit or decision vector records the prose characters retired and the vector added in its EXPERIENCE record, and keeps the prose's rationale as advisory text the vector cites. |
 
 ## Design
 
@@ -189,9 +217,18 @@ newest-updated first, up to `maxRooms`.
 | `status-override` | human | stage brief |
 | `workroom-drive-attention` | human | stage brief |
 
-Tool misses hint `skill-tool`: a tool's contract or its description is the
-first place to look. The hint is advisory. Slice 2 confirms it through
+Tool misses hint `skill-tool`, because a tool's contract or its description is
+the first place to look. The exception is a refusal code that means missing
+authority (`authority_denied`, `approval_required`, `permission_denied`,
+`grant_missing`, `workroom_access_denied`). Those hint `gpp-permit`: the room
+lacks a specific permission for a specific action, and a person's approval is
+the wrong fix. The hint is advisory. Slice 2 confirms it through
 `improvement-flywheel/routing-answer.ts`.
+
+**Decision scope.** Each candidate records the scope whose doctrine guides
+it. That is the room's own `decisionScope` when it has one; otherwise it is
+the layer's default. Ring 0 defaults to WWMD. On 2026-10-28, 135 active rooms
+recorded `wwmd`, 1 recorded `wsid` and the rest recorded none.
 
 **Candidates.** A miss key that recurs at least `minRecurrence` times
 (default 2) in the window becomes a candidate. It carries:
@@ -296,6 +333,40 @@ and ScheduledAgentTask already have every field this slice reads or writes.
   has won in two or more rooms of that shape, and for the core when it has
   won across shapes.
 
+### Decision guidance, permits and prose-to-vector (slices 2–3)
+
+The rest of the loop is steered, in this order:
+
+1. **Scope first.** The editor reads the candidate's `decisionScope` and runs
+   `principle_decide` there before it writes anything:
+   - WWMD for platform harness;
+   - WWWD for a business or archetype room;
+   - WSID for craft.
+
+   The decision id goes on the candidate. A scope that does not support the
+   edit ends the candidate as KEEP_BASE, with no probe spent. That applies
+   the commandment `consult-scopes-before-asking` to the loop itself.
+2. **Permit, not approval.** Adoption runs under a GPP permit scoped to the
+   edit's action and room. A `gpp-permit` candidate is the case where the edit
+   *is* a permit: for example, the narrow grant that would stop
+   `record_workroom_evidence` being refused `authority_denied` in a room
+   where that write is the room's own work. It is probed like any edit,
+   replaying the room's traces with and without the grant.
+   - **Dependency.** GPP cannot steer yet. Permits are minted by an approval,
+     not consulted before one, and their lineage is unsealed (BI-6B610D94,
+     BI-035BE8D1, BI-E458A9CB). Until those land, slice 3 records the permit
+     an edit needs and routes adoption through the governed PR path. It does
+     not invent an authority channel.
+3. **Prose to vector.** An edit class of its own. It replaces enforcement
+   that lives in always-on advisory prose with a vector the platform
+   enforces: a gate, a permit, a decision vector or a shape stop condition.
+   The prose stays as the advisory reasoning the vector cites; GPP keeps
+   advisory text as reasoning and permits as authority. The EXPERIENCE record
+   counts the prose characters retired and the vector added. Retiring
+   always-on prose is how the loop keeps `check-instruction-plane-size.mjs`
+   shrinking while behaviour gets stricter. The selection judge treats an
+   equal-contrast edit that retires prose as the better one.
+
 ### Slice 4 — weekly rollup
 
 The rollup lists recurrence per miss key, room and shape before and after each
@@ -312,9 +383,9 @@ adoption. The target is a miss that stops recurring.
 
 | Slice | Item | Covers |
 | --- | --- | --- |
-| 1 | BI-49BC21C1: room-scoped candidates on ring-0 rooms, typed aggregator, budget and spend | AC-1 – AC-5 |
-| 2 | Child of BI-49BC21C1: per-room editor plus harness-edit probe variant | AC-6 |
-| 3 | Child of BI-49BC21C1: compose, scoped EXPERIENCE library, cross-room promotion | AC-7, AC-8 |
+| 1 | BI-49BC21C1: room-scoped candidates on ring-0 rooms, typed aggregator, budget and spend, decision scope and permit-gap hint | AC-1 – AC-5, AC-10 |
+| 2 | Child of BI-49BC21C1: per-room editor guided by its scope, plus harness-edit probe variant | AC-6, AC-11 |
+| 3 | Child of BI-49BC21C1: compose under GPP permits, scoped EXPERIENCE library, prose-to-vector accounting, cross-room promotion (depends on BI-6B610D94) | AC-7, AC-8, AC-12, AC-13 |
 | 4 | Child of BI-49BC21C1: weekly before/after rollup | AC-9 |
 
 This design stays `draft` until an independent reviewer passes its

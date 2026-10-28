@@ -20,7 +20,7 @@ const ROOM_READ_LIMIT = 1_000;
 const MISS_READ_LIMIT = 5_000;
 const SIGNAL_READ_LIMIT = 200;
 
-export type ActiveRoomRow = { id: string; capsuleId: string; scopeClaims: unknown };
+export type ActiveRoomRow = { id: string; capsuleId: string; scopeClaims: unknown; decisionScope: string | null };
 export type ToolFailureRow = { capsuleId: string; id: string; toolName: string; error: string | null; createdAt: Date };
 export type RoomActivityRow = { workCapsuleId: string; id: string; kind: string; recordedAt: Date };
 export type ShapeSignalRow = { signalId: string; title: string; recurrenceCount: number; evidence: unknown };
@@ -52,7 +52,7 @@ export const prismaHarnessEvolutionStore: HarnessEvolutionStore = {
   async listActiveRooms(since) {
     return prisma.workroom.findMany({
       where: { archivedAt: null, status: { in: [...ACTIVE_ROOM_STATUSES] }, updatedAt: { gte: since } },
-      select: { id: true, capsuleId: true, scopeClaims: true },
+      select: { id: true, capsuleId: true, scopeClaims: true, decisionScope: true },
       orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
       take: ROOM_READ_LIMIT,
     });

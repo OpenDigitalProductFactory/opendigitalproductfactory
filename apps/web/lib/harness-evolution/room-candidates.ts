@@ -69,6 +69,9 @@ export function resolveSeedItemIds(taskConfig: unknown): string[] {
 
 /** Where a room's harness is edited first. Advisory until slice 2 routes it. */
 export type ComponentHint =
+  // A refusal for want of authority: the fix is a narrow GPP permit for this
+  // specific action, not a person's approval (GPP; BI-6B610D94).
+  | "gpp-permit"
   | "gate-hook-script"
   | "skill-tool"
   | "stage-brief"
@@ -78,8 +81,17 @@ export type ComponentHint =
 
 export type MissActor = "coworker" | "human";
 
+/** The scope whose doctrine decides an edit: platform, business or craft. */
+export type DecisionScope = "wwmd" | "wwwd" | "wsid";
+const DECISION_SCOPES = new Set<string>(["wwmd", "wwwd", "wsid"]);
+
+/** Refusal codes that mean "no authority for this action" rather than a bad call. */
+const PERMIT_GAP_CODES = new Set(["authority_denied", "approval_required", "permission_denied", "grant_missing", "workroom_access_denied"]);
+
 export type HarnessLayer = {
   key: string;
+  /** Scope consulted when the room records none: ring 0 is platform work, so WWMD. */
+  decisionScope: DecisionScope;
   /** A room is in the layer when its declared shape key starts with one of these. */
   shapeKeyPrefixes: readonly string[];
   /** Room activity kinds that count as misses in this layer. */
@@ -89,6 +101,7 @@ export type HarnessLayer = {
 /** Ring 0: platform development, delivered through the delivery-* shapes. */
 export const RING0_LAYER: HarnessLayer = {
   key: "ring-0",
+  decisionScope: "wwmd",
   shapeKeyPrefixes: ["delivery-"],
   missKinds: {
     "command-rejected": { actor: "coworker", componentHint: "stage-brief" },
@@ -138,7 +151,7 @@ export function roomMissFromToolFailure(row: { id: string; toolName: string; err
   return {
     missKey: `tool:${row.toolName}:${code}`,
     actor: "coworker",
-    componentHint: "skill-tool",
+    componentHint: PERMIT_GAP_CODES.has(code) ? "gpp-permit" : "skill-tool",
     at: row.createdAt,
     ref: { kind: "tool-execution", id: row.id },
   };
@@ -164,6 +177,8 @@ export type RoomCandidate = {
   capsuleId: string;
   shapeRef: string;
   layer: string;
+  /** The scope whose doctrine guides this room's edit (WWMD / WWWD / WSID). */
+  decisionScope: DecisionScope;
   missKey: string;
   actor: MissActor;
   componentHint: ComponentHint;
@@ -181,7 +196,7 @@ export type RoomCandidatesResult = {
 };
 
 export function deriveRoomCandidates(input: {
-  room: { capsuleId: string; shapeRef: string };
+  room: { capsuleId: string; shapeRef: string; decisionScope?: string | null };
   layer: HarnessLayer;
   misses: readonly RoomMiss[];
   minRecurrence: number;
@@ -194,6 +209,8 @@ export function deriveRoomCandidates(input: {
     else groups.set(miss.missKey, [miss]);
   }
 
+  const roomScope = input.room.decisionScope;
+  const decisionScope = roomScope && DECISION_SCOPES.has(roomScope) ? (roomScope as DecisionScope) : input.layer.decisionScope;
   let belowThreshold = 0;
   const recurring: RoomCandidate[] = [];
   for (const [missKey, group] of groups) {
@@ -208,6 +225,7 @@ export function deriveRoomCandidates(input: {
       capsuleId: input.room.capsuleId,
       shapeRef: input.room.shapeRef,
       layer: input.layer.key,
+      decisionScope,
       missKey,
       actor: head.actor,
       componentHint: head.componentHint,
