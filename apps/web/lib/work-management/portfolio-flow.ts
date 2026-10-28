@@ -18,6 +18,8 @@
  * Pure: rooms and stage telemetry in, numbers out.
  */
 import { computeFlowDurations, percentile } from "@/lib/queue/flow-metrics";
+
+import { compareStageEvents } from "./workroom-stage-telemetry";
 import { reconstructTimelines, type QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 import { PORTFOLIO_ROLES, isPortfolioRole, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 
@@ -125,7 +127,7 @@ function runsFrom(rows: readonly QueueTelemetryRow[]): Map<string, Run> {
   }
   const runs = new Map<string, Run>();
   for (const [itemId, itemRows] of byItem) {
-    const ordered = [...itemRows].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    const ordered = [...itemRows].sort(compareStageEvents);
     const entered = ordered.find((row) => row.transition === "enqueued");
     const last = ordered.at(-1)!;
     // A run is over when its newest event finishes a step and nothing re-opened;
