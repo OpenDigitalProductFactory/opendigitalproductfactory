@@ -463,7 +463,8 @@ export async function ingestBacklogItem(
   if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
       where: {
-        AND: [{ body: { contains: marker } }, ownedRowBodyWhere()],
+        body: { contains: marker },
+        AND: [ownedRowBodyWhere()],
         status: { notIn: ["done", "deferred", "retired"] },
       },
       select: { id: true, itemId: true },
