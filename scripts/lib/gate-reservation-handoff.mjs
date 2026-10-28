@@ -21,11 +21,26 @@ export function advanceGateReservationPin(argv, outputTail) {
   if (!/^[a-f0-9]{40}$/.test(sha ?? "") || !owner || !pin.value) return refuse("invalid-source-pin");
   const expected = `local-ci:${owner}:${sha}`;
   const leases = new Set();
+  let quiescence = false;
   for (const line of outputTail.split(/\r?\n/)) {
     let packet;
     try { packet = JSON.parse(line); } catch { continue; }
-    if (packet?.status !== "queued" || packet?.code !== "local_ci_durable_wait") continue;
-    if (packet.resumeMode !== "durable-task" || typeof packet.claimKey !== "string" ||
+    if (packet?.code === "local_ci_quiescence_wait") {
+      // This gate parked before claiming capacity. Keep the existing pin; a
+      // quiescence observation is never a replacement-reservation receipt.
+      if (packet.status !== "waiting" || packet.resumeMode !== "durable-quiescence"
+        || typeof packet.level !== "string" || !packet.level.trim()
+        || !(packet.runId === null || (typeof packet.runId === "string" && packet.runId.length > 0))
+        || typeof packet.retryAfterSeconds !== "number" || !Number.isFinite(packet.retryAfterSeconds)
+        || packet.retryAfterSeconds <= 0
+        || ["leaseId", "claimKey", "taskRunId"].some(key => key in packet)) {
+        return refuse("invalid-quiescence-wait");
+      }
+      quiescence = true;
+      continue;
+    }
+    if (packet?.code !== "local_ci_durable_wait") continue;
+    if (packet.status !== "queued" || packet.resumeMode !== "durable-task" || typeof packet.claimKey !== "string" ||
         !(packet.claimKey === expected || packet.claimKey.startsWith(`${expected}:`)) ||
         typeof packet.leaseId !== "string" || !/^NPEL-[A-Z0-9-]{1,80}$/.test(packet.leaseId) ||
         typeof packet.taskRunId !== "string" || !/^TR-NONPROD-[A-Z0-9-]{1,100}$/.test(packet.taskRunId)) {
@@ -33,6 +48,7 @@ export function advanceGateReservationPin(argv, outputTail) {
     }
     leases.add(packet.leaseId);
   }
+  if (quiescence) return leases.size ? refuse("ambiguous-handoff") : { required: false };
   if (leases.size !== 1) return refuse(leases.size ? "ambiguous-handoff" : "missing-handoff");
   const [leaseId] = leases;
   const next = [...argv];
