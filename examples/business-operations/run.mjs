@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, readFile, writeFile, cp, rm, lstat } from "node:fs/promises";
+import { readRegularFile } from "../_shared/read-regular-file.mjs";
+import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -24,8 +25,7 @@ try {
   for (const name of ["LICENSE", "NOTICE"]) await cp(join(here, name), join(temp, name));
   for (const source of manifest.sources) {
       const path = resolve(root, source);
-      if (!(await lstat(path)).isFile()) throw new Error(`Closure source must be a regular file: ${source}`);
-      const contents = await readFile(path, "utf8");
+      const contents = await readRegularFile(path, "utf8");
       sourceDigests[source] = createHash("sha256").update(contents).digest("hex");
       for (const match of contents.matchAll(/(?:from\s*|import\s*\()(["'])([^"']+)\1/g)) {
         if (!match[2].startsWith(".") || !match[2].endsWith(".ts")) throw new Error(`Nonportable import in ${source}: ${match[2]}`);

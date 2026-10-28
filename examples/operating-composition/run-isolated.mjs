@@ -1,3 +1,4 @@
+import { readRegularFile } from "../_shared/read-regular-file.mjs";
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -51,8 +52,8 @@ try {
   const targets = new Map();
   for (const source of manifest.sources) {
     const base = resolve(root, "packages/validators/src"), path = resolve(root, source);
-    if (!path.startsWith(base + sep) || !(await lstat(path)).isFile()) throw new Error(`Invalid regular closure source: ${source}`);
-    const text = await readFile(path, "utf8"); sourceDigests[source] = hash(text);
+    if (!path.startsWith(base + sep)) throw new Error(`Invalid regular closure source: ${source}`);
+    const text = await readRegularFile(path, "utf8"); sourceDigests[source] = hash(text);
     const target = resolve(temp, "kernel", relative(base, path)); targets.set(target, text);
     await mkdir(dirname(target), { recursive: true }); await writeFile(target, text);
   }
@@ -62,8 +63,7 @@ try {
       throw new Error(`Import escapes the exact source closure: ${target}: ${specifier}`);
   }
   const canonicalPath = resolve(root, manifest.canonicalJsonSource);
-  if (!(await lstat(canonicalPath)).isFile()) throw new Error("Canonical JSON must be a regular file");
-  const canonical = await readFile(canonicalPath, "utf8"); sourceDigests[manifest.canonicalJsonSource] = hash(canonical);
+  const canonical = await readRegularFile(canonicalPath, "utf8"); sourceDigests[manifest.canonicalJsonSource] = hash(canonical);
   if (imports(canonical, canonicalPath).length) throw new Error("Canonical JSON leaf gained an undeclared dependency");
   const packagePath = join(temp, "node_modules/@dpf/integration-shared");
   await mkdir(packagePath, { recursive: true });

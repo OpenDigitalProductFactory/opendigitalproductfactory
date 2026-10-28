@@ -1,3 +1,4 @@
+import { readRegularFile } from "../_shared/read-regular-file.mjs";
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -60,14 +61,14 @@ try {
   await writeFile(join(temp, "package.json"), JSON.stringify({ name: packageName, version: "0.0.0", private: true, type: "module", dependencies: {} }, null, 2));
   await writeFile(join(temp, "package-lock.json"), JSON.stringify({ name: packageName, version: "0.0.0", lockfileVersion: 3, requires: true,
     packages: { "": { name: packageName, version: "0.0.0", dependencies: {} } } }, null, 2));
-  for (const path of await regularTree(join(here, "src"))) fixtureDigests[relative(here, path)] = digest(await readFile(path));
+  for (const path of await regularTree(join(here, "src"))) fixtureDigests[relative(here, path)] = digest(await readRegularFile(path));
   await cp(join(here, "src"), join(temp, "src"), { recursive: true, dereference: false });
   for (const name of ["tsconfig.json", "LICENSE", "NOTICE"]) await cp(join(here, name), join(temp, name));
   const sources = new Map();
   for (const source of manifest.sources) {
     const path = resolve(root, source), base = resolve(root, "packages/validators/src");
-    if (!path.startsWith(base + sep) || !(await lstat(path)).isFile()) throw new Error(`Invalid closure source: ${source}`);
-    const contents = await readFile(path, "utf8");
+    if (!path.startsWith(base + sep)) throw new Error(`Invalid closure source: ${source}`);
+    const contents = await readRegularFile(path, "utf8");
     sourceDigests[source] = digest(contents);
     for (const specifier of importsOf(contents, source))
       if (!specifier.startsWith(".") || !specifier.endsWith(".ts")) throw new Error(`Nonportable import in ${source}: ${specifier}`);
