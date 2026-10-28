@@ -35,9 +35,19 @@ Each step extends existing substrate rather than adding a parallel one.
 
 ## Backlog coverage
 
-- **Decision:** decomposed
-- **Parent:** BI-B3D87B06
-- **Receipt:** not yet recorded. A schema-v2 coverage receipt binds to the umbrella's scope baseline, and only an independent reviewer's spec-approval of the design (§11 manifest) can mint that baseline. The coverage is recorded against this plan's pushed blob after that approval, followed by plan review.
+- Decision: decomposed
+- Parent: BI-B3D87B06
+- Receipt: blocked-by: no scope baseline exists for BI-B3D87B06 yet. A schema-v2 coverage receipt binds to that baseline, and only the independent spec-approval of the design's §11 manifest can mint it. That review was requested from the Change Reviewer on 2026-10-28. Coverage is recorded against this plan's pushed blob once it passes, followed by plan review.
+- Dependencies: BI-4ADFFEDB (workroom stage-queue emitter, flow-map F2) for A5; owner decision on organization-level facet selection for A6b; internal order A0 → A1 → A2 → A3 → A6a → A6b, with A4 and A5 after A1
+- Mappings:
+  - A0 one health vocabulary and critic calibration -> BI-930A4C88
+  - A1 atlas projection and `list_workrooms` `view: "atlas"` -> BI-7ACC31F9
+  - A2 glyph map leads `/ops/workrooms`, replaced surfaces retired -> BI-3791FDD8
+  - A3 room inspector checklist -> BI-94C9AFC1
+  - A4 rhythm strip for standing rooms -> BI-D8A6F0F2
+  - A5 stage lens with honest fallback -> BI-AC930585
+  - A6a business layouts and Just now feed -> BI-B0D8394B
+  - A6b refinements (existing item) -> BI-7EE5681A
 
 | Key | Deliverable | Live BI | Requirements | Contracts | Flows | Verification | Depends on | Independently shippable |
 |---|---|---|---|---|---|---|---|---|
