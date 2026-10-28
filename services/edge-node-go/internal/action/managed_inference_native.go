@@ -291,7 +291,7 @@ func (h *NativeManagedInferenceHandler) Execute(ctx context.Context, signed Sign
 		return output, ErrNativeInferenceFailed
 	}
 	parameters, err := parseManagedInferenceParameters(signed.Parameters)
-	if err != nil || (parameters.Operation == "activate" && parameters.SourceSHA != h.Config.ControllerSourceSHA) {
+	if err != nil {
 		return output, ErrNativeInferenceFailed
 	}
 	canonical, err := CanonicalEnvelope(signed.Envelope)
@@ -302,6 +302,9 @@ func (h *NativeManagedInferenceHandler) Execute(ctx context.Context, signed Sign
 	digest := hex.EncodeToString(sum[:])
 	output.Evidence["requestDigest"] = digest
 	output.Evidence["sourceSha"] = parameters.SourceSHA
+	if parameters.Operation == "activate" && parameters.SourceSHA != h.Config.ControllerSourceSHA {
+		return output, ErrNativeInferenceFailed
+	}
 	controller, err := VerifyNativeControllerPackage(h.Config)
 	if err != nil {
 		return output, ErrNativeInferenceFailed

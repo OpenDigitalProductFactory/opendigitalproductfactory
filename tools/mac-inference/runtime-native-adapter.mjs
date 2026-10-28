@@ -127,7 +127,9 @@ export function createNativeRuntimeAdapter({ authority, stateDirectory, baseline
       check(row.backend_name === 'llama.cpp', 'Unrelated baseline backend resident');
       const card = await json(original, runtimeModelPath(row.model_name), { timeout: 3000, recovery });
       const identity = card.id;
-      const matches = models.filter(model => model.digest === identity && model.configuration.some(config => config.mode === row.mode));
+      const matches = models.filter((model, index) => model.digest === identity
+        && (model.configuration.some(config => config.mode === row.mode)
+          || (index === 1 && model.configuration.length === 0 && row.mode === 'embedding')));
       check(matches.length === 1 && !result.some(value => value.digest === identity), 'Unrelated or duplicate baseline model identity resident');
       result.push({ model: matches[0].model, digest: identity, mode: row.mode, observedRef: row.model_name });
     }
@@ -373,10 +375,19 @@ export function createNativeRuntimeAdapter({ authority, stateDirectory, baseline
       check(canonicalJson(seen) === canonicalJson(snapshot.models), 'Baseline model settings changed before restoration');
       for (const loaded of snapshot.loadedModels) {
         const model = snapshot.models.find(model => model.digest === loaded.digest);
+        if (model === snapshot.models[1] && model.configuration.length === 0 && loaded.mode === 'embedding') {
+          // The qualified default embedding has no saved configuration row.
+          // Restore residency through its API, preserving that absence.
+          const result = await json(original, '/engines/llama.cpp/v1/embeddings', {
+            body: { model: model.model, input: ['DPF managed inference restoration'] }, recovery: true });
+          const vector = result.data?.[0]?.embedding;
+          check(Array.isArray(vector) && vector.length === 768 && vector.every(Number.isFinite), 'Default embedding restoration failed');
+        }
         for (const configuration of model.configuration.filter(row => row.mode === loaded.mode)) {
           await request(original + '/engines/_configure', { body: configuration, recovery: true });
         }
       }
+      check(canonicalJson(await currentModels(snapshot.models, true)) === canonicalJson(snapshot.models), 'Restoration changed baseline configuration');
       for (let n = 0; n < 60; n++) {
         const loaded = await loadedModels(await baselineRows(true), snapshot.models, true);
         if (canonicalJson(loaded.map(x => [x.digest, x.mode]).sort()) === canonicalJson(snapshot.loadedModels.map(x => [x.digest, x.mode]).sort())) return;

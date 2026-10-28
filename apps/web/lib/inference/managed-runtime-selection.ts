@@ -23,7 +23,7 @@ export function resolveManagedInferenceEndpoint(snapshot: unknown): string | nul
     || Object.keys(value).sort().join(",") !== ["schemaVersion", "mode", "actionKey", "nodeId", "device", "port", "sourceSha",
       "profileSha256", "runtimeManifestSha256", "qualificationReportSha256", "baselineEngineSha256"].sort().join(",")) return invalid();
   if (value.mode === "transitioning" || value.mode === "uncertain") throw new Error(`Managed inference ${value.mode}; new requests are fenced`);
-  return value.mode === "native" ? MANAGED_INFERENCE_BASE_URL : null;
+  return value.mode === "native" ? MANAGED_INFERENCE_BASE_URL : "http://model-runner.docker.internal/v1";
 }
 
 function readInstallStateBytes(): string | null {

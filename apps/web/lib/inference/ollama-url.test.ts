@@ -196,3 +196,15 @@ describe("getOllamaApiRoot", () => {
     delete process.env.LLM_BASE_URL;
   });
 });
+
+it("routes installer-confirmed rollback to Docker even when an explicit override retains the previously managed native endpoint", async () => {
+  managed.endpoint = "http://model-runner.docker.internal/v1";
+  const saved = process.env.LLM_BASE_URL;
+  process.env.LLM_BASE_URL = "http://host.docker.internal:12436/v1";
+  try {
+    const { getOllamaBaseUrl, getOllamaApiRoot } = await import("./ollama-url");
+    const provider = { providerId: "local", endpoint: process.env.LLM_BASE_URL, baseUrl: null };
+    expect(getOllamaBaseUrl(provider)).toBe("http://model-runner.docker.internal/v1");
+    expect(getOllamaApiRoot(provider)).toBe("http://model-runner.docker.internal");
+  } finally { if (saved === undefined) delete process.env.LLM_BASE_URL; else process.env.LLM_BASE_URL = saved; }
+});

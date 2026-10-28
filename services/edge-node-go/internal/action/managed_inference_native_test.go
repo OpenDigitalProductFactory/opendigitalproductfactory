@@ -128,3 +128,16 @@ func TestNativeManagedHandlerRefusesUnsignedAdmissionBeforeSubprocess(t *testing
 		t.Fatalf("unsigned admission admitted: %v %+v", err, output)
 	}
 }
+
+func TestNativeSourceMismatchRetainsOriginalReceiptBinding(t *testing.T) {
+	h, original, _, called := nativeHandlerFixture(t)
+	h.Config.ControllerSourceSHA = strings.Repeat("b", 40)
+	output, err := h.Execute(context.Background(), original)
+	canonical, canonicalErr := CanonicalEnvelope(original.Envelope)
+	if canonicalErr != nil {
+		t.Fatal(canonicalErr)
+	}
+	if err == nil || *called || output.Evidence["nativeStatus"] != "not-started" || output.Evidence["requestDigest"] != nativeHash(canonical) || output.Evidence["sourceSha"] != strings.Repeat("a", 40) {
+		t.Fatalf("known nonexecution lost its original signed receipt binding: %v %+v", err, output)
+	}
+}

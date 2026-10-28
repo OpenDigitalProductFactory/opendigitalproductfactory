@@ -9,13 +9,17 @@ import { createNativeRuntimeAdapter } from './runtime-native-adapter.mjs';
 import * as native from './runtime-native-adapter.mjs';
 import { RUNTIME_LOCK } from './runtime-profile.mjs';
 
-async function fixture(t) {
+async function fixture(t, { defaultEmbedding = false } = {}) {
   const f = await runtimeInstallationFixture(t);
   // The installed card hash is bound exactly as on the actual DMR API.
   const cards = f.models.map((model, i) => ({ id: model.digest, config: { fixture: i } }));
   const report = JSON.parse(f.reportBytes.toString());
   f.models.forEach((model, i) => { model.modelMetadataSha256 = sha256(JSON.stringify(cards[i].config));
     report.models[i].modelMetadataSha256 = model.modelMetadataSha256; });
+  if (defaultEmbedding) {
+    f.models[1].configuration = [];
+    report.configurations[1].original = []; report.configurations[1].candidate = [];
+  }
   f.reportBytes = Buffer.from(JSON.stringify(report)); f.binding.qualificationReportSha256 = sha256(f.reportBytes);
   const { servingProfileDigest } = await import('./runtime-installation.mjs');
   f.binding.profileSha256 = servingProfileDigest({ models: f.models, physicalDevice: f.physicalDevice });
@@ -24,17 +28,23 @@ async function fixture(t) {
     platform: 'darwin', arch: 'arm64', enabledRuntimeCapabilities: [], capabilityCatalogHash: null, capabilityStateVersion: null }), { mode: 0o600 });
   const authority = await runtimeAuthorityFixture(f.binding), calls = [], services = [];
   let device = f.physicalDevice;
-  const rows = f.models.map(model => ({ backend_name: 'llama.cpp', model_name: model.model, mode: model.configuration[0].mode }));
+  const rows = f.models.map((model, i) => ({ backend_name: 'llama.cpp', model_name: model.model, mode: i ? "embedding" : "completion" }));
   const fetchImpl = async (url, options = {}) => {
-    const u = new URL(url), method = options.method ?? 'GET'; calls.push({ url: u.href, method });
+    const u = new URL(url), method = options.method ?? 'GET'; calls.push({ url: u.href, method, body: options.body });
     const json = value => Response.json(value);
     if (u.pathname === '/engines/ps') return json(rows);
     if (u.pathname === '/version') return json({ version: RUNTIME_LOCK.packageVersion });
     if (u.pathname === '/') return json({ ok: true });
     if (u.pathname === '/engines/_configure' && method === 'GET') {
       const i = f.models.findIndex(model => model.model === u.searchParams.get('model'));
+      if (f.models[i].configuration.length === 0) return json([]);
       const { model, mode, ...Config } = f.models[i].configuration[0];
       return json([{ Backend: 'llama.cpp', Model: model, ModelID: f.models[i].digest, Mode: mode, Config }]);
+    }
+    if ((u.pathname === '/engines/_configure' || u.pathname.endsWith('/v1/embeddings')) && method === 'POST') {
+      const body = JSON.parse(options.body);
+      if (!rows.some(row => row.model_name === body.model)) rows.push({ backend_name: 'llama.cpp', model_name: body.model, mode: body.mode ?? 'embedding' });
+      return json(u.pathname.endsWith('/embeddings') ? { data: [{ embedding: Array(768).fill(0) }] } : {});
     }
     const i = f.models.findIndex(model => u.pathname === '/models/' + model.model.split('/').map(encodeURIComponent).join('/'));
     if (i >= 0) return json(cards[i]);
@@ -117,4 +127,16 @@ test('an authoritative parent fence prevents a launch even while the previous si
   f.adapter.fence();
   await assert.rejects(f.adapter.prepareCandidate(snapshot), /fenced/);
   assert.equal(f.services.length, 0);
+});
+
+test('an originally resident default embedding model is recognized and restored without adding a configuration override', async t => {
+  const f = await fixture(t, { defaultEmbedding: true });
+  const snapshot = await f.adapter.preflight(f.authority.action);
+  assert.equal(snapshot.loadedModels.length, 2);
+  assert.deepEqual(snapshot.models[1].configuration, []);
+  await f.adapter.prepareCandidate(snapshot); f.rows.length = 0;
+  await f.adapter.restoreBaseline(snapshot); await f.adapter.verifyBaseline(snapshot);
+  assert.deepEqual(snapshot.models[1].configuration, []);
+  assert.ok(f.calls.some(call => call.method === 'POST' && call.url.endsWith('/v1/embeddings')));
+  assert.ok(!f.calls.some(call => call.method === 'POST' && call.url.endsWith('/engines/_configure') && JSON.parse(call.body).model === f.models[1].model));
 });

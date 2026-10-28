@@ -12,7 +12,7 @@ describe("managed inference installation selection", () => {
     expect(resolveManagedInferenceEndpoint({ platform: "linux" })).toBeNull();
     expect(resolveManagedInferenceEndpoint(selected())).toBe(MANAGED_INFERENCE_BASE_URL);
     const reverted = selected(); reverted.managedInference.mode = "docker";
-    expect(resolveManagedInferenceEndpoint(reverted)).toBeNull();
+    expect(resolveManagedInferenceEndpoint(reverted)).toBe("http://model-runner.docker.internal/v1");
   });
   it("blocks new requests throughout transition or uncertain restoration", () => {
     for (const mode of ["transitioning", "uncertain"]) {

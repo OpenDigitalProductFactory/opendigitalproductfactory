@@ -17,7 +17,7 @@ export function getOllamaBaseUrl(provider?: ProviderUrlFields | null): string {
   if (!provider || provider.providerId === "local") {
     const managed = readManagedInferenceEndpoint();
     if (managed) {
-      const allowed = new Set(["http://model-runner.docker.internal/v1", managed]);
+      const allowed = new Set(["http://model-runner.docker.internal/v1", "http://host.docker.internal:12436/v1"]);
       const overrides = [process.env.LLM_BASE_URL, process.env.OLLAMA_INTERNAL_URL, provider?.endpoint, provider?.baseUrl];
       if (overrides.some(value => value && !allowed.has(value.replace(/\/+$/, "")))) {
         throw new Error("Managed inference endpoint conflicts with explicit local provider configuration");
