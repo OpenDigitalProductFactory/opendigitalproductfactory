@@ -49,4 +49,10 @@ test("portal runner packages the canonical gate-context generator closure", () =
     dockerfile,
     /^COPY --from=init \/app\/apps\/web\/lib\/ux-budget\/route-budget-baseline\.json \.\/apps\/web\/lib\/ux-budget\/$/m,
   );
+  // The docs-impact section reads the doc-impact graph and the route map (BI-9B17E889).
+  assert.match(
+    dockerfile,
+    /^COPY --from=init \/app\/apps\/web\/lib\/docs\/doc-impact\.generated\.json \.\/apps\/web\/lib\/docs\/$/m,
+  );
+  assert.match(dockerfile, /^COPY --from=init \/app\/apps\/web\/lib\/docs-route-map\.ts \.\/apps\/web\/lib\/$/m);
 });

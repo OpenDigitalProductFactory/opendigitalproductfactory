@@ -63,13 +63,16 @@ unstaged + untracked, vs the `origin/main` merge base):
 
 - required attestation trailers for this diff shape (Process-Spine, Design
   Grounding, UX-Fit, Seed-Fit body line, Data-Impact manifest,
-  Convergence-Impact decision);
+  Convergence-Impact decision, Docs Impact);
 - module-size caps for touched baselined files and budgets for new modules;
 - shrink-only prose/style ratchet values frozen for touched files;
 - derived artifacts to regenerate in the same change;
 - route budgets: absolute budgets + the four generated companions for
   net-new routes, frozen word/structure budgets for pre-existing ones;
 - migration immutability and safety-attestation contracts.
+- the published docs the doc-impact graph links to the changed files, each
+  `pending` or already `updated`, plus the Docs Impact trailer while any is
+  pending (BI-9B17E889). A Workroom's edit-path claim carries the same list.
 
 Run it before writing code and again before pushing; `--json` emits the
 machine-readable pack (`scripts/lib/gate-context.mjs` is the single source —
