@@ -135,6 +135,16 @@ describe("setServedContextTokens", () => {
     expect(JSON.parse(posts[0]!)).toEqual({ "runtime-flags": ["--spec-type", "ngram-mod"], model: "m", "context-size": 40960, keep_alive: "-1" });
   });
 
+  it("reads the stored config first when the caller passes no keys to retain (Build Studio path)", async () => {
+    const posts: string[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") { posts.push(init.body as string); return { ok: true, status: 202, text: async () => "" } as unknown as Response; }
+      return { ok: true, status: 200, json: async () => [{ Config: { "context-size": 32768, keep_alive: "-1", "runtime-flags": ["--threads", "8"] } }] } as unknown as Response;
+    }) as unknown as typeof fetch;
+    await setServedContextTokens(API_ROOT, "m", 65536, fetchImpl);
+    expect(JSON.parse(posts[0]!)).toEqual({ "runtime-flags": ["--threads", "8"], model: "m", "context-size": 65536, keep_alive: "-1" });
+  });
+
   it("surfaces a 404 as an unsupported-runtime reason", async () => {
     const fetchImpl = (async () => ({ ok: false, status: 404, text: async () => "" })) as unknown as typeof fetch;
     const res = await setServedContextTokens(API_ROOT, "x", 22000, fetchImpl);

@@ -185,11 +185,16 @@ export async function setServedContextTokens(
   model: string,
   contextTokens: number,
   fetchImpl: typeof fetch = fetch,
-  /** Other stored keys to keep (`ServedContextResult.retained`). */
-  retained: Record<string, unknown> = {},
+  /**
+   * Other stored keys to keep (`ServedContextResult.retained`). Omitted, the
+   * stored config is read first so a caller that only knows the context (the
+   * Build Studio action) cannot drop runtime-flags or speculative settings.
+   */
+  retained?: Record<string, unknown>,
 ): Promise<ApplyContextResult> {
   const url = configureUrl(apiRoot);
   try {
+    retained ??= (await getServedContextTokens(apiRoot, model, fetchImpl)).retained ?? {};
     const res = await fetchImpl(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
