@@ -53,7 +53,7 @@ A recommendation with `autonomyEligible: false` is **advisory** — surface the 
 ## Operator surfaces
 
 - Live audit: `/coworker-decisions/decisions` (`DecisionInteraction` ledger)  
-- Implementation: `apps/web/lib/decision/option-scoring.ts`, `mcda-quality-gates.ts`  
+- Implementation: `packages/validators/src/judgment/option-scoring.ts`, `mcda-quality-gates.ts`
 - Defaults: `PRINCIPLE_DECIDE_DEFAULTS.minFeatureKeys`, `.sensitivityEpsilon` in `packages/db/src/wiki-taxonomy.ts`
 
 ## Design grounding
@@ -64,7 +64,7 @@ A recommendation with `autonomyEligible: false` is **advisory** — surface the 
   - docs/superpowers/research/2026-08-10-decision-vector-science-and-corpus-adequacy.md
   - docs/superpowers/plans/2026-07-24-weight-inference-from-rulings.md
 - Current code substrate reviewed:
-  - apps/web/lib/decision/option-scoring.ts
+  - packages/validators/src/judgment/option-scoring.ts
   - apps/web/lib/mcp/packs/principle-decide-pack.ts
   - apps/web/lib/decision/kernel-consult-ledger.ts
   - packages/db/src/wiki-taxonomy.ts PRINCIPLE_DECIDE_DEFAULTS

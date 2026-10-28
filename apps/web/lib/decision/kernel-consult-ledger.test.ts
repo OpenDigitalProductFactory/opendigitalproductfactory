@@ -4,7 +4,7 @@ import {
   mapConsultOutcome,
   recordKernelConsultInteraction,
 } from "./kernel-consult-ledger";
-import type { DecisionResult } from "./option-scoring";
+import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 import type { DecisionCallerContext } from "./caller-context";
 
 function makeResult(overrides: Partial<DecisionResult> = {}): DecisionResult {

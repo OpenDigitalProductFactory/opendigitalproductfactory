@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "decidedOption": "preserve-twin-primitives-with-canonical-context-links",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/ResourceUnit.tsx",
+      "apps/web/components/twin/TwinQueue.tsx",
+      "apps/web/components/twin/WorkItem.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/admin/twin-kit": {
+        "defaultVisibleWords": 449,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 3
+      }
+    }
+  },
+  "notes": {
+    "method": "Actual canonical GitHub Actions UX route sweep, authenticated operator, light theme, 1280x900. The report measured216eligible routes; this manifest uses only the existing shared-primitive gallery route. Metrics are copied from the route verdict; serious/critical axe count is taken separately from route-sweep-execution.",
+    "provenance": {
+      "run": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/40770953527",
+      "artifactId": 12852922185,
+      "artifactName": "ux-route-budget-report",
+      "artifactDigest": "sha256:0cca6793f745a38c90d2f3518ff13dcb069cfaa5869275fd0e91659e145aaedf",
+      "sourceHead": "3e43e2edd9a312a4f8472ddf5b01262612ef17b4",
+      "measuredMergeCommit": "465fb61fdbceb660eb5503dfaad6cdc7172a69ef",
+      "mergeBaseParent": "4f00cb56885b0c7e801728fdd5c2566f442a91dd",
+      "reportSha256": "498959f80261d72f1550c7b49fc5dc13259d216d9b112355647d2702b7ae8f41",
+      "executionSha256": "219ac7665cbc31f5463a1938265874799dfe75e4c8611eb86a6506f9ecd19a1e"
+    },
+    "reuse": "Git comparison confirms the three scoped primitives, the gallery page and the frozen route baseline are byte-identical between the measured merge commit and producer head. Follow-up changes affect only example filesystem readers and this evidence manifest.",
+    "limits": "One actual gallery/default-view observation, not a mobile/dark/worker matrix or business-job/keyboard/screen-reader acceptance. Three existing serious/critical axe violations remain equal to the frozen baseline; this is not zero-violation accessibility qualification. Workspace is excluded from this canonical sweep as a wall-clock collection and is not claimed measured. Earlier private layout samples remain unqualified. No clock, cohort, normalization rule or baseline was changed by this correction."
+  }
+}

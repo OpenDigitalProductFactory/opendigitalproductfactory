@@ -7,8 +7,8 @@ import {
   deriveTemporalBias,
   modeBiasFor,
   shapeBiasFor,
-} from "./derive";
-import { TEMPORAL_BANDS } from "./temporal-band";
+} from "@dpf/validators/workroom-policy/derive";
+import { TEMPORAL_BANDS } from "@dpf/validators/workroom-policy/temporal-band";
 
 // The trap this file guards: `proactivityLevel` can only ever RAISE cadence
 // (tighten.ts), so any bias that intends "be quieter" must express it as

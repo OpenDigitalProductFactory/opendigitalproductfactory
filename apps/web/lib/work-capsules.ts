@@ -1,4 +1,5 @@
 import { slugify } from "@/lib/shared/slugify";
+import { DECISION_SCOPES, type DecisionScope } from "@dpf/validators/decision-scopes";
 import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 
 export const WORK_CAPSULE_STATUSES = [
@@ -86,9 +87,9 @@ export const SUB_SHAPE_ROOM_KEY_PREFIX = "sub-shape:";
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 
-export const WORK_CAPSULE_DECISION_SCOPES = ["wwmd", "wwwd", "wsid"] as const;
+export const WORK_CAPSULE_DECISION_SCOPES = DECISION_SCOPES;
 
-export type WorkCapsuleDecisionScope = (typeof WORK_CAPSULE_DECISION_SCOPES)[number];
+export type WorkCapsuleDecisionScope = DecisionScope;
 
 export const WORK_CAPSULE_PORTFOLIO_ROLES = [
   "foundational",

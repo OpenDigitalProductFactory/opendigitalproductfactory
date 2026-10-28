@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
-import type { ProactivityPlan } from "./proactivity-types";
-import { resolveDelegatedPosture } from "./delegated-posture";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
+import { resolveDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
 
 function plan(resolvedLevel: ProactivityPlan["resolvedLevel"]): ProactivityPlan {
   return {

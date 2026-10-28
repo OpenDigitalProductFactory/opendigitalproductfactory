@@ -4,8 +4,9 @@ import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import type { WorkCaseExecutionContext } from "@/lib/mcp-governed-execute-types";
 import type { WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 
-export const CONSEQUENCE_CLASSES = ["routine-read", "ordinary-mutation", "consequential-mutation"] as const;
-export type ConsequenceClass = (typeof CONSEQUENCE_CLASSES)[number];
+export { CONSEQUENCE_CLASSES } from "@dpf/validators/gpp/tool-facts";
+export type { ConsequenceClass } from "@dpf/validators/gpp/tool-facts";
+import type { ConsequenceClass } from "@dpf/validators/gpp/tool-facts";
 
 export type ConsequentialToolClassification = {
   class: ConsequenceClass;

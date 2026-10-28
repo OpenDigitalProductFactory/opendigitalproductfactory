@@ -18,7 +18,7 @@ import {
   SCHEDULED_WORK_TRIGGER_KINDS,
   withScheduledWorkTrigger,
   type ScheduledWorkTriggerKind,
-} from "@/lib/scheduling/scheduled-work-trigger";
+} from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 
 const definitions: ToolDefinition[] = [
   {

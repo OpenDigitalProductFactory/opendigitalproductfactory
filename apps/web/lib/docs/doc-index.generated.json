@@ -1231,6 +1231,15 @@
         "fleet-safe-evolution"
       ]
     },
+    "docs/architecture/business-operations-portability.md": {
+      "publicHref": "/architecture/business-operations-portability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-business-operations-read-models"
+      ]
+    },
     "docs/architecture/canonical-minimal-substrate.md": {
       "publicHref": "/architecture/canonical-minimal-substrate/",
       "portalHref": null,
@@ -2845,6 +2854,18 @@
       "publishedPortal": false,
       "anchors": [
         "workroom-ingestion-scale-qualification"
+      ]
+    },
+    "docs/architecture/workroom-policy-extraction.md": {
+      "publicHref": "/architecture/workroom-policy-extraction/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-workroom-policies",
+        "application-composition",
+        "compatibility-and-qualification",
+        "maintenance"
       ]
     },
     "docs/architecture/workroom-review-profile-contract.md": {

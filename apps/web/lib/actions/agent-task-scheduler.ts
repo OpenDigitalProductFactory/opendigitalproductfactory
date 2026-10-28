@@ -35,7 +35,7 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { assertScheduledResearchCapability, resolveScheduledTurnExternalAccess } from "@/lib/tak/scheduled-external-access";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
-import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
+import { resolveDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
 import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import {

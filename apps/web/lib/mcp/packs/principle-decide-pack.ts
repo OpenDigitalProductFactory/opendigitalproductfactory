@@ -11,7 +11,7 @@
 // The definition moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import { parseDecisionStakes } from "@/lib/decision/option-scoring";
+import { parseDecisionStakes } from "@dpf/validators/judgment/option-scoring";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
@@ -186,7 +186,7 @@ export async function runPrincipleDecision(
     "@dpf/db/wiki-taxonomy"
   );
   const { searchWikiPages } = await import("@/lib/wiki/embeddings");
-  const { decide } = await import("@/lib/wiki/principle-decide");
+  const { decide } = await import("@dpf/validators/judgment/option-scoring");
   const { principleMatchesRingScope } = await import(
     "@/lib/wiki/calling-ring-map"
   );

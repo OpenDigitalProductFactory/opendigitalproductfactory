@@ -28,13 +28,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import { GPP_NOT_EXECUTABLE_CODES, hasBlockingDiagnostic, type GppDiagnostic } from "./diagnostics";
-import { runDesignRules } from "./drc";
-import { CONSTRUCT_EXECUTABLE, GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { GPP_NOT_EXECUTABLE_CODES, hasBlockingDiagnostic, type GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { CONSTRUCT_EXECUTABLE, GPP_CONSTRUCTS, type GppConstruct } from "@dpf/validators/gpp/executable-constructs";
 import type { GateRatificationEntry } from "./gate-ratification";
-import { parseShapeDocument } from "./parse";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { parseShapeDocument } from "@dpf/validators/gpp/parse";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources } from "./resolve-sources";
 
 const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");

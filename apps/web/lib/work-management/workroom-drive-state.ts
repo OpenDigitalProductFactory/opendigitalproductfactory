@@ -1,5 +1,5 @@
 import { isRecord } from "@/lib/shared/coerce";
-import type { PriorWorkroomDrive } from "./workroom-drive-receipts";
+import type { PriorWorkroomDrive } from "@dpf/validators/workroom/receipts";
 import { readDispatchCheckpoint } from "./workroom-drive-checkpoint";
 
 export type StoredWorkroomDriveState = {
