@@ -12,6 +12,8 @@
 
 import type { Prisma } from "@dpf/db";
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
 import {
   GUARD_OUTCOME_OPERATION,
   MAX_DECLARATIONS_BYTES,
@@ -46,14 +48,11 @@ export type RecordGuardOutcomesInput = {
 /** permanent: the same payload can never be accepted; quarantine it. */
 export type GuardOutcomeRefusal = { runId: string | null; reason: string; permanent: boolean };
 
-export type RecordGuardOutcomesResult =
-  | {
-      ok: true;
-      acknowledged: string[];
-      refused: GuardOutcomeRefusal[];
-      declarations: "stored" | "already-stored" | "absent" | "refused" | "integrity-conflict";
-    }
-  | { ok: false; reason: string };
+export type RecordGuardOutcomesResult = ActionResult<{
+  acknowledged: string[];
+  refused: GuardOutcomeRefusal[];
+  declarations: "stored" | "already-stored" | "absent" | "refused" | "integrity-conflict";
+}>;
 
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
@@ -141,10 +140,10 @@ export async function recordGuardOutcomes(
   db: GuardOutcomeWriteDb,
 ): Promise<RecordGuardOutcomesResult> {
   if (!Array.isArray(input.records) || input.records.length === 0) {
-    return { ok: false, reason: "records must be a non-empty array" };
+    return err("records must be a non-empty array");
   }
   if (input.records.length > MAX_RECORDS_PER_CALL) {
-    return { ok: false, reason: `at most ${MAX_RECORDS_PER_CALL} records per call` };
+    return err(`at most ${MAX_RECORDS_PER_CALL} records per call`);
   }
 
   const declarations = await storeDeclarations(input.declarations, input, db);
@@ -153,7 +152,7 @@ export async function recordGuardOutcomes(
 
   for (const candidate of input.records) {
     const validation = validateGuardOutcomeRun(candidate);
-    if (!validation.ok) {
+    if (!validation.valid) {
       refused.push({ runId: validation.runId, reason: validation.reason, permanent: true });
       continue;
     }
@@ -184,5 +183,5 @@ export async function recordGuardOutcomes(
     }
   }
 
-  return { ok: true, acknowledged, refused, declarations };
+  return ok({ acknowledged, refused, declarations });
 }

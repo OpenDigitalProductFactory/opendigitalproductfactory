@@ -80,16 +80,16 @@ function isNonNegative(value: unknown): value is number {
 }
 
 export type GuardOutcomeRunValidation =
-  | { ok: true; run: GuardOutcomeRun }
-  | { ok: false; runId: string | null; reason: string };
+  | { valid: true; run: GuardOutcomeRun }
+  | { valid: false; runId: string | null; reason: string };
 
 /** Validate one submitted record. The reason names the first failing fields. */
 export function validateGuardOutcomeRun(value: unknown): GuardOutcomeRunValidation {
   const runId = isRecord(value) && typeof value.runId === "string" && RUN_ID_RE.test(value.runId) ? value.runId : null;
   const errors: string[] = [];
-  if (!isRecord(value)) return { ok: false, runId, reason: "record is not an object" };
+  if (!isRecord(value)) return { valid: false, runId, reason: "record is not an object" };
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_RECORD_BYTES) {
-    return { ok: false, runId, reason: `record exceeds ${MAX_RECORD_BYTES} bytes` };
+    return { valid: false, runId, reason: `record exceeds ${MAX_RECORD_BYTES} bytes` };
   }
   if (value.schema !== GUARD_OUTCOME_SCHEMA) errors.push("schema");
   if (!runId) errors.push("runId");
@@ -130,8 +130,8 @@ export function validateGuardOutcomeRun(value: unknown): GuardOutcomeRunValidati
       if (!isNonNegative(g.durationMs)) errors.push(`guards[${index}].durationMs`);
     });
   }
-  if (errors.length > 0) return { ok: false, runId, reason: `invalid: ${errors.slice(0, 8).join(", ")}` };
-  return { ok: true, run: value as unknown as GuardOutcomeRun };
+  if (errors.length > 0) return { valid: false, runId, reason: `invalid: ${errors.slice(0, 8).join(", ")}` };
+  return { valid: true, run: value as unknown as GuardOutcomeRun };
 }
 
 function rowId(prefix: string, key: string): string {

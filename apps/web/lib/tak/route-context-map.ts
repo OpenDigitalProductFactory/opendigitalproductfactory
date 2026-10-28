@@ -569,31 +569,6 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
-  "/ops/gate-efficacy": {
-    routePrefix: "/ops/gate-efficacy",
-    domain: "Gate Efficacy — GPP §11 Measures",
-    sensitivity: "internal",
-    domainContext:
-      "This page reports whether gates and guards earn their cost (BI-FEDD8F45): GPP §11 measures M-1 to M-7 and, per guard, runs, time, and the share of refusals classified caught, false refusal, overridden or undecided. Every value has a numerator, a denominator and a stated omission; a measure the records cannot answer is shown as unknown, never zero. Caught and false refusal are pairing proxies, not causal findings. The page is read-only; guards that look wasteful get a review item from the daily retirement review, and nothing is disabled automatically.",
-    domainTools: ["search_code_graph", "trace_code_surface", "doc_search", "search_knowledge"],
-    docsPath: "/docs/operations/index",
-    skills: [
-      {
-        label: "Explain these numbers",
-        description: "Say what the guard and GPP measures show and what they cannot answer",
-        capability: "view_platform",
-        taskType: "analysis",
-        prompt: "Look at this Gate efficacy page. In plain language, say how many guard checks ran, which guards cost the most time, how their refusals turned out, and which GPP measures are unknown and why. Treat caught and false refusal as pairing proxies, not proof.",
-      },
-      {
-        label: "Report an issue",
-        description: "Report a bug or give feedback",
-        capability: null,
-        prompt: "I'd like to report an issue or give feedback about this page.",
-      },
-    ],
-  },
-
   "/ops/dev-loop": {
     routePrefix: "/ops/dev-loop",
     domain: "Dev Loop — Runtime Coordination",

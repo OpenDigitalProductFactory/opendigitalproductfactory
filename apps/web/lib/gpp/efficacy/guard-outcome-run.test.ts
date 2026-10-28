@@ -43,18 +43,18 @@ describe("validateGuardOutcomeRun — in step with the client's validator", () =
   it.each(cases)("%s: platform and client agree", (_label, overrides) => {
     const record = clientRecord(overrides);
     const clientOk = validateRunRecord(record).length === 0;
-    expect(validateGuardOutcomeRun(record).ok).toBe(clientOk);
+    expect(validateGuardOutcomeRun(record).valid).toBe(clientOk);
   });
 
   it("names the failing fields and keeps the runId when it is valid", () => {
     const result = validateGuardOutcomeRun(clientRecord({ runner: "ci" }));
-    expect(result).toEqual({ ok: false, runId: "00000000-0000-4000-8000-000000000009", reason: "invalid: runner" });
+    expect(result).toEqual({ valid: false, runId: "00000000-0000-4000-8000-000000000009", reason: "invalid: runner" });
   });
 
   it("refuses more than 400 guard results", () => {
     const guard = buildGuardResult({ guardId: "loop:x", kind: "guard", guardDigest: "b".repeat(64), verdict: "passed", durationMs: 1 });
     const result = validateGuardOutcomeRun(clientRecord({ guards: Array.from({ length: 401 }, () => guard) }));
-    expect(result.ok).toBe(false);
+    expect(result.valid).toBe(false);
   });
 });
 

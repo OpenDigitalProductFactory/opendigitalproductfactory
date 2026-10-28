@@ -48,7 +48,7 @@ describe("recordGuardOutcomes", () => {
   it("AC-GOE-02: writes one guard-outcome.run row per run, with actor and recorder from the caller", async () => {
     const { db, rows } = fakeDb();
     const result = await recordGuardOutcomes({ ...caller, records: [validRun()] }, db);
-    expect(result).toEqual({ ok: true, acknowledged: [RUN_ID], refused: [], declarations: "absent" });
+    expect(result).toEqual({ ok: true, data: { acknowledged: [RUN_ID], refused: [], declarations: "absent" } });
     const row = rows.get(guardOutcomeRunRowId(RUN_ID));
     expect(row).toMatchObject({
       operationType: "guard-outcome.run",
@@ -65,7 +65,7 @@ describe("recordGuardOutcomes", () => {
     await recordGuardOutcomes({ ...caller, records: [validRun()] }, db);
     const tampered = validRun({ durationMs: 999 });
     const result = await recordGuardOutcomes({ ...caller, records: [tampered] }, db);
-    expect(result).toMatchObject({ ok: true, acknowledged: [], refused: [{ runId: RUN_ID, reason: "integrity-conflict", permanent: true }] });
+    expect(result).toMatchObject({ data: { acknowledged: [], refused: [{ runId: RUN_ID, reason: "integrity-conflict", permanent: true }] } });
     expect((rows.get(guardOutcomeRunRowId(RUN_ID))?.details as { durationMs: number }).durationMs).toBe(10);
   });
 
@@ -73,14 +73,14 @@ describe("recordGuardOutcomes", () => {
     const { db } = fakeDb();
     await recordGuardOutcomes({ ...caller, records: [validRun()] }, db);
     const result = await recordGuardOutcomes({ ...caller, actorUserId: "user-2", records: [validRun()] }, db);
-    expect(result).toMatchObject({ refused: [{ reason: "integrity-conflict", permanent: true }] });
+    expect(result).toMatchObject({ data: { refused: [{ reason: "integrity-conflict", permanent: true }] } });
   });
 
   it("a repeated runId is acknowledged without a second row", async () => {
     const { db, rows } = fakeDb();
     await recordGuardOutcomes({ ...caller, records: [validRun()] }, db);
     const again = await recordGuardOutcomes({ ...caller, records: [validRun()] }, db);
-    expect(again).toMatchObject({ ok: true, acknowledged: [RUN_ID] });
+    expect(again).toMatchObject({ data: { acknowledged: [RUN_ID] } });
     expect(rows.size).toBe(1);
   });
 
@@ -88,11 +88,10 @@ describe("recordGuardOutcomes", () => {
     const { db, rows } = fakeDb();
     const bad = validRun({ runId: "00000000-0000-4000-8000-000000000002", runner: "ci" });
     const result = await recordGuardOutcomes({ ...caller, records: [validRun(), bad] }, db);
-    expect(result).toMatchObject({
-      ok: true,
+    expect(result).toMatchObject({ data: {
       acknowledged: [RUN_ID],
       refused: [{ runId: "00000000-0000-4000-8000-000000000002", reason: "invalid: runner", permanent: true }],
-    });
+    } });
     expect(rows.size).toBe(1);
   });
 
@@ -100,9 +99,9 @@ describe("recordGuardOutcomes", () => {
     const { db } = fakeDb();
     const huge = validRun({ override: { kind: "skip-env", code: "x", reason: "y".repeat(70_000) } });
     const result = await recordGuardOutcomes({ ...caller, records: [huge] }, db);
-    expect(result).toMatchObject({ ok: true, refused: [{ reason: "record exceeds 65536 bytes" }] });
+    expect(result).toMatchObject({ data: { refused: [{ reason: "record exceeds 65536 bytes" }] } });
     const many = await recordGuardOutcomes({ ...caller, records: Array.from({ length: 21 }, () => validRun()) }, db);
-    expect(many).toEqual({ ok: false, reason: "at most 20 records per call" });
+    expect(many).toEqual({ ok: false, error: "at most 20 records per call" });
   });
 
   it("stores the declarations file once per distinct digest", async () => {
@@ -110,10 +109,10 @@ describe("recordGuardOutcomes", () => {
     const raw = JSON.stringify({ version: 1, guards: { "loop:check-no-x": { owner: "platform" } } });
     const first = await recordGuardOutcomes({ ...caller, records: [validRun()], declarations: raw }, db);
     const second = await recordGuardOutcomes({ ...caller, records: [validRun()], declarations: raw }, db);
-    expect(first).toMatchObject({ declarations: "stored" });
-    expect(second).toMatchObject({ declarations: "already-stored" });
+    expect(first).toMatchObject({ data: { declarations: "stored" } });
+    expect(second).toMatchObject({ data: { declarations: "already-stored" } });
     expect(rows.get(guardDeclarationsRowId(sha256Hex(raw)))).toMatchObject({ operationType: "guard-outcome.declarations" });
     const refused = await recordGuardOutcomes({ ...caller, records: [validRun()], declarations: "{ not json" }, db);
-    expect(refused).toMatchObject({ declarations: "refused" });
+    expect(refused).toMatchObject({ data: { declarations: "refused" } });
   });
 });

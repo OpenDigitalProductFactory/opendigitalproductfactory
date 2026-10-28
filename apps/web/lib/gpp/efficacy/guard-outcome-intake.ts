@@ -41,11 +41,11 @@ export async function handleGuardOutcomesPayload(input: {
     input.db,
   );
   if (!result.ok) {
-    return { success: false, error: "invalid_guard_outcomes", message: result.reason };
+    return { success: false, error: "invalid_guard_outcomes", message: result.error };
   }
   return {
     success: true,
-    message: `Recorded ${result.acknowledged.length} guard outcome run(s); ${result.refused.length} refused.`,
-    data: { acknowledged: result.acknowledged, refused: result.refused, declarations: result.declarations },
+    message: `Recorded ${result.data.acknowledged.length} guard outcome run(s); ${result.data.refused.length} refused.`,
+    data: result.data,
   };
 }
