@@ -113,3 +113,11 @@ test('a failing or cancelled toolchain blocks aggregate readiness', () => {
   assert.equal(evaluateDependencyResults({ 'agent-toolchain-bootstrap': { result: 'success' } }).ok, true);
   assert.equal(evaluateDependencyResults({ 'agent-toolchain-bootstrap': { result: 'skipped' } }).ok, true);
 });
+
+// Windows checkouts can use CRLF; the authority contract is line-ending independent.
+test('toolchain conformance accepts CRLF checkout bytes', () => {
+  const input = sources();
+  assert.deepEqual(validateWorkflowConformance({ ...input,
+    ciSource: input.ciSource.replaceAll('\n', '\r\n'),
+    toolchainSource: input.toolchainSource.replaceAll('\n', '\r\n') }), []);
+});

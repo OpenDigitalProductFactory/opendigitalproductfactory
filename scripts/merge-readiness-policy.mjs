@@ -81,6 +81,7 @@ export function parseAggregate(source, aggregateJobId) {
 
 export function validateWorkflowConformance({ manifest, ciSource, uxSource, toolchainSource }) {
   const errors = [];
+  ciSource = ciSource.replaceAll("\r\n", "\n");
   if (!workflowHasMergeGroup(ciSource)) errors.push(`${manifest.workflows.ci} must handle merge_group`);
   if (!workflowIsCallable(uxSource)) errors.push(`${manifest.workflows.ux} must handle workflow_call`);
 
