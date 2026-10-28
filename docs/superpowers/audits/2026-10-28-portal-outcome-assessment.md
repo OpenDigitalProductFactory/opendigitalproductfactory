@@ -23,6 +23,12 @@ This export is evidence derived from the existing registries, not a new registry
 
 ## Findings and existing work
 
+The CSV's static persona key `ops-coordinator` is the source identity whose
+display name is Scrum Master. Display labels and keys are not distinct owners.
+The operator authorized governed delivery on October 28; each proposed slice
+still owes its current independent admission, coverage and verification gates.
+This document commit changes no executable code and earns no runtime acceptance.
+
 | Finding | Evidence and user harm | Classification | Canonical disposition |
 | --- | --- | --- | --- |
 | F1: client health still lacks a complete repair journey | Live Self-upgrade renders nine credential observations, all stale or undeclared, under a client count. Reasons now render: the October 26 loss of detailed verdict reasons is repaired. No host-agent result accompanies these records. Repeated product names and old observations still do not identify distinct machines or prove installed copies are stale. | Observed remaining UX/identity seam; installed-client failure unproven | Reconcile BI-63672FBE and BI-3E66F76F; preserve their delivered fixes and collect next-release/restart evidence. Do not downgrade or revoke credentials based on the count. |

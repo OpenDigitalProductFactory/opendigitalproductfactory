@@ -7,6 +7,11 @@ status: draft
 **Parent:** BI-81AB897A. **Workroom:** WC-6D8C9787.
 **Status:** proposed decomposition; independent scope/plan approval and coverage receipt pending.
 
+The operator's October 28 authorization covers governed delivery of this program.
+This documentation commit authorizes no executable edit by itself. Each slice
+uses that existing operator authorization and still needs current admission and
+coverage; no new phase-change confirmation is required.
+
 For agentic workers: execute this plan one independently reviewable backlog item
 at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green
 implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate
@@ -134,6 +139,25 @@ supported client. Historic credentials remain history. Do not revoke, downgrade
 or prune them merely to improve a count.
 
 ## Rollout, rollback and completion
+
+Execution follows dependencies, not an unconditional date sequence. After
+admission, facts and build-truth can ship while COO evidence remains blocked.
+Continuity can complete detailed design and isolated nonproduction tests;
+COO-dependent dispatch stays disabled until BI-C43FD3E5's existing gates pass.
+Freshness may diagnose/present evidence under current read authority; unattended
+cross-room recovery retains that same dependency. BI-80ADD3A8's employee
+clearance decision must be recorded by its authorized policy owner before that
+audience changes; other audiences retain current policy. There is no fallback
+through wider grants or another COO. WC-6D8C9787 retains dependency/result
+locators and rechecks them before dependent admission. Unknown review execution
+remains held; a changed draft does not authorize replay of the original task.
+
+Continuity first establishes whether existing carriers meet the intent contract.
+If expansion is needed, review additive migration, tolerant readers/writers and
+backfill before cutover; contract only after old writers/records are accounted
+for. Rollback retains accepted identities, original deadlines and cancellation;
+hold incompatible intent visibly and reconcile dispatched effects under their
+original owner. Stand-down never extends expiry or discards accepted work.
 
 Publish independently reviewed slices through protected DCO PRs. Run affected
 tests/typechecks and the exact-path impact obligations; use the canonical

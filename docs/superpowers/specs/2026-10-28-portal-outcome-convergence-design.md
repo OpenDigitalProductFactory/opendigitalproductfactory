@@ -7,6 +7,12 @@ status: draft
 **Backlog:** BI-81AB897A. **Workroom:** WC-6D8C9787.
 **Status:** proposed integration scope; independent approval pending.
 
+The operator authorized this program's governed delivery on October 28.
+Authorization to do the work and admission of a particular design are separate:
+this commit changes documents only; no executable slice may start until its
+current shape, scope, coverage and independent gates allow implementation.
+No further technical confirmation is requested merely because the phase changes.
+
 ## Problem and boundaries
 
 The client-help incident exposes disconnected representations of a single job:
@@ -86,6 +92,15 @@ selection. DPF already has the necessary work carriers. Detailed implementation
 of a new continuation adapter must inspect the corresponding persisted request,
 deadline, current authority and effect receipt contracts before code admission.
 
+Retrieval record, October 28, 2026 (the primary URLs are linked above): all four
+returned readable HTML in the research browser. Inngest's Error handling page
+states “reuses results from steps that already succeeded”; Temporal's Durable AI
+page states “resumes automatically after a crash”; GOV.UK's task pattern names
+task order and completion; W3C's SC 4.1.3 explanation states “without receiving
+focus”. These excerpts support the compared patterns, not runtime conformance
+or adoption of those products. The public research retrieval is separate from
+the canonical-runtime evidence and carries no customer or credential data.
+
 ## Acceptance
 
 | Acceptance ID | Objective IDs | Statement |
@@ -101,10 +116,39 @@ deadline, current authority and effect receipt contracts before code admission.
 
 Preserve URLs, source records, identities, receipt histories and authority.
 Deliver independently reviewable adapters/projections through existing BIs and
-small successor slices. No data migration is proposed by this integration scope;
-any later schema change needs its own data review and fleet-safe migration.
+small successor slices. This documentation commit contains no data migration.
+The continuity design must prove whether existing request/task/checkpoint rows
+can hold executable intent, deadlines and effect receipts. If they cannot, that
+slice must obtain data review for an additive compatible expansion, deployment
+of tolerant readers/writers, supported migration/backfill and verified cutover
+before any contract step. A new table or mandatory field is not pre-approved.
 Stand down new recovery dispatch through current policy/release controls while
-retaining obligations if a rollout fails. Do not delete evidence or reset queues.
+retaining obligations if a rollout fails. Retained intent keeps its original
+identity, authority binding, cancellation and expiry. A rollback may stop new
+dispatch but must not erase accepted work, extend deadlines or replay uncertain
+effects. Already dispatched effects remain under their original reconciler;
+incompatible readers must explicitly hold and expose pending intent. Schema
+contraction waits until retained records and old writers are accounted for.
+Do not delete evidence or reset queues.
+
+## Failure analysis and admission obligations
+
+These are design constraints for future delivery, not executed runtime
+protection. Documentation checks establish only document integrity. Every owning
+slice owes positive and adverse runtime evidence before acceptance.
+
+| Failure and effect | Prevention / containment | Detection / recovery | Accountable delivery and evidence owed |
+| --- | --- | --- | --- |
+| A retained turn is stranded after restart; executable work is lost | Persist request identity before acknowledgement; retain context, expiry and next trigger | Observe task identity/age; continue only proven-not-started work, otherwise reconcile | BI-B7E2DD4B; restart/navigation/expiry fixtures, unrun |
+| A lost response causes duplicate external action on retry | Stable effect identity and original receipt reconciliation; unknown effects hold dispatch | Detect missing/conflicting receipts; effect owner settles uncertainty before continuation | BI-B7E2DD4B; uncertain-effect and duplicate-prevention fixtures, unrun |
+| Assistant context leaks identifiers or unauthorized facts | Bounded shared projection, identifier/secret removal and current user/coworker read checks | Explicit denied/unavailable state; remove adapter and preserve evidence on detected leak | BI-7CE02DE9; denied-read/redaction fixtures, unrun |
+| Recovery storms work, capacity or provider cost | Existing dispatch identity, budget, deadline, backoff and concurrency limits; no new spending authority | Observe acknowledgements/progress; stand down dispatch, retain obligations and reconcile in-flight work | BI-C43FD3E5 and BI-B7E2DD4B; cancel/budget/bounded-dispatch fixtures, unrun |
+| Completion claims contradict unresolved tasks or release evidence | Canonical current task-attempt/release projection; preserve superseded attempts | Show conflicts/missing evidence; repair projection without rewriting history | BI-69B29AEC; conflict/pending-release/verified fixtures, unrun |
+| Blocked dependencies appear as scheduled execution | Preserve owner, blocker and admissible next action; release independent work separately | Read dependency evidence; resume dependent work only after existing gate/policy resolution | WC-6D8C9787 and Windows owners; acknowledgement/result evidence outstanding |
+
+No runtime risk above is accepted or certified as mitigated by this draft.
+Publishing a proposal is bounded by explicit incomplete labels and protected
+review; the underlying runtime obligations remain open until evidence exists.
 
 ## Scale and verification
 
