@@ -6,7 +6,6 @@
     "files": [
       "apps/web/components/wiki/BacklinkGroup.tsx",
       "apps/web/components/wiki/WikiBacklinksPanel.tsx",
-      "apps/web/components/wiki/WikiPageViewer.tsx",
       "apps/web/components/decision-perspective/MaterialBacklinksPanel.tsx"
     ]
   },
