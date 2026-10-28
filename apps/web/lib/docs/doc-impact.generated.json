@@ -630,6 +630,9 @@
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -3444,6 +3447,7 @@
       "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts",
+      "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",

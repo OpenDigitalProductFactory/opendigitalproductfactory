@@ -155,8 +155,35 @@ the authoring assistant's own live connection, so no person is involved. A room
 a person opened with no assistant (BI-D3BAF945) is carried on any live
 connection of that person. Review admission then accepts the retired anchor on
 the person's room admission, because the carrying assistant was never in the
-room. When the person has no live connection, the room records
-`no-author-connection`.
+room. A delivery room retired by its status (`archived` or `complete`) is a
+retired anchor even when its `archivedAt` is still empty, as every merged
+break-fix room on the live install was on 2026-10-28 (BI-AA47C672).
+
+When neither the author nor the person has a live connection, the platform
+hands the review to its own reviewer instead of waiting (BI-AA47C672,
+[`platform-review-room.ts`](../../apps/web/lib/backlog/initiative-readiness/platform-review-room.ts)).
+It opens one review room per item, `WC-PIR-<id>`, keyed
+`platform-review:<itemId>`. The room names the item only through its outcome
+anchor, so it is never a delivery room. It declares the
+`platform-post-implementation-review` shape and binds its one stage to the
+packet's reviewer. The person accountable for the platform's automatic work
+owns the room. The platform appends the packet under its own issuer id, and the
+Workroom drive dispatches the reviewer through the ordinary scheduled-task path.
+The reviewer must run in-platform, hold `initiative_design_review` and not be a
+delivery actor. Otherwise nothing is opened and the anchor room records
+`no-author-connection` with a detail naming the coworker or grant that is
+missing. The writer admits the room's run only when every link is a fact the
+platform wrote and readiness, re-derived now for the same issuer identity,
+still issues that exact packet. The run writes under the platform's own
+authority, recorded with token scope `organization`. The receipt repository's
+trunk and delivery-actor checks apply unchanged. The anchor room records the
+hand-off once as `platform-reviewer`, with a growing back-off, until the review
+lands. Design-stage reviews keep their author carrier.
+
+Build Studio plan rooms (BI-27519C1A): review admission asks the Build Studio
+issuer the dispatcher used whether a review is owed, never the item projection.
+A build whose plan raised its shape owes a plan review the projection does not
+see, and admission had refused every such dispatch as "no pending review".
 
 The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
 
