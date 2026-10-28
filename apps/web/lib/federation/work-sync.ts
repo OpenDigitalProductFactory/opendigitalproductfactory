@@ -73,7 +73,7 @@ export interface WorkSyncDb {
     /** For the twin pass (BI-91FC6B9A); without it twins are not recorded. */
     findMany?(args: unknown): Promise<TwinCandidate[]>;
   };
-  /** For the twin pass (BI-91FC6B9A); without it twins are not recorded. */
+  /** For the twin pass (BI-91FC6B9A) and status history (BI-C5794F1D); without it neither is recorded. */
   backlogItemActivity?: TwinActivityDb["backlogItemActivity"];
   principal: {
     findUnique(args: unknown): Promise<{ id: string } | null>;
@@ -116,6 +116,8 @@ export interface WorkSyncLinkResult {
   epicsUpserted: number;
   /** Local items newly recorded as the twin of a pulled mirror (BI-91FC6B9A). */
   twinsRecorded: number;
+  /** Mirrors whose status this pull changed, each recorded once in item history (BI-C5794F1D). */
+  statusChangesRecorded: number;
 }
 
 export interface WorkSyncResult {
@@ -252,6 +254,44 @@ function mirrorPayload(item: FederatedWorkItemV1) {
   return { title: item.title, status: item.status, updatedAt: item.updatedAt, ...(item.claim ? { claim: item.claim } : {}) };
 }
 
+/**
+ * One history row when a pull changes a mirror's status (BI-C5794F1D). The
+ * origin made the change; this install only carries it, so the actor is the
+ * link's federated-peer Principal and the row says where it came from. Without
+ * it a status the origin moved (or a local edit the pull undid) changes with no
+ * trace. Written only on an actual change, never for an unchanged row.
+ */
+async function recordMirrorStatusChange(
+  db: WorkSyncDb,
+  link: WorkSyncLink,
+  origin: string,
+  change: { backlogItemId: string; itemId: string; from: string; to: string },
+  now: Date,
+): Promise<boolean> {
+  if (!db.backlogItemActivity || change.from === change.to) return false;
+  const peer = await db.principal.findUnique({
+    where: { principalId: federationPeerPrincipalId(link.linkId) },
+    select: { id: true },
+  });
+  await db.backlogItemActivity.create({
+    data: {
+      backlogItemId: change.backlogItemId,
+      kind: "status_change",
+      summary: `${change.from} → ${change.to} — work sync from installation ${origin}, which owns ${change.itemId}`,
+      payload: {
+        from: change.from,
+        to: change.to,
+        source: "federated-work-sync",
+        originInstallationId: origin,
+        federationLinkId: link.linkId,
+        actorPrincipalId: peer?.id ?? null,
+        observedAt: now.toISOString(),
+      },
+    },
+  });
+  return true;
+}
+
 function sameClaim(a: FederatedWorkClaim | null, b: FederatedWorkClaim | null): boolean {
   if (!a || !b) return a === b;
   return a.active === b.active && a.since === b.since && a.workrooms === b.workrooms;
@@ -265,7 +305,7 @@ async function upsertItem(
   epicLocalIds: ReadonlyMap<string, string>,
   known: ReadonlyMap<string, WorkSyncMirrorRow>,
   now: Date,
-): Promise<"created" | "updated" | "unchanged" | "conflict" | "deferred-unattributed"> {
+): Promise<{ outcome: "created" | "updated" | "unchanged" | "conflict" | "deferred-unattributed"; statusChanged: boolean }> {
   const mirrorWhere = { federationLinkId_recordType_localRecordRef: { federationLinkId: link.linkId, recordType: "backlog-item", localRecordRef: item.itemId } };
   const version = versionOf(item.updatedAt);
   const prior = known.get(item.itemId);
@@ -285,7 +325,7 @@ async function upsertItem(
       },
       update: { syncStatus: "conflict", conflictReason: "local-owned-id", lastSyncedAt: now },
     });
-    return "conflict";
+    return { outcome: "conflict", statusChanged: false };
   }
 
   // Unchanged at the origin AND still present locally as a mirror: nothing to
@@ -296,7 +336,7 @@ async function upsertItem(
   // A claim taken or released at the origin need not touch the origin row's
   // updatedAt (a Workroom opening does not), so it is compared on its own.
   const claimChanged = !sameClaim(claimFromMirrorPayload(prior?.payload), item.claim ?? null);
-  if (existing && !parkedBare && !claimChanged && prior && prior.syncStatus === "synced" && prior.version === version) return "unchanged";
+  if (existing && !parkedBare && !claimChanged && prior && prior.syncStatus === "synced" && prior.version === version) return { outcome: "unchanged", statusChanged: false };
 
   const deferral = await mirroredDeferralProjection(db, link, origin, item, now);
   const data = {
@@ -340,8 +380,17 @@ async function upsertItem(
       payload: mirrorPayload(item),
     },
   });
-  if (deferral.unattributed) return "deferred-unattributed";
-  return existing ? "updated" : "created";
+  let statusChanged = false;
+  if (existing) {
+    try {
+      statusChanged = await recordMirrorStatusChange(db, link, origin, { backlogItemId: existing.id, itemId: item.itemId, from: existing.status, to: item.status }, now);
+    } catch (error) {
+      // History is best-effort; the mirror itself is already current.
+      console.warn(`[work-sync] status history for ${item.itemId} skipped: ${getErrorMessage(error)}`);
+    }
+  }
+  if (deferral.unattributed) return { outcome: "deferred-unattributed", statusChanged };
+  return { outcome: existing ? "updated" : "created", statusChanged };
 }
 
 async function syncLink(
@@ -351,7 +400,7 @@ async function syncLink(
 ): Promise<WorkSyncLinkResult> {
   const result: WorkSyncLinkResult = {
     linkId: link.linkId, outcome: "synced", detail: null, pages: 0,
-    itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0, twinsRecorded: 0,
+    itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0, twinsRecorded: 0, statusChangesRecorded: 0,
   };
   const token = deps.decryptToken(link.peerTokenEnc);
   if (!token) return { ...result, outcome: "no-token", detail: "This link holds no peer-issued token." };
@@ -414,7 +463,8 @@ async function syncLink(
   for (const item of pages.flatMap((page) => page.items)) {
     seen.add(item.itemId);
     try {
-      const outcome = await upsertItem(db, link, origin, item, epicLocalIds, known, deps.now);
+      const { outcome, statusChanged } = await upsertItem(db, link, origin, item, epicLocalIds, known, deps.now);
+      if (statusChanged) result.statusChangesRecorded++;
       if (outcome === "created") result.itemsCreated++;
       else if (outcome === "updated") result.itemsUpdated++;
       else if (outcome === "unchanged") result.itemsUnchanged++;
@@ -450,10 +500,24 @@ async function syncLink(
       .filter(([itemId, row]) => !seen.has(itemId) && row.syncStatus === "synced")
       .map(([itemId]) => itemId);
     if (missing.length > 0) {
+      const retireWhere = { itemId: { in: missing }, body: { contains: `[origin:federatedWork:${origin}:` }, status: { notIn: ["done", "retired"] } };
+      // Read what is about to retire so each status change lands in history (BI-C5794F1D).
+      const retiring = db.backlogItem.findMany && db.backlogItemActivity
+        ? await db.backlogItem.findMany({ where: retireWhere, select: { id: true, itemId: true, status: true } }) as Array<{ id: string; itemId: string; status: string }>
+        : [];
       const retired = await db.backlogItem.updateMany({
-        where: { itemId: { in: missing }, body: { contains: `[origin:federatedWork:${origin}:` }, status: { notIn: ["done", "retired"] } },
+        where: retireWhere,
         data: { status: "retired", resolution: "Removed at the origin installation.", completedAt: deps.now },
       });
+      for (const row of retiring) {
+        try {
+          if (await recordMirrorStatusChange(db, link, origin, { backlogItemId: row.id, itemId: row.itemId, from: row.status, to: "retired" }, deps.now)) {
+            result.statusChangesRecorded++;
+          }
+        } catch (error) {
+          console.warn(`[work-sync] retirement history for ${row.itemId} skipped: ${getErrorMessage(error)}`);
+        }
+      }
       await db.federatedRecordMirror.updateMany({
         where: { federationLinkId: link.linkId, recordType: "backlog-item", localRecordRef: { in: missing } },
         data: { syncStatus: "withdrawn", lastSyncedAt: deps.now },
@@ -491,13 +555,13 @@ export async function runWorkSync(
     } catch (error) {
       results.push({
         linkId: link.linkId, outcome: "fetch-failed", detail: getErrorMessage(error), pages: 0,
-        itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0, twinsRecorded: 0,
+        itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0, twinsRecorded: 0, statusChangesRecorded: 0,
       });
     }
   }
   const failed = results.filter((r) => r.outcome !== "synced");
   for (const r of results) {
-    console.log(`[work-sync] ${r.linkId} ${r.outcome} pages=${r.pages} created=${r.itemsCreated} updated=${r.itemsUpdated} unchanged=${r.itemsUnchanged} retired=${r.itemsRetired} conflicts=${r.itemsConflicted} deferredUnattributed=${r.itemsDeferredUnattributed} epics=${r.epicsUpserted} twins=${r.twinsRecorded}${r.detail ? ` — ${r.detail}` : ""}`);
+    console.log(`[work-sync] ${r.linkId} ${r.outcome} pages=${r.pages} created=${r.itemsCreated} updated=${r.itemsUpdated} unchanged=${r.itemsUnchanged} retired=${r.itemsRetired} conflicts=${r.itemsConflicted} deferredUnattributed=${r.itemsDeferredUnattributed} epics=${r.epicsUpserted} twins=${r.twinsRecorded} statusChanges=${r.statusChangesRecorded}${r.detail ? ` — ${r.detail}` : ""}`);
   }
   // Remember what each pull reported so the health line can say WHY, not only when.
   if (db.platformConfig) {

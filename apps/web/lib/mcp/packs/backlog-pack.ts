@@ -40,6 +40,7 @@ import {
 } from "@/lib/backlog/deferral-contract";
 import { retireBacklogItemTool, triageBacklogItemTool } from "@/lib/mcp/backlog-retirement-handlers";
 import { completeBacklogItemTransitionTool } from "@/lib/backlog/mcp-terminal-status";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 // ── Handlers (case bodies moved verbatim) ───────────────────────────────────
 
 async function createBacklogItem(
@@ -320,10 +321,21 @@ async function updateBacklogItemStatus(
       claimedAt: true,
       deferredAt: true,
       organizationId: true,
+      body: true,
     },
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  // BI-C5794F1D: a work-sync mirror is changed at its origin; the next pull
+  // would silently undo a status written here, so refuse and name the owner.
+  const peerOwned = peerOwnedStatusRefusal(itemIdRaw, item.body);
+  if (peerOwned)
+    return {
+      success: false,
+      error: peerOwned.error,
+      message: peerOwned.message,
+      data: { originInstallationId: peerOwned.originInstallationId },
+    };
   if (!isBacklogStatus(item.status))
     return {
       success: false,
