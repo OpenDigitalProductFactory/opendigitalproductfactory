@@ -367,7 +367,7 @@ export async function claimBacklogItemWorkspace(args: {
     select: {
       id: true,
       itemId: true,
-      epicId: true, title: true, body: true,
+      epicId: true, title: true, body: true, outcome: true,
       claimStatus: true,
       claimedById: true,
       claimedByAgentId: true,
@@ -405,7 +405,8 @@ export async function claimBacklogItemWorkspace(args: {
     db: args.db,
     input: {
       title: args.input.title ?? `Work on ${item.itemId}`,
-      objective: args.input.objective ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
+      // BI-8DE5429B (WWMD DI-139981F74A44): the room's outcome is the item's.
+      objective: args.input.objective ?? item.outcome ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
       acceptanceSource: { itemId: item.itemId, body: item.body ?? null },
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,

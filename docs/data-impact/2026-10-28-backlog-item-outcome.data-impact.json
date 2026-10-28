@@ -1,0 +1,70 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "BacklogItem.outcome / BacklogItem.outcomeSource, written by ingestBacklogItem (apps/web/lib/operate/backlog-ingest.ts), createBacklogItem / updateBacklogItem (apps/web/lib/actions/backlog.ts), update_backlog_item (apps/web/lib/mcp/packs/backlog-update-item-handler.ts) and the hourly ops/backlog-outcome-reconcile job (apps/web/lib/backlog/outcome-backfill.ts); read by get_backlog_item, the Workroom projection (apps/web/lib/work-management/room-item-outcome.ts) and the claim path (apps/web/lib/work-capsules/work-capsule-store.ts)",
+    "ProductOutcomeObservation.backlogItemId, written by recordDeliveredWorkOutcome and recordItemOutcomeEvents (apps/web/lib/product-management/delivered-work-outcomes-repository.ts)",
+    "The legacy body '## Outcome' section on older items is input only: the reconcile job lifts it into the field as stated and never edits the body"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: the outcome sentence of a work item, at the same sensitivity as the item's title and body",
+    "dataSubjectRights": "Not applicable; the outcome describes work, not a person. It follows the item's existing sensitivity classification.",
+    "reviewDisposition": "A short statement already present in, or derived from, the item's own title and body. No new personal content."
+  },
+  "migration": {
+    "name": "20261028210000_backlog_item_outcome",
+    "backfill": "Not in the migration. Every existing row gets NULL in both columns, which the CHECK allows. The hourly ops/backlog-outcome-reconcile job fills open items (triaging, open, in-progress, awaiting-acceptance, blocked, deferred) at most 250 per run through resolveItemOutcome, with a compare-and-set on outcome IS NULL, preserving updatedAt. Live install at 2026-10-28: about 3,557 open items. Observation backlogItemId stays NULL on the 1 existing row (OBS-34E301FBC558).",
+    "rollback": "Forward-only and additive. Older code neither reads nor writes the columns; rolling the code back leaves the outcomes in place unread."
+  },
+  "tests": [
+    "apps/web/lib/backlog/intake-outcome-field.test.ts",
+    "apps/web/lib/backlog/intake-outcome.test.ts",
+    "apps/web/lib/backlog/outcome-backfill.test.ts",
+    "apps/web/lib/queue/functions/backlog-outcome-reconcile.test.ts",
+    "apps/web/lib/product-management/delivered-work-outcomes.test.ts",
+    "apps/web/lib/product-management/delivered-work-outcomes-repository.test.ts",
+    "apps/web/lib/mcp/packs/backlog-update-item-handler.test.ts",
+    "apps/web/lib/work-management/workroom-only-case-projection.test.ts",
+    "apps/web/lib/work-capsules/work-capsule-store-claim-outcome.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlog-item",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "Existing model; the columns follow the item row and its lifecycle.",
+      "fields": [
+        {
+          "fieldId": "data:backlog-item#outcome",
+          "resolution": "governed",
+          "reason": "The outcome the item delivers: what will be true, and for whom, once it is done. One home for it (WWMD DI-342D45001EF5).",
+          "provenance": "BI-8DE5429B",
+          "flags": []
+        },
+        {
+          "fieldId": "data:backlog-item#outcomeSource",
+          "resolution": "governed",
+          "reason": "Who wrote the outcome: stated (a person or agent) or derived (the platform drafted it from the item's context; visible and correctable). Closed set enforced by BacklogItem_outcomeSource_closed_set.",
+          "provenance": "BI-8DE5429B",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-outcome-observation",
+      "prismaModel": "ProductOutcomeObservation",
+      "lifecycleDisposition": "Existing model; the link is SET NULL if the item row is ever removed, so the observation is kept.",
+      "fields": [
+        {
+          "fieldId": "data:product-outcome-observation#backlogItemId",
+          "resolution": "governed",
+          "reason": "The backlog item whose own outcome this observation measures (WWMD DI-19ED69C312FC); null for a business Product measure. Indexed.",
+          "provenance": "BI-8DE5429B",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

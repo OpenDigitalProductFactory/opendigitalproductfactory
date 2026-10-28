@@ -20,7 +20,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "./backlog-update-item-handler";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
-import { OUTCOME_INTAKE_PROMPT } from "@/lib/backlog/intake-outcome";
+import { OUTCOME_INTAKE_PROMPT, derivedOutcomeAdvisory } from "@/lib/backlog/intake-outcome";
 import {
   getBacklogItem,
   getNextRecommendedWork,
@@ -158,9 +158,10 @@ async function createBacklogItem(
       result.duplicateSemanticUnavailable ?? null,
     );
     const withDuplicates = duplicateAdvisory ? `${scanned}\n\n${duplicateAdvisory}` : scanned;
-    // BI-B1B44777: a soft prompt for the outcome, never a refusal.
+    // BI-B1B44777: a soft prompt for the outcome, never a refusal. With the
+    // outcome a field (BI-8DE5429B), intake derived a draft: name it.
     const message = result.outcomeStated === false
-      ? `${withDuplicates}\n\n${OUTCOME_INTAKE_PROMPT}`
+      ? `${withDuplicates}\n\n${result.derivedOutcome ? derivedOutcomeAdvisory(result.derivedOutcome) : OUTCOME_INTAKE_PROMPT}`
       : withDuplicates;
     return { success: true, entityId: result.itemId, message };
   } catch (err) {
