@@ -2467,6 +2467,10 @@
     "scripts/lib/canonical-json.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "scripts/lib/ci-evidence-plan.mjs": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
       "docs/maintenance/staleness-report.md",
@@ -3158,6 +3162,7 @@
       "scripts/check-stuck-auto-merge.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
@@ -4101,6 +4106,7 @@
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
       "scripts/hooks/converge-git-hooks.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/ci-policy-guards.mjs",
       "scripts/lib/converge-hooks-dir.mjs",
       "scripts/lib/hooks-dir.mjs",
