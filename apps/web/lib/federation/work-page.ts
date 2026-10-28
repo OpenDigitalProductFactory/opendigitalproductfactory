@@ -12,6 +12,7 @@ import {
   FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX,
   FEDERATED_WORK_SPEC_VERSION,
   hasFederatedWorkOriginMarker,
+  type FederatedWorkClaimV1,
   type FederatedWorkDeferralV1,
   type FederatedWorkEpicV1,
   type FederatedWorkItemV1,
@@ -19,6 +20,7 @@ import {
 } from "@dpf/db/federated-work-contract";
 
 export interface WorkPageItemRow {
+  id?: string;
   itemId: string;
   title: string;
   status: string;
@@ -44,6 +46,8 @@ export interface WorkPageItemRow {
   deferTrigger: string | null;
   deferReviewAt: Date | null;
   deferredAt: Date | null;
+  claimStatus?: string | null;
+  claimedAt?: Date | null;
   epic: { epicId: string } | null;
 }
 
@@ -62,9 +66,14 @@ export interface WorkPageEpicRow {
 export interface WorkPageDb {
   backlogItem: { findMany(args: unknown): Promise<WorkPageItemRow[]> };
   epic: { findMany(args: unknown): Promise<WorkPageEpicRow[]> };
+  /** Live Workrooms, so a peer can see work in flight (BI-91FC6B9A). */
+  workroom?: { findMany(args: unknown): Promise<Array<{ backlogItemId: string | null }>> };
 }
 
-function toItem(row: WorkPageItemRow): FederatedWorkItemV1 {
+/** Mirrors TERMINAL_CAPSULE_STATUSES (apps/web/lib/build/unified-wip-query.ts). */
+const TERMINAL_WORKROOM_STATUSES = ["complete", "abandoned", "archived"] as const;
+
+function toItem(row: WorkPageItemRow, liveWorkrooms: number): FederatedWorkItemV1 {
   return {
     itemId: row.itemId,
     title: row.title,
@@ -89,7 +98,37 @@ function toItem(row: WorkPageItemRow): FederatedWorkItemV1 {
     updatedAt: row.updatedAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
     deferral: toDeferral(row),
+    claim: toClaim(row, liveWorkrooms),
   };
+}
+
+function toClaim(row: WorkPageItemRow, liveWorkrooms: number): FederatedWorkClaimV1 {
+  const held = row.claimStatus === "active";
+  return {
+    active: held || liveWorkrooms > 0,
+    since: held ? (row.claimedAt?.toISOString() ?? null) : null,
+    workrooms: liveWorkrooms,
+  };
+}
+
+/** Live Workrooms per served item. A Workroom names its item by semantic id or
+ *  row id, so both are matched; counts key on the semantic id. */
+async function liveWorkroomCounts(db: WorkPageDb, rows: readonly WorkPageItemRow[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (!db.workroom || rows.length === 0) return counts;
+  const bySemanticOrRowId = new Map<string, string>();
+  for (const row of rows) {
+    bySemanticOrRowId.set(row.itemId, row.itemId);
+    if (row.id) bySemanticOrRowId.set(row.id, row.itemId);
+  }
+  for (const room of await db.workroom.findMany({
+    where: { backlogItemId: { in: [...bySemanticOrRowId.keys()] }, status: { notIn: [...TERMINAL_WORKROOM_STATUSES] } },
+    select: { backlogItemId: true },
+  })) {
+    const itemId = room.backlogItemId ? bySemanticOrRowId.get(room.backlogItemId) : undefined;
+    if (itemId) counts.set(itemId, (counts.get(itemId) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /** Publish the deferral only when it is attributable (BI-9DA5F179). A parked
@@ -154,6 +193,7 @@ export async function buildFederatedWorkPage(
       scopeKind: true, archetypeCategories: true, archetypeIds: true, lifecycleTags: true,
       createdAt: true, updatedAt: true, completedAt: true,
       deferReason: true, deferTrigger: true, deferReviewAt: true, deferredAt: true,
+      id: true, claimStatus: true, claimedAt: true,
       epic: { select: { epicId: true } },
     },
   });
@@ -166,6 +206,7 @@ export async function buildFederatedWorkPage(
   // The cursor is the last row CONSIDERED, served or filtered, so a filtered
   // tail never makes the next page re-read or skip a row.
   const last = considered[considered.length - 1];
+  const workroomCounts = await liveWorkroomCounts(db, pageRows);
 
   const epics = input.cursor
     ? []
@@ -182,7 +223,7 @@ export async function buildFederatedWorkPage(
     specVersion: FEDERATED_WORK_SPEC_VERSION,
     originInstallationId: input.originInstallationId,
     generatedAt: (input.now ?? new Date()).toISOString(),
-    items: pageRows.map(toItem),
+    items: pageRows.map((row) => toItem(row, workroomCounts.get(row.itemId) ?? 0)),
     epics: epics.map(toEpic),
     cursor: hasMore && last ? last.itemId : null,
     complete: !hasMore,

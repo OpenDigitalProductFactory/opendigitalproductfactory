@@ -90,6 +90,16 @@ describe("validateFederatedWorkPageV1", () => {
     expect(validateFederatedWorkPageV1(page({ items: [{ ...base, deferral: "later" as never }] }))).toContain("items[0].deferral:not-an-object");
   });
 
+  it("accepts an absent or null claim and checks every field of a present one (BI-91FC6B9A)", () => {
+    const base = page().items[0]!;
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: null }] }))).toEqual([]);
+    const claim = { active: true, since: "2026-10-28T00:00:00.000Z", workrooms: 1 };
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim }] }))).toEqual([]);
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, active: "yes" as never } }] }))).toContain("items[0].claim.active:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, since: "now" } }] }))).toContain("items[0].claim.since:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, workrooms: -1 } }] }))).toContain("items[0].claim.workrooms:invalid");
+  });
+
   it("never throws on garbage", () => {
     expect(validateFederatedWorkPageV1(null)).toEqual(["page:not-an-object"]);
     expect(validateFederatedWorkPageV1({ items: "x", epics: 1 })).toEqual(

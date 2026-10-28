@@ -465,3 +465,59 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(mockBacklogUpdate).not.toHaveBeenCalled();
   });
 });
+
+describe("a merged PR closes the twins it closes (BI-91FC6B9A)", () => {
+  const MARKER = "[origin:tool-defect:surface_open]";
+  const PEER = "inst_0123456789abcdef0123456789abcdef";
+
+  beforeEach(() => {
+    mockBacklogFindMany.mockReset();
+    mockBacklogFindUnique.mockReset().mockResolvedValue({ status: "open" });
+    mockBacklogUpdate.mockReset();
+    mockActivityCreate.mockReset();
+    mockActivityFindMany.mockReset().mockResolvedValue([]);
+    mockItemLock.mockReset().mockResolvedValue([]);
+    mockWorkroomFindMany.mockReset().mockResolvedValue([]);
+    mockTransaction.mockReset().mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        backlogItem: { update: mockBacklogUpdate, findUnique: mockBacklogFindUnique },
+        backlogItemActivity: { create: mockActivityCreate, findMany: mockActivityFindMany },
+        $queryRaw: mockItemLock,
+      }),
+    );
+  });
+
+  const merged = (body: string) => prPayload({
+    action: "closed",
+    pull_request: { ...prPayload().pull_request, state: "closed", merged: true, merged_at: "2026-10-28T00:00:00Z", title: "fix: surface_open", body },
+  });
+
+  it("moves this install's own same-origin item when the PR delivers the peer's mirror, and never moves the mirror", async () => {
+    mockBacklogFindMany
+      .mockResolvedValueOnce([{ id: "row-peer", itemId: "BI-PEER", status: "open", claimStatus: null, workType: "bug",
+        body: `x\n\n${MARKER}\n[origin:federatedWork:${PEER}:BI-PEER]` }])
+      .mockResolvedValueOnce([{ id: "row-local", itemId: "BI-LOCAL", status: "open", claimStatus: null, workType: "bug", body: `y\n\n${MARKER}` }]);
+
+    const result = await applyGitHubPullRequestToBacklog(merged("Closes BI-PEER"));
+
+    expect(result.moved).toEqual(["BI-LOCAL"]);
+    expect(mockBacklogFindMany.mock.calls[1]![0].where).toEqual({
+      status: { in: [...CODING_POOL_STATUSES] },
+      NOT: { body: { contains: "[origin:federatedWork:inst_" } },
+      OR: [{ body: { contains: MARKER } }],
+    });
+    expect(mockActivityCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        backlogItemId: "row-local",
+        payload: expect.objectContaining({ reason: "Same defect as BI-PEER, delivered by merged PR #5126", to: "awaiting-acceptance" }),
+      }),
+    }));
+    expect(mockBacklogUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expand an unmerged PR to twins", async () => {
+    mockBacklogFindMany.mockResolvedValueOnce([{ id: "row-a", itemId: "BI-CA54ACC8", status: "open", claimStatus: null, workType: "bug", body: `x\n\n${MARKER}` }]);
+    await applyGitHubPullRequestToBacklog(prPayload());
+    expect(mockBacklogFindMany).toHaveBeenCalledTimes(1);
+  });
+});

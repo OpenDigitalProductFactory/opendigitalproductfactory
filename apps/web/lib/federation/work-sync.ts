@@ -35,6 +35,13 @@ import { fetchWorkPageFromPeer, type PeerPostResult } from "./client";
 import { relationshipPresetForRole } from "./demand-reconciliation";
 import { decryptPeerToken } from "./outbound";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  claimFromMirrorPayload,
+  recordFederatedTwins,
+  type FederatedWorkClaim,
+  type TwinActivityDb,
+  type TwinCandidate,
+} from "./federated-twins";
 
 /** Hard ceiling on pages per link per cycle: 50 × 500 = 25,000 rows. */
 const MAX_PAGES_PER_LINK = 50;
@@ -51,6 +58,7 @@ export interface WorkSyncMirrorRow {
   localRecordRef: string | null;
   version: bigint;
   syncStatus: string;
+  payload?: unknown;
 }
 
 export interface WorkSyncDb {
@@ -62,7 +70,11 @@ export interface WorkSyncDb {
     findUnique(args: unknown): Promise<{ id: string; body: string | null; status: string; deferReason?: string | null } | null>;
     upsert(args: unknown): Promise<{ id: string }>;
     updateMany(args: unknown): Promise<{ count: number }>;
+    /** For the twin pass (BI-91FC6B9A); without it twins are not recorded. */
+    findMany?(args: unknown): Promise<TwinCandidate[]>;
   };
+  /** For the twin pass (BI-91FC6B9A); without it twins are not recorded. */
+  backlogItemActivity?: TwinActivityDb["backlogItemActivity"];
   principal: {
     findUnique(args: unknown): Promise<{ id: string } | null>;
   };
@@ -102,6 +114,8 @@ export interface WorkSyncLinkResult {
    *  deferred with the gap written into the reason, owned by the peer principal. */
   itemsDeferredUnattributed: number;
   epicsUpserted: number;
+  /** Local items newly recorded as the twin of a pulled mirror (BI-91FC6B9A). */
+  twinsRecorded: number;
 }
 
 export interface WorkSyncResult {
@@ -234,6 +248,15 @@ async function mirroredDeferralProjection(
   };
 }
 
+function mirrorPayload(item: FederatedWorkItemV1) {
+  return { title: item.title, status: item.status, updatedAt: item.updatedAt, ...(item.claim ? { claim: item.claim } : {}) };
+}
+
+function sameClaim(a: FederatedWorkClaim | null, b: FederatedWorkClaim | null): boolean {
+  if (!a || !b) return a === b;
+  return a.active === b.active && a.since === b.since && a.workrooms === b.workrooms;
+}
+
 async function upsertItem(
   db: WorkSyncDb,
   link: WorkSyncLink,
@@ -270,7 +293,10 @@ async function upsertItem(
   // mirror parked bare — `deferred` with no reason — is never "unchanged": it
   // is the 2026-09-02 defect on disk, and the next cycle repairs it.
   const parkedBare = existing?.status === "deferred" && !existing.deferReason;
-  if (existing && !parkedBare && prior && prior.syncStatus === "synced" && prior.version === version) return "unchanged";
+  // A claim taken or released at the origin need not touch the origin row's
+  // updatedAt (a Workroom opening does not), so it is compared on its own.
+  const claimChanged = !sameClaim(claimFromMirrorPayload(prior?.payload), item.claim ?? null);
+  if (existing && !parkedBare && !claimChanged && prior && prior.syncStatus === "synced" && prior.version === version) return "unchanged";
 
   const deferral = await mirroredDeferralProjection(db, link, origin, item, now);
   const data = {
@@ -307,11 +333,11 @@ async function upsertItem(
       mirrorId: workMirrorId(link.linkId, "backlog-item", item.itemId), federationLinkId: link.linkId, recordType: "backlog-item",
       canonicalSide: "peer", localRecordRef: item.itemId, peerRecordRef: `${origin}:${item.itemId}`,
       syncStatus: "synced", version, acknowledgedVersion: version, lastSyncedAt: now,
-      payload: { title: item.title, status: item.status, updatedAt: item.updatedAt },
+      payload: mirrorPayload(item),
     },
     update: {
       syncStatus: "synced", conflictReason: null, version, acknowledgedVersion: version, lastSyncedAt: now,
-      payload: { title: item.title, status: item.status, updatedAt: item.updatedAt },
+      payload: mirrorPayload(item),
     },
   });
   if (deferral.unattributed) return "deferred-unattributed";
@@ -325,7 +351,7 @@ async function syncLink(
 ): Promise<WorkSyncLinkResult> {
   const result: WorkSyncLinkResult = {
     linkId: link.linkId, outcome: "synced", detail: null, pages: 0,
-    itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0,
+    itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0, twinsRecorded: 0,
   };
   const token = deps.decryptToken(link.peerTokenEnc);
   if (!token) return { ...result, outcome: "no-token", detail: "This link holds no peer-issued token." };
@@ -366,7 +392,7 @@ async function syncLink(
   const known = new Map<string, WorkSyncMirrorRow>();
   for (const row of await db.federatedRecordMirror.findMany({
     where: { federationLinkId: link.linkId, recordType: "backlog-item", canonicalSide: "peer" },
-    select: { mirrorId: true, localRecordRef: true, version: true, syncStatus: true },
+    select: { mirrorId: true, localRecordRef: true, version: true, syncStatus: true, payload: true },
   })) {
     if (row.localRecordRef) known.set(row.localRecordRef, row);
   }
@@ -397,6 +423,25 @@ async function syncLink(
     } catch (error) {
       // Fault-isolate: one bad row must not strand the rest of the inventory.
       console.warn(`[work-sync] item ${item.itemId} from ${link.linkId} skipped: ${getErrorMessage(error)}`);
+    }
+  }
+
+  // Record each pulled mirror as the twin of this install's own same-origin
+  // items. Unchanged mirrors included: the first cycle backfills (BI-91FC6B9A).
+  if (db.backlogItem.findMany && db.backlogItemActivity) {
+    const pulled = pages.flatMap((page) => page.items).map((item) => ({
+      itemId: item.itemId,
+      status: item.status,
+      body: withFederatedWorkOriginMarker(item.body, origin, item.itemId),
+    }));
+    try {
+      result.twinsRecorded = await recordFederatedTwins(
+        { backlogItem: { findMany: db.backlogItem.findMany.bind(db.backlogItem) }, backlogItemActivity: db.backlogItemActivity },
+        pulled,
+        deps.now,
+      );
+    } catch (error) {
+      console.warn(`[work-sync] twin pass for ${link.linkId} skipped: ${getErrorMessage(error)}`);
     }
   }
 
@@ -446,13 +491,13 @@ export async function runWorkSync(
     } catch (error) {
       results.push({
         linkId: link.linkId, outcome: "fetch-failed", detail: getErrorMessage(error), pages: 0,
-        itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0,
+        itemsCreated: 0, itemsUpdated: 0, itemsUnchanged: 0, itemsRetired: 0, itemsConflicted: 0, itemsDeferredUnattributed: 0, epicsUpserted: 0, twinsRecorded: 0,
       });
     }
   }
   const failed = results.filter((r) => r.outcome !== "synced");
   for (const r of results) {
-    console.log(`[work-sync] ${r.linkId} ${r.outcome} pages=${r.pages} created=${r.itemsCreated} updated=${r.itemsUpdated} unchanged=${r.itemsUnchanged} retired=${r.itemsRetired} conflicts=${r.itemsConflicted} deferredUnattributed=${r.itemsDeferredUnattributed} epics=${r.epicsUpserted}${r.detail ? ` — ${r.detail}` : ""}`);
+    console.log(`[work-sync] ${r.linkId} ${r.outcome} pages=${r.pages} created=${r.itemsCreated} updated=${r.itemsUpdated} unchanged=${r.itemsUnchanged} retired=${r.itemsRetired} conflicts=${r.itemsConflicted} deferredUnattributed=${r.itemsDeferredUnattributed} epics=${r.epicsUpserted} twins=${r.twinsRecorded}${r.detail ? ` — ${r.detail}` : ""}`);
   }
   // Remember what each pull reported so the health line can say WHY, not only when.
   if (db.platformConfig) {
