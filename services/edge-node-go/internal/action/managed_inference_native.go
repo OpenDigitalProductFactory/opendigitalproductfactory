@@ -287,7 +287,14 @@ func nativeAdmissionFile(path string, value any) error {
 
 func (h *NativeManagedInferenceHandler) Execute(ctx context.Context, signed SignedEnvelope) (ExecutionOutput, error) {
 	output := ExecutionOutput{Evidence: map[string]any{"schemaVersion": 1, "nativeStatus": "not-started", "settlement": "confirmed", "actionKey": signed.ActionKey}}
-	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" || h.Admission == nil || VerifyEnvelope(signed, h.PublicKey, h.NodeID, h.now(), nil) != nil {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		return output, ErrNativeInferenceFailed
+	}
+	verificationErr := VerifyEnvelope(signed, h.PublicKey, h.NodeID, h.now(), nil)
+	// ErrExpired is returned only after signature, node and lifetime checks.
+	// Preserve the original receipt when time crossed after executor admission
+	// and durable nonce consumption; expiry still forbids every host effect.
+	if verificationErr != nil && verificationErr != ErrExpired {
 		return output, ErrNativeInferenceFailed
 	}
 	parameters, err := parseManagedInferenceParameters(signed.Parameters)
@@ -302,7 +309,7 @@ func (h *NativeManagedInferenceHandler) Execute(ctx context.Context, signed Sign
 	digest := hex.EncodeToString(sum[:])
 	output.Evidence["requestDigest"] = digest
 	output.Evidence["sourceSha"] = parameters.SourceSHA
-	if parameters.Operation == "activate" && parameters.SourceSHA != h.Config.ControllerSourceSHA {
+	if verificationErr != nil || h.Admission == nil || (parameters.Operation == "activate" && parameters.SourceSHA != h.Config.ControllerSourceSHA) {
 		return output, ErrNativeInferenceFailed
 	}
 	controller, err := VerifyNativeControllerPackage(h.Config)
