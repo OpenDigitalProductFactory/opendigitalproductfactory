@@ -128,6 +128,17 @@ The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the en
 - **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
 - **Unpushed-work backup.** Before a live run deletes a stale, unmerged branch (bash stale prune, or Node Tier B), it counts commits on no remote (`git rev-list --count refs/heads/<b> --not --remotes`). If any exist it writes `refs/janitor-backup/<YYYY-MM-DD>/<b>` at the tip and logs it; if that count or ref write fails, the worktree is kept (BI-EBBBDF40). Recover with `git branch <b> refs/janitor-backup/<date>/<b>`.
 
+## Branches left without a worktree
+
+The janitor deletes a branch only together with the worktree it removes, so a branch whose tree went some other way stays forever. `scripts/branch-reaper.mjs` (BI-88D75BA3) reaps those branches.
+
+- **Dry run by default.** `node scripts/branch-reaper.mjs` classifies and reports; `--live` deletes and prunes, and `--json` gives the full report.
+- **What it reaps.** A local branch whose work is already on `origin/main`: either an ancestor of it, or exactly the head commit a merged PR shipped (squash merge). The branch must also have no worktree, no open PR and no live Workroom, and must not be the current, `main`, `release/*`, `hotfix/*` or a pinned branch. Pin a branch by adding its name as a line in `<git-common-dir>/dpf-branch-pins`.
+- **Fails closed.** If the Workroom observation or the open-PR list cannot be read, nothing is reaped. The observation must be installation-wide: an OAuth client credential sees only caller-visible rooms, so run it with the install's PAT. It reads branches only (`resolvePaths: false`) with a long read budget, because a large install's observation takes minutes.
+- **Never deletes a moved branch.** Deletion is `git update-ref -d refs/heads/<b> <tip>`, so a branch that gained a commit after classification is left alone.
+- **Each live cycle also** runs `git fetch --prune origin`, so remote-tracking refs for deleted remote branches go too.
+- **Stash census.** It reports the stash: entry count, how many are older than 7 or 30 days, and the oldest. It never drops an entry, because the stash stack is repository-wide and holds other sessions' work.
+
 ## Rebasing on a shallow clone — never a bare `git rebase origin/main`
 
 ⟦runtime: precondition — shallow checkouts only; on a full clone the phantom replay does not occur⟧

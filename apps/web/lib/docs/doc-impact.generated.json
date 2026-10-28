@@ -2111,6 +2111,9 @@
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
+    "scripts/branch-reaper.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
     "scripts/build-docs-staleness.mjs": [
       "docs/maintenance/README.md",
       "docs/maintenance/staleness-report.md"
@@ -3136,6 +3139,7 @@
     "docs/architecture/branch-and-worktree-runbook.md": [
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
       "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
+      "scripts/branch-reaper.mjs",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
       "scripts/hooks/session-reaper.sh",
       "scripts/lib/worktree-provision.mjs",
