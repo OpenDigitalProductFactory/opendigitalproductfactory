@@ -198,6 +198,8 @@ You are not asked to approve every invite. A room has a **charter**: the kinds o
 
 Every other invite still comes to you for approval. That includes inviting a person, inviting into a confidential or restricted room, inviting a retired coworker, and asking for more than the charter allows. The charter only decides whether you're asked. It never grants access: the invitee still needs the clearance and permissions the room requires.
 
+A room takes its sensitivity from the work it serves. Rooms for work on the open-source platform itself count as public, so any AI coworker can be invited to them. Rooms for your organization's own work are usually internal. A coworker joins one only once someone who manages coworkers has given it internal data access, under **Coworker data access**. Until then, an invite into such a room comes to you, and the coworker cannot read the room.
+
 Across rooms, you can see **where each AI coworker is engaged**—which active rooms it is in and its role in each (including where it coordinates). This 360 view helps manage how coworkers are used and recognise the routine patterns worth pre-positioning them for.
 
 An authorized coworker can also open a relevant product surface from the room's work type, resources, or task intent—even when no browser page is rendered. These silent/headless surfaces use the same semantic fields, validation, and governed actions as the human browser or mobile view. Room membership still does not expand authority: the surface catalog and every action apply the human role, coworker grants, room/work context, token scope, and approval rules together.

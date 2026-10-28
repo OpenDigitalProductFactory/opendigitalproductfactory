@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEscalation, type EscalationSteering } from "@/lib/govern/authority/escalation-gate";
 import { resolveCallConsequence } from "@/lib/tool-consequence";
 
-const mocks = vi.hoisted(() => ({ agent: vi.fn(), room: vi.fn(), principal: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { agent: { findUnique: mocks.agent } } }));
+const mocks = vi.hoisted(() => ({ agent: vi.fn(), room: vi.fn(), principal: vi.fn(), backlog: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { agent: { findUnique: mocks.agent }, backlogItem: { findFirst: mocks.backlog } } }));
 vi.mock("./room-participant-invitation-preflight.server", () => ({ resolveRoomMessagingWorkItem: mocks.room }));
 vi.mock("@/lib/identity/principal-linking", () => ({ ensureAgentPrincipalIdentity: mocks.principal }));
 
@@ -23,6 +23,24 @@ beforeEach(() => {
 it("narrows an in-charter coworker invite to non-damaging", async () => {
   await expect(call({ caseKey: "backlog-item:BI-1", agentId: "change-reviewer" }))
     .resolves.toEqual({ consequence: null, reason: "in-charter:platform-default:org-coworker:create" });
+});
+
+// BI-ED5561BB: reproduced live, change-reviewer ({public}) into the
+// platform-scope room backlog-item:BI-C649809F was ruled clearance-below-ceiling.
+it("admits a public-cleared coworker to a platform room by charter", async () => {
+  mocks.room.mockResolvedValue({ id: "room-item", evidence: [], sourceType: "backlog-item", sourceId: "BI-C649809F" });
+  mocks.backlog.mockResolvedValue({ sensitivity: "internal", scopeKind: "platform", digitalProduct: null });
+  mocks.principal.mockResolvedValue({ principalId: "PRN-reviewer", sensitivityClearance: ["public"] });
+  await expect(call({ caseKey: "backlog-item:BI-C649809F", agentId: "change-reviewer" }))
+    .resolves.toEqual({ consequence: null, reason: "in-charter:platform-default:org-coworker:create" });
+});
+
+it("keeps a public-cleared coworker outside the charter of a non-platform internal room", async () => {
+  mocks.room.mockResolvedValue({ id: "room-item", evidence: [], sourceType: "backlog-item", sourceId: "BI-ORG" });
+  mocks.backlog.mockResolvedValue({ sensitivity: "internal", scopeKind: "archetype-leaf", digitalProduct: null });
+  mocks.principal.mockResolvedValue({ principalId: "PRN-reviewer", sensitivityClearance: ["public"] });
+  await expect(call({ caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer" }))
+    .resolves.toEqual({ consequence: "authority", reason: "outside-charter:clearance-below-ceiling" });
 });
 
 it("keeps authority for a person invitee", async () => {
