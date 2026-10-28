@@ -60,6 +60,13 @@ The outcome belongs to the work, not to a structure beside it:
 - **A room's outcome is its item's outcome.** A Workroom shows the outcome of the item it carries, read live so it never drifts (DI-139981F74A44). Nobody writes a separate room objective for it. An explicit boundary claim can still say otherwise.
 - **Measure the item's own outcome.** The platform records it at delivery (achieved), at a reopen from done (regressed), and when failing evidence lands on a done item (not achieved). Each observation names the item and the outcome it measured (DI-19ED69C312FC). A Product or objective roll-up is the mean of those item observations. It is never authored separately.
 
+### One outcome hierarchy (founder direction, 2026-10-28)
+
+> "The mission and vision / outcomes of a DPF instance as a whole are also important. This is the prime definer for the WWMD, WWWD and WSID layers too. They steer towards the broader outcome as a whole. The more detailed workroom outcomes are all hierarchically there to help the organization achieve its outcomes. In other frameworks, Hoshin Kanri planning is sort of like this. We want a more simplified and practical version of it here."
+> — Mark Bodman, 2026-10-28
+
+Outcomes form one hierarchy: the instance's mission, vision and top-level outcomes, then epic outcomes, then item outcomes, then each room iteration's outcome. Each level's outcome lives on that level's own record and links to the outcome it serves (DI-DDB4BDE852BB). WWMD, WWWD and WSID steer by the instance outcomes. Progress rolls up from the items, and no level authors a separate aggregate. This keeps the Hoshin Kanri cascade and drops the catchball ceremony. The owner sets what the organization's outcomes are, through WWWD. An agent never invents them. The design is in `docs/superpowers/specs/2026-10-28-outcome-hierarchy-design.md`.
+
 ## Nothing waits on a person indefinitely (operator direction, 2026-10-27)
 
 > "We seem to have more process gates than needed, the actual closure is predicated on seeing results, which unless it's automatable, we don't want to have open items hanging out forever. [...] getting validation is really only required if there is a customer reported thing, and even then a simple question and response would do it."
@@ -76,6 +83,7 @@ A watcher armed to do this may also simply not work, and a silent watcher looks 
 - Open the pull request with its evidence, name what is unproven, end the thread.
 - State the outcome when you file the item. Add how you will know only when it is not obvious; if it can be checked automatically, declare the check. If the platform derived a draft, correct it when it is wrong.
 - Take a room's outcome from the item it carries. Do not invent a separate objective for the room or for a Product.
+- Know which parent outcome your work serves: the item's epic, and the instance outcome above it. When a link is missing, show the gap instead of guessing it.
 - Let the merge close the item. Do not hold it open for a sign-off nobody asked for.
 - Declaring a customer's outcome good on their behalf is not yours to do. The platform asks them, once.
 - If acceptance genuinely matters because a customer was promised it, tag the item `contractual` and say what the check is or who accepts. That item waits for its accepter, and declaring its outcome good is not yours to do.
