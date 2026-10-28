@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseQualificationExperimentBinding,
+  createQualificationExperimentAdmission,
+  qualificationBindingDigest,
+  verifyQualificationExperimentAdmission,
   validateQualificationExperimentAdmission,
 } from "./qualification-research-admission";
 
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
 const BLOB = "c".repeat(40);
-const NOW = new Date("2026-10-28T20:00:00.000Z");
+const NOW = new Date("2026-01-28T20:00:00.000Z");
 
 const binding = {
   schemaVersion: 1,
@@ -26,10 +29,15 @@ const binding = {
   installationId: "install-dev",
   accountablePrincipalRef: "principal:owner",
   authorityDecisionId: "AUTH-1",
+  shapeKey: "delivery-small-fix",
+  shapeVersion: "1.0.0",
+  stageKey: "qualification-research",
+  policyVersion: 1,
+  targetProductionBlobIds: ["d".repeat(40)],
   permittedTools: ["read_source_at_version", "write_sandbox_file", "run_sandbox_tests", "record_workroom_evidence"],
   allowedPaths: ["apps/web/lib/example.test.ts", "apps/web/lib/example.test-helper.ts"],
-  issuedAt: "2026-10-28T19:55:00.000Z",
-  expiresAt: "2026-10-28T20:25:00.000Z",
+  issuedAt: "2026-01-28T19:55:00.000Z",
+  expiresAt: "2026-01-28T20:25:00.000Z",
   maxStarts: 1,
   maxDurationMs: 600_000,
 } as const;
@@ -73,7 +81,7 @@ describe("qualification research admission", () => {
     ["owner", { accountablePrincipalRef: "principal:other" }],
     ["authority", { authorityDecisionId: "AUTH-2" }],
     ["duplicate start", { startCount: 1 }],
-    ["expiry", { now: new Date("2026-10-28T20:25:00.001Z") }],
+    ["expiry", { now: new Date("2026-01-28T20:25:00.001Z") }],
   ])("fails closed when %s changes", (_name, change) => {
     const parsed = parseQualificationExperimentBinding(binding);
     if (!parsed.ok) throw new Error(parsed.error);
@@ -103,6 +111,24 @@ describe("qualification research admission", () => {
       .toMatchObject({ ok: false });
     expect(parseQualificationExperimentBinding({ ...binding, maxStarts: 2 })).toMatchObject({ ok: false });
     expect(parseQualificationExperimentBinding({ ...binding, allowedPaths: ["apps/web/lib/production.ts"] }))
+      .toMatchObject({ ok: false });
+  });
+
+  it("signs the exact server-owned binding and rejects tampering or expiry", () => {
+    const parsed = parseQualificationExperimentBinding(binding);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const token = createQualificationExperimentAdmission(parsed.binding, { secret: "test-secret" });
+    expect(verifyQualificationExperimentAdmission(token, { secret: "test-secret", now: NOW })).toEqual({
+      ok: true,
+      admission: {
+        schemaVersion: 1,
+        purpose: "qualification-research-admission",
+        binding: parsed.binding,
+        bindingDigest: qualificationBindingDigest(parsed.binding),
+      },
+    });
+    expect(verifyQualificationExperimentAdmission(`${token}x`, { secret: "test-secret", now: NOW })).toMatchObject({ ok: false });
+    expect(verifyQualificationExperimentAdmission(token, { secret: "test-secret", now: new Date(binding.expiresAt) }))
       .toMatchObject({ ok: false });
   });
 });

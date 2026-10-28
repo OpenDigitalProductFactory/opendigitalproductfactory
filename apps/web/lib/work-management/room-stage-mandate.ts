@@ -6,6 +6,11 @@ import type { Prisma } from "@dpf/db";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import {
+  parseQualificationExperimentState,
+  qualificationBindingDigest,
+  verifyQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { isRecord } from "@/lib/shared/coerce";
 import { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveTaskId, workroomDriveBranchTaskId } from "./drive-resolution";
 import { isDeliveryShapeKey, DELIVERY_XLARGE_SHAPE_KEY, DELIVERY_AUTHOR_ROLE, DELIVERY_AUTHOR_EVIDENCE_TOOL as EVIDENCE_WRITER } from "./delivery-shapes";
@@ -172,6 +177,36 @@ export async function loadScheduledRoomAuthority(
     const assignedStageKey = assignment?.shapeKey === shape.key && assignment?.shapeVersion === shape.version ? assignment.stageKey : null;
     const declared = roomStageMandatedTools({ ...input, scheduledTaskId: taskId, room, assignedStageKey });
     const declaration = readWorkroomPostureClaim(room.scopeClaims);
+    if (assignment?.qualificationExperiment) {
+      run ??= await db.taskRun.findUnique({ where: { taskRunId: input.taskRunId }, select: RUN_SELECT });
+      const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
+      const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+      const runState = isRecord(run?.a2aMetadata) ? run.a2aMetadata : {};
+      const runBinding = isRecord(runState.qualificationExperiment) ? runState.qualificationExperiment : null;
+      const verified = state ? verifyQualificationExperimentAdmission(state.token, { now: (deps.now ?? (() => new Date()))() }) : null;
+      const digest = qualificationBindingDigest(assignment.qualificationExperiment);
+      if (!run || run.status !== "working" || run.archivedAt != null || !task?.isActive
+        || !state || state.status !== "started" || state.startCount !== 1 || state.taskId !== taskId
+        || !verified?.ok || verified.admission.bindingDigest !== digest || state.bindingDigest !== digest
+        || qualificationBindingDigest(runBinding as typeof assignment.qualificationExperiment) !== digest) {
+        return withheld("The qualification admission is missing, expired, superseded, or not bound to this run.");
+      }
+      const tools = assignment.tools.filter((tool) => assignment.qualificationExperiment!.permittedTools.includes(tool));
+      if (!input.toolName) return { ...EMPTY, mandatedTools: tools };
+      if (!tools.includes(input.toolName)) return withheld("The tool is outside the qualification admission.");
+      if (input.toolName === EVIDENCE_WRITER) {
+        const args = input.params;
+        const result = isRecord(args?.result) ? args.result : null;
+        const outcome = result?.qualificationOutcome;
+        if (!args || args.capsuleId !== room.capsuleId || args.stageKey !== assignment.stageKey
+          || result?.qualificationBindingDigest !== digest || typeof args.summary !== "string" || !args.summary.trim()
+          || (args.outcome !== "completed" && args.outcome !== "blocked")
+          || (outcome !== "positive" && outcome !== "negative" && outcome !== "inconclusive" && outcome !== "blocked")) {
+          return withheld("The terminal qualification evidence is incomplete or bound to another experiment.");
+        }
+      }
+      return { ...EMPTY, mandatedTools: [input.toolName] };
+    }
     // BI-E458A9CB: an exact blocked report survives lost completion authority.
     if (!isDeliveryShapeKey(shape.key) || (input.params?.outcome === "blocked" && declared.includes(EVIDENCE_WRITER)
       && declaration?.actionBoundary !== "advise" && declaration?.actionBoundary !== "propose")) {

@@ -601,6 +601,34 @@ describe("terminal initiative recovery", () => {
     expect(ports.resolveRecovery).not.toHaveBeenCalled();
   });
 
+  it("returns an exact server-issued qualification admission when the blocked room is eligible", async () => {
+    const ports = deps();
+    const qualificationAdmission = {
+      toolName: "claim_workroom_scope" as const,
+      workroomId: room.capsuleId,
+      qualificationAdmissionToken: "opaque.signed",
+      bindingDigest: `sha256:${"a".repeat(64)}`,
+      binding: { itemId: decision.subject.id },
+    } as never;
+    Object.assign(ports, { resolveQualificationAdmission: vi.fn().mockResolvedValue(qualificationAdmission) });
+    const researchOnly: InitiativeReadinessDecision = {
+      ...decision,
+      blockers: [readinessRequirement({ code: "RESEARCH_REQUIRED", state: "fail", accountableRole: "design-author" })],
+      unmet: [],
+    };
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: researchOnly,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+
+    expect(result.qualificationAdmission).toBe(qualificationAdmission);
+    expect(result.escalations).toMatchObject([{ toolName: "claim_workroom_scope" }]);
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {
     const ports = deps();
     ports.loadEligibleEvidenceActivityIds.mockResolvedValue(ok({ activityIds: [] }));

@@ -29,6 +29,10 @@ import { resolveReviewerIdentity } from "./reviewer-identity";
 import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
 import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
+import { createQualificationExperimentAdmission, qualificationBindingDigest,
+  type QualificationExperimentBinding } from "./qualification-research-admission";
+import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
+import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 export type { MergedRepairSource } from "./merged-repair-source";
 export { defaultLoadMergedRepairSource } from "./merged-repair-source";
@@ -74,14 +78,23 @@ type TerminalEscalation = {
   // (shape-requirements.ts small() and medium()), so the research lane's
   // escalation is addressed to the author, not to a reviewer (BI-7876699F).
   accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author" | "product-owner";
-  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item" | "update_backlog_item_status";
+  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item" | "update_backlog_item_status" | "claim_workroom_scope";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
 };
 
+export type QualificationAdmissionRoute = {
+  toolName: "claim_workroom_scope";
+  workroomId: string;
+  qualificationAdmissionToken: string;
+  bindingDigest: string;
+  binding: QualificationExperimentBinding;
+};
+
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
+  qualificationAdmission?: QualificationAdmissionRoute;
 };
 
 export type BaselinePayload = Record<string, unknown> & {
@@ -127,6 +140,7 @@ export type TerminalRecoveryPorts = {
   discoverCommitRange?(args: { repositoryFullName: string; ranges: CommitRange[] }): Promise<Awaited<ReturnType<typeof discoverCommitRangeArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
   loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
+  resolveQualificationAdmission?(args: { itemId: string; refusedWorkroomId: string | null; currentAgentId: string | null }): Promise<QualificationAdmissionRoute | null>;
 };
 
 /** The PIR's bound artifact: one repair blob at `commitSha`, or the whole commit range (BI-46E344FE). */
@@ -420,6 +434,57 @@ async function defaultLoadObjectiveMappingHistory(args: {
 }
 
 /** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
+function bodyMatch(body: string, expression: RegExp): string | null {
+  return expression.exec(body)?.[1]?.trim() ?? null;
+}
+
+async function defaultResolveQualificationAdmission(args: {
+  itemId: string; refusedWorkroomId: string | null; currentAgentId: string | null;
+}): Promise<QualificationAdmissionRoute | null> {
+  if (!args.refusedWorkroomId || !args.currentAgentId) return null;
+  const [item, room, identity] = await Promise.all([
+    prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, body: true } }),
+    prisma.workroom.findUnique({ where: { capsuleId: args.refusedWorkroomId }, select: {
+      capsuleId: true, backlogItemId: true, repositoryFullName: true, baseSha: true, headSha: true,
+      scopeClaims: true, leaseHolderPrincipalId: true,
+    } }),
+    resolveFederationIdentity(prisma),
+  ]);
+  if (!item?.body || !room || room.backlogItemId !== args.itemId || !room.repositoryFullName || !room.baseSha || !room.headSha
+    || room.leaseHolderPrincipalId !== args.currentAgentId) return null;
+  const path = bodyMatch(item.body, /Canonical design is now published at\s+([^\s]+\.md)/i);
+  const commitSha = bodyMatch(item.body, /signed commit\s+([a-f0-9]{40})/i);
+  const providerBlobId = bodyMatch(item.body, /blob\s+([a-f0-9]{40})/i);
+  const productionBlob = bodyMatch(item.body, /writer blob is\s+([a-f0-9]{40})/i);
+  const allowedPath = bodyMatch(item.body, /(scripts\/[A-Za-z0-9._/-]+\.test\.[A-Za-z0-9]+)/i);
+  const receipt = await prisma.backlogItemActivity.findFirst({
+    where: { backlogItemId: item.id, kind: "initiative_gate_receipt" }, orderBy: { recordedAt: "desc" }, select: { payload: true },
+  });
+  const payload = receipt?.payload && typeof receipt.payload === "object" && !Array.isArray(receipt.payload)
+    ? receipt.payload as Record<string, unknown> : null;
+  const authorityDecisionId = typeof payload?.authorityDecisionId === "string" ? payload.authorityDecisionId : null;
+  const shape = resolveWorkShapeClaim(room.scopeClaims);
+  if (!path || !commitSha || !providerBlobId || !productionBlob || !allowedPath || !authorityDecisionId || !shape
+    || commitSha.toLowerCase() !== room.headSha.toLowerCase()) return null;
+  const stage = shape.stages.find((candidate) => candidate.key === "reproduce") ?? shape.stages[0];
+  if (!stage) return null;
+  const issuedAt = new Date();
+  const binding: QualificationExperimentBinding = {
+    schemaVersion: 1, phase: "prepare", itemId: args.itemId, workroomId: room.capsuleId,
+    repositoryFullName: room.repositoryFullName, baseSha: room.baseSha, headSha: room.headSha,
+    protocol: { path, commitSha, providerBlobId }, installationId: identity.installationId,
+    accountablePrincipalRef: room.leaseHolderPrincipalId, authorityDecisionId,
+    shapeKey: shape.key, shapeVersion: shape.version, stageKey: stage.key, policyVersion: 1,
+    targetProductionBlobIds: [productionBlob],
+    permittedTools: ["read_source_at_version", "read_codebase_manifest", "write_sandbox_file", "edit_sandbox_file", "run_sandbox_tests", "record_workroom_evidence"],
+    allowedPaths: [allowedPath], issuedAt: issuedAt.toISOString(),
+    expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(), maxStarts: 1, maxDurationMs: 15 * 60_000,
+  };
+  return { toolName: "claim_workroom_scope", workroomId: room.capsuleId,
+    qualificationAdmissionToken: createQualificationExperimentAdmission(binding),
+    bindingDigest: qualificationBindingDigest(binding), binding };
+}
+
 export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadBacklogBody: async (itemId) => (await prisma.backlogItem.findUnique({
     where: { itemId }, select: { body: true },
@@ -457,6 +522,7 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   discoverCommitRange: (args) => discoverCommitRangeArtifact(args),
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
   loadPlanArtifact: loadPlanReviewArtifact,
+  resolveQualificationAdmission: defaultResolveQualificationAdmission,
 };
 
 import { classifyHistoricalObjectiveMappingArtifacts } from "./objective-mapping-history-artifacts";
@@ -488,6 +554,24 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const researchLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "RESEARCH_REQUIRED");
   if (researchLane) {
+    const qualification = await ports.resolveQualificationAdmission?.({
+      itemId: args.decision.subject.id,
+      refusedWorkroomId: args.refusedWorkroomId,
+      currentAgentId: args.currentAgentId,
+    });
+    if (qualification) {
+      return {
+        ...researchLaneEscalation(),
+        qualificationAdmission: qualification,
+        escalations: [{
+          accountableRole: "design-author",
+          toolName: "claim_workroom_scope",
+          grant: "backlog_write",
+          reason: "research-evidence-required",
+          nextAction: "Replay the opaque server-issued qualificationAdmissionToken through claim_workroom_scope on the named Workroom. This admits one bounded test-only experiment and does not satisfy research.",
+        }],
+      };
+    }
     return researchLaneEscalation();
   }
   const roomArgs = {

@@ -13,9 +13,11 @@ const QUALIFICATION = { schemaVersion: 1 as const, phase: "prepare" as const, it
   repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40),
   protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
   installationId: "install-dev", accountablePrincipalRef: "principal:owner", authorityDecisionId: "AUTH-1",
+  shapeKey: STAGE.shapeKey, shapeVersion: STAGE.shapeVersion, stageKey: STAGE.stageKey, policyVersion: 1 as const,
+  targetProductionBlobIds: ["d".repeat(40)],
   permittedTools: ["read_codebase_manifest", "list_patch_posture"],
-  allowedPaths: ["apps/web/lib/qualification.test.ts"], issuedAt: "2026-10-28T19:00:00.000Z",
-  expiresAt: "2026-10-28T20:00:00.000Z", maxStarts: 1 as const, maxDurationMs: 600_000 };
+  allowedPaths: ["apps/web/lib/qualification.test.ts"], issuedAt: "2026-01-28T19:00:00.000Z",
+  expiresAt: "2027-01-28T20:00:00.000Z", maxStarts: 1 as const, maxDurationMs: 600_000 };
 
 describe("workroom stage taskConfig record", () => {
   it("round-trips through the reader", () => {

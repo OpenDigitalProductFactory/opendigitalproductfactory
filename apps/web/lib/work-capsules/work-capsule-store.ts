@@ -700,6 +700,8 @@ export async function claimWorkCapsuleScope(args: {
   now?: Date;
   /** Deliberately co-claim despite an overlap with another active capsule. */
   force?: boolean;
+  /** Signed, server-issued qualification admission stored atomically with the scope claim. */
+  qualificationAdmissionToken?: string;
   /** Prospective, advisory impact derived before the scope write. */
   buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
 }) {
@@ -707,6 +709,27 @@ export async function claimWorkCapsuleScope(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  let qualificationState: import("@/lib/backlog/initiative-readiness/qualification-research-admission").QualificationExperimentState | null = null;
+  if (args.qualificationAdmissionToken) {
+    const { qualificationBindingDigest, verifyQualificationExperimentAdmission } =
+      await import("@/lib/backlog/initiative-readiness/qualification-research-admission");
+    const verified = verifyQualificationExperimentAdmission(args.qualificationAdmissionToken, { now: args.now });
+    if (!verified.ok) throw new Error(verified.error);
+    if (verified.admission.binding.workroomId !== args.capsuleId
+      || verified.admission.binding.itemId !== capsule.backlogItemId
+      || verified.admission.binding.repositoryFullName !== capsule.repositoryFullName
+      || verified.admission.binding.baseSha.toLowerCase() !== capsule.baseSha?.toLowerCase()
+      || verified.admission.binding.headSha.toLowerCase() !== capsule.headSha?.toLowerCase()
+      || verified.admission.binding.accountablePrincipalRef !== args.actor.principalId) {
+      throw new Error("Qualification admission does not match the live Workroom identity.");
+    }
+    qualificationState = {
+      schemaVersion: 1, status: "issued", token: args.qualificationAdmissionToken,
+      bindingDigest: qualificationBindingDigest(verified.admission.binding), startCount: 0,
+      issuedAt: verified.admission.binding.issuedAt,
+    };
+  }
 
   // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
   // (the abandoned-main false-success path landed claims on an unrelated WC).
@@ -760,10 +783,14 @@ export async function claimWorkCapsuleScope(args: {
     build: args.buildChangeImpactContract,
   });
   return inTransaction(args.db, async (tx) => {
+    const workspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+      ? capsule.workspaceState as Record<string, unknown> : {};
     const updated = await tx.workroom.update({
       where: scopeWriteWhere(capsule),
       data: {
         scopeClaims,
+        ...(qualificationState ? { workspaceState: { ...workspaceState,
+          qualificationExperimentAdmission: qualificationState } } : {}),
         ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
       },
     });
@@ -777,6 +804,7 @@ export async function claimWorkCapsuleScope(args: {
       payload: {
         added,
         refreshed,
+        ...(qualificationState ? { qualificationBindingDigest: qualificationState.bindingDigest } : {}),
         ...(conflicts.length > 0 ? { forcedOverConflicts: conflicts } : {}),
       },
       actor: args.actor,

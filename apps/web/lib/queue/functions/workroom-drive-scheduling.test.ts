@@ -11,7 +11,9 @@ describe("dispatch identity across sequential stages", () => {
     const tx = {
       workroom: {
         updateMany: vi.fn(async () => ({ count: 1 })),
-        findUnique: vi.fn(async () => ({ workspaceState, objective: "Review evidence" })),
+        findUnique: vi.fn(async () => ({ workspaceState, objective: "Review evidence", capsuleId: "WC-TEST",
+          backlogItemId: "BI-TEST", repositoryFullName: "owner/repo", baseSha: "a".repeat(40),
+          headSha: "b".repeat(40), leaseHolderPrincipalId: "principal" })),
         update: vi.fn(async ({ data }) => { workspaceState = data.workspaceState; }),
       },
       scheduledAgentTask: {

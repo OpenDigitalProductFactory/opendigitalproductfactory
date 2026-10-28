@@ -4,6 +4,8 @@ import { isWorkCapsuleEvidenceKind, type WorkCapsuleEvidenceKind, type WorkCapsu
 
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { buildStageEvidenceBinding } from "@/lib/work-management/workroom-stage-evidence-binding";
+import { isRecord } from "@/lib/shared/coerce";
+import { parseQualificationExperimentState } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 export async function recordWorkCapsuleActivity(
   db: CapsuleDb,
@@ -74,10 +76,27 @@ export async function recordWorkCapsuleEvidence(args: {
     const capsule = await tx.workroom.findUnique({ where: { capsuleId } });
     if (!capsule) throw new Error(`Work Capsule ${capsuleId} not found`);
     const sourceBinding = buildStageEvidenceBinding({ ...capsule, capsuleId }, evidence);
-    return recordWorkCapsuleActivity(tx, {
+    const qualificationResult = isRecord(evidence.result) ? evidence.result : null;
+    const qualificationDigest = typeof qualificationResult?.qualificationBindingDigest === "string"
+      ? qualificationResult.qualificationBindingDigest : null;
+    const workspace = isRecord(capsule.workspaceState) ? capsule.workspaceState : {};
+    const qualificationState = qualificationDigest
+      ? parseQualificationExperimentState(workspace.qualificationExperimentAdmission) : null;
+    if (qualificationDigest && (!qualificationState || qualificationState.status !== "started"
+      || qualificationState.bindingDigest !== qualificationDigest)) {
+      throw new Error("Qualification evidence is stale, duplicated, or bound to another experiment.");
+    }
+    const activity = await recordWorkCapsuleActivity(tx, {
       workCapsuleId: capsule.id, kind: "evidence-recorded", summary: evidence.summary,
       payload: { ...evidence, sourceBinding }, actor: args.actor,
     }, { deferPublication: true });
+    if (qualificationState) {
+      await tx.workroom.update({ where: { id: capsule.id }, data: { workspaceState: {
+        ...workspace,
+        qualificationExperimentAdmission: { ...qualificationState, status: "settled", evidenceId: activity.id },
+      } } });
+    }
+    return activity;
   };
   const activity = args.db.$transaction ? await args.db.$transaction(write) : await write(args.db);
   if (!args.deferPublication) {

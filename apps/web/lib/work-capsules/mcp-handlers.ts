@@ -225,6 +225,7 @@ export async function claimCapsuleScopeTool(
   }
 
   const force = params["force"] === true;
+  const qualificationAdmissionToken = stringParam(params, "qualificationAdmissionToken") ?? undefined;
   const db = workCapsuleDb();
   let renewedCapsule;
   try {
@@ -238,6 +239,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        qualificationAdmissionToken,
         buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
