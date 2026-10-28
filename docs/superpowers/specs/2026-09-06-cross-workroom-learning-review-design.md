@@ -617,6 +617,56 @@ A whole-file replacement from the retained branch would lose those changes. Reco
 the current base again when actual delivery admission exists. Reuse canonical identity,
 admission, profile composition and disclosure, retaining section 12's refactoring share.
 
+**Captured source-facts increment: BI-D02868D7.** This Medium platform feature is
+triaging under EP-C00F61F4. It succeeds only the unpublished occurrence-context scope,
+not the completed definition catalogue. The parent keeps its four objectives and
+twelve full acceptance cases; no old baseline or implementation claim is inherited.
+
+The chosen design extends the existing selected-room loader and localized Details
+disclosure. A second registry or policy composer would duplicate authority and is
+rejected. Treating booking facts as applicable obligations is also rejected: source
+facts are inputs, while governed composition remains separate work. No schema
+migration is proposed. Actual source impact and compatibility must be rechecked
+under a fresh admitted delivery binding before implementation.
+
+The increment has five observable acceptance checks:
+
+- I1: Missing, denied, thrown or absent exact-room content admission performs no
+  subject lookup, including private recovery. A reused admission decision is valid
+  only for the same selected row; existing workforce source authority still applies.
+- I2: Admitted lookup resolves only the selected booking's organization, storefront,
+  archetype and composition facts. One relation read takes 33 to detect a 32-entry
+  ceiling; provenance is bounded to 128 KiB. Conflicts, incomplete, denied or
+  unavailable facts remain unknown; removed and inactive entries are excluded.
+- I3: Existing localized Details shows attributable source facts, applicability
+  unknown and assessment not-exercised. It adds no controls, passed-review label or
+  review-cycle write. Verify changed rendered behavior, keyboard access and themes
+  on the containing installed revision under actual admission.
+- I4: A fresh normally admitted delivery binding reconciles current main and
+  preserves its gateGoverned/executor projection and load-trend localization.
+  Retained source is evidence, not an import instruction or scope claim. Exact
+  changed-tree checks, protected publication and installed observations retain
+  separate attribution.
+- I5: Completed-child history and parent section 12 criteria remain unchanged.
+  Source-fact evidence contributes to AC-02, AC-09 and AC-11 without claiming their
+  full completion. Governed facet/category/leaf/organization obligations,
+  historical profile composition and the full forbidden-action matrix stay outside
+  this increment.
+
+BI-B3DEC077 and its supported failure disposition remain delivery prerequisites;
+BI-2664971A owns the separate qualification-admission repair. Neither a policy
+change nor a controlled sensitivity result proves the original EPERM cause.
+Current research, design, plan coverage, exact scope and implementation admission
+remain required. No new review may replace or settle an original held execution.
+Documentation readiness is a separate publication step and does not prevent
+admitted source/criteria/overlap planning.
+
+Creation suggestions BI-C020360A, BI-756C899D and BI-4A06271B were read: they concern
+stakeholder-coverage invalidation, effective progress clocks and execution
+continuation briefs respectively. Their existing owners retain those mechanisms;
+none of the inspected bodies supplies this exact occurrence source-facts outcome.
+
+
 **Next ordinary steps.** Preserve this source reconciliation, obtain the actual
 immutable design identity, and follow the current governed design/coverage obligations.
 Do not request a replacement for any unsettled original review or infer its settlement
