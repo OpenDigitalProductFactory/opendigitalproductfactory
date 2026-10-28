@@ -125,15 +125,15 @@ What that means for an exercise:
   - Values go through the research path for confirmation.
   - Gaps the slot model itself could not express become BIs scoped `common` or `platform`, not leaf.
   - A second jurisdiction that surfaces no new slot is the signal the model has converged for that outcome.
-- **English-speaking countries first.** The default test set is:
-  1. United States (sub-national; start with US-TX);
-  2. United Kingdom (GB-ENG);
-  3. Canada (CA-ON);
-  4. Australia (AU-NSW);
-  5. then Ireland (IE) and New Zealand (NZ).
+- **Ship the capability, not a jurisdiction library.** What ships is:
+  - the archetype's rule slots;
+  - the setup-time investigation (cited research plus human confirmation) that the implementing organization's own install runs to fill those slots.
 
-  Language stays constant, so differences are legal and financial, not translation. Non-English jurisdictions follow once a slot set has held across this set.
-- **Archetypes in the queue (§3).** Each exercise of trades, asset rental and professional services runs at least two jurisdictions from the default set. Restaurant and pet rescue are re-run against the set when their next exercise is due.
+  Test jurisdictions prove and improve that investigation; they are not shipped value packs. Only new slots and generic values fold back into the platform. A cited, provenance-tagged starter set for a test jurisdiction is fine. A comprehensive out-of-the-box jurisdiction library is out of scope: it is too large to build now and would have to be maintained forever.
+- **Test order: US states first.** Start with the test install's own state: US-TX for the operator's DEV install, which is in Texas. Then test other US states. **Everywhere else runs on the archetype's generic default pack** until the founder extends the order.
+
+  > *Superseded:* an earlier statement the same day put English-speaking countries first (US-TX, GB-ENG, CA-ON, AU-NSW, then IE, NZ). The founder's later answer, "model US states first (start with the dev install's state), using the generic default pack elsewhere", replaces it. GB-ENG, CA-ON, AU-NSW, IE and NZ are not scheduled.
+- **Prove it once, then apply it everywhere.** Rescue adoption is the first outcome to run this loop. Once it has converged, every archetype in §3 adopts the same loop. Each exercise of trades, asset rental and professional services runs its outcome in at least two US states. Restaurant and pet rescue are re-run when their next exercise is due.
 
 | Archetype | Outcome under test | Exercised | Jurisdictions run |
 | --- | --- | --- | --- |

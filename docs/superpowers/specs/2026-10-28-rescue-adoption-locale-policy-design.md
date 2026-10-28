@@ -166,14 +166,9 @@ The slots in §5.2 are the platform's statement of *the need*. They are not comp
 4. Send values through the cited, human-confirmed research path (BI-50DF2A92).
 5. A jurisdiction that surfaces no new slot is the signal that the model has converged for adoption.
 
-The test order is English-speaking first:
-1. US-TX;
-2. GB-ENG;
-3. CA-ON;
-4. AU-NSW;
-5. then IE and NZ.
+**Test order:** US states first. Start with the DEV install's own state, US-TX, then other US states. Every other place runs on the generic default pack until the founder extends the order. This supersedes an earlier same-day order of English-speaking countries; see the playbook §6.
 
-Non-English jurisdictions follow once the slot set holds across this group. No code path ever branches on a country.
+**What ships is the capability, not a jurisdiction library:** the slots, plus the setup-time investigation (§5.3) that the implementing organization's install runs. Test jurisdictions improve that investigation. A cited starter set for a test jurisdiction may be seeded with provenance, but no comprehensive out-of-the-box library ships. No code path ever branches on a country.
 
 ## 6. Research and benchmarking
 
@@ -200,7 +195,7 @@ Non-English jurisdictions follow once the slot set holds across this group. No c
 | OBJ-2 Locale from setup | After "How you place animals", every slot has a provenance. Slots with an applicable confirmed `Regulation` cite it. | DB read of `AdoptionPolicy`; setup step test |
 | OBJ-3 Rules travel with the record | Changing the policy does not change an open application's rules; the snapshot shows the pack and policy version | Unit test |
 | OBJ-4 Two jurisdictions | Two fixture jurisdictions (`XX-AA`, `XX-BB`, synthetic authorities) produce different readiness lists, agreements and fees, and both complete | Test; no real law asserted |
-| OBJ-7 Learned by pattern | The adoption outcome is exercised in US-TX and GB-ENG under the playbook §6 loop; slot findings are recorded, and missing slots land in the generic pack | Exercise report with slot findings; pack version bump |
+| OBJ-7 Learned by pattern | The adoption outcome is exercised in US-TX and one other US state under the playbook §6 loop; slot findings are recorded, and missing slots land in the generic pack | Exercise report with slot findings; pack version bump |
 | OBJ-5 Money is right | The fee is in org currency, and a paid fee reaches Finance with the policy's receipt kind | Test plus live check after BI-D649585A |
 | OBJ-6 Gaps are visible | Skipped or default slots are counted on the cockpit and setup checklist | UI test |
 
@@ -230,5 +225,5 @@ Related defects found in the same walkthrough:
 
 ## 10. Decisions for the founder
 
-1. **Which jurisdictions to model first — answered 2026-10-28.** None is modelled up front. The platform knows the need, and gaps close by testing a few jurisdictions and folding in the pattern, English-speaking countries first (§5.5). This rule applies to all archetypes and lives in the archetype exercise playbook §6.
+1. **Which jurisdictions to model first — answered 2026-10-28.** No jurisdiction library ships. The platform knows the need, and gaps close by testing a few jurisdictions and folding in the pattern. The founder's latest answer sets the order: US states first, starting with the DEV install's state (US-TX), and the generic default pack everywhere else (§5.5). It supersedes an earlier same-day "English-speaking countries first". The rule applies to all archetypes and lives in the archetype exercise playbook §6.
 2. **Open:** whether DPF should offer a payment processor integration at all for adoption fees, or only record payments taken elsewhere. This is a financial and vendor decision.
