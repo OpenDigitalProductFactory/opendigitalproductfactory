@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildDestinationResetSql,
+  buildSanitizedCursorQuery,
   buildSourceCopyArgs,
   buildDestinationCopyArgs,
   buildCompatibleSanitizedSelectList,
@@ -413,5 +414,25 @@ describe("table classification helpers", () => {
     expect(shouldObfuscateTable("SomeNewTable")).toBe(true);
     expect(shouldCopyTable("SomeNewTable")).toBe(false);
     expect(shouldSkipTable("SomeNewTable")).toBe(false);
+  });
+});
+
+
+describe("confidential cursor order", () => {
+  it("streams by the original key while retaining the ordinal as a tie breaker", () => {
+    const sql = buildSanitizedCursorQuery("QueueTelemetryEvent", '"id", "name"', new Set(["id", "name"]));
+    expect(sql).toMatch(/ORDER BY r\."id" ASC, r\."__dpfCloneRowOrder"$/);
+  });
+
+  it("keeps the audit cohort and descending original keys", () => {
+    const sql = buildSanitizedCursorQuery("Audit", '"id", "createdAt"', new Set(["id", "createdAt"]), 50);
+    expect(sql).toContain('ORDER BY "createdAt" DESC, "id" DESC LIMIT 50');
+    expect(sql).toMatch(/ORDER BY r\."createdAt" DESC, r\."id" DESC, r\."__dpfCloneRowOrder"$/);
+  });
+
+  it("preserves the physical-order fallback when no projected ordering key exists", () => {
+    const sql = buildSanitizedCursorQuery("NoId", '"userId"', new Set(["userId"]));
+    expect(sql).toContain('row_number() OVER (ORDER BY ctid)');
+    expect(sql).toMatch(/ORDER BY r\."__dpfCloneRowOrder"$/);
   });
 });
