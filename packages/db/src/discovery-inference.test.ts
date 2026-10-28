@@ -70,7 +70,7 @@ describe("inferCrossCollectorRelationships", () => {
     expect(hostRels[0].attributes?.inferred).toBe(true);
   });
 
-  it("creates RUNS_ON from host to docker_host", () => {
+  it("links the OS host and the docker_host record as one machine with SAME_AS (BI-92804832)", () => {
     const input: CollectorOutput = {
       items: [
         {
@@ -91,8 +91,9 @@ describe("inferCrossCollectorRelationships", () => {
 
     const result = inferCrossCollectorRelationships(input);
 
+    expect(result.relationships.some((r) => r.relationshipType === "RUNS_ON")).toBe(false);
     const runsOn = result.relationships.find(
-      (r) => r.relationshipType === "RUNS_ON",
+      (r) => r.relationshipType === "SAME_AS",
     );
     expect(runsOn).toBeDefined();
     expect(runsOn!.fromExternalRef).toBe("host:dpf-dev");
