@@ -104,3 +104,15 @@ export function techDebtOutcome(title: string): string {
 export function recurringFailureOutcome(what: string): string {
   return `${what.trim()} stops recurring: the next run that used to fail succeeds.`;
 }
+
+/** An improvement proposal filed as work: the friction it names stops, or the proposal is in place. */
+export function improvementProposalOutcome(proposal: {
+  title: string;
+  proposalId: string;
+  observedFriction?: string | null;
+}): string {
+  const friction = text(proposal.observedFriction);
+  return friction
+    ? `The friction this proposal names no longer happens: ${friction}`
+    : `"${proposal.title.trim()}" is in place, as proposed in ${proposal.proposalId}.`;
+}
