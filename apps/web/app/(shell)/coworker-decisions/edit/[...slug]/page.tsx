@@ -19,18 +19,24 @@ import {
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
 import { WikiPageEditor } from "@/components/wiki/WikiPageEditor";
+import { prepareLinkMention } from "@/lib/wiki/link-mention";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ slug: string[] }>;
+type SearchParams = Promise<{ linkTo?: string | string[] }>;
 
 export default async function WikiPageEditRoute({
   params,
+  searchParams,
 }: {
   params: Params;
+  searchParams?: SearchParams;
 }) {
   const { slug: slugParts } = await params;
   const slug = slugParts.join("/");
+  const linkToParam = (await searchParams)?.linkTo;
+  const linkTo = typeof linkToParam === "string" && linkToParam.length > 0 ? linkToParam : null;
 
   const organization = await prisma.organization.findFirst({
     select: { id: true },
@@ -56,13 +62,25 @@ export default async function WikiPageEditRoute({
   });
 
   if (overlay) {
+    // "Link it" from the backlinks panel (BI-4EAFF7AC): open with the first
+    // mention of the target wrapped for the person to review. Nothing is saved
+    // until they save. Only overlay pages get here; kernel pages never do (R7).
+    const target = linkTo
+      ? await prisma.wikiPage.findFirst({
+          where: { slug: linkTo, OR: [{ organizationId: organization.id }, { organizationId: null }] },
+          select: { slug: true, title: true },
+        })
+      : null;
+    const prepared = target ? prepareLinkMention(overlay.body, target) : null;
     return (
       <WikiPageEditor
         mode="update"
         pageId={overlay.id}
         initialSlug={overlay.slug}
         initialTitle={overlay.title}
-        initialBody={overlay.body}
+        initialBody={prepared?.body ?? overlay.body}
+        notice={prepared?.notice ?? null}
+        initialChangeSummary={prepared?.changeSummary}
         initialPageKind={overlay.pageKind as WikiPageKind}
         initialStatus={overlay.status as WikiPageStatus}
         initialAbstract={overlay.abstract}

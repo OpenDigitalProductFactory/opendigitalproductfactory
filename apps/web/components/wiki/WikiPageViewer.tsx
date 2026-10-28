@@ -13,6 +13,9 @@ import {
 
 import { LocalTime } from "@/components/ui/LocalTime";
 
+import type { WikiBacklinks } from "@/lib/wiki/backlinks";
+
+import { WikiBacklinksPanel } from "./WikiBacklinksPanel";
 import { WikiBodyRenderer } from "./WikiBodyRenderer";
 import { WikiPageKindBadge } from "./WikiPageKindBadge";
 import { WikiSourceCitations, type WikiSourceCitation } from "./WikiSourceCitations";
@@ -76,6 +79,8 @@ const APPLIES_TO_LABEL: Record<string, string> = {
 
 type Props = {
   page: WikiPageDetail;
+  /** Inbound links and unlinked mentions, already limited to what the reader may open (BI-4EAFF7AC). */
+  backlinks?: WikiBacklinks;
 };
 
 function formatOrigin(page: WikiPageDetail): string {
@@ -182,9 +187,12 @@ function PrincipleMetadataPanel({ page }: { page: WikiPageDetail }): ReactNode {
   );
 }
 
-export function WikiPageViewer({ page }: Props): ReactNode {
+export function WikiPageViewer({ page, backlinks }: Props): ReactNode {
+  // Wide screens: the page, then a right-hand "Linked from" column. Narrow
+  // screens: the panel follows the page body (spec 2026-10-14 §4.2).
   return (
-    <article className="max-w-3xl mx-auto py-6 px-4">
+    <div className="mx-auto max-w-6xl px-4 py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-8">
+    <article className="min-w-0 max-w-3xl">
       <nav className="mb-3 text-xs text-[var(--dpf-muted)] flex items-center justify-between">
         <Link href="/coworker-decisions" className="hover:underline">
           ← Wiki
@@ -241,5 +249,13 @@ export function WikiPageViewer({ page }: Props): ReactNode {
         Updated <LocalTime value={page.updatedAt} mode="date" />
       </footer>
     </article>
+    {backlinks ? (
+      <aside aria-label="Backlinks" className="mt-8 lg:mt-0">
+        <div className="lg:sticky lg:top-6">
+          <WikiBacklinksPanel backlinks={backlinks} />
+        </div>
+      </aside>
+    ) : null}
+    </div>
   );
 }

@@ -6,6 +6,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 
 import { WikiPageViewer, type WikiPageDetail } from "@/components/wiki/WikiPageViewer";
+import { loadWikiBacklinks, type WikiReader } from "@/lib/wiki/backlinks";
+import { resolveReaderOrganizationId } from "@/lib/wiki/reader-organization";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +35,10 @@ export default async function WikiPageDetailRoute({ params }: { params: Params }
   const { slug: slugParts } = await params;
   const slug = slugParts.join("/");
 
-  const organization = await prisma.organization.findFirst({ select: { id: true } });
-  const organizationId = organization?.id ?? null;
+  // R2 (spec 2026-10-14 knowledge-linking §2): the reader's organization, from a
+  // seam that fails closed on a multi-organization install, never "the first
+  // organization" (BI-4EAFF7AC; session membership is BI-1B4AB42A).
+  const organizationId = await resolveReaderOrganizationId(prisma);
 
   // findFirst rather than findUnique because Prisma's compound-key
   // findUnique doesn't accept `organizationId: null` for the kernel
@@ -83,5 +87,8 @@ export default async function WikiPageDetailRoute({ params }: { params: Params }
     })),
   };
 
-  return <WikiPageViewer page={detail} />;
+  const reader: WikiReader = { organizationId, professionFamilies: null, familyKey: null };
+  const backlinks = await loadWikiBacklinks(prisma, { page: row, reader });
+
+  return <WikiPageViewer page={detail} backlinks={backlinks} />;
 }
