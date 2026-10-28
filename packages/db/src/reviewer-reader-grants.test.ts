@@ -48,3 +48,15 @@ describe("reviewer agents can read what they review", () => {
     expect(holders("initiative_data_review")).toContain("AGT-902");
   });
 });
+
+// BI-AA8EE6CE: the primary reviewer can itself be a delivery actor.
+describe("independent post-implementation reviewer coverage", () => {
+  it("retains another eligible reviewer when Change Reviewer delivered the repair", () => {
+    const eligible = AGENTS.filter(agent => {
+      const grants = effectiveGrants(agent);
+      return agent.agent_id !== "AGT-WS-REVIEW"
+        && grants.has("initiative_design_review") && grants.has("file_read");
+    });
+    expect(eligible.map(agent => agent.agent_id)).toContain("AGT-132");
+  });
+});
