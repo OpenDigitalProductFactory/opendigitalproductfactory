@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify, parseArgs } from 'node:util';
-import { mkdir, writeFile, open, realpath, lstat } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { mkdir, writeFile, open, realpath, lstat, mkdtemp, rename } from 'node:fs/promises';
+import { join, dirname, resolve } from 'node:path';
 import { canonicalJson } from '../../scripts/lib/canonical-json.mjs';
 import { isEntryModule } from '../../scripts/lib/entry-module.mjs';
 import { protectedDirectory, protectedRead } from '../../scripts/installer/recovery-filesystem.mjs';
@@ -36,9 +36,14 @@ function contractValid(contract) {
 
 // This builds source artifacts, never a daemon or a live install. Immutable Git
 // objects are the input even if a sibling checkout advances during staging.
-export async function buildNativeControllerPackage({ repoRoot, sourceSha, destination, nodePath = process.execPath }) {
+export async function buildNativeControllerPackage({ repoRoot, sourceSha, destination, nodePath = process.execPath, reuseVerified = false }) {
   check(/^[a-f0-9]{40}$/.test(sourceSha ?? ''), 'Exact controller source commit required');
-  destination = await unusedOutput(destination);
+  const existing = await lstat(resolve(destination)).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  if (existing) {
+    check(reuseVerified, 'Output already exists');
+    await unusedOutput(join(resolve(destination), '.dpf-unused-output-validation'));
+  }
+  const finalDestination = existing ? resolve(destination) : await unusedOutput(destination);
   repoRoot = await realpath(repoRoot); nodePath = await realpath(nodePath);
   const env = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' };
   const commit = await execute('git', ['-C', repoRoot, 'rev-parse', '--verify', sourceSha + '^{commit}'], { env, timeout: 5000 });
@@ -46,7 +51,10 @@ export async function buildNativeControllerPackage({ repoRoot, sourceSha, destin
   const nodeVersion = (await execute(nodePath, ['--version'], { env: safeEnvironment(), timeout: 5000 })).stdout.trim();
   const version = nodeVersion.match(/^v(\d+)\.(\d+)\.(\d+)$/);
   check(version && (Number(version[1]) > 22 || Number(version[1]) === 22 && Number(version[2]) >= 18), 'Controller requires Node >=22.18');
-  await mkdir(destination, { mode: 0o700 });
+  if (existing) return reuseCommittedController({ root: finalDestination, repoRoot, sourceSha, nodePath, nodeVersion, env });
+  // A failed build leaves private staging evidence, never a partially
+  // published source-version directory that blocks a supported retry.
+  destination = await mkdtemp(join(dirname(finalDestination), '.native-controller-'));
   const files = [];
   for (const path of CONTROLLER_SOURCE_FILES) {
     const { stdout } = await execute('git', ['-C', repoRoot, 'cat-file', 'blob', sourceSha + ':' + path],
@@ -79,8 +87,39 @@ export async function buildNativeControllerPackage({ repoRoot, sourceSha, destin
     try { await directory.sync(); } finally { await directory.close(); }
   }
   await verifyNativeControllerPackage({ root: destination, expectedManifestSha256: manifestSha256, sourceSha });
-  return { directory: await realpath(destination), sourceSha, manifestSha256, nodePath, nodeSha256: manifest.node.sha256,
-    entrypoint, activationAuthorized: false };
+  check(!await lstat(finalDestination).catch(error => { if (error.code === 'ENOENT') return null; throw error; }), 'Controller destination became occupied');
+  await rename(destination, finalDestination);
+  const parent = await open(dirname(finalDestination), 'r');
+  try { await parent.sync(); } finally { await parent.close(); }
+  return { directory: await realpath(finalDestination), sourceSha, manifestSha256, nodePath, nodeSha256: manifest.node.sha256,
+    entrypoint, activationAuthorized: false, reused: false };
+}
+
+async function reuseCommittedController({ root, repoRoot, sourceSha, nodePath, nodeVersion, env }) {
+  const raw = await protectedRead(join(await protectedDirectory(root), 'controller-manifest.json'));
+  const manifest = JSON.parse(raw.toString());
+  const nodeSha256 = await hashFile(nodePath);
+  check(manifest.node?.path === nodePath && manifest.node.version === nodeVersion && manifest.node.sha256 === nodeSha256,
+    'Committed controller Node runtime changed; stage a new published source version');
+  const files = [];
+  for (const path of CONTROLLER_SOURCE_FILES) {
+    const { stdout } = await execute('git', ['-C', repoRoot, 'cat-file', 'blob', sourceSha + ':' + path],
+      { env, encoding: 'buffer', timeout: 5000, maxBuffer: 512 * 1024 });
+    files.push({ path, sizeBytes: stdout.length, sha256: sha256(stdout) });
+  }
+  const bytes = canonicalJson({ private: true, type: 'module' });
+  files.push({ path: 'package.json', sizeBytes: Buffer.byteLength(bytes), sha256: sha256(bytes) });
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  check(canonicalJson(manifest.files) === canonicalJson(files), 'Controller bytes differ from committed source');
+  const manifestSha256 = sha256(raw);
+  await verifyNativeControllerPackage({ root, expectedManifestSha256: manifestSha256, sourceSha });
+  const inert = await execute(nodePath, [join(root, entrypoint), '--print-controller-contract'],
+    { cwd: root, env: safeEnvironment(), timeout: 15000, maxBuffer: 65536 });
+  const contract = JSON.parse(inert.stdout);
+  const expected = { schemaVersion: 1, packageName: 'dpf-native-inference-controller', version: '1', sourceSha, entrypoint,
+    node: { path: nodePath, version: nodeVersion, sha256: nodeSha256 }, contract, files, activationAuthorized: false };
+  check(contractValid(contract) && raw.toString() === canonicalJson(expected), 'Committed controller manifest changed');
+  return { directory: await realpath(root), sourceSha, manifestSha256, nodePath, nodeSha256, entrypoint, activationAuthorized: false, reused: true };
 }
 
 export async function verifyNativeControllerPackage({ root, expectedManifestSha256, sourceSha }) {
@@ -106,8 +145,8 @@ export async function verifyNativeControllerPackage({ root, expectedManifestSha2
 }
 
 async function main() {
-  const { values } = parseArgs({ strict: true, options: Object.fromEntries(['repo', 'source', 'out'].map(name => [name, { type: 'string' }])) });
+  const { values } = parseArgs({ strict: true, options: { ...Object.fromEntries(['repo', 'source', 'out'].map(name => [name, { type: 'string' }])), reuse: { type: 'boolean' } } });
   for (const name of ['repo', 'source', 'out']) check(values[name], 'Controller build arguments incomplete');
-  process.stdout.write(JSON.stringify(await buildNativeControllerPackage({ repoRoot: values.repo, sourceSha: values.source, destination: values.out })) + '\n');
+  process.stdout.write(JSON.stringify(await buildNativeControllerPackage({ repoRoot: values.repo, sourceSha: values.source, destination: values.out, reuseVerified: values.reuse === true })) + '\n');
 }
 if (isEntryModule(import.meta.url)) main().catch(error => { process.stderr.write(error.message + '\n'); process.exitCode = 1; });

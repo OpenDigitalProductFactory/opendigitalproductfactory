@@ -2,10 +2,17 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { canonicalizeEdgeActionEnvelope, type SignedEdgeActionEnvelope } from "@dpf/db/edge-action-envelope";
 import type { EdgeActionEnvelope } from "@dpf/db/edge-action-envelope";
-import { issueManagedInferenceAdmission, type ManagedInferenceAdmissionSnapshot } from "./managed-inference-admission";
+import { issueManagedInferenceAdmission, managedInferenceProviderDigest, type ManagedInferenceAdmissionSnapshot } from "./managed-inference-admission";
 
 const now = new Date("2026-10-28T22:00:00Z");
 const digest = "a".repeat(64);
+it("binds material provider settings without mistaking routine health timestamps for configuration changes", () => {
+  const provider = { baseUrl: "http://model-runner.docker.internal/v1", maxContextTokens: 131072, status: "active", updatedAt: new Date(0), modelRestrictions: ["same-model"] };
+  const original = managedInferenceProviderDigest(provider, {});
+  expect(managedInferenceProviderDigest({ ...provider, updatedAt: new Date(), status: "inactive" }, {})).toBe(original);
+  expect(managedInferenceProviderDigest({ ...provider, maxContextTokens: 32768 }, {})).not.toBe(original);
+  expect(() => managedInferenceProviderDigest({ ...provider, baseUrl: "http://different-host/v1" }, {})).toThrow();
+});
 function fixture() {
   const envelope: SignedEdgeActionEnvelope = {
     version: "dpf.edge-action/1", signingKeyId: "key", signature: "original-signature",

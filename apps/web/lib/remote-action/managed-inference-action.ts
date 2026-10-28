@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { MANAGED_INFERENCE_ACTION_TYPE, parseManagedInferenceTransitionParameters, type ManagedInferenceTransitionParameters } from "@dpf/db/remote-action-dispatch";
 import { isRecord } from "@/lib/shared/coerce";
 import type { ManagedInferenceAdmissionSnapshot } from "./managed-inference-admission";
+export { managedInferenceReportSettlement } from "./managed-inference-request";
 
 type Lease = NonNullable<ManagedInferenceAdmissionSnapshot["lease"]>;
 export const MANAGED_INFERENCE_UNSETTLED_WHERE = {
@@ -78,13 +79,4 @@ export function buildManagedInferenceOffer(input: {
     ? "Pause new local work, switch this Mac to the tested engine, and verify it before accepting requests. Keep the current models and settings. Restore Docker if the switch fails."
     : "Pause new local work, stop the managed engine, and restore Docker with the recorded model settings. Verify restoration before accepting requests.";
   return { ...c, token, impact: impact + (c.needsNodeGrant ? " Also allow this host agent to perform this managed engine procedure." : "") };
-}
-
-/** A reported failure releases the global pause only after a positive owned
- * restoration. Unknown child/authority outcomes keep the local fence intact. */
-export function managedInferenceReportSettlement(outcome: string, evidence: unknown): "succeeded" | "failed-restored" | "unknown" {
-  if (!isRecord(evidence) || evidence.settlement !== "confirmed") return "unknown";
-  if (outcome === "succeeded" && ["active", "rolled-back"].includes(String(evidence.nativeStatus))) return "succeeded";
-  if (outcome === "failed" && ["failed-restored", "not-started"].includes(String(evidence.nativeStatus))) return "failed-restored";
-  return "unknown";
 }

@@ -49,7 +49,7 @@ _dpf_native_edge_prepare_managed_inference() {
   chmod 0700 "$state_root/native-inference-controller" || return 1
   controller_root="$state_root/native-inference-controller/$source_sha"
   baseline="$HOME/.docker/bin/inference/llama-server"
-  (umask 077; node "$source_dir/tools/mac-inference/runtime-controller-package.mjs" --repo "$repo_root" --source "$source_sha" --out "$controller_root" > "$source_dir/controller.json") || return 1
+  (umask 077; node "$source_dir/tools/mac-inference/runtime-controller-package.mjs" --repo "$repo_root" --source "$source_sha" --out "$controller_root" --reuse > "$source_dir/controller.json") || return 1
   node "$controller_root/tools/mac-inference/runtime-provision.mjs" --state-directory "$state_root" \
     --runtime-package "$runtime_package" --source "$source_sha" --report "$report" \
     --runtime-manifest-sha256 "$runtime_hash" --report-sha256 "$report_hash" --baseline-engine "$baseline" \

@@ -80,3 +80,13 @@ Keep one durable request identity from confirmation through a lost response and 
 Result delivery retains the server's original admission and signed-dispatch digest; a host cannot replace its QR/lease provenance. Terminal receipt delivery may be idempotent for that same original digest, never a host-effect replay or upgrade from unknown. Confirmed owned activation/rollback or prior-state restoration closes only its own pause and change record. Unknown cleanup remains held.
 
 This amendment does not reopen historical request/reviewer/upgrade lineages, authorize a new paid review, change models, reduce context or override a denied policy read. The fresh October 28 executable-file observation is still `/Users/markbodman/.docker/bin/inference/llama-server` SHA-256 `0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26`. The separate OCI image digest is not an executable SHA or mapped-process proof. Canonical integration, protected publication, native activation/rollback, useful DPF workflows and matched performance remain unrun for this implementation.
+
+## October 28 source audit closure
+
+The canonical start reservation and all owned level advances now share one PostgreSQL transaction lock. Owned clears retain their compare-and-set under that lock; level advances also lock and recheck their run row. A parked legacy coordinator cannot take a foreign reservation. The three actual PostgreSQL concurrency cases require the admitted local-CI slot URL; source mocks and skipped cases do not establish database concurrency acceptance.
+
+One timestamp-bound original request identity is saved before submission and retained after a lost response or browser reload. The authenticated readback uses the same admission lock, so expiry plus absent records cannot race late acceptance. Confirmed settlement alone permits another request. No new retry queue, history replay or runtime switch is implied by status observation.
+
+Routine provider health timestamps and active/inactive probes are excluded from the material configuration digest; endpoint, limits, models and retirement remain bound. Source-qualified installer retries verify the exact immutable Git closure, Node identity and inert contract before reusing a controller bundle. Fresh bundles are staged and verified before publishing their version directory. These checks execute no native service.
+
+The local web typecheck passed after removing a stale generated incremental cache; the same source also passed a fresh nonincremental check. This is source verification only. The engine installation, actual PostgreSQL cases, protected publication, activation, rollback and DPF workload acceptance still need their own receipts.

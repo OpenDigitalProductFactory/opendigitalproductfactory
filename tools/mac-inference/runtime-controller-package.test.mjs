@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, rm, chmod } from 'node:fs/promises';
+import { sha256 } from './package.mjs';
+import { canonicalJson } from '../../scripts/lib/canonical-json.mjs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,4 +58,19 @@ test('the supported installer CLI builds the same verified inert package', async
   const built = JSON.parse(result.stdout);
   assert.equal(built.sourceSha, f.sourceSha); assert.equal(built.activationAuthorized, false);
   assert.match(built.manifestSha256, /^[a-f0-9]{64}$/);
+});
+
+test('an installer retry reuses exact committed controller bytes and rejects a self-rehashed counterfeit', async t => {
+  const f = await fixture(t); const original = await buildNativeControllerPackage(f);
+  const reused = await buildNativeControllerPackage({ ...f, reuseVerified: true });
+  assert.equal(reused.manifestSha256, original.manifestSha256); assert.equal(reused.reused, true);
+  const path = join(f.destination, 'tools/mac-inference/runtime-authority.mjs');
+  const changed = Buffer.from((await readFile(path, 'utf8')) + '\n// changed\n');
+  await chmod(path, 0o600); await writeFile(path, changed);
+  const manifestPath = join(f.destination, 'controller-manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const record = manifest.files.find(row => row.path === 'tools/mac-inference/runtime-authority.mjs');
+  record.sizeBytes = changed.length; record.sha256 = sha256(changed);
+  await writeFile(manifestPath, canonicalJson(manifest));
+  await assert.rejects(buildNativeControllerPackage({ ...f, reuseVerified: true }), /committed|source/);
 });

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 682,
+  "routeCount": 683,
   "routes": [
     {
       "routePath": "/",
@@ -1552,6 +1552,17 @@
         "syncId"
       ],
       "file": "apps/web/app/api/platform/integrations/sync-progress/[syncId]/route.ts"
+    },
+    {
+      "routePath": "/api/platform/managed-inference",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "managed-inference"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/managed-inference/route.ts"
     },
     {
       "routePath": "/api/platform/metrics",

@@ -46,7 +46,7 @@ async function ManagedInferenceSection() {
   try {
     const offers = await getManagedInferenceOffers();
     const offer = offers.activate.available ? offers.activate : offers.rollback.available ? offers.rollback : offers.activate;
-    return <ManagedInferencePanel key={offer.available ? offer.token : "waiting"} offer={offer} />;
+    return <ManagedInferencePanel key={(offer.available ? offer.token : "waiting") + (offers.pendingRequestId ?? "")} offer={offer} initialRequestId={offers.pendingRequestId} />;
   } catch {
     return <Notice title="Local inference engine">Host engine details are unavailable. Refresh this page to check again.</Notice>;
   }

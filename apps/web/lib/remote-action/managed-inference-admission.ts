@@ -45,9 +45,10 @@ export function managedInferenceProviderDigest(provider: unknown, env: Record<st
   }
   return createHash("sha256").update(JSON.stringify({
     llmBaseUrl: env.LLM_BASE_URL ?? null, ollamaInternalUrl: env.OLLAMA_INTERNAL_URL ?? null,
-    baseUrl: p.baseUrl ?? null, endpoint: p.endpoint ?? null, status: p.status ?? null,
+    baseUrl: p.baseUrl ?? null, endpoint: p.endpoint ?? null,
     maxContextTokens: p.maxContextTokens ?? null, maxOutputTokens: p.maxOutputTokens ?? null,
-    modelRestrictions: p.modelRestrictions ?? null, updatedAt: p.updatedAt ?? null,
+    modelRestrictions: p.modelRestrictions ?? null, enabledFamilies: p.enabledFamilies ?? null,
+    maxConcurrency: p.maxConcurrency ?? null, retiredAt: p.retiredAt ?? null, retiredReason: p.retiredReason ?? null,
   })).digest("hex");
 }
 
