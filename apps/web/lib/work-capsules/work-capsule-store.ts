@@ -714,7 +714,8 @@ export async function claimWorkCapsuleScope(args: {
 
   let qualificationState: import("@/lib/backlog/initiative-readiness/qualification-research-admission").QualificationExperimentState | null = null;
   if (args.qualificationAdmissionToken) {
-    const { issueQualificationExperimentState, parseQualificationExperimentState, verifyQualificationExperimentAdmission } =
+    const { advanceQualificationExperimentState, issueQualificationExperimentState,
+      parseQualificationExperimentState, verifyQualificationExperimentAdmission } =
       await import("@/lib/backlog/initiative-readiness/qualification-research-admission");
     const verified = verifyQualificationExperimentAdmission(args.qualificationAdmissionToken, { now: args.now });
     if (!verified.ok) throw new Error(verified.error);
@@ -731,8 +732,14 @@ export async function claimWorkCapsuleScope(args: {
     if (existingRaw !== undefined && !existing) {
       throw new Error("Existing qualification admission state is unreadable and cannot be replaced.");
     }
-    const issued = issueQualificationExperimentState({ existing, token: args.qualificationAdmissionToken,
+    let issued = issueQualificationExperimentState({ existing, token: args.qualificationAdmissionToken,
       binding: verified.data.binding });
+    if (!issued.ok && existing?.status === "settled" && verified.data.binding.phase === "verify") {
+      const prior = verifyQualificationExperimentAdmission(existing.token, { now: args.now, allowExpired: true });
+      if (!prior.ok) throw new Error(prior.error);
+      issued = advanceQualificationExperimentState({ existing, existingBinding: prior.data.binding,
+        token: args.qualificationAdmissionToken, binding: verified.data.binding });
+    }
     if (!issued.ok) throw new Error(issued.error);
     qualificationState = issued.data;
   }

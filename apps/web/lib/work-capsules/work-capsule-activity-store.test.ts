@@ -59,4 +59,27 @@ describe("transactional Workroom activity", () => {
     expect(activity.id).toBe("activity-1");
     expect(publishRecordedWorkCapsuleActivity).not.toHaveBeenCalled();
   });
+  it("settles the exact started qualification state atomically and refuses a duplicate", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const started = { schemaVersion: 1, status: "started", token: "opaque.signed", bindingDigest: digest,
+      startCount: 1, issuedAt: "2026-06-18T11:00:00.000Z", startedAt: "2026-06-18T11:05:00.000Z", taskId: "task-1" };
+    const create = vi.fn().mockResolvedValue({ id: "evidence-1", workCapsuleId: "room-1" });
+    const update = vi.fn().mockResolvedValue({});
+    const findUnique = vi.fn().mockResolvedValue({ id: "room-1", capsuleId: "WC-ONE",
+      workspaceState: { qualificationExperimentAdmission: started } });
+    const db = { workroom: { findUnique, update }, workroomActivity: { create } } as never;
+    const evidence = { kind: "test" as const, stageKey: "reproduce", outcome: "completed" as const,
+      summary: "Bound result", result: { qualificationBindingDigest: digest, qualificationOutcome: "candidate" } };
+    await recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
+      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" }, deferPublication: true });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { workspaceState: {
+      qualificationExperimentAdmission: expect.objectContaining({ status: "settled", evidenceId: "evidence-1" }),
+    } } }));
+    findUnique.mockResolvedValueOnce({ id: "room-1", capsuleId: "WC-ONE", workspaceState: {
+      qualificationExperimentAdmission: { ...started, status: "settled", evidenceId: "evidence-1" },
+    } });
+    await expect(recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
+      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" }, deferPublication: true }))
+      .rejects.toThrow(/stale, duplicated/i);
+  });
 });

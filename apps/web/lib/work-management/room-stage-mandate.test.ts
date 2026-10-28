@@ -5,8 +5,10 @@ import {
   ACCEPTANCE_VERIFIER_WRITES,
 } from "./acceptance-verification-shape";
 import { workroomDriveTaskId } from "./drive-resolution";
-import { loadScheduledRoomMandate, roomStageMandatedTools } from "./room-stage-mandate";
+import { loadScheduledRoomAuthority, loadScheduledRoomMandate, roomStageMandatedTools } from "./room-stage-mandate";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "./workroom-shape-claim";
+import { createQualificationExperimentAdmission, qualificationBindingDigest,
+  type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const CAPSULE = "WC-ACC-AAAA0001";
 const TASK = workroomDriveTaskId(CAPSULE, "acceptance-verification");
@@ -136,6 +138,45 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
       scheduledAgentTask.findUnique.mockResolvedValue(changed);
       expect(await loadScheduledRoomMandate({ ...fake, scheduledAgentTask }, input)).toEqual([]);
     }
+  });
+
+  it("enforces verification phase parameters at the actual scheduled mandate boundary", async () => {
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-mandate-secret");
+    const taskId = workroomDriveTaskId(CAPSULE, "release-readiness-watch");
+    const headSha = "d".repeat(40);
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "verify", itemId: "BI-QUAL", workroomId: CAPSULE,
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha,
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: "principal-1", authorityDecisionId: "AUTH-1",
+      shapeKey: "release-readiness-watch", shapeVersion: "1.0.0", stageKey: "report", policyVersion: 1,
+      targetProductionBlobIds: ["e".repeat(40)], allowedPaths: ["apps/web/lib/example.test.ts"],
+      permittedTools: ["run_sandbox_tests", "record_workroom_evidence"],
+      issuedAt: "2026-06-18T11:00:00.000Z", expiresAt: "2026-06-18T13:00:00.000Z",
+      maxStarts: 1, maxDurationMs: 600_000,
+      candidate: { headSha, diffDigest: `sha256:${"f".repeat(64)}`, testBlobIds: ["1".repeat(40)],
+        productionBytesUnchanged: true, reviewReceiptId: "review-1" },
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    const metadata = { sourceRef: { kind: "scheduled-task", id: taskId }, qualificationExperiment: binding };
+    const run = { a2aMetadata: metadata, status: "working", archivedAt: null, currentAgentId: "build-specialist",
+      userId: "user-1" };
+    const qualificationRoom = room({ scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")],
+      workspaceState: { qualificationExperimentAdmission: { schemaVersion: 1, status: "started", token,
+        bindingDigest: qualificationBindingDigest(binding), startCount: 1, issuedAt: binding.issuedAt,
+        startedAt: "2026-06-18T11:05:00.000Z", taskId } } });
+    const task = { taskId, ownerUserId: "user-1", agentId: "build-specialist", taskRunId: "TR-SCHED-QUAL",
+      isActive: true, taskConfig: { workroomStage: { shapeKey: binding.shapeKey, shapeVersion: binding.shapeVersion,
+        stageKey: binding.stageKey, tools: binding.permittedTools, qualificationExperiment: binding } } };
+    const fake = { taskRun: { findUnique: vi.fn().mockResolvedValue(run) }, workroom: { findMany: vi.fn().mockResolvedValue([qualificationRoom]) },
+      scheduledAgentTask: { findUnique: vi.fn().mockResolvedValue(task) } };
+    const base = { taskRunId: "TR-SCHED-QUAL", a2aMetadata: metadata, agentIds: ["build-specialist"],
+      toolName: "run_sandbox_tests" };
+    expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: true } },
+      { now: () => new Date("2026-06-18T11:06:00.000Z") })).withheldBecause).toMatch(/outside/i);
+    expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
+      { now: () => new Date("2026-06-18T11:06:00.000Z") })).mandatedTools).toEqual(["run_sandbox_tests"]);
+    vi.unstubAllEnvs();
   });
 
   it("is empty for a run that is not scheduled, not a Workroom drive task, or names no room", async () => {

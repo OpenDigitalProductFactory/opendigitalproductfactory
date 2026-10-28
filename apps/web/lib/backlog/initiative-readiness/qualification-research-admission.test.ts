@@ -36,7 +36,7 @@ const binding = {
   stageKey: "qualification-research",
   policyVersion: 1,
   targetProductionBlobIds: ["d".repeat(40)],
-  permittedTools: ["read_source_at_version", "write_sandbox_file", "run_sandbox_tests", "record_workroom_evidence"],
+  permittedTools: ["read_source_at_version", "write_sandbox_file", "record_workroom_evidence"],
   allowedPaths: ["apps/web/lib/example.test.ts", "apps/web/lib/example.test-helper.ts"],
   issuedAt: "2026-01-28T19:55:00.000Z",
   expiresAt: "2026-01-28T20:25:00.000Z",
@@ -99,6 +99,8 @@ describe("qualification research admission", () => {
     const verified = parseQualificationExperimentBinding({
       ...binding,
       phase: "verify",
+      headSha: "d".repeat(40),
+      permittedTools: ["read_source_at_version", "run_sandbox_tests", "record_workroom_evidence"],
       candidate: {
         headSha: "d".repeat(40),
         diffDigest: `sha256:${"e".repeat(64)}`,
@@ -108,6 +110,16 @@ describe("qualification research admission", () => {
       },
     });
     expect(verified).toMatchObject({ ok: true });
+  });
+
+  it("keeps preparation authoring-only and verification execution-only", () => {
+    expect(parseQualificationExperimentBinding({ ...binding,
+      permittedTools: [...binding.permittedTools, "run_sandbox_tests"] })).toMatchObject({ ok: false });
+    expect(parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
+      permittedTools: ["write_sandbox_file", "run_sandbox_tests", "record_workroom_evidence"],
+      candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
+        testBlobIds: ["f".repeat(40)], productionBytesUnchanged: true, reviewReceiptId: "review-1" } }))
+      .toMatchObject({ ok: false });
   });
 
   it("rejects caller widening and malformed bounds", () => {
@@ -148,8 +160,34 @@ describe("qualification research admission", () => {
       params: { path: "apps/web/lib/production.ts" }, now: NOW })).toBe(false);
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "write_sandbox_file",
       params: { path: "apps/web/lib/other.test-helper.ts" }, now: NOW })).toBe(false);
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
+      params: { capsuleId: binding.workroomId, stageKey: binding.stageKey, outcome: "completed", summary: "candidate",
+        result: { qualificationBindingDigest: qualificationBindingDigest(parsed.data), qualificationOutcome: "positive" } },
+      now: NOW })).toBe(false);
+  });
+
+  it("refuses verification auto-fix and accepts only the reviewed one-shot test", () => {
+    const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
+      permittedTools: ["read_source_at_version", "run_sandbox_tests", "record_workroom_evidence"],
+      candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
+        testBlobIds: ["f".repeat(40)], productionBytesUnchanged: true, reviewReceiptId: "review-1" } });
+    if (!parsed.ok) throw new Error(parsed.error);
+    const state = { schemaVersion: 1 as const, status: "started" as const, token: "opaque.signed",
+      bindingDigest: qualificationBindingDigest(parsed.data), startCount: 1 as const,
+      issuedAt: binding.issuedAt, startedAt: NOW.toISOString(), taskId: "task-verify" };
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "run_sandbox_tests",
-      now: new Date(NOW.getTime() + binding.maxDurationMs + 1) })).toBe(false);
+      params: { auto_fix: true }, now: NOW })).toBe(false);
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "run_sandbox_tests",
+      params: { auto_fix: false }, now: NOW })).toBe(true);
+    const evidence = { capsuleId: binding.workroomId, stageKey: binding.stageKey, outcome: "completed",
+      summary: "Observed the bounded result", result: { qualificationBindingDigest: qualificationBindingDigest(parsed.data),
+        qualificationOutcome: "positive", command: "run_sandbox_tests", outputDigest: `sha256:${"2".repeat(64)}`,
+        taskRunId: "TR-QUAL", toolExecutionReceiptIds: ["receipt-1"],
+        startedAt: NOW.toISOString(), completedAt: new Date(NOW.getTime() + 1_000).toISOString() } };
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
+      params: evidence, now: NOW })).toBe(true);
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
+      params: { ...evidence, result: { ...evidence.result, outputDigest: undefined } }, now: NOW })).toBe(false);
   });
 
   it.each(["started", "settled"] as const)("never rearms a %s admission from the same signed token", (status) => {

@@ -9,12 +9,16 @@ const mocks = vi.hoisted(() => ({
   recordGateReceipt: vi.fn(),
   recordSpecApproval: vi.fn(),
   recordObjectiveMapping: vi.fn(),
+  findActivity: vi.fn(),
+  findWorkroom: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     taskRun: { findUnique: (...args: unknown[]) => mocks.findTaskRun(...args) },
     toolExecution: { findMany: (...args: unknown[]) => mocks.findReads(...args) },
+    workroomActivity: { findUnique: (...args: unknown[]) => mocks.findActivity(...args) },
+    workroom: { findUnique: (...args: unknown[]) => mocks.findWorkroom(...args) },
   },
 }));
 
@@ -27,6 +31,8 @@ vi.mock("@/lib/backlog/initiative-readiness", async (importOriginal) => ({
 
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 import { initiativeReadinessPack } from "./initiative-readiness-pack";
+import { createQualificationExperimentAdmission, qualificationBindingDigest,
+  type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const expected = {
   record_initiative_evidence: ["manage_backlog", "initiative_evidence_write"],
@@ -42,6 +48,44 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
+  it("requires the exact positive terminal verification evidence to resolve the qualification finding", async () => {
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-research-writer-secret");
+    const headSha = "d".repeat(40);
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "verify", itemId: "BI-B3DEC077", workroomId: "WC-QUAL",
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha,
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: "principal-1", authorityDecisionId: "AUTH-1",
+      shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
+      targetProductionBlobIds: ["e".repeat(40)], allowedPaths: ["apps/web/lib/example.test.ts"],
+      permittedTools: ["run_sandbox_tests", "record_workroom_evidence"],
+      issuedAt: "2026-06-18T11:00:00.000Z", expiresAt: "2026-06-18T13:00:00.000Z",
+      maxStarts: 1, maxDurationMs: 600_000,
+      candidate: { headSha, diffDigest: `sha256:${"f".repeat(64)}`, testBlobIds: ["1".repeat(40)],
+        productionBytesUnchanged: true, reviewReceiptId: "review-1" },
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    const params = { itemId: binding.itemId, gate: "research", decision: "pass", reason: "Bound verification reproduced the gap.",
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: headSha,
+        path: "docs/protocol.md", providerBlobId: binding.protocol.providerBlobId },
+      findings: [], resolvedFindingRefs: ["IF-91E987DA433B0C82"], qualificationEvidenceId: "evidence-verify" };
+    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+    } } });
+    mocks.findWorkroom.mockResolvedValue({ backlogItemId: binding.itemId, workspaceState: {
+      qualificationExperimentAdmission: { schemaVersion: 1, status: "settled", token,
+        bindingDigest: qualificationBindingDigest(binding), startCount: 1, issuedAt: binding.issuedAt,
+        startedAt: "2026-06-18T11:05:00.000Z", taskId: "task-verify", evidenceId: "evidence-verify" },
+    } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "research-receipt" });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: true, data: { receiptId: "research-receipt" } });
+    mocks.findActivity.mockResolvedValue(null);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    vi.unstubAllEnvs();
+  });
   it("refuses malformed trusted workroom context and never accepts a caller-selected replacement", async () => {
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
       providerBlobId: "b".repeat(40), path: "plan.md" };

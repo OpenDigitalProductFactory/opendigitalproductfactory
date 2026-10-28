@@ -20,6 +20,8 @@ import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-con
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
+import { parseQualificationExperimentState, qualificationBindingDigest,
+  verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const artifactRefSchema = {
   type: "object",
@@ -110,6 +112,10 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
       ...(name === "record_initiative_evidence" ? {
         operation: { type: "string", enum: ["gate-receipt", "objective-mapping"] },
         baselineId: { type: "string" },
+        qualificationEvidenceId: {
+          type: "string",
+          description: "Required when a passing research receipt resolves a finding from a bounded qualification experiment. Must name the exact terminal verification Workroom evidence row.",
+        },
         objectiveMappings: {
           type: "array",
           items: {
@@ -225,6 +231,29 @@ function parseStringArray(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string" && entry.trim())
     ? value as string[]
     : null;
+}
+
+async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId: string): Promise<boolean> {
+  const activity = await prisma.workroomActivity.findUnique({ where: { id: evidenceId },
+    select: { id: true, workCapsuleId: true, payload: true } });
+  if (!activity) return false;
+  const room = await prisma.workroom.findUnique({ where: { id: activity.workCapsuleId },
+    select: { backlogItemId: true, workspaceState: true } });
+  if (!room || room.backlogItemId !== itemId || !room.workspaceState || typeof room.workspaceState !== "object"
+    || Array.isArray(room.workspaceState)) return false;
+  const state = parseQualificationExperimentState(
+    (room.workspaceState as Record<string, unknown>).qualificationExperimentAdmission,
+  );
+  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId) return false;
+  const admission = verifyQualificationExperimentAdmission(state.token, { allowExpired: true });
+  if (!admission.ok || admission.data.binding.phase !== "verify"
+    || admission.data.bindingDigest !== state.bindingDigest) return false;
+  const payload = activity.payload && typeof activity.payload === "object" && !Array.isArray(activity.payload)
+    ? activity.payload as Record<string, unknown> : null;
+  const result = payload?.result && typeof payload.result === "object" && !Array.isArray(payload.result)
+    ? payload.result as Record<string, unknown> : null;
+  return result?.qualificationOutcome === "positive"
+    && result.qualificationBindingDigest === qualificationBindingDigest(admission.data.binding);
 }
 
 function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; evidenceRefs: string[] }> | null {
@@ -464,6 +493,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     }
     const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
     if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
+    const qualificationEvidenceId = typeof params.qualificationEvidenceId === "string"
+      ? params.qualificationEvidenceId.trim() : "";
+    if (gate === "research" && decision === "pass" && resolvedFindingRefs.includes("IF-91E987DA433B0C82")
+      && (!qualificationEvidenceId || !await qualificationEvidenceSupportsResearch(String(params.itemId ?? ""), qualificationEvidenceId))) {
+      return { success: false, error: "qualification-evidence-required",
+        message: "Resolving IF-91E987DA433B0C82 requires the exact positive terminal verification evidence from the bound qualification experiment." };
+    }
     if (binding && findings.length > 0
       && (binding.artifactRef.kind === "repo-blob-at-commit" || binding.artifactRef.kind === "repo-commit-range")) {
       const reads = await prisma.toolExecution.findMany({

@@ -2,6 +2,8 @@ import type { PrismaClient } from "@dpf/db";
 import { describe, expect, it, vi } from "vitest";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 import type { WorkroomDriveEffects } from "./workroom-drive";
+import { createQualificationExperimentAdmission, qualificationBindingDigest,
+  type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 describe("dispatch identity across sequential stages", () => {
   function harness() {
@@ -33,7 +35,9 @@ describe("dispatch identity across sequential stages", () => {
       dispatchScope: { runKey: "shape@1:2026-09-01", cycleKey: "shape@1:2026-09-01", iteration: 0 },
       lease: { roomId: "room", holderPrincipalId: "principal", expiresAt: new Date(now.getTime() + 60_000) },
     };
-    return { tx, input, tasks, enqueue: (change: Partial<typeof input> = {}) => scheduleWorkroomAgentTask(db, { ...input, ...change }, () => now) };
+    return { tx, input, tasks, setWorkspaceState: (value: unknown) => { workspaceState = value; },
+      readWorkspaceState: () => workspaceState,
+      enqueue: (change: Partial<typeof input> = {}) => scheduleWorkroomAgentTask(db, { ...input, ...change }, () => now) };
   }
 
   it("queues the next legitimate stage on the same scheduled task", async () => {
@@ -92,5 +96,29 @@ describe("dispatch identity across sequential stages", () => {
     await expect(h.enqueue({ stage: { ...h.input.stage, tools: ["new-tool"] } })).rejects.toThrow(/identity reconciliation/);
     await expect(h.enqueue({ dispatchScope: undefined })).rejects.toThrow(/identity reconciliation/);
     expect(h.tx.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("consumes an issued preparation exactly once at the scheduler transaction boundary", async () => {
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-scheduler-secret");
+    const h = harness();
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "prepare", itemId: "BI-TEST", workroomId: "WC-TEST",
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40),
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: "principal", authorityDecisionId: "AUTH-1",
+      shapeKey: "shape", shapeVersion: "1.0.0", stageKey: "first", policyVersion: 1,
+      targetProductionBlobIds: ["d".repeat(40)], permittedTools: ["write_sandbox_file", "record_workroom_evidence"],
+      allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2026-09-01T00:00:00.000Z",
+      expiresAt: "2026-09-01T00:30:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    h.setWorkspaceState({ qualificationExperimentAdmission: { schemaVersion: 1, status: "issued", token,
+      bindingDigest: qualificationBindingDigest(binding), startCount: 0, issuedAt: binding.issuedAt } });
+    await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).resolves.toBe(true);
+    expect(h.readWorkspaceState()).toMatchObject({ qualificationExperimentAdmission: {
+      status: "started", startCount: 1, taskId: h.input.taskId,
+    } });
+    await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).rejects.toThrow(/already started/i);
+    vi.unstubAllEnvs();
   });
 });

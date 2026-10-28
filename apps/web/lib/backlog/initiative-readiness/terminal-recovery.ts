@@ -29,10 +29,12 @@ import { resolveReviewerIdentity } from "./reviewer-identity";
 import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
 import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
-import { createQualificationExperimentAdmission, qualificationBindingDigest,
+import { createQualificationExperimentAdmission, parseQualificationCandidateEvidence,
+  parseQualificationExperimentState, qualificationBindingDigest, verifyQualificationExperimentAdmission,
   type QualificationExperimentBinding } from "./qualification-research-admission";
 import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { isSemanticReviewReceipt } from "@/lib/change-review/semantic-change-review";
 
 export type { MergedRepairSource } from "./merged-repair-source";
 export { defaultLoadMergedRepairSource } from "./merged-repair-source";
@@ -445,8 +447,8 @@ async function defaultResolveQualificationAdmission(args: {
   const [item, room, identity] = await Promise.all([
     prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, body: true } }),
     prisma.workroom.findUnique({ where: { capsuleId: args.refusedWorkroomId }, select: {
-      capsuleId: true, backlogItemId: true, repositoryFullName: true, baseSha: true, headSha: true,
-      scopeClaims: true, leaseHolderPrincipalId: true,
+      id: true, capsuleId: true, backlogItemId: true, repositoryFullName: true, baseSha: true, headSha: true,
+      scopeClaims: true, leaseHolderPrincipalId: true, workspaceState: true,
     } }),
     resolveFederationIdentity(prisma),
   ]);
@@ -464,11 +466,43 @@ async function defaultResolveQualificationAdmission(args: {
     ? receipt.payload as Record<string, unknown> : null;
   const authorityDecisionId = typeof payload?.authorityDecisionId === "string" ? payload.authorityDecisionId : null;
   const shape = resolveWorkShapeClaim(room.scopeClaims);
-  if (!path || !commitSha || !providerBlobId || !productionBlob || !allowedPath || !authorityDecisionId || !shape
-    || commitSha.toLowerCase() !== room.headSha.toLowerCase()) return null;
+  if (!path || !commitSha || !providerBlobId || !productionBlob || !allowedPath || !authorityDecisionId || !shape) return null;
   const stage = shape.stages.find((candidate) => candidate.key === "reproduce") ?? shape.stages[0];
   if (!stage) return null;
   const issuedAt = new Date();
+  const workspace = room.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
+    ? room.workspaceState as Record<string, unknown> : {};
+  const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+  if (workspace.qualificationExperimentAdmission !== undefined && !state) return null;
+  if (state) {
+    if (state.status !== "settled" || !state.evidenceId) return null;
+    const prior = verifyQualificationExperimentAdmission(state.token, { now: issuedAt, allowExpired: true });
+    if (!prior.ok || prior.data.binding.phase !== "prepare") return null;
+    const evidence = await prisma.workroomActivity.findUnique({ where: { id: state.evidenceId }, select: { payload: true } });
+    const evidencePayload = evidence?.payload && typeof evidence.payload === "object" && !Array.isArray(evidence.payload)
+      ? evidence.payload as Record<string, unknown> : null;
+    const candidate = parseQualificationCandidateEvidence(evidencePayload?.result, prior.data.binding);
+    if (!candidate.ok || candidate.data.headSha.toLowerCase() !== room.headSha.toLowerCase()) return null;
+    const receipts = await prisma.externalEvidenceRecord.findMany({ where: {
+      workCapsuleId: room.id, operationType: "semantic-change-review.receipt",
+    }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, details: true } });
+    const review = receipts.find((row) => isSemanticReviewReceipt(row.details)
+      && row.details.result.decision === "pass"
+      && row.details.sourceHeadSha?.toLowerCase() === candidate.data.headSha.toLowerCase()
+      && row.details.diffDigest === candidate.data.diffDigest);
+    if (!review) return null;
+    const binding: QualificationExperimentBinding = {
+      ...prior.data.binding, phase: "verify", headSha: candidate.data.headSha,
+      authorityDecisionId, stageKey: stage.key,
+      permittedTools: ["read_source_at_version", "read_codebase_manifest", "run_sandbox_tests", "record_workroom_evidence"],
+      issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(),
+      candidate: { ...candidate.data, reviewReceiptId: review.id },
+    };
+    return { toolName: "claim_workroom_scope", workroomId: room.capsuleId,
+      qualificationAdmissionToken: createQualificationExperimentAdmission(binding),
+      bindingDigest: qualificationBindingDigest(binding), binding };
+  }
+  if (commitSha.toLowerCase() !== room.headSha.toLowerCase()) return null;
   const binding: QualificationExperimentBinding = {
     schemaVersion: 1, phase: "prepare", itemId: args.itemId, workroomId: room.capsuleId,
     repositoryFullName: room.repositoryFullName, baseSha: room.baseSha, headSha: room.headSha,
@@ -476,7 +510,7 @@ async function defaultResolveQualificationAdmission(args: {
     accountablePrincipalRef: room.leaseHolderPrincipalId, authorityDecisionId,
     shapeKey: shape.key, shapeVersion: shape.version, stageKey: stage.key, policyVersion: 1,
     targetProductionBlobIds: [productionBlob],
-    permittedTools: ["read_source_at_version", "read_codebase_manifest", "write_sandbox_file", "edit_sandbox_file", "run_sandbox_tests", "record_workroom_evidence"],
+    permittedTools: ["read_source_at_version", "read_codebase_manifest", "write_sandbox_file", "edit_sandbox_file", "record_workroom_evidence"],
     allowedPaths: [allowedPath], issuedAt: issuedAt.toISOString(),
     expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(), maxStarts: 1, maxDurationMs: 15 * 60_000,
   };

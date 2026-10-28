@@ -15,7 +15,7 @@ const QUALIFICATION = { schemaVersion: 1 as const, phase: "prepare" as const, it
   installationId: "install-dev", accountablePrincipalRef: "principal:owner", authorityDecisionId: "AUTH-1",
   shapeKey: STAGE.shapeKey, shapeVersion: STAGE.shapeVersion, stageKey: STAGE.stageKey, policyVersion: 1 as const,
   targetProductionBlobIds: ["d".repeat(40)],
-  permittedTools: ["read_codebase_manifest", "list_patch_posture"],
+  permittedTools: ["read_codebase_manifest", "list_patch_posture", "write_sandbox_file", "record_workroom_evidence"],
   allowedPaths: ["apps/web/lib/qualification.test.ts"], issuedAt: "2026-01-28T19:00:00.000Z",
   expiresAt: new Date(Date.now() + 60_000).toISOString(), maxStarts: 1 as const, maxDurationMs: 600_000 };
 
@@ -50,9 +50,10 @@ describe("workroom stage taskConfig record", () => {
     expect(readWorkroomStageTaskConfig({ workroomStage: { shapeKey: "s", stageKey: "x" } })?.tools).toEqual([]);
   });
   it("narrows a qualification stage to its server-owned tool set", () => {
-    const next = withWorkroomStageTaskConfig(null, { ...STAGE, tools: [...STAGE.tools, "deploy_feature"],
+    const expected = [...STAGE.tools, "write_sandbox_file", "record_workroom_evidence"];
+    const next = withWorkroomStageTaskConfig(null, { ...STAGE, tools: [...expected, "deploy_feature"],
       qualificationExperiment: QUALIFICATION });
-    expect(workroomStageToolsFromTaskConfig(next)).toEqual(STAGE.tools);
+    expect(workroomStageToolsFromTaskConfig(next)).toEqual(expected);
   });
   it("fails closed on a malformed qualification marker", () => {
     const next = { workroomStage: { ...STAGE, qualificationExperiment: { permittedTools: "list_patch_posture" } } };

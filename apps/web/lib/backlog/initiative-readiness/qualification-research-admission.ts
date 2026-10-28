@@ -17,7 +17,7 @@ const QUALIFICATION_TOOLS = new Set([
 ]);
 
 type ProtocolRef = { path: string; commitSha: string; providerBlobId: string };
-type CandidateRef = {
+export type QualificationCandidateRef = {
   headSha: string;
   diffDigest: string;
   testBlobIds: string[];
@@ -48,7 +48,7 @@ export type QualificationExperimentBinding = {
   expiresAt: string;
   maxStarts: 1;
   maxDurationMs: number;
-  candidate?: CandidateRef;
+  candidate?: QualificationCandidateRef;
 };
 
 export type QualificationExperimentAdmission = {
@@ -113,6 +113,29 @@ export function issueQualificationExperimentState(input: {
   });
 }
 
+export function advanceQualificationExperimentState(input: {
+  existing: QualificationExperimentState;
+  existingBinding: QualificationExperimentBinding;
+  token: string;
+  binding: QualificationExperimentBinding;
+}): ActionResult<QualificationExperimentState> {
+  const prior = input.existingBinding;
+  const next = input.binding;
+  const sameProtocol = prior.itemId === next.itemId && prior.workroomId === next.workroomId
+    && prior.repositoryFullName === next.repositoryFullName && prior.baseSha === next.baseSha
+    && prior.protocol.path === next.protocol.path && prior.protocol.commitSha === next.protocol.commitSha
+    && prior.protocol.providerBlobId === next.protocol.providerBlobId
+    && prior.installationId === next.installationId
+    && prior.accountablePrincipalRef === next.accountablePrincipalRef
+    && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion;
+  if (input.existing.status !== "settled" || prior.phase !== "prepare" || next.phase !== "verify"
+    || !next.candidate || next.headSha !== next.candidate.headSha || !sameProtocol) {
+    return err("Only a settled preparation may advance to its exact independently reviewed verification binding.");
+  }
+  return ok({ schemaVersion: 1, status: "issued", token: input.token,
+    bindingDigest: qualificationBindingDigest(next), startCount: 0, issuedAt: next.issuedAt });
+}
+
 const SIGNING_SECRET_ENV = "DPF_QUALIFICATION_ADMISSION_SECRET";
 
 function signingSecret(): string {
@@ -157,7 +180,7 @@ export function createQualificationExperimentAdmission(
 
 export function verifyQualificationExperimentAdmission(
   token: string,
-  options: { now?: Date; secret?: string } = {},
+  options: { now?: Date; secret?: string; allowExpired?: boolean } = {},
 ): ActionResult<QualificationExperimentAdmission> {
   const separator = token.lastIndexOf(".");
   if (separator <= 0 || separator === token.length - 1) return err("Malformed qualification admission token.");
@@ -179,7 +202,7 @@ export function verifyQualificationExperimentAdmission(
     || raw?.bindingDigest !== qualificationBindingDigest(parsed.data)) {
     return err("Qualification admission payload does not match its immutable binding.");
   }
-  if (Date.parse(parsed.data.expiresAt) <= (options.now ?? new Date()).getTime()) {
+  if (!options.allowExpired && Date.parse(parsed.data.expiresAt) <= (options.now ?? new Date()).getTime()) {
     return err("Qualification admission expired.");
   }
   return ok({ schemaVersion: 1, purpose: "qualification-research-admission", binding: parsed.data,
@@ -239,16 +262,23 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
   };
   const datesValid = issuedAt && expiresAt && Number.isFinite(Date.parse(issuedAt)) && Number.isFinite(Date.parse(expiresAt))
     && Date.parse(issuedAt) < Date.parse(expiresAt);
+  const phaseToolsValid = phase === "prepare"
+    ? tools?.includes("write_sandbox_file") && tools?.includes("record_workroom_evidence")
+      && !tools.includes("run_sandbox_tests")
+    : phase === "verify"
+      ? tools?.includes("run_sandbox_tests") && tools?.includes("record_workroom_evidence")
+        && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file")
+      : false;
   const valid = raw?.schemaVersion === 1 && (phase === "prepare" || phase === "verify")
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
-    && scalar.protocolCommit === scalar.headSha && raw?.policyVersion === 1
-    && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool))
+    && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
     && exactStrings(raw?.targetProductionBlobIds)?.every((blob) => FULL_SHA.test(blob))
     && paths && paths.every(validTestPath) && datesValid && raw?.maxStarts === 1
     && typeof raw?.maxDurationMs === "number" && raw.maxDurationMs > 0 && raw.maxDurationMs <= 3_600_000
-    && (phase === "prepare" ? !candidateRaw : candidate && FULL_SHA.test(candidate.headSha)
-      && SHA256.test(candidate.diffDigest) && candidate.testBlobIds.every((blob) => FULL_SHA.test(blob)));
+    && (phase === "prepare" ? !candidateRaw && scalar.protocolCommit === scalar.headSha
+      : candidate && FULL_SHA.test(candidate.headSha) && scalar.headSha === candidate.headSha
+        && SHA256.test(candidate.diffDigest) && candidate.testBlobIds.every((blob) => FULL_SHA.test(blob)));
   if (!valid) return err("Qualification binding is incomplete, widened, stale-shaped, or not bound to test-only paths.");
   return ok({
     schemaVersion: 1, phase, itemId: scalar.itemId!, workroomId: scalar.workroomId!,
@@ -296,18 +326,66 @@ export function qualificationToolEffectAllowed(input: {
     || input.now.getTime() - Date.parse(input.state.startedAt) > input.binding.maxDurationMs
     || !input.binding.permittedTools.includes(input.toolName)) return false;
   if (input.toolName === "write_sandbox_file" || input.toolName === "edit_sandbox_file") {
+    if (input.binding.phase !== "prepare") return false;
     const path = typeof input.params?.path === "string" ? input.params.path.replaceAll("\\", "/") : null;
     return path !== null && input.binding.allowedPaths.includes(path);
   }
   if (input.toolName === "record_workroom_evidence") {
     const result = record(input.params?.result);
     const disposition = result?.qualificationOutcome;
-    return input.params?.capsuleId === input.binding.workroomId
+    const phaseOutcome = input.binding.phase === "prepare"
+      ? disposition === "candidate" || disposition === "inconclusive" || disposition === "blocked"
+      : disposition === "positive" || disposition === "negative" || disposition === "inconclusive" || disposition === "blocked";
+    return phaseOutcome && input.params?.capsuleId === input.binding.workroomId
       && input.params.stageKey === input.binding.stageKey
       && result?.qualificationBindingDigest === qualificationBindingDigest(input.binding)
       && typeof input.params.summary === "string" && input.params.summary.trim().length > 0
       && (input.params.outcome === "completed" || input.params.outcome === "blocked")
-      && (disposition === "positive" || disposition === "negative" || disposition === "inconclusive" || disposition === "blocked");
+      && (input.binding.phase !== "prepare" || disposition !== "candidate" || qualificationCandidateEvidenceMatches(result, input.binding))
+      && (input.binding.phase !== "verify" || disposition === "blocked" || qualificationVerificationEvidenceMatches(result));
+  }
+  if (input.toolName === "run_sandbox_tests") {
+    return input.binding.phase === "verify" && input.params?.auto_fix !== true;
   }
   return true;
+}
+
+function qualificationVerificationEvidenceMatches(result: Record<string, unknown>): boolean {
+  const command = text(result.command);
+  const outputDigest = text(result.outputDigest);
+  const taskRunId = text(result.taskRunId);
+  const receiptIds = exactStrings(result.toolExecutionReceiptIds);
+  const startedAt = text(result.startedAt);
+  const completedAt = text(result.completedAt);
+  return Boolean(command && outputDigest && SHA256.test(outputDigest) && taskRunId && receiptIds
+    && startedAt && completedAt && Number.isFinite(Date.parse(startedAt)) && Number.isFinite(Date.parse(completedAt))
+    && Date.parse(startedAt) <= Date.parse(completedAt));
+}
+
+function qualificationCandidateEvidenceMatches(
+  result: Record<string, unknown>,
+  binding: QualificationExperimentBinding,
+): boolean {
+  const candidate = record(result.candidate);
+  const headSha = text(candidate?.headSha);
+  const diffDigest = text(candidate?.diffDigest);
+  const testBlobIds = exactStrings(candidate?.testBlobIds);
+  const productionBlobIds = exactStrings(candidate?.targetProductionBlobIds);
+  return Boolean(headSha && FULL_SHA.test(headSha) && diffDigest && SHA256.test(diffDigest)
+    && testBlobIds?.every((blob) => FULL_SHA.test(blob))
+    && candidate?.productionBytesUnchanged === true
+    && productionBlobIds && canonicalJson(productionBlobIds) === canonicalJson(binding.targetProductionBlobIds));
+}
+
+export function parseQualificationCandidateEvidence(
+  value: unknown,
+  binding: QualificationExperimentBinding,
+): ActionResult<Omit<QualificationCandidateRef, "reviewReceiptId">> {
+  const result = record(value);
+  if (!result || result.qualificationOutcome !== "candidate" || !qualificationCandidateEvidenceMatches(result, binding)) {
+    return err("Preparation evidence does not contain one complete exact candidate.");
+  }
+  const candidate = record(result.candidate)!;
+  return ok({ headSha: text(candidate.headSha)!, diffDigest: text(candidate.diffDigest)!,
+    testBlobIds: exactStrings(candidate.testBlobIds)!, productionBytesUnchanged: true });
 }
