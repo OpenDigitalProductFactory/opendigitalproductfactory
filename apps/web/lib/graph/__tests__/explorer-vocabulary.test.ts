@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RELATION_TYPES } from "@dpf/db/relation-vocabulary";
 import {
   ADDITIVE_MARKER_LABELS,
   GRAPH_DOMAINS,
@@ -115,6 +116,14 @@ describe("describeRelType", () => {
     const descriptor = describeRelType("IMPLEMENTS_ROUTE");
     expect(descriptor.label).toBe("Implements route");
     expect(descriptor.color).not.toBe("#8888a0");
+  });
+
+  it("labels every registered relation type from the relation vocabulary (BI-85389A35)", () => {
+    for (const def of RELATION_TYPES) {
+      const label = describeRelType(def.key).label;
+      expect(label.toLowerCase()).toBe(def.label.toLowerCase());
+    }
+    expect(describeRelType("BELONGS_TO").label).toBe("Is in portfolio");
   });
 
   it("humanizes an unknown relationship type instead of showing the raw enum", () => {

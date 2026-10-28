@@ -9,6 +9,7 @@
 // `props`, which the read side filters on (props->>'graphKey', props->>'name',
 // props->>'path', …).
 import { prisma } from "@dpf/db";
+import { assertRelationWrite } from "@dpf/db/relation-vocabulary";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 
 import { CODE_GRAPH_EXTRACTORS } from "./extractors";
@@ -87,13 +88,15 @@ async function upsertGraphNode(
   );
 }
 
-/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type); props shallow-merged. */
+/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type); props shallow-merged.
+ *  The kind must be in the relation vocabulary (BI-85389A35). */
 async function upsertGraphEdge(
   srcKey: string,
   dstKey: string,
-  relType: string,
+  relType: CodeGraphEdgeKind,
   props: Record<string, unknown>,
 ): Promise<void> {
+  assertRelationWrite(relType, props);
   await prisma.$executeRawUnsafe(
     `INSERT INTO graph_edge (src_key, dst_key, rel_type, props)
      VALUES ($1, $2, $3, $4::jsonb)
