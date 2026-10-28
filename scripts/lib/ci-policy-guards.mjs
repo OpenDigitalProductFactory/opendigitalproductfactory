@@ -376,6 +376,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/derived-artifacts-registry.test.mjs",
         "scripts/derived-artifacts-gate.test.mjs",
       ),
+      // BI-78176241: reads scripts/pregate.mjs and the live evidence policy, so
+      // the preflight must keep it.
+      conformanceTest("scripts/docs-only-single-source.test.mjs"),
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
     guard("pr-health-test", "PR Health Logic", [
