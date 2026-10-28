@@ -14,6 +14,7 @@
 import { randomUUID } from "crypto";
 
 import { prisma as defaultPrisma } from "@dpf/db";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 
 import {
   BACKLOG_SOURCE_VALUES,
@@ -455,10 +456,17 @@ export async function ingestBacklogItem(
     if (reconciled) return reconciled;
   }
 
-  // Dedup by origin marker against non-terminal items.
+  // Dedup by origin marker against non-terminal items this install owns. A
+  // work-sync mirror carries the peer's markers but is the peer's record: a
+  // bump here is overwritten on the next pull, so a local observation of a
+  // defect the peer tracks files a local twin instead (BI-91FC6B9A).
   if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
-      where: { body: { contains: marker }, status: { notIn: ["done", "deferred", "retired"] } },
+      where: {
+        body: { contains: marker },
+        AND: [ownedRowBodyWhere()],
+        status: { notIn: ["done", "deferred", "retired"] },
+      },
       select: { id: true, itemId: true },
       orderBy: { createdAt: "desc" },
     });

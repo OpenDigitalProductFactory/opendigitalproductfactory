@@ -422,6 +422,15 @@ own failure ("peer does not serve work sync yet"); a push that never arrives
 reports nothing. The demand lane is unchanged and still carries deliberate,
 per-item sharing across organization boundaries.
 
+Twin identity (amendment, 2026-10-28, BI-91FC6B9A): a mirror and this
+installation's own item that share an intake origin marker are the same
+defect. Each item now carries the origin's claim and live-Workroom presence
+(the optional `claim` field). The receiver records each twin on the local
+item, a claim refuses to start work the peer is already doing, and a merged
+PR moves the local twins it closes. Invariant 6 is unchanged: no mirror row is
+written. See
+[federated twin identity](2026-10-28-federated-twin-identity-design.md).
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
