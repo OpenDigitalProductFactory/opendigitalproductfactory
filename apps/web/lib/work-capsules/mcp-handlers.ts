@@ -54,6 +54,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { refuseUnlessRoomProvisions } from "./worktree-provision-gate";
 import { publicationRefusedToolResult } from "./publication-refusal";
 import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence-reach";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
@@ -226,6 +227,9 @@ export async function claimCapsuleScopeTool(
 
   const force = params["force"] === true;
   const db = workCapsuleDb();
+  // GPP admission (BI-D1FB8C4D): a read-only room claims no paths.
+  const provisionRefusal = await refuseUnlessRoomProvisions(db, capsuleId, "claim_workroom_scope");
+  if (provisionRefusal) return provisionRefusal;
   let renewedCapsule;
   try {
     renewedCapsule = await runAutoRenewedCapsuleWrite({
@@ -470,6 +474,9 @@ export async function planCapsuleWorktreeTool(
       message: `taxonomy must be one of: ${WORK_CAPSULE_BRANCH_TAXONOMIES.join(", ")}.`,
     };
   }
+  // GPP admission (BI-D1FB8C4D): a read-only room plans no worktree.
+  const provisionRefusal = await refuseUnlessRoomProvisions(workCapsuleDb(), capsuleId, "plan_workroom_worktree");
+  if (provisionRefusal) return provisionRefusal;
 
   let existingBranches = new Set<string>();
   try {

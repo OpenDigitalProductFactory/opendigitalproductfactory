@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { planWorktree, safeWorktreeName, verifiedBindingSource } from "./worktree-create.mjs";
+import { planWorktree, runWorktreeCreate, safeWorktreeName, verifiedBindingSource } from "./worktree-create.mjs";
 
 // ── planWorktree: canonical sibling base, per-OS ──────────────────────────────
 
@@ -83,7 +83,7 @@ async function packagedFixture(t, { reply, source = true, helper = true, legacyH
     writeFileSync(join(root, "AGENTS.md"), "# DPF source fixture\n");
   }
   if (helper) {
-    for (const relative of ["scripts/lib/workroom-bind.mjs", "scripts/lib/mcp-client.mjs", "scripts/lib/git.mjs",
+    for (const relative of ["scripts/lib/workroom-bind.mjs", "scripts/lib/worktree-provision.mjs", "scripts/lib/entry-module.mjs", "scripts/lib/mcp-client.mjs", "scripts/lib/git.mjs",
       "scripts/lib/mcp-credential.mjs", "scripts/lib/mcp-host-trust.mjs", "scripts/lib/foreground-gate-process.mjs", "scripts/lib/resolve-compose-install-context.mjs",
       "scripts/lib/script-argv.mjs", "packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs"]) {
       // Keep this literal copy loop visible to the shared fixture-import closure guard.
@@ -121,7 +121,9 @@ async function packagedFixture(t, { reply, source = true, helper = true, legacyH
     calls.push(rpc.params);
     if (disconnect) { request.destroy(); return; }
     const args = rpc.params.arguments;
-    if (drift) git("-C", args.worktreePath, "commit", "--quiet", "--allow-empty", "-m", "source moved during admission");
+    // The first adoption runs before the worktree exists (BI-D1FB8C4D); drift
+    // can only happen to a checkout that is already there.
+    if (drift && existsSync(args.worktreePath)) git("-C", args.worktreePath, "commit", "--quiet", "--allow-empty", "-m", "source moved during admission");
     const answer = reply?.(args) ?? { success: true, data: { capsule: {
       ...args, capsuleId: "WC-COLD-FIXTURE", leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
     } } };
@@ -160,14 +162,19 @@ async function packagedFixture(t, { reply, source = true, helper = true, legacyH
   return { directory, root, remote, pack, git, target, sha, calls, run, markerPath };
 }
 
-test("a cold copied package binds through the source checkout with exact observed SHAs and session", async t => {
+test("a cold copied package admits before creating, then re-binds through the source checkout with exact observed SHAs and session", async t => {
   const f = await packagedFixture(t);
   const result = await f.run();
   assert.equal(result.code, 0, result.stderr);
   assert.equal(realpathSync.native(result.stdout), realpathSync.native(f.target), "stdout contains only the created path");
-  assert.equal(f.calls.length, 1, result.stderr);
+  assert.equal(f.calls.length, 2, result.stderr);
+  // 1. Admission and binding, before the worktree exists: no source identity yet.
   assert.equal(f.calls[0].name, "adopt_worktree");
-  assert.deepEqual({ ...f.calls[0].arguments, title: undefined, objective: undefined, activityKind: undefined }, {
+  assert.equal(f.calls[0].arguments.headBranch, "cold-package");
+  assert.equal(f.calls[0].arguments.headSha, undefined);
+  // 2. The verified-source re-bind once the checkout exists.
+  assert.equal(f.calls[1].name, "adopt_worktree");
+  assert.deepEqual({ ...f.calls[1].arguments, title: undefined, objective: undefined, activityKind: undefined }, {
     title: undefined, objective: undefined, activityKind: undefined,
     repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory", headBranch: "cold-package",
     worktreePath: realpathSync.native(f.target).replaceAll("\\", "/"), baseBranch: "main", baseSha: f.sha, headSha: f.sha,
@@ -176,7 +183,19 @@ test("a cold copied package binds through the source checkout with exact observe
   assert.equal(JSON.parse(readFileSync(f.markerPath(), "utf8")).capsuleId, "WC-COLD-FIXTURE");
 });
 
-for (const scenario of ["foreign-source", "missing-helper", "unsupported-helper", "denied", "conflicting-head", "transport-failure", "source-drift"]) {
+// Before BI-D1FB8C4D every scenario still created the worktree. Now a refusal,
+// an unreachable platform or an unloadable library creates nothing; a failure
+// AFTER admission (the re-bind) is a warning, because the claim already exists.
+const SCENARIOS = {
+  "foreign-source": { created: true, calls: 1, stderr: /source identity not recorded/ },
+  "missing-helper": { created: true, calls: 0, stderr: null }, // no library: not DPF source, plain add
+  "unsupported-helper": { created: false, calls: 0, stderr: /cannot load/ },
+  denied: { created: false, calls: 1, stderr: /Refused \(not-authorized\)/ },
+  "conflicting-head": { created: true, calls: 2, stderr: /source identity not recorded/ },
+  "transport-failure": { created: false, calls: 1, stderr: /DPF_WORKTREE_BREAK_GLASS/ },
+  "source-drift": { created: true, calls: 2, stderr: /source identity not recorded/ },
+};
+for (const [scenario, expected] of Object.entries(SCENARIOS)) {
   test(`copied package keeps ${scenario} explicit without caching a claim or corrupting stdout`, async t => {
     const f = await packagedFixture(t, {
       source: scenario !== "foreign-source", helper: scenario !== "missing-helper",
@@ -184,15 +203,22 @@ for (const scenario of ["foreign-source", "missing-helper", "unsupported-helper"
       disconnect: scenario === "transport-failure", drift: scenario === "source-drift",
       reply: scenario === "denied" ? () => ({ success: false, error: "not-authorized", message: "Fixture refusal" })
         : scenario === "conflicting-head" ? args => ({ success: true, data: { capsule: {
-          ...args, capsuleId: "WC-COLD-FIXTURE", headSha: "0".repeat(40), leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
+          ...args, capsuleId: "WC-COLD-FIXTURE", ...(args.headSha ? { headSha: "0".repeat(40) } : {}), leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
         } } }) : undefined,
     });
     const result = await f.run();
-    assert.equal(result.code, 0, result.stderr);
-    assert.equal(realpathSync.native(result.stdout), realpathSync.native(f.target));
-    assert.equal(existsSync(f.markerPath()), false, result.stderr);
-    assert.match(result.stderr, /binding unavailable|NOT bound|binding failed/);
-    assert.equal(f.calls.length, ["denied", "conflicting-head", "transport-failure", "source-drift"].includes(scenario) ? 1 : 0, result.stderr);
+    assert.equal(f.calls.length, expected.calls, result.stderr);
+    if (expected.stderr) assert.match(result.stderr, expected.stderr);
+    if (expected.created) {
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(realpathSync.native(result.stdout), realpathSync.native(f.target));
+      assert.equal(existsSync(f.markerPath()), false, result.stderr);
+    } else {
+      assert.equal(result.code, 1, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.equal(existsSync(f.target), false, "nothing is created");
+      assert.doesNotMatch(result.stderr, /\.claude\/worktrees/);
+    }
   });
 }
 
@@ -217,4 +243,104 @@ test("source validation does not follow a binder junction outside the verified c
   symlinkSync(outside, original, process.platform === "win32" ? "junction" : "dir");
   assert.throws(() => verifiedBindingSource({ mainRoot: f.root, worktreePath: f.root, branch: "main", headSha: f.sha }), /escapes/);
   assert.equal(f.calls.length, 0);
+});
+
+// ── governed provisioning (BI-D1FB8C4D, AC-WPG-6..9) ──────────────────────────
+
+function deps({ libraryExists = true, provision, plainAdd } = {}) {
+  const seen = { imported: null, plainAdd: 0 };
+  return {
+    seen,
+    deps: {
+      exists: (p) => libraryExists && p === "D:/DPF/scripts/lib/worktree-provision.mjs",
+      importLibrary: async (p) => {
+        seen.imported = p;
+        return { provisionWorktree: provision };
+      },
+      addWorktree: (root, target) => {
+        seen.plainAdd++;
+        if (plainAdd) return plainAdd(root, target);
+        return target;
+      },
+    },
+  };
+}
+
+test("the provisioning library is loaded from the repository's main root, not the plugin", async () => {
+  const { seen, deps: d } = deps({ provision: async ({ plan }) => ({ status: "created", path: plan.target, capsuleId: "WC-1" }) });
+  const out = await runWorktreeCreate({ mainRoot: "D:\\DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(seen.imported, "D:/DPF/scripts/lib/worktree-provision.mjs");
+  assert.equal(out.exitCode, 0);
+  assert.equal(out.stdout, "D:/DPF-worktrees/feat-x");
+  assert.equal(seen.plainAdd, 0);
+});
+
+test("stdout carries only the path; the binding report goes to stderr", async () => {
+  const { deps: d } = deps({ provision: async ({ plan }) => ({ status: "created", path: plan.target, capsuleId: "WC-1" }) });
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.stdout, "D:/DPF-worktrees/feat-x");
+  assert.match(out.stderr.join("\n"), /WC-1/);
+});
+
+test("a refusal exits non-zero, creates nothing, and has no nested fallback", async () => {
+  const { seen, deps: d } = deps({
+    provision: async () => ({ status: "refused", code: "worktree_provision_not_admitted", message: "[worktree-provision] Refused (worktree_provision_not_admitted): read-only room. Read source through read_source_at_version" }),
+  });
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 1);
+  assert.equal(out.stdout, "");
+  assert.equal(seen.plainAdd, 0);
+  assert.match(out.stderr.join("\n"), /worktree_provision_not_admitted/);
+  assert.doesNotMatch(out.stderr.join("\n"), /\.claude\/worktrees/);
+});
+
+test("an unreachable platform exits non-zero and creates nothing", async () => {
+  const { seen, deps: d } = deps({ provision: async () => ({ status: "unavailable", message: "set DPF_WORKTREE_BREAK_GLASS" }) });
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 1);
+  assert.equal(seen.plainAdd, 0);
+});
+
+test("break-glass creation prints the path and says it is unbound", async () => {
+  const { deps: d } = deps({ provision: async ({ plan }) => ({ status: "break-glass", path: plan.target, reason: "portal down" }) });
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 0);
+  assert.equal(out.stdout, "D:/DPF-worktrees/feat-x");
+  assert.match(out.stderr.join("\n"), /BREAK-GLASS.*UNBOUND.*portal down/);
+});
+
+test("a repository without the library is not DPF source: plain git worktree add", async () => {
+  const { seen, deps: d } = deps({ libraryExists: false, provision: async () => assert.fail("must not provision") });
+  const out = await runWorktreeCreate({ mainRoot: "D:/other-repo", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 0);
+  assert.equal(out.stdout, "D:/other-repo-worktrees/feat-x");
+  assert.equal(seen.plainAdd, 1);
+  assert.equal(seen.imported, null);
+});
+
+test("a library that cannot load fails closed", async () => {
+  const d = deps().deps;
+  d.importLibrary = async () => { throw new Error("SyntaxError"); };
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 1);
+  assert.equal(out.stdout, "");
+});
+
+test("provisioning receives the hook's git add and its verified-source re-bind", async () => {
+  let effects = null;
+  const { deps: d } = deps({ provision: async (args) => { effects = args.effects; return { status: "created", path: args.plan.target, capsuleId: "WC-1" }; } });
+  d.afterCreate = async () => ({ status: "bound" });
+  await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(effects.addWorktree, d.addWorktree);
+  assert.equal(effects.afterCreate, d.afterCreate);
+});
+
+test("a DPF checkout older than the library still binds after creation", async () => {
+  const { seen, deps: d } = deps({ libraryExists: false, provision: async () => assert.fail("must not provision") });
+  d.afterCreate = async () => ({ status: "bound", capsuleId: "WC-OLD" });
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 0);
+  assert.equal(out.stdout, "D:/DPF-worktrees/feat-x");
+  assert.equal(seen.plainAdd, 1);
+  assert.match(out.stderr.join("\n"), /WC-OLD bound after creation/);
 });

@@ -1166,6 +1166,7 @@
         "merge-readiness",
         "merge-mechanics",
         "privatepublic-change-segregation-is-content-based",
+        "read-only-work-needs-no-worktree",
         "creating-a-worktree",
         "seeding-a-new-worktree",
         "routine-client-permissions",

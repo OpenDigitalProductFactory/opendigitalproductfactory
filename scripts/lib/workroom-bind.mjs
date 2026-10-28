@@ -263,7 +263,9 @@ export async function bindWorktreeToWorkroom({
       refusal = null;
       break;
     }
-    refusal ??= { status: "refused", reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
+    // The code lets a caller tell an authorization answer (e.g.
+    // worktree_provision_not_admitted, BI-D1FB8C4D) from an outage.
+    refusal ??= { status: "refused", code: payload.error ?? null, reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
     if (payload.error !== "branch_occupied") break;
   }
   if (refusal) return refusal;
@@ -291,7 +293,9 @@ export async function bindWorktreeToWorkroom({
   } catch (err) {
     // The claim EXISTS; only the cache failed. Say so rather than reporting a
     // failure to bind — the guard will simply re-derive it.
-    return { status: "bound", capsuleId: marker.capsuleId, reason: `claim recorded, marker not cached: ${err?.message ?? err}` };
+    return { status: "bound", capsuleId: marker.capsuleId, marker, reason: `claim recorded, marker not cached: ${err?.message ?? err}` };
   }
-  return { status: "bound", capsuleId: marker.capsuleId };
+  // The marker is returned so a caller that bound before the worktree existed
+  // (no gitDir yet) can cache it once the checkout is created.
+  return { status: "bound", capsuleId: marker.capsuleId, marker };
 }
