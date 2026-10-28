@@ -80,7 +80,7 @@ describe("appendRoomPolicyParticipant", () => {
   // BI-C649809F: an invite must not drop the room's charter, or the next
   // invite would fall back to the platform default the owner had narrowed.
   it("carries an explicit room charter forward across invites", () => {
-    const charter = { admits: ["org-coworker"], classCeiling: "observe", expiresAt: "2026-12-01T00:00:00.000Z" };
+    const charter = { admits: ["org-coworker"], classCeiling: "observe", expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString() };
     const prior = [{ workroomPolicy: { admittedPrincipalRefs: ["PRN-a"], actionPrincipalRefs: ["PRN-a"], discoverablePrincipalRefs: [], participants: [], charter } }];
     const out = appendRoomPolicyParticipant(prior, { principalRef: "PRN-b", roles: ["observer"], canAct: false });
     expect(latestPolicy(out).charter).toEqual(charter);
