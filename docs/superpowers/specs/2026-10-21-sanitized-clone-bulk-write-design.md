@@ -202,3 +202,37 @@ with 41 incumbent SQL tests passing. Preserve the cold 16 MiB assertion, all mea
 controls and the real PrismaPg writer. Final owned qualification requires the
 complete exact-source experiment to pass this changed default; its actual outcome
 belongs in the Workroom and PR record, separately from source-local checks.
+
+
+**October 28 follow-up: stream the incumbent cursor order (BI-B47BB1D7).**
+The bulk writer is already deployed. A read-only, five-second-bounded EXPLAIN
+on the canonical database found a top-level Sort over an estimated 14,541,988
+telemetry rows, sorting solely on the generated row-number expression. The
+native preview stopped before serving after 20m33s; the collapsed terminal
+category does not prove which liveness check fired. No full-copy timing or
+repair success is inferred from planner estimates.
+
+The bounded repair is to expose the same original ordering keys at the outer
+join, followed by the existing ordinal as the final tie breaker. This is
+lexicographically equivalent to the incumbent ordinal order, including tied
+keys. For the observed ID-ordered table, PostgreSQL instead plans an Incremental
+Sort with id as its presorted key; estimated startup cost changes from6580321.35
+to1.76 in planner units, not milliseconds. The remaining transaction overhead
+still needs real measurement. Physical ctid fallback, audit LIMIT/direction,
+User ranking/COALESCE, all source rows, sanitization, native omissions and the
+50-row read window stay unchanged. No classification, data policy, source or
+runtime mutation, timeout, privacy or lease-fence change belongs to this repair.
+
+Ordered loop: exercise the actual cursor-query builder; observe the old outer
+sort fail the original-key regression; add the ordering prefix and retain the
+ordinal tie breaker; compare actual PostgreSQL legacy/repaired ordered values,
+audit cohort, user aliases and cursor batches; run all clone, source-integrity,
+cleanup/memory tests and DB typecheck. Run the PostgreSQL proof only through
+the governed shared test database, then normal exact-tree integration, review,
+DCO and protected publication. After normal canonical release, measure one
+full-cohort startup with unchanged bounds before resuming approval-screen QA.
+The existing six acceptance obligations above remain obligations; this targeted
+source repair does not claim sampling policy, scale timing or served acceptance.
+PostgreSQL documents explicit multi-key ordering and planner startup costs at
+https://www.postgresql.org/docs/current/queries-order.html and
+https://www.postgresql.org/docs/current/using-explain.html.
