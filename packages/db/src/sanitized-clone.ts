@@ -431,6 +431,21 @@ async function copyRowsForSanitization(
     resolveCompatibleCopyColumns(sourceColumns, destinationColumns, tableName),
   );
 
+  const selectSql = buildSanitizedCursorQuery(tableName, selectList, compatibleColumns, limit);
+  await copySanitizedCursorBatches(source, selectSql, async rows => {
+    for (const row of rows) delete row.__dpfCloneRowOrder;
+    await write(rows);
+  }, 50, false);
+
+}
+
+/** Build the actual confidential cursor query, including its stable alias order. */
+export function buildSanitizedCursorQuery(
+  tableName: string,
+  selectList: string,
+  compatibleColumns: ReadonlySet<string>,
+  limit?: number,
+): string {
   const quotedTable = quoteIdentifier(tableName);
   const ordering = limit && compatibleColumns.has("createdAt")
     ? ["createdAt", ...(compatibleColumns.has("id") ? ["id"] : [])]
@@ -444,17 +459,20 @@ async function copyRowsForSanitization(
   const referenceSql = references.map(column => `r.${quoteIdentifier(column)}::text`).join(", ");
   // Carry the ordering through the join; batch boundaries cannot change aliases.
   const rowsSql = `SELECT ${selectList}, row_number() OVER (ORDER BY ${orderSql}) AS "__dpfCloneRowOrder" FROM ${quotedTable} ORDER BY ${orderSql}${limitClause}`;
+  // The original keys expose the existing path ordering to PostgreSQL. Sorting
+  // only by the generated ordinal forces a blocking full-table sort. Retain the
+  // ordinal last so tied keys keep exactly the window's assigned alias order.
+  const joinedOrderSql = [
+    ...ordering.map(column => `r.${quoteIdentifier(column)}${limit ? " DESC" : " ASC"}`),
+    'r."__dpfCloneRowOrder"',
+  ].join(", ");
   const selectSql = references.length
     ? `SELECT r.*, u."__dpfCloneUserIndex" FROM (${rowsSql}) r LEFT JOIN
        (SELECT id, row_number() OVER (ORDER BY id) AS "__dpfCloneUserIndex" FROM "User") u
        ON u.id = ${references.length === 1 ? referenceSql : `COALESCE(${referenceSql})`}
-       ORDER BY r."__dpfCloneRowOrder"`
+       ORDER BY ${joinedOrderSql}`
     : rowsSql;
-  await copySanitizedCursorBatches(source, selectSql, async rows => {
-    for (const row of rows) delete row.__dpfCloneRowOrder;
-    await write(rows);
-  }, 50, false);
-
+  return selectSql;
 }
 
 /**

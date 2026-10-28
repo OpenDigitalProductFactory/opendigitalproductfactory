@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "../generated/client/client";
 import {
   createSanitizedCloneInsertWriter,
+  buildSanitizedCursorQuery,
   insertRowsWithReplicationDisabled,
   runSourceCheckedClone,
   sanitizeConfidentialRow,
@@ -92,6 +93,52 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       await client.end();
     }
   });
+
+  it("keeps legacy ordered values, audit cohort and aliases without a global ordinal sort", async () => {
+    const tableName = fixtureName("ordered");
+    const table = publicFixture(tableName);
+    const users = `"${schema}"."CloneUser"`;
+    try {
+      await client.query(`CREATE TABLE ${table} (id text PRIMARY KEY, name text, "createdAt" timestamptz, payload jsonb)`);
+      await client.query(`CREATE TABLE ${users} (id text PRIMARY KEY)`);
+      await client.query(`INSERT INTO ${users} VALUES ('000001'), ('000003')`);
+      await client.query(`INSERT INTO ${table}
+        SELECT lpad(i::text, 6, '0'), 'Source person',
+          CASE WHEN i % 7 = 0 THEN NULL ELSE '2026-01-01'::timestamptz + (i % 3) * interval '1 day' END,
+          jsonb_build_object('value', i) FROM generate_series(1, 10001) i`);
+      await client.query(`ANALYZE ${table}`);
+      for (const limit of [undefined, 50]) {
+        const sql = buildSanitizedCursorQuery(tableName, '"id", "name", "createdAt", "payload"',
+          new Set(["id", "name", "createdAt", "payload"]), limit).replace('FROM "User"', `FROM ${users}`);
+        const legacy = sql.replace(/ORDER BY r\.[\s\S]*$/, 'ORDER BY r."__dpfCloneRowOrder"');
+        const expected = (await client.query(legacy)).rows;
+        const actual = (await client.query(sql)).rows;
+        expect(actual).toEqual(expected);
+        expect(actual).toHaveLength(limit ?? 10001);
+        let index = 2;
+        const aliases = actual.map(row => sanitizeConfidentialRow(row,
+          row.__dpfCloneUserIndex == null ? ++index : Number(row.__dpfCloneUserIndex)));
+        expect(aliases[0]?.name).toBe(limit ? "Dev User 003" : "Dev User 001");
+        if (!limit) {
+          const result = await client.query(`EXPLAIN (FORMAT JSON) ${sql}`);
+          const plan = result.rows[0]["QUERY PLAN"][0].Plan;
+          expect(plan["Node Type"]).not.toBe("Sort");
+          let copied = 0;
+          let largestBatch = 0;
+          await copySanitizedCursorBatches(client, sql, async rows => {
+            largestBatch = Math.max(largestBatch, rows.length);
+            expect(rows).toEqual(actual.slice(copied, copied + rows.length));
+            copied += rows.length;
+          }, 50);
+          expect(copied).toBe(10001);
+          expect(largestBatch).toBe(50);
+        }
+      }
+    } finally {
+      await client.query(`DROP TABLE IF EXISTS ${table}`);
+      await client.query(`DROP TABLE IF EXISTS ${users}`);
+    }
+  }, 30_000);
 
   it("reads large JSON and native vector data in bounded batches without fetching vector content", async () => {
     const table = `"${schema}"."PayloadBatch"`;
