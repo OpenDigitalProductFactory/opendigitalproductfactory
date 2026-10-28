@@ -568,6 +568,29 @@ services:
     # Service-level `cpus` rather than deploy.resources.limits: compose refuses
     # a deploy limits block beside `pids_limit` above.
     cpus: "4.0"
+    # Containment profile (agent sandbox containment design, AC-1). Agent CLIs
+    # run here with their own approvals off, so the container is the boundary.
+    # Every capability is dropped; the six added back are each needed and were
+    # proven by removal: CHOWN (chown -R /workspace, pnpm install), DAC_OVERRIDE
+    # and FOWNER (root writing and chmod-ing node-owned files, restoring the
+    # node home), SETUID and SETGID (`su node`), KILL (pkill of node-owned
+    # dev servers). The seccomp profile is Docker's default minus unprivileged
+    # ptrace / process_vm_readv / process_vm_writev, so one agent cannot attach
+    # to another process in the container. Root is read-only; the writable
+    # paths are the workspace volume and size-capped tmpfs mounts (exec is
+    # needed: the portal runs its runner scripts from /tmp). The image restores
+    # /root and /home/node into the empty tmpfs at boot. Reasoning and the
+    # verification record: config/sandbox/README.md.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./config/sandbox/seccomp.json
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777,exec
+      - /root:size=512m,mode=0700,exec
+      - /home/node:size=2g,uid=1000,gid=1000,mode=0755,exec
     logging: *default-logging
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"

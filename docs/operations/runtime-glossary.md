@@ -17,6 +17,7 @@ The Build Studio agent execution and preview surface on `http://localhost:3035`.
 - Compose service: `sandbox`
 - `RuntimeTarget.kind`: `build-sandbox`
 - Mutated by: Build Studio orchestrator only. The "Live preview" name is the user-facing label; the compose-service name `sandbox` remains in diagnostics.
+- Containment: read-only root, all capabilities dropped but six, `no-new-privileges`, and a seccomp profile without ptrace. Only `/workspace`, `/tmp`, `/root` and `/home/node` are writable, the last three as size-capped tmpfs that empties on every restart. See [`config/sandbox/README.md`](../../config/sandbox/README.md).
 
 ## Contributor preview
 

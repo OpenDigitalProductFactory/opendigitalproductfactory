@@ -5,6 +5,26 @@ set -eu
 # bootstrap sentinel proves source exists, not that node_modules matches it.
 # Converge dependencies before Next imports instrumentation (BI-FFFEA4ED).
 workspace=${DPF_SANDBOX_WORKSPACE_ROOT:-/workspace}
+
+# Read-only root (agent sandbox containment design, AC-1). Compose mounts
+# /root and /home/node as tmpfs, which hides what the image placed there (the
+# codex config, git identity, the pre-seeded opencode provider). The image keeps
+# a copy under /opt/dpf-home-seed; restore it into an empty home on every boot.
+# A home that already has content (a compose without the tmpfs mounts) is left
+# alone, so this image still runs under the previous compose.
+seed_root=${DPF_SANDBOX_HOME_SEED:-/opt/dpf-home-seed}
+seed_home() {
+  [ -d "$seed_root/$1" ] || return 0
+  [ -d "$2" ] || return 0
+  [ -z "$(ls -A "$2" 2>/dev/null)" ] || return 0
+  cp -a "$seed_root/$1/." "$2/" || {
+    echo "[sandbox-start] ERROR could not restore $2 from $seed_root/$1" >&2
+    exit 15
+  }
+}
+seed_home root "${DPF_SANDBOX_ROOT_HOME:-/root}"
+seed_home node "${DPF_SANDBOX_NODE_HOME:-/home/node}"
+
 while [ ! -f "$workspace/.dpf-version" ]; do
   echo 'Waiting for workspace bootstrap...'
   sleep 5

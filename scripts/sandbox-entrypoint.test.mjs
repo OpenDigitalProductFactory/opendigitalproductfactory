@@ -243,3 +243,51 @@ test('a container stop still ends the entrypoint and its dev server promptly', {
     assert.equal(devStarts(log), 1, 'a stop must not restart the dev server');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// Agent sandbox containment (design 2026-10-21, AC-1): compose mounts /root and
+// /home/node as tmpfs over a read-only root, hiding what the image put there.
+// The entrypoint restores the image's copy into an empty home, and leaves a
+// home that already has content alone (the same image under an older compose).
+function seedFixture() {
+  const root = mkdtempSync(join(tmpdir(), 'dpf-sandbox-seed-'));
+  const bin = join(root, 'bin');
+  const workspace = join(root, 'ws');
+  const seed = join(root, 'seed');
+  const rootHome = join(root, 'root-home');
+  const nodeHome = join(root, 'node-home');
+  for (const dir of [bin, workspace, join(seed, 'root', '.codex'), join(seed, 'node', '.cache', 'opencode'), rootHome, nodeHome]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(workspace, '.dpf-version'), 'prior-source');
+  writeFileSync(join(seed, 'root', '.codex', 'config.toml'), 'sandbox_mode = "danger-full-access"\n');
+  writeFileSync(join(seed, 'node', '.gitconfig'), '[user]\n\tname = DPF Sandbox\n');
+  writeFileSync(join(seed, 'node', '.cache', 'opencode', 'provider'), 'seeded');
+  writeFileSync(join(bin, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const run = () => spawnSync('sh', [entrypoint], {
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: workspace, DPF_SANDBOX_HOME_SEED: seed, DPF_SANDBOX_ROOT_HOME: rootHome, DPF_SANDBOX_NODE_HOME: nodeHome, DPF_SANDBOX_DEV_RESTART_LIMIT: '1' },
+    encoding: 'utf8', timeout: 5000,
+  });
+  return { root, rootHome, nodeHome, run, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('sandbox boot restores the image homes into an empty tmpfs home', { skip: process.platform === 'win32' }, () => {
+  const fx = seedFixture();
+  try {
+    const result = fx.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(readFileSync(join(fx.rootHome, '.codex', 'config.toml'), 'utf8'), /danger-full-access/);
+    assert.match(readFileSync(join(fx.nodeHome, '.gitconfig'), 'utf8'), /DPF Sandbox/);
+    assert.equal(readFileSync(join(fx.nodeHome, '.cache', 'opencode', 'provider'), 'utf8'), 'seeded');
+  } finally { fx.cleanup(); }
+});
+
+test('sandbox boot leaves a home that already has content untouched', { skip: process.platform === 'win32' }, () => {
+  const fx = seedFixture();
+  try {
+    writeFileSync(join(fx.nodeHome, '.gitconfig'), 'operator-owned\n');
+    const result = fx.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(join(fx.nodeHome, '.gitconfig'), 'utf8'), 'operator-owned\n');
+    assert.deepEqual(readdirSync(fx.nodeHome), ['.gitconfig']);
+    // The other, empty home is still restored.
+    assert.match(readFileSync(join(fx.rootHome, '.codex', 'config.toml'), 'utf8'), /danger-full-access/);
+  } finally { fx.cleanup(); }
+});

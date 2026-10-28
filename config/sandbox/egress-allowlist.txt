@@ -1,0 +1,29 @@
+# Build Studio sandbox egress allowlist (agent sandbox containment design, AC-2).
+#
+# One anchored extended regex per line, matched against the request host by the
+# sandbox egress proxy (tinyproxy `Filter`, `FilterDefaultDeny Yes`). Anything
+# not listed is refused. Compose-network peers (portal, sandbox-postgres) are
+# reached directly through NO_PROXY and are not listed here.
+#
+# Widening this list is a security change: the contract test
+# scripts/installer/sandbox-containment-contract.test.mjs pins it, so an edit
+# here fails CI until the test's expected list is changed in the same commit.
+
+# Packages: pnpm/npm registry (also corepack's pnpm downloads).
+^registry\.npmjs\.org$
+# Git over HTTPS and release downloads.
+^github\.com$
+^codeload\.github\.com$
+^objects\.githubusercontent\.com$
+# Prisma engines, fetched by `prisma generate` at sandbox boot (the install
+# runs with --ignore-scripts, so no postinstall download happens earlier).
+^binaries\.prisma\.sh$
+# Model providers used by the agent CLIs.
+^api\.anthropic\.com$
+^api\.openai\.com$
+^auth\.openai\.com$
+^chatgpt\.com$
+^api\.x\.ai$
+# Local model endpoints for OpenCode (opencode-dispatch.ts).
+^host\.docker\.internal$
+^model-runner\.docker\.internal$

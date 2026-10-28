@@ -150,6 +150,7 @@ The current codebase already includes:
 - a local development server inside the sandbox
 - an optional sandbox-local `postgres` container (`sandbox-postgres`, on `pgvector/pgvector:pg16`) on a dedicated network
 - time, CPU, memory, and disk limits for sandbox containers
+- a containment profile on the `sandbox` service: all capabilities dropped but six, `no-new-privileges`, a seccomp profile that refuses ptrace, a read-only root, and size-capped tmpfs for `/tmp` and the home directories (see [`config/sandbox/README.md`](../../config/sandbox/README.md))
 - sandbox lifecycle controls for launch, inspect, and teardown
 
 ### Target Iterative Workflow

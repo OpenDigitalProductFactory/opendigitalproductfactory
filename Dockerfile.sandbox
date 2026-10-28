@@ -110,6 +110,12 @@ RUN mkdir -p /root/.codex && printf '%s\n' \
   '[plugins."github@openai-curated"]' \
   'enabled = false' \
   > /root/.codex/config.toml
+# Read-only root (agent sandbox containment design, AC-1): compose mounts
+# /root and /home/node as tmpfs. Keep a copy of both homes as built so the
+# entrypoint can restore them into the empty tmpfs on each boot.
+RUN mkdir -p /opt/dpf-home-seed \
+ && cp -a /root /opt/dpf-home-seed/root \
+ && cp -a /home/node /opt/dpf-home-seed/node
 WORKDIR /workspace
 # No portal secrets and no Docker socket. Compose never passes the portal's
 # AUTH_SECRET / NEXTAUTH_SECRET here (BI-F1C680C7): agent CLIs run in this
