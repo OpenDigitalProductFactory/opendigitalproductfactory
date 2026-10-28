@@ -422,8 +422,17 @@ function memoryStore(seed: Array<Partial<MemItem> & { itemId: string }>, seedAct
     if (!where) return true;
     const body = where.body as { contains?: string } | undefined;
     if (body?.contains && !(item.body ?? "").includes(body.contains)) return false;
-    const notBody = (where.NOT as { body?: { contains?: string } } | undefined)?.body?.contains;
-    if (notBody && (item.body ?? "").includes(notBody)) return false;
+    for (const clause of (where.AND as Array<Record<string, unknown>> | undefined) ?? []) {
+      if (clause.OR) {
+        const anyMatch = (clause.OR as Array<Record<string, unknown>>).some((alt) => {
+          if ("body" in alt && alt.body === null) return item.body === null;
+          const notContains = (alt.NOT as { body?: { contains?: string } } | undefined)?.body?.contains;
+          if (notContains) return !(item.body ?? "").includes(notContains);
+          return matches(item, alt);
+        });
+        if (!anyMatch) return false;
+      } else if (!matches(item, clause)) return false;
+    }
     const status = where.status as { notIn?: string[]; in?: readonly string[] } | undefined;
     if (status?.notIn && status.notIn.includes(item.status)) return false;
     if (status?.in && !status.in.includes(item.status)) return false;

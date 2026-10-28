@@ -169,7 +169,7 @@ export type TwinActivityDb = {
   };
 };
 
-type MirrorRef = { itemId: string; status: string; body: string | null };
+type MirrorRef = { itemId: string; peerStatus: string; body: string | null };
 
 /**
  * Record each twin on this install's own item, once per (local item, mirror)
@@ -205,8 +205,8 @@ export async function recordFederatedTwins(db: TwinActivityDb, mirrors: readonly
         data: {
           backlogItemId: local.id,
           kind: FEDERATED_TWIN_ACTIVITY_KIND,
-          summary: `Same defect is tracked on the paired installation as ${mirror.itemId} (${mirror.status})`,
-          payload: { peerInstallationId: peer!.installationId, peerItemId: mirror.itemId, peerStatus: mirror.status, marker, observedAt: now.toISOString() },
+          summary: `Same defect is tracked on the paired installation as ${mirror.itemId} (${mirror.peerStatus})`,
+          payload: { peerInstallationId: peer!.installationId, peerItemId: mirror.itemId, peerStatus: mirror.peerStatus, marker, observedAt: now.toISOString() },
         },
       });
       recorded.add(`${local.id}\x00${mirror.itemId}`);
@@ -216,7 +216,8 @@ export async function recordFederatedTwins(db: TwinActivityDb, mirrors: readonly
   return written;
 }
 
-/** Where-clause fragment: rows this install owns (not work-sync mirrors). */
-export const OWNED_ROW_BODY_WHERE = {
-  OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
-} as const;
+/** Where-clause fragment: rows this install owns (not work-sync mirrors).
+ *  NULL-safe: `NOT (body LIKE …)` is NULL for a NULL body, so the null arm is explicit. */
+export function ownedRowBodyWhere(): { OR: Array<{ body: null } | { NOT: { body: { contains: string } } }> } {
+  return { OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }] };
+}

@@ -431,7 +431,7 @@ async function syncLink(
   if (db.backlogItem.findMany && db.backlogItemActivity) {
     const pulled = pages.flatMap((page) => page.items).map((item) => ({
       itemId: item.itemId,
-      status: item.status,
+      peerStatus: item.status,
       body: withFederatedWorkOriginMarker(item.body, origin, item.itemId),
     }));
     try {

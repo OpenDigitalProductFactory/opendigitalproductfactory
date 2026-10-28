@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
-import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
-import { intakeOriginMarkers, isFederatedMirror } from "@/lib/federation/federated-twins";
+import { ownedRowBodyWhere, intakeOriginMarkers, isFederatedMirror } from "@/lib/federation/federated-twins";
 import { isBacklogStatus, isLegalTransition, type BacklogStatus } from "@/lib/backlog/transitions";
 
 export const CODING_POOL_STATUSES = ["triaging", "open", "in-progress"] as const;
@@ -184,8 +183,7 @@ async function loadOwnedTwins(delivered: readonly LinkedItem[]): Promise<Array<L
   const rows: LinkedItem[] = await prisma.backlogItem.findMany({
     where: {
       status: { in: [...CODING_POOL_STATUSES] },
-      NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
-      OR: [...markerOwner.keys()].map((marker) => ({ body: { contains: marker } })),
+      AND: [ownedRowBodyWhere(), { OR: [...markerOwner.keys()].map((marker) => ({ body: { contains: marker } })) }],
     },
     select: { id: true, itemId: true, status: true, claimStatus: true, workType: true, body: true },
   });

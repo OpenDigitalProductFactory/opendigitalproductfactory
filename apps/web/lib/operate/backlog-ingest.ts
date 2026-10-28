@@ -14,7 +14,7 @@
 import { randomUUID } from "crypto";
 
 import { prisma as defaultPrisma } from "@dpf/db";
-import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 
 import {
   BACKLOG_SOURCE_VALUES,
@@ -463,8 +463,7 @@ export async function ingestBacklogItem(
   if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
       where: {
-        body: { contains: marker },
-        NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
+        AND: [{ body: { contains: marker } }, ownedRowBodyWhere()],
         status: { notIn: ["done", "deferred", "retired"] },
       },
       select: { id: true, itemId: true },

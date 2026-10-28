@@ -503,8 +503,10 @@ describe("a merged PR closes the twins it closes (BI-91FC6B9A)", () => {
     expect(result.moved).toEqual(["BI-LOCAL"]);
     expect(mockBacklogFindMany.mock.calls[1]![0].where).toEqual({
       status: { in: [...CODING_POOL_STATUSES] },
-      NOT: { body: { contains: "[origin:federatedWork:inst_" } },
-      OR: [{ body: { contains: MARKER } }],
+      AND: [
+        { OR: [{ body: null }, { NOT: { body: { contains: "[origin:federatedWork:inst_" } } }] },
+        { OR: [{ body: { contains: MARKER } }] },
+      ],
     });
     expect(mockActivityCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({

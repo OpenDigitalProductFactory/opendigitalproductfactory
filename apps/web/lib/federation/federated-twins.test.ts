@@ -111,7 +111,7 @@ describe("recordFederatedTwins (AC-2)", () => {
         create: vi.fn(async ({ data }: { data: { backlogItemId: string; payload: unknown } }) => { activities.push(data); }),
       },
     };
-    const mirrors = [{ itemId: "BI-PEER", status: "in-progress", body: mirror().body }];
+    const mirrors = [{ itemId: "BI-PEER", peerStatus: "in-progress", body: mirror().body }];
 
     expect(await recordFederatedTwins(db, mirrors, now)).toBe(1);
     expect(db.backlogItemActivity.create).toHaveBeenCalledWith({
@@ -130,8 +130,8 @@ describe("recordFederatedTwins (AC-2)", () => {
       backlogItem: { findMany: vi.fn().mockResolvedValue([mirror()]) },
       backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
     };
-    expect(await recordFederatedTwins(db, [{ itemId: "BI-PEER", status: "open", body: mirror().body }], now)).toBe(0);
-    expect(await recordFederatedTwins(db, [{ itemId: "BI-X", status: "open", body: `[origin:federatedWork:${PEER}:BI-X]` }], now)).toBe(0);
+    expect(await recordFederatedTwins(db, [{ itemId: "BI-PEER", peerStatus: "open", body: mirror().body }], now)).toBe(0);
+    expect(await recordFederatedTwins(db, [{ itemId: "BI-X", peerStatus: "open", body: `[origin:federatedWork:${PEER}:BI-X]` }], now)).toBe(0);
     expect(db.backlogItemActivity.create).not.toHaveBeenCalled();
   });
 });
