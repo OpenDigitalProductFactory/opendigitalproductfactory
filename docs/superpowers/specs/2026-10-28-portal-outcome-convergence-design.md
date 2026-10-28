@@ -7,11 +7,12 @@ status: draft
 **Backlog:** BI-81AB897A. **Workroom:** WC-6D8C9787.
 **Status:** proposed integration scope; independent approval pending.
 
-The operator authorized this program's governed delivery on October 28.
-Authorization to do the work and admission of a particular design are separate:
-this commit changes documents only; no executable slice may start until its
-current shape, scope, coverage and independent gates allow implementation.
-No further technical confirmation is requested merely because the phase changes.
+The confirmed task scope is investigation and an improvement plan. The October
+28 request asks to complete this thread's outcomes; clarification of whether it
+also extends to implementation is pending. This commit changes documents only.
+Future execution needs operator scope authorization and current shape, coverage
+and independent admission. Within an authorized scope, a phase change alone
+does not require another confirmation.
 
 ## Problem and boundaries
 

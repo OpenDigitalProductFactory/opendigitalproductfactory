@@ -25,8 +25,9 @@ This export is evidence derived from the existing registries, not a new registry
 
 The CSV's static persona key `ops-coordinator` is the source identity whose
 display name is Scrum Master. Display labels and keys are not distinct owners.
-The operator authorized governed delivery on October 28; each proposed slice
-still owes its current independent admission, coverage and verification gates.
+The confirmed scope is investigation and an improvement plan; extension to
+implementation is being clarified. Each proposed slice still owes scope
+authorization and current independent admission, coverage and verification.
 This document commit changes no executable code and earns no runtime acceptance.
 
 | Finding | Evidence and user harm | Classification | Canonical disposition |
@@ -84,9 +85,10 @@ independent review/evidence recovery. BI-7906C73E owns the historical initiative
 proof lane; BI-8ECEC429 is a distinct semantic-review lane. An uncertain old
 execution must not be declared settled to enable a new review.
 
-The operator's October 28 instruction authorizes this thread's governed
-implementation and verification. It supersedes the earlier planning-only scope;
-it does not widen grants or settle historical reviews. The assessment Workroom
+The October 28 request is to complete this thread's desired outcomes. The earlier
+explicit scope is investigation and an improvement plan. A clarification is
+pending on whether implementation is also requested; no executable repair has
+been made. No instruction widens grants or settles historical reviews. The Workroom
 reports unresolved funding attribution. No funding principal is inferred from
 the install, coordinator or executor, and no paid provider is added.
 

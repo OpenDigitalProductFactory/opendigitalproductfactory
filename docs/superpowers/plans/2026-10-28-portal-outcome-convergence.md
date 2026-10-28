@@ -7,10 +7,11 @@ status: draft
 **Parent:** BI-81AB897A. **Workroom:** WC-6D8C9787.
 **Status:** proposed decomposition; independent scope/plan approval and coverage receipt pending.
 
-The operator's October 28 authorization covers governed delivery of this program.
-This documentation commit authorizes no executable edit by itself. Each slice
-uses that existing operator authorization and still needs current admission and
-coverage; no new phase-change confirmation is required.
+The confirmed operator scope is investigation and an improvement plan. Whether
+the October 28 completion request also includes implementation is being clarified.
+This documentation commit authorizes no executable edit. Future slices need
+operator scope authorization plus current admission/coverage; within authorized
+scope, a phase change alone needs no further confirmation.
 
 For agentic workers: execute this plan one independently reviewable backlog item
 at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green
@@ -30,9 +31,15 @@ is proposed. Existing Windows COO work keeps its ownership and review gates.
 ## Backlog coverage
 
 Decision: **decomposed**. These deliverables are independently shippable. This
-table is the proposed graph, not a governed coverage receipt. Record the receipt
-against this immutable plan only after the parent's independent scope baseline
-exists; copy its identity here and check current coverage before implementation.
+table is the delivery graph. The governed decomposition receipt is
+`cmvsirovl3emm01s5xu80m667`, recorded against plan blob
+`b5d6b21de27b5bd4855725418933aeb2291e94f0` at commit
+`207f6567a79439d65a352c43370ccd8bef8ea1c6`, with scope baseline
+`baseline-40ea2e65-69af-4493-875d-5a717a918678`. It validates nine live mappings;
+it is neither implementation authorization nor delivery acceptance. Recheck and
+refresh coverage for the final plan amendment before implementation. In that
+receipt, requirement references are objective IDs and verification references
+are acceptance IDs; V-* below names the additional test procedure.
 
 | Key / live item | Requirement references | Contract references | Flow references | Verification references | Dependencies |
 | --- | --- | --- | --- | --- | --- |
