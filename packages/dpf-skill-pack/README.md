@@ -125,6 +125,22 @@ The auto-install hook (BI-98683E68) wires these into portal install + worktree c
 
 ## Standalone install and update
 
+### Runtime floor: the stock Python of every supported OS (BI-90C9478D)
+
+The updater and its scripts use only the standard library of Python 3.9, which is what stock macOS ships. CI runs every suite on a macOS runner's system `/usr/bin/python3` (the `Stock macOS Python` job) as well as on Linux with 3.12.
+
+Python 3.9 has no TOML parser, so `scripts/codex_toml.py` reads TOML in this order:
+
+1. `tomllib` (3.11+);
+2. `tomli`;
+3. Codex's own parser. It writes the text into a private, throw-away `CODEX_HOME` and asks `codex app-server` for `config/read`, so the result is exactly what Codex itself will load. Results are cached per run.
+
+The Codex path refuses two things rather than risk a wrong rewrite:
+- a file Codex itself calls invalid (`Invalid TOML for Codex: …`, with its line, column and reason);
+- a TOML date-time value, which JSON would turn into a string.
+
+The Codex CLI is found on `PATH`, in the usual install folders, and inside the ChatGPT app (`ChatGPT.app/Contents/Resources/codex-cli/bin/codex`). With no parser and no Codex CLI at all, nothing on the host reads Codex settings. Codex is then reported `absent` and its settings are left unchanged; the run does not fail.
+
 The root-clone guard distinguishes shell syntax from quoted diagnostic text and
 interpreter heredoc input (BI-F6176C63). Read-only scripts with comparisons or
 HTML are allowed. Shell redirections, commands after a heredoc, shell-fed input,
@@ -284,6 +300,8 @@ Until then, rows stay checklist-only in
 
 `toolchain-version.json` is the only place the pack version is written. Every client manifest (`.claude-plugin`, `.grok-plugin`, `.antigravity-plugin`, the Codex manifest's base version) and both version fields in the root `.claude-plugin/marketplace.json` are generated from it with `node scripts/sync-toolchain-version.mjs`. The Toolchain Version Guard (`--check`) fails CI on any hand edit. To bump the version, edit `toolchain-version.json` and run the script.
 
+**A content change does not need a bump to ship (BI-4F9E3221).** The portal manifest publishes `deliveredVersion` = `<packVersion>+c.<packDigest[0:12]>`, and the updater stamps that string into every client manifest it delivers (`.claude-plugin`, `.grok-plugin`, `.antigravity-plugin`) and into the managed marketplace. Claude Code keys its plugin cache by that string, so any change of delivered bytes refreshes it. `delivered_digest` hashes those manifests with their version value blank, so stamping never changes the digest. Codex keeps its own `+codex.<digest>` suffix. Bump `packVersion` only for a semantic reason: a floor, a breaking change, or a release note. Design: [`docs/superpowers/specs/2026-10-27-self-converging-agent-toolchain-design.md`](../../docs/superpowers/specs/2026-10-27-self-converging-agent-toolchain-design.md) M1.
+
 Each portal serves the pack its image ships, with no source checkout needed (BI-52934B3E, design `docs/superpowers/specs/2026-10-07-agent-toolchain-release-delivery-design.md` §5.1):
 
 - `GET /api/agent-toolchain/manifest` returns `packVersion`, `packDigest` (the delivered-content identity), `archiveSha256`, `releaseId`, `floor` and the per-client connector shape, including each client's `declarationCarrier`. It is signed with the installation's Ed25519 identity (`deviceId`, `signingPublicKey`, `signature` over the canonical manifest bytes).
@@ -311,6 +329,31 @@ Then the updater inside the verified pack runs, and the pin is written after it 
 - converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
 - with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
 
+### The host keeps itself current (BI-65C17737)
+
+After one portal-sourced run has pinned the installation, the host converges on its own. That run registers `scripts/toolchain_agent.py` from the shared copy as a per-user job, with no elevation:
+
+| Platform | Mechanism | Name |
+| --- | --- | --- |
+| macOS | launchd user agent, hourly and at login | `local.dpf.toolchain-agent` |
+| Linux | systemd user timer, hourly and 2 minutes after boot | `dpf-toolchain-agent.timer` |
+| Windows | Scheduled Task, hourly | `DPF Toolchain Agent` |
+
+Each run reads the signed manifest for the origin and device id already pinned in `~/.dpf/trusted-installations.json`. It never uses an identity it was not already given; a changed identity is refused and reported as `needs-operator:identity_changed`. It runs the same updater (`--from-portal … --expect-installation …`) only when something changed:
+
+- a new release (`packDigest` differs);
+- a client CLI's `--version` changed;
+- a retry, once a failure's backoff has elapsed (1, 2, 4 … up to 24 hours);
+- a daily re-verification.
+
+Otherwise it does nothing. State lands in `~/.dpf/toolchain-agent/state.json` (`status`: `ok`, `failed`, `needs-operator`, `offline`, `opted-out`, `ahead-of-portal` or `busy`, with `code`, `detail`, `failureSince`, `backoffUntil` and the client versions), and one line per run goes to `~/.dpf/toolchain-agent/agent.log`. The bootstrap's readiness record, `~/.dpf/agent-toolchain-state.json`, has its own writer and is never touched here.
+
+- **A source checkout ahead of the portal wins (spec row X15).** On a contributor host the session bootstrap installs the pack from the source checkout. When the shared copy's `.dpf-delivery.json` says `source: checkout`, and that commit contains the portal's `releaseId`, the agent writes nothing and reports `ahead-of-portal`. If git cannot tell, a higher base version, or the same one, also counts as ahead. A checkout behind the served release converges from the portal.
+- **One convergence at a time.** The agent and every updater run share `~/.dpf/toolchain-agent/run.lock`. A second run exits 75 (`busy`). A lock held by a dead process, or older than 30 minutes, is taken over. The holder passes `DPF_TOOLCHAIN_LOCK_HELD=1` to the updater processes it starts, and read-only modes (`--dry-run`, the hook-reference checks) take no lock.
+- **The agent never re-registers itself.** Reloading a launchd job terminates the running copy, so the updater skips schedule registration when it runs under the agent (`DPF_TOOLCHAIN_AGENT=1`).
+- **Opting out.** Write `{"enabled": false}` to `~/.dpf/toolchain-agent/config.json`. The next updater run removes the schedule, and the agent reports `opted-out`. With several paired portals, `{"origin": "https://…"}` chooses one; until then the agent reports `needs-operator:ambiguous-origin`.
+- **Commands:** `toolchain_agent.py status` prints the schedule and the state; `install` and `uninstall` manage the job by hand.
+
 ### What a connection declares, and what it is told
 
 A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the first 16 hex of the delivered digest) and `dpf_client` on the MCP URL, or the `X-DPF-Toolchain: pack=…;digest=…;client=…` header (BI-54469E18, design §5.2). On every connection the server:
@@ -318,6 +361,11 @@ A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the f
 - **Computes a verdict.** `current`, `stale`, `below-floor` or `undeclared`, from `apps/web/lib/agent-toolchain/toolchain-verdict.ts`. A User-Agent never decides it.
 - **Records the copy.** It goes in `AgentToolchainObservation`, keyed by the server-derived credential (`oauth:<OAuthClient.id>` or `token:<McpApiToken.id>`) and the loaded digest, with writes coalesced to one per five minutes. `initialize` also records `clientInfo`.
 - **Tells the agent.** A `TOOLCHAIN:` line is added to the `initialize` instructions, naming what is stale, the portal repair and the full installation id the updater must expect (`--expect-installation`). It is addressed to the agent and never hands the user a command.
+
+**How the host's agent last fared (BI-3E66F76F).** The declaration also carries `converge=status[:code][@epochSeconds]`, or `dpf_converge` on the query, read from the host agent's own `~/.dpf/toolchain-agent/state.json`. The status vocabulary is `ok`, `failed`, `needs-operator`, `opted-out`, `offline`, `ahead-of-portal` and `busy`. The code is a machine code such as `exit-1` or `identity_changed`, never free text. The time is when the host first failed. The value reflects the agent's last completed run, so it lags one run behind the run in progress.
+- The server stores it on the observation (`convergeStatus`, `convergeCode`, `convergeSince`).
+- The Connected Agent Clients card on `/ops/self-upgrade` shows it next to each client's reasons for being behind.
+- A host that has been `failed` or `needs-operator` for more than a day raises one `agent-toolchain` attention item per credential, with the single operator action for its code. Healthy, opted-out, ahead-of-portal and week-silent hosts raise nothing.
 
 `get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
 

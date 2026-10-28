@@ -180,3 +180,16 @@ describe("canonical embedding transport", () => {
     expect(transport.fetch).toHaveBeenNthCalledWith(2, expect.stringContaining("/models"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 });
+
+describe("query-time callers can bound the wait (BI-MCP-EFF-4F823E5B)", () => {
+  it("uses the caller's deadline, and keeps 30 s for everyone else", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+
+    await generateEmbeddingDetailed("search text", { timeoutMs: 15_000 });
+    await generateEmbeddingDetailed("indexed text");
+
+    expect(timeout).toHaveBeenNthCalledWith(1, 15_000);
+    expect(timeout).toHaveBeenNthCalledWith(2, 30_000);
+  });
+});

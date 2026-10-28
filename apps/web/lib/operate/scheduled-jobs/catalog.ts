@@ -548,7 +548,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     honorsEnabledGate: true,
     name: "Workroom flow review",
     purpose:
-      "Once a day, turns every place where Workrooms pile up (three or more held at one step) into an improvement signal. A pile that persists across reviews is filed once as a backlog item through the improvement facility; one that clears on its own never reaches the backlog (EP-B70E718D F8).",
+      "Once a day, records each work shape's newest flow review: the step where the most waiting built up and why. When two reviews in a row name the same step and cause, files it once as a backlog item, owned by the step's accountable principal and routed as a gate on that step; a pile that clears between reviews never reaches the backlog (EP-B70E718D F8c).",
     cron: "23 6 * * *",
     cadence: "Daily at 06:23",
     category: "editable",

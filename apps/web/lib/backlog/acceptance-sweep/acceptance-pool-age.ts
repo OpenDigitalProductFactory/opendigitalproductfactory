@@ -1,7 +1,7 @@
 import type { BacklogStatus } from "@/lib/backlog/transitions";
 
 import { acceptanceEnteredAt, type AcceptanceAgeBasis } from "./acceptance-age";
-import { ACCEPTANCE_CANDIDATE_WHERE, retainedDeploymentObligation } from "./acceptance-sweep-page";
+import { ACCEPTANCE_CANDIDATE_WHERE, retainedClosureObligation } from "./acceptance-sweep-page";
 
 // The awaiting-acceptance pool's age, measured every sweep run (BI-DF255666).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md
@@ -91,7 +91,7 @@ export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb, now: Date)
   // predicate. Include that read cost in the revisit estimate, not pool.size.
   ages.candidateCount = items.length;
   for (const item of items) {
-    if (item.status === "done" && !retainedDeploymentObligation({ ...item, agentId: null, claimedByAgentId: null })) continue;
+    if (item.status === "done" && !retainedClosureObligation({ ...item, agentId: null, claimedByAgentId: null })) continue;
     const terminal = item.status === "done" ? item.activities?.[0] : null;
     const entry = terminal ? { enteredAt: terminal.recordedAt, ageBasis: "entry" as const }
       : acceptanceEnteredAt(rowsByItem.get(item.id) ?? [], item.createdAt);

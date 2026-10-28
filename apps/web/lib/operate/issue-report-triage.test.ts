@@ -380,6 +380,107 @@ describe("triageIssueReports — crash_boundary gate (BI-B4F401B3)", () => {
   });
 });
 
+describe("triageIssueReports — signature dedup at mint (BI-24092DC9)", () => {
+  const sigReport = {
+    id: "rs1",
+    reportId: "PIR-MUCGY",
+    type: "log_signature",
+    severity: "high",
+    title: "New error signature in portal: [callWithFallbackChain] anthropic-sub failed: Token refresh",
+    description: "token refresh failed",
+    routeContext: null,
+    errorStack: null,
+    source: "log-signature-scanner",
+    dedupeKey: "log-sig:portal:287cb58ad5",
+  };
+
+  it("stamps the signature and source report into the minted item so a repeat can find it", () => {
+    const item = buildIssueBacklogItem(sigReport, "prod-1", "tax-1");
+    expect(item.body).toContain("Signature: log-sig:portal:287cb58ad5");
+    expect(item.body).toContain("Source report: PIR-MUCGY (log-signature-scanner)");
+  });
+
+  it("attaches a repeat of an already-filed signature to the existing item instead of minting a BI", async () => {
+    const created: unknown[] = [];
+    const incremented: string[] = [];
+    const acknowledged: string[] = [];
+    const mockLlm = vi.fn();
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [sigReport],
+      findOpenItemTitleBySignature: async (sig: { reportId: string; dedupeKey: string | null }) =>
+        sig.dedupeKey === "log-sig:portal:287cb58ad5" ? "Portal: add retry/backoff for Anthropic token refresh" : null,
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      incrementOccurrence: async (t: string) => { incremented.push(t); },
+      acknowledgeReport: async (id: string) => { acknowledged.push(id); },
+      callLlm: mockLlm,
+    }));
+    expect(result.created).toBe(0);
+    expect(created).toHaveLength(0);
+    // incrementOccurrence is the existing path that bumps the tally AND raises priority.
+    expect(incremented).toEqual(["Portal: add retry/backoff for Anthropic token refresh"]);
+    expect(acknowledged).toEqual(["rs1"]);
+    // Folded before the LLM, so a known signature costs no inference.
+    expect(mockLlm).not.toHaveBeenCalled();
+  });
+
+  it("re-checks just before minting, so a signature filed while the LLM ran is attached, not duplicated", async () => {
+    const created: unknown[] = [];
+    const incremented: string[] = [];
+    let calls = 0;
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [sigReport],
+      // First lookup (pre-LLM) misses; the concurrent path mints meanwhile.
+      findOpenItemTitleBySignature: async () => (++calls === 1 ? null : "Investigate anthropic-sub token refresh"),
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      incrementOccurrence: async (t: string) => { incremented.push(t); },
+      callLlm: async () => ({
+        content: JSON.stringify({ severity: "high", taxonomyPath: null, duplicateOf: null, rootCause: null, suggestedTitle: "Reworded" }),
+      }),
+    }));
+    expect(result.created).toBe(0);
+    expect(created).toHaveLength(0);
+    expect(incremented).toEqual(["Investigate anthropic-sub token refresh"]);
+  });
+
+  it("does not mint when another projection path already claimed the report", async () => {
+    const created: unknown[] = [];
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [sigReport],
+      findOpenItemTitleBySignature: async () => null,
+      claimReport: async () => false,
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+    }));
+    expect(result.created).toBe(0);
+    expect(created).toHaveLength(0);
+  });
+
+  it("releases the claim when minting fails so the next sweep retries", async () => {
+    const released: string[] = [];
+    await expect(
+      triageIssueReports(triageDeps({
+        getOpenReports: async () => [sigReport],
+        findOpenItemTitleBySignature: async () => null,
+        claimReport: async () => true,
+        releaseReport: async (id: string) => { released.push(id); },
+        createBacklogItem: async () => { throw new Error("db down"); },
+      })),
+    ).rejects.toThrow("db down");
+    expect(released).toEqual(["rs1"]);
+  });
+
+  it("still mints a first occurrence of a new signature", async () => {
+    const created: Array<{ body: string }> = [];
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [sigReport],
+      findOpenItemTitleBySignature: async () => null,
+      claimReport: async () => true,
+      createBacklogItem: async (d: { body: string }) => { created.push(d); },
+    }));
+    expect(result.created).toBe(1);
+    expect(created[0].body).toContain("Signature: log-sig:portal:287cb58ad5");
+  });
+});
+
 describe("triageIssueReports — reach-threshold + staging gate (BI-51F6A428)", () => {
   // A reach-gated "noise-digest" signal (log-signature scanner output).
   const logSig = {

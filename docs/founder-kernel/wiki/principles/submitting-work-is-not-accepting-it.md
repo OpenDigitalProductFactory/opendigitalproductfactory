@@ -2,8 +2,8 @@
 title: Submitting Work Is Not Accepting It
 pageKind: principle
 status: published
-abstract: Opening a pull request with its evidence ends the delivering thread. Merge and live verification run on a different clock, and acceptance belongs to whoever asked for the change.
-principleDirection: End the thread when the pull request is open and its evidence recorded; never hold a session to watch a merge or deploy, and never self-accept your own work.
+abstract: Opening a pull request with its evidence ends the delivering thread. Merge and live verification run on a different clock. Delivery closes the item by default; a separate acceptance by whoever asked is owed only for contractual work, a customer who reported the problem is asked once whether it is fixed, and a regression found in use becomes a new item.
+principleDirection: End the thread when the pull request is open and its evidence recorded; never hold a session to watch a merge or deploy. Let the merge close non-contractual work, never self-accept work tagged contractual, ask a customer submitter one question with a bounded window, and never leave an obligation open without a bound.
 principleTier: core
 principleDimensionVector: {"governance_compliance": 0.7, "operator_effort": -0.3, "evidence_density": 0.5}
 principleWeight: 0.6
@@ -33,15 +33,40 @@ Two separate reasons, and each stands alone.
 
 **Merging and verification belong on different clocks.** Verification happens asynchronously, later, in whatever session is running when the change actually reaches an install. Holding a thread open to watch it burns context and wall-clock for no added assurance.
 
-**Acceptance is not the author's to give.** The person who asked for the change says whether it is acceptable. Self-verifying and then declaring the work accepted usurps that judgement. This is `governance-approves-evidence-not-provenance` applied to the end of the pipeline: evidence is submitted, not self-ratified.
+**Acceptance is not the author's to give.** Where a separate acceptance is owed, the person who asked for the change says whether it is acceptable. Self-verifying and then declaring the work accepted usurps that judgement. This is `governance-approves-evidence-not-provenance` applied to the end of the pipeline: evidence is submitted, not self-ratified.
+
+## Outcomes define done (founder direction, 2026-10-27)
+
+> "Outcomes is the way to know [...] Only when not obvious, we need to ask for how to know. The default is, someone who uses a change, will complain and we open a new BI. [...] not worry so much about the acceptance unless its a contractual thing. This is rare, so not the norm."
+> — Mark Bodman, approved in thread 2026-10-27 (BI-B1B44777)
+
+A separate acceptance step had turned into an administrative black hole. On 2026-10-27, 352 items sat awaiting acceptance, 318 of them for more than a week. Coding a new fix is faster than holding an old item open. So:
+
+- **The outcome is stated at intake.** Every new item says what will be true, and for whom, once it is done. Intake asks "how will we know?" only when the change does not make it obvious.
+- **Delivery closes the item by default.** A merge through CI and the merge queue satisfies acceptance and objective reconciliation. No design-time gate is owed retroactively, and nobody chases proof.
+- **A regression is a new item.** Whoever uses the change and finds it wrong reports it, and that becomes a new item. A newest recorded `ux` or `manual` failure on the item itself still blocks closure.
+- **Acceptance by whoever asked is the exception.** It applies to contractual commitments, marked with the `contractual` lifecycle tag (kernel decision DI-1263D968DC26), and to the rare item whose outcome cannot be judged from the change. Only those items wait in awaiting-acceptance.
+
+The authorised acceptance sweep reads the same completion gate, so it closes merged non-contractual items without any further step.
+
+## Nothing waits on a person indefinitely (operator direction, 2026-10-27)
+
+> "We seem to have more process gates than needed, the actual closure is predicated on seeing results, which unless it's automatable, we don't want to have open items hanging out forever. [...] getting validation is really only required if there is a customer reported thing, and even then a simple question and response would do it."
+> — Mark Bodman, 2026-10-27 (BI-C899BB40)
+
+- **A customer-reported item gets one question.** It closes on delivery like any other non-contractual item. Its submitter is then asked once whether it is fixed. A "no" (the issue reopened) becomes one corrective item and the delivered item stays done. Confirmation, or silence for 14 days, settles it.
+- **Obligations are bounded.** A delivered, non-contractual item carries no open obligation without a bound. Only an automated check declared at filing, or the one customer question with its window, may follow delivery. Each concludes on the record.
+- **The sweep never re-selects a closed item for acceptance.** It visits a done item only to take that one bounded step.
 
 A watcher armed to do this may also simply not work, and a silent watcher looks identical to a passing one — so the practice adds risk on top of the wasted time.
 
 ## How to apply
 
 - Open the pull request with its evidence, name what is unproven, end the thread.
-- If live acceptance genuinely matters, record it on the backlog item as the outstanding step so any later session, or the requester, can pick it up.
-- Closing a backlog item you shipped is still yours to do. Declaring the outcome good is not.
+- State the outcome when you file the item. Add how you will know only when it is not obvious; if it can be checked automatically, declare the check.
+- Let the merge close the item. Do not hold it open for a sign-off nobody asked for.
+- Declaring a customer's outcome good on their behalf is not yours to do. The platform asks them, once.
+- If acceptance genuinely matters because a customer was promised it, tag the item `contractual` and say what the check is or who accepts. That item waits for its accepter, and declaring its outcome good is not yours to do.
 
 ## Related
 

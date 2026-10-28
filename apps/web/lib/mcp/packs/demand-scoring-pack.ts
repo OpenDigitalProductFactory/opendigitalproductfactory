@@ -15,6 +15,7 @@ import type { DemandScoreInputs, DemandScoreResult } from "@/lib/demand/scoring"
 import type { DemandEvidenceDb } from "@/lib/demand/evidence-repository";
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
+import { mergeBacklogItemsConsequence } from "@/lib/demand/duplicate-merge-consequence";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
@@ -221,8 +222,10 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
-    // destroys state → consult-gated (TAK §8.4.1).
+    // destroys state → consult-gated (TAK §8.4.1). A proven same-origin
+    // duplicate with no open work is the intake fold done late (BI-EAFD2D09).
     consequence: "irreversible",
+    consequenceForCall: mergeBacklogItemsConsequence,
   },
   {
     name: "run_capacity_drain",
@@ -738,7 +741,7 @@ export const demandScoringPack: ToolPack = {
     set_demand_policy: (params) => setDemandPolicyHandler(params),
     set_backlog_delivery_budget: (params) => setBacklogDeliveryBudgetHandler(params),
     find_duplicate_candidates: (params) => findDuplicateCandidatesHandler(params),
-    merge_backlog_items: (params) => mergeBacklogItemsHandler(params),
+    merge_backlog_items: (params, userId, ctx) => mergeBacklogItemsHandler(params, userId, ctx),
     sweep_duplicate_demand: (params) => sweepDuplicateDemandHandler(params),
     approve_demand_for_funding: (params, userId, ctx) => approveDemandForFundingHandler(params, userId, ctx),
     run_capacity_drain: (params, userId) => runCapacityDrainHandler(params, userId),

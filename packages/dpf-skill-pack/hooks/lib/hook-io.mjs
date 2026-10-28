@@ -173,8 +173,9 @@ export function normalizePayload(raw) {
   const toolName = p.toolName ?? p.tool_name;
   const rawInput = p.toolInput ?? p.tool_input ?? {};
   const toolInput = rawInput && typeof rawInput === "object" ? rawInput : {};
-  // Only Grok sends camelCase; Claude and Codex send snake_case.
-  const surface = p.toolName !== undefined && p.tool_name === undefined ? "grok" : "claude";
+  // Only Grok sends camelCase; Claude and Codex send snake_case. Grok 1.0.52 sends
+  // BOTH casings, so any camelCase key means Grok (BI-6145A168).
+  const surface = p.toolName !== undefined || p.hookEventName !== undefined || p.workspaceRoot !== undefined ? "grok" : "claude";
   // Both surfaces send the working dir at top level (Claude: cwd; Grok: cwd + workspaceRoot).
   const sessionCwd = p.cwd ?? p.workspaceRoot;
   let cwd = sessionCwd;

@@ -20,6 +20,7 @@
  * this is the second such source rather than a new mechanism.
  */
 
+import { loadContentAuthorizedWorkroomRecovery, type WorkroomHandoffRecoveryLoader, type WorkroomBlockerContentAuthorizer } from "@/lib/work-capsules/workroom-recovery-projection";
 import { buildWorkCaseDetail } from "./case-read-model";
 import { encodeWorkCaseKey } from "./case-key";
 import { buildWorkroomView } from "./room-read-model";
@@ -76,11 +77,15 @@ export async function loadWorkroomOnlyCaseDetail({
   caseKey,
   now,
   authContext,
+  canReadWorkroomContent,
+  handoffRecoveryLoader,
 }: {
   prismaClient: WorkroomOnlyPrismaClient;
   sourceId: string;
   caseKey: string;
   now: Date;
+  canReadWorkroomContent?: WorkroomBlockerContentAuthorizer;
+  handoffRecoveryLoader?: WorkroomHandoffRecoveryLoader;
   authContext?: { principalId: string | null; sensitivityClearance: readonly string[]; isSuperuser: boolean };
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   if (!authContext) return null;
@@ -147,6 +152,7 @@ export async function loadWorkroomOnlyCaseDetail({
   detail.summary.sourceRefs.push(...execution.sourceRefs);
   const roomView = buildWorkroomView({
     executionAttentionReason: execution.attentionReason,
+    ...await loadContentAuthorizedWorkroomRecovery(room, now, canReadWorkroomContent, handoffRecoveryLoader),
     caseKey,
     detail: titledDetail,
     sourceHealth: execution.partial ? "partial" : "ok",

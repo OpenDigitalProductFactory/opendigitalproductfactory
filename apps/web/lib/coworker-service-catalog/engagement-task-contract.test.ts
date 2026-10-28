@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { reconstructPersistedRemoteTask } from "@/lib/mcp-task-background-worker";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 import { parseRemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
-import { parseEngagementTaskBinding } from "./engagement-task-binding";
+import { parseEngagementTaskBinding,buildEngagementTaskPrompt } from "./engagement-task-binding";
 import { engagementInputDigest } from "./engagement-fulfillment";
 
 export function fixture() {
@@ -48,4 +48,21 @@ describe("durable engagement task reconstruction", () => {
     row.a2aMetadata.requestDigest = remoteTaskRequestDigest({ ...parsed, authorityScope: row.authorityScope });
     expect(reconstructPersistedRemoteTask(row)).toMatchObject({ ok: false, code: "persisted_request_invalid" });
   });
+});
+
+it("normalizes optional visual refs across JSONB order without altering old bindings",()=>{
+ const {parsed}=fixture();const old=remoteTaskRequestDigest(parsed);
+ const visualEvidenceRef={kind:"document-version" as const,repositoryFullName:"owner/repo",versionId:"capture-manifest",valueDigest:"e".repeat(64)};
+ const bound=parseEngagementTaskBinding({...parsed.engagementBinding,visualEvidenceRef})!;
+ expect(bound.visualEvidenceRef).toEqual(visualEvidenceRef);
+ expect(parseEngagementTaskBinding({...bound,visualEvidenceRef:{valueDigest:visualEvidenceRef.valueDigest,versionId:visualEvidenceRef.versionId,repositoryFullName:visualEvidenceRef.repositoryFullName,kind:visualEvidenceRef.kind}})).toEqual(bound);
+ expect(remoteTaskRequestDigest({...parsed,engagementBinding:bound})).not.toBe(old);
+ expect(remoteTaskRequestDigest(parsed)).toBe(old);
+ expect(parseEngagementTaskBinding({...bound,visualEvidenceRef:{...visualEvidenceRef,repositoryFullName:"foreign/repo"}})).toBeNull();
+});
+
+it("keeps the legacy admitted prompt byte-for-byte at the optional image boundary",()=>{
+ const {parsed}=fixture();const prompt=buildEngagementTaskPrompt(parsed.engagementBinding!,{requestedOutcome:"Review",inputPayload:{}});
+ expect(prompt).toContain('Never grant acceptance or author disposition.\nOriginal request and inputs (assessment data):');
+ expect(prompt).not.toContain('Provided rendered inputs');
 });

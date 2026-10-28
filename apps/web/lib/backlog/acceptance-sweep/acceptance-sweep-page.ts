@@ -1,5 +1,8 @@
 import { ACCEPTANCE_OWED_ACTIVITY_KIND } from "./owed-snapshot";
 
+/** The activity that records each step of a submitter question (submitter-confirmation.ts). */
+export const SUBMITTER_CONFIRMATION_ACTIVITY_KIND = "submitter_confirmation";
+
 export type AcceptanceSweepPageItem = {
   id: string; itemId: string; claimedByAgentId: string | null; agentId: string | null;
   status?: string;
@@ -7,23 +10,41 @@ export type AcceptanceSweepPageItem = {
   activities?: Array<{ kind: string; recordedAt: Date; payload: unknown }>;
 };
 
+/**
+ * The obligations a done item can still carry (BI-C899BB40). Each concludes:
+ * one question, one corrective item, or a recorded retirement. `not-owed` and
+ * `satisfied` are never selected, and a resolved submitter_confirmation row
+ * removes the item from the pool for good.
+ */
+export const RETAINED_ACCEPTANCE_OBLIGATIONS = [
+  "pending-submitter-confirmation",
+  "corrective-work-required",
+  // Legacy: no longer written. Visited once to ask a customer its question or
+  // to record the obligation retired, then excluded.
+  "pending-independent-verification",
+] as const;
+
 /** Coarse indexed pool; the latest transition is checked after the bounded read. */
 export const ACCEPTANCE_CANDIDATE_WHERE = {
   OR: [
     { status: "awaiting-acceptance" },
-    { status: "done", activities: { some: { kind: "status_change",
-      payload: { path: ["closureBasis"], equals: "canonical-deployment" } } } },
+    { status: "done",
+      activities: { some: { kind: "status_change",
+        OR: RETAINED_ACCEPTANCE_OBLIGATIONS.map(value => ({ payload: { path: ["acceptanceObligation"], equals: value } })) } },
+      NOT: { activities: { some: { kind: SUBMITTER_CONFIRMATION_ACTIVITY_KIND,
+        payload: { path: ["resolved"], equals: true } } } } },
   ],
 };
 
-export function retainedDeploymentObligation(item: AcceptanceSweepPageItem): boolean {
+/** Whether the item's newest transition is a delivery closure that left a bounded obligation open. */
+export function retainedClosureObligation(item: AcceptanceSweepPageItem): boolean {
   if (item.status !== "done") return false;
   const payload = item.activities?.find(row => row.kind === "status_change")?.payload;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   const row = payload as Record<string, unknown>;
-  // Unknown obligation values remain unresolved, not implicitly satisfied.
-  return row.to === "done" && row.closureBasis === "canonical-deployment"
-    && row.acceptanceObligation !== "satisfied";
+  return row.to === "done"
+    && (row.closureBasis === "canonical-deployment" || row.closureBasis === "delivery-evidence")
+    && (RETAINED_ACCEPTANCE_OBLIGATIONS as readonly unknown[]).includes(row.acceptanceObligation);
 }
 
 const SELECT = {
@@ -61,9 +82,9 @@ export async function selectAcceptanceSweepPage(db: AcceptanceSweepPageDb, input
     orderBy: [{ id: "asc" }], take: take - rows.length, select: SELECT,
   }));
   return {
-    items: rows.filter(row => row.status === "awaiting-acceptance" || retainedDeploymentObligation(row)),
+    items: rows.filter(row => row.status === "awaiting-acceptance" || retainedClosureObligation(row)),
     unsnapshotted: rows.filter(row => row._count?.activities === 0
-      && (row.status === "awaiting-acceptance" || retainedDeploymentObligation(row))).length,
+      && (row.status === "awaiting-acceptance" || retainedClosureObligation(row))).length,
     nextCursor: rows.at(-1)?.id ?? input.cursor,
   };
 }

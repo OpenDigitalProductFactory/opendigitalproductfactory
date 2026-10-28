@@ -130,6 +130,8 @@ it("consumes an approved exact-bound writer from a historically completed TaskRu
   expect(db.reserveTaskRun).toHaveBeenCalledWith({
     where: { taskRunId, status: "completed", updatedAt },
     data: {
+      status: "working",
+      lastHeartbeatAt: expect.any(Date),
       completedAt: null,
       progressPayload: expect.objectContaining({ approvalResumeReserved: true }),
     },

@@ -145,5 +145,9 @@ leaves the business is verified first, whatever the default says. That ordering 
 deliberate: a blanket preference about rooms should not overrule the shape of the job in
 front of you.
 
+Build Studio rooms follow your default directly. Their changes are already checked by the
+build gates before they land, so your choice of pace and whether they may act alone applies
+there at any hour. See [Work Rooms](../workspace/work-rooms.md).
+
 Setting a looser authority default never promotes a coworker. If a coworker may only
 propose, rooms will still propose. The default can restrain; it cannot grant.

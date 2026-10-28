@@ -41,20 +41,27 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
 // Codex changes its tracing call id for each invocation; it is not a guard input.
 const WRAPPER_ENV = /^(?:npm_lifecycle_event|npm_lifecycle_script|npm_command|npm_execpath|npm_node_execpath|npm_config_user_agent|INIT_CWD|SHLVL|_|CODEX_TOOL_CALL_ID)$/i;
 
-export function identifyGuardExecution({ cwd = process.cwd(), plan, env = process.env } = {}) {
+export function identifyGuardExecution({ cwd = process.cwd(), plan, env = process.env, source = null } = {}) {
   try {
     const git = args => gitText(args, { cwd, timeout: 10000 });
     if (git(["status", "--porcelain", "--untracked-files=normal"])) return null;
+    const head = git(["rev-parse", "HEAD"]);
+    // Initial readiness pins both endpoints before classifying its scope. Re-read
+    // the candidate, never substitute a newer commit into that admitted plan.
+    if (source && (!/^[a-f0-9]{40}$/i.test(source.baseSha ?? "")
+      || !/^[a-f0-9]{40}$/i.test(source.headSha ?? "") || head !== source.headSha)) return null;
+    const base = git(["rev-parse", source ? source.baseSha + "^{commit}" : "origin/main"]);
+    if (source && base !== source.baseSha) return null;
     const windows = process.platform === "win32";
     const pnpm = spawnSync(windows ? "pnpm --version" : "pnpm", windows ? [] : ["--version"], { cwd, env, encoding: "utf8", shell: windows, timeout: 10000, windowsHide: true });
     if (pnpm.status !== 0 || !pnpm.stdout.trim()) return null;
     const fileStamp = relative => readGuardInputStamp(join(cwd, relative));
     return {
-      policy: "host-guards-v2",
+      policy: "host-guards-v3",
       repository: realpathSync(cwd),
-      head: git(["rev-parse", "HEAD"]),
-      tree: git(["rev-parse", "HEAD^{tree}"]),
-      base: git(["rev-parse", "origin/main"]),
+      head,
+      tree: git(["rev-parse", `${head}^{tree}`]),
+      base,
       plan: digest(plan),
       toolchain: { node: process.version, executable: process.execPath, pnpm: pnpm.stdout.trim(), git: git(["--version"]), platform: process.platform, arch: process.arch },
       dependencies: ["pnpm-lock.yaml", "node_modules/.modules.yaml", "node_modules/.pnpm/lock.yaml", "packages/db/generated/client/client.ts"].map(fileStamp),

@@ -443,7 +443,7 @@ export const resolveCoworkerToolAuthorityInput =
       const tokenId = asString(engagementMetadata.apiTokenId);
       const source = engagementMetadata.tokenSource;
       const sourceRef = objectRecord(engagementMetadata.sourceRef);
-      if (!task || !binding || !tokenId || (source !== "oauth" && source !== "pat")
+      if (!task || !binding || engagementMetadata.engagementReadFailure || !tokenId || (source !== "oauth" && source !== "pat")
         || engagementMetadata.trigger !== "external-mcp" || sourceRef?.kind !== "mcp-token" || sourceRef.id !== tokenId
         || !engagementProviderIdentityRefs(binding.providerAgentId).includes(actingAgentId) || execution.userId !== binding.userId
         || !engagementToolAllowed(binding, execution.toolName, execution.rawParams)) throw new Error("Engagement tool is outside its immutable advisory binding.");

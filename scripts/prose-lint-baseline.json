@@ -7751,6 +7751,14 @@
     "longSentences": 0,
     "textMass": 13
   },
+  "apps/web/components/platform/coworker-record/ArchetypeRosterCoveragePanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
   "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

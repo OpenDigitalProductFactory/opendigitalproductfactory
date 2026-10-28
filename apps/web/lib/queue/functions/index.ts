@@ -32,6 +32,7 @@ import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { agentChildThreadRun } from "./agent-child-thread-run";
+import { workroomQueueHoldRelease } from "./workroom-queue-hold-release";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -43,6 +44,7 @@ import { capacityDrainScheduled } from "./capacity-drain";
 import { assuranceRemediationTeeUpScheduled } from "./assurance-remediation-teeup";
 import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import { subscriptionOAuthRenewal } from "./subscription-oauth-renewal";
 import { legacyProposalExpirySweep } from "./legacy-proposal-expiry-sweep";
 import {
   contributorInventorySyncCron,
@@ -171,6 +173,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  workroomQueueHoldRelease, // BI-95638941: provider-held Workrooms release themselves
   providerPauseReconcile,
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
@@ -193,6 +196,7 @@ export const scheduledFunctions = [
   assuranceRemediationTeeUpScheduled, // BI-7C121CCF: off-hours, budget-capped assurance remediation lane
   assuranceMergeGateScheduled, // BI-204EE70B P2.2: WWMD merge gate (dark — escalate-only until actuation enabled)
   tokenExpiryMonitor,
+  subscriptionOAuthRenewal, // BI-A53C594E: renew subscription OAuth sign-ins ahead of expiry, retry with backoff
   legacyProposalExpirySweep, // BI-753D69A9: expire undecided legacy proposals under the approval lifetime
   contributorInventorySyncCron,
   wikiLint,
@@ -218,7 +222,7 @@ export const scheduledFunctions = [
   substrateReconciler,   // BI-903FB5F9/BI-547B788D: restart stopped required substrate; report a wedged Docker VM, every 5 min
   edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
-  worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
+  worktreeJanitor, // BI-42FA7DD8/BI-99395B29: platform-owned worktree reaper (Tier-A); daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
   regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00

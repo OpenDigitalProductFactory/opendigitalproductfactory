@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   roomIdentity: vi.fn(),
   taskAuthority: vi.fn(),
   recoveryTarget: vi.fn(),
+  presentRequest: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -61,6 +62,7 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveHumanWorkroomAccess: mocks.roomAccess,
 }));
 vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: mocks.recoveryTarget }));
+vi.mock("@/lib/mcp-task-review-reassessment", () => ({ issuePresentReassessmentRequest: mocks.presentRequest }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
 
 import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
@@ -96,6 +98,25 @@ const baseItem = {
 };
 
 describe("backlog deferral read projection", () => {
+  it("uses the explicitly located approved policy issuer without resuming the historical task", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-bi", status: "in-progress", body: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null, productLine: null,
+      businessProduct: null, demandEvidenceLinks: [], activities: [], completedAt: null });
+    const decision = { verdict: "input-required", blockers: [], unmet: [{ code: "SPEC_APPROVAL_REQUIRED" }] };
+    mocks.projectReadiness.mockReturnValue({ decisions: { plan: decision, completion: decision } });
+    const packet = { targetAgent: "reviewer", requestKey: "original", initiativeReviewBinding: { gate: "design-spec" } };
+    const present = { ...packet, requestKey: "server-present", initiativeReviewBinding: { gate: "design-spec", presentReassessment: { originalTaskRunId: "TR-original" } } };
+    mocks.resolveTerminalRecovery.mockResolvedValue({ reviewerRoutes: [{ gate: "design-spec", independent: true,
+      workroomId: "WC-BOUND", requestCoworker: packet }], escalations: [], unroutable: [] });
+    mocks.presentRequest.mockResolvedValue(present);
+    const result = await Reflect.apply(getBacklogItem, undefined, [{ itemId: baseItem.itemId, recoveryGate: "design-spec",
+      reassessmentAuthorizationItemId: "BI-7906C73E" }, "AGT-AUTHOR", "user-1",
+      { authSource: "oauth", apiTokenId: "token-row", tokenGrantScopes: ["backlog_read"] }]);
+    expect(result).toMatchObject({ success: true, data: { recovery: { reviewerRoutes: [{ requestCoworker: present }] } } });
+    expect(mocks.presentRequest).toHaveBeenCalledWith({ packet, authorizationItemId: "BI-7906C73E", userId: "user-1",
+      actingAgentId: "AGT-AUTHOR", tokenGrantScopes: ["backlog_read"] });
+    expect(mocks.recoveryTarget).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "not-applicable" } });
     vi.clearAllMocks();

@@ -4,6 +4,7 @@ import { reconstructTimelines, buildSnapshotRow } from "@/lib/queue/queue-metric
 
 import {
   entryStageKey,
+  planRoomEndClosures,
   planStageTransitions,
   readDriveObservation,
   workroomStageLiveCounts,
@@ -292,3 +293,36 @@ describe("a conformance hold names its deviation", () => {
   });
 });
 
+// BI-C9F1DE01: a room that ends (archived, abandoned, complete) never writes
+// again, so the drive cannot close its open step. The close is planned here.
+describe("planRoomEndClosures", () => {
+  const ev = (queueKey: string, itemId: string, transition: string, minute: number) =>
+    ({ queueKey, itemId, transition, occurredAt: at(minute) });
+  const Q = (stage: string) => workroomStageQueueKey("delivery-small@1.0.0", stage);
+
+  it("releases a held step and cancels it; a working step is cancelled without a release", () => {
+    const out = planRoomEndClosures([
+      ev(Q("reproduce"), "WC-1:run", "enqueued", 0), ev(Q("reproduce"), "WC-1:run", "finished", 5),
+      ev(Q("repair"), "WC-1:run", "enqueued", 5), ev(Q("repair"), "WC-1:run", "held", 6),
+      ev(Q("merge"), "WC-2:run", "enqueued", 1), ev(Q("merge"), "WC-2:run", "started", 2),
+    ], at(30));
+    expect(out.map((t) => [t.queueKey, t.itemId, t.transition, t.outcome, t.actorType])).toEqual([
+      [Q("repair"), "WC-1:run", "released", null, "system"],
+      [Q("repair"), "WC-1:run", "cancelled", "cancelled", "system"],
+      [Q("merge"), "WC-2:run", "cancelled", "cancelled", "system"],
+    ]);
+    expect(out.every((t) => t.itemKind === "workroom-stage" && t.occurredAt.getTime() === at(30).getTime())).toBe(true);
+  });
+
+  it("leaves closed steps alone, so running it twice writes nothing the second time", () => {
+    expect(planRoomEndClosures([
+      ev(Q("merge"), "WC-1:run", "enqueued", 0), ev(Q("merge"), "WC-1:run", "cancelled", 3),
+      ev(Q("repair"), "WC-1:run", "enqueued", 0), ev(Q("repair"), "WC-1:run", "finished", 2),
+    ], at(30))).toEqual([]);
+  });
+
+  it("never closes a step before its own last event", () => {
+    const [t] = planRoomEndClosures([ev(Q("merge"), "WC-1:run", "enqueued", 40)], at(30));
+    expect(t!.occurredAt.getTime()).toBe(at(40).getTime() + 1);
+  });
+});

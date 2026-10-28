@@ -103,3 +103,20 @@ export async function readApprovalFailureEvidence(
     threadBinding: bound.threadBinding, ...(roomHref ? { roomHref } : {}),
     roomAccess: roomHref ? "available" : "unavailable" };
 }
+
+/** Internal server-only operation binding. Callers project an explicit safe
+ * observation and never serialize these original parameters or raw results. */
+export async function readFailedBoundedHandoffOperation(envelope: Envelope, db: Db, now: Date) {
+  if (envelope.status !== "failed" || envelope.manifestActionId !== "reassign_workroom_executor") return null;
+  const bound = await readBoundApprovalExecution(envelope, db, now);
+  if (bound.state !== "available") return null;
+  const result = consistentResult(bound.run);
+  if (!result || bound.run.success || result.error !== "handoff-transaction-required") return null;
+  try {
+    const { parseBoundedHandoffCommand } = await import("@/lib/work-capsules/bounded-handoff-command");
+    const command = parseBoundedHandoffCommand(bound.parameters);
+    if (command?.phase !== "request") return null;
+    return { approvalId: envelope.id, executionId: bound.run.id, executedAtIso: bound.run.createdAt.toISOString(),
+      ownerUserId: envelope.delegatingUserId, sourceAgentId: envelope.coworkerAgentId, command };
+  } catch { return null; }
+}

@@ -866,6 +866,17 @@
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
     },
     {
+      "routePath": "/api/documents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/documents/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/documents/[documentId]/content",
       "kind": "route",
       "segments": [

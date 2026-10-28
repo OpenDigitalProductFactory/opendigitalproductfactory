@@ -740,3 +740,41 @@ describe("a work-capsule case key resolves to its anchored canonical case", () =
     expect(canonical).toBeNull();
   });
 });
+
+
+it("projects only the content-authorized selected Workroom blocker and keeps sibling explanations withheld", async () => {
+  const db = prismaFor([baseItem]);
+  const now = new Date("2026-10-26T01:00:00.000Z");
+  const selected = { id: "selected", capsuleId: "WC-SELECTED", title: "Selected", status: "blocked",
+    workspaceState: { statusOverride: { reason: "Selected transfer prerequisite", until: "2026-10-27T00:00:00.000Z" } } };
+  const other = { ...selected, id: "other", capsuleId: "WC-OTHER",
+    workspaceState: { statusOverride: { reason: "Private sibling prerequisite", until: "2026-10-27T00:00:00.000Z" } } };
+  db.workroom.findMany = vi.fn(async args => (args as { where: { capsuleId?: string } }).where.capsuleId === "WC-SELECTED" ? [selected] : [other, selected]);
+  const result = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1",
+    selectedWorkroomId: "WC-SELECTED", userId: "user-1", now, canReadWorkroomContent: async rowId => rowId === "selected" });
+  expect(result?.room?.work).toMatchObject({ recordedBlocker: { explanation: "Selected transfer prerequisite",
+    source: { capsuleId: "WC-SELECTED" }, coordinationOnly: true } });
+  expect(JSON.stringify(result)).not.toContain("Private sibling prerequisite");
+  const choices = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1", userId: "user-1", now });
+  expect(choices?.room).toBeUndefined();
+  expect(JSON.stringify(choices)).not.toContain("prerequisite");
+  const denied = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1",
+    selectedWorkroomId: "WC-SELECTED", userId: "unassigned-user", now });
+  expect(denied).toBeNull();
+});
+
+it.each(["denied", "unavailable", "not-supplied"])("withholds recorded blocker content when only the case is readable (%s)", async mode => {
+  const db = prismaFor([baseItem]);
+  db.workroom.findMany = vi.fn(async () => [{ id: "restricted-room", capsuleId: "WC-RESTRICTED", title: "Restricted", status: "blocked",
+    workspaceState: { statusOverride: { reason: "Room-private failure explanation", until: "2026-10-27T00:00:00.000Z" } } }]);
+  const canReadWorkroomContent = mode === "not-supplied" ? undefined : vi.fn(async () => {
+    if (mode === "unavailable") throw new Error("Private permission backend failure");
+    return false;
+  });
+  const result = await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1", userId: "user-1",
+    selectedWorkroomId: "WC-RESTRICTED", now: new Date("2026-10-26T00:00:00.000Z"), canReadWorkroomContent });
+  expect(result).not.toBeNull();
+  expect(result?.room?.work.recordedBlocker).toBeNull();
+  expect(JSON.stringify(result)).not.toContain("Room-private failure explanation");
+  expect(JSON.stringify(result)).not.toContain("Private permission backend failure");
+});

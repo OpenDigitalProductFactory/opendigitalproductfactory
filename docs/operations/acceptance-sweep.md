@@ -1,35 +1,27 @@
 # Acceptance sweep (operator runbook)
 
-## Medium work whose criteria are in its body
+## Delivered work closes on delivery (since 2026-10-27)
 
-Product-linked medium work still needs independent acceptance after delivery.
-It can use an Acceptance heading with one criterion per bullet, or explicit
-`AC-<id>:` bullets, without obtaining a separate spec approval.
+A merged, green item is done, unless it is tagged `contractual`. Nobody needs
+to come back and prove it (founder direction 2026-10-27, BI-B1B44777 and
+BI-C899BB40). Only a failure recorded as the item's newest evidence keeps it
+open. If something is still wrong later, whoever finds it reports it and that
+becomes a new item.
 
-After delivery passes, an authorized completion attempt retains those criteria
-as an immutable version. It requires one current source Workroom with a full
-repository commit, attributable criteria and source authors, and document storage
-in the item's organization. The attempt may still refuse completion: retaining
-criteria is preparation for review, not an acceptance receipt.
+A `contractual` item still waits in awaiting acceptance for its check or its
+named accepter, as before.
 
-Read the returned recovery action. It distinguishes unreadable criteria,
-unretained criteria, stale source or criteria, missing eligible evidence, and
-an unavailable independent reviewer. Record passing evidence after the retained
-baseline, then request the exact server-issued acceptance packet. The reviewer
-needs its existing reading and evidence-writing grants plus admission to the
-Workroom; use the governed coworker engagement procedure when admission is absent.
-
-Changed criteria, source identity or eligible evidence invalidate the old request.
-Refresh recovery for a successor; unchanged retries reuse the request and receipt.
-Historical requests remain auditable. Only a current independent receipt satisfies
-acceptance. Product links, delivery shape and administrator approval gates stay intact.
+Medium work can still list acceptance criteria in its body (an Acceptance
+heading with one criterion per bullet, or `AC-<id>:` bullets). They describe
+what done means. They are not a separate sign-off.
 
 The `acceptance-sweep-daily` scheduled task (05:00 UTC, owned by the Portfolio
 Advisor, AGT-WS-PORTFOLIO) revisits a page of `awaiting-acceptance` backlog
 items each day. It records who owes each item's acceptance, measures how long
 items have waited, and writes one summary to the standing **Acceptance** room.
 It runs without a model. Design:
-`docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md`.
+`docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md`
+(§9 for closure on delivery and the customer question).
 
 ## Closing items the gate already allows (off by default)
 
@@ -41,8 +33,11 @@ for you, but only after you allow it.
   `allowed`. Every close goes through the same governed completion step as the
   backlog editor and the status tool, which checks the gate again. Nothing that
   needs a decision is closed.
-- **How many:** at most 25 per run by default (you can set 1 to 100). The rest
-  wait for the next run.
+- **How many:** at most 100 per run by default (you can set 1 to 100). The rest
+  wait for the next run. An authorisation recorded before 2026-10-27 kept its
+  own number, which was 25 unless you changed it. The card shows the number.
+  To raise it, choose **Stop closing**, then **Allow closing** again and set
+  the new number under **Change how many it closes per run**.
 - **Who it acts as:** the Portfolio Advisor, on your behalf. Each closure
   records you as the person who allowed it, when, and your reason.
 
@@ -67,6 +62,35 @@ It also switches itself off if the person who allowed it is deactivated or
 loses `manage_backlog`, or if the Portfolio Advisor loses the grant that
 permits completing backlog items.
 
+## Customer-reported work: one question
+
+An item a customer reported closes on delivery like any other. The sweep then
+asks the person who reported it one question, once. It recognises customer
+work from how it arrived: an ecosystem issue or demand intake, a founder
+demand cluster, or a product quality report.
+
+- **GitHub issue:** the sweep posts one comment on the issue asking the
+  reporter to reopen it if the change did not fix it. It posts as the
+  managed-repository login (Admin > Platform Development). Without that login,
+  nothing is posted and the summary says `no-credential`. The item still closes.
+  If GitHub is briefly unavailable, the sweep tries again on later runs, up to
+  three attempts in all. A refusal (no access, issue not found) is not retried.
+- **Founder demand cluster:** the reporting installations get one notice
+  through the federation link.
+- **Anything else:** nothing is sent (`no-channel`).
+
+The answer comes back on its own: the issue intake re-reads the issue's state.
+
+| What happens | Result |
+| --- | --- |
+| The issue is reopened after the question | One corrective item is filed. The delivered item stays done |
+| The reporter closes the issue | Confirmed |
+| Nothing for 14 days | Settled by silence |
+
+Each item gets one question and one recorded outcome. After that the sweep
+never selects it again. The summary's `confirmation` section counts the
+questions sent and not sent, the outcomes, and the items still waiting.
+
 ## What the summary tells you
 
 Each run's summary in the Acceptance room has a `closing` section:
@@ -85,7 +109,8 @@ The headline ends with either `N closed under operator pre-authorisation` or
 
 ## Who verifies an item that is not closable
 
-With routing on, an item that has waited past the aged threshold gets its own
+An item stays awaiting acceptance only when it has no delivery evidence yet,
+or its newest evidence is a failure. With routing on, an item that has waited past the aged threshold gets its own
 **Acceptance verification** room, bound to one coworker who checks it on the
 live install and records the evidence. The sweep never picks the item's
 author, an agent that runs only outside the platform (such as the external
@@ -106,8 +131,13 @@ author) or `no-in-platform-coworker` (only external agents hold it).
 ## How the portal knows work was merged
 
 Merged platform work closes on the merge signal: the portal checks whether the
-item's branch head, or its linked pull request, is on `origin/main`. On an
-install it reads the Build Studio workspace clone (`/sandbox-workspace`); a
+item's branch head, or its linked pull request, is on `origin/main`. When no
+recorded pull request is found there, it searches `origin/main` for a commit
+that delivers the item: the item id in the commit title, or after a delivery
+word such as "Fixes" (a bare mention or a `Refs:` line does not count). A
+reverted commit, a commit made before the item was last reopened, and a docs
+commit for an item that is not documentation work do not count (BI-D9DC902E).
+On an install it reads the Build Studio workspace clone (`/sandbox-workspace`); a
 host with a source checkout can point `DPF_HOST_SOURCE_ROOT` at it instead.
 
 - **Kept current:** the code-graph job fetches `origin/main` into that clone

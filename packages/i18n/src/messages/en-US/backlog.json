@@ -1,0 +1,7 @@
+{
+  "intake": {
+    "outcomeLabel": "Outcome",
+    "outcomePlaceholder": "What will be true, and for whom, when this is done?",
+    "outcomeHint": "Optional. Delivery closes the item."
+  }
+}

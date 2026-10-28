@@ -1,3 +1,4 @@
+import {redactDiagnosticEvidenceText as redactFunctionalFailureText} from "@/lib/shared/diagnostic-evidence-redaction";
 // Build-evidence tool pack — scoped ToolPack extraction.
 //
 // Drains the build/backlog evidence-capture domain out of the mcp-tools.ts
@@ -9,8 +10,7 @@
 //
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source. The
-// functional-failure handler used one local redaction helper that had no other
-// consumer; it is replicated here so the pack is self-contained.
+// functional-failure handler shares the canonical diagnostic redaction policy.
 
 import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
@@ -31,20 +31,6 @@ import {
   isNonprodOwnerProvider,
   NONPROD_OWNER_PROVIDERS,
 } from "@/lib/nonprod/nonprod-owner-provider";
-
-/** Strip bearer tokens / MCP tokens / Anthropic keys out of operator-supplied failure text. */
-function redactFunctionalFailureText(text: string): string {
-  return text
-    .replace(/\bdpfmcp_[A-Za-z0-9_-]+/g, "[redacted-token]")
-    .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]")
-    // BI-1291B677: Anthropic OAuth tokens (sk-ant-oat01-*) and API keys
-    // (sk-ant-api03-*) in raw form.
-    .replace(/\bsk-ant-[A-Za-z0-9_-]{8,}/g, "[redacted-token]")
-    // BI-1291B677: a secret staged into the sandbox as `echo '<base64>' | base64 -d`
-    // (the CLI dispatch token / mcp-config write). Redact the base64 payload so a
-    // surfaced docker command can't be reversed back to the secret.
-    .replace(/echo '[A-Za-z0-9+\/=]{20,}'(\s*\|\s*base64\s+-d)/g, "echo '[redacted-token]'$1");
-}
 
 const definitions: ToolDefinition[] = [
   {

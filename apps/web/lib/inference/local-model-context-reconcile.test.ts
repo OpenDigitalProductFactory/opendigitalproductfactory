@@ -10,6 +10,7 @@ vi.mock("@dpf/db", () => ({ prisma: mockPrisma, DISCOVERY_TRIAGE_AGENT_ID: "disc
 
 import {
   reconcileLocalModelContext,
+  reconcileLocalEmbedderPlacement,
   resolveLocalServedContextTokens,
   resolveLocalServingPosture,
   resolveServedContextTarget,
@@ -97,11 +98,18 @@ const EMBED = "docker.io/ai/nomic-embed-text-v1.5:latest";
 function makeFetch(opts: {
   models?: Array<{ id: string }>;
   configured?: number | null;
+  /** Stored keep_alive; defaults to resident ("-1") whenever an override is set. */
+  keepAlive?: string | null;
+  /** Other stored config keys (e.g. runtime-flags) the GET reports. */
+  extra?: Record<string, unknown>;
   postStatus?: number;
   modelsStatus?: number;
 }) {
   let configured = opts.configured ?? null;
-  const calls = { post: 0, getConfigure: 0, models: 0 };
+  let keepAlive = opts.keepAlive !== undefined ? opts.keepAlive : configured == null ? null : "-1";
+  let extra = opts.extra ?? {};
+  const calls = { post: 0, getConfigure: 0, models: 0, postBodies: [] as Array<Record<string, unknown>> };
+  const config = () => ({ ...extra, "context-size": configured, ...(keepAlive == null ? {} : { keep_alive: keepAlive }) });
   const fetchImpl = (async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (u.includes("_configure")) {
@@ -110,14 +118,19 @@ function makeFetch(opts: {
         calls.post++;
         const status = opts.postStatus ?? 202;
         const ok = status >= 200 && status < 300;
+        const body = JSON.parse(String(init?.body ?? "{}")) as { "context-size"?: number; keep_alive?: string };
+        calls.postBodies.push(body);
         if (ok) {
-          const body = JSON.parse(String(init?.body ?? "{}")) as { "context-size"?: number };
-          configured = body["context-size"] ?? configured;
+          // DMR replaces the stored config wholesale on configure.
+          const { model: _model, "context-size": size, keep_alive: ka, ...rest } = body as Record<string, unknown>;
+          configured = (size as number | undefined) ?? null;
+          keepAlive = (ka as string | undefined) ?? null;
+          extra = rest;
         }
-        return { ok, status, text: async () => "", json: async () => [{ Config: { "context-size": configured } }] } as unknown as Response;
+        return { ok, status, text: async () => "", json: async () => [{ Config: config() }] } as unknown as Response;
       }
       calls.getConfigure++;
-      const entry = configured == null ? {} : { Config: { "context-size": configured } };
+      const entry = configured == null ? {} : { Config: config() };
       return { ok: true, status: 200, json: async () => [entry] } as unknown as Response;
     }
     if (u.includes("/models")) {
@@ -209,6 +222,43 @@ describe("reconcileLocalModelContext", () => {
     );
   });
 
+  it("pins the runner resident when context is fine but DMR's 5-minute idle unload is in force (BI-34F71E9D)", async () => {
+    // Live 2026-10-27: Config {"context-size":40960} only → 39 idle evictions,
+    // each re-reading 17.66 GiB and discarding every slot's prompt cache.
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+    const f = makeFetch({ configured: 49_152, keepAlive: null });
+    const r = await reconcileLocalModelContext(f.fetchImpl);
+    expect(r.status).toBe("pinned");
+    expect(r.before).toBe(49_152);
+    expect(r.after).toBe(49_152);
+    // The write keeps the larger served window; it never lowers it to the target.
+    expect(f.calls.postBodies).toEqual([{ model: GEN, "context-size": 49_152, keep_alive: "-1" }]);
+  });
+
+  it("keeps stored runtime flags when re-pinning residency", async () => {
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+    const f = makeFetch({ configured: 49_152, keepAlive: null, extra: { "runtime-flags": ["--spec-type", "ngram-mod"] } });
+    await reconcileLocalModelContext(f.fetchImpl);
+    expect(f.calls.postBodies).toEqual([
+      { "runtime-flags": ["--spec-type", "ngram-mod"], model: GEN, "context-size": 49_152, keep_alive: "-1" },
+    ]);
+  });
+
+  it("raises context and pins residency in the same write", async () => {
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
+    const f = makeFetch({ configured: 4096, keepAlive: null });
+    const r = await reconcileLocalModelContext(f.fetchImpl);
+    expect(r.status).toBe("raised");
+    expect(f.calls.postBodies).toEqual([{ model: GEN, "context-size": RECOMMENDED_BUILD_CONTEXT_TOKENS, keep_alive: "-1" }]);
+  });
+
+  it("is write-free once context and residency are both in place", async () => {
+    mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+    const f = makeFetch({ configured: RECOMMENDED_BUILD_CONTEXT_TOKENS, keepAlive: "-1" });
+    expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
+    expect(f.calls.post).toBe(0);
+  });
+
   it("leaves the embedding model alone (no generation model installed)", async () => {
     const f = makeFetch({ models: [{ id: EMBED }], configured: null });
     const r = await reconcileLocalModelContext(f.fetchImpl);
@@ -230,6 +280,33 @@ describe("reconcileLocalModelContext", () => {
     const r = await reconcileLocalModelContext(f.fetchImpl);
     expect(r.status).toBe("unreachable");
     expect(f.calls.post).toBe(0);
+  });
+});
+
+describe("reconcileLocalEmbedderPlacement (BI-B60AFE7B)", () => {
+  function embedRuntime(models: Array<{ id: string }>) {
+    const posts: Array<Record<string, unknown>> = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("_configure")) {
+        if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return { ok: true, status: 202, text: async () => "" } as unknown as Response; }
+        return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ data: models }) } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { fetchImpl, posts };
+  }
+
+  it("moves the installed embedder off the GPU, never the generation model", async () => {
+    const r = embedRuntime([{ id: GEN }, { id: EMBED }]);
+    expect(await reconcileLocalEmbedderPlacement(r.fetchImpl)).toMatchObject({ status: "applied", modelId: EMBED });
+    expect(r.posts.every((p) => p.model === EMBED)).toBe(true);
+  });
+
+  it("is a no-op when no embedder is installed", async () => {
+    const r = embedRuntime([{ id: GEN }]);
+    expect((await reconcileLocalEmbedderPlacement(r.fetchImpl)).status).toBe("no-model");
+    expect(r.posts).toEqual([]);
   });
 });
 

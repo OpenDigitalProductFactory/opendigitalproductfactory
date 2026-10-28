@@ -21,6 +21,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+
+NEEDS_STDLIB_TOML = unittest.skipIf(
+    __import__("codex_toml")._stdlib_parser() is None,
+    "fakes the Codex CLI, so its TOML needs Python 3.11+ or tomli; CI runs it (BI-90C9478D)",
+)
+
+
+# BI-90C9478D: these cases exercise Codex settings writes, which need a TOML
+# parser (Python 3.11+, tomli, or the Codex CLI). The stock-macOS CI runner has
+# none, so they skip there and run everywhere a parser exists.
+NEEDS_ANY_TOML = unittest.skipUnless(
+    __import__("codex_toml").available(),
+    "needs a TOML parser: Python 3.11+, tomli or the Codex CLI (BI-90C9478D)",
+)
+
 class CodexCacheVersionTest(unittest.TestCase):
     def test_changed_contents_refresh_same_source_version_and_reruns_are_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -114,6 +129,7 @@ class WriteTextIfChangedTest(unittest.TestCase):
             self.assertEqual(list(Path(tmp).iterdir()), [])
         self.assertEqual(manifest.read_bytes(), before)
 
+    @NEEDS_ANY_TOML
     def test_main_fails_when_codex_cache_verification_fails(self):
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch.object(
@@ -649,6 +665,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    @NEEDS_ANY_TOML
     def test_reconverges_config_after_codex_plugin_install_recreates_legacy_alias(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -684,6 +701,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    @NEEDS_ANY_TOML
     def test_heals_config_already_corrupted_with_duplicate_table(self) -> None:
         """A config a pre-#2657 updater left with a stray appended
         `[mcp_servers.dpf]` (a TOML redefinition error) is healed back to a single
@@ -1167,13 +1185,73 @@ class ClaudeUserScopeDpfServerTest(unittest.TestCase):
         self.assertEqual(status, "failed: Claude CLI not found")
 
 
+class _FakeAgy:
+    """`agy mcp add` / `agy mcp disable` as agy 1.4.4 does them (probed 2026-10-27).
+
+    `add` replaces the whole entry (so it resets `disabled`) and keeps other
+    servers. `honest=False` exits 0 and writes nothing: the read-back case.
+    """
+
+    def __init__(self, honest: bool = True) -> None:
+        self.honest = honest
+        self.calls: list[list[str]] = []
+
+    def __call__(self, command: list[str], **kwargs: Any) -> Any:
+        self.calls.append(command)
+        path = updater.antigravity_mcp_config_path(Path(kwargs["env"]["HOME"]))
+        if self.honest:
+            raw = path.read_text() if path.exists() else ""
+            data = json.loads(raw) if raw.strip() else {}
+            servers = data.setdefault("mcpServers", {})
+            if command[1:3] == ["mcp", "add"]:
+                headers = dict(item.split(": ", 1) for item in command[4:-2:2])
+                servers[command[-2]] = {"disabled": False, **({"headers": headers} if headers else {}),
+                                        "serverUrl": command[-1]}
+            elif command[1:3] == ["mcp", "disable"]:
+                servers[command[-1]]["disabled"] = True
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data))
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+
 class AntigravityMcpConfigTest(unittest.TestCase):
+    """agy owns its MCP config: DPF converges it through `agy mcp` (BI-1DCF9F23, spec M4)."""
+
+    def _converge(self, home: Path, url: str = updater.DEFAULT_MCP_URL, agy: Any = None, **kwargs: Any) -> str:
+        with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+            return updater.ensure_antigravity_mcp_config(home, url, runner=agy or _FakeAgy(), **{"dry_run": False, **kwargs})
+
     def test_writes_the_file_agy_and_the_ide_read(self) -> None:
         # agy 1.4.3 and Antigravity.app read ~/.gemini/config/mcp_config.json;
         # nothing reads ~/.antigravity/mcp_config.json (BI-4CB3C923).
         home = Path("/tmp/home")
         self.assertEqual(updater.antigravity_mcp_config_path(home),
                          home / ".gemini" / "config" / "mcp_config.json")
+
+    def test_adds_the_server_through_agy_and_reads_it_back(self) -> None:
+        # Plain http: the header is the only credential path there.
+        http_url = "http://127.0.0.1:3000/api/mcp/v1"
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            agy = _FakeAgy()
+            self.assertEqual(self._converge(home, http_url, agy), "converged")
+            self.assertEqual(agy.calls, [["/fake/agy", "mcp", "add", "--header",
+                                          "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}", "dpf", http_url]])
+            dpf = json.loads(updater.antigravity_mcp_config_path(home).read_text())["mcpServers"]["dpf"]
+            self.assertEqual(dpf["serverUrl"], http_url)
+            self.assertIs(dpf["disabled"], False)
+            # No plaintext secret is ever written.
+            self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
+            second = _FakeAgy()
+            self.assertEqual(self._converge(home, http_url, second), "already current")
+            self.assertEqual(second.calls, [])
+
+    def test_the_declaration_rides_a_header(self) -> None:
+        declared = __import__("toolchain_convergence").Declarations.of("0.3.0", "ab" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            agy = _FakeAgy()
+            self._converge(Path(tmp), agy=agy, declarations=declared)
+            self.assertIn("X-DPF-Toolchain: pack=0.3.0;digest=abababababababab;client=antigravity", agy.calls[0])
 
     def test_an_empty_config_file_is_converged_not_left_empty(self) -> None:
         # The operator's file was 0 bytes, so agy listed no MCP servers at all.
@@ -1182,11 +1260,8 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text("")
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                self.assertEqual(updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False), "converged")
-            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
-            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
-            self.assertIs(dpf["disabled"], False)
+            self.assertEqual(self._converge(home), "converged")
+            self.assertEqual(json.loads(cfg_path.read_text())["mcpServers"]["dpf"]["serverUrl"], updater.DEFAULT_MCP_URL)
 
     def test_unparseable_config_is_left_alone_and_does_not_stop_the_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1194,55 +1269,35 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text("{not json")
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                status = updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            agy = _FakeAgy()
+            status = self._converge(home, agy=agy)
             self.assertTrue(status.startswith("skipped: cannot parse"), status)
             self.assertEqual(cfg_path.read_text(), "{not json")
+            self.assertEqual(agy.calls, [])
 
     def test_an_operator_disabled_dpf_entry_stays_disabled(self) -> None:
+        # `agy mcp add` re-enables the entry, so the adapter disables it again.
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://old/api/mcp/v1", "disabled": True}}}))
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            agy = _FakeAgy()
+            self.assertEqual(self._converge(home, agy=agy), "converged")
+            self.assertEqual(agy.calls[-1], ["/fake/agy", "mcp", "disable", "dpf"])
             dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
             self.assertIs(dpf["disabled"], True)
             self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
 
-    def test_skipped_when_agy_absent(self) -> None:
-        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
-            status = updater.ensure_antigravity_mcp_config(
-                Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False
-            )
-        self.assertEqual(status, "skipped: Antigravity CLI (agy) not found")
-
-    def test_upserts_dpf_server_env_backed_and_idempotent(self) -> None:
-        # Plain http: the header is the only credential path there. The https
-        # default carries no header (OnePluginOwnedConnectorTest).
-        http_url = "http://127.0.0.1:3000/api/mcp/v1"
+    def test_agy_succeeding_without_recording_the_server_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp)
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                first = updater.ensure_antigravity_mcp_config(
-                    home, http_url, dry_run=False
-                )
-                second = updater.ensure_antigravity_mcp_config(
-                    home, http_url, dry_run=False
-                )
-            self.assertEqual(first, "converged")
-            self.assertEqual(second, "already current")
-            cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
-            dpf = cfg["mcpServers"]["dpf"]
-            # agy's own schema (what `agy mcp add` writes), BI-4CB3C923.
-            self.assertEqual(dpf["serverUrl"], http_url)
-            self.assertIs(dpf["disabled"], False)
-            self.assertNotIn("url", dpf)
-            self.assertNotIn("type", dpf)
-            self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
-            # No plaintext secret is ever written.
-            self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
+            status = self._converge(Path(tmp), agy=_FakeAgy(honest=False))
+        self.assertTrue(status.startswith("failed:"), status)
+
+    def test_absent_when_agy_is_missing(self) -> None:
+        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
+            status = updater.ensure_antigravity_mcp_config(Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False)
+        self.assertEqual(status, "absent: Antigravity CLI (agy) not found")
 
     def test_merges_without_clobbering_other_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1250,20 +1305,18 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text(json.dumps({"mcpServers": {"other": {"url": "x"}}}))
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            self._converge(home)
             cfg = json.loads(cfg_path.read_text())
             self.assertIn("other", cfg["mcpServers"])
             self.assertIn("dpf", cfg["mcpServers"])
 
-    def test_dry_run_writes_nothing(self) -> None:
+    def test_dry_run_runs_nothing_and_says_would(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                status = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=True
-                )
-            self.assertIn("dry-run", status)
+            agy = _FakeAgy()
+            status = self._converge(home, agy=agy, dry_run=True)
+            self.assertTrue(status.startswith("dry-run: would"), status)
+            self.assertEqual(agy.calls, [])
             self.assertFalse(updater.antigravity_mcp_config_path(home).exists())
 
 
@@ -1851,6 +1904,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    @NEEDS_ANY_TOML
     def test_explicit_portal_origin_keeps_the_canonical_mcp_path(self):
         for endpoint in ("https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"):
             with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
@@ -1865,6 +1919,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 if "tenant=demo" in endpoint:
                     self.assertIn("tenant=demo", value)
 
+    @NEEDS_ANY_TOML
     def test_explicit_proxy_endpoint_preserves_path_and_query(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1939,6 +1994,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 self.assertFalse(updater.codex_managed_plugin_path(home).exists())
                 self.assertEqual(path.read_text() if path.exists() else None, original)
 
+    @NEEDS_ANY_TOML
     def test_codex_unreadable_saved_endpoint_requires_explicit_repair(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1952,6 +2008,7 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, "https://repair.example/api/mcp/v1", False)
             self.assertIn('url = "https://repair.example/api/mcp/v1?tier=full"', path.read_text())
 
+    @NEEDS_STDLIB_TOML
     def test_main_distinguishes_implicit_environment_and_cli_endpoints(self):
         original = "http://127.0.0.1:3000/api/mcp/v1?tier=full"
         environment = "https://environment.example/api/mcp/v1"
@@ -1972,6 +2029,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 self.assertIn(f'url = "{expected}"', path.read_text())
                 self.assertIn("startup_timeout_sec=45", path.read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_implicit_convergence_preserves_existing_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1986,12 +2044,14 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, None, False)
             self.assertEqual(first, path.read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_new_connection_keeps_https_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             updater.ensure_codex_config(home, None, False)
             self.assertIn('url = "https://localhost/api/mcp/v1?tier=full"', updater.codex_config_path(home).read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_explicit_endpoint_replaces_existing_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -2007,6 +2067,7 @@ class OAuthDefaultTest(unittest.TestCase):
             with self.subTest(case=case):
                 self.assertEqual(updater.mcp_client_bearer_header_required(case["endpoint"], case["client"], case["mode"]), case["required"])
 
+    @NEEDS_ANY_TOML
     def test_codex_updater_preserves_oauth_and_user_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -2108,6 +2169,7 @@ class WrapperEndpointParityTest(unittest.TestCase):
             self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
 
 
+@NEEDS_STDLIB_TOML
 class CodexRegistrationConvergenceTest(unittest.TestCase):
     def fixture(self, home, canonical=True, legacy=True):
         config = updater.codex_config_path(home)
@@ -2275,6 +2337,22 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
 
+    def test_shell_bootstrap_does_not_report_saved_permissions_as_an_installed_cli(self):
+        source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        if not source.exists():
+            self.skipTest("Repository adapter is not shipped in standalone packs")
+        text = source.read_text(encoding="utf-8")
+        block = text[text.index("CLAUDE_PRESENT=0"):text.index('if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then')]
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text('[projects."source"]\ntrust_level = "trusted"\n', encoding="utf-8")
+            for binary, expected in (("", "0"), ("/native/codex", "1")):
+                setup = 'maybe_install_agy() { :; }; resolve_claude_bin() { :; }; resolve_grok_bin() { :; }; resolve_agy_bin() { :; }; resolve_codex_bin() { printf "%s" "$DPF_TEST_CODEX_BIN"; };\n'
+                result = subprocess.run([updater.shutil.which("bash") or "bash", "-c", setup + block + '\nprintf "%s" "$CODEX_PRESENT"'],
+                    env={**os.environ, "CODEX_CONFIG_PATH": config.as_posix(), "DPF_TEST_CODEX_BIN": binary},
+                    capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout, expected, "Saved permissions cannot prove an installed Codex CLI")
+
     def test_registration_only_mode_does_not_write_connectors_or_other_clients(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -2409,7 +2487,8 @@ class CodexProjectConfigTest(unittest.TestCase):
             config.parent.mkdir()
             original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
             config.write_text(original)
-            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+            import codex_toml
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}), patch.object(codex_toml, "_codex_binary", return_value=None):
                 with self.assertRaisesRegex(ValueError, "Python 3.11"):
                     updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
             self.assertEqual(config.read_text(), original)
@@ -2430,6 +2509,7 @@ class CodexProjectConfigTest(unittest.TestCase):
             self.assertNotIn("bearer_token_env_var", parsed["mcp_servers"]["dpf"])
             self.assertNotIn("enabled", parsed["mcp_servers"]["dpf"])
 
+    @NEEDS_ANY_TOML
     def test_main_forwards_explicit_project_and_endpoint_even_on_dry_run(self):
         import contextlib
         import io
@@ -2507,6 +2587,100 @@ class ClaimRefreshParityTest(unittest.TestCase):
             pruned = updater.prune_codex_hooks_payload(again, hooks_dir)
             pruned_cmds = [h["command"] for g in pruned["hooks"].get("PostToolUse", []) for h in g["hooks"]]
             self.assertEqual(pruned_cmds, ["node /foreign/audit.js"])
+
+
+@unittest.skipIf(tomllib is None, "TOML regression requires Python 3.11+")
+class QuotedCodexConvergenceTest(unittest.TestCase):
+    def test_permission_writer_then_updater_preserves_choices_and_is_idempotent(self):
+        import routine_permissions
+        original = {
+            "model": "operator-model",
+            "plugins": {"dpf-platform@personal": {"enabled": False, "custom": "keep"},
+                        **{key: {"enabled": False} for key in updater.codex_competitive_plugin_ids(None)}},
+            "mcp_servers": {"dpf": {
+                "url": "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+                "enabled": True, "startup_timeout_sec": 90,
+                "bearer_token_env_var": "OPERATOR_TOKEN",
+                "http_headers": {"X-Custom": "keep"},
+            }},
+            "hooks": {"state": {"operator": {"trusted_hash": "keep"}}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            target = home / ".codex/config.toml"
+            target.parent.mkdir()
+            target.write_text(routine_permissions.dump_toml(original), encoding="utf-8")
+            updater.ensure_codex_config(home, None, False)
+            parsed = tomllib.loads(target.read_text())
+            for key in original:
+                self.assertEqual(parsed[key], original[key], key)
+            first = target.read_bytes()
+            self.assertFalse(updater.ensure_codex_config(home, None, False))
+            self.assertEqual(first, target.read_bytes())
+
+    def test_literal_quoted_keys_and_headers_preserve_endpoint_and_disabled_choice(self):
+        text = "['plugins'.'dpf-platform@personal'] # operator\n'enabled' = false\n['mcp_servers'.'dpf'] # saved\n'url' = 'http://127.0.0.1:3000/api/mcp/v1?tier=full'\n'enabled' = true\n"
+        self.assertFalse(updater.desired_codex_plugin_enabled(text))
+        self.assertEqual(updater.existing_codex_mcp_endpoint(text), "http://127.0.0.1:3000/api/mcp/v1?tier=full")
+        changed = updater.set_codex_plugin_enabled(text, updater.CODEX_PLUGIN_ID, False)
+        changed = updater.upsert_toml_table(changed, "[mcp_servers.dpf]", updater.codex_mcp_body(changed, None))
+        self.assertEqual(tomllib.loads(text), tomllib.loads(changed))
+
+    def test_invalid_candidate_never_replaces_existing_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_text('model = "keep"\n', encoding="utf-8")
+            before = target.read_bytes()
+            with self.assertRaises(ValueError):
+                updater.write_text_if_changed(target, 'enabled = true\n"enabled" = false\n')
+            self.assertEqual(before, target.read_bytes())
+
+    def test_dry_run_also_rejects_invalid_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "codex_mcp_body", return_value=['url = "https://localhost/api/mcp/v1"', 'enabled = true', '"enabled" = true']):
+                with self.assertRaises(ValueError):
+                    updater.ensure_codex_config(home, None, True)
+            self.assertFalse((home / ".codex/config.toml").exists())
+
+    def test_failed_atomic_replace_keeps_original_and_cleans_staging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_bytes(b'model = "keep"\n')
+            with patch.object(updater.os, "replace", side_effect=OSError("fixture failure")):
+                with self.assertRaises(OSError):
+                    updater.write_text_if_changed(target, 'model = "new"\n')
+            self.assertEqual(target.read_bytes(), b'model = "keep"\n')
+            self.assertEqual(list(target.parent.iterdir()), [target])
+
+    def test_missing_parser_refuses_write_without_touching_original(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_bytes(b'model = "keep"\n')
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.write_text_if_changed(target, 'model = "new"\n')
+            self.assertEqual(target.read_bytes(), b'model = "keep"\n')
+
+    def test_managed_quoted_bearer_is_removed_without_changing_custom_options(self):
+        text = '["mcp_servers"."dpf"]\n"url"="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n"enabled"=true\n"bearer_token_env_var"="DPF_MCP_BEARER_TOKEN"\n"startup_timeout_sec"=90\n'
+        with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+            updated = updater.upsert_toml_table(text, "[mcp_servers.dpf]", updater.codex_mcp_body(text, None))
+        data = tomllib.loads(updated)["mcp_servers"]["dpf"]
+        self.assertNotIn("bearer_token_env_var", data)
+        self.assertEqual(data["startup_timeout_sec"], 90)
+
+    def test_refused_global_candidate_skips_native_plugin_mutation(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "validate_toml", side_effect=ValueError("Invalid TOML candidate; configuration unchanged")), patch.object(updater, "install_codex_plugin") as native, contextlib.redirect_stdout(io.StringIO()) as output:
+                code = updater.main(["--skill-pack-path", str(Path(updater.__file__).resolve().parents[1]), "--skip-claude-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 1)
+            native.assert_not_called()
+            self.assertIn("configuration unchanged", output.getvalue())
+            self.assertNotIn("Codex      : marketplace + config converged", output.getvalue())
 
 
 if __name__ == "__main__":

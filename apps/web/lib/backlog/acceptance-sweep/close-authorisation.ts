@@ -18,8 +18,12 @@ import { isRecord } from "@/lib/shared/coerce";
 
 export const CLOSE_AUTHORISATION_CONFIG_KEY = "acceptance-sweep.close-authorisation";
 export const CLOSE_AUTHORISATION_SCOPE = "close-when-gate-allows";
-/** Closures per run when the authorisation names no bound. */
-export const DEFAULT_CLOSE_LIMIT = 25;
+/**
+ * Closures per run when the authorisation names no bound. Raised from 25 to
+ * the maximum (BI-C899BB40) so the delivered-but-open pool drains in days once
+ * delivery evidence closes every shape. A recorded bound is kept as recorded.
+ */
+export const DEFAULT_CLOSE_LIMIT = 100;
 /** The largest bound an authorisation may set. A run never closes more than it evaluated either. */
 export const MAX_CLOSE_LIMIT = 100;
 /** The tool whose grant mapping decides whether a coworker may perform the completion transition. */

@@ -75,9 +75,12 @@ const parsed = {
   },
 };
 
+const reviewTaskIdentity = { userId: "user-1", currentAgentId: parsed.agentId,
+  a2aMetadata: { requestDigest: "9".repeat(64), initiativeReviewBinding: parsed.initiativeReviewBinding } };
+
 describe("remote task cancellation settlement", () => {
   it("rejects a stale queue claim before invoking inference", async () => {
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { dispatch: { claimedAt: "new", count: 2 } } });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { dispatch: { claimedAt: "new", count: 2 } } });
     const outcome = await executeRemoteTaskAttempt({
       run: { id: "run", taskRunId: "TR-DISPATCH", contextId: "thread-1" }, threadId: "thread-1",
       token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" },
@@ -89,19 +92,20 @@ describe("remote task cancellation settlement", () => {
     expect(db.updateTaskRun).not.toHaveBeenCalled();
   });
   it("refuses malformed transferred authority before inference without falling back to the origin token", async () => {
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { reviewExecutionAuthority: { tokenId: "forged" } }, a2aMetadata: {} });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { reviewExecutionAuthority: { tokenId: "forged" } }, a2aMetadata: reviewTaskIdentity.a2aMetadata });
     const outcome = await executeRemoteTaskAttempt({ run: { id: "run", taskRunId: "TR-RECOVERY", contextId: "thread-1" }, threadId: "thread-1",
       token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" }, userContext: {} as never,
       parsed, idempotentReplay: true, capacityAttempt: 1 });
-    expect(outcome).toMatchObject({ kind: "result", result: { status: "input-required", isError: true,
-      structuredContent: { error: "review_execution_authority_refused" } } });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "working",
+      progressPayload: { reviewExecutionAuthority: { tokenId: "forged" } } } });
+    expect(db.updateTaskRun).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled(); expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });
   it.each(["capacity", "missing-writer", "exception"])("retains current authority and recorded windows when execution parks as %s", async mode => {
-    const authority = { tokenId: "current-token", originTokenId: "expired-token" };
+    const authority = { schemaVersion: 1, tokenId: "current-token", originTokenId: "expired-token" };
     const deadlineAt = new Date(Date.now() + 60_000).toISOString();
     const expiresAt = new Date(Date.now() + 120_000).toISOString();
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { reviewExecutionAuthority: authority, deadlineAt, expiresAt }, a2aMetadata: {} });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { reviewExecutionAuthority: authority, deadlineAt, expiresAt }, a2aMetadata: reviewTaskIdentity.a2aMetadata });
     recoveryAuthority.mockResolvedValue(true);
     if (mode === "exception") autonomous.execute.mockRejectedValue(Error("Provider failure"));
     else autonomous.execute.mockResolvedValue({ content: "Still waiting", executedTools: [],
@@ -116,7 +120,7 @@ describe("remote task cancellation settlement", () => {
   });
   it("preserves queue claim and dispatch budget when parking", async () => {
     const dispatch = { claimedAt: "claim", count: 3, state: "claimed" };
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { dispatch } });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { dispatch } });
     autonomous.execute.mockResolvedValueOnce({ content: "Writer missing", executedTools: [] });
     await executeRemoteTaskAttempt({
       run: { id: "run", taskRunId: "TR-DISPATCH", contextId: "thread-1" }, threadId: "thread-1",
@@ -129,7 +133,7 @@ describe("remote task cancellation settlement", () => {
     }));
   });
   it("does not adopt a newer reservation when the caller entered late", async () => {
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { resumeReservedAt: "new" } });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { resumeReservedAt: "new" } });
     autonomous.execute.mockResolvedValueOnce({ content: "Old result", executedTools: [] });
     const outcome = await executeRemoteTaskAttempt({
       run: { id: "run", taskRunId: "TR-LATE", contextId: "thread-1" }, threadId: "thread-1",
@@ -141,7 +145,7 @@ describe("remote task cancellation settlement", () => {
     expect(db.updateTaskRun).not.toHaveBeenCalled();
   });
   it("retains reservation identity when the newer attempt parks for its writer", async () => {
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { resumeReservedAt: "new" } });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { resumeReservedAt: "new" } });
     autonomous.execute.mockResolvedValueOnce({ content: "Writer missing", executedTools: [] });
     await executeRemoteTaskAttempt({
       run: { id: "run", taskRunId: "TR-NEWER", contextId: "thread-1" }, threadId: "thread-1",
@@ -153,9 +157,9 @@ describe("remote task cancellation settlement", () => {
     }));
   });
   it.each(["working", "input-required"])("does not overwrite a newer reservation in %s", async (status) => {
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { resumeReservedAt: "old" } });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { resumeReservedAt: "old" } });
     autonomous.execute.mockImplementationOnce(async () => {
-      db.findTaskRun.mockResolvedValue({ status, progressPayload: { resumeReservedAt: "new" } });
+      db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status, progressPayload: { resumeReservedAt: "new" } });
       return { content: "Old result", executedTools: [] };
     });
     const outcome = await executeRemoteTaskAttempt({
@@ -172,7 +176,7 @@ describe("remote task cancellation settlement", () => {
     autonomous.execute.mockReset();
     db.updateTaskRun.mockReset();
     db.findModelConfig.mockResolvedValue(null);
-    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working" });
     db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
@@ -184,7 +188,7 @@ describe("remote task cancellation settlement", () => {
   });
 
   it.each(["canceled", "archived", "rejected", "quiescing", "paused-for-upgrade", "paused-for-upgrade-forced", "stalled"])("preserves externally settled %s state", async (status) => {
-    db.findTaskRun.mockResolvedValue({ status, progressPayload: {} });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status, progressPayload: {} });
     autonomous.execute.mockResolvedValueOnce({ content: "Late result", executedTools: [] });
     const outcome = await executeRemoteTaskAttempt({
       run: { id: "run", taskRunId: "TR-SETTLED", contextId: "thread-1" }, threadId: "thread-1",
@@ -198,9 +202,9 @@ describe("remote task cancellation settlement", () => {
   });
   it("returns cancellation when cancellation wins the conditional settlement write", async () => {
     const updatedAt = new Date("2026-09-27T23:00:00Z");
-    db.findTaskRun.mockResolvedValue({ status: "working", updatedAt });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", updatedAt });
     db.updateTaskRun.mockImplementationOnce(async () => {
-      db.findTaskRun.mockResolvedValue({ status: "canceled", progressPayload: {} });
+      db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "canceled", progressPayload: {} });
       return { count: 0 };
     });
     autonomous.execute.mockResolvedValueOnce({ content: "Late result", executedTools: [] });
@@ -215,9 +219,9 @@ describe("remote task cancellation settlement", () => {
     expect(outcome).toMatchObject({ kind: "result", result: { status: "canceled", resumable: false } });
   });
   it.each(["missing-writer", "completed", "exception"])("preserves cancellation while inference returns %s", async (settlement) => {
-    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: {}, taskRunId: "TR-CANCELLED" });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: {}, taskRunId: "TR-CANCELLED" });
     autonomous.execute.mockImplementationOnce(async () => {
-      db.findTaskRun.mockResolvedValue({ status: "canceled", progressPayload: {}, taskRunId: "TR-CANCELLED" });
+      db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "canceled", progressPayload: {}, taskRunId: "TR-CANCELLED" });
       if (settlement === "exception") throw new Error("Late provider failure");
       return { content: "Late inference output", executedTools: [] };
     });

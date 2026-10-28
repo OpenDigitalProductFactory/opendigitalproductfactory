@@ -3,13 +3,15 @@ import type { DpfSession } from "@/lib/govern/auth";
 import { buildEffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import { baseItem, prismaFor } from "./workspace-case-loader.test-fixtures";
 import { loadAuthorizedWorkspaceCase, loadAuthorizedWorkroomProcess } from "./workspace-case-detail.server";
-const state = vi.hoisted(() => ({ db: {} as Record<string, unknown>, effective: vi.fn(), flow: vi.fn() }));
+const state = vi.hoisted(() => ({ db: {} as Record<string, unknown>, effective: vi.fn(), flow: vi.fn(), roomAccess: vi.fn(), handoffRecovery: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: state.db }));
 vi.mock("@/lib/identity/load-effective-auth-context", () => ({ loadEffectiveAuthContext: state.effective }));
 vi.mock("./room-participation-prisma.server", () => ({ loadPrismaWorkroomParticipants: vi.fn(async () => []) }));
 vi.mock("./room-posture.server", () => ({ loadWorkroomPostureContext: vi.fn(async () => null) }));
 vi.mock("./room-structure.server", () => ({ resolveWorkroomStructureForCase: vi.fn(async () => null) }));
 vi.mock("./workroom-flow-map.server", () => ({ loadWorkroomFlowMap: state.flow }));
+vi.mock("./workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: state.roomAccess }));
+vi.mock("@/lib/work-capsules/workroom-failed-handoff-recovery.server", () => ({ loadWorkroomFailedHandoffRecovery: state.handoffRecovery }));
 const user: DpfSession["user"] = { id: "user-1", email: "test@example.test", type: "admin", platformRole: null,
   isSuperuser: false, accountId: null, accountName: null, contactId: null };
 function effective(clearance = ["public", "internal"]) { return buildEffectiveAuthContext({ user, grantedCapabilities: [],
@@ -25,6 +27,7 @@ function setup(item = baseItem) {
   return db;
 }
 beforeEach(() => { vi.clearAllMocks(); for (const key of Object.keys(state.db)) delete state.db[key];
+  state.handoffRecovery.mockResolvedValue(null);
   state.effective.mockResolvedValue(effective()); state.flow.mockResolvedValue(null); });
 describe("shared authorized case and process loader", () => {
   it("retains manual process reads for an authorized case without an execution capsule", async () => {
@@ -106,3 +109,39 @@ describe("shared authorized case and process loader", () => {
     setup(); expect(await loadAuthorizedWorkspaceCase({ caseKey, user })).toBeNull(); expect(state.effective).not.toHaveBeenCalled();
   });
 });
+
+it.each(["admitted", "not-admitted", "insufficient-clearance", "unavailable"])("uses canonical exact-room admission for the selected blocker (%s)", async disposition => {
+  const db=setup();
+  db.workroom.findMany=vi.fn(async () => [{ id: "selected-private-row", capsuleId: "WC-SELECTED", title: "Selected", status: "blocked",
+    workspaceState: { statusOverride: { reason: "Selected room-private explanation", until: new Date(Date.now() + 86_400_000).toISOString() } } }]);
+  if(disposition === "unavailable") state.roomAccess.mockRejectedValue(new Error("private authority service error"));
+  else state.roomAccess.mockResolvedValue({ decision: { level: disposition === "admitted" ? "content" : "none", reason: disposition } });
+  const result=await loadAuthorizedWorkspaceCase({ caseKey: "booking:BK-1", selectedWorkroomId: "WC-SELECTED", user });
+  expect(state.roomAccess).toHaveBeenCalledExactlyOnceWith({ userId: "user-1", workroomId: "selected-private-row", requested: "content" }, expect.anything());
+  expect(result).not.toBeNull();
+  if(disposition === "admitted") expect(result?.detail.room?.work.recordedBlocker).toMatchObject({ explanation: "Selected room-private explanation" });
+  else {
+    expect(result?.detail.room?.work.recordedBlocker).toBeNull();
+    expect(JSON.stringify(result)).not.toContain("Selected room-private explanation");
+    expect(JSON.stringify(result)).not.toContain("private authority service error");
+  }
+});
+
+it.each([false,true])("enforces the canonical backlog-sensitive room decision for a standalone creator (admitted=%s)", async admitted => {
+  const db=setup(); db.workItem.findFirst=vi.fn(async () => null);
+  Object.assign(db.workroom,{findFirst:vi.fn(async () => ({ id:"standalone-private-row",capsuleId:"WC-ALONE",title:"Standalone",status:"blocked",workItemId:null,
+    backlogItemId:"BI-SENSITIVE",createdByPrincipal:{principalId:"PRN-OWNER"},
+    workspaceState:{statusOverride:{reason:"Backlog-sensitive standalone explanation",until:new Date(Date.now() + 86_400_000).toISOString()}} }))});
+  state.roomAccess.mockResolvedValue({decision:{level:admitted?"content":"discover",reason:admitted?"authorized":"insufficient-clearance"}});
+  const result=await loadAuthorizedWorkspaceCase({caseKey:"work-capsule:WC-ALONE",user});
+  expect(state.roomAccess).toHaveBeenCalledExactlyOnceWith({userId:"user-1",workroomId:"standalone-private-row",requested:"content"},expect.anything());
+  if(admitted)expect(result?.detail.room?.work.recordedBlocker).toMatchObject({explanation:"Backlog-sensitive standalone explanation"});
+  else{
+    expect(result?.detail.room?.work.recordedBlocker).toBeNull();
+    expect(JSON.stringify(result)).not.toContain("Backlog-sensitive standalone explanation");
+  }
+});
+
+it.each([true,false])("binds typed handoff history to the selected session room only after content admission (%s)",async allowed=>{setup();state.roomAccess.mockResolvedValue({decision:{level:allowed?"content":"discover"}});const recovery={kind:"failed-bounded-handoff",state:"resolved",reason:"handoff-completed-after-original-refusal",checkedAt:new Date().toISOString(),owner:null,original:{envelopeId:"failed",executionId:"actual",executedAt:new Date().toISOString()},action:null,resolution:{requestId:"later-real-request",activityId:"completed",recordedAt:new Date().toISOString()}};state.handoffRecovery.mockResolvedValue(recovery);const result=await loadAuthorizedWorkspaceCase({caseKey:"booking:BK-1",selectedWorkroomId:"WC-SELECTED",user});if(allowed){expect(state.handoffRecovery).toHaveBeenCalledWith(expect.objectContaining({userId:user.id,workroomRowId:"room-selected",context:undefined}),expect.anything());expect(result?.detail.room?.work.failedHandoffRecovery).toMatchObject({state:"resolved",resolution:{requestId:"later-real-request"}});}else{expect(state.handoffRecovery).not.toHaveBeenCalled();expect(result?.detail.room?.work.failedHandoffRecovery??null).toBeNull();}});
+
+it("never serializes a ready assistant action packet into the browser session view",async()=>{setup();state.roomAccess.mockResolvedValue({decision:{level:"content"}});state.handoffRecovery.mockResolvedValue({kind:"failed-bounded-handoff",state:"ready",reason:"ready",checkedAt:new Date().toISOString(),owner:null,original:null,action:{toolName:"reassign_workroom_executor",args:{privateTypedPacket:"SOURCE-ONLY"}}});const result=await loadAuthorizedWorkspaceCase({caseKey:"booking:BK-1",selectedWorkroomId:"WC-SELECTED",user});expect(result?.detail.room?.work.failedHandoffRecovery).toMatchObject({state:"ready",action:null});expect(JSON.stringify(result)).not.toContain("SOURCE-ONLY");});

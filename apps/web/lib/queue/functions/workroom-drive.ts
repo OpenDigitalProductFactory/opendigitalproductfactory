@@ -14,7 +14,7 @@ import {
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
-import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
+import { liveDriveTaskOwnerEffects, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import { isRecord } from "@/lib/shared/coerce";
@@ -85,6 +85,7 @@ import {
 import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
+import { overseeDriveRooms, type DriveOverseerDeps, type DriveOverseerResult } from "./workroom-overseer-run"; // BI-8E1486FA
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
@@ -183,7 +184,7 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
   notifyDeadline?: (input: DeadlineNoticeInput) => Promise<boolean>;
 };
 
-export type WorkroomDriveResult = {
+export type WorkroomDriveResult = DriveOverseerResult & {
   runId: string;
   scanned: number;
   dispatched: number;
@@ -408,7 +409,7 @@ export async function applyDrivePlan(input: {
 
 export async function runWorkroomDriveJob(
   now: Date = new Date(),
-  deps?: {
+  deps?: DriveOverseerDeps & {
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
@@ -459,6 +460,7 @@ export async function runWorkroomDriveJob(
     // BI-7C0B2BD6: the writeback latch reads each room's task, so it holds only while a run is outstanding.
     rooms = await withStageRuns(rooms);
   }
+  const overseen = await overseeDriveRooms(rooms, now, deps); rooms = overseen.rooms; // BI-8E1486FA: close finished rooms first
   const effects = deps?.effects ?? createWorkroomDriveEffects();
   // BI-7C0B2BD6 / DI-7109D22D4812: dispatch no more than agent capacity allows; the rest wait, oldest first.
   rooms = orderRoomsOldestWaitingFirst(rooms);
@@ -570,7 +572,7 @@ export async function runWorkroomDriveJob(
     attention,
     stopped,
     skipped,
-    plans,
+    plans, ...(overseen.overseer ? { overseer: overseen.overseer } : {}), // absent when the duty did not run, so caller-supplied ticks are unchanged
   };
 }
 
@@ -669,23 +671,11 @@ export function createWorkroomDriveEffects(
 ): WorkroomDriveEffects {
   return {
     ...createSubShapeChildEffects(loadDb as never),
-    // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
-    // blockage can name who clears it instead of waiting on nobody. Composed
-    // from the same lineage walk the room workforce read uses, so the two
-    // cannot disagree about who answers for a room.
-    async resolveAccountability(roomId) {
-      const prisma = await loadDb();
-      const { resolveRoomAccountabilityFromDb } = await import(
-        "@/lib/work-management/room-workforce.server"
-      );
-      return resolveRoomAccountabilityFromDb(
-        prisma as unknown as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
-        { workroomId: roomId },
-      );
-    },
-    async resolvePrincipalUserId(principalId) {
-      return activeUserIdForHumanPrincipal((await loadDb()) as never, principalId);
-    },
+    // BI-12A083B4: the drive asks accountability only when a tick ends stuck,
+    // so a blockage can name who clears it instead of waiting on nobody.
+    // BI-D13FA12A/BI-17238133: the same effects name a task's owner, shared
+    // with the scheduled-room mandate that re-checks it.
+    ...liveDriveTaskOwnerEffects(loadDb),
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),
     notifyDeadline: async (input) => (await import("@/lib/work-management/workroom-deadline-notice")).notifyWorkroomDeadline(input),

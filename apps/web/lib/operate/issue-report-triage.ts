@@ -43,6 +43,20 @@ interface IssueReport {
   occurrenceCount?: number | null;
   firstSeenAt?: Date | null;
   lastSeenAt?: Date | null;
+  // BI-24092DC9: the automated producer's stable signature (the log-signature
+  // scanner files `log-sig:<service>:<sigId>`). Stamped into the minted item so
+  // a repeat of the same signature attaches to it instead of minting a new BI.
+  dedupeKey?: string | null;
+}
+
+/** The body marker a minted item carries for its source signature (BI-24092DC9). */
+export function signatureMarker(dedupeKey: string): string {
+  return `Signature: ${dedupeKey}`;
+}
+
+/** The body marker a minted item carries for its source report. */
+export function sourceReportMarker(report: { reportId: string; source: string }): string {
+  return `Source report: ${report.reportId} (${report.source})`;
 }
 
 // BI-B4F401B3: reports filed by the production crash boundary carry only a
@@ -116,7 +130,8 @@ export function buildIssueBacklogItem(
     report.description,
     report.routeContext ? `Route: ${report.routeContext}` : null,
     report.errorStack ? `Stack (excerpt):\n${report.errorStack.slice(0, 2000)}` : null,
-    `Source report: ${report.reportId} (${report.source})`,
+    report.dedupeKey ? signatureMarker(report.dedupeKey) : null,
+    sourceReportMarker(report),
   ];
 
   return {
@@ -235,6 +250,20 @@ export async function triageIssueReports(deps: {
    *  captured this error digest, or null. Powers cross-route incident dedup so
    *  one underlying error reported from N routes folds into one BI. */
   findCrashItemTitleByDigest?: (digest: string) => Promise<string | null>;
+  /** BI-24092DC9: title of a live (not done/retired) bug item already minted
+   *  from this report or from another report with the same signature, or null.
+   *  Consulted before the LLM and again right before minting. */
+  findOpenItemTitleBySignature?: (sig: {
+    reportId: string;
+    source: string;
+    dedupeKey: string | null;
+  }) => Promise<string | null>;
+  /** BI-24092DC9: atomically take the report out of the OPEN pool before
+   *  minting. False means another projection path (the 15-minute sweep vs the
+   *  immediate event) already took it, so this one must not mint. */
+  claimReport?: (id: string) => Promise<boolean>;
+  /** Put a claimed report back in the OPEN pool when minting failed. */
+  releaseReport?: (id: string) => Promise<void>;
   resolveProductId?: () => Promise<string | null>;
   resolveTaxonomyNodeId?: () => Promise<string | null>;
   resolveTaxonomyNodeByPath?: (path: string) => Promise<string | null>;
@@ -331,6 +360,22 @@ export async function triageIssueReports(deps: {
 
     const isCrashBoundary = report.source === CRASH_BOUNDARY_SOURCE;
 
+    // ── Step 0: Signature dedup (BI-24092DC9) ────────────────────────────
+    // A repeat of an already-filed signature, or a report another path already
+    // minted, attaches to the live item (tally + priority via
+    // incrementOccurrence) instead of filing a new BI-PIR row. Runs before the
+    // LLM: the LLM rewrites titles, which is why title dedup alone let one
+    // signature mint up to five items.
+    const signature = { reportId: report.reportId, source: report.source, dedupeKey: report.dedupeKey ?? null };
+    if (deps.findOpenItemTitleBySignature) {
+      const existingTitle = await deps.findOpenItemTitleBySignature(signature);
+      if (existingTitle) {
+        await deps.incrementOccurrence(existingTitle);
+        await deps.acknowledgeReport(report.id);
+        continue;
+      }
+    }
+
     // ── Step 1: Try LLM-enhanced triage ──────────────────────────────────
     // BI-B4F401B3: NEVER run the LLM on crash-boundary reports — their only
     // input is a sanitized message, so the model invents a phantom root cause.
@@ -385,7 +430,24 @@ export async function triageIssueReports(deps: {
       llmEnhanced++;
     }
 
-    await deps.createBacklogItem(data);
+    // BI-24092DC9: the LLM call above can take minutes, and the cron and the
+    // immediate event both select OPEN reports. Re-check the signature and claim
+    // the report atomically so only one path ever mints it.
+    if (deps.findOpenItemTitleBySignature) {
+      const mintedMeanwhile = await deps.findOpenItemTitleBySignature(signature);
+      if (mintedMeanwhile) {
+        await deps.incrementOccurrence(mintedMeanwhile);
+        await deps.acknowledgeReport(report.id);
+        continue;
+      }
+    }
+    if (deps.claimReport && !(await deps.claimReport(report.id))) continue;
+    try {
+      await deps.createBacklogItem(data);
+    } catch (err) {
+      if (deps.claimReport && deps.releaseReport) await deps.releaseReport(report.id);
+      throw err;
+    }
     existingTitles.push(data.title); // prevent intra-batch dupes
     await deps.acknowledgeReport(report.id);
     created++;

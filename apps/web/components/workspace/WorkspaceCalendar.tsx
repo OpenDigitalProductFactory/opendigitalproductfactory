@@ -12,6 +12,7 @@ import { CalendarEventPopover } from "./CalendarEventPopover";
 import { CalendarDetailPopover } from "./CalendarDetailPopover";
 import { CalendarAgentScheduler } from "./CalendarAgentScheduler";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
+import { CalendarFeedSubscribePanel } from "./CalendarFeedSubscribePanel";
 
 // Must match CATEGORY_COLORS in calendar-data.ts — use concrete hex, not CSS vars
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
@@ -462,6 +463,7 @@ export function WorkspaceCalendar({
       )}
 
       <CalendarSyncPanel />
+      <CalendarFeedSubscribePanel />
     </div>
   );
 }

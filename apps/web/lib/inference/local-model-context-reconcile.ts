@@ -33,7 +33,14 @@ import {
   estimateModelVramGb,
   type HostMemory,
 } from "./local-model-policy";
-import { getServedContextTokens, setServedContextTokens, getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import {
+  getServedContextTokens,
+  setServedContextTokens,
+  getLocalThinkingBudgetEvidence,
+  ensureLocalEmbedderOffGpu,
+  LOCAL_RUNNER_KEEP_ALIVE,
+  type EmbedderPlacementResult,
+} from "./dmr-runtime-config";
 import { canonicalLocalModelKey } from "./local-model-management";
 import type { LocalPresence } from "@/lib/routing/local-tool-ceiling";
 
@@ -159,7 +166,8 @@ export async function resolveServedContextInfo(fetchImpl: typeof fetch = fetch):
 
 export type ContextReconcileStatus =
   | "raised" // was below target; override applied (and ModelProfile synced)
-  | "ok" // already at/above target; no write
+  | "pinned" // context already met target; only the resident keep_alive was missing (BI-34F71E9D)
+  | "ok" // already at/above target and resident; no write
   | "deferred" // below target but DMR refused the write (runner active); applies on next load
   | "no-model" // no local generation model installed
   | "unsupported" // local runtime exposes no context-size configuration API
@@ -222,7 +230,18 @@ export async function reconcileLocalModelContext(
       return { status: "unsupported", modelId, before: null, after: null, reason: served.reason };
     }
     const before = served.contextTokens; // null = no override set (DMR default ~4k)
-    if (before !== null && before >= target) {
+    const contextMet = before !== null && before >= target;
+    if (contextMet && served.keepAlive !== LOCAL_RUNNER_KEEP_ALIVE) {
+      // Context is fine but DMR's 5-minute idle unload is in force (a DMR
+      // restart drops it, and so did every context write before BI-34F71E9D).
+      // Re-pin residency without lowering a larger served window.
+      const pinned = await setServedContextTokens(apiRoot, modelId, before, fetchImpl, served.retained);
+      if (!pinned.ok) {
+        return { status: "deferred", modelId, before, after: null, reason: pinned.reason };
+      }
+      return { status: "pinned", modelId, before, after: pinned.contextTokens ?? before, reason: null };
+    }
+    if (contextMet) {
       // DMR already serves enough. Repair the routing column if re-profiling has
       // drifted it below what is actually served — best-effort, conditional so the
       // steady state stays write-free.
@@ -239,7 +258,7 @@ export async function reconcileLocalModelContext(
       return { status: "ok", modelId, before, after: before, reason: null };
     }
 
-    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl);
+    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl, served.retained);
     if (!applied.ok) {
       // DMR refuses while a runner is active; the override applies on next load.
       return { status: "deferred", modelId, before, after: null, reason: applied.reason };
@@ -263,6 +282,30 @@ export async function reconcileLocalModelContext(
     };
   } catch (err) {
     return none("unreachable", `context reconcile failed: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Keep the installed local embedder off the GPU (BI-B60AFE7B) so it never
+ * competes with the generation model for VRAM. Runs beside the context
+ * reconcile on boot and on the same interval: DMR forgets per-model config on
+ * restart. Best-effort; never throws.
+ */
+export async function reconcileLocalEmbedderPlacement(
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ status: EmbedderPlacementResult["status"] | "no-model" | "unreachable"; modelId: string | null; reason: string | null }> {
+  try {
+    const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
+    const modelsUrl = oaiBase.endsWith("/v1") ? `${oaiBase}/models` : `${oaiBase}/v1/models`;
+    const res = await fetchImpl(modelsUrl, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { status: "unreachable", modelId: null, reason: `models endpoint returned HTTP ${res.status}` };
+    const body = (await res.json()) as { data?: Array<{ id?: string }> };
+    const modelId = (body.data ?? []).find((m) => m.id && isEmbeddingModelId(m.id))?.id ?? null;
+    if (!modelId) return { status: "no-model", modelId: null, reason: "no local embedding model installed" };
+    const placed = await ensureLocalEmbedderOffGpu(getOllamaApiRoot(), modelId, fetchImpl);
+    return { ...placed, modelId };
+  } catch (err) {
+    return { status: "unreachable", modelId: null, reason: `embedder placement failed: ${(err as Error).message}` };
   }
 }
 

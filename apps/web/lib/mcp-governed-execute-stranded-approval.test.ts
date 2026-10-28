@@ -27,6 +27,8 @@
 //     still stands — the retry runs the call once (AC-RESERVED-REFUSAL-RELEASED,
 //     AC-NO-STRANDED-RETRY).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: vi.fn(async () => null) }));
 
 import {
   finalizeAuthorityApprovalEnvelope,

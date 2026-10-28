@@ -4,6 +4,7 @@ import { COWORKER_READ_BASELINE_GRANTS } from "@/lib/tak/agent-grants";
 
 import {
   deriveRoomTurnAuthority,
+  resolveRoomActionBoundary,
   roomAuthorizesTool,
   workroomIdFromRoute,
   roomGrantsFromWorkShape,
@@ -245,5 +246,51 @@ describe("toRoomAuthorityContext", () => {
     expect(ctx?.workShapeKey).toBe("assurance-sweep");
     expect(ctx?.authorizedGrants).toEqual([...COWORKER_READ_BASELINE_GRANTS]);
     expect(toRoomAuthorityContext(unroomedTurnAuthority([]))).toBeNull();
+  });
+});
+
+// BI-D0DFE502 / WWMD DI-EDAF65D71636: the runtime and the room's displayed
+// posture read the same precedence. In a gate-governed room the gates review
+// the change, so a shape's ask-first yields to the decreed default.
+describe("resolveRoomActionBoundary in a gate-governed room", () => {
+  const shaped = { declaredActionBoundary: null, shapeActionBoundary: "propose" as const };
+
+  it("lets the decreed default decide over the shape", () => {
+    expect(resolveRoomActionBoundary({ ...shaped, gateGoverned: true }, "preauthorized")).toBe("preauthorized");
+  });
+
+  it("keeps the shape for a room a person reviews", () => {
+    expect(resolveRoomActionBoundary(shaped, "preauthorized")).toBe("propose");
+  });
+
+  it("still lets the room's declaration decide", () => {
+    expect(
+      resolveRoomActionBoundary({ ...shaped, declaredActionBoundary: "advise", gateGoverned: true }, "preauthorized"),
+    ).toBe("advise");
+  });
+
+  it("agrees with the displayed posture for the same room", async () => {
+    const { resolveWorkPosture } = await import("@/lib/work-posture");
+    const shown = resolveWorkPosture({
+      inherited: {
+        proactivityPlan: {
+          resolvedLevel: "balanced",
+          policyId: "test",
+          attentionWindowMinutes: 60,
+          followUpCadenceMinutes: [120],
+          maxAttempts: 2,
+          spendClass: "standard",
+          channelPolicy: "preferred-channel",
+          escalationTarget: "attention-surface",
+          actionBoundary: "propose",
+          explanation: "test",
+          evidenceRefs: [],
+        },
+      },
+      gateGoverned: true,
+      shape: { shapeKey: "change-consequential" },
+      workroomDefault: { actionBoundary: "preauthorized" },
+    });
+    expect(resolveRoomActionBoundary({ ...shaped, gateGoverned: true }, "preauthorized")).toBe(shown.actionBoundary);
   });
 });

@@ -22,6 +22,26 @@ an action, and generic test success supplies neither a Responses verification
 receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
 initiative review or substitute for the gate's independent writer.
 
+### Delivery closes non-contractual work (BI-B1B44777)
+
+Founder direction, 2026-10-27: outcomes define done. A merge through CI and the
+merge queue closes every item that is not an aggregate (xlarge) and is not
+tagged `contractual`. The tag lives in `BacklogItem.lifecycleTags` (kernel
+decision DI-1263D968DC26). For these items the merge satisfies delivery,
+acceptance and objective reconciliation, and design, plan and specialist-review
+lanes are not owed after the change has landed.
+
+These still block:
+
+- a recorded failed review;
+- the newest `ux` or `manual` evidence being a failure;
+- a conflicting or malformed objective reconciliation.
+
+The predicate is `deliveryClosesItem` in `backlog-completion-evaluation.ts`.
+The acceptance sweep reads the same evaluation, so it closes these items under
+its recorded pre-authorisation. The independent-acceptance lanes below apply
+to contractual items. A regression found in use becomes a new item.
+
 ### Medium body criteria and independent acceptance
 
 Effective medium work, including product-linked work, can satisfy its objective
@@ -255,6 +275,11 @@ authenticated human and acting coworker; another user's or coworker's request
 returns the same unavailable response as an unknown ID. It reveals no arguments
 or raw tool results and confers no workroom admission or reviewer authority.
 
+`get_my_approval_status(mode: "pending")` lists requests from the acting
+coworker only. Its result carries `scope.coversOwnerInbox: false` and
+`ownerInboxTotal: null`. Never report its count, including zero, as the owner's
+Inbox total; other coworkers' requests are excluded (BI-83638ACC).
+
 An approved request without execution evidence remains unknown. Confirm the
 target operation's actual state before retrying; HTTP success from the approval
 route alone is not delivery or acceptance evidence. The Inbox projects the same
@@ -286,6 +311,24 @@ describes the current-authority checks, generation reservation and approval
 continuation. Completion still requires the original task's genuine governed
 writer receipt and the readiness finding it actually records.
 
+### A present assessment authorized by an approved policy
+
+Original recovery cannot restart uncertain or exhausted work. A separately
+approved retained policy may explicitly authorize a present assessment of its
+exact unchanged requirements. Supply its `reassessmentAuthorizationItemId` on
+the bounded `get_backlog_item` read alongside `itemId` and `recoveryGate`, then
+use the returned complete `request_coworker` packet. The current human,
+connection, author, independent reviewer and both Workrooms must still authorize
+it. A policy identifier never supplies those permissions.
+
+Every accepted assessment consumes that policy's allowance in every state.
+Retrying a request returns the existing assessment without another execution
+window. An initial qualification failure also consumes its accepted allocation;
+do not issue another key or connection family to replace it. The original
+unknown result remains unchanged. Only genuine governed receipts satisfy the
+requirements, and the parent's next normal admission check must still pass.
+See the [present reassessment authorization procedure](mcp-tool-authorization-runbook.md#explicitly-authorized-present-reassessments)
+for capture, budget, compatibility and restore restrictions.
 
 **Workroom review observations.**
 

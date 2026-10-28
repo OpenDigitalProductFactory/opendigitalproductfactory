@@ -43,6 +43,8 @@ import {
 import { isRecord } from "@/lib/shared/coerce";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
   currentInferenceSignal } from "./governed-inference-deadline";
+import { assertReassessmentPlan, isReassessmentExecutionError, refuseReassessmentExecution,
+  validateReassessmentToolCalls } from "./reassessment-execution-scope";
 
 // Compatibility export for existing callers; callProvider now owns local
 // admission, so this adapter never acquires the lane itself.
@@ -193,6 +195,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
+    const reassessment = assertReassessmentPlan({ providerId, modelId, plan, tools });
+    if (reassessment && (plan.providerSettings.thinking_budget_tokens !== undefined || plan.localThinkingBudgetEvidence !== undefined)) {
+      return refuseReassessmentExecution("reassessment-runtime-probe-not-permitted");
+    }
     const { baseUrl, headers } = provider;
     let requestHeaders = headers;
     const total = plan.completionAllowance;
@@ -496,7 +502,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         )) throw new Error("Local thinking runtime evidence changed or unavailable");
         await assertGovernedInferenceAuthority(currentInferenceSignal());
       }
-      const continuation = await prepareLocalNativeChatReplay(request, chatUrl);
+      const continuation = reassessment ? null : await prepareLocalNativeChatReplay(request, chatUrl);
       if (continuation) {
         continuationBinding = continuation.binding;
         nativeReplay = continuation.replayed;
@@ -517,6 +523,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       });
     } catch (e) {
       currentInferenceSignal()?.throwIfAborted();
+      if (isReassessmentExecutionError(e)) throw e;
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
       if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
@@ -730,20 +737,15 @@ export const chatAdapter: ExecutionAdapterHandler = {
           );
           throw error;
         }
-      } else if (text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
+      } else if (!reassessment && text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
         // Fallback: model runner didn't translate native tool-call markers to structured format.
         // Handles Gemma/Llama template variants that leak <tool_call> or <|tool_call> as text.
         const extracted = extractTextualToolCalls(text);
         toolCalls = extracted.toolCalls;
         text = extracted.cleanText;
-      } else if (text && text.includes('"tool_use"')) {
-        // Fallback 2: local/Docker Model Runner (Gemma, Llama) emits the
-        // canonical Anthropic-style {"type":"tool_use",...} JSON as plain
-        // content rather than a structured tool_calls field. Without this
-        // every tool-requiring turn that fallback-routes to local is a
-        // silent dead-end: the agentic loop sees toolCalls=0 and gives up.
-        // Share the CLI adapters' extractor so the behaviour is identical
-        // regardless of provider.
+      } else if (!reassessment && text && text.includes('"tool_use"')) {
+        // Ordinary local traffic may emit Anthropic tool_use JSON as text.
+        // Restricted reviews require structured provider calls instead.
         const textualUse = extractTextualToolUse(text);
         if (textualUse.length > 0) {
           toolCalls = textualUse;
@@ -765,6 +767,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       outputTokens = readUsage("output_tokens", "completion_tokens");
     }
 
+    validateReassessmentToolCalls(toolCalls);
     // Keep provider-supplied identity, never the requested model or response body.
     const returnedModel = typeof data.model === "string" && data.model.trim() ? data.model : undefined;
     const result: AdapterResult = {

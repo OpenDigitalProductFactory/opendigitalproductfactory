@@ -134,7 +134,7 @@ export function recordPlanAdvanceFailure(
 ): PlanAdvanceTracker {
   return {
     failures: (prev?.failures ?? 0) + 1,
-    lastError: error.slice(0, 300),
+    lastError: excerptHeadAndTail(error, 300), // a failed command prints its stderr last
     lastAt: now.toISOString(),
     ...(prev?.escalatedAt ? { escalatedAt: prev.escalatedAt } : {}),
   };

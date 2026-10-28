@@ -79,3 +79,29 @@ function exhaustedSuggestion(params: {
       return "The note above says what ruled it out.";
   }
 }
+
+function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
+  const counts = new Map<string, number>();
+  for (const tool of executedTools) {
+    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([name, count]) => count > 1 ? `${name} x${count}` : name)
+    .join(", ");
+}
+
+// BI-0C19AFDD: this message must stay domain-agnostic. The prior copy hard-coded
+// a "finance reports"/"finance-summary tool" suggestion, which confabulated an
+// unrelated domain for every non-finance coworker (e.g. Dale's truck-parts build
+// was told to "use the finance reports directly"). Keep the guidance generic,
+// mirroring the honest max-iter sibling below.
+export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
+  const toolSummary = summarizeExecutedToolNames(executedTools) || "the available tools";
+  return [
+    `I used ${toolSummary}, but the coworker hit the runtime limit before it produced a final answer.`,
+    "I stopped before returning another raw tool request.",
+    "The route and tool attempts were recorded; try a narrower question, or break the request into a smaller step.",
+  ].join(" ");
+}

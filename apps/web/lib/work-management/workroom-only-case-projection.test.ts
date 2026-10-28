@@ -215,3 +215,29 @@ describe("loadWorkroomOnlyCaseDetail", () => {
     expect(() => JSON.stringify(detail)).not.toThrow();
   });
 });
+
+
+it("shares bounded blocker normalization after standalone content admission", async () => {
+  const blocked = room({ id: "standalone", status: "blocked", workspaceState: { statusOverride: {
+    reason: "Standalone prerequisite", until: "2026-09-08T12:00:00.000Z",
+  } } });
+  const result = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: client(blocked), sourceId: "WC-ALPHA",
+    caseKey: "work-capsule%3AWC-ALPHA", now: NOW, canReadWorkroomContent: async rowId => rowId === "standalone" });
+  expect(result?.room?.work).toMatchObject({ recordedBlocker: {
+    explanation: "Standalone prerequisite", explanationState: "current", source: { capsuleId: "WC-ALPHA" },
+  } });
+  const denied = await loadWorkroomOnlyCaseDetail({ authContext: { ...AUTH, principalId: "PRN-OTHER" },
+    prismaClient: client(blocked), sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW });
+  expect(denied).toBeNull();
+});
+
+it("withholds a standalone explanation when historical room creation does not establish current exact-room clearance", async () => {
+  const blocked = room({ id: "standalone", status: "blocked", workspaceState: { statusOverride: {
+    reason: "Backlog-sensitive explanation", until: "2026-09-08T12:00:00.000Z",
+  } } });
+  const result = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: client(blocked), sourceId: "WC-ALPHA",
+    caseKey: "work-capsule%3AWC-ALPHA", now: NOW, canReadWorkroomContent: async () => false });
+  expect(result).not.toBeNull();
+  expect(result?.room?.work.recordedBlocker).toBeNull();
+  expect(JSON.stringify(result)).not.toContain("Backlog-sensitive explanation");
+});

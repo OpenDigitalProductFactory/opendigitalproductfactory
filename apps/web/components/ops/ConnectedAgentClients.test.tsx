@@ -24,9 +24,9 @@ describe("ConnectedAgentClients", () => {
       release,
       truncated: false,
       clients: [
-        { credentialRef: "oauth:a", product: "Claude Code", probable: false, authMode: "oauth", standing: "current", loadedVersion: "0.4.0", loadedFingerprint: "1111111111aa", lastSeen: new Date("2026-10-13T11:30:00Z"), behind: false },
-        { credentialRef: "token:b", product: "Codex", probable: false, authMode: "bearer", standing: "stale", loadedVersion: "0.3.0", loadedFingerprint: "2222222222bb", lastSeen: new Date("2026-10-11T12:00:00Z"), behind: true },
-        { credentialRef: "oauth:c", product: null, probable: false, authMode: "oauth", standing: "undeclared", loadedVersion: null, loadedFingerprint: null, lastSeen: new Date("2026-10-13T07:00:00Z"), behind: true },
+        { credentialRef: "oauth:a", product: "Claude Code", probable: false, authMode: "oauth", standing: "current", loadedVersion: "0.4.0", loadedFingerprint: "1111111111aa", lastSeen: new Date("2026-10-13T11:30:00Z"), behind: false, reasons: [], hostAgent: { status: "ok", code: null, since: null } },
+        { credentialRef: "token:b", product: "Codex", probable: false, authMode: "bearer", standing: "stale", loadedVersion: "0.3.0", loadedFingerprint: "2222222222bb", lastSeen: new Date("2026-10-11T12:00:00Z"), behind: true, reasons: ["the files it loaded differ from the released pack"], hostAgent: { status: "failed", code: "exit-1", since: new Date("2026-10-10T09:00:00Z") } },
+        { credentialRef: "oauth:c", product: null, probable: false, authMode: "oauth", standing: "undeclared", loadedVersion: null, loadedFingerprint: null, lastSeen: new Date("2026-10-13T07:00:00Z"), behind: true, reasons: ["the connection declares no DPF toolchain"], hostAgent: null },
       ],
     });
 
@@ -44,6 +44,11 @@ describe("ConnectedAgentClients", () => {
     expect(html).toContain("did not say");
     expect(html).toContain("5 hours ago");
     expect(html).toContain("within the last hour");
+    // BI-3E66F76F: why it is behind, and how its computer's automatic update fared.
+    expect(html).toContain("Why: the files it loaded differ from the released pack.");
+    expect(html).toContain("This computer updates its agent tools on its own.");
+    expect(html).toContain("automatic update has been failing.");
+    expect(html).toContain("Since ");
     // The fingerprint is explained, never bare jargon.
     expect(html).toContain("fingerprint");
     expect(html).not.toMatch(/digest/i);
