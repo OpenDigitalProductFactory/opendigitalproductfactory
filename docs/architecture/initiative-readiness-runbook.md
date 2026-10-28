@@ -105,10 +105,15 @@ children or changing the initiative's shape.
 Break-fix post-implementation review uses the authored Workroom head and a
 provider-verified artifact. A workflow or code repair with one implementation
 file can be reviewed without a changed design document; accompanying tests
-and explanatory docs do not change that identity. Multiple implementation
-files without a canonical design remain an explicit scope ambiguity. Use the
-returned reviewer packet unchanged; deployment evidence and an independent
-receipt are still required. This does not relax design-approval gates.
+and explanatory docs do not change that identity. A repair with several
+implementation files is reviewed whole (BI-46E344FE): the review binds a
+`repo-commit-range` artifact, the compared range plus a digest of every path's
+post-change blob. The reviewer reads it with `read_source_at_version` at the
+virtual path `repo-commit-range/<base>..<head>`, bound to that digest, and the
+read fails closed if the digest differs. Use the returned reviewer packet
+unchanged; deployment evidence and an independent receipt are still required.
+This does not relax design-approval gates: only a post-implementation review
+binds a commit range.
 
 After merge the delivering room is usually archived or idle, so no live room
 exists (BI-CE661173). The review then reads the merged squash commit on
@@ -118,7 +123,15 @@ PR the room recorded. It must be committed after the latest reopen and must not
 be reverted. The item's newest delivery room is the request's anchor: its
 recorded branch and head are what admission, the PIR evidence context and the
 receipt writer match. A room whose recorded base equals its head reads the same
-merged commit. No live room is reopened.
+merged commit. A room that never recorded its base or head is anchored to the
+newest merged commit, and the writer accepts that missing head only with its
+own trunk proof. No live room is reopened.
+
+An item delivered by several standing squash commits is reviewed as their
+union, oldest first, in one `repo-commit-range` artifact with one range per
+commit (at most eight). The writer accepts the receipt only if the trunk still
+names exactly those commits, in that order, and the provider's change still
+matches the digest. Every commit's sign-off must name the same author.
 
 Every delivery actor is excluded from reviewing a merged repair, not just the
 caller. That set is everyone who created, held or worked in any of the item's
@@ -128,7 +141,8 @@ merged delivery from that room, or the reviewer is a delivery actor, the write
 is refused.
 
 Escalations: `merged-delivery-not-found` means no standing delivering commit
-exists. `merged-delivery-ambiguous` means several PRs delivered the item.
+exists. `merged-delivery-ambiguous` means more than eight commits delivered the
+item.
 `delivery-actors-unbounded` means the item has too many rooms to bound the
 actor set.
 

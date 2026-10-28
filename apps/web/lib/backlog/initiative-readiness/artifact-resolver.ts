@@ -281,7 +281,7 @@ export async function resolveInitiativeArtifact(args: {
 
   let providerBlob: ProviderResolvedBlob | null;
   try {
-    if (args.resolveRepositoryBlob) {
+    if (args.resolveRepositoryBlob && args.locator.kind === "repo-blob-at-commit") {
       providerBlob = await args.resolveRepositoryBlob(args.locator);
     } else {
       const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject,
