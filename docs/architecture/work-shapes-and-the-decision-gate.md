@@ -880,6 +880,23 @@ call now answers with `stageReach`: whether the next drive tick can advance the
 stage from it, or why not (a blocker, not the current stage, accountable to
 someone else, or no driven stage yet).
 
+**An answered dispatch is not run again (BI-CAP-B5F50D1F).** A stage task keeps
+the drive's own cron, so after a successful run its next tick can start before
+the drive reads that run's evidence and stops the room. On 2026-10-28 room
+WC-PIR-MCP-EFF-852B5BBE recorded its review at 11:51:02, was run again at
+12:00:00 and was stopped by the drive at 12:00:16. The writer refused the
+second review, the run was filed as an error, and it left a `blocked` record
+after the completed one. Six of that day's ten review errors were this. The
+scheduler now asks first whether the task's own dispatch (its checkpoint's
+`confirmedEffect.recordedAt`) already has completing evidence, by the same rule
+the drive earns receipts with (`stageHasCompletingEvidence`). If it does, the
+model is not run and the task records `unchanged`
+(`apps/web/lib/work-management/stage-dispatch-answered.ts`). The drive still
+owns the advance. A task with no checkpoint, another task's checkpoint, a
+graph shape or a failed read runs as before. A required writer that was
+called and refused on every call is now reported as "called N times and
+refused (codes)", never as "attached and not called".
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was
