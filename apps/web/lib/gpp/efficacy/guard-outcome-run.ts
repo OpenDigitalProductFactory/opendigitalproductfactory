@@ -8,6 +8,8 @@
 
 import { createHash } from "node:crypto";
 
+import { isRecord } from "@/lib/shared/coerce";
+
 export const GUARD_OUTCOME_SCHEMA = "guard-outcome-run.v1";
 export const GUARD_OUTCOME_RUNNERS = ["pregate", "pre-push-gate", "guard-loop"] as const;
 export const GUARD_VERDICTS = ["passed", "refused", "self-test-failed", "runner-failed", "skipped"] as const;
@@ -66,10 +68,6 @@ const CLONE_KEY_RE = /^[0-9a-f]{16}$/;
 const RUN_ID_RE = /^[0-9a-f-]{36}$/;
 const GUARD_ID_RE = /^(loop|policy|hook):[A-Za-z0-9._-]{1,120}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,200}$/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function includes<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === "string" && (values as readonly string[]).includes(value);

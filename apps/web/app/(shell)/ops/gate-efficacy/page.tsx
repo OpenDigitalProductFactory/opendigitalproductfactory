@@ -48,7 +48,7 @@ export default async function GateEfficacyPage() {
 
       <PlatformTabNav />
 
-      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Summary">
+      <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4" aria-label={t("gateEfficacy.summaryRegion")}>
         <StatCard label={t("gateEfficacy.stats.checks")} value={runs.toLocaleString()} hint={t("gateEfficacy.stats.checksHint")} />
         <StatCard label={t("gateEfficacy.stats.refusals")} value={classified.toLocaleString()} />
         <StatCard label={t("gateEfficacy.stats.waiting")} value={waiting.toLocaleString()} hint={t("gateEfficacy.stats.waitingHint")} />

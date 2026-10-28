@@ -311,6 +311,7 @@
     "title": "Gate efficacy",
     "from": "From",
     "to": "to",
+    "summaryRegion": "Summary",
     "summary": "{$runs} guard checks recorded, {$classified} refusals classified. Unknown measures: {$unknown}.",
     "none": "none",
     "noDecision": "Nothing here needs your decision. Guards that look wasteful get a review item automatically.",

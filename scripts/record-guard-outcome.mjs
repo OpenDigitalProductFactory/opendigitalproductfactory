@@ -12,6 +12,7 @@ import { parseArgs } from "node:util";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { buildGuardResult, digestFiles, GUARD_VERDICTS, recordGuardRun } from "./lib/guard-outcome-record.mjs";
 import { submitSpool } from "./lib/guard-outcome-submit.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 export const HOOK_GUARDS = Object.freeze({
   "pre-push-gate": { guardId: "hook:pre-push-gate", files: [".githooks/pre-push-gate"] },
@@ -19,7 +20,7 @@ export const HOOK_GUARDS = Object.freeze({
 
 export function parseHookArgs(argv) {
   const { values } = parseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     options: {
       runner: { type: "string" },
       verdict: { type: "string" },

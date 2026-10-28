@@ -17,10 +17,10 @@
 // portal or a malformed declaration cannot change a guard's exit code.
 
 import { createHash, randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { gitTextOrNull } from "./git.mjs";
 
 export const GUARD_OUTCOME_SCHEMA = "guard-outcome-run.v1";
 export const GUARD_OUTCOME_RUNNERS = Object.freeze(["pregate", "pre-push-gate", "guard-loop"]);
@@ -282,10 +282,7 @@ export function buildRunRecord({
 }
 
 function git(args, { cwd, exec, input }) {
-  return String(exec("git", args, {
-    cwd, encoding: "utf8", input, maxBuffer: 256 * 1024 * 1024,
-    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
-  })).trim();
+  return gitTextOrNull(args, { cwd, exec, input, maxBuffer: 256 * 1024 * 1024 });
 }
 
 /** A stable key for this clone and worktree. Carries no path: a hash of host and location. */
@@ -297,7 +294,7 @@ export function cloneKeyFor(worktreePath, host = hostname()) {
  * Branch, HEAD, merge base with origin/main, the change's patch id, whether the
  * tree was dirty, and the clone key. Unknown parts read as null; never throws.
  */
-export function resolveDiffIdentity({ cwd = process.cwd(), exec = execFileSync, host } = {}) {
+export function resolveDiffIdentity({ cwd = process.cwd(), exec, host } = {}) {
   const attempt = (args, input) => {
     try { return git(args, { cwd, exec, input }) || null; } catch { return null; }
   };
@@ -322,7 +319,7 @@ export function resolveDiffIdentity({ cwd = process.cwd(), exec = execFileSync, 
   };
 }
 
-export function spoolDirectory({ cwd = process.cwd(), exec = execFileSync } = {}) {
+export function spoolDirectory({ cwd = process.cwd(), exec } = {}) {
   try {
     const common = git(["rev-parse", "--git-common-dir"], { cwd, exec });
     return common ? join(resolve(cwd, common), SPOOL_DIRECTORY_NAME) : null;
@@ -490,7 +487,7 @@ export async function recordGuardRun({
   durationMs,
   cwd = process.cwd(),
   env = process.env,
-  exec = execFileSync,
+  exec,
   submit = async () => null,
   log = (line) => process.stderr.write(`${line}\n`),
 }) {

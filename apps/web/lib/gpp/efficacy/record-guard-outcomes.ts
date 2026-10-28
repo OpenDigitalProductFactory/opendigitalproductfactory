@@ -11,6 +11,7 @@
 // quarantines them instead of resubmitting forever.
 
 import type { Prisma } from "@dpf/db";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
@@ -56,18 +57,6 @@ export type RecordGuardOutcomesResult = ActionResult<{
 
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
-}
-
-/** Key-sorted JSON, so content equality does not depend on key order. */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value ?? null);
 }
 
 /** A collision is a replay only when the same actor sent the same content. */
