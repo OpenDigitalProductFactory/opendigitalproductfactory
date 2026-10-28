@@ -242,6 +242,22 @@ its existing gate. See [PR health](../testing/pr-health.md#corrections-after-pub
 for commands, proof identity and freshness requirements. Scoped operator
 recovery remains a separate audited route when its conditions apply.
 
+A merge of origin/main onto a passed published head stays a **main refresh**
+even when it regenerates registry-generated files (route manifest, doc index):
+drift in registered derived-artifact outputs is not authored change. Its
+reduced tier runs those artifacts' freshness checks, the affected tests and the
+package typecheck, and reuses the prior PASS for everything else.
+`pnpm run pregate` takes this tier automatically on such a head instead of the
+full gate (`--force-rerun` forces the full gate).
+
+Pregate preflight also judges derived artifacts against the merged base before
+any guard or lease (BI-1A06A1AF). CI checks freshness on the merge of main and
+the branch. When the branch is behind origin/main and both sides changed the
+inputs of the same registered artifact, preflight fails with CI's
+`[derived-artifacts] <id>: STALE` lines and `run:` remedies: merge origin/main,
+regenerate, commit. When the merge base cannot be computed, the result is
+reported as UNRUN, not STALE.
+
 `pregate:preflight` and `pr:ready` reuse wholly successful local guard results
 for at most one hour when the clean worktree, HEAD/tree, main, command plan,
 toolchain and environment still match. Readiness also binds PR body and labels.

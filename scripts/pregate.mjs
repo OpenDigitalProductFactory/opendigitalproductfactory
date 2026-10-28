@@ -128,6 +128,19 @@ export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) 
 }
 
 /**
+ * BI-25CB699C: a head that only merged origin/main onto a published, passed
+ * head (regenerated registry outputs included) takes the reduced tier —
+ * derived-artifact freshness, typecheck and affected tests — reusing that
+ * PASS for everything else. The reuse is recorded as a published-correction
+ * proof (gate-unrun, integration delegated); CI and the merge queue stay
+ * authoritative. Any other class, or a forced re-gate, runs the full gate.
+ */
+export function shouldTakeReducedTier({ args = [], classification = null } = {}) {
+  if (isRecordExemptInvocation(args) || args.includes(FORCE_RERUN_FLAG)) return false;
+  return classification === "main-refresh";
+}
+
+/**
  * Drop the wrapper-only force flag before the gate sees it — gate-worktree.mjs
  * dies on an unknown option, so forwarding it would turn a deliberate re-gate
  * into a crash (BI-1669E08A).
@@ -862,6 +875,23 @@ async function main() {
         + `pregate: read it with  pnpm run pregate:status  — re-gate anyway with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`,
     );
     process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
+  }
+
+  if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
+    // The probe only ever narrows work: a checkout without the correction
+    // module (or its packaged classifier) runs the full gate as before.
+    const correction = await import("./published-correction.mjs").catch(() => null);
+    if (correction && shouldTakeReducedTier({ args, classification: correction.reducedTierClassification() })) {
+      process.stdout.write("pregate: HEAD only merges origin/main onto a passed published head — running the reduced tier (derived-artifact freshness, typecheck, affected tests); the prior PASS covers the rest.\n");
+      try {
+        const result = await correction.verifyPublishedCorrection();
+        process.stdout.write(`pregate: reduced tier passed (${result.publicationCorrection.commands.length} command(s)); recorded as ${result.skipReason}. Full integration UNRUN, delegated to protected GitHub checks and the merge queue.\n`);
+        process.exit(0); // exit-0: reduced-tier proof recorded for this HEAD; pre-push accepts it, CI stays authoritative
+      } catch (error) {
+        process.stderr.write(`pregate: reduced tier failed — ${error.message}\npregate: fix the named check; re-gate fully only with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`);
+        process.exit(1);
+      }
+    }
   }
 
   const preflightStatus = await runHostPreflight({ args });
