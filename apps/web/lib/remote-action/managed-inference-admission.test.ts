@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { canonicalizeEdgeActionEnvelope, type SignedEdgeActionEnvelope } from "@dpf/db/edge-action-envelope";
 import type { EdgeActionEnvelope } from "@dpf/db/edge-action-envelope";
-import { issueManagedInferenceAdmission, managedInferenceProviderDigest, type ManagedInferenceAdmissionSnapshot } from "./managed-inference-admission";
+import { issueManagedInferenceAdmission, managedInferenceProviderDigest, managedInferenceProviderAllowsTransition, type ManagedInferenceAdmissionSnapshot } from "./managed-inference-admission";
 
 const now = new Date("2026-10-28T22:00:00Z");
 const digest = "a".repeat(64);
@@ -33,7 +33,7 @@ function fixture() {
       targetVersion: "a".repeat(40), targetBundleHash: digest, swapStartedAt: now },
     admission: { ownerSessionId: "session-1", branchName: "codex/test", ownerPid: 123, ownerProcessIdentity: "mac:123",
       quiescenceRunId: "QR-test", controllerManifestSha256: digest, providerDigest: digest },
-    currentProviderDigest: digest,
+    currentProviderDigest: digest, currentProviderEnabled: true,
     globalFence: { level: "swapping", runId: "QR-test" },
   };
   const signer = { signingKeyId: "key", sign: vi.fn((value: EdgeActionEnvelope) => ({ ...value, signature: value.actionType.endsWith(".admission") ? "admission-signature" : envelope.signature })) };
@@ -62,6 +62,7 @@ describe("managed inference admission", () => {
     ["wrong resource", f => { f.snapshot.lease!.resourceClass = "vitest"; }],
     ["wrong process", f => { f.snapshot.lease!.ownerProcessIdentity = "replacement"; }],
     ["wrong source", f => { f.snapshot.node.controllerSourceSha = "b".repeat(40); }],
+    ["operator paused local provider", f => { f.snapshot.currentProviderEnabled = false; }],
     ["changed provider", f => { f.snapshot.currentProviderDigest = "b".repeat(64); }],
     ["unrelated drain", f => { f.snapshot.quiescence!.triggerRefId = "self-upgrade:other"; }],
     ["drain unfinished", f => { f.snapshot.quiescence!.status = "draining"; }],
@@ -82,4 +83,14 @@ describe("managed inference admission", () => {
     f.snapshot.globalFence.level = "draining";
     expect(issueManagedInferenceAdmission({ ...f, now, nonce: "proof" }).parameters).toMatchObject({ ready: true });
   });
+});
+
+it("honors the current default local connection veto independently of routine provider health", () => {
+  const provider = { providerId: "local", status: "inactive", retiredAt: null };
+  expect(managedInferenceProviderAllowsTransition(provider, { connectionId: "provider-default-local", providerId: "local", status: "active" })).toBe(true);
+  for (const status of ["paused", "disabled", "inactive", "disconnected"]) {
+    expect(managedInferenceProviderAllowsTransition(provider, { connectionId: "provider-default-local", providerId: "local", status })).toBe(false);
+  }
+  expect(managedInferenceProviderAllowsTransition(provider, null)).toBe(false);
+  expect(managedInferenceProviderAllowsTransition({ ...provider, retiredAt: new Date() }, { connectionId: "provider-default-local", providerId: "local", status: "active" })).toBe(false);
 });

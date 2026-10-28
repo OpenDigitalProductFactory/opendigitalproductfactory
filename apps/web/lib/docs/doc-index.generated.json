@@ -11920,6 +11920,7 @@
       "anchors": [
         "overview",
         "accounts-and-provider-setup",
+        "managed-engine-on-a-qualified-mac",
         "routing-status-and-temporary-pauses",
         "when-the-platform-loses-ai-capacity",
         "authentication-methods",

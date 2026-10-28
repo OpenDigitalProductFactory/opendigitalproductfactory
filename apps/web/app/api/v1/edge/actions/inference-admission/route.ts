@@ -1,3 +1,4 @@
+// @exposure authenticated
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
@@ -7,7 +8,7 @@ import { resolveEdgeNodeMtls, type EdgeNodeMtlsDb } from "@/lib/auth/edge-node-m
 import { loadEdgeMtlsProxySecret } from "@/lib/auth/edge-mtls-proxy-secret";
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { loadEdgeActionSigner } from "@/lib/remote-action/action-signing-key";
-import { issueManagedInferenceAdmission, managedInferenceProviderDigest, parseManagedInferenceAdmissionBinding } from "@/lib/remote-action/managed-inference-admission";
+import { issueManagedInferenceAdmission, managedInferenceProviderDigest, managedInferenceProviderAllowsTransition, parseManagedInferenceAdmissionBinding } from "@/lib/remote-action/managed-inference-admission";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { isRecord } from "@/lib/shared/coerce";
 import { parseQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const parameters = parseManagedInferenceTransitionParameters(row.parameters);
       if (!binding || !parameters || !row.dispatchNonce || !row.dispatchIssuedAt || !row.dispatchExpiresAt
         || !row.dispatchSigningKeyId || !row.dispatchSignature) throw new Error("unavailable");
-      const [node, cap, change, lease, quiescence, provider, fence] = await Promise.all([
+      const [node, cap, change, lease, quiescence, provider, fence, connection] = await Promise.all([
         tx.edgeNode.findUnique({ where: { id: auth.edgeNodeRowId } }),
         tx.edgeNodeCapability.findUnique({ where: { edgeNodeId_capability: { edgeNodeId: auth.edgeNodeRowId, capability: "action.execute" } } }),
         tx.changeRequest.findUnique({ where: { id: row.changeRequestId }, select: { id: true, status: true, approvedAt: true, approvedById: true } }),
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         tx.quiescenceRun.findUnique({ where: { runId: binding.quiescenceRunId } }),
         tx.modelProvider.findUnique({ where: { providerId: "local" } }),
         tx.platformConfig.findUnique({ where: { key: "portal.quiescence" } }),
+        tx.aiProviderConnection.findUnique({ where: { connectionId: "provider-default-local" }, select: { connectionId: true, providerId: true, status: true } }),
       ]);
       if (!node || node.platform !== "darwin" || node.installMode !== "native" || !node.lastSeenAt || +now - +node.lastSeenAt > 120000
         || !cap || +now - +cap.reportedAt > 120000 || !isRecord(cap.evidence)) throw new Error("unavailable");
@@ -75,6 +77,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           controllerSourceSha: typeof controller.sourceSha === "string" ? controller.sourceSha : null,
           controllerManifestSha256: typeof controller.controllerManifestSha256 === "string" ? controller.controllerManifestSha256 : null },
         change, lease, quiescence, admission: binding, currentProviderDigest: managedInferenceProviderDigest(provider),
+        currentProviderEnabled: managedInferenceProviderAllowsTransition(provider, connection),
         globalFence: parseQuiescenceConfig(fence?.value ?? null),
       } });
     }, { isolationLevel: "RepeatableRead" });

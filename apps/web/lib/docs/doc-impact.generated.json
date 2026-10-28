@@ -2507,6 +2507,12 @@
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "scripts/installer/native-edge-host.ps1": [
+      "docs/operations/mac-inference-engine.md"
+    ],
+    "scripts/installer/native-edge-host.sh": [
+      "docs/operations/mac-inference-engine.md"
+    ],
     "scripts/issue-authority-tls-cert.sh": [
       "docs/edge-node/security-and-sovereignty.md",
       "docs/install/edge-node-air-gapped.md",
@@ -3901,6 +3907,10 @@
       "scripts/host-resource-runner.mjs",
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
+    ],
+    "docs/operations/mac-inference-engine.md": [
+      "scripts/installer/native-edge-host.ps1",
+      "scripts/installer/native-edge-host.sh"
     ],
     "docs/operations/mobile-store-launch-runbook.md": [
       "apps/mobile/eas.json"

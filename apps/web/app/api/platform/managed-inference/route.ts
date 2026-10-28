@@ -1,3 +1,4 @@
+// @exposure authenticated
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";

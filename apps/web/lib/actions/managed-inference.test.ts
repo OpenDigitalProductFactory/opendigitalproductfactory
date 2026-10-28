@@ -1,22 +1,22 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { createManagedInferenceRequestId } from "@/lib/remote-action/managed-inference-request";
 import { QuiescenceStartUncertainError } from "@/lib/self-upgrade/quiescence-start-reservation";
-const m = vi.hoisted(() => ({ read: vi.fn(), start: vi.fn(), fail: vi.fn(), build: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() }));
+const m = vi.hoisted(() => ({ read: vi.fn(), start: vi.fn(), fail: vi.fn(), build: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), connection: vi.fn() }));
 vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability: async () => ({ userId: "operator" }) }));
 vi.mock("@/lib/identity/principal-linking", () => ({ resolveActiveHumanPrincipalRecordIdForUser: async () => "human-principal" }));
 vi.mock("@/lib/remote-action/managed-inference-request-state", () => ({ readManagedInferenceRequestState: m.read }));
-vi.mock("@/lib/remote-action/managed-inference-admission", () => ({ managedInferenceProviderDigest: () => "a".repeat(64) }));
+vi.mock("@/lib/remote-action/managed-inference-admission", () => ({ managedInferenceProviderDigest: () => "a".repeat(64), managedInferenceProviderAllowsTransition: (_provider: unknown, connection: { status: string } | null) => connection?.status === "active" }));
 vi.mock("@/lib/remote-action/managed-inference-action", () => ({ buildManagedInferenceOffer: m.build, MANAGED_INFERENCE_UNSETTLED_WHERE: { actionType: "inference.runtime.transition" } }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({ startQuiescence: m.start, signalSwapStarting: vi.fn(), failQuiescenceSwap: m.fail }));
 vi.mock("@/lib/change-management/register-change", () => ({ registerChange: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
   edgeNode: { findMany: m.findMany }, nonProductionEnvironmentLease: { findMany: m.findMany }, workroom: { findMany: m.findMany },
   remoteAction: { findFirst: m.findFirst }, modelProvider: { findUnique: m.findUnique }, quiescenceRun: { findFirst: m.findFirst },
-  platformConfig: { findUnique: m.findUnique },
+  platformConfig: { findUnique: m.findUnique }, aiProviderConnection: { findUnique: m.connection },
 } }));
 import { requestManagedInferenceTransition } from "./managed-inference";
 const input = () => ({ requestId: createManagedInferenceRequestId(), operation: "activate" as const, offerToken: "a".repeat(64), operatorConfirmed: true, allowNodeAction: false });
-beforeEach(() => { vi.resetAllMocks(); process.env.DPF_REMOTE_ACTION_DISPATCH_ENABLED = "true"; m.findMany.mockResolvedValue([]); m.findFirst.mockResolvedValue(null);m.findUnique.mockResolvedValue(null); });
+beforeEach(() => { vi.resetAllMocks(); process.env.DPF_REMOTE_ACTION_DISPATCH_ENABLED = "true"; m.findMany.mockResolvedValue([]); m.findFirst.mockResolvedValue(null);m.findUnique.mockResolvedValue(null); m.connection.mockResolvedValue({ status: "active" }); });
 it("observes a recorded original request instead of creating another pause or action", async () => {
   m.read.mockResolvedValue({ recorded: true, message: "The original request is still preparing." });
   expect((await requestManagedInferenceTransition(input())).ok).toBe(false);
@@ -37,4 +37,15 @@ it("retains the original prequeue identity after a lost start acknowledgement an
   expect(m.fail).not.toHaveBeenCalled();
   await requestManagedInferenceTransition(request);
   expect(m.start).toHaveBeenCalledTimes(1); expect(m.fail).not.toHaveBeenCalled();
+});
+
+it.each(["paused", "disabled"])("refuses a %s default local connection after the offer without queueing a host switch", async status => {
+  const request = input();
+  m.read.mockResolvedValue({ recorded: false });
+  m.build.mockReturnValue({ available: true, token: request.offerToken, needsNodeGrant: false,
+    parameters: { sourceSha: "a".repeat(40), profileSha256: "b".repeat(64) } });
+  m.start.mockResolvedValue({ runId: "QR-owned", awaitReady: async () => { m.connection.mockResolvedValue({ status }); return { ok: true }; } });
+  expect((await requestManagedInferenceTransition(request)).ok).toBe(false);
+  expect(m.build).toHaveBeenCalledTimes(1);
+  expect(m.fail).toHaveBeenCalledWith("QR-owned", "Native inference offer changed before queueing");
 });

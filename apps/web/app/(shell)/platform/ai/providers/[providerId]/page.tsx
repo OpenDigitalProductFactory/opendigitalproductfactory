@@ -42,13 +42,13 @@ import { getManagedInferenceOffers } from "@/lib/actions/managed-inference";
 
 type Props = { params: Promise<{ providerId: string }>; searchParams: Promise<{ account?: string | string[] }> };
 
-async function ManagedInferenceSection() {
+async function ManagedInferenceSection({ copy }: { copy: Record<string, string> }) {
   try {
     const offers = await getManagedInferenceOffers();
     const offer = offers.activate.available ? offers.activate : offers.rollback.available ? offers.rollback : offers.activate;
-    return <ManagedInferencePanel key={(offer.available ? offer.token : "waiting") + (offers.pendingRequestId ?? "")} offer={offer} initialRequestId={offers.pendingRequestId} />;
+    return <ManagedInferencePanel key={(offer.available ? offer.token : "waiting") + (offers.pendingRequestId ?? "")} offer={offer} copy={copy} initialRequestId={offers.pendingRequestId} />;
   } catch {
-    return <Notice title="Local inference engine">Host engine details are unavailable. Refresh this page to check again.</Notice>;
+    return <Notice title={copy.managedEngineTitle}>{copy.managedEngineUnavailable}</Notice>;
   }
 }
 
@@ -254,7 +254,7 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
         />
       )}
       {providerId === "local" && !additionalAccount && canManageHost && <Suspense fallback={null}>
-        <ManagedInferenceSection />
+        <ManagedInferenceSection copy={copy} />
       </Suspense>}
 
       {pw.provider.costPerformanceNotes && (

@@ -6,7 +6,7 @@ import { requireCapability } from "@/lib/actions/shared/guards";
 import { registerChange } from "@/lib/change-management/register-change";
 import { resolveActiveHumanPrincipalRecordIdForUser } from "@/lib/identity/principal-linking";
 import { buildManagedInferenceOffer, MANAGED_INFERENCE_UNSETTLED_WHERE, type ManagedInferenceOffer } from "@/lib/remote-action/managed-inference-action";
-import { managedInferenceProviderDigest } from "@/lib/remote-action/managed-inference-admission";
+import { managedInferenceProviderDigest, managedInferenceProviderAllowsTransition } from "@/lib/remote-action/managed-inference-admission";
 import { startQuiescence, signalSwapStarting, failQuiescenceSwap } from "@/lib/self-upgrade/quiescence";
 import { isRecord } from "@/lib/shared/coerce";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
@@ -20,7 +20,7 @@ class NativeQueueRefused extends Error {}
 async function loadOffer(operation: "activate" | "rollback", ownActionKey?: string): Promise<ManagedInferenceOffer> {
   if (!envFlagEnabled(process.env, "DPF_REMOTE_ACTION_DISPATCH_ENABLED")) return { available: false, message: "The host action channel is not enabled." };
   const now = new Date();
-  const [nodes, leases, workrooms, active, provider, pendingDrain, globalRow] = await Promise.all([
+  const [nodes, leases, workrooms, active, provider, pendingDrain, globalRow, connection] = await Promise.all([
     prisma.edgeNode.findMany({ where: { platform: "darwin", installMode: "native", trustState: "trusted", customerAccountId: null, customerSiteId: null },
       take: 20, include: { capabilityRows: { where: { capability: "action.execute" } } } }),
     prisma.nonProductionEnvironmentLease.findMany({ where: { environmentKey: "host-heavy-resource", resourceClass: "inference",
@@ -32,7 +32,9 @@ async function loadOffer(operation: "activate" | "rollback", ownActionKey?: stri
     prisma.quiescenceRun.findFirst({ where: { triggerRefId: { startsWith: "inference-runtime:" }, status: { in: ["pending", "preparing", "draining", "awaiting-operator", "ready-to-swap", "swapping"] },
       ...(ownActionKey ? { NOT: { triggerRefId: `inference-runtime:${ownActionKey}` } } : {}) }, select: { runId: true } }),
     prisma.platformConfig.findUnique({ where: { key: "portal.quiescence" } }),
+    prisma.aiProviderConnection.findUnique({ where: { connectionId: "provider-default-local" }, select: { connectionId: true, providerId: true, status: true } }),
   ]);
+  if (!managedInferenceProviderAllowsTransition(provider, connection)) return { available: false, message: "The local provider is paused or unavailable for routing. Reconcile its account before changing the engine." };
   const global = isRecord(globalRow?.value) ? globalRow.value : {};
   const ownDrain = ownActionKey ? await prisma.quiescenceRun.findFirst({ where: { triggerRefId: `inference-runtime:${ownActionKey}` }, select: { runId: true } }) : null;
   const foreignCurrent = (global.runId && global.runId !== ownDrain?.runId) || (["draining", "swapping"].includes(String(global.level)) && !ownDrain);
@@ -97,13 +99,14 @@ export async function requestManagedInferenceTransition(input: {
     await withQuiescenceStartSerialization(prisma as unknown as QuiescenceReservationDb, "portal.quiescence", async port => {
       const tx = port as unknown as Prisma.TransactionClient;
       await tx.$executeRaw`SELECT 1 FROM "QuiescenceRun" WHERE "runId" = ${runId} FOR UPDATE`;
-      const [node, cap, lease, provider, ownDrain, currentFence] = await Promise.all([
+      const [node, cap, lease, provider, ownDrain, currentFence, connection] = await Promise.all([
         tx.edgeNode.findUnique({ where: { id: fresh.edgeNodeId } }),
         tx.edgeNodeCapability.findUnique({ where: { edgeNodeId_capability: { edgeNodeId: fresh.edgeNodeId, capability: "action.execute" } } }),
         tx.nonProductionEnvironmentLease.findUnique({ where: { leaseId: fresh.parameters.leaseId } }),
         tx.modelProvider.findUnique({ where: { providerId: "local" } }),
         tx.quiescenceRun.findUnique({ where: { runId: runId! } }),
         tx.platformConfig.findUnique({ where: { key: "portal.quiescence" } }),
+        tx.aiProviderConnection.findUnique({ where: { connectionId: "provider-default-local" }, select: { connectionId: true, providerId: true, status: true } }),
       ]);
       const fence = isRecord(currentFence?.value) ? currentFence.value : {};
       if (!ownDrain || ownDrain.triggerRefId !== request.triggerRefId || !["ready-to-swap", "swapping"].includes(ownDrain.status)
@@ -113,7 +116,7 @@ export async function requestManagedInferenceTransition(input: {
         || cap?.mode !== "enabled" || !lease || lease.status !== "active" || lease.phase !== "running" || lease.releasedAt
         || lease.expiresAt <= new Date() || lease.ownerPid !== fresh.lease.ownerPid || lease.ownerProcessIdentity !== fresh.lease.ownerProcessIdentity
         || lease.ownerSessionId !== fresh.lease.ownerSessionId || lease.branchName !== fresh.lease.branchName
-        || managedInferenceProviderDigest(provider) !== fresh.providerDigest) throw new NativeQueueRefused("Native source admission changed");
+        || !managedInferenceProviderAllowsTransition(provider, connection) || managedInferenceProviderDigest(provider) !== fresh.providerDigest) throw new NativeQueueRefused("Native source admission changed");
       if (await tx.remoteAction.count({ where: MANAGED_INFERENCE_UNSETTLED_WHERE })) throw new NativeQueueRefused("Native change already in progress");
       const policy = isRecord(node.scopePolicy) ? node.scopePolicy : {};
       const types = Array.isArray(policy.actionTypes) ? policy.actionTypes.filter((x): x is string => typeof x === "string") : [];

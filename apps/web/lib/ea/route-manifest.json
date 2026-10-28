@@ -1562,7 +1562,8 @@
         "managed-inference"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/platform/managed-inference/route.ts"
+      "file": "apps/web/app/api/platform/managed-inference/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/metrics",
@@ -2806,7 +2807,8 @@
         "inference-admission"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/v1/edge/actions/inference-admission/route.ts"
+      "file": "apps/web/app/api/v1/edge/actions/inference-admission/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/v1/edge/actions/result",

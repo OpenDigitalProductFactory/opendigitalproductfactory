@@ -19,6 +19,7 @@ export interface ManagedInferenceAdmissionSnapshot {
   admission: { ownerSessionId: string; branchName: string; ownerPid: number; ownerProcessIdentity: string;
     quiescenceRunId: string; controllerManifestSha256: string; providerDigest: string };
   currentProviderDigest: string;
+  currentProviderEnabled: boolean;
   globalFence: { level: string; runId: string | null };
 }
 const check = (ok: unknown): void => { if (!ok) throw new Error("Managed inference admission is unavailable; no host effect is authorized."); };
@@ -33,6 +34,15 @@ export function parseManagedInferenceAdmissionBinding(value: unknown): ManagedIn
     || !Number.isSafeInteger(v.ownerPid) || Number(v.ownerPid) <= 0 || typeof v.quiescenceRunId !== "string"
     || !hex64(v.controllerManifestSha256) || !hex64(v.providerDigest)) return null;
   return value as ManagedInferenceAdmissionSnapshot["admission"];
+}
+
+/** The default connection carries the operator routing veto. Provider health
+ * may fluctuate during the switch; it cannot erase a pause or disabled account. */
+export function managedInferenceProviderAllowsTransition(provider: unknown, connection: unknown): boolean {
+  const p = provider && typeof provider === "object" ? provider as Record<string, unknown> : null;
+  const c = connection && typeof connection === "object" ? connection as Record<string, unknown> : null;
+  return !!p && p.providerId === "local" && !p.retiredAt && !["disabled", "paused", "unconfigured"].includes(String(p.status))
+    && !!c && c.providerId === "local" && c.connectionId === "provider-default-local" && ["active", "degraded"].includes(String(c.status));
 }
 
 /** Capture the existing provider settings without consulting the temporarily
@@ -91,6 +101,7 @@ export function issueManagedInferenceAdmission(input: {
     && ["ready-to-swap", "swapping"].includes(drain.status) && drain.swapStartedAt && drain.swapStartedAt <= now
     && drain.trigger === "manual" && drain.triggerRefId === `inference-runtime:${saved.actionKey}`
     && drain.targetVersion === p.sourceSha && drain.targetBundleHash === p.profileSha256);
+  check(s.currentProviderEnabled === true);
   check(hex64(s.admission.providerDigest) && s.admission.providerDigest === s.currentProviderDigest);
   const expiresAt = new Date(Math.min(+now + 30000, expires, +lease!.expiresAt));
   check(expiresAt > now);
