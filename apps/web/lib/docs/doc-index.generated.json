@@ -6303,6 +6303,7 @@
         "dpf-install-operations",
         "quick-start",
         "linux-pilot-and-private-startup-state",
+        "qualified-mac-inference-opt-in",
         "capability-resolved-runtime-profiles",
         "consumer-release-assets",
         "fresh-install-runtime-and-recovery",

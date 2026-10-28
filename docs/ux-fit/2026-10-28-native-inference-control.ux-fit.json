@@ -2,9 +2,16 @@
   "version": "1",
   "decidedOption": "existing-provider-context",
   "decisionInteractionId": "DI-EF183BAC83E3",
-  "scope": { "files": [
-    "apps/web/components/platform/ManagedInferencePanel.tsx",
-    "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx"
-  ] },
-  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["existing-provider-context", "separate-runtime-console"] }
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ManagedInferencePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "existing-provider-context",
+      "separate-runtime-console"
+    ]
+  }
 }
