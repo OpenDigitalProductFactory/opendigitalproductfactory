@@ -1,0 +1,64 @@
+---
+backlog: BI-AA8EE6CE
+status: active
+---
+
+# Finish merged break-fix reviews
+
+## Outcome and observed state
+
+BI-CAP-AB63E190, BI-95BB9CB1 and BI-1CC992A5 need recorded independent
+post-implementation reviews and governed completion. Live observations on
+2026-10-28 show the latter two already have passing receipts from platform
+review runs. Their earlier native executions remain input-required with
+executionUncertainty.settlement=unknown. A different task's receipt does not
+settle those historical executions or authorize their replay.
+
+## Design grounding
+
+Extend the existing initiative review packet, platform review room, exact-task
+receipt reconciliation and canonical workforce registry. Reuse
+[completion recovery](2026-09-01-completion-readiness-recovery-design.md) and
+[CLI failure diagnostics](2026-10-15-reviewer-cli-failure-recovery.md). Preserve
+original request identity, uncertainty and bounded retry ceilings. No new table,
+tool, reviewer role or execution authority is introduced.
+
+WWMD DI-A7009B9406C3 recommends the existing active Release Acceptance reviewer
+AGT-132, rather than author self-review or another overlapping role. Add only
+file_read and initiative_design_review to its canonical profile. Keep the
+primary reviewer's existing grants and every delivery-actor exclusion.
+
+## Ordered repair
+
+1. Add first-failing invariants for an independent second reviewer and a failed
+   exact-task run whose canonical receipt already exists.
+2. Record research and immutable plan coverage for this ordered fix.
+3. Provision AGT-132 through canonical seeded grants, honoring durable revocations.
+   Reconcile failed exact-task receipts through the existing compare-and-set
+   completion writer and background scan, without another inference. Preserve
+   canceled, rejected, archived and displaced executions. Failed runs with a
+   safe terminal-writer checkpoint retain the existing same-task bounded replay;
+   uncertain runs never acquire retry authority from a provider error or silence.
+4. Run affected unit tests, package typechecks, derived-artifact and style guards,
+   pregate, independent semantic review, DCO PR and protected merge queue.
+5. Upgrade through the portal, verify reviewer eligibility and actual PIR receipts,
+   record the earlier two task identities alongside their separately fulfilled
+   review obligations without calling those original executions settled, and
+   verify all three items close through the governed completion path. Check the
+   wider WC-PIR queue and acceptance sweep's enabled authorization and results.
+
+## Traceability and verification
+
+Atomic implementation: BI-AA8EE6CE. REQ-PIR-CLOSE requires all three receipts
+and closure. CONTRACT-REVIEW-INDEPENDENCE retains the independent actor check;
+CONTRACT-EXACT-RECEIPT requires a receipt attributable to the exact TaskRun;
+FLOW-PIR-RECOVER connects dispatch, receipt readback and governed completion.
+VERIFY-PIR-RECOVERY covers first-failing grant and failed-run regressions,
+negative cancellation/uncertainty cases, live grants, receipts and closure.
+These are dependent steps of one closure repair, not separate product features.
+
+Rollback removes the extra default grants and restores prior receipt scan
+behavior; retained receipts and historical failures are never deleted. No schema
+migration or visual interface change is required. The source change does not
+claim to resolve native process settlement: unknown historical executions stay
+held and their original evidence remains available.
