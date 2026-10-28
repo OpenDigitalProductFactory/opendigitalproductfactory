@@ -51,6 +51,7 @@ import {
   type ScreenInferencePayloadInput,
 } from "@/lib/inference/data-screening/screen-inference-payload";
 import { assertReassessmentActive, assertReassessmentPlan, refuseReassessmentExecution } from "./reassessment-execution-scope";
+import { isConfirmedReauthenticationRequired } from "@/lib/govern/oauth-renewal-errors";
 
 type RouteOutcomeAttribution = {
   /** Provider-managed conversation state is bound to the account that created it. */
@@ -645,6 +646,7 @@ export async function callWithFallbackChain(
             scheduleRecovery(entry.providerId, entry.modelId);
           } else {
           const isOAuth = entry.accountAuthMethod?.startsWith("oauth2") ?? (provider.authMethod?.startsWith("oauth2") ?? false);
+          let signInRefused = false; // BI-A53C594E: only a refused sign-in leaves routing
           if (isOAuth && !authRefreshRetried) {
             authRefreshRetried = true;
             let refreshed: { token: string } | { error: string } | undefined;
@@ -673,14 +675,15 @@ export async function callWithFallbackChain(
               i--;
               continue;
             }
-            if (refreshed && "error" in refreshed) console.warn(
-              `[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; token refresh failed (${refreshed.error}). Disabling provider.`,
-            );
+            if (refreshed && "error" in refreshed) {
+              signInRefused = isConfirmedReauthenticationRequired(refreshed.error);
+              console.warn(`[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; token refresh failed (${refreshed.error}). ${signInRefused ? "Sign-in refused; disabling." : "Keeping it; background renewal retries."}`);
+            }
           }
           // Non-OAuth provider, refresh failed, or refresh-retry already
           // attempted: disable the provider — as an automatic disable that
           // schedules its own recovery (BI-D28A4F55), not a permanent one.
-          if (accountRenewalUnavailable) {
+          if (accountRenewalUnavailable || (isOAuth && !signInRefused)) {
             console.info("[callWithFallbackChain] Account renewal is temporarily unavailable; trying another eligible account.");
           } else if (entry.providerConnectionId && account) {
             await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });

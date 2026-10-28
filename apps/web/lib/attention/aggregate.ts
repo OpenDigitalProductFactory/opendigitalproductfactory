@@ -159,7 +159,7 @@ export function attentionSourceLoaders(
     {
       source: "provider-credential",
       load: async () => [
-        ...(await loadProviderCredentialItems()),
+        ...(await loadProviderCredentialItems(db)),
         ...(await loadProviderSuitabilityDriftItems(db)),
       ],
     },
