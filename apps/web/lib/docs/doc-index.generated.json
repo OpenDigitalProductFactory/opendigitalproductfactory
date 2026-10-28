@@ -6414,6 +6414,7 @@
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
         "alert-delivery",
+        "ai-capacity-watch-bi-24092dc9",
         "log-capture-runs-by-default-bi-f8024a9d",
         "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
@@ -11894,6 +11895,7 @@
         "overview",
         "accounts-and-provider-setup",
         "routing-status-and-temporary-pauses",
+        "when-the-platform-loses-ai-capacity",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",

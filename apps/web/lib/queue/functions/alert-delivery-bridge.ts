@@ -227,6 +227,44 @@ export const alertDeliveryBridge = jobs.createFunction(
     const gate = await gateAtEntry(step, "ops/alert-delivery-bridge");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return await step.run("deliver-alerts", async () => runAlertDeliveryScan());
+    const delivery = await step.run("deliver-alerts", async () => runAlertDeliveryScan());
+    // BI-24092DC9: its own step, so it runs even when both alert evaluators are
+    // unreachable (the delivery scan returns early then) and a failure in one
+    // does not hide the other.
+    const aiCapacity = await step.run("watch-ai-capacity", async () => runAiCapacityWatchCycle());
+    return { ...delivery, aiCapacity };
   },
 );
+
+/** Providers the provider-credential lane already shows a reconnect item for. Best-effort. */
+async function providersShownByCredentialLane(): Promise<Set<string>> {
+  try {
+    const { getProviders } = await import("@/lib/ai-provider-data");
+    const { selectExpiredCredentialProviders, selectDisabledConnectedProviders } = await import(
+      "@/lib/attention/sources/provider-credential"
+    );
+    const rows = await getProviders();
+    return new Set([
+      ...selectExpiredCredentialProviders(rows).map((p) => p.providerId),
+      ...selectDisabledConnectedProviders(rows).map((p) => p.providerId),
+    ]);
+  } catch {
+    return new Set();
+  }
+}
+
+/** One AI-capacity watch cycle over the live db, pushing new rows to the operator's bell. */
+export async function runAiCapacityWatchCycle() {
+  const { prisma } = await import("@dpf/db");
+  const { runAiCapacityWatch } = await import("@/lib/routing/ai-capacity-watch");
+  const { notifyAttentionLive, resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
+  return runAiCapacityWatch(prisma as never, {
+    coveredByCredentialLane: await providersShownByCredentialLane(),
+    notify: async (item) => {
+      const recipient = await resolveOperatorRecipient();
+      // No resolvable owner: notification is best-effort; the row still projects.
+      if (!recipient) return;
+      await notifyAttentionLive({ source: "platform-health", userId: recipient, ...item });
+    },
+  });
+}

@@ -63,6 +63,15 @@ Resuming removes the operator pause. It does not reset a provider's usage limit 
 
 Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
 
+### When the platform loses AI capacity
+
+Every five minutes the platform checks how much of its recent AI work actually succeeded, for each provider and in total, over the last 30 minutes. You get one item in **Needs you** (and a bell notification) when:
+
+- **A provider fails every request.** At least 5 requests went to it and none succeeded. The item names the provider and the cause in plain words: its sign-in needs renewing, its plan's usage limit is reached (with the reset time when the provider gives one), its spending or credit limit is reached, it has no working sign-in or key, or the local engine is overloaded. The button opens that provider's page.
+- **Too little AI work succeeds overall.** At least 10 requests ran and fewer than half succeeded. The item lists the providers that are down and links to **AI providers**.
+
+These items are not backlog work. They clear themselves the first time the provider (or the platform) serves requests again. If a provider stops receiving requests, its item stays open until it is turned off or serves again, because no traffic is not proof that it recovered. When the reconnect item for a provider's sign-in is already showing, you see that one item, not two.
+
 ## Authentication Methods
 
 On a provider's detail page, **Configured** means settings and model profiles
