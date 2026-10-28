@@ -17,7 +17,7 @@ const QUALIFICATION = { schemaVersion: 1 as const, phase: "prepare" as const, it
   targetProductionBlobIds: ["d".repeat(40)],
   permittedTools: ["read_codebase_manifest", "list_patch_posture"],
   allowedPaths: ["apps/web/lib/qualification.test.ts"], issuedAt: "2026-01-28T19:00:00.000Z",
-  expiresAt: "2027-01-28T20:00:00.000Z", maxStarts: 1 as const, maxDurationMs: 600_000 };
+  expiresAt: new Date(Date.now() + 60_000).toISOString(), maxStarts: 1 as const, maxDurationMs: 600_000 };
 
 describe("workroom stage taskConfig record", () => {
   it("round-trips through the reader", () => {

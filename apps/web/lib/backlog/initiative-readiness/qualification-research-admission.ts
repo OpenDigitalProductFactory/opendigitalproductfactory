@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { signingKey, verificationKeys } from "@/lib/auth/dedicated-signing-key";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 const FULL_SHA = /^[a-f0-9]{40}$/i;
 const SHA256 = /^sha256:[a-f0-9]{64}$/i;
@@ -94,6 +95,24 @@ export function parseQualificationExperimentState(value: unknown): Qualification
     ...(taskRunId ? { taskRunId } : {}), ...(evidenceId ? { evidenceId } : {}) };
 }
 
+export function issueQualificationExperimentState(input: {
+  existing: QualificationExperimentState | null;
+  token: string;
+  binding: QualificationExperimentBinding;
+}): ActionResult<QualificationExperimentState> {
+  const digest = qualificationBindingDigest(input.binding);
+  if (input.existing && (input.existing.bindingDigest !== digest || input.existing.token !== input.token)) {
+    return err("A different qualification admission already exists for this Workroom.");
+  }
+  if (input.existing && input.existing.status !== "issued") {
+    return err("Qualification admission was already started or settled and cannot be rearmed.");
+  }
+  return ok(input.existing ?? {
+    schemaVersion: 1, status: "issued", token: input.token, bindingDigest: digest,
+    startCount: 0, issuedAt: input.binding.issuedAt,
+  });
+}
+
 const SIGNING_SECRET_ENV = "DPF_QUALIFICATION_ADMISSION_SECRET";
 
 function signingSecret(): string {
@@ -129,8 +148,8 @@ export function createQualificationExperimentAdmission(
   const admission: QualificationExperimentAdmission = {
     schemaVersion: 1,
     purpose: "qualification-research-admission",
-    binding: parsed.binding,
-    bindingDigest: qualificationBindingDigest(parsed.binding),
+    binding: parsed.data,
+    bindingDigest: qualificationBindingDigest(parsed.data),
   };
   const encoded = encode(canonicalJson(admission));
   return `${encoded}.${sign(encoded, options.secret ?? signingSecret())}`;
@@ -139,32 +158,32 @@ export function createQualificationExperimentAdmission(
 export function verifyQualificationExperimentAdmission(
   token: string,
   options: { now?: Date; secret?: string } = {},
-): { ok: true; admission: QualificationExperimentAdmission } | { ok: false; code: "qualification-admission-token-invalid"; error: string } {
+): ActionResult<QualificationExperimentAdmission> {
   const separator = token.lastIndexOf(".");
-  if (separator <= 0 || separator === token.length - 1) return { ok: false, code: "qualification-admission-token-invalid", error: "Malformed qualification admission token." };
+  if (separator <= 0 || separator === token.length - 1) return err("Malformed qualification admission token.");
   const encoded = token.slice(0, separator);
   const actual = token.slice(separator + 1);
   const keys = options.secret !== undefined
     ? [{ secret: options.secret }]
     : verificationKeys(SIGNING_SECRET_ENV, options.now ?? new Date());
   if (!keys.some((key) => equalSignature(sign(encoded, key.secret), actual))) {
-    return { ok: false, code: "qualification-admission-token-invalid", error: "Qualification admission signature does not match." };
+    return err("Qualification admission signature does not match.");
   }
   let value: unknown;
   try { value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")); } catch {
-    return { ok: false, code: "qualification-admission-token-invalid", error: "Qualification admission payload is malformed." };
+    return err("Qualification admission payload is malformed.");
   }
   const raw = record(value);
   const parsed = parseQualificationExperimentBinding(raw?.binding);
   if (!parsed.ok || raw?.schemaVersion !== 1 || raw?.purpose !== "qualification-research-admission"
-    || raw?.bindingDigest !== qualificationBindingDigest(parsed.binding)) {
-    return { ok: false, code: "qualification-admission-token-invalid", error: "Qualification admission payload does not match its immutable binding." };
+    || raw?.bindingDigest !== qualificationBindingDigest(parsed.data)) {
+    return err("Qualification admission payload does not match its immutable binding.");
   }
-  if (Date.parse(parsed.binding.expiresAt) <= (options.now ?? new Date()).getTime()) {
-    return { ok: false, code: "qualification-admission-token-invalid", error: "Qualification admission expired." };
+  if (Date.parse(parsed.data.expiresAt) <= (options.now ?? new Date()).getTime()) {
+    return err("Qualification admission expired.");
   }
-  return { ok: true, admission: { schemaVersion: 1, purpose: "qualification-research-admission", binding: parsed.binding,
-    bindingDigest: qualificationBindingDigest(parsed.binding) } };
+  return ok({ schemaVersion: 1, purpose: "qualification-research-admission", binding: parsed.data,
+    bindingDigest: qualificationBindingDigest(parsed.data) });
 }
 
 export type QualificationExperimentContext = Pick<QualificationExperimentBinding,
@@ -173,9 +192,6 @@ export type QualificationExperimentContext = Pick<QualificationExperimentBinding
     startCount: number;
     now: Date;
   };
-
-type ParseResult = { ok: true; binding: QualificationExperimentBinding }
-  | { ok: false; code: "qualification-binding-malformed"; error: string };
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -199,7 +215,7 @@ function validTestPath(path: string): boolean {
     && /(?:\.test\.|\.spec\.|test-helper\.)/.test(normalized);
 }
 
-export function parseQualificationExperimentBinding(value: unknown): ParseResult {
+export function parseQualificationExperimentBinding(value: unknown): ActionResult<QualificationExperimentBinding> {
   const raw = record(value);
   const protocol = record(raw?.protocol);
   const tools = exactStrings(raw?.permittedTools);
@@ -233,9 +249,8 @@ export function parseQualificationExperimentBinding(value: unknown): ParseResult
     && typeof raw?.maxDurationMs === "number" && raw.maxDurationMs > 0 && raw.maxDurationMs <= 3_600_000
     && (phase === "prepare" ? !candidateRaw : candidate && FULL_SHA.test(candidate.headSha)
       && SHA256.test(candidate.diffDigest) && candidate.testBlobIds.every((blob) => FULL_SHA.test(blob)));
-  if (!valid) return { ok: false, code: "qualification-binding-malformed",
-    error: "Qualification binding is incomplete, widened, stale-shaped, or not bound to test-only paths." };
-  return { ok: true, binding: {
+  if (!valid) return err("Qualification binding is incomplete, widened, stale-shaped, or not bound to test-only paths.");
+  return ok({
     schemaVersion: 1, phase, itemId: scalar.itemId!, workroomId: scalar.workroomId!,
     repositoryFullName: scalar.repositoryFullName!, baseSha: scalar.baseSha!, headSha: scalar.headSha!,
     protocol: { path: scalar.protocolPath!, commitSha: scalar.protocolCommit!, providerBlobId: scalar.protocolBlob! },
@@ -245,7 +260,7 @@ export function parseQualificationExperimentBinding(value: unknown): ParseResult
     targetProductionBlobIds: exactStrings(raw?.targetProductionBlobIds)!,
     issuedAt: issuedAt!, expiresAt: expiresAt!, maxStarts: 1, maxDurationMs: raw.maxDurationMs as number,
     ...(candidate ? { candidate } : {}),
-  } };
+  });
 }
 
 function protocolEqual(left: ProtocolRef, right: ProtocolRef): boolean {
@@ -253,7 +268,10 @@ function protocolEqual(left: ProtocolRef, right: ProtocolRef): boolean {
     && left.providerBlobId.toLowerCase() === right.providerBlobId.toLowerCase();
 }
 
-export function validateQualificationExperimentAdmission(binding: QualificationExperimentBinding, context: QualificationExperimentContext) {
+export function validateQualificationExperimentAdmission(
+  binding: QualificationExperimentBinding,
+  context: QualificationExperimentContext,
+): ActionResult<{ binding: QualificationExperimentBinding; researchSatisfied: false; ordinaryImplementationAuthorized: false }> {
   const exact = binding.itemId === context.itemId && binding.workroomId === context.workroomId
     && binding.repositoryFullName === context.repositoryFullName
     && binding.baseSha.toLowerCase() === context.baseSha.toLowerCase()
@@ -262,8 +280,34 @@ export function validateQualificationExperimentAdmission(binding: QualificationE
     && binding.accountablePrincipalRef === context.accountablePrincipalRef
     && binding.authorityDecisionId === context.authorityDecisionId;
   if (!exact || context.startCount !== 0 || context.now.getTime() > Date.parse(binding.expiresAt)) {
-    return { ok: false as const, code: "qualification-admission-refused" as const,
-      error: "Qualification identity changed, expired, or already started." };
+    return err("Qualification identity changed, expired, or already started.");
   }
-  return { ok: true as const, binding, researchSatisfied: false as const, ordinaryImplementationAuthorized: false as const };
+  return ok({ binding, researchSatisfied: false, ordinaryImplementationAuthorized: false });
+}
+
+export function qualificationToolEffectAllowed(input: {
+  binding: QualificationExperimentBinding;
+  state: QualificationExperimentState;
+  toolName: string;
+  params?: Readonly<Record<string, unknown>>;
+  now: Date;
+}): boolean {
+  if (input.state.status !== "started" || input.state.startCount !== 1 || !input.state.startedAt
+    || input.now.getTime() - Date.parse(input.state.startedAt) > input.binding.maxDurationMs
+    || !input.binding.permittedTools.includes(input.toolName)) return false;
+  if (input.toolName === "write_sandbox_file" || input.toolName === "edit_sandbox_file") {
+    const path = typeof input.params?.path === "string" ? input.params.path.replaceAll("\\", "/") : null;
+    return path !== null && input.binding.allowedPaths.includes(path);
+  }
+  if (input.toolName === "record_workroom_evidence") {
+    const result = record(input.params?.result);
+    const disposition = result?.qualificationOutcome;
+    return input.params?.capsuleId === input.binding.workroomId
+      && input.params.stageKey === input.binding.stageKey
+      && result?.qualificationBindingDigest === qualificationBindingDigest(input.binding)
+      && typeof input.params.summary === "string" && input.params.summary.trim().length > 0
+      && (input.params.outcome === "completed" || input.params.outcome === "blocked")
+      && (disposition === "positive" || disposition === "negative" || disposition === "inconclusive" || disposition === "blocked");
+  }
+  return true;
 }

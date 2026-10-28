@@ -588,7 +588,6 @@ export async function recordAgentActivity(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
   return recordActivity(args.db, {
     workCapsuleId: capsule.id,
     kind: args.activity.type,
@@ -709,26 +708,32 @@ export async function claimWorkCapsuleScope(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+  const existingWorkspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+    ? capsule.workspaceState as Record<string, unknown> : {};
 
   let qualificationState: import("@/lib/backlog/initiative-readiness/qualification-research-admission").QualificationExperimentState | null = null;
   if (args.qualificationAdmissionToken) {
-    const { qualificationBindingDigest, verifyQualificationExperimentAdmission } =
+    const { issueQualificationExperimentState, parseQualificationExperimentState, verifyQualificationExperimentAdmission } =
       await import("@/lib/backlog/initiative-readiness/qualification-research-admission");
     const verified = verifyQualificationExperimentAdmission(args.qualificationAdmissionToken, { now: args.now });
     if (!verified.ok) throw new Error(verified.error);
-    if (verified.admission.binding.workroomId !== args.capsuleId
-      || verified.admission.binding.itemId !== capsule.backlogItemId
-      || verified.admission.binding.repositoryFullName !== capsule.repositoryFullName
-      || verified.admission.binding.baseSha.toLowerCase() !== capsule.baseSha?.toLowerCase()
-      || verified.admission.binding.headSha.toLowerCase() !== capsule.headSha?.toLowerCase()
-      || verified.admission.binding.accountablePrincipalRef !== args.actor.principalId) {
+    if (verified.data.binding.workroomId !== args.capsuleId
+      || verified.data.binding.itemId !== capsule.backlogItemId
+      || verified.data.binding.repositoryFullName !== capsule.repositoryFullName
+      || verified.data.binding.baseSha.toLowerCase() !== capsule.baseSha?.toLowerCase()
+      || verified.data.binding.headSha.toLowerCase() !== capsule.headSha?.toLowerCase()
+      || verified.data.binding.accountablePrincipalRef !== args.actor.principalId) {
       throw new Error("Qualification admission does not match the live Workroom identity.");
     }
-    qualificationState = {
-      schemaVersion: 1, status: "issued", token: args.qualificationAdmissionToken,
-      bindingDigest: qualificationBindingDigest(verified.admission.binding), startCount: 0,
-      issuedAt: verified.admission.binding.issuedAt,
-    };
+    const existingRaw = existingWorkspaceState.qualificationExperimentAdmission;
+    const existing = parseQualificationExperimentState(existingRaw);
+    if (existingRaw !== undefined && !existing) {
+      throw new Error("Existing qualification admission state is unreadable and cannot be replaced.");
+    }
+    const issued = issueQualificationExperimentState({ existing, token: args.qualificationAdmissionToken,
+      binding: verified.data.binding });
+    if (!issued.ok) throw new Error(issued.error);
+    qualificationState = issued.data;
   }
 
   // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
@@ -783,13 +788,11 @@ export async function claimWorkCapsuleScope(args: {
     build: args.buildChangeImpactContract,
   });
   return inTransaction(args.db, async (tx) => {
-    const workspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
-      ? capsule.workspaceState as Record<string, unknown> : {};
     const updated = await tx.workroom.update({
       where: scopeWriteWhere(capsule),
       data: {
         scopeClaims,
-        ...(qualificationState ? { workspaceState: { ...workspaceState,
+        ...(qualificationState ? { workspaceState: { ...existingWorkspaceState,
           qualificationExperimentAdmission: qualificationState } } : {}),
         ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
       },

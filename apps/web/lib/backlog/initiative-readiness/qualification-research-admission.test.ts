@@ -4,6 +4,8 @@ import {
   parseQualificationExperimentBinding,
   createQualificationExperimentAdmission,
   qualificationBindingDigest,
+  qualificationToolEffectAllowed,
+  issueQualificationExperimentState,
   verifyQualificationExperimentAdmission,
   validateQualificationExperimentAdmission,
 } from "./qualification-research-admission";
@@ -61,11 +63,13 @@ describe("qualification research admission", () => {
     const parsed = parseQualificationExperimentBinding(binding);
     expect(parsed).toMatchObject({ ok: true });
     if (!parsed.ok) throw new Error(parsed.error);
-    expect(validateQualificationExperimentAdmission(parsed.binding, context)).toEqual({
+    expect(validateQualificationExperimentAdmission(parsed.data, context)).toEqual({
       ok: true,
-      binding: parsed.binding,
-      researchSatisfied: false,
-      ordinaryImplementationAuthorized: false,
+      data: {
+        binding: parsed.data,
+        researchSatisfied: false,
+        ordinaryImplementationAuthorized: false,
+      },
     });
   });
 
@@ -85,12 +89,12 @@ describe("qualification research admission", () => {
   ])("fails closed when %s changes", (_name, change) => {
     const parsed = parseQualificationExperimentBinding(binding);
     if (!parsed.ok) throw new Error(parsed.error);
-    expect(validateQualificationExperimentAdmission(parsed.binding, { ...context, ...change })).toMatchObject({ ok: false });
+    expect(validateQualificationExperimentAdmission(parsed.data, { ...context, ...change })).toMatchObject({ ok: false });
   });
 
   it("requires a separately reviewed candidate for final verification", () => {
     const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify" });
-    expect(parsed).toMatchObject({ ok: false, code: "qualification-binding-malformed" });
+    expect(parsed).toMatchObject({ ok: false, error: expect.stringMatching(/binding/i) });
 
     const verified = parseQualificationExperimentBinding({
       ...binding,
@@ -117,18 +121,47 @@ describe("qualification research admission", () => {
   it("signs the exact server-owned binding and rejects tampering or expiry", () => {
     const parsed = parseQualificationExperimentBinding(binding);
     if (!parsed.ok) throw new Error(parsed.error);
-    const token = createQualificationExperimentAdmission(parsed.binding, { secret: "test-secret" });
+    const token = createQualificationExperimentAdmission(parsed.data, { secret: "test-secret" });
     expect(verifyQualificationExperimentAdmission(token, { secret: "test-secret", now: NOW })).toEqual({
       ok: true,
-      admission: {
+      data: {
         schemaVersion: 1,
         purpose: "qualification-research-admission",
-        binding: parsed.binding,
-        bindingDigest: qualificationBindingDigest(parsed.binding),
+        binding: parsed.data,
+        bindingDigest: qualificationBindingDigest(parsed.data),
       },
     });
     expect(verifyQualificationExperimentAdmission(`${token}x`, { secret: "test-secret", now: NOW })).toMatchObject({ ok: false });
     expect(verifyQualificationExperimentAdmission(token, { secret: "test-secret", now: new Date(binding.expiresAt) }))
       .toMatchObject({ ok: false });
+  });
+
+  it("enforces exact test/helper paths and the start-duration bound", () => {
+    const parsed = parseQualificationExperimentBinding(binding);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const state = { schemaVersion: 1 as const, status: "started" as const, token: "opaque.signed",
+      bindingDigest: qualificationBindingDigest(parsed.data), startCount: 1 as const,
+      issuedAt: binding.issuedAt, startedAt: NOW.toISOString(), taskId: "task-1" };
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "write_sandbox_file",
+      params: { path: binding.allowedPaths[0] }, now: NOW })).toBe(true);
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "edit_sandbox_file",
+      params: { path: "apps/web/lib/production.ts" }, now: NOW })).toBe(false);
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "write_sandbox_file",
+      params: { path: "apps/web/lib/other.test-helper.ts" }, now: NOW })).toBe(false);
+    expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "run_sandbox_tests",
+      now: new Date(NOW.getTime() + binding.maxDurationMs + 1) })).toBe(false);
+  });
+
+  it.each(["started", "settled"] as const)("never rearms a %s admission from the same signed token", (status) => {
+    const parsed = parseQualificationExperimentBinding(binding);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const token = createQualificationExperimentAdmission(parsed.data, { secret: "test-secret" });
+    const existing = { schemaVersion: 1 as const, status, token, bindingDigest: qualificationBindingDigest(parsed.data),
+      startCount: 1 as const, issuedAt: binding.issuedAt, startedAt: NOW.toISOString(), taskId: "task-1",
+      ...(status === "settled" ? { evidenceId: "evidence-1" } : {}) };
+    expect(issueQualificationExperimentState({ existing, token, binding: parsed.data })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/cannot be rearmed/i),
+    });
   });
 });

@@ -8,6 +8,7 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   parseQualificationExperimentState,
+  qualificationToolEffectAllowed,
   qualificationBindingDigest,
   verifyQualificationExperimentAdmission,
 } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
@@ -183,27 +184,21 @@ export async function loadScheduledRoomAuthority(
       const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
       const runState = isRecord(run?.a2aMetadata) ? run.a2aMetadata : {};
       const runBinding = isRecord(runState.qualificationExperiment) ? runState.qualificationExperiment : null;
-      const verified = state ? verifyQualificationExperimentAdmission(state.token, { now: (deps.now ?? (() => new Date()))() }) : null;
+      const qualificationNow = (deps.now ?? (() => new Date()))();
+      const verified = state ? verifyQualificationExperimentAdmission(state.token, { now: qualificationNow }) : null;
       const digest = qualificationBindingDigest(assignment.qualificationExperiment);
       if (!run || run.status !== "working" || run.archivedAt != null || !task?.isActive
         || !state || state.status !== "started" || state.startCount !== 1 || state.taskId !== taskId
-        || !verified?.ok || verified.admission.bindingDigest !== digest || state.bindingDigest !== digest
+        || !verified?.ok || verified.data.bindingDigest !== digest || state.bindingDigest !== digest
         || qualificationBindingDigest(runBinding as typeof assignment.qualificationExperiment) !== digest) {
         return withheld("The qualification admission is missing, expired, superseded, or not bound to this run.");
       }
       const tools = assignment.tools.filter((tool) => assignment.qualificationExperiment!.permittedTools.includes(tool));
       if (!input.toolName) return { ...EMPTY, mandatedTools: tools };
       if (!tools.includes(input.toolName)) return withheld("The tool is outside the qualification admission.");
-      if (input.toolName === EVIDENCE_WRITER) {
-        const args = input.params;
-        const result = isRecord(args?.result) ? args.result : null;
-        const outcome = result?.qualificationOutcome;
-        if (!args || args.capsuleId !== room.capsuleId || args.stageKey !== assignment.stageKey
-          || result?.qualificationBindingDigest !== digest || typeof args.summary !== "string" || !args.summary.trim()
-          || (args.outcome !== "completed" && args.outcome !== "blocked")
-          || (outcome !== "positive" && outcome !== "negative" && outcome !== "inconclusive" && outcome !== "blocked")) {
-          return withheld("The terminal qualification evidence is incomplete or bound to another experiment.");
-        }
+      if (!qualificationToolEffectAllowed({ binding: assignment.qualificationExperiment, state,
+        toolName: input.toolName, params: input.params, now: qualificationNow })) {
+        return withheld("The qualification tool effect is outside the exact path, duration, or terminal-evidence binding.");
       }
       return { ...EMPTY, mandatedTools: [input.toolName] };
     }

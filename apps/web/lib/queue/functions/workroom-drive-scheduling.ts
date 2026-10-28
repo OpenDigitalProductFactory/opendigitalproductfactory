@@ -45,24 +45,24 @@ export async function scheduleWorkroomAgentTask(
         throw new Error("Qualification experiment was already started or settled.");
       }
       const verified = verifyQualificationExperimentAdmission(qualificationState.token, { now: clock() });
-      if (!verified.ok || qualificationBindingDigest(verified.admission.binding) !== qualificationState.bindingDigest) {
+      if (!verified.ok || qualificationBindingDigest(verified.data.binding) !== qualificationState.bindingDigest) {
         throw new Error("Qualification experiment admission is invalid or expired.");
       }
-      const admitted = validateQualificationExperimentAdmission(verified.admission.binding, {
+      const admitted = validateQualificationExperimentAdmission(verified.data.binding, {
         itemId: room.backlogItemId ?? "", workroomId: room.capsuleId,
         repositoryFullName: room.repositoryFullName ?? "", baseSha: room.baseSha ?? "", headSha: room.headSha ?? "",
-        protocol: verified.admission.binding.protocol,
-        installationId: verified.admission.binding.installationId,
+        protocol: verified.data.binding.protocol,
+        installationId: verified.data.binding.installationId,
         accountablePrincipalRef: room.leaseHolderPrincipalId ?? "",
-        authorityDecisionId: verified.admission.binding.authorityDecisionId,
+        authorityDecisionId: verified.data.binding.authorityDecisionId,
         startCount: qualificationState.startCount, now: clock(),
       });
-      if (!admitted.ok || verified.admission.binding.shapeKey !== input.stage.shapeKey
-        || verified.admission.binding.shapeVersion !== input.stage.shapeVersion
-        || verified.admission.binding.stageKey !== input.stage.stageKey) {
+      if (!admitted.ok || verified.data.binding.shapeKey !== input.stage.shapeKey
+        || verified.data.binding.shapeVersion !== input.stage.shapeVersion
+        || verified.data.binding.stageKey !== input.stage.stageKey) {
         throw new Error("Qualification experiment no longer matches the live room or scheduled stage.");
       }
-      qualificationBinding = verified.admission.binding;
+      qualificationBinding = verified.data.binding;
     }
     const checkpoint = buildDispatchCheckpoint(workspace.workroomDispatchCheckpoint, {
       taskId: input.taskId, roomId: input.lease.roomId, objective: room.objective ?? null,

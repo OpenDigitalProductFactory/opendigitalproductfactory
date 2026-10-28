@@ -65,7 +65,7 @@ export function readWorkroomStageTaskConfig(taskConfig: unknown): WorkroomStageT
     const qualification = parseQualificationExperimentBinding(qualificationRaw);
     if (!qualification.ok) return null;
     return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools,
-      qualificationExperiment: qualification.binding };
+      qualificationExperiment: qualification.data };
   }
   return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools };
 }
