@@ -3,13 +3,16 @@
 // files, or that landed in several squash commits, reviews every range together
 // instead of refusing to pick one file or one commit.
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { commitRangeReaderPath, REPO_COMMIT_RANGE_PATH_PREFIX } from "@/lib/shared/immutable-review-reader";
 
-const execFileAsync = promisify(execFile);
+// The review contract imports this module for its pure parsers, so git is
+// loaded only when a range is actually read.
+async function execFileAsync(file: string, args: string[], options: { timeout: number; windowsHide: boolean; maxBuffer: number }) {
+  const [{ execFile }, { promisify }] = await Promise.all([import("node:child_process"), import("node:util")]);
+  return promisify(execFile)(file, args, options);
+}
 
 export type CommitRange = { baseSha: string; headSha: string };
 
