@@ -1,0 +1,47 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-28C22BE3 (EP-5F6369AB). A Prisma relation is mirrored once per foreign key, from the model that holds it, under a typed relation. Migration 20261028070000_retire_relates_to retires the RELATES_TO relation type and drops its derived graph_edge rows; the code-graph reconcile (projection version 4) rewrites them as HAS_FOREIGN_KEY_TO. The EA data-model mirror retypes its associated_with rows to has_foreign_key_to (or composed_of for a required cascading key) and deletes the back-relation duplicates on its next run.",
+  "affectedCopies": [
+    "graph_edge rows of type RELATES_TO (code graph, derived from packages/db/prisma/schema/*.prisma): deleted by the migration, rewritten as HAS_FOREIGN_KEY_TO by apps/web/lib/build/code-graph/graph-projection.ts",
+    "EaRelationship rows written by the data-model mirror (properties.sourceKey prisma:relation:*): retyped or, for back-relation duplicates, deleted by apps/web/lib/ea/data-model-mirror-apply.ts",
+    "graph_edge rows of type ASSOCIATED_WITH projected from those EA rows: removed by pruneStaleEaRelationshipEdges (packages/db/src/graph-sync.ts) after the mirror re-projects"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "public: structural facts about the platform schema (model names, foreign-key field names). No organization or person content.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Derived projections of the shipped Prisma schema; regenerated from source on every install."
+  },
+  "migration": {
+    "name": "20261028070000_retire_relates_to",
+    "backfill": "The deleted RELATES_TO edges are derived; the code-graph reconcile (every 15 minutes, projection version bumped to 4) rewrites them typed. On the dev install on 2026-10-28 the migration ran in a rolled-back transaction and left 0 RELATES_TO rows. The EA retype runs in the data-model mirror's next scheduled reconcile; no row holds information the FK-side row does not.",
+    "rollback": "Forward-only. Rolling the code back would let the code graph write RELATES_TO again, which the retired status refuses, so roll back the migration's UPDATE with it."
+  },
+  "tests": [
+    "apps/web/lib/build/code-graph/extractors/prisma.test.ts",
+    "apps/web/lib/ea/data-model-mirror.test.ts",
+    "apps/web/lib/ea/data-model-mirror-apply.test.ts",
+    "packages/db/src/relation-vocabulary.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:graph-relation-type",
+      "prismaModel": "GraphRelationType",
+      "lifecycleDisposition": "Reference data; one row's status moves from deprecated to retired.",
+      "fields": [
+        { "fieldId": "data:graph-relation-type#status", "resolution": "not-applicable", "reason": "RELATES_TO becomes retired: its only writer now emits HAS_FOREIGN_KEY_TO.", "provenance": "Migration 20261028070000_retire_relates_to; BI-28C22BE3.", "flags": [] }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:graph-edge",
+      "prismaModel": "GraphEdge",
+      "lifecycleDisposition": "Derived projection; RELATES_TO rows are deleted and regenerated typed.",
+      "fields": [
+        { "fieldId": "data:graph-edge#relType", "resolution": "governed", "reason": "No row carries the retired RELATES_TO type after the migration.", "provenance": "Migration 20261028070000_retire_relates_to; BI-28C22BE3.", "flags": [] }
+      ]
+    }
+  ]
+}
