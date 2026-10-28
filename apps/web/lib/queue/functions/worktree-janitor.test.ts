@@ -88,16 +88,59 @@ describe("worktree-janitor schedule invariants (BI-42FA7DD8)", () => {
     expect(result.tierAPaths).toEqual(["/wt/a", "/wt/b"]);
   });
 
-  it("live tier-a mode when AUTO_REAP is on", async () => {
+  it("live tier-a mode when AUTO_REAP is on, after an observation", async () => {
+    const modes: string[] = [];
     const runScan = vi.fn(async (mode: "dry-run" | "live") => {
-      expect(mode).toBe("live");
-      return scanOutcome("live");
+      modes.push(mode);
+      return scanOutcome(mode);
     });
     const result = await runWorktreeJanitor({ env: AUTO, runScan });
+    expect(modes).toEqual(["dry-run", "live"]);
     expect(result.skipped).toBe(false);
     if (result.skipped || "healthy" in result) throw new Error("expected summary");
     expect(result.mode).toBe("live");
     expect(result.removed).toBe(2);
+  });
+
+  // AUTO_REAP is an owner's standing go for Tier A, not a go to reap on a guess.
+  // The primary reaper fails closed exactly as the bound does: if the observation
+  // kept anything because liveness was unreadable, no live run follows.
+  it("AUTO_REAP stays in observe mode when liveness could not be read", async () => {
+    const modes: string[] = [];
+    const runScan = vi.fn(async (mode: "dry-run" | "live") => {
+      modes.push(mode);
+      const outcome = scanOutcome(mode);
+      if (outcome.available) {
+        outcome.scan.decisions = [
+          {
+            path: "/wt/unknown",
+            branch: "fix/x",
+            verdict: "KEEP",
+            reason: "Workroom claims unreadable (no token) — refusing to reap on absent evidence",
+            tier: null,
+          },
+        ];
+      }
+      return outcome;
+    });
+
+    const result = await runWorktreeJanitor({ env: AUTO, runScan });
+
+    expect(modes).toEqual(["dry-run"]);
+    if (result.skipped || "healthy" in result) throw new Error("expected a summary");
+    expect(result.mode).toBe("dry-run");
+    expect(result.removed).toBe(0);
+  });
+
+  it("AUTO_REAP reports UNHEALTHY and never goes live when the observation is blind", async () => {
+    const modes: string[] = [];
+    const runScan = vi.fn(async (mode: "dry-run" | "live"): Promise<ScanOutcome> => {
+      modes.push(mode);
+      return { available: false, reason: "fatal: not a git repository" };
+    });
+    const result = await runWorktreeJanitor({ env: AUTO, runScan });
+    expect(modes).toEqual(["dry-run"]);
+    expect(result).toMatchObject({ skipped: false, healthy: false });
   });
 
   // This test used to assert `skipped: true` for an unreachable scan. That was

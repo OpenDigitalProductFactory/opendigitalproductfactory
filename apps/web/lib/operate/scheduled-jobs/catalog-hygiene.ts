@@ -98,9 +98,9 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     inngestId: "ops/worktree-janitor",
     ungatedReason:
       "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
-    name: "Worktree janitor fleet backstop (Tier-A)",
+    name: "Worktree janitor (Tier-A)",
     purpose:
-      "OPTIONAL fleet sweeper for leftover worktrees. Primary reaping is session-lifecycle (worktree-session-hygiene on SessionEnd). This portal Inngest job dry-runs when DPF_WORKTREE_JANITOR_ENABLED=1; live Tier-A only with DPF_WORKTREE_JANITOR_AUTO_REAP=1. Not a per-client CLI cron.",
+      "The platform-owned worktree reaper. It runs here on the portal, with no AI client required; client session hooks only accelerate it. Observes when DPF_WORKTREE_JANITOR_ENABLED=1 and reaps Tier-A only above DPF_WORKTREE_JANITOR_MAX or with DPF_WORKTREE_JANITOR_AUTO_REAP=1. Every live run follows an observation and stays an observation when liveness is unreadable.",
     cron: "40 5 * * *",
     cadence: "Daily at 05:40",
     category: "core",
