@@ -8,12 +8,21 @@ import { projectGateStatus, worktreeContextFromGit } from "../pregate-status.mjs
 import { readLocalCiGateState, writeLocalCiGateState } from "./local-ci-gate-state.mjs";
 
 import {
+  applyLiveGate,
   classifySlotRecord,
   exitCodeForVerdict,
   formatStatusReport,
   poolClosedReasonFromState,
+  PREGATE_LIVE_VERDICTS,
   reconcileSlots,
 } from "./pregate-status.mjs";
+import {
+  liveGateRefusal,
+  readLivePregate,
+  removePregateLiveMarker,
+  updatePregateLiveStage,
+  writePregateLiveMarker,
+} from "./pregate-live.mjs";
 
 const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OLD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -1071,4 +1080,127 @@ test('terminal or uncertain current claims never recommend unqualified replaceme
       assert.match(result.reason, /stop.*reconcile/i);
     }
   }
+});
+
+// ── BI-F039AA83: a live gate is never reported as terminal ───────────────────
+
+const liveMarker = (overrides = {}) => ({
+  pid: 4144, stage: "preflight", branch: "claude/topic", sha: HEAD,
+  startedAt: "2026-08-04T11:59:00.000Z", stageAt: "2026-08-04T11:59:00.000Z", ...overrides,
+});
+const head = { headSha: HEAD, headBranch: "claude/topic" };
+const NO_RECORD = { verdict: "NO-RECORD", reason: "no gate record for this worktree — pregate has not run here", slot: null };
+const recordFor = (status, extra = {}) => ({
+  ...classifySlotRecord({
+    state: passingState({ gatePassed: false, status, evidenceRecordId: "", ...extra }),
+    metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW,
+  }),
+  slot: "slot-0",
+});
+
+test("live: preflight running before any gate record is PREFLIGHT with its pid, never NO-RECORD (Codex 2026-10-28)", () => {
+  const r = applyLiveGate(NO_RECORD, { live: liveMarker(), ...head });
+  assert.equal(r.verdict, "PREFLIGHT");
+  assert.equal(r.live.pid, 4144);
+  assert.match(r.live.stage, /preflight/);
+  assert.doesNotMatch(r.reason, /has not run/);
+  assert.equal(exitCodeForVerdict(r.verdict), 75);
+});
+
+test("live: a re-run in preflight over an earlier FAIL record for HEAD is PREFLIGHT, not FAIL", () => {
+  const failed = recordFor("failed", { failureReason: "vitest failed" });
+  assert.equal(failed.verdict, "FAIL");
+  const r = applyLiveGate(failed, { live: liveMarker(), ...head });
+  assert.equal(r.verdict, "PREFLIGHT");
+  assert.equal(r.priorVerdict, "FAIL");
+});
+
+test("live: an admitted record with a live gate process is ADMITTED, not FAIL or INCONCLUSIVE", () => {
+  const r = applyLiveGate(recordFor("admitted"), {
+    queuedWaiter: { checked: true, alive: true, pids: [15776], alivePids: [15776] }, ...head,
+  });
+  assert.equal(r.verdict, "ADMITTED");
+  assert.equal(r.live.pid, 15776);
+  assert.equal(exitCodeForVerdict(r.verdict), 75);
+});
+
+test("live: a running record under a live pregate is RUNNING and names the stage", () => {
+  const r = applyLiveGate(recordFor("running"), { live: liveMarker({ stage: "gate" }), ...head });
+  assert.equal(r.verdict, "RUNNING");
+  assert.equal(r.live.pid, 4144);
+  assert.match(r.live.stage, /sandbox/);
+});
+
+test("live: a queued record with a live waiter is QUEUED with its queue position", () => {
+  const queued = recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 3 }] });
+  const r = applyLiveGate(queued, { queuedWaiter: { checked: true, alive: true, pids: [77], alivePids: [77] }, ...head });
+  assert.equal(r.verdict, "QUEUED");
+  assert.equal(r.live.queuePosition, 3);
+  assert.match(r.reason, /position 3/);
+});
+
+test("live: pregate past preflight with no record yet for HEAD is QUEUED (requesting admission)", () => {
+  const r = applyLiveGate(NO_RECORD, { live: liveMarker({ stage: "gate" }), ...head });
+  assert.equal(r.verdict, "QUEUED");
+  assert.equal(r.live.queuePosition, null);
+});
+
+test("live: an admitted record whose gate process is gone stays INCONCLUSIVE — not live, not FAIL", () => {
+  const r = applyLiveGate(recordFor("admitted"), { queuedWaiter: { checked: true, alive: false, pids: [9], alivePids: [] }, ...head });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("live: a recorded FAIL with no live gate stays FAIL (exit 1)", () => {
+  const r = applyLiveGate(recordFor("failed", { failureReason: "tsc" }), { ...head });
+  assert.equal(r.verdict, "FAIL");
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("live: a PASS for HEAD is never downgraded by a live re-run", () => {
+  const pass = { ...classifySlotRecord({ state: passingState(), metadata: null, headSha: HEAD, now: NOW }), slot: "slot-0" };
+  assert.equal(applyLiveGate(pass, { live: liveMarker(), ...head }).verdict, "PASS");
+});
+
+test("live: a pregate gating another SHA does not stand in for HEAD", () => {
+  const r = applyLiveGate(NO_RECORD, { live: liveMarker({ sha: OLD }), ...head });
+  assert.equal(r.verdict, "NO-RECORD");
+  assert.match(r.reason, /pid 4144/);
+  assert.match(r.reason, /not HEAD/);
+});
+
+test("live verdicts are the four non-terminal words and print pid, stage and the wait instruction", () => {
+  assert.deepEqual([...PREGATE_LIVE_VERDICTS], ["PREFLIGHT", "QUEUED", "ADMITTED", "RUNNING"]);
+  const queued = recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 2 }] });
+  const r = applyLiveGate(queued, { live: liveMarker({ stage: "gate" }), ...head });
+  const text = formatStatusReport(r, { ...head, now: NOW }).join("\n");
+  assert.match(text, /^local-CI gate: QUEUED/);
+  assert.match(text, /pid\s+4144/);
+  assert.match(text, /queue\s+position 2/);
+  assert.match(text, /next\s+wait/);
+  assert.doesNotMatch(text, /FAIL|NO-RECORD/);
+});
+
+test("live marker: written, staged and read back while its process is alive; removed only by its owner", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-pregate-live-"));
+  try {
+    const path = join(dir, "dpf-pregate-live.json");
+    const alive = () => ({ alive: true });
+    writePregateLiveMarker({ path, branch: "claude/topic", sha: HEAD, pid: 4144, startedAt: "2026-08-04T11:59:00.000Z" });
+    assert.equal(readLivePregate({ path, observerAlive: alive }).stage, "preflight");
+    assert.equal(updatePregateLiveStage({ path, stage: "gate", pid: 999 }), null, "another pid cannot restage it");
+    updatePregateLiveStage({ path, stage: "gate", pid: 4144 });
+    assert.equal(readLivePregate({ path, observerAlive: alive }).stage, "gate");
+    assert.equal(readLivePregate({ path, observerAlive: () => ({ alive: false }) }), null, "a dead or recycled pid is not live");
+    assert.equal(removePregateLiveMarker({ path, pid: 999 }), false);
+    assert.equal(removePregateLiveMarker({ path, pid: 4144 }), true);
+    assert.equal(readLivePregate({ path, observerAlive: alive }), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("live marker: a second pregate is refused with a pointer at the running one", () => {
+  assert.equal(liveGateRefusal(null), null);
+  assert.match(liveGateRefusal(liveMarker()), /already running.*pid 4144.*pregate:status/s);
 });
