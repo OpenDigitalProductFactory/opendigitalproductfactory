@@ -135,6 +135,7 @@ export async function mcpPost(method, params, {
   accept,
   fetchImpl,
   label,
+  env = process.env,
 } = {}) {
   if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
   if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
@@ -161,7 +162,7 @@ export async function mcpPost(method, params, {
   // appeared in ambient state -- a copied-in, stale or tampered `.mcp.json`
   // -- naming any other host is refused. Callers with their own operator signal
   // (a --mcp-url flag) can still pass allowNonLoopbackEndpoint directly.
-  if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl)) {
+  if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl, env)) {
     throw new Error(
       `mcpCall: refusing to send a bearer token to ${mcpUrl}. Only loopback MCP `
       + "endpoints and the install's configured origin (PUBLIC_URL, DPF_MCP_URL or "
@@ -188,7 +189,7 @@ export async function mcpPost(method, params, {
     return { status: response.status, text: await response.text(), via: "fetch" };
   }
 
-  const injectedTransport = process.env.DPF_GATE_CURL_BIN;
+  const injectedTransport = env.DPF_GATE_CURL_BIN;
   if (injectedTransport) {
     const text = await callInjectedCurlTransport({
       command: injectedTransport,
@@ -201,7 +202,7 @@ export async function mcpPost(method, params, {
   }
 
   const url = new URL(mcpUrl);
-  const trust = url.protocol === "https:" ? resolveHostMcpTrust({ mcpUrl }) : null;
+  const trust = url.protocol === "https:" ? resolveHostMcpTrust({ mcpUrl, env }) : null;
   const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
     const timeoutError = () => Object.assign(

@@ -279,3 +279,14 @@ test("mcpCall keeps its invalid-JSON error text, which retry classifiers match",
     /mcpCall: invalid JSON response from http:\/\/127\.0\.0\.1:3000\/api\/mcp\/v1 \(status 502\)/,
   );
 });
+
+
+test("MCP transport uses the caller-scoped endpoint environment without ambient changes", async () => {
+  const endpoint = "https://scoped-install.example/api/mcp/v1";
+  let requests = 0;
+  const options = { mcpUrl: endpoint, bearerToken: "fixture", env: { DPF_MCP_URL: endpoint },
+    fetchImpl: async () => { requests++; return new Response("{}"); } };
+  assert.equal((await mcpPost("tools/list", {}, options)).status, 200);
+  await assert.rejects(mcpPost("tools/list", {}, { ...options, env: {} }), /refusing to send/);
+  assert.equal(requests, 1);
+});

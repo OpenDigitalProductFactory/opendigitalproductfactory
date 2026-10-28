@@ -433,3 +433,44 @@ describe("claims honour the server's liveness verdict", () => {
     assert.deepEqual(names, ["list_workrooms"]);
   });
 });
+
+
+describe("ownership traversal uses one saved connection configuration (BI-02C0877D)", () => {
+  it("prepares trust once for every page and detail without mutating the caller environment", async () => {
+    const env = { DPF_MCP_URL: "https://localhost/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture" };
+    const prepared = { ...env, NODE_EXTRA_CA_CERTS: "saved-authorized-ca.pem" };
+    let resolutions = 0, credentialEnv;
+    const calls = [];
+    const result = await loadActiveWorkroomPaths({ env,
+      resolveTrust: options => { resolutions++; assert.equal(options.env, env); return { env: prepared }; },
+      resolveCredential: options => { credentialEnv = options.env; return { bearer: "fixture" }; },
+      fetchImpl: async (_url, init) => {
+        const { name, arguments: args } = JSON.parse(init.body).params;
+        calls.push(name);
+        if (name === "get_workroom") return new Response(JSON.stringify({ success: true, data: { capsule: room("two", "D:/wt/two") } }));
+        return new Response(args.cursor
+          ? pagePayload([{ capsuleId: "two", status: "working", detail: { toolName: "get_workroom", arguments: { capsuleId: "two" } } }], { populationCount: 2 })
+          : pagePayload([room("one", "D:/wt/one")], { populationCount: 2, nextCursor: "next", disposition: "more" }));
+      },
+    });
+    assert.equal(result.available, true);
+    assert.equal(resolutions, 1);
+    assert.equal(credentialEnv, prepared);
+    assert.equal(env.NODE_EXTRA_CA_CERTS, undefined);
+    assert.deepEqual(calls, ["list_workrooms", "list_workrooms", "get_workroom"]);
+    assert.equal(result.activePaths.size, 2);
+  });
+
+  it("fails closed before credentials or requests when saved trust cannot be read", async () => {
+    let requests = 0, credentials = 0;
+    const result = await loadActiveWorkroomPaths({ env: { DPF_MCP_URL: "https://localhost/api/mcp/v1" },
+      resolveTrust: () => { throw new Error("saved CA unreadable"); },
+      resolveCredential: () => { credentials++; return { bearer: "fixture" }; },
+      fetchImpl: async () => { requests++; return new Response(pagePayload([])); },
+    });
+    assert.equal(result.available, false);
+    assert.match(result.reason, /saved CA unreadable/);
+    assert.equal(requests, 0);
+    assert.equal(credentials, 0);
+  });
+});
