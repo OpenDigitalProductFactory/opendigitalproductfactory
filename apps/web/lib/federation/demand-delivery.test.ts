@@ -280,7 +280,7 @@ describe("dispatchDueDemand", () => {
 
   it("retains a failed delivery and schedules bounded exponential retry with jitter", async () => {
     const { db, workItemUpdate } = deliveryDb(outbox);
-    const send = vi.fn().mockResolvedValue({ ok: false, status: 503, error: "unavailable" });
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 500, error: "server error" });
 
     const result = await dispatchDueDemand(db, {
       now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token", random: () => 0.5,
@@ -378,6 +378,44 @@ describe("dispatchDueDemand", () => {
     expect(classifyDeliveryFailure(403)).toBe("rejected-auth");
     expect(classifyDeliveryFailure(404)).toBe("rejected-other");
     expect(classifyDeliveryFailure(500)).toBe("rejected-other");
+  });
+
+  // BI-2DE1002F: a peer answering 502/503/504 is reachable but temporarily not
+  // serving (RFC 9110 §15.6.3–15.6.5). On 2026-10-28 a 25-minute 503 window
+  // dead-lettered 12 envelopes and spent their re-heals, stranding them for good.
+  it("classifies 502, 503 and 504 as the peer being temporarily unavailable", () => {
+    expect(classifyDeliveryFailure(502)).toBe("unavailable");
+    expect(classifyDeliveryFailure(503)).toBe("unavailable");
+    expect(classifyDeliveryFailure(504)).toBe("unavailable");
+  });
+
+  it("never dead-letters an item while the peer answers 503", async () => {
+    const { db, update, workItemUpdate } = deliveryDb({ ...outbox, deliveryAttempts: 7 });
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+
+    const result = await dispatchDueDemand(db, {
+      now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token",
+    });
+
+    expect(result.deadLettered).toBe(0);
+    expect(result.unreachable).toBe(1);
+    expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ syncStatus: "dead-letter" }),
+    }));
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-1" }, data: expect.objectContaining({
+      status: "queued", attemptCount: 8,
+    }) });
+  });
+
+  it("records why it dead-lettered an envelope on the mirror itself", async () => {
+    const { db, update } = deliveryDb({ ...outbox, deliveryAttempts: 7 });
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 422 });
+
+    await dispatchDueDemand(db, { now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token" });
+
+    expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
+      syncStatus: "dead-letter", lastDeliveryError: "peer responded 422",
+    }) });
   });
 });
 

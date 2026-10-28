@@ -295,12 +295,20 @@ const MAX_ATTEMPTS = 8;
  * settled "no" that retrying cannot change, and that path burned 1,083 attempts
  * across the same outbox without ever quarantining the link.
  */
-export type DeliveryFailureKind = "unreachable" | "rejected-auth" | "rejected-other";
+export type DeliveryFailureKind = "unreachable" | "unavailable" | "rejected-auth" | "rejected-other";
+
+/**
+ * Replies that mean "not now", not "no" (RFC 9110 §15.6.3–15.6.5): a gateway or
+ * the peer itself is temporarily not serving. BI-2DE1002F: a 25-minute 503
+ * window on 2026-10-28 dead-lettered 12 envelopes and spent their re-heals.
+ */
+const TEMPORARILY_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
 
 export function classifyDeliveryFailure(status: number): DeliveryFailureKind {
   // postToPeer returns 0 for a network error and for a URL the SSRF guard
   // refused to dial. Neither reached the peer, so neither is evidence about it.
   if (status === 0) return "unreachable";
+  if (TEMPORARILY_UNAVAILABLE_STATUSES.has(status)) return "unavailable";
   if (status === 401 || status === 403) return "rejected-auth";
   return "rejected-other";
 }
@@ -605,7 +613,9 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     // spend the dead-letter budget. An install away from its peer for days holds
     // its outbox intact and drains it on return; previously the same budget
     // covered both kinds and everything queued was written off within the hour.
-    if (failureKind === "unreachable") {
+    // A peer that answered "temporarily unavailable" has said nothing about the
+    // payload either, so it holds the same way (BI-2DE1002F).
+    if (failureKind === "unreachable" || failureKind === "unavailable") {
       unreachable++;
       await finishFederationDeliveryJob(db, {
         itemId: job.itemId,
@@ -641,7 +651,9 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     if (attempts >= MAX_ATTEMPTS) {
       deadLettered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
-        syncStatus: "dead-letter", deadLetteredAt: now,
+        // The cause travels with the record, so digest re-heal can tell a refusal
+        // apart from a dead letter it has no explanation for (BI-2DE1002F).
+        syncStatus: "dead-letter", deadLetteredAt: now, lastDeliveryError: error,
       } });
       await finishFederationDeliveryJob(db, { itemId: job.itemId, attemptCount: job.attemptCount, outcome: "dead-letter", error, now });
     } else {
