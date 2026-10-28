@@ -41,6 +41,19 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     runNowEvent: null,
   },
   {
+    jobId: "subscription-oauth-renewal",
+    inngestId: "ops/subscription-oauth-renewal",
+    honorsEnabledGate: true,
+    name: "Subscription sign-in renewal",
+    purpose:
+      "Renews subscription AI sign-ins (Claude, ChatGPT/Codex) before they expire and retries a failed renewal with backoff (BI-A53C594E). If it stops, a subscription goes dark after its token lapses until someone opens the provider page.",
+    cron: "*/10 * * * *",
+    cadence: "Every 10 min",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "legacy-proposal-expiry-sweep",
     inngestId: "ops/legacy-proposal-expiry-sweep",
     honorsEnabledGate: true,

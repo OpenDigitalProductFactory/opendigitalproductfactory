@@ -352,13 +352,24 @@ export interface ScopedOAuthRefreshGuard {
 
 class ScopedOAuthAccountChanged extends Error {}
 
-async function isOAuthGrantRefusal(response: Response): Promise<boolean> {
-  if (response.status === 401 || response.status === 403) return true;
-  if (response.status !== 400) return false;
-  const body = await response.json().catch(() => null) as { error?: string | { code?: string } } | null;
-  return body?.error === "invalid_grant"
-    || (typeof body?.error === "object" && body.error?.code === "invalid_grant");
+/**
+ * Only an RFC 6749 §5.2 invalid_grant proves the stored grant is dead. A bare
+ * 401/403 (an edge block, a rejected client) is retryable: treating it as a
+ * refusal took anthropic-sub dark for six days on 2026-10-21 while the same
+ * refresh token renewed on its next attempt (BI-A53C594E). The status and the
+ * OAuth error code are logged; the body and token values never are.
+ */
+async function isOAuthGrantRefusal(response: Response, providerId: string): Promise<boolean> {
+  const body = response.status >= 400 && response.status < 500
+    ? await response.json().catch(() => null) as { error?: string | { code?: string; type?: string } } | null
+    : null;
+  const code = typeof body?.error === "string" ? body.error : body?.error?.code ?? body?.error?.type ?? null;
+  const safeCode = JSON.stringify(typeof code === "string" ? code.slice(0, 64) : "no-oauth-error-code");
+  console.warn(`[provider-oauth] renewal refused for ${JSON.stringify(providerId)}: HTTP ${response.status} ${safeCode}`);
+  return code === "invalid_grant";
 }
+
+export { isConfirmedReauthenticationRequired } from "./oauth-renewal-errors";
 
 export function matchesScopedOAuthConnection(current: ScopedOAuthRefreshGuard["connection"] | null, expected: ScopedOAuthRefreshGuard["connection"]) {
   return Boolean(current && current.id === expected.id && current.connectionId === expected.connectionId
@@ -559,7 +570,7 @@ export async function refreshOAuthToken(
     });
 
     if (!res.ok) {
-      if (guard && !await isOAuthGrantRefusal(res)) {
+      if (!await isOAuthGrantRefusal(res, providerId)) {
         return { error: res.status === 429 || res.status >= 500
           ? `OAuth token renewal unavailable (HTTP ${res.status})`
           : `OAuth token renewal failed (HTTP ${res.status})` };
