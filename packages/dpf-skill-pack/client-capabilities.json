@@ -25,6 +25,7 @@
         {"path": "~/.claude/plugins/installed_plugins.json", "owner": "client", "format": "json", "writer": "cli", "cli": "claude plugin install|update --scope local|project", "reason": "Claude Code records each install itself"},
         {"path": "~/.claude/plugins/cache/**", "owner": "client", "format": "tree", "writer": "cli", "cli": "claude plugin install|update", "reason": "Claude Code fills its own cache"},
         {"path": "~/.claude/plugins/cache/**/claude.mcp.json", "owner": "client", "format": "json", "writer": "direct", "cli": null, "reason": "no CLI sets a cached record's connector URL; pinned to a literal endpoint (design 5.4)"},
+        {"path": "~/.claude/plugins/installed_plugins.dpf-prune-bak*.json", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "the backup taken before the CLI removes records whose project folder is gone"},
         {"path": "~/.claude.json", "owner": "client", "format": "json", "writer": "cli", "cli": "claude mcp remove dpf -s user|local", "reason": "a duplicate dpf server is removed through the CLI after a backup"},
         {"path": "~/.claude/dpf-*-mcp.legacy-bak*.json", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "the backup taken before the CLI removes a duplicate user- or local-scope server"},
         {"path": "<project>/.mcp.json", "owner": "client", "format": "json", "writer": "direct", "cli": null, "reason": "no CLI disables a project .mcp.json server; backed up, then disabled"},

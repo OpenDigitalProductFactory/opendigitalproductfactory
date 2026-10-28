@@ -1210,6 +1210,83 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     return result
 
 
+def _remove_if_only_cli_settings(directory: Path) -> bool:
+    """Remove a directory the updater recreated, if it holds only what the CLI wrote."""
+    settings = directory / ".claude" / "settings.json"
+    entries = {path.relative_to(directory).as_posix() for path in directory.rglob("*")}
+    if not entries <= {".claude", ".claude/settings.json"}:
+        return False
+    if settings.exists():
+        try:
+            if json.loads(settings.read_text(encoding="utf-8")) not in ({}, {"enabledPlugins": {}}):
+                return False
+        except ValueError:
+            return False
+        settings.unlink()
+    if (directory / ".claude").exists():
+        (directory / ".claude").rmdir()
+    directory.rmdir()
+    return True
+
+
+def prune_claude_project_records(home: Path, projects: list[str], dry_run: bool,
+                                 claude: Optional[str] = None, runner: Any = None) -> list[dict[str, Any]]:
+    """Remove project records whose directory is gone, through the Claude CLI (spec M10).
+
+    `claude plugin uninstall --scope project` acts only on the record for the
+    directory it runs in, so the gone directory is recreated empty for the
+    call and removed again afterwards; its parent must still exist. Claude
+    Code's record file is backed up first, and success is the record gone on
+    read-back. A record whose parent is gone too is left for Claude Code.
+    """
+    results: list[dict[str, Any]] = []
+    if not projects:
+        return results
+    backup: Optional[Path] = None
+    run = runner or subprocess.run
+    for project in projects:
+        target = Path(project)
+        if not target.parent.is_dir():
+            results.append({"project": project, "action": "prunable",
+                            "detail": "the project folder and its parent are gone; left for Claude Code to drop"})
+            continue
+        if dry_run:
+            results.append({"project": project, "action": "preview", "detail": "would remove this record through the Claude CLI"})
+            continue
+        if not claude:
+            results.append({"project": project, "action": "prunable", "detail": "no Claude CLI to remove the record with"})
+            continue
+        if backup is None:
+            source = claude_installed_plugins_path(home)
+            backup = source.with_name("installed_plugins.dpf-prune-bak.json")
+            suffix = 1
+            while backup.exists():
+                backup = source.with_name(f"installed_plugins.dpf-prune-bak.{suffix}.json")
+                suffix += 1
+            shutil.copy2(source, backup)
+        target.mkdir()
+        try:
+            completed = run([claude, "plugin", "uninstall", CLAUDE_PLUGIN_ID, "--scope", "project", "--keep-data"],
+                            cwd=str(target), capture_output=True, text=True, timeout=120)
+            returncode = completed.returncode
+        except (OSError, subprocess.SubprocessError):
+            returncode = None
+        finally:
+            removed = _remove_if_only_cli_settings(target)
+        remaining = any(r.get("scope") == "project" and r.get("projectPath") == project for r in claude_plugin_records(home))
+        row: dict[str, Any] = {"project": project, "backupPath": str(backup)}
+        if remaining:
+            ran = "could not run" if returncode is None else f"exited {returncode}"
+            row.update(action="failed", detail="the Claude CLI left the record in place" if returncode == 0
+                       else f"claude plugin uninstall {ran}; the record is still present")
+        else:
+            row.update(action="pruned", detail="record removed through the Claude CLI")
+        if not removed:
+            row["detail"] += f"; {project} now holds other files, so it was left in place"
+        results.append(row)
+    return results
+
+
 _MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
 
 
@@ -1309,17 +1386,19 @@ def converge_claude_project_connectors(
 
     version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     plugins = converge_claude_project_plugins(home, version, dry_run)
+    pruned = prune_claude_project_records(home, plugins["pruned"], dry_run, claude=resolve_claude_binary())
     if outcome is not None:
         outcome["plugins"] = plugins
         outcome["retired"] = []
+        outcome["prune"] = pruned
     verb = "would update" if dry_run else "updated"
     lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
-             f"prunable {len(plugins['pruned'])}"]
+             f"gone {len(plugins['pruned'])}"]
     lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
     lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
               for project in plugins["failed"]]
-    lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
+    lines += [f"    {row['action']} (projectPath gone): {row['project']}; {row['detail']}" for row in pruned]
     projects = {
         entry["projectPath"]
         for entry in claude_plugin_records(home)
@@ -2826,6 +2905,14 @@ def _main(argv: list[str]) -> int:
         print(f"  Antigravity: {antigravity_status}")
         if report:
             report.add("antigravity", "user", antigravity_status)
+    # Every run looks for installed clients, so one added since bootstrap is
+    # seen, and one DPF cannot converge is reported rather than skipped (spec M6).
+    discovered = convergence.discover_clients(home)
+    unadapted = sorted(client for client in discovered if client not in convergence.DEFAULT_CARRIERS)
+    if unadapted:
+        print(f"  Also found : {', '.join(unadapted)} (no DPF adapter yet; reported as unproven)")
+    if report:
+        report.add_discovery(discovered)
 
     claude_install_failed = False
     if not args.codex_only:

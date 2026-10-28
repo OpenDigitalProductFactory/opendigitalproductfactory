@@ -75,7 +75,9 @@ def run_updater(root: Path) -> list[str]:
     cache.mkdir(parents=True)
     (cache / "claude.mcp.json").write_text(json.dumps({"mcpServers": {"dpf": {
         "type": "http", "url": "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}"}}}))
+    gone = root / "gone-project"  # pruned through the (faked) CLI, after a backup (spec M10)
     records = [{"scope": "project", "projectPath": str(project), "version": "0.2.5", "installPath": str(cache)},
+               {"scope": "project", "projectPath": str(gone), "version": "0.2.5", "installPath": str(cache)},
                {"scope": "local", "projectPath": str(project), "version": "0.2.5", "installPath": str(cache)}]
     installed = updater.claude_installed_plugins_path(home)
     installed.parent.mkdir(parents=True, exist_ok=True)

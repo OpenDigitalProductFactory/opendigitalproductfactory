@@ -151,6 +151,25 @@ Promote a suggested client only after each gate has evidence (or an explicit “
 
 Source checklist also lives in `packages/dpf-skill-pack/README.md` (adapter checklist section).
 
+### Adding a client (the updater's adapter contract, BI-D43723D7)
+
+Clients change weekly, so the updater finds them on every run instead of using a list fixed at bootstrap. A binary on `PATH` or an app bundle counts as installed. A config folder alone does not, because one is often left behind after an uninstall. `DISCOVERY` in `packages/dpf-skill-pack/scripts/toolchain_convergence.py` lists where each known client shows itself. An installed client with no adapter is reported `unproven` in the run report, never skipped. So is an adapted client whose app is present without the CLI DPF converges it through.
+
+A client is adapted when it has all three of these:
+
+1. **An adapter** in `update_agent_toolchain.py` with four parts:
+   - *discover*: a `resolve_<client>_binary` resolver and a `DISCOVERY` entry;
+   - *converge*: writes only through the client's own CLI wherever the CLI covers the setting;
+   - *verify*: a read-back of the client's own view, in `ConvergenceReport.readback_failure`;
+   - *prune*: removes records the client no longer needs, through its CLI.
+2. **A profile row** in `client-capabilities.json`, with its `writes[]` declaration and its `declarationCarrier`. The carrier must match `DEFAULT_CARRIERS`, and a client listed there counts as adapted.
+3. **Fixture tests** against a fixture home:
+   - a read-back case in `readback_test.py` where the write succeeds and the client's view differs;
+   - the single-writer run in `single_writer_test.py`;
+   - discovery cases in `discovery_test.py`.
+
+When an adapted client's version changes, the host agent's next run re-checks it. If the read-back fails at the new version, the agent records `unproven.<client>.<version>` with the failing read-back, keeps the last version that passed as the reference, and reports the host `failed`. After a day, that raises one attention item naming the client and version. The fix is a pack change, which then ships like any other release.
+
 ## What this currently tells us (the open adoption gaps)
 
 - **Governance parity (2026-07-26):** Waves 1–3 closed Grok host/BS seed, competitive disable on Codex/Grok/Claude, worktree Tier-A, and BS sandbox GC. Remaining: Antigravity disable+hooks proof, OpenCode/Gemini/Cursor product pull, Docker image reap (separate). Token economy rows below remain separate.

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -301,6 +302,44 @@ def _summarize(report: Any) -> tuple[str, str]:
     return result, detail
 
 
+_VERSION_IN = re.compile(r"\d+(?:\.\d+)+[0-9a-z.-]*")
+
+
+def unproven_code(client: str, version: Optional[str]) -> str:
+    """`unproven.<client>.<version>` within the converge-token code vocabulary (spec M7)."""
+    match = _VERSION_IN.search(str(version or "").lower())
+    return f"unproven.{client}.{match.group(0) if match else 'unknown'}"[:48]
+
+
+def canary(state: dict[str, Any], versions: Mapping[str, Any], report: Any, now: float) -> Optional[str]:
+    """Record which client versions passed read-back; name a new version that broke it (M7).
+
+    A client whose rows all pass at its current version becomes the verified
+    reference. One that fails at a version other than the last verified one
+    is `unproven` at that version, with the failing read-back as its probe.
+    Returns the converge code for the first unproven client, if any.
+    """
+    rows = [row for row in (report.get("clients") or []) if isinstance(row, dict)] if isinstance(report, dict) else []
+    verified: dict[str, Any] = dict(state.get("verifiedVersions") or {})
+    unproven: dict[str, Any] = dict(state.get("unproven") or {})
+    for client, version in versions.items():
+        mine = [row for row in rows if row.get("client") == client]
+        if not version or not mine:
+            continue
+        failed = [row for row in mine if row.get("action") == "failed"]
+        if not failed:
+            verified[client] = version
+            unproven.pop(client, None)
+        elif verified.get(client) not in (None, version):
+            previous = unproven.get(client) or {}
+            unproven[client] = {"version": version, "detail": str(failed[0].get("detail") or "")[:200],
+                                "since": previous.get("since") if previous.get("version") == version else now}
+    state["verifiedVersions"] = verified
+    state["unproven"] = unproven
+    first = next(iter(sorted(unproven)), None)
+    return unproven_code(first, unproven[first]["version"]) if first else None
+
+
 # ---------------------------------------------------------------- one run
 
 
@@ -374,6 +413,7 @@ def run_once(
         state["manifestDigest"] = digest
         state["deliveredVersion"] = manifest.get("deliveredVersion")
         state["cliVersions"] = versions
+        unproven = canary(state, versions, parsed, now)
         if code_out == 0 and result == "converged":
             state.update({"lastSuccessAt": now, "failureSince": None, "backoffUntil": None, "failures": 0})
             return finish("ok", None, "", decision)
@@ -384,7 +424,7 @@ def run_once(
         if result == "refused" or isinstance(refusal, dict):
             refusal_code = refusal.get("code") if isinstance(refusal, dict) else None
             return finish("needs-operator", str(refusal_code or "refused"), detail, decision)
-        return finish("failed", f"exit-{code_out}" if code_out else result, detail, decision)
+        return finish("failed", unproven or (f"exit-{code_out}" if code_out else result), detail, decision)
     finally:
         release_lock(home)
 
