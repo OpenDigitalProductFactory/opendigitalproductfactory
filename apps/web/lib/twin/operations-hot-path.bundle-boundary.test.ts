@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const hotPathFiles = [
   resolve(here, "living-business-snapshot.ts"),
-  resolve(here, "operations-snapshot.ts"),
+  resolve(here, "../../../../packages/storefront-templates/src/operations/snapshot.ts"),
   resolve(here, "operations-loader.ts"),
   resolve(here, "operations-load-runtime.ts"),
   resolve(here, "operations-format.ts"),

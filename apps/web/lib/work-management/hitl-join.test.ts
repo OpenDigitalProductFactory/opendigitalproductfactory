@@ -6,9 +6,9 @@ import {
   hasPassingVerificationEvidence,
   joinAutonomy,
   resolveVerificationRequirement,
-} from "./hitl-join";
+} from "@dpf/validators/workroom-policy/hitl-join";
 import type { WorkCaseAutonomyDecisionMode } from "./autonomy-envelope";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { RiskClass } from "@/lib/autonomy/trust-graduation";
 import type { VerificationDepth } from "@/lib/golden-triangle";
 

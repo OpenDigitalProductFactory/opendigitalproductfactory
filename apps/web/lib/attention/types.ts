@@ -137,7 +137,7 @@ export type AttentionTechnicalMetadata = {
  * level union remains canonical; owner-facing labels come from
  * PROACTIVITY_LEVEL_COPY (`quiet` renders as “Quiet”). */
 export type AttentionProactivity = {
-  level: import("@/lib/proactivity/proactivity-types").ProactivityLevel;
+  level: import("@dpf/validators/workroom-policy/proactivity-types").ProactivityLevel;
   actorId?: string;
   policyId?: string;
 };

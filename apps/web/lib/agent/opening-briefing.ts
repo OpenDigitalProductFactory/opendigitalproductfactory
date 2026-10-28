@@ -8,7 +8,7 @@
 // (kernel decision: deterministic-ephemeral-briefing, high confidence).
 
 import type { AttentionItem } from "@/lib/attention/types";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export type OpeningBriefing = {
   /** Markdown for the assistant bubble (links render via ReactMarkdown). */

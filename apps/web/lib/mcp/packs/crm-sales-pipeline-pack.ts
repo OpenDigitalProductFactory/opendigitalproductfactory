@@ -281,7 +281,7 @@ async function buildCreatedAccountEnrichmentOffer(
 ) {
   try {
     const { buildEnrichmentOfferForIntake } = await import("@/lib/crm/enrichment/enrichment-offer");
-    const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+    const { resolveProactivityPlan } = await import("@dpf/validators/workroom-policy/proactivity-resolver");
     const plan = resolveProactivityPlan({
       activityFamily: "crm-record-enrichment",
       agentId: context?.agentId ?? null,

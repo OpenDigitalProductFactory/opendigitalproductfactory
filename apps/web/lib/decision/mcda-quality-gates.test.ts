@@ -4,8 +4,8 @@ import {
   countFeatureKeys,
   evaluateAutonomyEligibility,
   measureFeatureCoverage,
-} from "./mcda-quality-gates";
-import { decide, type DecisionPrinciple } from "./option-scoring";
+} from "@dpf/validators/judgment/mcda-quality-gates";
+import { decide, type DecisionPrinciple } from "@dpf/validators/judgment/option-scoring";
 
 const principle = (
   id: string,
