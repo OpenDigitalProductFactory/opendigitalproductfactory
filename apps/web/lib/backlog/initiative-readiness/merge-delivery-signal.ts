@@ -483,7 +483,18 @@ export type MergedDeliveryCommit = { sha: string; parentSha: string; subject: st
 export async function findMergedDeliveryCommits(
   root: string,
   item: { itemId: string; workType: string | null },
-  options: { roomPullRequests?: readonly number[]; after?: Date | null; trunkRef?: string } = {},
+  options: {
+    roomPullRequests?: readonly number[];
+    /**
+     * BI-46E344FE: PRs the PR-submit actuator recorded for the CURRENT attempt
+     * (`deliveryAttemptPullRequests`, which stops at the latest reopen). That
+     * record postdates the reopen, so its squash commit counts even when it was
+     * merged before the reopen, provided it delivers the item by message.
+     */
+    attestedPullRequests?: readonly number[];
+    after?: Date | null;
+    trunkRef?: string;
+  } = {},
 ): Promise<MergedDeliveryCommit[] | null> {
   const trunkRef = options.trunkRef ?? "origin/main";
   const after = options.after ?? null;
@@ -501,6 +512,13 @@ export async function findMergedDeliveryCommits(
       const marker = `(#${prNumber})`;
       for (const c of await readTrunkCommits(root, trunkRef, [marker], 20)) {
         if (standing(c) && c.subject.endsWith(marker)) candidates.set(c.sha, c);
+      }
+    }
+    for (const prNumber of new Set(options.attestedPullRequests ?? [])) {
+      if (!Number.isInteger(prNumber) || prNumber <= 0) continue;
+      const marker = `(#${prNumber})`;
+      for (const c of await readTrunkCommits(root, trunkRef, [marker], 20)) {
+        if (!c.subject.startsWith("Revert ") && c.subject.endsWith(marker) && trunkCommitDeliversItem(c, item)) candidates.set(c.sha, c);
       }
     }
     const delivered: MergedDeliveryCommit[] = [];
@@ -559,6 +577,7 @@ export async function resolveMergedDeliveryCommitFromDb(
       if (!(await trunkRefExists(root))) continue;
       const commits = await findMergedDeliveryCommits(root, { itemId: args.itemId, workType: args.workType }, {
         roomPullRequests: args.roomPullRequests,
+        attestedPullRequests: deliveryAttemptPullRequests(transitions),
         after: latestReopenAt(transitions),
       });
       if (commits === null) return { kind: "signal-unavailable" };

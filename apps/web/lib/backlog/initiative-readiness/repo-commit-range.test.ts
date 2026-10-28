@@ -98,12 +98,12 @@ describe("repo-commit-range (BI-46E344FE)", () => {
       readProviderRange: async () => null });
     expect(unbound.ok).toBe(true);
     if (!unbound.ok) return;
-    expect(unbound.text.indexOf(`Range 1 of 2: ${base}..${head}`)).toBeLessThan(unbound.text.indexOf(`Range 2 of 2: ${head}..${second}`));
-    expect(unbound.text).toContain("+export const b = 3;");
-    const bound = await readCommitRanges({ repositoryFullName: "o/r", ranges, expectedDigest: unbound.digest, roots: [root],
+    expect(unbound.data.text.indexOf(`Range 1 of 2: ${base}..${head}`)).toBeLessThan(unbound.data.text.indexOf(`Range 2 of 2: ${head}..${second}`));
+    expect(unbound.data.text).toContain("+export const b = 3;");
+    const bound = await readCommitRanges({ repositoryFullName: "o/r", ranges, expectedDigest: unbound.data.digest, roots: [root],
       readProviderRange: async () => null });
-    expect(bound).toMatchObject({ ok: true, digest: unbound.digest });
-    const other = await readCommitRanges({ repositoryFullName: "o/r", ranges: ranges.slice(0, 1), expectedDigest: unbound.digest,
+    expect(bound).toMatchObject({ ok: true, data: { digest: unbound.data.digest } });
+    const other = await readCommitRanges({ repositoryFullName: "o/r", ranges: ranges.slice(0, 1), expectedDigest: unbound.data.digest,
       roots: [root], readProviderRange: async () => null });
     expect(other).toMatchObject({ ok: false, code: "IMMUTABLE_BLOB_MISMATCH" });
   });
@@ -112,7 +112,7 @@ describe("repo-commit-range (BI-46E344FE)", () => {
     const range = { baseSha: "1".repeat(40), headSha: "2".repeat(40) };
     const read = await readCommitRanges({ repositoryFullName: "o/r", ranges: [range], expectedDigest: null,
       roots: [root], readProviderRange: async (r) => ({ range: r, files: [{ path: "x.ts", blobId: "3".repeat(40) }], patch: "patch" }) });
-    expect(read).toMatchObject({ ok: true, digest: commitRangeDigest([{ range, files: [{ path: "x.ts", blobId: "3".repeat(40) }] }]) });
+    expect(read).toMatchObject({ ok: true, data: { digest: commitRangeDigest([{ range, files: [{ path: "x.ts", blobId: "3".repeat(40) }] }]) } });
     const missing = await readCommitRanges({ repositoryFullName: "o/r", ranges: [range], expectedDigest: null,
       roots: [root], readProviderRange: async () => null });
     expect(missing).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
@@ -123,9 +123,9 @@ describe("repo-commit-range (BI-46E344FE)", () => {
     const read = await readCommitRanges({ repositoryFullName: "o/r", ranges, expectedDigest: null, roots: [root], readProviderRange: async () => null });
     if (!read.ok) throw new Error("range unreadable");
     const options = { roots: [root], readProviderRange: async () => null };
-    const params = { repositoryFullName: "o/r", path: commitRangePath(ranges), version: head, expectedBlobId: read.digest, maxLines: 5 };
+    const params = { repositoryFullName: "o/r", path: commitRangePath(ranges), version: head, expectedBlobId: read.data.digest, maxLines: 5 };
     const page = await readCommitRangeAtVersion(params, options);
-    expect(page).toMatchObject({ success: true, data: { path: params.path, version: head, blobId: read.digest, startLine: 1, endLine: 5, hasMore: true } });
+    expect(page).toMatchObject({ success: true, data: { path: params.path, version: head, blobId: read.data.digest, startLine: 1, endLine: 5, hasMore: true } });
     if (!page.success) throw new Error(page.message);
     const next = await readCommitRangeAtVersion({ ...params, cursor: (page.data as { nextCursor: string }).nextCursor }, options);
     expect(next).toMatchObject({ success: true, data: { startLine: 6 } });

@@ -9,7 +9,7 @@ import {
   resolveRepoIdentity,
   type GithubReadTransport,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
-import { ok, type ActionSuccess } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -286,7 +286,7 @@ export async function readRepositoryProviderBlob(args: {
   }
 }
 
-type ProviderCompareResult = { ok: true; files: ProviderRangeFile[] } | { ok: false; error: string };
+type ProviderCompareResult = ActionResult<ProviderRangeFile[]>;
 
 /** BI-46E344FE: one range's canonical change list, from the provider compare. */
 async function fetchProviderCompare(args: {
@@ -299,8 +299,8 @@ async function fetchProviderCompare(args: {
   });
   if (!result.ok) return { ok: false, error: providerFailureMessage(result, { unavailable: "the merged change", unreadable: "comparison metadata" }) };
   const files = changesFromProviderCompare(result.data);
-  return files ? { ok: true, files }
-    : { ok: false, error: `Repository provider returned an unreadable or truncated file list for ${args.range.baseSha.slice(0, 12)}..${args.range.headSha.slice(0, 12)}.` };
+  return files ? ok(files)
+    : err(`Repository provider returned an unreadable or truncated file list for ${args.range.baseSha.slice(0, 12)}..${args.range.headSha.slice(0, 12)}.`);
 }
 
 /** BI-46E344FE: the reader's provider fallback for a commit range on the canonical repository. */
@@ -601,22 +601,22 @@ export async function resolveRepositoryArtifact(args: {
     : [];
     const authorAgentId = soleAgentId && agentAliases.length === 1 ? soleAgentId : null;
 
+    let verified: { digest: string; bytes: Uint8Array };
     if (range) {
       // BI-46E344FE: re-read every range at the provider and require the bound digest.
       const changes: RangeChange[] = [];
       for (const r of range.ranges) {
         const compared = await fetchProviderCompare({ owner: expectedRepo.owner, repo: expectedRepo.name, token, range: r, fetchImpl });
         if (!compared.ok) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: compared.error };
-        changes.push({ range: r, files: compared.files, patch: providerPatchText(compared.files) });
+        changes.push({ range: r, files: compared.data, patch: providerPatchText(compared.data) });
       }
       const digest = commitRangeDigest(changes);
       if (digest !== range.digest) {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
           error: `The merged change resolves to ${digest}, not the bound ${range.digest}. Read get_backlog_item with recoveryGate "post-implementation-review" for the current request.` };
       }
-      return { ok: true, artifact: { digest, bytes: Buffer.from(renderCommitRangeText(changes, digest), "utf8"),
-        authorPrincipalId, authorAgentId, authorEmail: email } };
-    }
+      verified = { digest, bytes: Buffer.from(renderCommitRangeText(changes, digest), "utf8") };
+    } else {
     const providerBlob = await fetchRepositoryProviderBlob({
     owner: expectedRepo.owner,
     repo: expectedRepo.name,
@@ -639,11 +639,12 @@ export async function resolveRepositoryArtifact(args: {
     if (planProof && digest !== planProof.digest) {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified immutable plan bytes do not match the current coverage digest." };
     }
+    verified = { digest, bytes: providerBlob.data };
+    }
     return {
       ok: true,
       artifact: {
-        digest,
-        bytes: providerBlob.data,
+        ...verified,
         authorPrincipalId,
         authorAgentId,
         authorEmail: email,

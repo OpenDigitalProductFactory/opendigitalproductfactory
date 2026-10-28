@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { commitRangeReaderPath, REPO_COMMIT_RANGE_PATH_PREFIX } from "@/lib/shared/immutable-review-reader";
 
 const execFileAsync = promisify(execFile);
@@ -196,7 +197,7 @@ export function renderCommitRangeText(changes: readonly RangeChange[], digest: s
 }
 
 export type CommitRangeReadResult =
-  | { ok: true; changes: RangeChange[]; digest: string; text: string }
+  | ActionSuccess<{ changes: RangeChange[]; digest: string; text: string }>
   | { ok: false; code: "IMMUTABLE_SOURCE_UNAVAILABLE" | "IMMUTABLE_BLOB_MISMATCH"; error: string };
 
 /**
@@ -215,7 +216,7 @@ export async function readCommitRanges(args: {
   const readProvider = args.readProviderRange ?? (async (range: CommitRange) => {
     const { readRepositoryProviderCompare } = await import("./repository-artifact");
     const compared = await readRepositoryProviderCompare({ repositoryFullName: args.repositoryFullName, ...range });
-    return compared.ok ? { range, files: compared.files, patch: providerPatchText(compared.files) } : null;
+    return compared.ok ? { range, files: compared.data, patch: providerPatchText(compared.data) } : null;
   });
   const changes: RangeChange[] = [];
   for (const range of args.ranges) {
@@ -235,7 +236,7 @@ export async function readCommitRanges(args: {
   if (args.expectedDigest !== null && digest !== args.expectedDigest) {
     return { ok: false, code: "IMMUTABLE_BLOB_MISMATCH", error: `Expected change digest ${args.expectedDigest}, but the ranges resolve to ${digest}.` };
   }
-  return { ok: true, changes, digest, text: renderCommitRangeText(changes, digest) };
+  return ok({ changes, digest, text: renderCommitRangeText(changes, digest) });
 }
 
 type RangeReaderOptions = Pick<Parameters<typeof readCommitRanges>[0], "roots" | "readProviderRange">;
@@ -262,7 +263,7 @@ export async function readCommitRangeAtVersion(params: Record<string, unknown>, 
   const read = await readCommitRanges({ repositoryFullName, ranges, expectedDigest: expected, ...options });
   if (!read.ok) return { success: false, error: read.code, message: read.error };
   const { pageSource } = await import("@/lib/source-page");
-  const page = pageSource({ content: read.text, ref: head, path, blobId: read.digest, cursor: params.cursor,
+  const page = pageSource({ content: read.data.text, ref: head, path, blobId: read.data.digest, cursor: params.cursor,
     startLine: params.startLine, maxLines: params.maxLines, maxChars: params.maxChars });
   if ("error" in page) return { success: false, error: page.error, message: page.error };
   const more = page.hasMore ? " (more available)" : "";
@@ -276,6 +277,6 @@ export async function discoverCommitRangeArtifact(args: { repositoryFullName: st
   | { resolved: false; code: "provider-unavailable"; nextAction: string }> {
   const read = await readCommitRanges({ ...args, expectedDigest: null });
   return read.ok
-    ? { resolved: true, artifact: { kind: "repo-commit-range", ranges: args.ranges, digest: read.digest } }
+    ? { resolved: true, artifact: { kind: "repo-commit-range", ranges: args.ranges, digest: read.data.digest } }
     : { resolved: false, code: "provider-unavailable", nextAction: `${read.error} Retry once the trunk or the repository provider can be read.` };
 }
