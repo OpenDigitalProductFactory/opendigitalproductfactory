@@ -67,6 +67,8 @@ export function appendRoomPolicyParticipant(
     discoverablePrincipalRefs: current.discoverablePrincipalRefs ?? [],
     // Carry only a ceiling someone set; the room derives its own (BI-0A5EE9C1).
     ...(current.sensitivityCeiling ? { sensitivityCeiling: current.sensitivityCeiling } : {}),
+    // A room's charter outlives any one invite (BI-C649809F).
+    ...(current.charter ? { charter: current.charter } : {}),
     participants,
   };
 

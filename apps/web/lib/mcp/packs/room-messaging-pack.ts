@@ -33,6 +33,7 @@ import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { executeCooBroadcastAck, executeCooBroadcastAsk, type CooBroadcastDb } from "@/lib/operate/coo-broadcast.server";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
+import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-charter-consequence.server";
 
 type PackContext = { agentId?: string };
 
@@ -693,8 +694,10 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "view_operations",
     sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
+    // changes identity or authority → consult-gated (TAK §8.4.1), except an
+    // admission the room's charter already decided (BI-C649809F).
     consequence: "authority",
+    consequenceForCall: inviteRoomParticipantConsequence,
   },
   {
     name: "get_coworker_room_engagement",

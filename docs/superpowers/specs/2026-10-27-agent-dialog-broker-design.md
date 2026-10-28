@@ -132,6 +132,22 @@ The charter is a small extension of the room boundary that already exists (`purp
 
 Changing a charter is itself `authority`, and gates once.
 
+**Delivered (BI-C649809F).** The charter is `workroomPolicy.charter` (`apps/web/lib/work-management/room-charter.ts`). `readWorkspaceRoomPolicy` reads it, and `appendRoomPolicyParticipant` carries it forward across invites.
+
+`invite_room_participant` keeps its declared `authority` but gains a `consequenceForCall` refiner (`room-charter-consequence.server.ts`). The refiner narrows an in-charter invite to non-damaging. Recorded steering then decides that invite as for any other non-damaging call:
+- `room-authority` for an in-room coworker turn;
+- `connection-delegation` for an OAuth assistant;
+- a person when nothing steers it.
+
+A person invitee, an unknown room or agent, or any lookup error keeps `authority`.
+
+Until organization posture lands, one platform default applies. Rooms whose sensitivity ceiling is public or internal admit `org-coworker` and `operator-assistant` up to `create`. Confidential and restricted rooms have no default.
+
+Still open:
+- the batched card and "allow in rooms like this" (`BI-49379534`), which change the exact-call approval binding;
+- posture by archetype (`BI-434756B6`);
+- a writer for explicit charters in the room's Participants control.
+
 ### 4.3 The admission card: one card, batched, legible
 
 When an admission is outside the charter, the platform files one `CoworkerActionEnvelope` per room per decision window, never one per invite. Further pending admissions for the same room join the open card, following the "hand over a set of rooms in one approval" pattern (`BI-D4144471`).
