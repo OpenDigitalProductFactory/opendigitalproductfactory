@@ -1210,6 +1210,83 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     return result
 
 
+def _remove_if_only_cli_settings(directory: Path) -> bool:
+    """Remove a directory the updater recreated, if it holds only what the CLI wrote."""
+    settings = directory / ".claude" / "settings.json"
+    entries = {path.relative_to(directory).as_posix() for path in directory.rglob("*")}
+    if not entries <= {".claude", ".claude/settings.json"}:
+        return False
+    if settings.exists():
+        try:
+            if json.loads(settings.read_text(encoding="utf-8")) not in ({}, {"enabledPlugins": {}}):
+                return False
+        except ValueError:
+            return False
+        settings.unlink()
+    if (directory / ".claude").exists():
+        (directory / ".claude").rmdir()
+    directory.rmdir()
+    return True
+
+
+def prune_claude_project_records(home: Path, projects: list[str], dry_run: bool,
+                                 claude: Optional[str] = None, runner: Any = None) -> list[dict[str, Any]]:
+    """Remove project records whose directory is gone, through the Claude CLI (spec M10).
+
+    `claude plugin uninstall --scope project` acts only on the record for the
+    directory it runs in, so the gone directory is recreated empty for the
+    call and removed again afterwards; its parent must still exist. Claude
+    Code's record file is backed up first, and success is the record gone on
+    read-back. A record whose parent is gone too is left for Claude Code.
+    """
+    results: list[dict[str, Any]] = []
+    if not projects:
+        return results
+    backup: Optional[Path] = None
+    run = runner or subprocess.run
+    for project in projects:
+        target = Path(project)
+        if not target.parent.is_dir():
+            results.append({"project": project, "action": "prunable",
+                            "detail": "the project folder and its parent are gone; left for Claude Code to drop"})
+            continue
+        if dry_run:
+            results.append({"project": project, "action": "preview", "detail": "would remove this record through the Claude CLI"})
+            continue
+        if not claude:
+            results.append({"project": project, "action": "prunable", "detail": "no Claude CLI to remove the record with"})
+            continue
+        if backup is None:
+            source = claude_installed_plugins_path(home)
+            backup = source.with_name("installed_plugins.dpf-prune-bak.json")
+            suffix = 1
+            while backup.exists():
+                backup = source.with_name(f"installed_plugins.dpf-prune-bak.{suffix}.json")
+                suffix += 1
+            shutil.copy2(source, backup)
+        target.mkdir()
+        try:
+            completed = run([claude, "plugin", "uninstall", CLAUDE_PLUGIN_ID, "--scope", "project", "--keep-data"],
+                            cwd=str(target), capture_output=True, text=True, timeout=120)
+            returncode = completed.returncode
+        except (OSError, subprocess.SubprocessError):
+            returncode = None
+        finally:
+            removed = _remove_if_only_cli_settings(target)
+        remaining = any(r.get("scope") == "project" and r.get("projectPath") == project for r in claude_plugin_records(home))
+        row: dict[str, Any] = {"project": project, "backupPath": str(backup)}
+        if remaining:
+            ran = "could not run" if returncode is None else f"exited {returncode}"
+            row.update(action="failed", detail="the Claude CLI left the record in place" if returncode == 0
+                       else f"claude plugin uninstall {ran}; the record is still present")
+        else:
+            row.update(action="pruned", detail="record removed through the Claude CLI")
+        if not removed:
+            row["detail"] += f"; {project} now holds other files, so it was left in place"
+        results.append(row)
+    return results
+
+
 _MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
 
 
@@ -1309,17 +1386,19 @@ def converge_claude_project_connectors(
 
     version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     plugins = converge_claude_project_plugins(home, version, dry_run)
+    pruned = prune_claude_project_records(home, plugins["pruned"], dry_run, claude=resolve_claude_binary())
     if outcome is not None:
         outcome["plugins"] = plugins
         outcome["retired"] = []
+        outcome["prune"] = pruned
     verb = "would update" if dry_run else "updated"
     lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
-             f"prunable {len(plugins['pruned'])}"]
+             f"gone {len(plugins['pruned'])}"]
     lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
     lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
               for project in plugins["failed"]]
-    lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
+    lines += [f"    {row['action']} (projectPath gone): {row['project']}; {row['detail']}" for row in pruned]
     projects = {
         entry["projectPath"]
         for entry in claude_plugin_records(home)
@@ -1660,46 +1739,77 @@ def antigravity_mcp_config_path(home: Path) -> Path:
     return home / ".gemini" / "config" / "mcp_config.json"
 
 
-def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
-    """Upsert the DPF `mcpServers.dpf` block into agy's JSON MCP config.
+def _agy_entry(server: Any) -> Optional[dict[str, Any]]:
+    """The fields of an agy `dpf` entry the updater converges."""
+    if not isinstance(server, dict):
+        return None
+    headers = server.get("headers")
+    return {"serverUrl": server.get("serverUrl"), "disabled": server.get("disabled") is True,
+            "headers": dict(headers) if isinstance(headers, dict) else {}}
 
-    Env-backed (no secret written): the CLI reads the token from
-    DPF_MCP_BEARER_TOKEN at runtime. Idempotent — merges into any existing
-    config rather than clobbering the operator's other MCP servers. Skips
-    cleanly when `agy` is not installed (nothing to wire).
-    """
-    if resolve_antigravity_binary() is None:
-        return "skipped: Antigravity CLI (agy) not found"
-    path = antigravity_mcp_config_path(home)
+
+def _read_agy_servers(path: Path) -> dict[str, Any]:
     # agy leaves a 0-byte file behind when no server is configured; that is an
-    # empty config. Unparseable content is the operator's: leave it, and keep
-    # the rest of the update running instead of exiting.
+    # empty config. Unparseable content raises ValueError for the caller.
+    raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+    data = json.loads(raw) if raw.strip() else {}
+    servers = data.get("mcpServers") if isinstance(data, dict) else None
+    return servers if isinstance(servers, dict) else {}
+
+
+def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None,
+                                  runner: Any = None) -> str:
+    """Converge agy's `dpf` MCP server through agy's own CLI, then read it back.
+
+    `agy mcp add` covers the URL and headers, so it is the only writer of
+    agy's config (BI-1DCF9F23, spec M4); `agy mcp disable` keeps an operator's
+    disabled choice, since add resets it. Env-backed (no secret written): the
+    CLI reads the token from DPF_MCP_BEARER_TOKEN at runtime. Success is the
+    entry agy recorded, never the exit code (spec M3).
+    """
+    agy = resolve_antigravity_binary()
+    if agy is None:
+        return "absent: Antigravity CLI (agy) not found"
+    path = antigravity_mcp_config_path(home)
+    # Unparseable content is the operator's: leave it, and keep the rest of
+    # the update running instead of exiting.
     try:
-        raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
-        data = json.loads(raw) if raw.strip() else {}
-    except (OSError, json.JSONDecodeError):
+        servers = _read_agy_servers(path)
+    except (OSError, ValueError):
         return f"skipped: cannot parse {path}; fix or empty it, then rerun"
-    if not isinstance(data, dict):
-        data = {}
-    servers = data.get("mcpServers")
-    if not isinstance(servers, dict):
-        servers = {}
-    # agy's own schema: what `agy mcp add` writes for an http server. An
-    # operator who disabled the entry keeps it disabled.
-    previous = servers.get("dpf")
-    disabled = isinstance(previous, dict) and previous.get("disabled") is True
-    servers["dpf"] = {
-        "serverUrl": mcp_url,
-        "disabled": disabled,
-        **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
-    }
+    previous = _agy_entry(servers.get("dpf"))
+    desired: dict[str, Any] = {"serverUrl": mcp_url, "disabled": bool(previous and previous["disabled"])}
+    if mcp_client_bearer_header_required(mcp_url, "antigravity"):
+        desired["headers"] = {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}
     if declarations is not None:
-        servers["dpf"] = declarations.declare_server(servers["dpf"], "antigravity")
-    data["mcpServers"] = servers
+        desired = declarations.declare_server(desired, "antigravity")
+    desired = _agy_entry(desired) or {}
+    if previous == desired:
+        return "already current"
     if dry_run:
-        return f"dry-run: would upsert dpf server into {path}"
-    changed = write_json(path, data)
-    return "converged" if changed else "already current"
+        return f"dry-run: would run agy mcp add dpf {mcp_url}"
+    command = [agy, "mcp", "add"]
+    for name, value in desired["headers"].items():
+        command += ["--header", f"{name}: {value}"]
+    command += ["dpf", mcp_url]
+    commands = [command] + ([[agy, "mcp", "disable", "dpf"]] if desired["disabled"] else [])
+    # agy edits the config under HOME; point it at the home this run converges.
+    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+    run = runner or subprocess.run
+    for step in commands:
+        try:
+            completed = run(step, capture_output=True, text=True, env=env, timeout=60)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return f"failed: agy {' '.join(step[1:3])} could not run ({exc.__class__.__name__})"
+        if completed.returncode != 0:
+            return f"failed: agy {' '.join(step[1:3])} exited {completed.returncode}"
+    try:
+        recorded = _agy_entry(_read_agy_servers(path).get("dpf"))
+    except (OSError, ValueError):
+        recorded = None
+    if recorded != desired:
+        return "failed: agy did not record the dpf server as requested"
+    return "converged"
 
 
 def ensure_antigravity_skills(skill_pack: Path, home: Path, dry_run: bool) -> str:
@@ -2671,7 +2781,8 @@ def _main(argv: list[str]) -> int:
     pack_identity.converge = convergence.agent_converge_token(home)
     # A connector declares only a well-formed pack version (design §5.2).
     declarations = pack_identity if pack_identity.enabled() else None
-    report = convergence.ConvergenceReport(home, pack_identity, portal_manifest) if args.report_json else None
+    report = (convergence.ConvergenceReport(home, pack_identity, portal_manifest, endpoint=mcp_url)
+              if args.report_json else None)
     codex_header = declarations.header_value("codex") if declarations and declarations.carrier("codex") == "header" else None
 
     copy_skill_pack(skill_pack, codex_managed, args.dry_run)
@@ -2787,10 +2898,21 @@ def _main(argv: list[str]) -> int:
             )
             mcp_st = ensure_antigravity_mcp_config(home, mcp_url, args.dry_run, declarations)
             skills_st = ensure_antigravity_skills(skill_pack, home, args.dry_run)
-            antigravity_status = f"MCP config {mcp_st}; skills {skills_st}"
+            # Lead with an absent CLI or a failure so the report classifies the row (spec M3).
+            lead, _, rest = mcp_st.partition(": ")
+            antigravity_status = (f"{lead}: MCP config {rest}; skills {skills_st}" if lead in ("absent", "failed") and rest
+                                  else f"MCP config {mcp_st}; skills {skills_st}")
         print(f"  Antigravity: {antigravity_status}")
         if report:
             report.add("antigravity", "user", antigravity_status)
+    # Every run looks for installed clients, so one added since bootstrap is
+    # seen, and one DPF cannot converge is reported rather than skipped (spec M6).
+    discovered = convergence.discover_clients(home)
+    unadapted = sorted(client for client in discovered if client not in convergence.DEFAULT_CARRIERS)
+    if unadapted:
+        print(f"  Also found : {', '.join(unadapted)} (no DPF adapter yet; reported as unproven)")
+    if report:
+        report.add_discovery(discovered)
 
     claude_install_failed = False
     if not args.codex_only:
@@ -2805,7 +2927,7 @@ def _main(argv: list[str]) -> int:
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
             claude_install_failed = status.startswith("failed:")
-        print(f"  Claude     : marketplace converged; plugin install {status}")
+        print(f"  Claude     : marketplace {'would converge' if args.dry_run else 'converged'}; plugin install {status}")
         if not args.skip_claude_cli_install:
             project_outcome: dict[str, Any] = {}
             for line in converge_claude_project_connectors(home, version, args.dry_run, project_outcome):
@@ -2851,7 +2973,8 @@ def _main(argv: list[str]) -> int:
     if permission_runtime_unavailable and report:
         report.add_permissions(unrun_permission_rows)
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
-    print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
+    written_word = "would be written" if args.dry_run else "written"
+    print(f"  MCP auth   : OAuth configuration {written_word}; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)
@@ -2883,6 +3006,9 @@ def _main(argv: list[str]) -> int:
             exit_code = exit_code or 1
     if exit_code:
         print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
+    elif args.dry_run:
+        # A preview writes nothing; it never reports converged or done (BI-81AB897A E3).
+        print("Preview only: nothing was written. These are the changes an update would make.")
     elif permission_runtime_unavailable:
         print("Skills and connectors converged; routine permissions remain UNRUN because the Python TOML parser is unavailable.")
     else:

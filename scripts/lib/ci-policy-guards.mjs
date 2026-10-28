@@ -233,6 +233,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-7371D444: .wslconfig keys land in the section WSL reads them from
       // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
       conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
+      // BI-084F85E5: the start script and host convergence ship as release assets;
+      // an existing install converges the native agent at its next logon.
+      conformanceTest("scripts/installer/host-convergence.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -323,7 +326,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
-    ]),
+      // BI-5E4BB7CA: code-only. Every command reads installers, compose, env
+      // examples and promote.sh, never docs. Undeclared, a docs-only push ran
+      // the four promote.sh dry-run contracts above (~110 s per dry-run on a
+      // loaded Windows host, ~17 dry-runs) and sat past 30 minutes.
+    ], { inputs: ["code"] }),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
       node(
@@ -348,6 +355,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
       conformanceTest("scripts/promote-source-identity.test.mjs"),
+      // BI-578131A3: real-daemon release image addressing; skips without a
+      // daemon. self-upgrade-acceptance.yml runs it on both image stores.
+      conformanceTest("scripts/release-image-reference.docker.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),

@@ -274,6 +274,81 @@ class RunOnceTest(unittest.TestCase):
             self.assertEqual(seen.get("PATH"), "/bin")
 
 
+class _ClientFakes(Fakes):
+    """The updater's report fails exactly the named clients' rows."""
+
+    def __init__(self, failing: tuple[str, ...] = (), **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.failing = failing
+
+    def runner(self, command: list[str], **kwargs: Any) -> _Completed:
+        self.runs.append(command)
+        report = Path(command[command.index("--report-json") + 1])
+        rows = [{"client": client, "scope": "user", "action": "failed" if client in self.failing else "updated",
+                 "detail": "read-back: Grok's plugin store does not hold the delivered pack." if client in self.failing else None}
+                for client in ("claude-code", "grok")]
+        report.write_text(json.dumps({"result": "failed" if self.failing else "converged", "clients": rows}))
+        return _Completed(1 if self.failing else 0)
+
+
+class CanaryTest(unittest.TestCase):
+    """BI-D43723D7 (spec M7): a client whose new version breaks read-back is named unproven."""
+
+    VERSIONS = {"claude-code": "2.1.197 (Claude Code)", "grok": "grok 1.0.67 (2fe064390d07) [stable]"}
+
+    def _run(self, home: Path, now: float, versions: dict[str, str], failing: tuple[str, ...] = ()) -> dict[str, Any]:
+        return _ClientFakes(failing=failing, versions=versions).run(home, now=now)
+
+    def test_a_passing_run_records_each_client_version_as_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            state = self._run(home, 1000.0, self.VERSIONS)
+        self.assertEqual(state["verifiedVersions"], self.VERSIONS)
+        self.assertEqual(state.get("unproven") or {}, {})
+
+    def test_an_upgraded_client_that_fails_read_back_is_unproven_at_its_new_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._run(home, 1000.0, self.VERSIONS)
+            upgraded = {**self.VERSIONS, "grok": "grok 1.0.68 (abc) [stable]"}
+            state = self._run(home, 1000.0 + HOUR, upgraded, failing=("grok",))
+        self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["code"], "unproven.grok.1.0.68")
+        self.assertEqual(state["unproven"]["grok"]["version"], "grok 1.0.68 (abc) [stable]")
+        self.assertIn("read-back", state["unproven"]["grok"]["detail"])
+        # The last version that worked stays the reference.
+        self.assertEqual(state["verifiedVersions"]["grok"], self.VERSIONS["grok"])
+        self.assertEqual(state["verifiedVersions"]["claude-code"], self.VERSIONS["claude-code"])
+
+    def test_a_failure_without_a_version_change_is_an_ordinary_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._run(home, 1000.0, self.VERSIONS)
+            state = _ClientFakes(failing=("grok",), versions=self.VERSIONS, digest="2" * 64).run(home, now=1000.0 + HOUR)
+        self.assertEqual(state["status"], "failed")
+        self.assertFalse(str(state["code"]).startswith("unproven."))
+        self.assertEqual(state.get("unproven") or {}, {})
+
+    def test_a_later_pass_clears_the_unproven_client(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._run(home, 1000.0, self.VERSIONS)
+            upgraded = {**self.VERSIONS, "grok": "grok 1.0.68"}
+            self._run(home, 1000.0 + HOUR, upgraded, failing=("grok",))
+            state = _ClientFakes(versions=upgraded, digest="3" * 64).run(home, now=1000.0 + 30 * HOUR)
+        self.assertEqual(state["status"], "ok")
+        self.assertEqual(state.get("unproven") or {}, {})
+        self.assertEqual(state["verifiedVersions"]["grok"], "grok 1.0.68")
+
+    def test_version_codes_stay_inside_the_converge_token_vocabulary(self) -> None:
+        import re
+        for raw, expected in (("2.1.197 (Claude Code)", "2.1.197"), ("codex-cli 0.165.0-alpha.1.2", "0.165.0-alpha.1.2"),
+                              ("grok 1.0.67 (2fe064390d07) [stable]", "1.0.67"), ("weird", "unknown")):
+            code = agent.unproven_code("codex", raw)
+            self.assertEqual(code, f"unproven.codex.{expected}")
+            self.assertRegex(code, re.compile(r"^[a-z0-9_.-]{1,48}$"))
+
+
 class PrecedenceTest(unittest.TestCase):
     """Spec row X15: a source checkout ahead of the portal's release wins."""
 

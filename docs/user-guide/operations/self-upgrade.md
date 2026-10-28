@@ -196,6 +196,10 @@ Each computer that runs these tools also keeps them current on its own. A backgr
 
 If a computer has been failing, or waiting for a person, for more than a day, one item appears in your attention list. It names the single thing needed, for example confirming that the portal's new identity is yours. A computer that is up to date, turned off or simply quiet raises nothing.
 
+When a client such as Grok or Codex updates itself and the DPF tools stop working with the new version, the item names that client and version. The fix is a DPF update for that version. It arrives like any other update, and you do not need to do anything on the computer.
+
+Each update also looks for agent tools installed since the last one. A tool DPF does not support yet, such as VS Code or the Gemini CLI, is listed in the update's report rather than skipped without a word. Old Claude Code records for project folders that no longer exist are removed once, through Claude Code itself, after a backup.
+
 After an update that ships new agent tools, the portal posts one notification
 that names the clients still behind. Restarting the portal without an update
 posts nothing. You do not need to run anything.

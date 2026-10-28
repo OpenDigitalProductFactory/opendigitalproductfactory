@@ -24,6 +24,7 @@ test("stable releases publish integrity-bound native Edge binaries", async () =>
   assert.match(workflow, /make\s+-C\s+services\/edge-node-go\s+build-all/);
   const assets = workflow.match(/EDGE_ASSETS="([^"]+)"/)?.[1].split(/\s+/) ?? [];
   assert.ok(assets.includes("dpf-edge-node-darwin-arm64"), "release must publish the Apple silicon Edge binary");
+  assert.ok(assets.includes("dpf-edge-node-darwin-amd64"), "release must publish the Intel Mac Edge binary");
   assert.ok(assets.includes("dpf-edge-node-windows-amd64.exe"), "release must publish the Windows Edge binary");
   assert.match(workflow, /dpf-edge-node-checksums\.sha256/);
   assert.match(workflow, /gh release upload/);
@@ -43,7 +44,8 @@ test("macOS installer provisions the host-native Edge process instead of the Doc
   const launchAgent = await read("scripts/installer/macos-edge-node.plist.tmpl");
 
   assert.match(installer, /dpf_native_edge_install/);
-  assert.match(hostInstaller, /dpf-edge-node-darwin-arm64/);
+  // The Mac build follows the CPU: Apple silicon or Intel (BI-084F85E5).
+  assert.match(hostInstaller, /dpf-edge-node-darwin-\$arch/);
   assert.match(hostInstaller, /dpf-edge-node-checksums\.sha256/);
   assert.match(hostInstaller, /shasum\s+-a\s+256\s+-c/);
   assert.match(hostInstaller, /DPF_AUTHORITY_URL/);

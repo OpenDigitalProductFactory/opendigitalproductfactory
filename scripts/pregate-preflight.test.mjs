@@ -618,6 +618,8 @@ test("the real registry declares the module-size guard code-only and leaves the 
   const docsOnly = planPreflight({ changeScope: { docsOnly: true, mobileOnly: false, heavy: false } });
   assert.ok(docsOnly.skippedByScope.length >= 20, `expected a material docs-only saving, got ${docsOnly.skippedByScope.length}`);
   assert.ok(docsOnly.entries.some((e) => e.id === "docs-link-integrity"));
+  // BI-5E4BB7CA: the promote.sh dry-run contracts held docs-only pushes 30+ minutes.
+  assert.ok(docsOnly.skippedByScope.some((e) => e.id === "installer-state-contract"));
 });
 
 // Drift detector: a guard declared `inputs: ["code"]` must not read docs or

@@ -95,7 +95,21 @@ export type EmbeddingResult =
   | { status: "deferred"; reason: string }
   | { status: "failed"; reason: string };
 
-export async function generateEmbeddingDetailed(text: string): Promise<EmbeddingResult> {
+/**
+ * Indexing can afford to wait out a cold load; an interactive search cannot.
+ * Docker Model Runner unloads the embedder after a few idle minutes and
+ * reloads it beside the completion model, and on 2026-10-15 every search
+ * during two reloads waited the full 30 s and then failed
+ * (BI-MCP-EFF-4F823E5B). Query-time callers pass a shorter `timeoutMs` and
+ * answer some other way when it elapses.
+ */
+const DEFAULT_EMBED_TIMEOUT_MS = 30_000;
+
+export async function generateEmbeddingDetailed(
+  text: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<EmbeddingResult> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_EMBED_TIMEOUT_MS;
   const baseUrl = getLlmBaseUrl();
   // Full-length attempt first, then shorter slices ONLY if the backend rejects
   // for size. Ordinary text still embeds at full fidelity; dense text degrades
@@ -123,7 +137,7 @@ export async function generateEmbeddingDetailed(text: string): Promise<Embedding
           model: EMBEDDING_MODEL,
           input: truncated,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (!res.ok) {

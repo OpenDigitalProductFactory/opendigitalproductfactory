@@ -352,6 +352,20 @@ docker run --rm --read-only -v "$PWD:/host-source:ro" -v "$HOME/.dpf:/dpf-state:
   dpf-promoter:<target> --readiness
 ```
 
+## Failure class: reassessment-compatibility-unproven (portal could not probe the candidate)
+
+The **deployed** portal probes the candidate portal image's packaged reassessment owners before quiescence. It runs `docker run --pull never <engine id> … reassessment-capability-probe.mjs`. A refusal fails the run before any drain or swap:
+
+```
+reassessment-compatibility-unproven: <subcode>: <detail>
+```
+
+The subcode names the cause. `release-image-unresolved` lists every immutable reference tried and Docker's answer for each. `probe-exit-<n>` carries the probe's stderr tail. The other subcodes are `probe-output-invalid`, `probe-source-mismatch`, `source-image-unresolved`, `image-moved` and `proof-unrecorded`.
+
+Canonical case **SUR-F2A0D477 (2026-10-27)**. The failure log held only the bare code. The cause was image addressing, not the release. Docker's **containerd image store** (the Docker Desktop default, `docker info` → `driver-type io.containerd.snapshotter.v1`) names a pulled image by its *index* digest, so `docker run <config digest>` returned `No such image` (BI-A9BA9583). Every release-image reference must go through `apps/web/lib/self-upgrade/release-image-reference.ts`. `scripts/release-image-reference.docker.test.mjs` proves that against a real daemon on both stores in the acceptance workflow (BI-578131A3).
+
+**Recovery:** none is needed for the install itself, because nothing was deployed. The check runs in the *deployed* portal, so a release that carries a fix cannot unwedge an install whose own preflight is the defect. That hop needs the independent recovery route (BI-7A4E70E9).
+
 ## Failure class: migration-unique-violation (P3018 + 23505)
 
 A data migration's bulk UPDATE/INSERT hits `duplicate key value violates unique constraint` and the

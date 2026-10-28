@@ -264,21 +264,25 @@ class ReportJsonTest(unittest.TestCase):
             self.assertEqual(report["source"], {"kind": "local"})
             for row in report["clients"]:
                 self.assertLessEqual({"before", "after", "action", "restartRequired", "cliVersion"}, set(row))
-                self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed"))
+                self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed", "absent"))
             shared = rows[("shared", "copy")]
             self.assertEqual((shared["before"]["digest"], shared["after"]["digest"]), (None, digest))
             self.assertEqual(shared["action"], "updated")
             self.assertTrue(shared["restartRequired"])
             self.assertEqual(report["result"], "failed")
             self.assertEqual(rows[("claude-code", f"project:{stale}")]["action"], "failed")
-            self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "prunable")
+            # The fake CLI removes nothing, so pruning the gone record reads back as failed (spec M10).
+            self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "failed")
+            self.assertIn("left the record in place", rows[("claude-code", f"project:{gone}")]["detail"])
+            self.assertFalse(gone.exists())
             self.assertEqual(rows[("claude-code", f"project-mcp-json:{stale}")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", f"project-mcp-json:{stale}")]["backupPath"]).exists())
             self.assertEqual(rows[("claude-code", "user-mcp")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", "user-mcp")]["backupPath"]).exists())
             self.assertEqual(rows[("claude-code", f"local-mcp:{stale}")]["action"], "retired")
-            self.assertIn(("codex", "user"), rows)
-            self.assertIn(("grok", "user"), rows)
+            # No Codex, Grok or agy CLI on this host: absent, not a silent "unchanged" (spec M3).
+            for client in ("codex", "grok", "antigravity"):
+                self.assertEqual(rows[(client, "user")]["action"], "absent", client)
 
             managed = updater.shared_managed_plugin_path(home)
             header = f"pack={report['packVersion']};digest={digest[:16]};client=claude-code"

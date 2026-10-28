@@ -1370,6 +1370,9 @@
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
     ],
+    "apps/web/lib/self-upgrade/release-image-reference.ts": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "apps/web/lib/self-upgrade/run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1767,6 +1770,8 @@
       "docs/operations/disaster-recovery.md"
     ],
     "dpf-start.ps1": [
+      "docs/install/windows.md",
+      "docs/operations/remote-action-edge-dispatch.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "e2e/fixtures/evidence.ts": [
@@ -2416,8 +2421,14 @@
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
     ],
+    "scripts/installer/autostart-bridge.mjs": [
+      "docs/operations/remote-action-edge-dispatch.md"
+    ],
     "scripts/installer/doctools-prepull.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
@@ -2431,6 +2442,9 @@
     ],
     "scripts/installer/lib/docker.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/lib/host-convergence.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
@@ -2601,6 +2615,9 @@
     "scripts/regen-lockfile.mjs": [
       "docs/architecture/agent-skill-index.md",
       "docs/architecture/contributor-procedure-runbook.md"
+    ],
+    "scripts/release-image-reference.docker.test.mjs": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "scripts/restore-postgres.sh": [
       "docs/operations/disaster-recovery.md"
@@ -3737,7 +3754,8 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/windows.md": [
-      "dpf-reinstall.ps1"
+      "dpf-reinstall.ps1",
+      "dpf-start.ps1"
     ],
     "docs/install/worktree-janitor-schedule.md": [
       "scripts/install-worktree-janitor-schedule.sh",
@@ -3819,7 +3837,11 @@
       "scripts/check-no-private-identity.mjs"
     ],
     "docs/operations/remote-action-edge-dispatch.md": [
-      "docker-compose.edge-actions.yml"
+      "docker-compose.edge-actions.yml",
+      "dpf-start.ps1",
+      "scripts/installer/autostart-bridge.mjs",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/lib/host-convergence.sh"
     ],
     "docs/operations/runtime-glossary.md": [
       "docker-compose.dev-against-live-db.yml",
@@ -3897,7 +3919,9 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
-      "dpf-start.ps1"
+      "apps/web/lib/self-upgrade/release-image-reference.ts",
+      "dpf-start.ps1",
+      "scripts/release-image-reference.docker.test.mjs"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
       ".github/workflows/ci.yml",

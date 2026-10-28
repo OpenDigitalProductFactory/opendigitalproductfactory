@@ -19,7 +19,7 @@ let retained: { pid: number; hostname: string; proof: ReassessmentRuntimeCompati
 const defaultRunDocker: ReassessmentContractPorts["runDocker"] = async args => {
   const nameIndex = args.indexOf("--name"), containerName = nameIndex < 0 ? undefined : args[nameIndex + 1];
   const result = await runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192, containerName });
-  if (result.outputLimitExceeded) refuseReassessmentCompatibility();
+  if (result.outputLimitExceeded) refuseReassessmentWithDetail("docker-output-oversized");
   return result;
 };
 const defaultPorts: ReassessmentContractPorts = {
@@ -31,20 +31,39 @@ function sameInfo(left: ReassessmentCapabilityInfo, right: ReassessmentCapabilit
       && left.owners[owner].sourceSha256 === right.owners[owner].sourceSha256);
 }
 
+/** BI-578131A3: a refusal keeps its typed code but names its cause. SUR-F2A0D477
+ * recorded only the bare code, and "No such image" from Docker was lost. */
+export function refuseReassessmentWithDetail(detail: string): never {
+  throw Object.assign(new Error("reassessment-compatibility-unproven"), { code: "reassessment-compatibility-unproven", detail: detail.slice(0, 600) });
+}
+export function reassessmentRefusalDetail(error: unknown): string {
+  const detail = (error as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  return error instanceof Error && error.message !== "reassessment-compatibility-unproven" ? `unexpected: ${error.message}` : "unspecified";
+}
+const outputTail = (text: string) => text.trim().split(/\r?\n/).slice(-3).join(" | ").slice(0, 400);
+function parseProbeOutput(stdout: string): ReassessmentCapabilityInfo {
+  try { return validateReassessmentCapabilityInfo(JSON.parse(stdout)); } catch { return refuseReassessmentWithDetail(`probe-output-invalid: ${outputTail(stdout)}`); }
+}
+
 /** A mount-free packaged component probe, never a workflow or retirement proof. */
 export async function readReassessmentImageContract(configDigest: string, expectedSourceSha?: string,
   runDocker: ReassessmentContractPorts["runDocker"] = defaultRunDocker): Promise<ReassessmentRuntimeCompatibility> {
   try {
-    if (currentReassessmentExecution() || !/^sha256:[a-f0-9]{64}$/.test(configDigest)) refuseReassessmentCompatibility();
+    if (currentReassessmentExecution()) refuseReassessmentWithDetail("inside-reassessment-execution");
+    if (!/^sha256:[a-f0-9]{64}$/.test(configDigest)) refuseReassessmentWithDetail("image-reference-invalid");
     const args = ["run", "--rm", "--read-only", "--name", `dpf-reassessment-probe-${randomUUID()}`, "--network", "none",
       "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64",
       "--pull", "never", "--entrypoint", "node", configDigest, "/app/scripts/reassessment-capability-probe.mjs"];
     const result = await runDocker(args);
-    if (result.exitCode !== 0 || Buffer.byteLength(result.stdout) > 8192) refuseReassessmentCompatibility();
-    const info = validateReassessmentCapabilityInfo(JSON.parse(result.stdout));
-    if (expectedSourceSha !== undefined && info.sourceSha !== expectedSourceSha) refuseReassessmentCompatibility();
+    if (result.exitCode !== 0) refuseReassessmentWithDetail(`probe-exit-${result.exitCode} (${configDigest}): ${outputTail(result.stderr)}`);
+    if (Buffer.byteLength(result.stdout) > 8192) refuseReassessmentWithDetail("probe-output-oversized");
+    const info = parseProbeOutput(result.stdout);
+    if (expectedSourceSha !== undefined && info.sourceSha !== expectedSourceSha) {
+      refuseReassessmentWithDetail(`probe-source-mismatch: expected ${expectedSourceSha}, image reports ${info.sourceSha}`);
+    }
     return validateReassessmentRuntimeCompatibility({ ...info, configDigest });
-  } catch { return refuseReassessmentCompatibility(); }
+  } catch (error) { return refuseReassessmentWithDetail(reassessmentRefusalDetail(error)); }
 }
 
 /** PRE-Q only. A server-owned probe brands retained initial proof for this
@@ -70,7 +89,7 @@ export async function readCurrentReassessmentContract(ports: ReassessmentContrac
     Object.freeze(observed.owners); Object.freeze(observed); brands.add(observed);
     retained = { pid: process.pid, hostname: hostname(), proof: observed };
     return observed;
-  } catch { return refuseReassessmentCompatibility(); }
+  } catch (error) { return refuseReassessmentWithDetail(reassessmentRefusalDetail(error)); }
 }
 
 /** No I/O or cache repair in Q/E or transaction callbacks. A new process must

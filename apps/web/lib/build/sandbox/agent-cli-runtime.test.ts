@@ -57,6 +57,8 @@ import {
   buildSpecialistTaskPrompt,
   credentialFileExports,
   removeSandboxFiles,
+  runSandboxAgentCli,
+  MAX_AGENT_CLI_STDERR_TAIL_CHARS,
 } from "./agent-cli-runtime";
 import type { AssignedTask } from "../task-dependency-graph";
 
@@ -283,6 +285,64 @@ describe("buildSpecialistTaskPrompt — the build's own checkout (BI-C36D23B9)",
     const prompt = buildSpecialistTaskPrompt({ task, instructions: "x", workdir: "/workspace/.builds/FB-1" });
     expect(prompt).toMatch(/this build's own checkout/i);
     expect(prompt).toMatch(/do not create another git worktree, clone, or branch/i);
+  });
+});
+
+// A runaway writer in the sandbox must not grow the portal's memory without
+// bound: stdout is capped and the run stopped, stderr keeps only its tail.
+describe("runSandboxAgentCli output limits", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("stops the run and rejects once stdout passes the cap", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+    const onStdoutChunk = vi.fn();
+
+    const p = runSandboxAgentCli({
+      containerId: "dpf-sandbox-1",
+      runnerScript: "/tmp/run.sh",
+      timeoutMs: 60_000,
+      maxStdoutChars: 10,
+      onStdoutChunk,
+    });
+    proc.stdout.emit("data", Buffer.from("123456"));
+    proc.stdout.emit("data", Buffer.from("7890ab"));
+    proc.stdout.emit("data", Buffer.from("more"));
+    expect(proc.kill).toHaveBeenCalledWith("SIGKILL");
+    proc.emit("close", null);
+
+    await expect(p).rejects.toMatchObject({ outputLimitExceeded: true, stdout: "" });
+    await expect(p).rejects.not.toHaveProperty("killed");
+    expect(onStdoutChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns stdout unchanged under the cap", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = runSandboxAgentCli({ containerId: "dpf-sandbox-1", runnerScript: "/tmp/run.sh", timeoutMs: 60_000, maxStdoutChars: 10 });
+    proc.stdout.emit("data", Buffer.from("0123456789"));
+    proc.emit("close", 0);
+
+    await expect(p).resolves.toMatchObject({ stdout: "0123456789", exitCode: 0 });
+    expect(proc.kill).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the tail of stderr", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = runSandboxAgentCli({ containerId: "dpf-sandbox-1", runnerScript: "/tmp/run.sh", timeoutMs: 60_000 });
+    proc.stderr.emit("data", Buffer.from("x".repeat(MAX_AGENT_CLI_STDERR_TAIL_CHARS)));
+    proc.stderr.emit("data", Buffer.from("THE-END"));
+    proc.stdout.emit("data", Buffer.from("ok"));
+    proc.emit("close", 0);
+
+    const result = await p;
+    expect(result.stderr.length).toBe(MAX_AGENT_CLI_STDERR_TAIL_CHARS);
+    expect(result.stderr.endsWith("THE-END")).toBe(true);
   });
 });
 

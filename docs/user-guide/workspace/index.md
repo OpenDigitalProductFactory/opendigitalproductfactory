@@ -40,6 +40,10 @@ After a decision, another request may fill the cleared place; the pending total
 shows your progress. The displayed-item count also includes other notices and
 is not the full approval total. If the queue cannot be read, it says unavailable.
 
+A coworker's approval-status check sees requests from that coworker only. An
+empty result does not mean your whole Inbox is empty; other coworkers may still
+need your decision. Use the Inbox's pending total for the requests you can access.
+
 An approval and a completed action are separate facts. The result says whether
 the action completed, failed, could not run, or expired, and explains the next
 step. Older decisions without a recorded result say the outcome is unknown.

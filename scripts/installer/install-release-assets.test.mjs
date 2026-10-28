@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDedicatedSigningKeys, ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { ensureDedicatedSigningKeys, ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, ensureRemoteActionDispatch, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -227,4 +227,15 @@ test("updateEnv carries the Inngest keys into the committed install env", () => 
   const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\r\nINNGEST_SIGNING_KEY=abcdef0123456789\r\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8"); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
   assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}\r$/m);
   assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}\r$/m);
+});
+
+test("an upgrade turns the remote-action channel on where the trust bundle configured it, and keeps an explicit value (BI-084F85E5)", () => {
+  const configured = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n";
+  assert.equal(ensureRemoteActionDispatch(configured, "\n"), `${configured}DPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n`);
+  assert.equal(ensureRemoteActionDispatch("DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1", "\r\n"), "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\r\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=1\r\n");
+  const optedOut = `${configured}DPF_REMOTE_ACTION_DISPATCH_ENABLED=0\n`;
+  assert.equal(ensureRemoteActionDispatch(optedOut, "\n"), optedOut, "an operator's 0 is kept");
+  assert.equal(ensureRemoteActionDispatch("DPF_IMAGE_TAG=v1\n", "\n"), "DPF_IMAGE_TAG=v1\n", "no trust bundle, no channel");
+  assert.equal(ensureRemoteActionDispatch("DPF_EDGE_ACTION_DISPATCH_CONFIGURED=0\n", "\n"), "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=0\n");
+  assert.match(updateEnv(Buffer.from(configured), "v2", "owner").toString(), /^DPF_REMOTE_ACTION_DISPATCH_ENABLED=1$/m);
 });

@@ -114,6 +114,12 @@ describe("agent-toolchain attention: only what automation cannot fix, once", () 
     expect(item.context).toMatch(/identity/i);
   });
 
+  it("a client upgrade that broke its DPF tools names the client and version (BI-D43723D7)", () => {
+    const [item] = agentToolchainAttentionItems([row({ convergeStatus: "failed", convergeCode: "unproven.grok.1.0.68", convergeSince: new Date(NOW.getTime() - 2 * day) })], NOW);
+    expect(item.context).toContain("Grok 1.0.68");
+    expect(item.context).toMatch(/DPF update/);
+  });
+
   it("healthy, recent, opted-out, ahead and long-silent hosts raise nothing", () => {
     const recent = new Date(NOW.getTime() - CONVERGE_ESCALATE_AFTER_MS / 2);
     expect(agentToolchainAttentionItems([
