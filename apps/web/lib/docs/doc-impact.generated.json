@@ -1935,6 +1935,9 @@
       "docs/maintenance/staleness-report.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
+    "packages/db/src/relation-vocabulary-entries.ts": [
+      "docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md"
+    ],
     "packages/db/src/seed-decision-perspective.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -3757,6 +3760,9 @@
     ],
     "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md": [
       "apps/web/lib/kernel/runtime-gate.ts"
+    ],
+    "docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md": [
+      "packages/db/src/relation-vocabulary-entries.ts"
     ],
     "docs/founder-kernel/wiki/principles/universal-work-formula.md": [
       "apps/web/lib/work-management/work-unit.ts"
