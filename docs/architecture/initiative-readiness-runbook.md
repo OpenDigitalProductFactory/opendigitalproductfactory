@@ -185,6 +185,14 @@ issuer the dispatcher used whether a review is owed, never the item projection.
 A build whose plan raised its shape owes a plan review the projection does not
 see, and admission had refused every such dispatch as "no pending review".
 
+Refusal back-off across a deploy (BI-D1DAB5AF): a standing refusal
+(`refused` or `no-author-connection`) last attempted before the current portal
+process started is retried on the first tick after the start, whatever its
+`nextAttemptAt`. The code that refused it may have been fixed by the deploy. If
+it is refused again for the same reason, the same row keeps counting attempts
+and its back-off resumes. A refusal recorded by the running process keeps its
+back-off.
+
 The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
 
 ```

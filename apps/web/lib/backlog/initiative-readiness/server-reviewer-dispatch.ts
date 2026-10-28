@@ -99,6 +99,8 @@ type Deps = {
   owedRoutes?: (itemId: string, authorAgentId: string | null, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
   /** BI-AA47C672: hand an owed post-implementation review to the platform's own reviewer. */
   routeToPlatformReviewer?: (input: { itemId: string; requestCoworker: Record<string, unknown>; issuer: ReviewIssuerIdentity; now: Date }) => Promise<PlatformReviewRouteOutcome>;
+  /** BI-D1DAB5AF: when this portal process started; tests inject it. */
+  processStartedAt?: Date;
 };
 
 function aliasValue(principal: { aliases: Array<{ aliasValue: string }> } | null | undefined): string | null {
@@ -375,10 +377,28 @@ function attemptsOf(record: DispatchRecord): number {
   return typeof attempts === "number" && Number.isInteger(attempts) && attempts > 0 ? attempts : 1;
 }
 
-/** When this request may be attempted again: a standing refusal's next attempt, else one cooldown after the record. */
-function nextAttemptDue(record: DispatchRecord): number {
+/** When this portal process started. A deploy or restart starts a new one. */
+const PROCESS_STARTED_AT = new Date();
+
+/**
+ * When this request may be attempted again: a standing refusal's next attempt,
+ * else one cooldown after the record.
+ *
+ * BI-D1DAB5AF: a standing refusal last attempted before this process started
+ * was decided by the code that ran before it, which a deploy may have fixed. It
+ * is due at once; refused again, the same row resumes its back-off. The build
+ * resume loop's unchanged-refusal hold applies the same rule (WWMD
+ * DI-A1DB91A1755E).
+ */
+function nextAttemptDue(record: DispatchRecord, processStartedAt: Date, now: Date): number {
   const next = typeof record.payload.nextAttemptAt === "string" ? Date.parse(record.payload.nextAttemptAt) : NaN;
-  return Number.isFinite(next) ? next : record.recordedAt.getTime() + REVIEW_DISPATCH_COOLDOWN_MS;
+  if (!Number.isFinite(next)) return record.recordedAt.getTime() + REVIEW_DISPATCH_COOLDOWN_MS;
+  const lastAttempt = typeof record.payload.lastAttemptAt === "string" ? Date.parse(record.payload.lastAttemptAt) : NaN;
+  const attemptedAt = Number.isFinite(lastAttempt) ? lastAttempt : record.recordedAt.getTime();
+  const standing = STANDING_REFUSALS.has(record.payload.outcome as RouteOutcome["outcome"]);
+  const started = processStartedAt.getTime();
+  if (standing && started <= now.getTime() && attemptedAt < started) return started;
+  return next;
 }
 
 /** Wait before attempt `attempts + 1`: the cooldown, doubled per repeated refusal, capped. */
@@ -443,7 +463,7 @@ export async function dispatchReviewerRequest(args: {
    * nothing changes.
    */
   issuer?: ReviewIssuerIdentity;
-  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute" | "routeToPlatformReviewer">;
+  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute" | "routeToPlatformReviewer" | "processStartedAt">;
 }): Promise<RouteOutcome> {
   const { room, requestCoworker } = args;
   const now = args.now ?? new Date();
@@ -452,7 +472,9 @@ export async function dispatchReviewerRequest(args: {
   if (!requestKey) return { ...at, outcome: "refused", detail: "The reviewer packet carries no request key." };
   if (!room.userId || (args.carrier === "author-assistant" && !room.agentId)) return { ...at, outcome: "no-author" };
   const previous = await latestDispatchRecord(room.roomId, requestKey);
-  if (previous && now.getTime() < nextAttemptDue(previous)) return { ...at, outcome: "cooling-down" };
+  if (previous && now.getTime() < nextAttemptDue(previous, args.deps?.processStartedAt ?? PROCESS_STARTED_AT, now)) {
+    return { ...at, outcome: "cooling-down" };
+  }
   const findConnection = args.deps?.findConnection
     ?? ((userId: string, agentId: string) => findStandingConnection(userId, agentId, "request_coworker", "platform-reviewer-dispatch"));
   const findUserConnection = args.deps?.findUserConnection
