@@ -323,7 +323,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
-    ]),
+      // BI-5E4BB7CA: code-only. Every command reads installers, compose, env
+      // examples and promote.sh, never docs. Undeclared, a docs-only push ran
+      // the four promote.sh dry-run contracts above (~110 s per dry-run on a
+      // loaded Windows host, ~17 dry-runs) and sat past 30 minutes.
+    ], { inputs: ["code"] }),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
       node(
