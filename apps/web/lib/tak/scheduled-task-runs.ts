@@ -455,8 +455,31 @@ export function scheduledRunTerminalOutcome(error: unknown): ScheduledRunTermina
   return error instanceof ScheduledRunTerminalError ? error.outcome : null;
 }
 
+
 /** A requeued run waits this long; the same base a Workroom queue hold releases after. */
 export const SCHEDULED_PROVIDER_REQUEUE_MINUTES = 30;
+
+/**
+ * Who acts next on a run that ended this way, and what they do. A typed terminal
+ * state that names no next action only moves the load to whoever reads it, so
+ * each one names its owner. None is a person: the scheduler requeues, the
+ * drive re-dispatches, and a grant gap goes to the platform-engineer coworker that maintains the grant registry
+ * (never the founder).
+ */
+export const SCHEDULED_RUN_NEXT_ACTION: Readonly<Record<ScheduledRunTerminalOutcome, { owner: string; nextAction: string }>> = {
+  "no-governed-work": {
+    owner: "workroom-drive",
+    nextAction: "Re-dispatch on the retry cadence; the stage advances only on recorded evidence. A recurring miss surfaces as a harness-evolution candidate.",
+  },
+  "provider-busy-requeue": {
+    owner: "agent-task-scheduler",
+    nextAction: `Requeued automatically in ${SCHEDULED_PROVIDER_REQUEUE_MINUTES} minutes; no retry attempt spent. A Workroom's queue hold releases itself.`,
+  },
+  "not-dispatched": {
+    owner: "platform-engineer",
+    nextAction: "Grant the coworker the writer's grant, or rebind the room to a coworker that holds it; a retry cannot change this.",
+  },
+};
 
 /** The loop's typed dead ends that waiting fixes, as the queue hold names them. */
 const PROVIDER_DEFERRAL_KINDS: Readonly<Record<string, InferenceFailureKind>> = {

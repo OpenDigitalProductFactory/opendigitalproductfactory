@@ -173,7 +173,7 @@ describe("a scheduled run whose required writer executed zero times (BI-A8679D84
     await executeScheduledAgentTask(TASK_ID);
 
     expect(mocks.prisma.taskRun.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) }));
-    expect(taskRunUpdate()).toMatchObject({ status: "failed", progressPayload: { terminalOutcome: "no-governed-work" } });
+    expect(taskRunUpdate()).toMatchObject({ status: "failed", progressPayload: { terminalOutcome: "no-governed-work", owner: "workroom-drive" } });
     expect(recordedTask().lastError).toMatch(/record_workroom_evidence executed zero times/);
   });
 
@@ -182,7 +182,7 @@ describe("a scheduled run whose required writer executed zero times (BI-A8679D84
 
     await executeScheduledAgentTask(TASK_ID);
 
-    expect(taskRunUpdate()).toMatchObject({ status: "failed", progressPayload: { terminalOutcome: "not-dispatched" } });
+    expect(taskRunUpdate()).toMatchObject({ status: "failed", progressPayload: { terminalOutcome: "not-dispatched", owner: "platform-engineer", nextAction: expect.stringMatching(/Grant the coworker/) } });
   });
 });
 
@@ -221,7 +221,7 @@ describe("a provider-busy run is requeued, not filed as a writer the model would
     await executeScheduledAgentTask(TASK_ID);
 
     expect(mocks.runAgenticLoop).toHaveBeenCalledTimes(1);
-    expect(taskRunUpdate()).toMatchObject({ status: "failed", progressPayload: { terminalOutcome: "provider-busy-requeue" } });
+    expect(taskRunUpdate()).toMatchObject({ status: "failed", progressPayload: { terminalOutcome: "provider-busy-requeue", owner: "agent-task-scheduler" } });
     const task = recordedTask() as { lastStatus?: string; lastError?: string; attempts?: number; nextRunAt?: Date };
     expect(task.lastStatus).toBe("retrying");
     expect(task.lastError).toMatch(/^Scheduled run produced no governed work \(rate-limit\)/);

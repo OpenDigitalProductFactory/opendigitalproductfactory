@@ -1143,6 +1143,12 @@ the model would not call.
   - `no-governed-work`: the model ran and the writer did not;
   - `provider-busy-requeue`;
   - `not-dispatched`: refused before inference, so no short-cadence retry.
+
+  Each outcome also records the owner who acts next and the exact next action
+  (`SCHEDULED_RUN_NEXT_ACTION`). None of them is a person:
+  - the drive re-dispatches a run with no governed work;
+  - the scheduler requeues a provider-busy run;
+  - a grant gap goes to the platform-engineer coworker.
 - **The correction turn forces the writer.** It runs with `forcedToolName`
   (`forced-tool-choice.ts`). The writer is the only tool on the surface, under
   `tool_choice: "required"`, the contract the reviewer's writer-only phase

@@ -24,7 +24,7 @@ import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
   detectScheduledRunFailure, withPersistedExecutions, scheduledMandatoryToolGap, scheduledRequiredToolCorrection,
-  ScheduledRunTerminalError, scheduledRunTerminalOutcome, scheduledRunProviderDeferral, SCHEDULED_PROVIDER_REQUEUE_MINUTES,
+  ScheduledRunTerminalError, scheduledRunTerminalOutcome, scheduledRunProviderDeferral, SCHEDULED_PROVIDER_REQUEUE_MINUTES, SCHEDULED_RUN_NEXT_ACTION,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -757,7 +757,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         data: {
           status: "failed",
           completedAt: new Date(),
-          progressPayload: { error: errMsg, ...(terminalOutcome ? { terminalOutcome } : {}) },
+          progressPayload: { error: errMsg, ...(terminalOutcome ? { terminalOutcome, ...SCHEDULED_RUN_NEXT_ACTION[terminalOutcome] } : {}) },
         },
       }).catch((updateErr) => {
         console.error(
