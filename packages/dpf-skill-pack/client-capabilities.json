@@ -345,17 +345,17 @@
         "hookPlane": {
           "cli": {
             "status": "verified",
-            "verifiedAt": "2026-07-07",
-            "verifiedVersion": "0.2.87",
-            "evidence": "docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11.1 (BI-883FC2FC): a prisma migrate probe was denied in a DPF worktree and ran in a bare folder. Grok ignores plugin-bundled hooks. The SessionStart and Stop session plane is wired globally (BI-BCA23DBB) and was sampled live on 2026-07-26.",
+            "verifiedAt": "2026-10-14",
+            "verifiedVersion": "1.0.52",
+            "evidence": "BI-742D707B live probe 2026-10-14, Grok 1.0.52 headless -p --always-approve: `npx tsc --version` was denied by raw-tool-guard (PreToolUse on run_terminal_command); a `write` of a root-clone file with the session rooted there was denied by root-clone-guard (Grok names its write tools write and search_replace, so the Write|Edit|MultiEdit matcher alone never fired); worktree-session-heartbeat wrote its marker at SessionStart and refreshed it at Stop. The marker was still present after exit, so SessionEnd stays unproven in headless mode. ask_user_question was not probed. Earlier: BI-883FC2FC (0.2.87) prisma migrate deny; Grok ignores plugin-bundled hooks.",
             "delivery": "global ~/.grok/hooks/dpf-guards.json only, written by update_agent_toolchain.py install_grok_hooks",
             "denyEnvelope": "dual",
-            "permissionModes": ["headless grok -p"],
+            "permissionModes": ["headless grok -p --always-approve"],
             "events": {
               "SessionStart": "fires",
               "PreToolUse:Bash": "fires",
               "PreToolUse:AskUserQuestion": "unproven",
-              "PreToolUse:Write|Edit|MultiEdit": "unproven",
+              "PreToolUse:Write|Edit|MultiEdit": "fires",
               "UserPromptSubmit": "unproven",
               "Stop": "fires",
               "SessionEnd": "unproven"
