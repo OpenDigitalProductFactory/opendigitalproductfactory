@@ -432,20 +432,20 @@ export async function trunkHasDeliveringCommit(
   }
 }
 
-type TrunkCommit = { sha: string; subject: string; body: string; committedAt: Date };
+type TrunkCommit = { sha: string; parents: string[]; subject: string; body: string; committedAt: Date };
 
 async function readTrunkCommits(root: string, trunkRef: string, patterns: readonly string[], limit: number): Promise<TrunkCommit[]> {
   const { stdout } = await execFileAsync(
     "git",
     trustedGitArgs(root, [
       "log", trunkRef, "--fixed-strings", ...patterns.map((p) => `--grep=${p}`), "-n", String(limit),
-      "--format=%H%x1f%cI%x1f%s%x1f%b%x1e",
+      "--format=%H%x1f%P%x1f%cI%x1f%s%x1f%b%x1e",
     ]),
     { timeout: 5000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
   );
   return stdout.split("\x1e").map((entry) => entry.replace(/^\n/, "")).filter(Boolean).map((entry) => {
-    const [sha = "", date = "", subject = "", body = ""] = entry.split("\x1f");
-    return { sha: sha.trim(), committedAt: new Date(date.trim()), subject: subject.trim(), body };
+    const [sha = "", parents = "", date = "", subject = "", body = ""] = entry.split("\x1f");
+    return { sha: sha.trim(), parents: parents.trim().split(/\s+/).filter(Boolean), committedAt: new Date(date.trim()), subject: subject.trim(), body };
   });
 }
 
@@ -459,4 +459,133 @@ async function trunkHasRevertOf(root: string, trunkRef: string, commit: TrunkCom
   const patterns = [commit.sha, ...(marker ? [marker] : [])];
   const reverts = (await readTrunkCommits(root, trunkRef, patterns, 20)).filter((c) => c.subject.startsWith("Revert "));
   return reverts.some((r) => (marker && r.subject.includes(marker)) || r.body.includes(`This reverts commit ${commit.sha}`));
+}
+
+/**
+ * BI-CE661173. The squash commit on the trunk that delivered the item: what a
+ * post-implementation review reviews once the work has merged. The signal
+ * above answers only "did it land"; a reviewer needs the exact commit, so this
+ * names it, under the same rules:
+ *
+ * - a commit whose message DELIVERS the item (`trunkCommitDeliversItem`), or
+ *   the merge-queue squash commit of a PR a room bound to the item recorded;
+ * - committed after the item's latest reopen;
+ * - not reverted on the trunk;
+ * - exactly one parent, so `parent..commit` is the whole delivered change.
+ *
+ * More than one standing delivering commit is reported, never narrowed to a
+ * convenient one. They are returned oldest first: a delivery split across PRs
+ * is reviewed as the ordered union of its ranges (BI-46E344FE).
+ * `null` means git could not answer.
+ */
+export type MergedDeliveryCommit = { sha: string; parentSha: string; subject: string };
+
+export async function findMergedDeliveryCommits(
+  root: string,
+  item: { itemId: string; workType: string | null },
+  options: {
+    roomPullRequests?: readonly number[];
+    /**
+     * BI-46E344FE: PRs the PR-submit actuator recorded for the CURRENT attempt
+     * (`deliveryAttemptPullRequests`, which stops at the latest reopen). That
+     * record postdates the reopen, so its squash commit counts even when it was
+     * merged before the reopen, provided it delivers the item by message.
+     */
+    attestedPullRequests?: readonly number[];
+    after?: Date | null;
+    trunkRef?: string;
+  } = {},
+): Promise<MergedDeliveryCommit[] | null> {
+  const trunkRef = options.trunkRef ?? "origin/main";
+  const after = options.after ?? null;
+  const standing = (c: TrunkCommit) => !c.subject.startsWith("Revert ")
+    && (!after || c.committedAt.getTime() > after.getTime());
+  try {
+    const candidates = new Map<string, TrunkCommit>();
+    if (/^BI-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(item.itemId)) {
+      for (const c of await readTrunkCommits(root, trunkRef, [item.itemId], TRUNK_SEARCH_LIMIT)) {
+        if (standing(c) && trunkCommitDeliversItem(c, item)) candidates.set(c.sha, c);
+      }
+    }
+    for (const prNumber of new Set(options.roomPullRequests ?? [])) {
+      if (!Number.isInteger(prNumber) || prNumber <= 0) continue;
+      const marker = `(#${prNumber})`;
+      for (const c of await readTrunkCommits(root, trunkRef, [marker], 20)) {
+        if (standing(c) && c.subject.endsWith(marker)) candidates.set(c.sha, c);
+      }
+    }
+    for (const prNumber of new Set(options.attestedPullRequests ?? [])) {
+      if (!Number.isInteger(prNumber) || prNumber <= 0) continue;
+      const marker = `(#${prNumber})`;
+      for (const c of await readTrunkCommits(root, trunkRef, [marker], 20)) {
+        if (!c.subject.startsWith("Revert ") && c.subject.endsWith(marker) && trunkCommitDeliversItem(c, item)) candidates.set(c.sha, c);
+      }
+    }
+    const delivered: MergedDeliveryCommit[] = [];
+    for (const c of candidates.values()) {
+      if (c.parents.length !== 1 || await trunkHasRevertOf(root, trunkRef, c)) continue;
+      // BI-46E344FE: oldest first, so a split delivery is reviewed in trunk order.
+      let at = delivered.length;
+      while (at > 0 && await isAncestor(root, c.sha, delivered[at - 1]!.sha)) at -= 1;
+      delivered.splice(at, 0, { sha: c.sha, parentSha: c.parents[0]!, subject: c.subject });
+    }
+    return delivered;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether `ancestor` precedes `descendant` on the trunk; a git failure is thrown to the caller's `null`. */
+async function isAncestor(root: string, ancestor: string, descendant: string): Promise<boolean> {
+  try {
+    await execFileAsync("git", trustedGitArgs(root, ["merge-base", "--is-ancestor", ancestor, descendant]),
+      { timeout: 5000, windowsHide: true });
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return false;
+    throw error;
+  }
+}
+
+export type MergedDeliveryCommitResult =
+  | { kind: "found"; commit: MergedDeliveryCommit }
+  | { kind: "ambiguous"; commits: MergedDeliveryCommit[] }
+  | { kind: "not-found" }
+  | { kind: "signal-unavailable" };
+
+type MergedDeliveryCommitDb = {
+  backlogItemActivity: MergeDeliveryDb["backlogItemActivity"];
+};
+
+/**
+ * The database half of `findMergedDeliveryCommits`: the item's latest reopen
+ * bounds the search, and the first root whose trunk resolves answers.
+ */
+export async function resolveMergedDeliveryCommitFromDb(
+  db: MergedDeliveryCommitDb,
+  args: { itemRowId: string; itemId: string; workType: string | null; roomPullRequests: readonly number[] },
+  options: { roots?: readonly string[] } = {},
+): Promise<MergedDeliveryCommitResult> {
+  try {
+    const transitions = await db.backlogItemActivity.findMany({
+      where: { backlogItemId: args.itemRowId, kind: "status_change" },
+      orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+      select: { kind: true, payload: true, recordedAt: true },
+      take: 200,
+    });
+    for (const root of options.roots ?? mergeSignalRoots()) {
+      if (!(await trunkRefExists(root))) continue;
+      const commits = await findMergedDeliveryCommits(root, { itemId: args.itemId, workType: args.workType }, {
+        roomPullRequests: args.roomPullRequests,
+        attestedPullRequests: deliveryAttemptPullRequests(transitions),
+        after: latestReopenAt(transitions),
+      });
+      if (commits === null) return { kind: "signal-unavailable" };
+      if (commits.length === 1) return { kind: "found", commit: commits[0]! };
+      return commits.length === 0 ? { kind: "not-found" } : { kind: "ambiguous", commits };
+    }
+    return { kind: "signal-unavailable" };
+  } catch {
+    return { kind: "signal-unavailable" };
+  }
 }

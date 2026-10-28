@@ -40,6 +40,7 @@ exports[`shapeSignature > gives every current and frozen prior shape a signature
   "outward-surface-review@1.0.0": "⏱ cadence 🛡 authority-change · AI draft → AI storefront-fit → AI document → AI accessibility → ◇ Person publish [role:marketing-owner] → ● success | ⊗ failure | ⧖ budget",
   "payables-watch@1.0.0": "📅 deadline-horizon ⏱ cadence · AI read → AI report → ◇ Person pay [role:finance-owner] → ● success | ⊗ failure | ⧖ budget",
   "payables-watch@1.1.0": "📅 deadline-horizon ⏱ cadence · AI read → AI report → ◇ Person pay [role:finance-owner] → ● success | ⊗ failure | ⧖ budget",
+  "platform-post-implementation-review@1.0.0": "⬆ escalation · Person review → ● success | ⊗ failure | ⧖ budget",
   "pull-request-flow-watch@1.0.0": "⏱ cadence ⬆ escalation · AI read → AI classify → ◇ Person merge [role:change-approver] → ● success | ⊗ failure | ⧖ budget",
   "pull-request-flow-watch@1.1.0": "⏱ cadence ⬆ escalation · AI read → AI classify → ◇ Person merge [role:change-approver] → ● success | ⊗ failure | ⧖ budget",
   "release-readiness-watch@1.0.0": "⏱ cadence 📅 deadline-horizon · AI assemble → AI report → ◇ Person cut [role:release-owner] → ● success | ⊗ failure | ⧖ budget",

@@ -11,7 +11,7 @@ import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { buildWorkroomFlowMap, type StageSnapshot, type WorkroomFlowMapModel } from "./workroom-flow-map";
-import { WORKROOM_STAGE_ITEM_KIND, readDriveObservation, workroomStageQueueKey } from "./workroom-stage-telemetry";
+import { WORKROOM_STAGE_ITEM_KIND, compareStageEvents, readDriveObservation, workroomStageQueueKey } from "./workroom-stage-telemetry";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -54,10 +54,10 @@ export async function loadWorkroomFlowMap(
         itemId: { startsWith: `${room.capsuleId}:` },
         occurredAt: { gte: new Date(now.getTime() - 90 * DAY_MS) },
       },
-      select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true },
-      orderBy: { occurredAt: "asc" },
+      select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true, createdAt: true },
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
       take: 5000,
-    }),
+    }).then((rows) => rows.sort(compareStageEvents)),
     db.queueMetricSnapshot.findMany({
       where: {
         queueKey: { in: definition.stages.map((stage) => workroomStageQueueKey(shapeRef, stage.key)) },

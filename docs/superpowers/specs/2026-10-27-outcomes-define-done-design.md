@@ -40,6 +40,14 @@ On 2026-10-27 the backlog held 352 awaiting-acceptance items. 190 were platform-
 - **Contractual items** keep today's behaviour exactly: acceptance evidence and objective reconciliation are owed.
 - **Acceptance sweep.** No code change. It reads the same evaluation through `get_backlog_item`, so under the recorded operator pre-authorisation (BI-45D3BBF4) it closes merged non-contractual items. A test covers this path.
 - **Intake.** `ingestBacklogItem` takes an optional `outcome` and an optional `howWeKnow`. Every caller of the ingest front door can pass them; it writes them into the body as `## Outcome` and `## How we'll know`. `create_backlog_item` exposes both, and returns a soft advisory when the item states no outcome. The advisory never refuses. The portal backlog form gets an Outcome field. Build Studio intake files through `create_backlog_item`, and coworker intake files through `create_backlog_item` or the ingest front door, so both reach the same capture.
+- **Every other filing route (BI-458CCA8D).** Routes where no person types an outcome derive one from what they observed, in fixed text with no model call (kernel DI-E7C174B8C21E):
+  - issue-report triage and the admin "send to Build Studio" fix: the reported problem no longer happens on its route;
+  - `register_tech_debt`: takes `outcome` / `howWeKnow`; without them, the shortcut is replaced by the intended design;
+  - Build Studio decomposition children: the child's scope summary, as one part of the parent; design-review auto-intake: the build's constrained goal;
+  - detectors: the waste or failure that stops. For example, an MCP efficiency retry storm files "`<tool>` calls stop retry-storming". This covers A2A health, improvement signals, the process observer, corrective build and self-upgrade failures, functional smoke failures, acceptance misses, flow-review escalation, the local-only knowledge sweep, the canonical digest, improvement proposals, client-capability drift and catalog gaps;
+  - requests carried from elsewhere (peer demand, upstream issues, founder demand clusters) keep the requester's stated outcome and derive one only when there is none.
+
+  `outcome-every-intake-route.test.ts` fails when a new filing call site in `apps/web` passes no outcome. Excluded: federation work-sync, which replicates a peer's item as it is, and the one-off seed, restore and reconcile scripts under `packages/db/scripts`.
 
 ## Comparable practice
 

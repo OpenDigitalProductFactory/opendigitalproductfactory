@@ -1,3 +1,5 @@
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
+
 import { ACCEPTANCE_OWED_ACTIVITY_KIND } from "./owed-snapshot";
 
 /** The activity that records each step of a submitter question (submitter-confirmation.ts). */
@@ -24,8 +26,8 @@ export const RETAINED_ACCEPTANCE_OBLIGATIONS = [
   "pending-independent-verification",
 ] as const;
 
-/** Coarse indexed pool; the latest transition is checked after the bounded read. */
-export const ACCEPTANCE_CANDIDATE_WHERE = {
+/** Every acceptance obligation, whichever installation owns it. */
+export const ACCEPTANCE_OBLIGATION_WHERE = {
   OR: [
     { status: "awaiting-acceptance" },
     { status: "done",
@@ -34,6 +36,18 @@ export const ACCEPTANCE_CANDIDATE_WHERE = {
       NOT: { activities: { some: { kind: SUBMITTER_CONFIRMATION_ACTIVITY_KIND,
         payload: { path: ["resolved"], equals: true } } } } },
   ],
+};
+
+/**
+ * Coarse indexed pool; the latest transition is checked after the bounded read.
+ * BI-C5794F1D: a work-sync mirror is owned by its origin installation, which
+ * alone accepts or closes it; a close made here is reverted by the next pull.
+ * Mirrors are excluded with the same marker predicate the triage drain uses,
+ * so they never use up the page or the close budget. The run counts them.
+ */
+export const ACCEPTANCE_CANDIDATE_WHERE = {
+  ...ACCEPTANCE_OBLIGATION_WHERE,
+  AND: [ownedRowBodyWhere()],
 };
 
 /** Whether the item's newest transition is a delivery closure that left a bounded obligation open. */

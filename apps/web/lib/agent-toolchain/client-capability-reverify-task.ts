@@ -107,6 +107,8 @@ export async function executeClientCapabilityReverifyTask(
       fileItem: async (proposal) => {
         const item = await ingest({
           title: `Re-verify ${proposal.clientKind} capabilities for ${proposal.clientVersion}`,
+          // BI-458CCA8D: done when each flagged field is confirmed or corrected for this version.
+          outcome: `Each flagged ${proposal.clientKind} capability field is confirmed or corrected for ${proposal.clientVersion}, citing its source passage and a live probe.`,
           body: proposalBody(proposal),
           workType: "chore",
           source: "automated-detection",

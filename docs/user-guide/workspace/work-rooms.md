@@ -192,6 +192,10 @@ An admitted coworker can **read the room's message feed and post into it**, and 
 
 A room can also **call in new participants on demand**: a member with action rights (typically the Coordinator) can invite another coworker or a person into the room, either to participate or read-only. The invitee is admitted only to that room, for that room's outcome—never granted anything elsewhere.
 
+You are not asked to approve every invite. A room has a **charter**: the kinds of participant it admits without asking, and the most they may do there. By default, a room whose sensitivity is public or internal admits your organization's own AI coworkers and your own assistants (Claude, Codex, Grok), up to posting and creating records. When an invite fits the charter, it goes ahead under a decision that's already on record: the room's own decision for a coworker working in it, or the consent you gave when you connected your assistant. When nothing like that applies, you're still asked.
+
+Every other invite still comes to you for approval. That includes inviting a person, inviting into a confidential or restricted room, inviting a retired coworker, and asking for more than the charter allows. The charter only decides whether you're asked. It never grants access: the invitee still needs the clearance and permissions the room requires.
+
 Across rooms, you can see **where each AI coworker is engaged**—which active rooms it is in and its role in each (including where it coordinates). This 360 view helps manage how coworkers are used and recognise the routine patterns worth pre-positioning them for.
 
 An authorized coworker can also open a relevant product surface from the room's work type, resources, or task intent—even when no browser page is rendered. These silent/headless surfaces use the same semantic fields, validation, and governed actions as the human browser or mobile view. Room membership still does not expand authority: the surface catalog and every action apply the human role, coworker grants, room/work context, token scope, and approval rules together.

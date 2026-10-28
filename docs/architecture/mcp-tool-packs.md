@@ -234,7 +234,9 @@ Three properties make the binding honest rather than merely present. The id is *
 handlers came from **inline** `case` bodies rather than a sibling handler module. It owns the
 three platform-feedback tools — `report_quality_issue` (→ `createPlatformIssueReport`),
 `escalate_feedback_upstream` (→ `escalateReportUpstream`), and `register_tech_debt`
-(`createTechDebtItem` + a direct `prisma` write). Each handler lazy-imports its dependency and
+(`createTechDebtItem` + a direct `prisma` write). `register_tech_debt` takes an optional
+`outcome` and `howWeKnow`; without an outcome the item records that the shortcut is replaced
+by the intended design (BI-458CCA8D). Each handler lazy-imports its dependency and
 reproduces the former switch case verbatim; the three definitions and switch cases (and the
 now-unused helper imports) are gone from `mcp-tools.ts`.
 

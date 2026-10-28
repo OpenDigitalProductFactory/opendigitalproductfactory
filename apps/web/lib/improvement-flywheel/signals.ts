@@ -70,6 +70,8 @@ const filePersistentSignal: FileSignalBacklogItemFn = async (signal) => {
   try {
     const result = await ingestBacklogItem({
       title: signal.title,
+      // BI-458CCA8D: a persistent signal is done when it stops recurring.
+      outcome: `"${signal.title.trim()}" stops recurring: no new ${signal.sourceType} observation of it after the fix ships.`,
       body: [
         signal.description,
         signal.suspectedRootCause ? `Suspected root cause: ${signal.suspectedRootCause}` : null,

@@ -630,6 +630,9 @@
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -637,6 +640,9 @@
       "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
@@ -701,6 +707,9 @@
     ],
     "apps/web/lib/build/pull-request-merged-signal.ts": [
       "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/sandbox/grok-governance-seed.ts": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "apps/web/lib/build/sandbox/sandbox.ts": [
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
@@ -1623,6 +1632,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/workspace/finite-delivery-agreements.md"
     ],
+    "apps/web/lib/work-management/stage-dispatch-answered.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
@@ -1988,11 +2000,23 @@
     "packages/dpf-skill-pack/client-capabilities.json": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "packages/dpf-skill-pack/hooks/client-hook-planes.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
     ],
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/dpf-skill-pack/hooks/hooks.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/lib/hook-io.mjs": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs": [
       "docs/architecture/build-gate-runbook.md"
@@ -2024,11 +2048,20 @@
     "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
+    "packages/dpf-skill-pack/scripts/grok_credential.py": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/scripts/toolchain_convergence.py": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1": [
       "docs/operations/install.md"
     ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
+    ],
+    "packages/dpf-skill-pack/scripts/update_agent_toolchain.py": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "packages/i18n/src/catalog.ts": [
       "docs/architecture/localization-runbook.md"
@@ -2466,6 +2499,10 @@
     ],
     "scripts/lib/canonical-json.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/lib/ci-evidence-plan.mjs": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
@@ -3035,13 +3072,21 @@
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/investment-admission.ts",
+      "apps/web/lib/build/sandbox/grok-governance-seed.ts",
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/deliberation/external-review-activation.ts",
       "apps/web/lib/routing/anthropic-cache.ts",
       "e2e/fixtures/evidence.ts",
       "packages/dpf-skill-pack/client-capabilities.json",
-      "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs"
+      "packages/dpf-skill-pack/hooks/client-hook-planes.json",
+      "packages/dpf-skill-pack/hooks/hooks.json",
+      "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs",
+      "packages/dpf-skill-pack/hooks/lib/hook-io.mjs",
+      "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
+      "packages/dpf-skill-pack/scripts/grok_credential.py",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/dpf-skill-pack/scripts/update_agent_toolchain.py"
     ],
     "docs/architecture/agent-client-governance.md": [
       "apps/web/lib/change-review/semantic-change-review.ts"
@@ -3158,6 +3203,7 @@
       "scripts/check-stuck-auto-merge.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
@@ -3409,9 +3455,11 @@
       "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts",
+      "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts",
       "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
       "apps/web/lib/kernel/governing-principles.ts",
@@ -3583,6 +3631,7 @@
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/stage-dispatch-answered.ts",
       "apps/web/lib/work-management/work-shapes.ts",
       "scripts/measure-capability-completeness.mjs"
     ],
@@ -4101,6 +4150,7 @@
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
       "scripts/hooks/converge-git-hooks.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/ci-policy-guards.mjs",
       "scripts/lib/converge-hooks-dir.mjs",
       "scripts/lib/hooks-dir.mjs",

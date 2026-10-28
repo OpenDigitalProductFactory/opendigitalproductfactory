@@ -54,6 +54,38 @@ export const LOCAL_RUNNER_KEEP_ALIVE = "-1";
 /** Config keys that set runner lifecycle only and cannot alter the template or parser. */
 const LIFECYCLE_ONLY_CONFIG_KEYS = new Set(["context-size", "keep_alive"]);
 
+/**
+ * n-gram speculative decoding for the local generation model (BI-0D208EBB).
+ * Drafts come from n-grams already in the context, so it costs no VRAM and no
+ * draft model; llama.cpp verifies every drafted token with the served model.
+ * Qualified 2026-10-27 on llama.cpp b9879-cuda (RTX 4090, Qwen3.8-27B): all
+ * correctness controls matched, new text unchanged at ~40 tok/s, a rewrite
+ * that copies the prompt 40 -> 394 tok/s with identical output. Greedy output
+ * is not bit-stable once drafts are accepted (batched verification numerics).
+ */
+export const LOCAL_SPECULATIVE_RUNTIME_FLAGS = ["--spec-type", "ngram-mod"] as const;
+
+/** The engine build the flags were qualified on; older builds lack `ngram-mod`. */
+const SPECULATION_QUALIFIED_ENGINE = /^Running: llama\.cpp b9879(?:-|\s)/;
+
+export function isSpeculationQualifiedEngine(identity: unknown): boolean {
+  return typeof identity === "string" && SPECULATION_QUALIFIED_ENGINE.test(identity);
+}
+
+export function isQualifiedSpeculativeFlags(flags: unknown): boolean {
+  return JSON.stringify(flags) === JSON.stringify(LOCAL_SPECULATIVE_RUNTIME_FLAGS);
+}
+
+/** The running llama.cpp engine identity from `/engines/status`, or null when unreadable. */
+export async function getLlamaCppEngineIdentity(apiRoot: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  try {
+    const res = await fetchImpl(`${apiRoot.replace(/\/$/, "")}/engines/status`, { method: "GET", signal: AbortSignal.timeout(2500) });
+    if (!res.ok) return null;
+    const identity = ((await res.json()) as Record<string, unknown>)?.["llama.cpp"];
+    return typeof identity === "string" ? identity : null;
+  } catch { return null; }
+}
+
 export type ServedContextResult = {
   /** The served context window in tokens, or null when DMR doesn't report one. */
   contextTokens: number | null;
@@ -106,7 +138,10 @@ export async function getLocalThinkingBudgetEvidence(
         !/^sha256:[a-f0-9]{64}$/.test(entry.ModelID ?? "")) return undefined;
     // Unknown flags may override the template/parser. A narrow observed config
     // is preferable to silently claiming support for an unverified override.
-    if (!entry.Config || Object.keys(entry.Config).some(key => !LIFECYCLE_ONLY_CONFIG_KEYS.has(key))) return undefined;
+    // The qualified speculation pair is accepted exactly: it changes how tokens
+    // are drafted, never the template or the reasoning parser.
+    if (!entry.Config || Object.entries(entry.Config).some(([key, value]) => !LIFECYCLE_ONLY_CONFIG_KEYS.has(key) &&
+        !(key === "runtime-flags" && isQualifiedSpeculativeFlags(value)))) return undefined;
     if (entry.Config.keep_alive !== undefined && typeof entry.Config.keep_alive !== "string") return undefined;
     const context = entry.Config["context-size"];
     if (context !== undefined && (typeof context !== "number" || !Number.isSafeInteger(context) || context <= 0)) return undefined;
