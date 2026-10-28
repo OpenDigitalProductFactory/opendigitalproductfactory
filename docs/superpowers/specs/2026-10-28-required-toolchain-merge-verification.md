@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Required agent toolchain merge verification
 
 Backlog: BI-A689AB68
