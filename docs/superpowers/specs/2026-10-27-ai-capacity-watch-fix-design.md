@@ -15,6 +15,19 @@ workroom: WC-1966F6F3
 | Builds on | BI-A53C594E / PR #6680 (subscription OAuth renewal and its Needs-you item), PR #6679 (Codex usage limit as quota), BI-ADB574AB (monitor-clears rows), the issue-report reach gate (`lib/quality/issue-report-promotion.ts`) |
 | Leaves to | BI-AE428731, BI-02A513D1, BI-DDDC8E9D (providers page status, per-provider classification) |
 
+## Scope
+
+**OBJ-1:** The operator learns within one drive cycle, in plain words, when the platform loses usable AI capacity, and repeated automated detections of one fault stop filing new backlog items.
+
+| ID | Objectives | Acceptance criterion |
+| --- | --- | --- |
+| AC-1 | OBJ-1 | The served share of routed work is measured per provider and in total over a rolling 30-minute window from AdapterRunTelemetry. |
+| AC-2 | OBJ-1 | A provider failing every call raises exactly one Needs-you item, not a backlog row, naming the provider, the plain-language cause and the exact page and action, within one 5-minute watch cycle. |
+| AC-3 | OBJ-1 | A total served share under the threshold raises one platform-level Needs-you item. |
+| AC-4 | OBJ-1 | Each item clears itself when calls are served again. |
+| AC-5 | OBJ-1 | A repeat of an already-filed report or signature attaches to the live item and raises its priority instead of minting a new BI-PIR row, and one report is never minted twice. |
+| AC-6 | OBJ-1 | Tests cover AC-2 through AC-5. |
+
 ## Defect
 
 Reproduced on `027053263fe`:
