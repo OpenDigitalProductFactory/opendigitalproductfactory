@@ -2,7 +2,6 @@
 
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { auth } from "@/lib/auth";
-import { sanitizeForLog } from "@/lib/security/safe-log";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
   scheduleAgentTaskFor,
@@ -383,7 +382,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       const { loadStageDispatchAnswered } = await import("@/lib/work-management/stage-dispatch-answered");
       const answer = await loadStageDispatchAnswered(task);
       if (answer.answered) {
-        console.info("[agent-task-scheduler] %s: stage %s already has completing evidence for this dispatch (%s); not running it again.", sanitizeForLog(taskId), sanitizeForLog(answer.stageKey), answer.evidenceRecordedAt.toISOString());
+        // Same form as the failure line below (CodeQL #39): JSON.stringify escapes CR/LF.
+        console.info("[agent-task-scheduler] %s: stage %s already has completing evidence for this dispatch (%s); not running it again.", JSON.stringify(taskId), JSON.stringify(answer.stageKey), answer.evidenceRecordedAt.toISOString());
         return await recordUnchangedScheduledRun(task, now);
       }
     }
