@@ -612,6 +612,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -3640,6 +3643,7 @@
       "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
+      "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts",
       "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/work-management/delivery-shapes.ts"

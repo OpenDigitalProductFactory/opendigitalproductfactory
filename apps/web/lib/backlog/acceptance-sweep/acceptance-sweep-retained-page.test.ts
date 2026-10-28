@@ -20,14 +20,26 @@ describe("bounded acceptance candidate cursor", () => {
     const page = await selectAcceptanceSweepPage(db as never, { pageSize: 10, cursor: null });
     expect(page.items.map(x => x.itemId)).toEqual(["BI-a", "BI-b"]);
   });
-  it("uses the latest transition, excludes ordinary done, and retains malformed obligations", async () => {
+  // BI-C899BB40: only bounded obligations are retained; not-owed, satisfied and
+  // malformed ones are never selected again.
+  it("uses the latest transition and retains only bounded open obligations", async () => {
     const page = await selectAcceptanceSweepPage(fixture([
       row("a", "done", { to: "done", closureBasis: "manual" }),
       row("b", "done", { ...pending, acceptanceObligation: null }),
       row("c", "done", { ...pending, acceptanceObligation: "satisfied" }),
+      row("d", "done", { to: "done", closureBasis: "delivery-evidence", acceptanceObligation: "not-owed" }),
+      row("e", "done", { to: "done", closureBasis: "delivery-evidence", acceptanceObligation: "pending-submitter-confirmation" }),
+      row("f", "done", { to: "done", reason: "verification-fail", correctiveItemId: "BI-ACC-1" }),
     ]) as never, { pageSize: 10, cursor: null });
-    expect(page.items.map(x => x.itemId)).toEqual(["BI-b"]);
-    expect(page.nextCursor).toBe("c");
+    expect(page.items.map(x => x.itemId)).toEqual(["BI-e"]);
+    expect(page.nextCursor).toBe("f");
+  });
+
+  it("excludes a done item whose bounded step is resolved, at the indexed pool", async () => {
+    const { ACCEPTANCE_CANDIDATE_WHERE, SUBMITTER_CONFIRMATION_ACTIVITY_KIND } = await import("./acceptance-sweep-page");
+    const done = ACCEPTANCE_CANDIDATE_WHERE.OR[1] as { NOT: { activities: { some: { kind: string; payload: unknown } } } };
+    expect(done.NOT.activities.some).toEqual({ kind: SUBMITTER_CONFIRMATION_ACTIVITY_KIND, payload: { path: ["resolved"], equals: true } });
+    expect(JSON.stringify(ACCEPTANCE_CANDIDATE_WHERE)).not.toContain("not-owed");
   });
   it("visits over 500 old obligations despite continuous fresh arrivals, then wraps", async () => {
     const rows = Array.from({length: 601}, (_,i) => row(String(i).padStart(4,"0"), "done"));

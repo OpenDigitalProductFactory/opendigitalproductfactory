@@ -2,8 +2,8 @@
 title: Submitting Work Is Not Accepting It
 pageKind: principle
 status: published
-abstract: Opening a pull request with its evidence ends the delivering thread. Merge and live verification run on a different clock. Delivery closes the item by default; a separate acceptance by whoever asked is owed only for contractual (or genuinely non-obvious) work, and a regression found in use becomes a new item.
-principleDirection: End the thread when the pull request is open and its evidence recorded; never hold a session to watch a merge or deploy. Let the merge close non-contractual work, and never self-accept work that is tagged contractual.
+abstract: Opening a pull request with its evidence ends the delivering thread. Merge and live verification run on a different clock. Delivery closes the item by default; a separate acceptance by whoever asked is owed only for contractual work, a customer who reported the problem is asked once whether it is fixed, and a regression found in use becomes a new item.
+principleDirection: End the thread when the pull request is open and its evidence recorded; never hold a session to watch a merge or deploy. Let the merge close non-contractual work, never self-accept work tagged contractual, ask a customer submitter one question with a bounded window, and never leave an obligation open without a bound.
 principleTier: core
 principleDimensionVector: {"governance_compliance": 0.7, "operator_effort": -0.3, "evidence_density": 0.5}
 principleWeight: 0.6
@@ -49,13 +49,23 @@ A separate acceptance step had turned into an administrative black hole. On 2026
 
 The authorised acceptance sweep reads the same completion gate, so it closes merged non-contractual items without any further step.
 
+## Nothing waits on a person indefinitely (operator direction, 2026-10-27)
+
+> "We seem to have more process gates than needed, the actual closure is predicated on seeing results, which unless it's automatable, we don't want to have open items hanging out forever. [...] getting validation is really only required if there is a customer reported thing, and even then a simple question and response would do it."
+> — Mark Bodman, 2026-10-27 (BI-C899BB40)
+
+- **A customer-reported item gets one question.** It closes on delivery like any other non-contractual item. Its submitter is then asked once whether it is fixed. A "no" (the issue reopened) becomes one corrective item and the delivered item stays done. Confirmation, or silence for 14 days, settles it.
+- **Obligations are bounded.** A delivered, non-contractual item carries no open obligation without a bound. Only an automated check declared at filing, or the one customer question with its window, may follow delivery. Each concludes on the record.
+- **The sweep never re-selects a closed item for acceptance.** It visits a done item only to take that one bounded step.
+
 A watcher armed to do this may also simply not work, and a silent watcher looks identical to a passing one — so the practice adds risk on top of the wasted time.
 
 ## How to apply
 
 - Open the pull request with its evidence, name what is unproven, end the thread.
-- State the outcome when you file the item. Add how you will know only when it is not obvious.
+- State the outcome when you file the item. Add how you will know only when it is not obvious; if it can be checked automatically, declare the check.
 - Let the merge close the item. Do not hold it open for a sign-off nobody asked for.
+- Declaring a customer's outcome good on their behalf is not yours to do. The platform asks them, once.
 - If acceptance genuinely matters because a customer was promised it, tag the item `contractual` and say what the check is or who accepts. That item waits for its accepter, and declaring its outcome good is not yours to do.
 
 ## Related

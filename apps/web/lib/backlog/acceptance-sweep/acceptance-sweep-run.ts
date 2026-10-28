@@ -14,6 +14,7 @@ import {
   type AgedSweepCandidate,
 } from "./acceptance-sweep-routing";
 import type { RouteOutcome } from "./route-aged-item";
+import type { ConfirmationStep } from "./submitter-confirmation";
 
 // One acceptance sweep run (BI-DF255666, AC-S2-2 and AC-S2-3).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.3.
@@ -66,6 +67,12 @@ export type AcceptanceSweepPorts = {
     authorisation: Extract<CloseAuthorisation, { state: "enabled" }>,
   ): Promise<CloseOutcome>;
   recordSnapshot(item: AcceptanceSweepPageItem, projection: OwedAcceptance): Promise<{ written: boolean }>;
+  /**
+   * BI-C899BB40: advance a done item's bounded obligation one step (ask its
+   * customer submitter once, observe the answer, or retire it). Done items are
+   * never re-evaluated for acceptance. Absent, done items are only counted.
+   */
+  confirm?(item: AcceptanceSweepPageItem): Promise<ConfirmationStep>;
   /** Route the run's aged, non-closable items to their coworkers (route-aged-item.ts). */
   route(candidates: readonly AgedSweepCandidate[], limit: number): Promise<RouteOutcome[]>;
   recordRun(summary: AcceptanceSweepSummary): Promise<{ activityId: string }>;
@@ -106,7 +113,20 @@ export type AcceptanceSweepSummary = {
   routing: AcceptanceSweepRouting;
   /** BI-45D3BBF4: closures made under the operator pre-authorisation. */
   closing: AcceptanceSweepClosing;
+  /** BI-C899BB40: done items whose one bounded post-delivery step was advanced. */
+  confirmation: AcceptanceSweepConfirmation;
   cursor: string | null;
+};
+
+export type AcceptanceSweepConfirmation = {
+  visited: number;
+  /** Steps taken this run, by step (question-sent, not-fixed, satisfied-by-silence, ...). */
+  steps: Record<string, number>;
+  /** Why a question was not sent (no-credential, no-channel, error). */
+  notSentByReason: Record<string, number>;
+  /** Corrective items filed this run (a "not fixed" answer or a failed acceptance). */
+  correctiveItemIds: string[];
+  errored: Array<{ itemId: string; message: string }>;
 };
 
 export type AcceptanceSweepClosing = {
@@ -141,6 +161,10 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
       ? `${summary.closing.closed.length} closed under operator pre-authorisation`
       : `closing off (${summary.closing.disabledReason})`,
     routingHeadline(summary.routing),
+    ...(summary.confirmation.visited > 0
+      ? [`${summary.confirmation.visited} delivered items advanced (${summary.confirmation.steps["question-sent"] ?? 0} asked, `
+        + `${summary.confirmation.correctiveItemIds.length} corrective)`]
+      : []),
   ].join("; ").slice(0, 500);
 }
 
@@ -194,6 +218,7 @@ export async function runAcceptanceSweep(
     deferredByLimit: [],
   };
 
+  const confirmation: AcceptanceSweepConfirmation = { visited: 0, steps: {}, notSentByReason: {}, correctiveItemIds: [], errored: [] };
   const routing = emptyRouting(config.routing, config.routeLimit);
   const agedCandidates: AgedSweepCandidate[] = [];
 
@@ -206,6 +231,25 @@ export async function runAcceptanceSweep(
         listed.aged.push(item.itemId);
       }
       if (itemAge.ageDays > config.trendDays) page.agedOverTrend += 1;
+    }
+
+    // BI-C899BB40: a done item is never re-evaluated for acceptance. Its
+    // closure left one bounded step (a customer question, a corrective item,
+    // or a recorded retirement); take it and move on.
+    if (item.status === "done") {
+      confirmation.visited += 1;
+      if (!ports.confirm) { increment(confirmation.steps, "skipped"); continue; }
+      try {
+        const step = await ports.confirm(item);
+        increment(confirmation.steps, step.step);
+        if (step.step === "question-not-sent") increment(confirmation.notSentByReason, step.reason);
+        if ((step.step === "not-fixed" || step.step === "corrective-filed") && step.correctiveItemId) {
+          confirmation.correctiveItemIds.push(step.correctiveItemId);
+        }
+      } catch (error) {
+        confirmation.errored.push({ itemId: item.itemId, message: (error instanceof Error ? error.message : "unknown error").slice(0, 300) });
+      }
+      continue;
     }
 
     const projection = await ports.evaluate(item).catch(() => null);
@@ -261,6 +305,7 @@ export async function runAcceptanceSweep(
     },
     routing,
     closing,
+    confirmation,
     cursor: nextCursor,
   };
   const summary: AcceptanceSweepSummary = { ...withoutHeadline, headline: headline(withoutHeadline, config.agedDays) };

@@ -130,6 +130,16 @@ export type BacklogCompletionEvaluation = {
   acceptanceState: string;
   hasDesignSpec: boolean;
   deliveryEvidenceRefs: string[];
+  /**
+   * BI-C899BB40: this closure is BI-B1B44777's delivery-closes default (a
+   * non-contractual merge or deployment, nothing failed). Reported, not a gate.
+   */
+  closureFollowsDelivery: boolean;
+  /**
+   * BI-C899BB40: a customer reported this non-contractual work, so its
+   * submitter is asked once. A contractual item keeps its acceptance lane.
+   */
+  customerReported: boolean;
 };
 
 /**
@@ -227,6 +237,42 @@ export function isDirectMergePlatformWork(item: {
   const noProduct = item.digitalProductId == null;
   const noObjective = (item.productObjectiveWork?.length ?? 0) === 0;
   return platformScoped && noBuild && noProduct && noObjective;
+}
+
+/**
+ * Origin markers that mean a customer, not the platform, reported the work
+ * (BI-C899BB40). Each is written by an existing intake path:
+ * ecosystem/inbound-issue-triage.ts (upstream issue, peer demand),
+ * federation/demand-exchange.ts (adopted federated demand) and
+ * federation/founder-portfolio.ts (a founder demand cluster).
+ */
+const CUSTOMER_ORIGIN_MARKERS = [
+  "[origin:ecosystem-upstream-issue:",
+  "[origin:ecosystem-peer-demand:",
+  "[origin:federatedDemand:",
+  "[origin:founderDemandCluster:",
+] as const;
+
+/**
+ * Whether a customer reported this item, read from provenance that already
+ * exists; there is no persisted flag. A customer-reported item still closes on
+ * delivery; its submitter is then asked one question (acceptance sweep §9).
+ *
+ * `upstreamIssueNumber` is deliberately not a signal: the issue bridge sets it
+ * when THIS install files its own item upstream, and already comments on that
+ * issue when the item closes.
+ */
+export function isCustomerReported(item: {
+  itemId: string;
+  body?: string | null;
+  lifecycleTags?: readonly string[] | null;
+}): boolean {
+  if (item.lifecycleTags?.includes("ecosystem-inbound")) return true;
+  // A product quality report (actions/quality.ts): the BI-PIR- id and its source line.
+  if (item.itemId.startsWith("BI-PIR-")) return true;
+  const body = item.body ?? "";
+  if (/^Source report: \S+/m.test(body)) return true;
+  return CUSTOMER_ORIGIN_MARKERS.some((marker) => body.includes(marker));
 }
 
 /**
@@ -474,6 +520,15 @@ export async function evaluateBacklogItemCompletion(args: {
     };
   }
   const projected = project(projectionInput);
+  // BI-C899BB40: whether THIS closure is the delivery-closes default of
+  // BI-B1B44777 (deliveryClosesItem, recognizeMergeThroughGates above), so the
+  // terminal transition can record a bounded obligation. A reported fact, not
+  // a second rule: it adds no gate and relaxes nothing. A contractual item, an
+  // aggregate, a current failure or a failed/conflicting reconciliation is
+  // never a delivery closure.
+  const closureFollowsDelivery = recognizeMergeThroughGates && acceptanceFailures.length === 0
+    && reconciliation.state !== "fail" && reconciliation.state !== "conflict" && reconciliation.state !== "malformed";
+
   const independent = project({ ...projectionInput, completion: {
     ...projectionInput.completion!,
     acceptanceEvidence: acceptanceFailures.length === 0
@@ -493,6 +548,8 @@ export async function evaluateBacklogItemCompletion(args: {
     acceptanceState,
     hasDesignSpec,
     deliveryEvidenceRefs,
+    closureFollowsDelivery,
+    customerReported: isCustomerReported(item) && !isContractualItem(item),
   };
 }
 
