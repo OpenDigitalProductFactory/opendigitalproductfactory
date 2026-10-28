@@ -152,6 +152,31 @@ Closing or archiving an outcome preserves its observations and work links.
 Product-line outcome posture is derived from its real Products; no second
 product-line outcome ledger is created.
 
+#### Outcomes of delivered platform work
+
+DPF can tell you whether the platform work it delivers holds, without anyone
+recording it by hand. Turn this on by designating the business Product that
+your platform development work serves. An agent does this with
+`designate_platform_work_product`, citing the business decision that chose
+the Product. DPF never guesses the Product. Until one is designated, it
+records nothing.
+
+Once a Product is designated, its outcomes list two kinds of objective:
+
+- **Delivered platform work holds** is the designation. It also collects work
+  that belongs to no epic.
+- **Delivered work holds: _epic title_** objectives appear on their own when
+  the first item in an epic is delivered.
+
+Each time an item is delivered, DPF adds one observation to its objective. The
+value is the percentage of the objective's items delivered 14 to 90 days
+earlier that held. An item held if it is still done, was never reopened, and
+has no failing evidence recorded since delivery. The observation shows the
+count behind the percentage and names the items that did not hold. DPF
+records nothing until at least one delivery is 14 days old. Recording never
+blocks a delivery. Work scoped to an archetype or to a business Product is
+not counted, because it belongs to that Product's own outcomes.
+
 ### Read the evidence-derived roadmap
 
 Open a business Product and choose **Direction → Roadmap**. A product line also
@@ -370,6 +395,8 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
 - Append quantitative or qualitative observations with source provenance and
   correction history
 - Link only real, same-product backlog work to the outcome it contributes to
+- See, without anyone recording it by hand, whether delivered platform work
+  held, once the Product it serves is designated
 - Compare product-line sales evidence and drill into a business Product's
   Direction brief
 - Switch between guided and professional density without forking product truth

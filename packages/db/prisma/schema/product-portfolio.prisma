@@ -221,6 +221,10 @@ model ProductObjective {
   activatedAt       DateTime?
   closedAt          DateTime?
   archivedAt        DateTime?
+  // Origin (BI-42399593): "epic" + epicId, or "platform-work" + productId, for
+  // objectives the platform derives; null for objectives a person defines.
+  sourceKind        String?
+  sourceRef         String?
   createdAt         DateTime                    @default(now())
   updatedAt         DateTime                    @updatedAt
   organization      Organization                @relation("ProductObjectiveOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
@@ -230,6 +234,7 @@ model ProductObjective {
   observations      ProductOutcomeObservation[]
 
   @@unique([id, organizationId])
+  @@unique([organizationId, sourceKind, sourceRef])
   @@index([organizationId, status, reviewAt])
   @@index([productId, status])
   @@index([ownerPrincipalId])

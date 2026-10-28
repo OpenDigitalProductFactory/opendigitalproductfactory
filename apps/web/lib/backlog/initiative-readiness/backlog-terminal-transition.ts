@@ -68,6 +68,8 @@ export async function completeBacklogItemTransition(args: {
   authority: TerminalAuthority;
   evaluatedAt?: string;
   dependencies?: BacklogCompletionDependencies;
+  /** Records the delivered work's outcome observation (BI-42399593); injectable for tests. */
+  recordDeliveredOutcome?: RecordDeliveredOutcome;
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
   const evaluatedAt = args.evaluatedAt ?? new Date().toISOString();
@@ -183,10 +185,50 @@ export async function completeBacklogItemTransition(args: {
           recordedById: args.actor.humanContextRef,
           recordedByAgentId: args.actor.agentContextRef,
         } });
+        await recordDeliveredOutcomeIsolated(genericTx, {
+          itemId: lockedItem.itemId,
+          backlogItemRowId: lockedItem.id,
+          observedAt: new Date(evaluatedAt),
+        }, args.recordDeliveredOutcome ?? defaultRecordDeliveredOutcome);
       }
       return updated.count;
     },
   });
+}
+
+export type RecordDeliveredOutcome = (
+  tx: unknown,
+  input: { backlogItemRowId: string; observedAt: Date },
+) => Promise<unknown>;
+
+const defaultRecordDeliveredOutcome: RecordDeliveredOutcome = async (tx, input) => {
+  const { recordDeliveredWorkOutcome } = await import("@/lib/product-management/delivered-work-outcomes-repository");
+  return recordDeliveredWorkOutcome(tx as never, input);
+};
+
+/**
+ * BI-42399593: record the delivered work's outcome observation in the same
+ * transaction as the delivery, so the two commit together, but behind a
+ * savepoint: a recording failure rolls back only the recording and never
+ * blocks or reverses the delivery. A client that cannot open a savepoint
+ * records nothing rather than risk the delivery.
+ */
+async function recordDeliveredOutcomeIsolated(
+  tx: unknown,
+  input: { itemId: string; backlogItemRowId: string; observedAt: Date },
+  record: RecordDeliveredOutcome,
+): Promise<void> {
+  const raw = tx as { $executeRawUnsafe?: (query: string) => Promise<unknown> };
+  if (typeof raw.$executeRawUnsafe !== "function") return;
+  await raw.$executeRawUnsafe("SAVEPOINT delivered_work_outcome");
+  try {
+    await record(tx, { backlogItemRowId: input.backlogItemRowId, observedAt: input.observedAt });
+    await raw.$executeRawUnsafe("RELEASE SAVEPOINT delivered_work_outcome");
+  } catch (error) {
+    await raw.$executeRawUnsafe("ROLLBACK TO SAVEPOINT delivered_work_outcome");
+    await raw.$executeRawUnsafe("RELEASE SAVEPOINT delivered_work_outcome");
+    console.warn(`[delivered-work-outcome] ${input.itemId}: outcome observation not recorded; the delivery stands.`, error);
+  }
 }
 
 /**
