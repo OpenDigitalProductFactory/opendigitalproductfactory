@@ -59,6 +59,8 @@ import { workroomFlowReview } from "./workroom-flow-review";
 import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
+import { guardOutcomeClassify } from "./guard-outcome-classify";
+import { guardRetirementReview } from "./guard-retirement-review";
 import { a2aCollaborationHealthScan } from "./a2a-collaboration-health-scan";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
@@ -200,6 +202,8 @@ export const scheduledFunctions = [
   businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
+  guardOutcomeClassify, // BI-FEDD8F45: daily guard refusal classification + 365-day guard-outcome prune
+  guardRetirementReview, // BI-FEDD8F45: daily guard retirement review → one review item per guard (never disables)
   a2aCollaborationHealthScan, // BI-3003EE63: daily A2A edge health (failed/blocked/stuck/orphan) — slice 1 analyze+log
 
   workPatternProfileReview,

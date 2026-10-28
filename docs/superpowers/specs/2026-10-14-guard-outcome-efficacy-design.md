@@ -221,6 +221,14 @@ The following requirements supersede narrower historical measurement rows in sec
 
 Refactor shared record validation/normalization, identity and bounded queries in their existing homes rather than maintaining divergent JS/TS copies or growing the oversized grant module. Preserve current runner receipts and shadow enforcement. At least the user's stated 20% refactoring emphasis is served through this reuse/reliability work; investment accounting follows the recorded funding owner, not the DEV label. The integration reference is the actual approval inbox, including ordinary bound blocked reports and repeated waits; measure distinct requests/effects, never hidden cards. PR #6588 owns blocked-report authority and wait parking, and BI-D95FD249 owns its remaining stage-authority work. This item observes their results without reimplementing them.
 
+## 5.2 Implementation realization (2026-10-27)
+
+- **Submission lane.** `record_guard_outcomes` is realized as the optional `guardOutcomes` payload of the existing `record_external_development_evidence` tool (`apps/web/lib/gpp/efficacy/guard-outcome-intake.ts`), not as a new MCP tool. The closed consequence vocabulary has no internal-write class, and §5.1 forbids growing the unclassified-tool baseline, so a new tool could not comply. The existing lane keeps the same grant and actor binding (`principle_decide` DI-C7020CB136AA). Where AC-GOE-02 says `record_guard_outcomes`, read this payload.
+- **Replay and quarantine.** A replayed run is acknowledged only when the stored actor and canonical content match; a mismatch is an `integrity-conflict` refusal. Refusals carry `permanent`, and the client moves a permanent refusal to a bounded quarantine with a coverage-loss count. Anything else stays pending.
+- **Measures.** M-2 and M-7 are published as unknown. Beside them sit the kernel-only ratio (M-2a), choice-linkage proxies (M-7a human, M-7b agent-reported) and the actual approval-request population by status. Every measure carries its unit.
+- **Completeness.** Classification settles only complete clone+branch series, paged by `(createdAt, id)`; an over-long series is reported, never settled on a partial page. Aggregates bucket by each run's own start time over a half-open period. The prune never removes a declarations row that a retained run cites.
+- **Owner report.** `/ops/gate-efficacy` composes report-kit StatCard, DataTable and StatusBadge, with a ratified page-purpose contract (`apps/web/lib/ux-budget/purpose-contracts/gate-efficacy.ts`).
+
 ## 6. Delivery ledger
 
 Declared medium shape, one implementation PR proposed, all deliverables on BI-FEDD8F45. Current declared access-control paths raise the native effective shape to large/high; retain that review contract rather than infer approval from the historical shape. Plan: [implementation plan](../plans/2026-10-14-guard-outcome-efficacy-plan.md).

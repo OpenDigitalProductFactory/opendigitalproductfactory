@@ -415,6 +415,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate-preflight-effective-environment.test.mjs",
+        // BI-FEDD8F45: guard outcome records (client record, spool, flush, hook CLI).
+        "scripts/lib/guard-outcome-record.test.mjs",
+        "scripts/lib/guard-outcome-submit.test.mjs",
+        "scripts/record-guard-outcome.test.mjs",
         "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",

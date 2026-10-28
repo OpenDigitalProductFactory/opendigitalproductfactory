@@ -306,5 +306,30 @@
       "protocolUnavailable": "The host's change tool could not be verified, so nothing was changed. Open runtime health.",
       "unknown": "The platform returned an answer this page does not recognise."
     }
+  },
+  "gateEfficacy": {
+    "title": "Gate efficacy",
+    "from": "From",
+    "to": "to",
+    "summary": "{$runs} guard checks recorded, {$classified} refusals classified. Unknown measures: {$unknown}.",
+    "none": "none",
+    "noDecision": "Nothing here needs your decision. Guards that look wasteful get a review item automatically.",
+    "stats": {
+      "checks": "Guard checks",
+      "checksHint": "last 14 days",
+      "refusals": "Refusals classified",
+      "waiting": "Approvals waiting",
+      "waitingHint": "requests, not cards",
+      "unknown": "Unknown measures"
+    },
+    "sections": {
+      "measures": "GPP §11 measures",
+      "guards": "Guards, most expensive first"
+    },
+    "tables": {
+      "gpp": "GPP §11 measures",
+      "proxies": "Subset proxies and approval load",
+      "breakdowns": "Breakdowns"
+    }
   }
 }
