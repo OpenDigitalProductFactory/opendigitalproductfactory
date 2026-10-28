@@ -340,6 +340,10 @@ conversation, credential or server process disappears.
 **OBJ-COO-LEGIBILITY:** Give the human one clear view of outcomes and necessary
 decisions, with current design, strategy and operating guidance aligned.
 
+**OBJ-COO-INSTALLATION:** Each COO owns its installation's declared purpose and
+coordinates with the correctly identified peer COO when context, evidence or
+authority belongs elsewhere, including production, development and test instances.
+
 ### One control loop, three responsibilities
 
 The existing Workroom drive remains the lifecycle and dispatch authority.
@@ -428,6 +432,78 @@ not an invented failure cause. Dependency completion rechecks the waiting stage.
 No recovery cancels an independent gate, retries a possibly published effect
 blindly or spends on an unapproved provider.
 
+### Installation-aware COO coordination — October 26 clarification
+
+The founder requires COO instances to know about one another. The COO of this
+development installation owns development responsibilities; it must consult the
+production COO when production objectives, decisions or corpus are needed.
+Additional sandbox and test installations retain their own scoped responsibility.
+This is a refinement of the existing sovereign-install model, not a global COO
+that acquires every installation's authority.
+
+| Installation purpose | Accountable COO responsibility | Boundary |
+| --- | --- | --- |
+| Production business operation | Follow the production business's work, objectives and recorded decisions; answer permitted context requests from DEV | The owning production work and business policy remain canonical there |
+| Development / evolve-dpf | Coordinate platform development, internal and external executors, tests and reviewed delivery; obtain missing production context | DEV evidence does not establish production acceptance or permission to act there |
+| Admitted sandbox / test instance | Coordinate its declared experiment or acceptance run, budget, expiry and evidence handoff | A clone, test result or role name does not confer production identity or authority |
+
+Before coordination, resolve installation identity, organization, environment
+class, declared purpose, active runtime/lease and canonical local COO principal.
+Environment comes from installationContext, not coworker lifecycleStage, a host
+name or an agent's display name. AGT-ORCH-000 remains the local role lookup;
+cross-install identity additionally binds the source and destination installation,
+verified GAID/AIDoc and current trusted link. Follow existing governed GAID
+continuity if one enduring subject spans installations. Cloning configuration
+does not establish that continuity or make identical local IDs globally unique.
+
+Reuse FederationLink, current installation/paired-estate context, PrincipalAlias,
+the approved A2A coordination design, existing TaskRun/artifact/receipt identities
+and the federation outbox. No second peer directory, scheduler, shared memory
+database or per-conversation credential is introduced. Discovery and posture
+are observations; neither proves remote admission or an implemented task route.
+The source currently contains federated room helpers without an inbound caller;
+that seam requires qualification rather than a claim of live COO-to-COO messaging.
+
+A cross-install obligation retains the originating installation and Workroom,
+the receiving installation and accountable COO, purpose, permitted question or
+action, accepted task identity, acknowledgement deadline, next check, source
+references and final result. A reference always carries its owning installation;
+a bare BI, room ID, local agent ID or localhost URL cannot identify a peer item.
+The source remains responsible for following the request through to a verified
+result or an owned wait. The destination accepts and executes only through its
+own current grants, admission, budget and decision gates. A receipt from another
+installation is evidence with provenance, not a local authorization receipt.
+
+Production corpus may be absent from DEV and test databases. Retrieve only the
+minimum permitted context through the existing projection/coordination boundary.
+Retain source owner, version, retrieval/check time, freshness and applicability.
+State unavailable, denied or stale context explicitly; route the unresolved
+question to its recorded owner. Never substitute a DEV fixture, seed, copied
+summary or generic doctrine for a missing production decision. Knowledge sharing
+does not require copying private prompts, credentials or the entire corpus.
+
+This installation currently declares paired-peer read-only authority. That
+remains binding. A new peer action channel needs the owning installation's
+recorded authority and the existing control-scope decision; this clarification
+does not enable remote mutation. Read-only consultation, task delegation and
+operational control must remain distinguishable in the UI and evidence.
+
+Test and sandbox coordination carries its parent delivery/run, actual hosting
+installation identity, admitted lease, purpose and expiry. A preview inside the
+same installation does not invent a sovereign identity. A true clone establishes
+its own identity before advertising a COO. Before expiry or teardown, hand back
+evidence, pending/uncertain effects and remaining obligations through the existing
+checkpoint and artifact mechanisms. The parent owner acknowledges the handoff;
+lost or expired instances remain visible as unavailable, not completed. No
+production outcome is earned by a test-only receipt.
+
+PR #6609 / BI-63FB1683 is the existing Phase E visibility and local broadcast seam.
+P2 reuses its joined projection and hardened ask/ack contract; the surface alone
+does not dispatch stages or establish cross-install readiness. Every destination
+needs current admission. An ask requires recoverable delivery, and an ACK must
+bind an existing ask and its intended room; neither may turn an undelivered or
+future request into verified progress. Review findings are retained with that PR.
+
 ### Human experience and scalability
 
 Extend the existing Workroom/portfolio projection: owner, last verified progress,
@@ -444,8 +520,12 @@ continuation. Persist continuation after accepted processing. The initial
 reconciliation budget is at most 100 candidate rooms and 10 recovery requests
 per existing drive cycle; overflow remains due and explicitly incomplete,
 oldest-due first. These are proposed implementation bounds, not current telemetry.
-Scale beyond one install follows the existing sovereign-install control-plane
-boundary; this work does not centralize peer data or mutate paired records.
+Peer discovery and context requests use admitted links with paginated/delta
+selection and the same due-work budget. No all-to-all COO broadcast or complete
+peer inventory is loaded for each cycle. Existing EP-MSP-FEDERATION owns scaling
+beyond this bounded local coordinator and qualifying the remote transport.
+Scale beyond one install follows the sovereign-install control-plane boundary;
+this work does not centralize peer data or mutate paired records.
 
 ### Acceptance contract
 
@@ -458,10 +538,15 @@ boundary; this work does not centralize peer data or mutate paired records.
 | AC-COO-05 | OBJ-COO-RECOVERY, OBJ-COO-LEGIBILITY | Human escalation contains a specific necessary decision or exhausted authorized recovery, and routine unchanged state does not repeatedly notify the founder. |
 | AC-COO-06 | OBJ-COO-LEGIBILITY | Canonical design, architecture, strategy, COO skill/task/persona and user guidance consistently describe the current Workroom-based operating model and distinguish deployed behavior from pending acceptance. |
 | AC-COO-07 | OBJ-COO-PROGRESS, OBJ-COO-RECOVERY, OBJ-COO-EXTERNAL | Served-runtime evidence proves provider recovery, interrupted external executor and resolved dependency continuation without founder nudges, plus one genuine human decision routed once. Unit/source checks alone do not close operational acceptance. |
+| AC-COO-08 | OBJ-COO-INSTALLATION, OBJ-COO-EXTERNAL, OBJ-COO-LEGIBILITY | DEV, PROD and an admitted sandbox/test context resolve distinct installation responsibilities and authenticated COO destinations; missing production context is retrieved within projection policy or reported unavailable. Restart, denied/revoked peer access, expired sandbox and uncertain delivery preserve owned obligations without cross-install authority leakage or test evidence reported as production acceptance. |
 
 Negative controls retain refused authority, canceled work, independent review,
 explicit pause and stale-executor fences. Restart/duplicate/uncertain-effect
-cases must be exercised. The observation window starts only when the canonical
+cases must be exercised. AC-COO-08 is the October 26 owner clarification.
+Earlier approvals and baseline cover only their immutable artifacts; reconcile the added objective and criterion
+through independent review, a revised objective baseline and live P2 coverage
+before claiming this amended scope admitted. Prior evidence remains intact.
+The observation window starts only when the canonical
 release containing the repair is served. No unit test or completed backlog label
 substitutes for that operational evidence.
 
@@ -534,6 +619,8 @@ the same principal, mandate and permitted tools.
 | Ask an accountable coworker | request_coworker | thread_write present; current delegation, action and request gates still apply |
 | Read the response and reconcile it | get_thread_result, get_child_threads; original task result/receipt | thread_read absent; qualify the supported result route before dispatch |
 | Inspect participation and messages | get_coworker_room_engagement, read_room_messages | work_room_read absent |
+| Resolve local installation purpose and peer limit | get_my_coworker_profile.installationContext plus existing trusted-link/estate projection | October 26 caller inspection confirms DEV/evolve-dpf/read-only peer; the COO must invoke its own admitted path |
+| Consult another installation’s COO | existing federation/A2A task, outbox and result contracts | Not qualified: helper presence and local A2A health do not prove a reachable remote COO tool; retain an explicit dependency until the federation owner supplies the supported route |
 | Record coordination and request supported recovery | post_room_message, record_agent_activity, resume_workroom_queue, reassign_workroom_executor, drive_workroom_runtime | relevant room/capsule write grants absent; each action requires its own authority/admission check |
 
 These are existing permission categories, not instructions to grant every write
@@ -549,6 +636,13 @@ an eligible owner's acknowledgement, read the actual result, and independently
 verify advancement. A prose acknowledgement or a tool advertised in a prompt
 alone does not establish awareness plus usable capability. Until that rehearsal,
 report onboarding and operational readiness as pending.
+
+AC-COO-08 extends that rehearsal: identify the local installation and a verified
+peer COO, request one permitted production fact absent from DEV, retain source
+and freshness, and read the destination’s acknowledgement and result through
+its authorized route. Also prove denied/unreachable context stays an owned wait
+and a sandbox returns evidence before expiry. A local handoff, federated mirror
+or membership invitation is not a substitute for this end-to-end qualification.
 
 ### Harness engineering alignment requested by the founder
 
@@ -593,3 +687,126 @@ or unbounded recursive spend as operating defaults. Harness optimization may
 improve how an authorized job runs; it cannot change who may authorize it or
 weaken its independent acceptance gate. No new engine, dependency or runtime
 permission is introduced by this design comparison.
+
+## October 27 amendment: the per-room overseer duty (BI-8E1486FA)
+
+**Backlog:** BI-8E1486FA. **Status:** operator direction; implementation in
+the branch that adds this section. Served-runtime acceptance is pending.
+
+Operator direction, 2026-10-27: "There should be a workroom owner who watches
+over and addresses issues like this per workroom." Rooms and items were being
+left hanging and the same mistakes repeated.
+
+### Evidence on the production install this month
+
+- WC-A4B7B438: PR #6532 merged, the room stayed live and refused a later claim
+  on the same item. Its drive recorded "the room's work item is done; the drive
+  stands down", but nothing closed the room.
+- WC-A2D58814 and WC-B9703CBC: leases expired five to six days earlier on merged
+  branches; both rooms still read `ready`.
+- WC-EC0E4382: 373 consecutive drive ticks held
+  `attention|role_stage|design-note` because "BI-985F4EC9 has no size, so its
+  investment is unknown". The item was later sized and delivered; the room never
+  concluded.
+
+The governed Workroom reaper (`work-capsule-reaper.ts`, run from the TaskRun
+watchdog) already classifies delivered and lease-expired rooms, but it acts only
+when `DPF_WORKCAPSULE_REAPER_ENABLED=1`, and it never looks at the backlog
+item, at duplicate rooms or at drive holds. The drive already reads every
+shaped room every 15 minutes and already stands a room down when its item is
+done (`drive-work-item-gate.ts`), but it never closes one. No component owned
+"this room is finished or stuck, so resolve it or hand it to someone".
+
+### Decision
+
+The duty runs inside the existing drive cycle (`runWorkroomDriveJob`), before
+rooms are driven. There is no new scheduler, table, migration, grant or agent
+role. Each cycle reads the rooms the drive already selected, applies ordered
+rules to each non-standing delivery room, and records one `workroom-overseer`
+activity naming the rule for every change it makes. Standing rooms
+(`idempotencyKey` `standing-room:*`) are excluded from every rule: they have no
+branch, no lease and no single item, and their stalls already reach the
+workroom-stall source.
+
+Rules, first match wins. Rules that resolve a room run before rules that only
+route it, so a merged duplicate is closed rather than reported:
+
+| Rule | Fires when | Effect |
+| --- | --- | --- |
+| R1 | item `done` or `retired`, and the PR merged or no PR is open | close the room, release its scope claims |
+| R2 | lease expired past the 24-hour resume grace, and the branch merged | close the room, release its scope claims |
+| R5 | another live delivery room exists for the same item, and this room's branch merged | close this room, release its scope claims |
+| R3 | lease expired past the grace, and the branch carries authored commits that are not merged | mark the room `needs resume`; raise one overseer Attention item |
+| R4 | the same drive hold has lasted 48 ticks (12 hours) or more | conclude the hold with a recorded outcome; raise one overseer Attention item |
+
+"Close" is the platform's existing delivered close-out: `archived` through
+`updateWorkCapsuleStatus`, the writer the reaper and the publication refusal
+(`deliveredCloseout`) already use. `complete` on a governed room is the
+completion-readiness transition, which needs evidence the overseer does not own.
+Scope is released through `releaseWorkCapsuleScope`. Both writers record their
+own activity rows; the overseer row adds the rule and the facts it read.
+
+Merge state comes from the reaper's existing sources, and the overseer and the
+reaper share one predicate. A room is merged when the verified GitHub
+observation for its exact head is merged; or, because a squash or rebase merge
+leaves the recorded head off main and many rooms never had their PR bound
+(WC-A2D58814, WC-B9703CBC, WC-EC0E4382), when its bound PR, or with none bound
+the newest PR observed for its repository and branch, merged after the room
+last recorded its head; or when its head is reachable from main in a runtime
+with a checkout. A newest PR that is open keeps the room open. A head recorded
+after the merge, or no observation at all, leaves the state unknown, and an
+unknown merge state never closes a room.
+
+R4 derives what it can. When the item has no size and the room declares a
+delivery shape, the size the shape implies (`DELIVERY_SHAPE_SIZE`) is recorded
+on the conclusion as the proposed fix. The drive has no governed writer for an
+item's size (`size_backlog_item` is a triage-granted MCP action), so the
+overseer does not write it: the Attention item carries the derived value to the
+owner. Any other long hold concludes as `needs owner`. Either way the hold ends
+with a recorded outcome instead of idling, and the same hold is never concluded
+twice.
+
+Attention is a projection, like every other source: the overseer writes
+`workspaceState.workroomOverseer.attention` and the workroom-stall source lists
+it under the id `workroom-overseer:<capsuleId>`, deep-linked to the room and
+addressed to the room's Process Overseer (or, failing that, its accountable
+participant). One record per room is the dedupe. A raise whose rule key is
+unchanged writes nothing; when the condition clears (the session resumed, the
+hold moved) the next cycle clears the record and says so.
+
+Every rule is idempotent: a closed room leaves the drive's selection, and the
+routing rules compare the stored rule key before writing. Each cycle logs a
+summary (rooms considered, and per rule: fired, already recorded, refused).
+`DPF_WORKROOM_OVERSEER_DRY_RUN=1` keeps the summary and writes nothing. A writer
+that refuses (for example a CAS conflict) is counted and retried next cycle,
+never retried in the same one.
+
+### Research & Benchmarking
+
+Checked 2026-10-27; no dependency is adopted.
+
+- Harness 2 (arXiv 2610.14224), the operator's reference: adopt a bounded
+  budget per attempt (the 48-tick hold budget), always conclude (every long hold
+  ends in a recorded outcome), and retain a lesson only with evidence (each
+  conclusion stores the facts it read). Reject open-ended retry.
+- [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+  and [garbage collection with owner references](https://kubernetes.io/docs/concepts/architecture/garbage-collection/):
+  adopt a level-triggered reconcile loop that compares observed state with the
+  desired state and is safe to re-run; the room's item and branch are its
+  owners, and a room whose owners are finished is collected. Reject a second
+  controller beside the drive.
+- GitHub [automatic deletion of merged head branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-the-automatic-deletion-of-branches)
+  and the [stale action](https://github.com/actions/stale): adopt automatic
+  close on a merge fact and a bounded inactivity window with one notice before
+  action. Reject closing unmerged work on inactivity alone; R3 asks the owner
+  instead.
+- ITIL 4 problem management: every record has one problem owner who sees it to
+  closure. Adopt the room's Process Overseer as that owner for anything the
+  rules cannot resolve.
+
+### Acceptance
+
+The item's acceptance criteria AC-1 to AC-4 bind. Unit tests cover each rule
+firing and not firing, standing-room exclusion, an idempotent second cycle, and
+Attention dedupe. Operational acceptance needs one served-runtime cycle that
+closes a merged room and routes an unmerged one; unit evidence does not close it.

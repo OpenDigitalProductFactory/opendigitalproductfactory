@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ workroom: { findUnique: vi.fn() }, workroomActivity: { findMany: vi.fn(), findFirst: vi.fn() },
   taskRun: { findMany: vi.fn() }, backlogItem: { findMany: vi.fn() }, $queryRaw: vi.fn(),
   $executeRaw: vi.fn(), $transaction: vi.fn() }));
+const handoffRecovery = vi.hoisted(() => vi.fn());
+vi.mock("./workroom-failed-handoff-recovery.server", () => ({ loadWorkroomFailedHandoffRecovery: handoffRecovery }));
 const roomAccess = vi.hoisted(() => vi.fn(async () => ({ decision: { level: "content" } })));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 vi.mock("../portfolio/investment-balance-server", () => ({ projectItemInvestment: vi.fn(async () => null) }));
@@ -37,6 +39,7 @@ let candidateFailure: Error | null;
 describe("get_workroom native review readback", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    handoffRecovery.mockResolvedValue(null);
     db.$transaction.mockImplementation(async work => work(db));
     db.workroom.findUnique.mockResolvedValue(room);
     db.workroomActivity.findMany.mockResolvedValue([]);
@@ -56,6 +59,26 @@ describe("get_workroom native review readback", () => {
       if (sql.includes('AS "rowId"')) return identities;
       throw new Error("Unexpected review query");
     });
+  });
+
+
+  it("retains the current recorded blocker through model serialization without scanning history or granting a repair", async () => {
+    const explanation = "Transfer did not complete. The recorded blocker must be inspected before another attempt.";
+    db.workroom.findUnique.mockResolvedValue({ ...room, status: "blocked",
+      workspaceState: { statusOverride: { reason: explanation, until: new Date(Date.now() + 60_000).toISOString() },
+        unrelated: "irrelevant".repeat(MCP_ROUTE_TOOL_RESULT_CHAR_CAP) } });
+    candidates = [];
+    identities = [];
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1" }, "requester-1");
+    const formatted = clampToolResultForModel(result, { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP });
+    expect(formatted.truncated).toBe(false);
+    const readback = JSON.parse(formatted.text.slice(formatted.text.indexOf("\n") + 1));
+    expect(readback).toMatchObject({ capsule: { recovery: { state: "blocked",
+      recordedBlocker: { explanation, explanationState: "current", coordinationOnly: true },
+      blocker: { reason: "workroom-blocked", accountableOwner: null, action: null } } },
+      omittedFields: expect.arrayContaining(["capsule.workspaceState"]) });
+    expect(JSON.stringify(readback)).not.toContain("irrelevant");
+    expect(db.workroomActivity.findMany).not.toHaveBeenCalled();
   });
 
   it("resolves a Build Studio row-id linkage before emitting the semantic backlog recovery call", async () => {
@@ -251,3 +274,5 @@ describe("get_workroom native review readback", () => {
       success: false, error: "workroom_recovery_budget_exceeded" });
   });
 });
+
+it("passes actual authenticated MCP context into the typed current-room recovery reader",async()=>{db.workroom.findUnique.mockResolvedValue({...room,status:"blocked"});candidates=[];identities=[];const context={agentId:"AGT-EXT-CODEX",authSource:"oauth",apiTokenId:"own-token",tokenScope:"write",tokenGrantScopes:["work_capsule_write"]};const recovery={kind:"failed-bounded-handoff",state:"waiting",reason:"handoff-receiver-acknowledgement-required",checkedAt:new Date().toISOString(),owner:{userId:"requester-1",agentId:"AGT-EXT-CODEX",executorRef:"source-chat"},original:{envelopeId:"original",executionId:"actual",executedAt:new Date().toISOString()},action:null,pending:{requestId:"real-request",requestDigest:"a".repeat(64),receiverRef:"receiver-chat"}};handoffRecovery.mockResolvedValue(recovery);const result=await getWorkCapsuleTool({capsuleId:"WC-1"},"requester-1",context);expect(handoffRecovery).toHaveBeenCalledWith(expect.objectContaining({userId:"requester-1",workroomRowId:"room-row",context}),db);expect(result).toMatchObject({data:{capsule:{recovery:{failedHandoffRecovery:recovery}}}});});

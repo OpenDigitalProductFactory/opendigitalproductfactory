@@ -4,10 +4,13 @@
 // manifest of one PNG per page (preview-manifest.ts). The page lists the pages;
 // GET /api/documents/:documentId/previews/:page serves one image. The route
 // owns the session check; this resolves what to send and never throws for an
-// expected miss.
+// expected miss. A document the viewer may not read is "Document not found."
+// (BI-957915CB). loadPreviewPages takes a version id the page has already
+// loaded through the viewer check.
 
 import { prisma } from "@dpf/db";
 import { readDocumentBlob } from "./blob-storage";
+import { readableDocumentWhere, type DocumentViewer } from "./document-access";
 import { contentFilename, type DocumentContentResult } from "./document-content";
 import { parsePreviewManifest, type PreviewManifest } from "./preview-manifest";
 import { err, ok } from "@/lib/shared/action-result";
@@ -46,12 +49,12 @@ export async function loadPreviewPages(documentVersionId: string, deps: Document
 }
 
 export async function resolvePreviewImage(
-  input: { documentId: string; page: number; version?: number | null },
+  input: { documentId: string; page: number; version?: number | null; viewer: DocumentViewer },
   deps: DocumentPreviewDeps = defaultDeps(),
 ): Promise<DocumentContentResult> {
   const pinned = typeof input.version === "number" && Number.isInteger(input.version);
-  const document = (await deps.db.document.findUnique({
-    where: { documentId: input.documentId },
+  const document = (await deps.db.document.findFirst({
+    where: { AND: [{ documentId: input.documentId }, readableDocumentWhere(input.viewer)] },
     select: pinned
       ? { title: true, versions: { where: { version: input.version! }, take: 1, select: { id: true } } }
       : { title: true, currentVersion: { select: { id: true } } },

@@ -11,6 +11,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
+import { improvementProposalOutcome } from "@/lib/backlog/intake-outcome";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
@@ -686,9 +687,7 @@ async function proposeImprovementHandler(
   // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
   // backlog the moment the proposal exists, so it is visible and triageable
   // without the old manual Review→Prioritize promotion that never happened.
-  // The proposal stays the evidence record; the BacklogItem is the work.
-  //
-  // Gate (BI-18685188): low-severity [reference-doc] doc-polish proposals are
+  // The proposal stays the evidence record; the BacklogItem is the work. Gate (BI-18685188): low-severity [reference-doc] doc-polish proposals are
   // withheld from the backlog here, mirroring the reconcile-path exclusion, so
   // the scanner's recurring doc-suggestion batch never inflates the backlog at
   // creation. They remain as ImprovementProposal rows (backlogItemId null) for
@@ -705,6 +704,7 @@ async function proposeImprovementHandler(
       );
       const ingest = await ingestBacklogItem({
         title: proposal.title,
+        outcome: improvementProposalOutcome(proposal), // BI-458CCA8D
         body: [
           proposal.description,
           proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,

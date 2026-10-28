@@ -1,5 +1,7 @@
 // Pure utility library — no server imports. Safe in tests and client components.
 
+// Type-only: an inline `import("…")` type reads as a dynamic value import to the
+// client/server boundary check, which then walks into server-only modules.
 import type { BacklogWorkroomSummary } from "@/lib/work-capsules/backlog-workroom-ownership";
 
 export type BacklogItemInput = {
@@ -10,6 +12,8 @@ export type BacklogItemInput = {
   source?: BacklogSource;
   priority?: number;
   body?: string;
+  /** Create only: the outcome the item delivers, stored as the body's "## Outcome" (BI-B1B44777). */
+  outcome?: string;
   taxonomyNodeId?: string;
   digitalProductId?: string;
   organizationId?: string;

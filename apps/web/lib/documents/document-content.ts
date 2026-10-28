@@ -1,11 +1,13 @@
 // Serve a managed document's stored bytes (BI-9D43CBEF): the original file
 // ("Download original") or its PDF rendition ("View PDF") on the document page.
 // The route (app/api/documents/[documentId]/content) owns the session check;
-// this resolves what to send and never throws for an expected miss.
+// this resolves what to send and never throws for an expected miss. A document
+// the viewer may not read is "Document not found." (BI-957915CB).
 
 import { prisma } from "@dpf/db";
 import { readDocumentBlob } from "./blob-storage";
 import { officeSourceExtension } from "./conversion/formats";
+import { readableDocumentWhere, type DocumentViewer } from "./document-access";
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 
 export type DocumentContentKind = "original" | "pdf";
@@ -51,12 +53,12 @@ export function contentFilename(title: string, extension: string): string {
 }
 
 export async function resolveDocumentContent(
-  input: { documentId: string; rendition: DocumentContentKind; version?: number | null },
+  input: { documentId: string; rendition: DocumentContentKind; version?: number | null; viewer: DocumentViewer },
   deps: DocumentContentDeps = defaultDeps(),
 ): Promise<DocumentContentResult> {
   const pinned = typeof input.version === "number" && Number.isInteger(input.version);
-  const document = await deps.db.document.findUnique({
-    where: { documentId: input.documentId },
+  const document = await deps.db.document.findFirst({
+    where: { AND: [{ documentId: input.documentId }, readableDocumentWhere(input.viewer)] },
     select: pinned
       ? { title: true, versions: { where: { version: input.version! }, take: 1, select: VERSION_SELECT } }
       : { title: true, currentVersion: { select: VERSION_SELECT } },

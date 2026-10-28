@@ -77,6 +77,8 @@ export type RoomTurnAuthorityFacts = {
     declaredPriority: GoldenTrianglePreference | null;
     /** The shape-derived action boundary (work-posture derive.ts), when any. */
     shapeActionBoundary: ProactivityActionBoundary | null;
+    /** The room's change passes a governed gate chain (isGateGovernedExecutor). */
+    gateGoverned?: boolean;
     /**
      * Every active participant the room records (principal row id → roles).
      * Null when the room records none — the pre-W2 shape, which does not narrow.
@@ -162,14 +164,20 @@ function boundaryPermitsHandsOn(boundary: ProactivityActionBoundary | null): boo
  * The room's action boundary: its own declaration, then its collaboration
  * shape's bias, then the decreed platform default. One precedence for the turn
  * authority and for the PR follow-through (BI-88341B5D), so they never disagree.
+ * A gate-governed room skips the shape: its gates review the change, not a
+ * person (BI-D0DFE502) — the same rule the displayed posture applies.
  */
 export function resolveRoomActionBoundary(
-  room: { declaredActionBoundary: ProactivityActionBoundary | null; shapeActionBoundary: ProactivityActionBoundary | null } | null,
+  room: {
+    declaredActionBoundary: ProactivityActionBoundary | null;
+    shapeActionBoundary: ProactivityActionBoundary | null;
+    gateGoverned?: boolean;
+  } | null,
   platformDefaultActionBoundary: ProactivityActionBoundary | null,
 ): ProactivityActionBoundary | null {
-  return room
-    ? room.declaredActionBoundary ?? room.shapeActionBoundary ?? platformDefaultActionBoundary
-    : platformDefaultActionBoundary;
+  if (!room) return platformDefaultActionBoundary;
+  const shapeActionBoundary = room.gateGoverned ? null : room.shapeActionBoundary;
+  return room.declaredActionBoundary ?? shapeActionBoundary ?? platformDefaultActionBoundary;
 }
 
 /**

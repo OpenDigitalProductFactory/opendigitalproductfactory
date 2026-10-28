@@ -428,7 +428,9 @@ export function scopedTestRunnerCommand(packageJson: string, fileArgs: string): 
   } catch {
     usesJest = false;
   }
-  return usesJest ? `pnpm exec jest --ci ${fileArgs}` : `pnpm exec vitest run ${fileArgs}`;
+  // BI-33B54E4B: the sandbox exports NODE_ENV=development and Vitest keeps an
+  // existing NODE_ENV, so tests that rely on the test environment failed here only.
+  return usesJest ? `NODE_ENV=test pnpm exec jest --ci ${fileArgs}` : `NODE_ENV=test pnpm exec vitest run ${fileArgs}`;
 }
 
 function splitExitMarker(raw: string): { output: string; exitCode: number | null } {

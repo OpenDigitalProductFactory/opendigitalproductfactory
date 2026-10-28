@@ -24,6 +24,7 @@ import { getEffectivePostureForAgent } from "@/lib/golden-triangle/persistence";
 import type { ArchetypeStreamInput } from "@dpf/validators/workroom-policy";
 
 import type { WorkroomPostureContext } from "./room-posture";
+import { getWorkroomPostureDefault } from "./workroom-posture-defaults";
 
 /**
  * Map the room's subject to a proactivity activity family. Only families the
@@ -98,10 +99,14 @@ export async function loadWorkroomPostureContext(ref: {
       agentId: ref.assignedToAgentId,
     });
 
-    const [hours, stream, priority] = await Promise.all([
+    const [hours, stream, priority, workroomDefault] = await Promise.all([
       resolveOperatingScheduleForSystem().catch(() => null),
       resolveStream(),
       getEffectivePostureForAgent(ref.assignedToAgentId, null).catch(() => null),
+      // The owner's "How work rooms behave" default. The runtime already reads
+      // it (room-turn-authority); without it here the room showed a posture
+      // that did not govern (BI-D0DFE502).
+      getWorkroomPostureDefault().catch(() => null),
     ]);
 
     return {
@@ -123,6 +128,7 @@ export async function loadWorkroomPostureContext(ref: {
       stream,
       activityFamily,
       hardPolicy: null,
+      workroomDefault,
     };
   } catch {
     return null;

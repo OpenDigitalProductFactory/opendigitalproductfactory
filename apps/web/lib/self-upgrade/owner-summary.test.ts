@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildOwnerReleaseSummary, type OwnerReleaseInput } from "./owner-summary";
 import type { LocalChangesResult } from "./local-changes-ledger";
+import { getSelfUpgradeRecoveryState } from "./recovery-eligibility";
 
 const NO_LOCAL_CHANGES: LocalChangesResult = { available: true, changes: [] };
 
@@ -22,7 +23,7 @@ function baseInput(overrides: Partial<OwnerReleaseInput> = {}): OwnerReleaseInpu
     blackoutUntil: null,
     blackoutName: null,
     platformVersion: { version: "1.2.0", gitSha: "abc1234" },
-    rollbackAvailable: false,
+    recovery: getSelfUpgradeRecoveryState(null),
     latestRun: null,
     latestRunImpact: null,
     ...overrides,
@@ -51,6 +52,13 @@ function allCopy(s: ReturnType<typeof buildOwnerReleaseSummary>): string {
 }
 
 describe("buildOwnerReleaseSummary", () => {
+  it("does not promise undo or universal automatic recovery when restoration is unavailable", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({ isFresh: false,
+      targetSha: "f".repeat(40) }), NO_LOCAL_CHANGES);
+    expect(summary.rollback.available).toBe(false);
+    expect(allCopy(summary)).not.toMatch(/can be undone|restored automatically|restores the previous version on its own/i);
+    expect(summary.riskNotice?.recovery).toBe("A prior version can be used only if it is compatible with the retained history.");
+  });
   it("reports an unidentified install as unavailable instead of up to date", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({
@@ -224,9 +232,9 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.whatCouldGoWrong.some((w) => w.includes("higher-impact"))).toBe(true);
   });
 
-  it("always includes the automatic-restore safety net", () => {
+  it("describes prior-version recovery as conditional on compatible retained history", () => {
     const s = buildOwnerReleaseSummary(baseInput(), NO_LOCAL_CHANGES);
-    expect(s.whatCouldGoWrong.at(-1)).toContain("restores the previous version");
+    expect(s.whatCouldGoWrong.at(-1)).toBe("A prior version can be used only if it is compatible with the retained history.");
   });
 
   it("reports in-progress while a run is queued/running/completing", () => {
@@ -243,29 +251,34 @@ describe("buildOwnerReleaseSummary", () => {
     }
   });
 
-  it("reports failed and points at recovery when a run failed with a recovery point", () => {
+  it("reports failed without offering restoration just because a backup exists", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({
         isFresh: false,
         targetSha: "f".repeat(40),
-        rollbackAvailable: true,
+        recovery: getSelfUpgradeRecoveryState({ status: "failed", completionEvidence: { recoveryPoint: {
+          schemaVersion: 1, trigger: "pre-upgrade-recovery", status: "ok",
+          members: [{ target: "postgres", runId: "BR-PG", status: "ok" }],
+        } } }),
         latestRun: { status: "failed", reason: null, targetSha: null },
       }),
       NO_LOCAL_CHANGES,
     );
     expect(s.state).toBe("failed");
     expect(s.tone).toBe("danger");
-    expect(s.rollback.available).toBe(true);
-    expect(s.recommendedAction.detail).toContain("Restore the previous version");
+    expect(s.rollback.available).toBe(false);
+    expect(s.rollback.detail).toContain("review history can be preserved safely");
+    expect(s.recommendedAction.detail).not.toContain("Restore the previous version");
   });
 
-  it("marks rollback unavailable (with a reassuring detail) when no governed recovery point exists", () => {
+  it("explains unavailable restoration when no governed recovery point exists", () => {
     const s = buildOwnerReleaseSummary(
-      baseInput({ rollbackAvailable: false, latestRun: { status: "succeeded", reason: null, targetSha: null } }),
+      baseInput({ recovery: getSelfUpgradeRecoveryState({ status: "succeeded", completionEvidence: null }),
+        latestRun: { status: "succeeded", reason: null, targetSha: null } }),
       NO_LOCAL_CHANGES,
     );
     expect(s.rollback.available).toBe(false);
-    expect(s.rollback.detail).toContain("saved automatically");
+    expect(s.rollback.detail).toContain("no governed recovery point");
   });
 
   it("counts kept local changes and explains they are preserved", () => {
@@ -461,7 +474,7 @@ describe("buildOwnerReleaseSummary — a failure explains itself", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({
         ...FAILED,
-        rollbackAvailable: false,
+        recovery: getSelfUpgradeRecoveryState(null),
         latestRun: { status: "failed", reason: "merge-conflict: 3 files", targetSha: null },
       }),
       NO_LOCAL_CHANGES,

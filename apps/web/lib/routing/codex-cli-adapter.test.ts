@@ -346,6 +346,65 @@ describe("Codex native effect replay fence", () => {
   });
 });
 
+// BI-PIR-0371f80d: from 2026-10-27 every Codex run failed with exit 1 and the
+// CLI's verdict ("You've hit your usage limit ... try again at Nov 2nd, 2026
+// 6:13 AM") was dropped: the run stayed uncertain, the log said only
+// "stderrPresent: true", and the provider still read as available.
+describe("Codex CLI failure verdict is never hidden", () => {
+  const USAGE_LIMIT = "ERROR: You\u2019ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits or try again at Nov 2nd, 2026 6:13 AM.";
+
+  async function runFailing(stderr: string) {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        proc.emit("spawn");
+        proc.stderr.emit("data", Buffer.from(stderr));
+        proc.emit("close", 1);
+      });
+      return proc;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const error = await codexCliAdapter.execute(makeRequest()).catch((e: unknown) => e);
+    const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+    warn.mockRestore();
+    return { error: error as { name: string; diagnostics?: Record<string, unknown> }, logged };
+  }
+
+  it("logs the CLI's own error line, classifies it, and records the subscription cap", async () => {
+    const { recordCliRateLimit } = await import("./cli-pool-status");
+    const { error, logged } = await runFailing(`Human: PRIVATE_PROMPT discussing 401 Unauthorized\n${USAGE_LIMIT}\n`);
+    expect(error.name).toBe("NativeCliExecutionUncertainError");
+    expect(error.diagnostics).toMatchObject({ exitCode: 1, cliFailureHint: "quota" });
+    expect(logged).toContain("hit your usage limit");
+    expect(logged).toContain("hint=quota");
+    expect(logged).not.toContain("PRIVATE_PROMPT");
+    expect(recordCliRateLimit).toHaveBeenCalledWith("codex-cli", "codex", expect.stringContaining("try again at Nov 2nd, 2026 6:13 AM"), undefined);
+  });
+
+  it("classifies the CLI's auth verdict without recording a rate limit", async () => {
+    const { recordCliRateLimit } = await import("./cli-pool-status");
+    const { error, logged } = await runFailing("ERROR: Your access token could not be refreshed. Please sign in again.\n");
+    expect(error.diagnostics).toMatchObject({ cliFailureHint: "auth" });
+    expect(logged).toContain("hint=auth");
+    expect(recordCliRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("bounds and redacts what it logs", async () => {
+    const { logged } = await runFailing(`ERROR: upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP ${"x".repeat(5_000)}\n`);
+    expect(logged).not.toMatch(/eyJhbGci|sk-proj-ABCDEFGH/);
+    expect(logged).toContain("[redacted]");
+    expect(logged.length).toBeLessThan(1_200);
+  });
+});
+
 describe("Codex inference context isolation", () => {
   it("keeps simultaneous account credentials in distinct private homes", async () => {
     vi.clearAllMocks();

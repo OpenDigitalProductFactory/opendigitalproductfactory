@@ -24,6 +24,7 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
+import { mergedBaseDerivedVerdict } from "./derived-artifacts-gate.mjs";
 
 /**
  * BI-8CDA7F95: classify the diff with the classifier the cloud trusts. When the
@@ -65,6 +66,29 @@ export function obligationLines(repoRoot) {
   } catch {
     return [];
   }
+}
+
+/**
+ * BI-1A06A1AF: refuse, before any guard runs or lease is claimed, a branch
+ * whose derived artifacts CI will judge on a merge HEAD cannot predict. Prints
+ * CI's artifact ids and `run:` remedies. A verdict that cannot be computed is
+ * UNRUN (BI-BD7E0319, BI-20B40955) and does not refuse; CI still enforces.
+ * Returns the exit code.
+ */
+export function refuseOnMergedBaseStaleness({ cwd = process.cwd(), registry, write = text => process.stderr.write(text) } = {}) {
+  const verdict = mergedBaseDerivedVerdict({ cwd, ...(registry ? { registry } : {}) });
+  if (verdict.status === "unrun") {
+    write(`[pregate-preflight] derived artifacts vs ${verdict.baseRef}: UNRUN — the merged base could not be computed; this is not a staleness verdict. CI still enforces.\n`);
+    return 0;
+  }
+  if (verdict.status !== "stale") return 0;
+  write(`[pregate-preflight] HEAD is ${verdict.behind} commit(s) behind ${verdict.baseRef}; CI judges derived artifacts on the merge of both, and both changed these inputs since ${verdict.mergeBase.slice(0, 12)}:\n`);
+  for (const entry of verdict.entries) {
+    write(`[derived-artifacts] ${entry.id}: STALE\n`);
+    write(`[derived-artifacts]   run: ${entry.generate.join(" ")}\n`);
+  }
+  write(`[pregate-preflight] remedy: git merge ${verdict.baseRef}, then run each command above and commit — no lease was claimed.\n`);
+  return 1;
 }
 
 function resolveChangeScope(worktreePath) {
@@ -116,6 +140,14 @@ export async function main() {
     process.stdout.write(
       `[pregate-preflight] root clone current (${staleRoot.rootClonePath})\n`,
     );
+  }
+
+  if (!process.env[PREFLIGHT_SKIP_ENV]) {
+    const mergedBase = refuseOnMergedBaseStaleness();
+    if (mergedBase !== 0) {
+      process.exitCode = mergedBase;
+      return;
+    }
   }
 
   // Stage 0 (BI-6C54223E, DOC-C263E0C9): enforce compile-readiness for code
@@ -200,6 +232,7 @@ export async function main() {
     process.removeListener("SIGTERM", cancel);
   }
   const { result } = execution;
+  if (!execution.reused) await recordPreflightOutcome({ result, plan: planned.entries, startedAt });
   const fullyVerified = execution.identityVerified && !result.skipped && result.entries.length === planned.entries.length
     && result.entries.every(entry => entry.status === "passed");
   process.stdout.write(`DPF_HOST_PREFLIGHT_RESULT=${JSON.stringify({ status: fullyVerified ? "passed" : "inconclusive",
@@ -290,6 +323,25 @@ export async function main() {
       (caveats.length > 0 ? ` (${caveats.join(", ")}, see warnings)` : "") +
       "\n",
   );
+}
+
+/**
+ * BI-FEDD8F45: record this preflight as a guard outcome run and submit the
+ * spool. A skipped run is recorded with its override and no guard results.
+ * A reused receipt is not recorded again: those guards did not run. Never
+ * throws and never changes the preflight's verdict.
+ */
+export async function recordPreflightOutcome({ result, plan, startedAt, env = process.env, repoRoot = process.cwd() }) {
+  try {
+    const record = await import("./lib/guard-outcome-record.mjs");
+    const runner = env.DPF_GUARD_OUTCOME_RUNNER === "pre-push-gate" ? "pre-push-gate" : "pregate";
+    const { guards: declarations } = record.loadGuardDeclarations({ repoRoot });
+    const guards = result.skipped ? [] : record.policyGuardResults(result.entries, plan, { repoRoot, declarations });
+    const { submitSpool } = await import("./lib/guard-outcome-submit.mjs");
+    await record.recordGuardRun({ runner, guards, startedAt, durationMs: Date.now() - startedAt, cwd: repoRoot, env, submit: submitSpool });
+  } catch {
+    // observation only
+  }
 }
 
 export async function runPreflightEntrypoint(run = main, report = text => process.stderr.write(text)) {

@@ -17,6 +17,11 @@ it("preserves room admission after a successful current-authority check", async 
   expect(await defaultGovernedToolPreflight(event, room)).toMatchObject({ success: false, error: "workroom_access_denied" });
   expect(room).toHaveBeenCalledOnce();
 });
+it("forwards the authenticated actor and captured generation", async () => {
+  const executionFence = { schemaVersion: 1 as const, reservation: "original", dispatchClaim: null, authorityDigest: null, requestDigest: "a".repeat(64) };
+  await defaultGovernedToolPreflight({ ...event, context: { ...event.context, agentId: "reviewer", taskExecutionFence: executionFence } }, vi.fn());
+  expect(guard).toHaveBeenCalledWith(expect.objectContaining({ actingAgentId: "reviewer", executionFence }));
+});
 it("defers approval-completion checks to execution so the existing approval can close as failed", async () => {
   const room = vi.fn();
   expect(await defaultGovernedToolPreflight({ ...event, context: { ...event.context, callerClient: "approval-completion" } }, room)).toBeNull();

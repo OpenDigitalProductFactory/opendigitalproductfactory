@@ -53,3 +53,11 @@ it("returns the actual missing immutable guidance in both the visible hold and p
  expect(JSON.stringify(hold?.settlement.data.progressPayload)).toContain(missing);
  expect(hold?.outcome).toMatchObject({kind:"result",result:{status:"input-required",resumable:false,requiresApproval:false}});
 });
+
+it.each([
+ ["not JSON","contribution-json-invalid"],
+ [content.replace('"criteria":["Hierarchy"]','"criteria":[{"name":"Hierarchy"}]'),"contribution-criteria-invalid"],
+ [content.replace("professions/ux-design/hierarchy","professions/ux-design/invented"),"contribution-corpus-ref-unproven"],
+])("retains the precise contribution predicate for %s",async (candidate,code)=>{
+ expect(await engagementReadCompletion("TR-original",binding).inspect(candidate)).toMatchObject({complete:false,code});
+});

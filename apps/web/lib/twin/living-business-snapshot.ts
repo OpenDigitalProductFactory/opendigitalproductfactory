@@ -24,6 +24,7 @@ import {
 } from "@dpf/storefront-templates";
 
 import { buildStageFlow, type StageDemand } from "./stage-flow";
+import { addWorkroomStageDemand, bindArchetypeWorkroomStages } from "./workroom-stage-binding";
 import {
   daysBetween,
   humanizeWait,
@@ -415,6 +416,7 @@ export interface LivingBusinessLoadOptions {
   viewer?: UserContext;
   now?: Date;
   clock?: () => number;
+  loadWorkroomStageCounts?: () => Promise<Map<string, { wip: number; depth: number }>>;
 }
 
 /**
@@ -702,8 +704,8 @@ export async function loadLivingBusinessProjection(
 
   // Value-stream flow lane (workstream C): live demand grouped by its stage.
   // Waiting (pending / unassigned) demand sits at the primary stage; work in
-  // progress has moved to Deliver.
-  const binding = deriveTwinValueStreamBinding(def);
+  // progress has moved to Deliver, as do delivery-shape Workroom stages (BI-B32D8C16).
+  const binding = bindArchetypeWorkroomStages(def, deriveTwinValueStreamBinding(def));
   const deliverStage = binding.stages.some((s) => s.stageKey === "deliver")
     ? "deliver"
     : binding.primaryStageKey;
@@ -721,6 +723,7 @@ export async function loadLivingBusinessProjection(
     cur.longestWaitMs = Math.max(cur.longestWaitMs ?? 0, waitMs);
     stageDemand[stage] = cur;
   }
+  await addWorkroomStageDemand(binding, stageDemand, opts?.loadWorkroomStageCounts);
   const stageFlow = buildStageFlow(binding, stageDemand);
 
   // Outcomes (workstream D): the archetype decides what proof of value means.

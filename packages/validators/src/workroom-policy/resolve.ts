@@ -130,6 +130,16 @@ export interface WorkPostureInput {
    * COWORKER behave). Absent means today's behaviour exactly.
    */
   workroomDefault?: RoomPostureDeclaration | null;
+  /**
+   * The room's change already passes a governed gate chain (Build Studio: CI,
+   * merge queue, semantic review, DCO) — see `isGateGovernedExecutor`. Its
+   * "propose" is to those gates, not to a person, so derivation neither
+   * narrows the boundary nor quiets the pace, and the decreed default decides
+   * the boundary exactly as the runtime turn authority does
+   * (`resolveRoomActionBoundary`). Declarations and hard policy still tighten.
+   * BI-D0DFE502, WWMD DI-EDAF65D71636.
+   */
+  gateGoverned?: boolean;
   shape?: RoomShapeInput | null;
   /** Existing Build Studio rightsizing facts, when this room fronts a build. */
   stakes?: WorkStakesInput | null;
@@ -249,7 +259,9 @@ export function resolveWorkPosture(input: WorkPostureInput): ResolvedWorkPosture
 
   const clock = input.temporal ? resolveTemporalBand(input.temporal) : null;
   const band: TemporalBand | null = clock?.band ?? null;
-  const biases = collectBiases(input, clock);
+  const biases = input.gateGoverned
+    ? collectBiases(input, clock).map((bias): PostureBias => ({ ...bias, actionBoundary: undefined, damp: undefined }))
+    : collectBiases(input, clock);
 
   // ── Layer 3: derived. Applied ONLY through the tighten-only clamps. ──
   const priorityAxes: Array<"quality" | "cost" | "time"> = [];
@@ -308,7 +320,9 @@ export function resolveWorkPosture(input: WorkPostureInput): ResolvedWorkPosture
   // Only fills gaps. It never overrides a derived value, because the shape of
   // the work is more specific than a blanket preference about rooms; and its
   // boundary still goes through the tighten-only clamp, so decreeing a default
-  // can restrict what rooms may do and can never widen it.
+  // can restrict what rooms may do and can never widen it — except in a
+  // gate-governed room, where the gates are the reviewer and the default sets
+  // the boundary as the runtime turn authority already does (BI-D0DFE502).
   const workroomDefault = input.workroomDefault;
   if (workroomDefault) {
     if (workroomDefault.proactivityLevel && proactivitySource !== "derived") {
@@ -320,7 +334,14 @@ export function resolveWorkPosture(input: WorkPostureInput): ResolvedWorkPosture
       if (next !== proactivityLevel) proactivitySource = "workroom-default";
       proactivityLevel = next;
     }
-    if (workroomDefault.actionBoundary) {
+    if (workroomDefault.actionBoundary && input.gateGoverned) {
+      const next = workroomDefault.actionBoundary;
+      record(adjustments, "actionBoundary", actionBoundary, next, {
+        reasonCode: "workroom_default_gate_governed",
+        reason: "The build gates review this change, so the default for rooms decides whether it may act alone.",
+      });
+      actionBoundary = next;
+    } else if (workroomDefault.actionBoundary) {
       const next = tightenActionBoundary(actionBoundary, workroomDefault.actionBoundary);
       record(adjustments, "actionBoundary", actionBoundary, next, {
         reasonCode: "workroom_default",

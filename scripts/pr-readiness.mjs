@@ -34,8 +34,8 @@ export function readPublicationGateRecords(context = resolveWorktreeContext(), r
   return records;
 }
 
-function git(args, { allowFail = false } = {}) {
-  const result = runGit(args, { cwd: process.cwd(), maxBuffer: 32 * 1024 * 1024 });
+function git(args, { allowFail = false, cwd = process.cwd() } = {}) {
+  const result = runGit(args, { cwd, maxBuffer: 32 * 1024 * 1024 });
   if (result.ok || allowFail) return result.stdout;
   throw new GitCommandError(args, result);
 }
@@ -81,8 +81,8 @@ function usage() {
   ].join("\n");
 }
 
-function readCommits() {
-  const raw = git(["log", "origin/main..HEAD", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%B%x1e"], { allowFail: true });
+function readCommits({ baseSha, headSha }, git) {
+  const raw = git(["log", `${baseSha}..${headSha}`, "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%B%x1e"], { allowFail: true });
   return raw
     .split("\x1e")
     .map((entry) => entry.trim())
@@ -99,49 +99,53 @@ function readCommits() {
     });
 }
 
-function readAheadBehind(upstream) {
+function readAheadBehind(upstream, { baseSha, headSha }, git) {
   if (!upstream) {
-    const ahead = Number.parseInt(git(["rev-list", "--count", "origin/main..HEAD"], { allowFail: true }).trim() || "0", 10);
+    const ahead = Number.parseInt(git(["rev-list", "--count", `${baseSha}..${headSha}`], { allowFail: true }).trim() || "0", 10);
     return { ahead, behind: 0 };
   }
-  const [behind, ahead] = git(["rev-list", "--left-right", "--count", `${upstream}...HEAD`], { allowFail: true })
+  const [behind, ahead] = git(["rev-list", "--left-right", "--count", `${upstream}...${headSha}`], { allowFail: true })
     .trim()
     .split(/\s+/)
     .map((n) => Number.parseInt(n || "0", 10));
   return { ahead: Number.isFinite(ahead) ? ahead : 0, behind: Number.isFinite(behind) ? behind : 0 };
 }
 
-function readRepoState(publishedRef = null) {
-  fetchOriginMainSharedSafe((args) => git(args));
+export function readRepoState(publishedRef = null, { cwd = process.cwd(), fetch = fetchOriginMainSharedSafe } = {}) {
+  const readGit = (args, options) => git(args, { ...options, cwd });
+  fetch((args) => readGit(args));
+  const baseSha = readGit(["rev-parse", "--verify", "origin/main^{commit}"]).trim();
 
-  const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
-  const headSha = git(["rev-parse", "HEAD"]).trim();
+  const branch = readGit(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const headSha = readGit(["rev-parse", "HEAD"]).trim();
   const publishedSha = publishedRef
-    ? git(["rev-parse", "--verify", publishedRef], { allowFail: true }).trim()
+    ? readGit(["rev-parse", "--verify", publishedRef], { allowFail: true }).trim()
     : "";
-  const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { allowFail: true }).trim();
-  const aheadBehind = readAheadBehind(upstream);
-  const mergeBases = git(["merge-base", "--all", "origin/main", "HEAD"], { allowFail: true })
+  const upstream = readGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { allowFail: true }).trim();
+  const source = { baseSha, headSha };
+  const aheadBehind = readAheadBehind(upstream, source, readGit);
+  const mergeBases = readGit(["merge-base", "--all", baseSha, headSha], { allowFail: true })
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const worktreeDiff = collectWorktreeDiff({ base: "origin/main" });
+  const worktreeDiff = collectWorktreeDiff({ base: baseSha, head: headSha, cwd });
   const changedFiles = worktreeDiff.changedFiles.map((entry) => entry.path);
 
   return {
     branch,
+    baseSha,
     headSha,
     isDetached: branch === "HEAD",
-    isShallow: isShallowRepository((args) => git(args)),
+    isShallow: isShallowRepository((args) => readGit(args)),
     mergeBases,
     changedFiles,
     changedFileEntries: worktreeDiff.changedFiles,
     addedLinesByFile: worktreeDiff.addedLinesByFile,
-    statusPorcelain: git(["status", "--porcelain"], { allowFail: true }),
+    statusPorcelain: readGit(["status", "--porcelain"], { allowFail: true }),
     upstream: upstream || null,
     ahead: aheadBehind.ahead,
     behind: aheadBehind.behind,
-    commits: readCommits(),
+    commits: readCommits(source, readGit),
     publishedRef,
     publishedRefMatchesHead: Boolean(publishedRef) && publishedSha === headSha,
   };
@@ -209,7 +213,7 @@ async function main() {
   }
   const inspected = inspectCorrectionRecord();
   const proportional = inspected.ok;
-  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles), publishedCorrection: proportional });
+  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles), publishedCorrection: proportional, baseSha: repo.baseSha, headSha: repo.headSha });
   const controller = new AbortController();
   const cancel = () => controller.abort();
   process.once("SIGINT", cancel);
@@ -218,7 +222,7 @@ async function main() {
   try { execution = args.runGates ? await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pr-readiness",
-    identify: () => identifyGuardExecution({ plan: gatePlan }),
+    identify: () => identifyGuardExecution({ plan: gatePlan, source: { baseSha: repo.baseSha, headSha: repo.headSha } }),
     execute: async ({ progress }) => {
       const results = [];
       for (const gate of gatePlan) results.push(await runGate(gate, { progress, signal: controller.signal }));
@@ -238,7 +242,9 @@ async function main() {
   repo.publicationIdentityChanged = git(["rev-parse", "HEAD"]).trim() !== repo.headSha
     || git(["rev-parse", "--abbrev-ref", "HEAD"]).trim() !== repo.branch;
   repo.statusPorcelain = git(["status", "--porcelain"]);
+  const latestBaseSha = git(["rev-parse", "--verify", "origin/main^{commit}"], { allowFail: true }).trim() || null;
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext, localCiRecords: readPublicationGateRecords() });
+  if (latestBaseSha !== repo.baseSha) verdict.notes.push(`origin/main is now ${latestBaseSha ?? "unavailable"}; these checks cover pinned base ${repo.baseSha}, not the newer main. Protected GitHub checks remain the integration authority.`);
   if (proportional) verdict.notes.push("Published correction: fresh repository/DCO/metadata guards run locally; broad source guards and full integration delegated to protected GitHub, not rerun locally.");
   if (args.runGates && !execution.identityVerified) {
     verdict.ready = false;
@@ -253,6 +259,7 @@ async function main() {
       warnings: verdict.warnings,
       notes: verdict.notes,
       branch: verdict.branch,
+      source: { baseSha: repo.baseSha, headSha: repo.headSha, latestBaseSha },
       changedFiles: verdict.changedFiles,
       localGuards: {
         reused: execution.reused,

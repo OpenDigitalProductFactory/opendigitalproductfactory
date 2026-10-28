@@ -1,5 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
-import { boundReviewReceiptId, publishBoundReviewEffect, type BoundReviewScope } from "./bound-review-effect";
+import { boundReviewReceiptId, checkBoundReviewWriteExecution, lockBoundReviewEffect, publishBoundReviewEffect, type BoundReviewScope } from "./bound-review-effect";
+import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import type { Prisma } from "@dpf/db";
+
+it("locks the task before both sorted reassessment owners without checking new-write authority during receipt readback", async () => {
+  const requestDigest = "9".repeat(64);
+  const scope: BoundReviewScope = { actionKey: "record_initiative_design_review", itemId: "BI-285EF102", gate: "design-spec",
+    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "fixture/repo", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40), path: "design.md" },
+    reviewerUserId: "reviewer", reviewerAgentId: "AGT-REVIEW", authorityDecisionId: "AUTH-1", expectedCurrentBaselineId: null,
+    boundReviewTask: { taskRunId: "TR-PRESENT", requestDigest, executionFence: captureTaskExecutionFence({}, requestDigest)! } };
+  const presentReassessment = { schemaVersion: 1, authorizationItemId: "BI-7906C73E", baselineId: "baseline-fixture", policyDigest: "2".repeat(64),
+    originalTaskRunId: "TR-OLD", originalRequestDigest: "3".repeat(64), predecessorTaskRunIds: ["TR-OLD"], authorityArtifact: scope.artifactRef };
+  const binding = { writerToolName: scope.actionKey, itemId: scope.itemId, gate: scope.gate, artifactRef: scope.artifactRef,
+    expectedCurrentBaselineId: null, presentReassessment };
+  const tx = { $queryRaw: vi.fn(async (..._args: unknown[]) => []),
+    taskRun: { findUnique: vi.fn(async () => ({ userId: scope.reviewerUserId, currentAgentId: scope.reviewerAgentId, status: "working",
+      progressPayload: { reassessmentQuarantine: { retained: true } }, a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: binding,
+        reassessmentExecution: { schemaVersion: 2, manifestArtifactId: "ta-root", manifestDigest: "4".repeat(64) } } })) },
+    authorizationDecisionLog: { findUnique: vi.fn(async () => ({ decision: "allow", actionKey: scope.actionKey, organizationId: null,
+      rationale: { taskRunId: scope.boundReviewTask!.taskRunId } })) },
+    coworkerActionEnvelope: { findMany: vi.fn(async () => []) },
+    backlogItem: { findMany: vi.fn(async () => [{ id: "row-z", itemId: scope.itemId, organizationId: null },
+      { id: "row-a", itemId: presentReassessment.authorizationItemId, organizationId: null }]) } };
+  const locked = await lockBoundReviewEffect(tx as unknown as Prisma.TransactionClient, scope, null);
+  expect(locked.refusal).toBeNull();
+  expect(tx.$queryRaw.mock.calls.map(call => call[1])).toEqual(["TR-PRESENT", "row-a", "row-z"]);
+  expect(await checkBoundReviewWriteExecution(scope, locked.execution, tx as unknown as Prisma.TransactionClient))
+    .toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+});
+
+it("refuses a new V2 writer effect without the actual promoted server scope", async () => {
+  const requestDigest = "9".repeat(64);
+  const scope: BoundReviewScope = { actionKey: "record_initiative_design_review", itemId: "BI-1", gate: "design-spec",
+    artifactRef: { kind: "document-version", versionId: "version-1" }, reviewerUserId: "reviewer",
+    reviewerAgentId: "AGT-REVIEW", authorityDecisionId: "AUTH-1",
+    boundReviewTask: { taskRunId: "TR-PRESENT", requestDigest, executionFence: captureTaskExecutionFence({}, requestDigest)! } };
+  const locked = { status: "working", progressPayload: {}, a2aMetadata: { reassessmentExecution: {
+    schemaVersion: 2, manifestArtifactId: "ta-root", manifestDigest: "1".repeat(64),
+  } } };
+  expect(await checkBoundReviewWriteExecution(scope, locked)).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+});
 
 it("keeps canonical receipt identity stable across ephemeral execution generations", () => {
   const scope: BoundReviewScope = { actionKey: "record_initiative_design_review", itemId: "BI-1", gate: "design-spec",

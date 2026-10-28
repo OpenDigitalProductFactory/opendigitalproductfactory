@@ -36,6 +36,7 @@ import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { storeWikiPage, type StoreWikiPageInput } from "@/lib/wiki/embeddings";
 import type { PortfolioDecomposition } from "@dpf/storefront-templates";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 /** Marker proving a body was produced by this generator (operator edits drop it). */
 export const OPERATING_MODEL_SEED_MARKER = "<!-- seed:operating-model-map -->";
@@ -389,6 +390,11 @@ export async function seedOrgOperatingModelPages(
       body: page.body,
       changeKind: "ingest",
       changeSummary: "operating-model map seed",
+    });
+    await syncWikiPageLinks(db as unknown as Parameters<typeof syncWikiPageLinks>[0], {
+      pageId: saved.id,
+      organizationId,
+      body: page.body,
     });
 
     const ok = await embed({

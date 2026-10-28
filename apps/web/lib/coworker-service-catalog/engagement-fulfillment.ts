@@ -127,19 +127,26 @@ export async function validateEngagementTask(input: {
 }
 
 type ContributionExecution = { id: string; toolName: string; success: boolean; parameters: unknown; result: unknown };
-export function validateEngagementContribution(binding: EngagementTaskBinding, content: unknown, executions: readonly ContributionExecution[], professionKey?: string, evidence: readonly EngagementRead[] = [], visualDelivery?:unknown) {
-  if (typeof content !== "string" || content.length > 100_000 || !hasEngagementVisualDelivery(binding,visualDelivery)) return null;
+export function validateEngagementContribution(binding: EngagementTaskBinding, content: unknown, executions: readonly ContributionExecution[], professionKey?: string, evidence: readonly EngagementRead[] = [], visualDelivery?:unknown, onFailure?:(code:string,message:string)=>void) {
+  const fail=(code:string,message:string)=>{onFailure?.(code,message);return null;};
+  if(typeof content!=="string" || content.length>100_000)return fail("contribution-size-invalid","Contribution must be text within the 100000 character limit");
+  if(!hasEngagementVisualDelivery(binding,visualDelivery))return fail("contribution-images-unproven","Provided rendered input delivery is not verified");
   let contribution: Record<string, unknown>;
-  try { contribution = record(JSON.parse(content.replace(/^\x60\x60\x60(?:json)?\s*/u, "").replace(/\s*\x60\x60\x60$/u, ""))); } catch { return null; }
+  try { contribution = record(JSON.parse(content.replace(/^\x60\x60\x60(?:json)?\s*/u, "").replace(/\s*\x60\x60\x60$/u, ""))); } catch { return fail("contribution-json-invalid","Contribution must be one JSON object, optionally enclosed in a JSON code fence"); }
   const nonemptyStrings = (value: unknown): value is string[] => Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every(text);
-  if (!text(contribution.summary) || !nonemptyStrings(contribution.criteria) || !nonemptyStrings(contribution.corpusRefs) || !Array.isArray(contribution.findings)) return null;
+  if(!text(contribution.summary))return fail("contribution-summary-invalid","summary must be a nonempty string");
+  if(!nonemptyStrings(contribution.criteria))return fail("contribution-criteria-invalid","criteria must be a nonempty string array with at most 100 entries");
+  if(!nonemptyStrings(contribution.corpusRefs))return fail("contribution-corpus-refs-invalid","corpusRefs must be a nonempty string array with at most 100 entries");
+  if(!Array.isArray(contribution.findings))return fail("contribution-findings-invalid","findings must be an array");
   const successfulIds = new Set(executions.filter(row => row.success).map(row => row.id));
   const proven = evidence.filter(row => successfulIds.has(row.executionId));
   const slugs = new Set(proven.filter(row => row.kind === "corpus").flatMap(row => Array.isArray(row.pages) ? row.pages.flatMap(page => text(record(page).slug) ? [String(record(page).slug)] : []) : []));
   const calibration = proven.filter(row => row.kind === "calibration");
-  if (!completeArtifactReads(binding.artifactRef, proven) || (binding.guidanceArtifacts ?? []).some(a => !completeArtifactReads(a, proven))
-    || (professionKey === "ux-design" && !calibration.length) || contribution.corpusRefs.some(slug => !slugs.has(slug)
-      || !slug.startsWith(professionKey ? `professions/${professionKey}/` : "professions/"))) return null;
+  if(!completeArtifactReads(binding.artifactRef,proven)||(binding.guidanceArtifacts??[]).some(a=>!completeArtifactReads(a,proven)))
+    return fail("contribution-source-unproven","Complete immutable source and pinned guidance traversal is required");
+  if(professionKey==="ux-design"&&!calibration.length)return fail("contribution-calibration-unproven","A calibratedOnly UX corpus query is required, including an empty result");
+  if(contribution.corpusRefs.some(slug=>!slugs.has(slug)||!slug.startsWith(professionKey? `professions/${professionKey}/`:"professions/")))
+    return fail("contribution-corpus-ref-unproven","Every corpusRefs entry must name an actually consulted page in the reviewer's profession corpus");
   return { ...contribution, sourceExecutionIds: proven.filter(row => row.kind === "source").map(row => row.executionId), corpusExecutionIds: proven.filter(row => row.kind === "corpus").map(row => row.executionId),
     artifactRef: binding.artifactRef, guidanceArtifacts: binding.guidanceArtifacts ?? [], roomHeadSha: binding.roomHeadSha ?? binding.artifactRef.commitSha,
     actorAgentId: binding.actorAgentId, providerAgentId: binding.providerAgentId,

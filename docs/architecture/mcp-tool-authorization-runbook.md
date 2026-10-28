@@ -106,7 +106,17 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. An administrator ends one person's
+follow the connection to another person. The platform automation persona
+(`automation@dpf.local`) is never offered there (BI-F586F8A5): a browser
+still holding its session gets a page naming that account with a link to
+sign in as yourself, and the POST issues no code. The governed acceptance
+flow keeps its path: mint `issue_ux_verification_sign_in` with `nextPath`
+set to the exact `/api/oauth/authorize?...` request (its `client_id` and
+`code_challenge`); that session may consent to that one request only.
+Fixture verification users are ordinary accounts and are unaffected. A
+connection refused `workroom_access_denied` is told which account it acts
+as (`data.connectedAs`) and to reconnect while signed in as the room's
+owner; the owner is not named to a caller who is not admitted. An administrator ends one person's
 grants under a shared client registration with People > Revoke this person's
 access on Admin > Platform Development (BI-0A724798); the whole-client revoke
 stays the larger control. The default flow is one Connect action;
@@ -731,6 +741,20 @@ execution-uncertain or exhausted predecessor requires reconciliation; readback
 returns a refusal rather than a replacement request. Dropping a recovery locator
 from a bounded native request does not authorize a new task.
 
+Before issuing recovery, the original-review guard inventories the unsuffixed
+key and every reviewer-scoped alias, including histories from earlier OAuth
+families. Coexisting unresolved tasks refuse as ambiguous even when one matches
+the current key. A completed alias cannot hide an unresolved original. Malformed
+identities, changed request bytes and incomplete inventory refuse safely.
+
+Ordinary creation repeats the predecessor check under the subject lock before
+allocating a task. Its only exhausted-reviewer exception reuses the existing
+terminal-writer exhaustion proof for a different canonical reviewer in the same
+current OAuth family. Both keys, the saved digest, artifact, binding, tool scope,
+human and requesting coworker must match their recorded authority. Renaming the
+same reviewer, changing family, uncertain execution or a present reassessment
+cannot supply another budget.
+
 The locator grants no authority. Submission rechecks the current interactive
 OAuth connection, authenticated human, canonical acting coworker, live grants,
 exact Workroom action admission and current server-issued review packet. The
@@ -780,6 +804,16 @@ are unaffected.
 
 ## Canonical review writer execution identity
 
+The captured identity also fences every task-bound review callback, whether or
+not it used connection recovery. Governed preflight, immediate tool dispatch and
+task settlement recheck the same request, reservation, dispatch claim and
+authority digest. An approval return keeps its original audited identity and
+cannot adopt a newer generation or revive a held execution. Malformed non-null
+review bindings fail closed; ordinary tasks with the historical null sentinel
+keep their normal behavior. The original owner can still read exact
+`tasks/get` and `tasks/result` evidence under current read permissions. These
+reads neither resume execution nor clear uncertainty.
+
 For a task-bound initiative review, the admitted executor captures its request
 digest, reservation, dispatch claim and recorded execution-authority digest before
 starting provider work. Internal tool execution carries that captured identity;
@@ -800,6 +834,54 @@ reset attempts or qualify historical recovery. Deploy compatible writers before
 admitting these sessions. Roll back by disabling admission while retaining the
 compatible fence and readers; a pre-fence binary requires separately proven
 capability retirement and reconciled effects.
+
+## Explicitly authorized present reassessments
+
+An approved retained policy can authorize a bounded present assessment of an
+unchanged review requirement. This is separate from original-task recovery.
+`get_backlog_item` accepts `reassessmentAuthorizationItemId` with the exact
+`itemId` and `recoveryGate`; its server-issued packet retains the original
+source and the approved policy, baseline and predecessor relation. The locator
+confers no permission. Submit the complete packet unchanged through the normal
+governed `request_coworker` path.
+
+Admission rechecks current human, connection, coworker grants, Workroom access,
+independent approval, normal routing and recorded budgets. It locks the complete
+accepted lineage before the subject and authorization items. Every accepted
+assessment counts, including pending, failed, canceled and uncertain work.
+Repeated requests read the existing allocation; they cannot open another window
+or reset a counter. Historical unknown consumption remains unknown.
+The shared task creator also refuses a new ordinary bound task for the same
+held, uncertain, quarantined or already reassessed requirement. Explicit review
+writer scopes require a binding, and external independent writers require the
+validated persisted binding at publication. Direct `tasks/submit` cannot publish
+a replacement verdict by omitting that binding or changing its key.
+
+The initial TaskRun, immutable qualification root and first input commit together.
+Only declared captured configuration reads run during qualification. Promotion
+adds an immutable execution seal on that same task and original window; reader,
+writer, count and generation effects require the actual promoted scope. Current
+authority and the retained seal are checked again at each effect and inside the
+canonical writer transaction. A genuine existing receipt takes precedence over
+new execution. Predecessor quarantine retains its original status, uncertainty,
+attempts and limits alongside a separate execution hold.
+
+The finite native path captures complete count and generation bodies, reserves
+the exact prompt count plus the full output ceiling, and retains outstanding
+reservations. Normal model selection, quality floors, daily observed-usage checks
+and resource admission still apply. Missing host GPU telemetry is recorded as
+unknown under the ordinary capacity policy; it is never an idle measurement.
+An unsupported normal winner refuses before allocation.
+
+Compatible transport, approval, worker and writer owners are required on the
+actual served image. Upgrade preflight and the final swap check their packaged
+capability proof, including fallback targets. Canonical self-upgrade PostgreSQL
+rollback is currently refused before any backup or restore effect because
+whole-restore retention and effect exclusion have not been proven. This
+deliberately reduces rollback availability; the refusal is not positive
+retention evidence. Other privileged database, file and host administration
+remains the approved trusted-admin boundary. Source
+tests alone do not establish deployment, a live assessment or parent admission.
 
 ## Bounded Workroom activity reads
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildFilterSql, hashToNumber } from "./pgvector-store";
+import { buildFilterSql, buildLexicalSql, hashToNumber } from "./pgvector-store";
 
 describe("pgvector-store buildFilterSql (filter DSL → SQL)", () => {
   it("returns empty string for an empty filter", () => {
@@ -112,5 +112,27 @@ describe("pgvector-store hashToNumber (stable ids)", () => {
   it("is deterministic and non-negative", () => {
     expect(hashToNumber("wiki-page:BI-1")).toBe(hashToNumber("wiki-page:BI-1"));
     expect(hashToNumber("anything")).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("pgvector-store buildLexicalSql (embedding-free fallback, BI-MCP-EFF-4F823E5B)", () => {
+  it("scores each row by how many terms appear in any searched field", () => {
+    const { sql, params } = buildLexicalSql("platform-knowledge", ["wiki", "backlinks"], ["title", "contentPreview"], undefined, 5);
+    expect(params).toEqual(["platform-knowledge", "%wiki%", "%backlinks%"]);
+    expect(sql).toContain("payload->>'title' ILIKE $2");
+    expect(sql).toContain("payload->>'contentPreview' ILIKE $3");
+    expect(sql).toContain("/ 2.0");
+    expect(sql).toContain("LIMIT 5");
+  });
+
+  it("treats LIKE wildcards in a term as literal text", () => {
+    const { params } = buildLexicalSql("c", ["100%_done\\"], ["title"], undefined, 5);
+    expect(params[1]).toBe("%100\\%\\_done\\\\%");
+  });
+
+  it("appends the vector filter after the term parameters", () => {
+    const { sql, params } = buildLexicalSql("c", ["a"], ["title"], { must: [{ key: "entityType", match: { value: "epic" } }] }, 5);
+    expect(params).toEqual(["c", "%a%", '"epic"']);
+    expect(sql).toContain("payload->'entityType' = $3::jsonb");
   });
 });

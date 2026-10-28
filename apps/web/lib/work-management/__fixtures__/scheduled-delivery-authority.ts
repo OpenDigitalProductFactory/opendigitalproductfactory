@@ -5,6 +5,7 @@ import { deriveRoomTurnAuthority, type RoomTurnAuthority } from "../room-turn-au
 import type { AuthorStageAutonomyFor } from "../author-stage-autonomy-live";
 import { buildDispatchCheckpoint } from "../workroom-drive-checkpoint";
 import { buildWorkShapeClaim } from "../workroom-shape-claim";
+import type { MandateRoomRow } from "../room-stage-mandate";
 const NOW = new Date("2026-10-26T00:00:00Z");
 const CAPSULE = "WC-DELIVERY-TEST";
 const TASK = `workroom-${CAPSULE}-delivery-small`;
@@ -23,8 +24,10 @@ export function scheduledDeliveryFixture(runStatus = "working") {
   });
   const room = {
     id: "room-row", capsuleId: CAPSULE, status: "working", archivedAt: null as Date | null,
-    backlogItemId: "BI-TEST", ownerUserId: "owner", scopeClaims: [buildWorkShapeClaim("delivery-small@1.0.0")] as unknown,
+    backlogItemId: "BI-TEST", scopeClaims: [buildWorkShapeClaim("delivery-small@1.0.0")] as unknown,
     workspaceState: { workroomDispatchCheckpoint: checkpoint, workroomDrive: { stageKey: "repair", runKey: "cycle-1" } },
+    requestedByPrincipal: { aliases: [{ aliasValue: "owner" }] } as { aliases: Array<{ aliasValue: string }> } | null,
+    createdByPrincipal: null as { aliases: Array<{ aliasValue: string }> } | null,
   };
   const task = { taskId: TASK, taskRunId: "TR-SCHED-DELIVERY", agentId: AGENT, ownerUserId: "owner", isActive: true,
     taskConfig: { workroomStage: stage, workroomDispatchCheckpoint: checkpoint } };
@@ -41,7 +44,8 @@ export function scheduledDeliveryFixture(runStatus = "working") {
   const agent = { id: "agent-row", agentId: "AGT-BUILD-SPECIALIST", slugId: AGENT, governanceProfile: null as { hitlPolicy: string } | null };
   const db = { agent: { findFirst: vi.fn(async () => agent) }, taskRun: { findUnique: vi.fn(async () => run) },
     scheduledAgentTask: { findUnique: vi.fn(async () => task) },
-    workroom: { findMany: vi.fn(async () => [room]) } };
+    workroom: { findMany: vi.fn(async () => [room]) },
+    user: { findMany: vi.fn(async (): Promise<Array<{ id: string }>> => []) } };
   room.workspaceState.workroomDispatchCheckpoint = structuredClone(checkpoint);
   task.taskConfig.workroomDispatchCheckpoint = structuredClone(checkpoint);
   run.a2aMetadata.workroomDispatchCheckpoint = structuredClone(checkpoint);
@@ -50,6 +54,9 @@ export function scheduledDeliveryFixture(runStatus = "working") {
     loadAgentGrants: vi.fn(async (): Promise<string[]> => ["workroom_evidence_write"]),
     loadAuthorStageAutonomy: vi.fn(async (): Promise<AuthorStageAutonomyFor> => () => ({ roleBindings: { author: AUTHOR_STAGE_AGENT_REF }, withheldBecause: null })),
     loadRoomTurnAuthority: vi.fn(async (): Promise<RoomTurnAuthority> => roomTurn),
+    // The drive's owner rule: the recorded requester/creator user (BI-17238133).
+    resolveRoomTaskOwnerUserId: vi.fn(async (r: MandateRoomRow): Promise<string | null> => r.requestedByPrincipal?.aliases[0]?.aliasValue
+      ?? r.createdByPrincipal?.aliases[0]?.aliasValue ?? null),
   };
   const input = { taskRunId: run.taskRunId, agentIds: [AGENT],
     toolName: "record_workroom_evidence",

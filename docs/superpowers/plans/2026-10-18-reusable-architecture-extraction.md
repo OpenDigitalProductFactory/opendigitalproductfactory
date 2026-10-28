@@ -529,15 +529,17 @@ The completed-slice handoff must include:
 
 ## Remaining decisions and resumption
 
-The operator authorized publication of these exact two planning documents. Obtain
-the independent baseline/review and plan coverage through the existing governed
-route, map the deliverables, then claim and execute the first admitted local
-slice. Publishing refactoring code still needs a separate later decision about
-the completed code; do not publish it under the planning-documents exception.
-No runtime deployment, package release, website change or private-corpus
-publication follows from this permission.
+The operator subsequently authorized the local refactor with independent client
+review while unavailable native review and coverage remain recorded as unrun, then
+authorized source publication and a protected ready PR. That existing exception
+does not waive DCO, scope ownership, deterministic checks, shared integration or
+production integrity. Follow the current semantic-review publication procedure;
+client assessments retain their own provenance and are never native receipts.
 
-If the governed review or coverage route refuses admission, preserve the exact
-refusal and follow its recorded remedy before source implementation. This is the
-explicit stop required by the planning contract, not a completed extraction or an
-enforcement/qualification result.
+All seven families have been audited and their supported working subsets joined.
+Current-main integration preserves its newer gate-governed policy behavior in the
+extracted canonical resolver, with the host still responsible for the actual
+executor fact and admission. Final served software/shelter evidence, measured UX,
+exact shared integration and publication readiness remain to be completed. DPF2
+stays read-only and its acceptance remains consumer-owned. No runtime deployment,
+package release, website change or private-corpus publication is authorized here.

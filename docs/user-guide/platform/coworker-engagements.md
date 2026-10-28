@@ -96,3 +96,14 @@ revision; later material and its limits must be explicitly associated and report
 Structured specialist completion also holds the boundary against an additional
 conversational review/debate call. The validated contribution or held failure is
 returned unchanged; ordinary conversations retain their configured deliberation.
+
+
+A rejected specialist response retains its first validation reason on the original
+task. Its bounded original text is kept as **unvalidated assessment data** in
+TaskMessage metadata, with a digest, original byte length and truncation or
+redaction flags. Retention excludes image data and credential-shaped output.
+This data follows the task's existing access and sensitivity. It does not count
+as a contribution, authorize replay or change an unknown execution outcome.
+Settlement preserves the first reason rather than validating the generated hold
+message. A completed contribution still requires all source, corpus and rendered
+input checks; the requesting author must provide a separate disposition.

@@ -49,6 +49,16 @@ With managed build dependencies available, invoke exact Node 24.16.0 for these c
 external compiler is TypeScript 6.0.3. The isolated NodeNext runners start no DPF runtime
 and install nothing. Record actual final-revision results.
 
+Current relative source imports use `.ts` extensions. Preserve exact source bytes and
+enable `rewriteRelativeImportExtensions` in the consumer's emitting NodeNext build;
+characterize that build before updating provenance. The read-only October 28 consumer
+refresh found that DPF2's `tsconfig.server.json` lacks this option. DPF2 remains unchanged.
+
+The policy resolver includes current DPF's gate-governed room-default behavior. Its
+`gateGoverned` input is a trusted host fact derived from the actual executor, followed by
+room-declaration and hard-policy floors. A supplied label, compile result or posture does
+not establish governed execution or permission to act.
+
 ```sh
 node examples/workroom-kernel/run.mjs
 node examples/gpp-toolkit/run.mjs

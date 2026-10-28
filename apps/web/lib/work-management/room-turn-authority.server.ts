@@ -12,6 +12,7 @@ import { prisma } from "@dpf/db";
 
 import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
 import { shapeBiasFor } from "@dpf/validators/workroom-policy/derive";
+import { isGateGovernedExecutor } from "@/lib/work-posture/gate-governed";
 
 import { getWorkShape } from "./work-shapes";
 import { readDeclaredWorkShapeKey } from "./work-shapes";
@@ -31,6 +32,7 @@ export type RoomTurnAuthorityDb = {
       id: string;
       capsuleId: string;
       scopeClaims: unknown;
+      executorKind?: string | null;
       participants?: Array<{ principalId: string; roles: string[] }>;
     } | null>;
   };
@@ -51,6 +53,7 @@ async function loadRoomFacts(
         id: true,
         capsuleId: true,
         scopeClaims: true,
+        executorKind: true,
         participants: {
           where: { lifecycle: "active" },
           select: { principalId: true, roles: true },
@@ -79,6 +82,7 @@ async function loadRoomFacts(
     declaredActionBoundary: declaration?.actionBoundary ?? null,
     declaredPriority: declaration?.priority ?? null,
     shapeActionBoundary: shapeBiasFor(collaborationShape)?.actionBoundary ?? null,
+    gateGoverned: isGateGovernedExecutor(room.executorKind),
     participants: room.participants?.length ? room.participants : null,
     agentPrincipalId: alias?.principalId ?? null,
   };

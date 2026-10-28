@@ -30,6 +30,7 @@
 import { prisma } from "@dpf/db";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { generateBacklogItemId } from "@/lib/operate/backlog-ingest";
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { generateBuildId, normalizeHappyPathState } from "@/lib/explore/feature-build-types";
 import type { BuildDesignDoc, ReviewResult } from "@/lib/explore/feature-build-types";
 import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
@@ -582,14 +583,19 @@ export async function approveDecomposition(
           data: {
             itemId: childBacklogLogicalIds[i]!,
             title: child.title,
-            body: [
-              `Build Studio decomposition child of ${build.originator.itemId}.`,
-              child.designDoc.proposedApproach,
-              childAcceptance.length > 0
-                ? ["## Acceptance", ...childAcceptance.map((ac, n) => `- AC-${n + 1} ${ac}`)].join("\n")
-                : null,
-              `Depends on: ${dependencyKeys.length > 0 ? dependencyKeys.join(", ") : "none"}.`,
-            ].filter(Boolean).join("\n\n"),
+            // BI-458CCA8D: each child states the outcome it delivers — its own
+            // slice of the parent's — so delivery of that child defines done.
+            body: composeIntakeBody({
+              outcome: decompositionChildOutcome(scope, child.title, build.originator.itemId),
+              body: [
+                `Build Studio decomposition child of ${build.originator.itemId}.`,
+                child.designDoc.proposedApproach,
+                childAcceptance.length > 0
+                  ? ["## Acceptance", ...childAcceptance.map((ac, n) => `- AC-${n + 1} ${ac}`)].join("\n")
+                  : null,
+                `Depends on: ${dependencyKeys.length > 0 ? dependencyKeys.join(", ") : "none"}.`,
+              ].filter(Boolean).join("\n\n"),
+            }),
             status: "open",
             type: build.originator.type,
             workType: build.originator.workType ?? "feature",
@@ -815,4 +821,14 @@ export async function approveDecomposition(
     childBacklogItemIds: txResult.childBacklogItemIds,
     unblockedChildBuildIds: txResult.unblockedChildBuildIds,
   };
+}
+
+/** The outcome a decomposition child delivers: its scope summary, as one part of the parent (BI-458CCA8D). */
+export function decompositionChildOutcome(
+  scope: { summary?: string | null },
+  childTitle: string,
+  parentItemId: string,
+): string {
+  const summary = scope.summary?.trim().replace(/[.\s]+$/, "");
+  return `${summary || `"${childTitle}" is delivered`}, as one independently shippable part of ${parentItemId}.`;
 }

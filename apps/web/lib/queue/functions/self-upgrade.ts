@@ -10,6 +10,7 @@ import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-up
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import {
   runCandidatePreflight,
+  runReassessmentCandidatePreflight,
   loadInstallStateSigningContext,
   verifyMigrationHandoff,
 } from "@/lib/self-upgrade/preflight";
@@ -24,6 +25,7 @@ import {
   cancelRun,
   updateRunPlan,
   recordPromoterReadiness,
+  recordReassessmentCompatibility,
   getLatestRun,
   getLatestSucceededRun,
 } from "@/lib/self-upgrade/run-store";
@@ -503,6 +505,12 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
       await emitFailure(run.runId);
       await recordCooldown(now, cooldownMinutes);
       return done({ ok: false, status: "failed", runId: run.runId, reason: "prebuild-failed" });
+    }
+    const compatibility = await runReassessmentCandidatePreflight({ runId: run.runId, targetSha: builtStamp,
+      composeProject, release, stage: "preflight", failRun, emitFailure, recordCompatibility: recordReassessmentCompatibility });
+    if (!compatibility.ok) {
+      await recordCooldown(now, cooldownMinutes);
+      return done({ ok: false, status: "failed", runId: run.runId, reason: compatibility.reason });
     }
   }
 

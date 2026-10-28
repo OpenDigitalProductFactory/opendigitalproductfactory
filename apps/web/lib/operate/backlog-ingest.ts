@@ -14,6 +14,7 @@
 import { randomUUID } from "crypto";
 
 import { prisma as defaultPrisma } from "@dpf/db";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 
 import {
   BACKLOG_SOURCE_VALUES,
@@ -39,6 +40,8 @@ import {
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+import { routingAnswerProblem, type RoutingAnswer } from "@/lib/improvement-flywheel/routing-answer";
+import { composeIntakeBody, statesOutcome } from "@/lib/backlog/intake-outcome";
 import {
   backlogOriginMarker,
   reconcileOrigin,
@@ -62,6 +65,14 @@ const defaultListRepoFiles = listRepoSourceFiles;
 export interface BacklogIngestInput {
   title: string;
   body?: string | null;
+  /**
+   * What will be true, and for whom, once this is done (BI-B1B44777). Written
+   * into the body as "## Outcome". Optional: an item without one is still
+   * filed, and `outcomeStated` tells the caller to prompt for it.
+   */
+  outcome?: string | null;
+  /** How we will know — given only when the outcome is not obvious from the change. */
+  howWeKnow?: string | null;
   /** The WHAT (closed enum) — required on every item per the workType spec. */
   workType: BacklogWorkType;
   /** The ORIGIN (closed enum) — how the work arrived. */
@@ -103,6 +114,12 @@ export interface BacklogIngestInput {
    * semantics (non-terminal dedupe + occurrence bump) are unchanged.
    */
   reconcile?: OriginReconciliation;
+  /**
+   * For a recurring miss: which kind of control fixes it and what it binds to
+   * (BI-B146AB6B rule). Recorded on the intake_origin activity, so the item
+   * carries its answer from the moment it is filed.
+   */
+  routing?: RoutingAnswer;
 }
 
 export interface BacklogIngestResult {
@@ -148,6 +165,12 @@ export interface BacklogIngestResult {
    * "nothing similar exists" (BI-3722E9A1).
    */
   duplicateSemanticUnavailable?: string | null;
+
+  /**
+   * Whether the stored body states the outcome the item delivers
+   * (BI-B1B44777). Advisory: false never refuses the filing.
+   */
+  outcomeStated?: boolean;
 }
 
 /**
@@ -395,6 +418,8 @@ export async function ingestBacklogItem(
   if (validationError) {
     throw new Error(`[backlog-ingest] ${validationError}`);
   }
+  const routingProblem = input.routing ? routingAnswerProblem(input.routing) : null;
+  if (routingProblem) throw new Error(`[backlog-ingest] ${routingProblem}`);
 
   const marker = input.origin ? backlogOriginMarker(input.origin.kind, input.origin.id) : null;
 
@@ -413,6 +438,7 @@ export async function ingestBacklogItem(
           created,
           createdBy: "backlog-ingest",
           ...(input.reconcile ? { source: sourceSnapshot(input.reconcile) } : {}),
+          ...(input.routing ? { routing: input.routing } : {}),
         },
         ...(input.submittedById ? { recordedById: input.submittedById } : {}),
         ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),
@@ -430,10 +456,17 @@ export async function ingestBacklogItem(
     if (reconciled) return reconciled;
   }
 
-  // Dedup by origin marker against non-terminal items.
+  // Dedup by origin marker against non-terminal items this install owns. A
+  // work-sync mirror carries the peer's markers but is the peer's record: a
+  // bump here is overwritten on the next pull, so a local observation of a
+  // defect the peer tracks files a local twin instead (BI-91FC6B9A).
   if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
-      where: { body: { contains: marker }, status: { notIn: ["done", "deferred", "retired"] } },
+      where: {
+        body: { contains: marker },
+        AND: [ownedRowBodyWhere()],
+        status: { notIn: ["done", "deferred", "retired"] },
+      },
       select: { id: true, itemId: true },
       orderBy: { createdAt: "desc" },
     });
@@ -467,7 +500,8 @@ export async function ingestBacklogItem(
   }
 
   const itemId = input.itemId?.trim() || generateBacklogItemId(input.itemIdPrefix);
-  const body = composeIngestBody(input.body, marker);
+  const intakeBody = composeIntakeBody({ body: input.body, outcome: input.outcome, howWeKnow: input.howWeKnow });
+  const body = composeIngestBody(intakeBody, marker);
   const demandStage = initialDemandStageForInput(input);
 
   const item = await store.backlogItem.create({
@@ -518,7 +552,7 @@ export async function ingestBacklogItem(
       },
     });
   }
-  indexKnowledge({ entityId: item.itemId, title: input.title, content: input.body ?? "" });
+  indexKnowledge({ entityId: item.itemId, title: input.title, content: input.outcome ? intakeBody ?? "" : input.body ?? "" });
 
   // ─── Implementation scan (BI-1A1EC5EC) ──────────────────────────────────────
   // Runs AFTER the create, deliberately. It is advisory, and a filing surface
@@ -639,5 +673,6 @@ export async function ingestBacklogItem(
     implementationCandidates,
     duplicateCandidates,
     duplicateSemanticUnavailable,
+    outcomeStated: statesOutcome(body),
   };
 }

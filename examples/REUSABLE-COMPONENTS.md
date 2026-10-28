@@ -7,6 +7,18 @@ checkpoint below. Production data, deployment and DPF2 edits remain excluded.
 The checkpoint verification is historical evidence for its exact revision;
 publication checks and their current verdict belong to the pull request.
 
+Current-main integration carries the newer gate-governed room-default behavior into
+the canonical policy resolver, preserving its application behavior after extraction.
+The host derives `gateGoverned` from the actual executor; room declarations and hard
+policy still apply afterward, and posture grants no execution permission. The retired
+application barrel stays deleted, including after migrating the new upstream test.
+The integration checks passed 20 application files/263 tests, six additional caller
+files/96 tests, 24 validator files/358 tests, all seven isolated consumers and 10 guard
+tests. Initial runs exposed two new tests' retired module imports; those failures are
+retained and the reruns pass. Three new production callers also use the canonical receipt
+and hold entries after the typecheck found their retired imports. Served verification, exact shared
+integration and final publication readiness remain separate pending checks.
+
 The [Iteration 6 takeover guide](ITERATION6-HANDOFF.md) gives the receiving
 implementation its selective adoption order, trusted ports, compatibility floors
 and retirement obligations. It adds no consumer acceptance or test result to the

@@ -9,8 +9,9 @@
 // the coworker's inherited posture) are pre-resolved by the loader and handed
 // in as `context`, exactly as `structure` and `sourceHealth` already are.
 //
-// The tighten-only invariant is enforced inside resolveWorkPosture, so nothing
-// assembled here can widen what a coworker may do unattended.
+// The resolver keeps declaration and hard-policy floors. A trusted gateGoverned
+// fact lets the owner's room default set the action boundary before those floors;
+// the host derives that fact from the actual executor. Posture grants no authority.
 import {
   resolveWorkPosture,
   type ArchetypeStreamInput,
@@ -77,6 +78,8 @@ export interface WorkroomPostureFacts {
   /** Existing Build Studio rightsizing facts, when this room fronts a build. */
   stakes?: WorkStakesInput | null;
   declaration: RoomPostureDeclaration | null;
+  /** The room's change passes a governed gate chain (isGateGovernedExecutor). */
+  gateGoverned?: boolean;
 }
 
 export interface WorkroomPostureView extends ResolvedWorkPosture {
@@ -119,6 +122,7 @@ export function resolveWorkroomPosture(
     hardPolicy: context.hardPolicy ?? null,
     declaration: facts.declaration,
     workroomDefault: context.workroomDefault ?? null,
+    gateGoverned: facts.gateGoverned ?? false,
     shape: {
       shapeKey: facts.shapeKey,
       activityKind: facts.activityKind,

@@ -13,6 +13,11 @@ import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivit
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
+import { narrowInitiativeReviewTools, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
+import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
+import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
+import type { RemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -78,6 +83,11 @@ export type AutonomousWorkRunInput = {
    * payload; it exists for authority lanes that must serialize alternate keys.
    */
   admissionGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
+  /** Server-only atomic persistence, after creation and before the deferred
+   * input commits. Never accepted from serialized client or tool arguments. */
+  afterTaskCreated?: (tx: Prisma.TransactionClient, run: AutonomousWorkRunRef) => Promise<void>;
+  /** Server-derived MCP context only; never accepted from serialized tools. */
+  reviewCreationAuthority?: { taskAuthorityKey: string; tokenId: string; parsed: RemoteTaskSubmitParams };
   transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
   /**
    * Closed deferred callers may commit their first user message in the same
@@ -123,6 +133,7 @@ export async function createAutonomousWorkRun(
   if (input.deferredSubmission && input.trigger !== "external-mcp") {
     throw new Error("Deferred submission is restricted to external MCP work.");
   }
+  if (input.reviewCreationAuthority && input.trigger !== "external-mcp") throw new Error("Review creation authority is restricted to external MCP work.");
   const threadId = input.threadId ?? null;
   const a2aMetadata = {
     trigger: input.trigger,
@@ -136,6 +147,11 @@ export async function createAutonomousWorkRun(
     const source = taskRunSourceForTrigger(input.trigger);
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
     await input.admissionGuard?.(tx);
+    if (input.metadata?.initiativeReviewBinding) {
+      const { lockInitiativeReviewCreationSubject } = await import("../mcp-task-review-reassessment");
+      await lockInitiativeReviewCreationSubject(tx, input.metadata.initiativeReviewBinding,
+        input.reviewCreationAuthority ? { ...input.reviewCreationAuthority, userId: input.userId } : undefined);
+    }
     const taskRun = await tx.taskRun.create({
       data: {
         taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
@@ -158,6 +174,7 @@ export async function createAutonomousWorkRun(
       },
       select: { id: true, taskRunId: true, contextId: true },
     });
+    await input.afterTaskCreated?.(tx, taskRun);
     if (input.deferredSubmission) {
       await tx.taskMessage.create({
         data: {
@@ -175,7 +192,7 @@ export async function createAutonomousWorkRun(
       });
     }
     return taskRun;
-  }, { isolationLevel: input.transactionIsolationLevel ?? "Serializable" });
+  }, { isolationLevel: input.transactionIsolationLevel ?? (input.metadata?.initiativeReviewBinding ? "ReadCommitted" : "Serializable") });
 }
 
 export async function findCurrentAutonomousWorkRun(input: {
@@ -248,6 +265,8 @@ export async function resolveAutonomousWorkTools(input: {
    *  schemas inside the attachment budget so the model never has to discover a
    *  known governed writer through the public marketplace. */
   requiredToolNames?: readonly string[];
+  /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
+  restrictedReviewBinding?: InitiativeReviewBinding;
   roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
@@ -268,6 +287,17 @@ export async function resolveAutonomousWorkTools(input: {
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
     ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
+
+  if (input.restrictedReviewBinding) {
+    const binding = input.restrictedReviewBinding;
+    const names = [immutablePageReaderForArtifact(binding.artifactRef), binding.writerToolName];
+    const requested = new Set(input.requiredToolNames ?? []);
+    if (requested.size !== 2 || names.some(name => !requested.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new ReassessmentExecutionError("reassessment-tool-surface-unavailable", "The exact reader and writer must both be normally authorized; auxiliary tools cannot join this surface.");
+    }
+    return narrowInitiativeReviewTools({ tools: authorized, toolsForProvider: toolsToOpenAIFormat(authorized), deferredTools: [] },
+      names, binding, input.intentQuery);
+  }
 
   // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the
   // SAME budget the interactive path uses (coworker-tool-budget). A scheduled
@@ -365,6 +395,7 @@ export async function resolveAutonomousWorkTools(input: {
 }
 
 export async function executeAutonomousAgenticLoop(input: {
+  canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
@@ -440,6 +471,19 @@ export async function executeAutonomousAgenticLoop(input: {
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
   const { withInferenceOrigin } = await import("@/lib/inference/inference-admission");
+
+  const restricted = currentReassessmentExecution();
+  if (restricted) {
+    assertReassessmentToolCall({ toolName: immutablePageReaderForArtifact(restricted.binding.artifactRef), params: {},
+      userId: input.userId, agentId: input.agentId, taskRunId: input.taskRunId ?? undefined, executionFence: input.taskExecutionFence });
+    // The sealed review runs its exact loop. Auxiliary grounding, draft reviews
+    // and asynchronous learning writers are outside this captured composition.
+    const result = await withInferenceOrigin("autonomous", () => runAgenticLoop({ ...input, toolsForProvider: input.toolsForProvider,
+      deferredTools: [], allowToolFreeInference: false,
+      ...(input.roomTurn ? { workroomId: input.roomTurn.workroomId, roomAuthority: toRoomAuthorityContext(input.roomTurn),
+        externalAccessEnabled: input.roomTurn.externalAccess.enabled, workroomPriority: input.roomTurn.priority } : {}) }));
+    return { ...result, authoritativeSurfaceEvidence: false };
+  }
 
   // Capture before-run timestamp so the post-run reflection trigger only
   // considers PlatformIssueReport rows this run produced.

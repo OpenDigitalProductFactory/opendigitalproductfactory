@@ -18,7 +18,7 @@ import type { EffectiveHumanAccountability } from "@/lib/work-management/human-a
 import { classifyDriveSegment } from "@/lib/work-management/workroom-flow-state";
 
 import { applyDrivePlan, runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom } from "./workroom-drive";
-import { activeUserIdForHumanPrincipal, resolveDriveTaskOwner } from "./workroom-drive-task-owner";
+import { activeUserIdForHumanPrincipal, resolveDriveTaskOwner, resolveRoomDriveTaskOwnerUserId } from "./workroom-drive-task-owner";
 
 // The graph fixture is not registered, so the shape-claim resolver is
 // overridden for its key only (as in workroom-drive.test.ts).
@@ -245,5 +245,23 @@ describe("a graph room's branch dispatch follows the same owner rule (BI-D13FA12
     expect(tick.result.dispatched).toBe(0);
     expect(tick.drive).toMatchObject({ action: "pause", reason: "missing_task_owner", dispatchedStageKeys: [] });
     expect((tick.drive.conclusion as { kind: string }).kind).not.toBe("in-motion");
+  });
+});
+
+describe("resolveRoomDriveTaskOwnerUserId (BI-17238133)", () => {
+  it("returns the recorded owner without asking accountability", async () => {
+    const resolveAccountability = vi.fn();
+    expect(await resolveRoomDriveTaskOwnerUserId({ id: "room", recordedOwnerUserId: "u1" }, { resolveAccountability }))
+      .toBe("u1");
+    expect(resolveAccountability).not.toHaveBeenCalled();
+  });
+  it("falls back to the accountable person's active user", async () => {
+    expect(await resolveRoomDriveTaskOwnerUserId({ id: "room", recordedOwnerUserId: null }, {
+      resolveAccountability: async () => ({ state: "resolved", principalId: "p1", source: "organization-owner" }) as never,
+      resolvePrincipalUserId: async () => "u2",
+    })).toBe("u2");
+  });
+  it("returns null when no owner can be named", async () => {
+    expect(await resolveRoomDriveTaskOwnerUserId({ id: "room", recordedOwnerUserId: null }, {})).toBeNull();
   });
 });

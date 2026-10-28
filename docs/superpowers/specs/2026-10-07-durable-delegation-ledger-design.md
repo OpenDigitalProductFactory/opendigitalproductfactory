@@ -237,8 +237,14 @@ room's work is what the Workroom drive dispatches, so the hold lives there:
 - "Delegated results ahead of new work" has no subject until a child result can
   start a parent turn (`BI-AD979E79`, deferred): today it is a message in the
   parent thread. It moves to that item.
-- Usage-limit auto-resume (release a hold at the provider's reset time) is a
-  follow-up; the hold records the failure kind it needs.
+- Holds release themselves (`BI-95638941`, 2026-10-27). Live use showed the
+  manual-only release froze rooms: 40 rate-limit holds from 10-17 to 10-25, none
+  resumed, 36 rooms still held after ten days. Each hold now carries `releaseAt`
+  (30 minutes, doubling for a room re-held within 24 hours of its last release,
+  capped at 6 hours) and its owner; the `workroom/queue-hold-release` job
+  releases due holds every 5 minutes through `resumeWorkroomQueue`, recorded as
+  `provider-unblocked`. Releasing at the provider's own reset time, when one is
+  reported, remains a refinement.
 
 
 **P6b corrective continuation (2026-10-25, BI-9CD95438).** A known provider

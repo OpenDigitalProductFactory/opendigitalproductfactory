@@ -7,13 +7,21 @@ status: active
 **Umbrella:** BI-4B48E7FE. **Workroom:** WC-D5FD489C.
 **Design:** docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md,
 October 25 amendment. **Decision:** DI-EE06CE5554D2, ratified by the founder.
-**Current status (October 26 UTC):** current native design/spec approval at
-e48abd61281f established baseline-fb4de98c-353a-4e89-98b6-23a455810cc1.
-The plan at 297e69b44b0f has native approval and decomposed coverage. Current
-architecture attempts stopped on invalid source cursor calls before a verdict;
-BI-E8237EAE owns the bounded reader repair. P2 implementation is not admitted.
-P1 has tested source and remains unpublished after a repeated host gate failure.
-No merge, deployment or unattended operational acceptance is claimed.
+**Scope authority (October 26):** PR #6613 merged the installation-aware
+amendment. Independent spec approval
+initiative-review-v1-ec144680d9a904f69e57e23517da757282baf788c9ea73818080ddc613a26cdb
+established baseline-3116fb84-01f5-46c4-a4ec-376b8e8f0fe9: five objectives and
+eight acceptance criteria, preserving all prior statements. Native decomposed
+coverage cmvpn6g0t0r8q01ml5v7zy33f was recorded and checked valid for the plan
+at a4a7682815ef09b55620099ec8c4b5d5e0b9fdf5. Its immutable history is retained;
+this corrected plan receives its own exact-blob coverage before review.
+Architecture and plan decisions are read from the parent's current native
+readiness. Neither this document nor a submitted review grants implementation
+authority. Claim the actual slice after its prerequisites are satisfied.
+The amended scope stays with BI-4B48E7FE / WC-D5FD489C; P2 is BI-C43FD3E5.
+Runtime publication and live COO acceptance are separate delivery phases.
+Execution state and exact receipts live on those Workrooms.
+
 For agentic workers: execute this plan one independently reviewable backlog item
 at a time -- one BI, one branch, one PR. Use dpf-tdd for red-green implementation,
 dpf-local-merge-ci-before-push plus the completion gate before any success claim,
@@ -70,29 +78,84 @@ checkpoint/activity/result identities. Persist the obligation before dispatch;
 acknowledgement and verified result are separate states. Bound retry and
 reconcile uncertain effects before any successor.
 
-Requirement refs: OBJ-COO-RECOVERY; OBJ-COO-EXTERNAL; OBJ-COO-LEGIBILITY; OBJ-COO-PROGRESS.
-Acceptance refs: AC-COO-03; AC-COO-04; AC-COO-05; AC-COO-06; AC-COO-07.
+Requirement refs: OBJ-COO-RECOVERY; OBJ-COO-EXTERNAL; OBJ-COO-LEGIBILITY; OBJ-COO-PROGRESS; OBJ-COO-INSTALLATION.
+Acceptance refs: AC-COO-03; AC-COO-04; AC-COO-05; AC-COO-06; AC-COO-07; AC-COO-08.
 Contract refs: apps/web/lib/work-management/workroom-stall-notice.ts;
 apps/web/lib/work-management/nested-room-coordination.server.ts;
 apps/web/lib/operate/scheduled-jobs/coworker-standing-self-tasks.ts;
 apps/web/lib/work-management/workroom-drive-checkpoint.ts;
-docs/architecture/workroom-cycle-continuity.md.
+docs/architecture/workroom-cycle-continuity.md;
+apps/web/lib/work-management/federated-room.server.ts;
+docs/superpowers/specs/2026-08-08-federated-a2a-gaid-coordination-design.md;
+docs/architecture/federation-outbox-runbook.md.
 Flow ref: due stalled room -> authorized COO recovery obligation -> acknowledged owner request -> reconcile result -> independent verification or necessary human decision.
 Verification refs: apps/web/lib/work-management/workroom-stall-notice.test.ts;
 apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.test.ts;
 canonical served-runtime fault/recovery pilot.
 
-Before code, resolve exact persisted recovery ownership and current action
-admission in the independent design/architecture review. No generic role grant
-or prompt is a permit. Missing owner, admission or external adapter stays an
-explicit routed blocker. The first implementation is bounded to 100 due
-candidate rooms and 10 recovery requests per existing drive cycle; continuation
-remains due, oldest first. State incompleteness and reuse current pagination.
+### P2 ownership and action contract
+
+The following implementation decisions resolve the ownership/admission design;
+the independent architecture reviewer validates this contract. Runtime onboarding
+must demonstrate the actual bindings rather than treating planned ownership as a
+live assignment.
+
+| Concern | Existing source and selected rule | Accountable delivery owner |
+| --- | --- | --- |
+| Local recovery executor | Read the affected room's active coordinator principal and recorded responsibility parents through loadNestedRoomCoordination in apps/web/lib/work-management/nested-room-coordination.server.ts. Preserve missing/conflicting lineage as setup-required; never choose an executor by display name. The existing typed recovery projection identifies the responsible task and exact supported action. | P2 BI-C43FD3E5 / WC-32BE8CAC, AGT-EXT-CODEX implements the resolver and refusal tests; the recorded coordinator retains execution accountability. |
+| Follow-through supervisor | Resolve AGT-ORCH-000 through apps/web/lib/coworker-identity.ts and PrincipalAlias in this installation; bind its active principal as the obligation's COO owner. An absent or inactive binding is a named setup blocker owned by P2. Never union a legacy alias's grants or assume room membership. | P2 owns onboarding; each installation's admitted COO owns its resulting supervision obligations. |
+| Durable state and enqueue | Extend the existing Workroom workspace/checkpoint reader and writer plus apps/web/lib/queue/functions/workroom-drive-scheduling.ts. Keep the obligation on the affected room, keyed by room/run/stage/iteration/last verified progress, with both owner principals, exact task/request, due times, attempts, uncertain effect and result references. Commit obligation revision and scheduled task under the existing room lease/transaction; append the native activity. Preserve unrelated JSON fields and legacy unknowns. DispatchCheckpoint version 1's null artifact/acceptance fields are not a place to fabricate recovery state; introduce an explicitly versioned compatible extension in the existing owner. | P2 implements checkpoint/reconciliation; the room drive remains the stage dispatcher. |
+| Read and act admission | Re-read canonical actor access through resolveCanonicalWorkroomActorAccess / resolveAgentWorkroomAccess in apps/web/lib/work-management/workroom-agent-access.server.ts for each destination. Content access allows observation only. A consequential call re-enters governedExecuteTool with the actual COO context, effective tool grants, current action admission, lease, budget and original request identity. Internal system authority is never substituted for missing COO permission. | P2 owns wiring/negative regressions; existing governance owns the action decision. |
+| Supported recovery | Consume the exact current action from apps/web/lib/work-capsules/workroom-recovery-projection.ts. Reuse post_room_message, resume_workroom_queue, drive_workroom_runtime or reassign_workroom_executor only when that action is currently offered and admitted; the latter retains receiver acknowledgement and its own approval gate. No generic retry, direct DB repair or independent-review override. | Recorded local executor performs the admitted action; COO reconciles acknowledgement and result. |
+| Missing authority, runtime or peer adapter | Persist the specific owned wait, due check, evidence and observable trigger before attempting dispatch. P2 retains local onboarding gaps; existing federation work EP-MSP-FEDERATION retains missing remote discovery/task/result capability. A refused peer request stays a refusal under receiver policy and DEV's read-only paired-peer boundary. | COO follows the named dependency; a real authority decision routes once through the existing responsibility chain. |
+
+Implement in this order: failing owner/admission/checkpoint tests; shared typed
+projection and lease-fenced obligation write; bounded standing-task dispatch;
+acknowledgement/result reconciliation; persona/tool onboarding and served proof.
+Sequential and graph drives call the same owner. Do not add a scheduler, registry
+or private work ledger. Tests must cover duplicate selection, concurrent supervisors,
+restart after persistence/before dispatch, lost response, revoked admission,
+ambiguous coordinator and an unresolved independent review. Reconcile original
+effects before a successor; review UNKNOWN remains held without authoritative
+provider observation.
+
+The first implementation processes at most 100 due candidate rooms and 10
+recovery requests per existing drive cycle. Keep continuation due, oldest first;
+report incomplete selection and reuse current pagination. Checkpoints and
+accepted task receipts prove dispatch/acknowledgement, not completed work.
+
 
 Update COO persona and skill/task definitions with regression guards against
 the stale Advisor-only, report-only contract. Update Workroom/operator guidance
 using the existing read model and disclosures; do not add another dashboard or
 private task list. Check cadence parity, alias identity and current grants.
+
+### Installation and Phase E integration
+
+1. Resolve canonical local COO identity together with installation identity,
+   organization, declared purpose, runtime and existing authority. Qualify the
+   conversation and scheduled paths against the same mandate and permitted tools.
+2. Reuse Phase E PR #6609 / BI-63FB1683 for supervision visibility and local
+   ask/ack. Resolve its destination-admission, undelivered-message replay and
+   ACK-before-ask findings before using it as the recovery obligation's transport.
+   Keep delivery and acknowledgement separate from verified outcome.
+3. Read the existing paired-estate/federation state. Qualify the supported remote
+   discovery/task/result path against its owning federation work; do not treat
+   the presence of federated-room helpers as implemented inbound coordination.
+4. Bind a remote context request to source/destination installations and COOs,
+   the originating Workroom, permitted scope, task/receipt identity, due time and
+   source/version/applicability. A production business question stays owned by
+   its production authority when the relevant corpus is unavailable in DEV.
+5. Use current projection and receiver-side policy. Preserve this install's
+   read-only peer boundary; a peer action needs its existing control-scope gate.
+   No universal remote execution, corpus replication or new identity registry.
+6. Bind sandbox/test work to its parent run, admitted lease, actual identity and
+   expiry. Recover or hand back obligations and uncertain effects before disposal;
+   parent acknowledgement is required and test receipts remain test evidence.
+
+Refactor shared identity/context resolution, request/result reconciliation and
+operator projection rather than building separate loops per environment. Existing
+federation and Phase E owners retain their implementations and acceptance.
 
 ## Operational acceptance
 
@@ -103,6 +166,13 @@ real human decision. Record beginning and end source identities, task/receipt
 identity, acknowledgement time, last verified progress, owner, duplicate-effect
 checks and human interventions. Add controls for revoked admission, canceled
 work, independent gate, explicit pause and uncertain publication.
+
+For AC-COO-08, exercise DEV requesting permitted production context that is not
+in DEV, a denied or stale source, duplicate remote response and lost acknowledgement,
+revoked peer trust, a cloned test identity, and sandbox expiry with unfinished work.
+Record installation and COO identities, applicability, destination decision authority,
+parent handoff and absence of duplicate effects. A supported refusal is an honest
+result; missing federation execution is a named dependency, not a passing pilot.
 
 No founder nudge may be part of a passing recovery. A genuine necessary decision
 is expected and must be routed once. A valid refusal remains a valid refusal.
@@ -131,12 +201,19 @@ missing investment authority.
 
 Decision: decomposed. P1 maps to BI-756C899D. P2 maps to BI-C43FD3E5 and depends
 on P1. The design/strategy/guide reconciliation accompanies these deliveries.
-Live decomposed coverage cmvol5jge0sr701o0xwelfc4l binds the plan at
-297e69b44b0f116bb8e38e46c6878e61b0bf89c8 to baseline
-baseline-fb4de98c-353a-4e89-98b6-23a455810cc1. Native plan approval is
-initiative-review-v1-f016d738ee67c46249678f403792f4a296dc0dffd4539e3cdcb28fb626b9dc69.
-These receipts cover their immutable artifacts, not later verification notes.
-Revalidate live readiness and the exact source before implementing a slice.
+Current approved scope is baseline-3116fb84-01f5-46c4-a4ec-376b8e8f0fe9.
+Coverage cmvpn6g0t0r8q01ml5v7zy33f binds immutable plan a4a7682815ef09b55620099ec8c4b5d5e0b9fdf5,
+blob b46e9c68286f8bf12ffb438379bf814a6c3decc3, and was checked valid.
+Record a new exact-blob coverage receipt for this corrected plan using the same
+P1/P2 graph and check it before independent plan review. Its receipt lives in
+the native parent timeline, avoiding a self-referential commit/receipt cycle.
+Prior baseline-fb4de98c-353a-4e89-98b6-23a455810cc1 and coverage
+cmvol5jge0sr701o0xwelfc4l remain immutable historical scope, not current approval.
+Native plan-review fail receipt
+initiative-review-v1-95972f575b8077d3d9cac2a5e0eeef0ca9b1117341e7f60e1b50a1488a58a3a7
+identifies the corrected stale-status and ownership/admission findings. A reviewer
+must decide the corrected artifact; authors do not turn those findings into passes.
+
 
 The start-of-work change-impact contract is resolved for the design/doc paths:
 no source tests or guard obligations were listed; regenerate/check doc-index,
@@ -145,191 +222,61 @@ Implementation claims must refresh exact source paths and carry every returned
 testImpact and guardObligation into the appropriate phase.
 
 
-## Current delivery evidence and resume conditions
+## Delivery integration and evidence ownership
 
-P1 is independently admitted by IRD-E06F5E4974CA, with atomic coverage receipt
-cmvo7c1zh050601mqxwgivlxg against its companion design at
-b433583daddc4f77dd83a616782c3e8170e677e0. Its governed branch is
-`fix/workroom-effective-progress`, WC-36F36351. Local signed source ends at
-4bb9f306765d2fe3d39c5b9941eed00c85885e2f and is not yet published as code.
-301 affected tests and six additional notification/reader/UI checks passed;
-three opt-in PostgreSQL tests skipped. A separate source-derived, read-only
-PostgreSQL SELECT qualification passed. Typecheck passed.
+Execution history belongs on the canonical Workrooms and backlog evidence. The
+old overlapping-document approval is resolved; do not replay it. Earlier uncertain
+reviews and failed host observations remain preserved and do not become passes.
 
-P1 publication awaits approval of an overlapping claim on the canonical
-`docs/architecture/work-shapes-and-the-decision-gate.md` correction. The existing
-owner is WC-5D6B124A / BI-A798975C; the proposed edit only updates stale stall
-semantics and does not change that owner's finite-delivery agreement scope.
-The exact proposed patch is retained with the installation evidence. No edit
-was made through the refused claim, and no documentation exception hides it.
-Shared exact-tree integration, independent publication review, protected PR
-and served-runtime acceptance remain outstanding.
+| Work | Existing owner | Current next outcome |
+| --- | --- | --- |
+| Truthful effective progress | BI-756C899D / WC-36F36351 | Publish and qualify tested source through exact-tree gate, independent review and served acceptance |
+| Immutable reader recovery | BI-E8237EAE / WC-9255BE6F | Publish the bounded cursor-guidance fix, deploy normally, then recover the original eligible architecture execution |
+| COO supervision surface and local broadcast | PR #6609 / BI-63FB1683 | Reuse Phase E; resolve recorded integration findings and complete its own served verification |
+| Installation-aware recovery and onboarding | BI-C43FD3E5; parent scope WC-D5FD489C | Use approved baseline 3116fb84 and refreshed exact-plan coverage; obtain current architecture/plan decisions, then implement the owner/admission contract and qualify local/peer behavior |
+| Finite delivery completion acceptance | BI-A798975C / WC-5D6B124A | Continue the transferred completion/replay/changed-criteria/missing-evidence acceptance; a successful executor handoff does not close it |
+| Learning and review continuity | BI-IMP-9DA35549 / BI-BF20F828 | Retain harness evaluation and review ownership; no second improvement engine |
 
-The documentation branch's 126 readiness checks all passed, but its final
-qualification was inconclusive after origin/main changed during the run;
-head/tree stayed unchanged. The existing host-preflight performance item
-BI-5E4BB7CA carries that reproduction. Preserve the receipt and requalify under
-the existing procedure; do not edit evidence or call it ready.
+PR #6600 delivered the existing Windows gate repair. Its merge removes the old
+source dependency; only a fresh qualified result for the candidate can establish
+publication readiness. PR #6599 delivered documentation, not runtime COO behavior.
+Exact source/test identities and later changes are read from live evidence before
+each publication; this plan does not maintain a second mutable build ledger.
 
-For P2, reconcile the original design/spec review executions through their
-current launcher, process-supervisor and effect-owner authority before resuming
-those exact reviews. Do not dispatch replacements or treat the completed
-architecture review as the missing design/spec receipts. No founder status
-nudge is an acceptance test, and no passing source suite closes P2.
+The founder authorized coordination with “Prioritize DPF platform design” and
+implementation of the agreed plan. Its archived handoff remains provenance:
+coordinated-coo-implementation-handoff.json, SHA256
+2404f9f247322c69b1ee78d81631a87f74a7da8ba109d200a4ee38a3e127d1b6.
+This receiver completed the native finite-room transfer and one exact ACK replay;
+RV-COO-FINITE-HANDOFF-20261026 covers that scoped outcome only. No source permission
+or review authority is delegated by this coordination history.
+
+Harness2 task-level Propose-Probe-Compose and the separate Meta-Harness candidate
+promotion experiment remain design references. Keep incumbent/candidate identities,
+isolated probes, regression/held-out cases, budget and rollback with the existing
+learning owners. Optimizing execution does not change the delivery agreement or
+authorize a peer action.
+
+Finite delivery retains the existing capture and reader owners:
+`apps/web/lib/work-capsules/delivery-agreement-capture.ts` captures the initial
+objective and semantic acceptance digest;
+`apps/web/lib/work-management/delivery-agreement.ts` owns typed reads and
+projection. Retry, restart and recovery retain that agreement. Changed acceptance
+requires explicit reconciliation; missing evidence blocks completion, completed
+handoffs stay immutable, and separately owned follow-ons cannot reopen them.
+
+## Amended review and coverage
+
+The current independent spec approval and baseline above include
+OBJ-COO-INSTALLATION / AC-COO-08; they preserve all four earlier objectives and
+seven earlier criteria. P1 remains AC-COO-01/02; P2 covers AC-COO-03..08 and depends
+on P1. Current coverage validates that graph. Refresh only the changed plan's
+immutable artifact and its dependent review, retaining prior receipts and the
+original UNKNOWN review history. No new initiative or orchestration engine is
+required. Current native readiness, not a historical prose status, determines
+whether a slice may start.
 
 
-## Design-only follow-up: COO onboarding and harness comparison
-
-The founder asks to establish the design before implementation. The canonical
-design now includes an explicit COO mandate, live tool/grant readiness matrix,
-alias-resolution requirement, and an onboarding rehearsal that proves actual
-read/request/result/verification capability. The running persona and standing
-task have not been updated, and no COO acknowledgement is claimed.
-
-Google Research Harness2 and Joel Niklaus's Meta-Harness experiment inform the
-comparison in that design. Operational follow-through remains the COO's job;
-measured harness improvement stays with the existing improvement and review
-owners. Add candidate/incumbent identity, isolated probes, regression and
-held-out acceptance cases, budgets and rollback to P2's relevant repair path.
-These clarify AC-COO-03/06 and existing learning boundaries; they do not create
-another optimization engine or authorize live grant changes. Existing review
-requests remain bound to their original artifacts. This revised design needs
-normal independent review after original execution settlement; no old receipt
-is claimed to cover the new text.
-
-
-## Coordinated implementation handoff accepted October 25
-
-The founder now authorizes coordination with "Prioritize DPF platform design"
-and implementation of the agreed design and plan. That chat confirmed the
-ownership split and supplied a bounded handoff rather than another design.
-This chat coordinates P1/P2 and the remaining BI-A798975C finite completion acceptance;
-BI-IMP-9DA35549 and BI-BF20F828 retain learning/review; Rationalize approval list
-retains approval-policy ownership. No source permission or review is delegated
-by this paragraph.
-
-Handoff provenance: coordinated-coo-implementation-handoff.json supplied by chat
-01a173c1-2a8e-74d2-a14b-bad35032d891. The receiver read the actual file and verified
-SHA256 2404f9f247322c69b1ee78d81631a87f74a7da8ba109d200a4ee38a3e127d1b6.
-It is coordination evidence, not a native review, coverage or acceptance receipt.
-Its original native recording was refused during an upgrade drain; adoption was subsequently recorded through Workroom evidence.
-
-### Adopted order and completion boundaries
-
-| Order | Existing delivery | Concrete next outcome | Dependencies and ownership |
-| --- | --- | --- | --- |
-| 1 | BI-756C899D | Publish and verify truthful effective dispatch/progress | This chat; independent of the optimization program |
-| 2 | BI-C43FD3E5 under BI-4B48E7FE | Server-owned COO recovery and onboarding | Current design/plan review, valid coverage/admission, P1 and existing finite agreement contract |
-| 3 | BI-34999E95, BI-B93E9C6E, BI-69803ACC | Correct schema-valid true/false/null attribution; join existing outcomes; fixed-cohort quality, throughput, cost and human-attention scorecard | Existing measurement owners; verify BI-58A9FC76 delivered resolver before replacing anything |
-| 4 | BI-1B7BB954, BI-6DB95601, then BI-A472354E | Qualification/integrity gates followed by one bounded versioned candidate/incumbent pilot | Existing learning/review owners; scorecard and each BI's current prerequisites |
-
-Orders 3/4 are separately owned follow-ons, not added acceptance criteria for
-P1 or P2. They cannot prevent ordinary authorized recovery or silently reopen a
-completed finite agreement. Their current live readiness still controls start.
-
-### Concrete finite-agreement integration for P2
-
-Consume the already merged finite contract from PR 6575, merge
-909f8eebaffa6e5c1eb2a9e40c53f7580546c64b. Its plan coverage is
-cmvo6frnw171d01qhgu1aznxj and implementation admission IRD-5F9E819B30BA.
-Those facts do not establish a native independent semantic-review verdict.
-
-- apps/web/lib/work-capsules/delivery-agreement-capture.ts owns capture of the
-  initial objective, semantic acceptance digest and scoped guidance context.
-  Recovery retains that agreement; it does not capture a replacement objective.
-- apps/web/lib/work-management/delivery-agreement.ts owns typed readers and
-  projectDeliveryAgreement. Legacy rooms keep unknown initial history, and
-  standing rooms retain cycle semantics.
-- apps/web/lib/work-capsules/workroom-detail-read.server.ts exposes capsule.delivery;
-  apps/web/lib/work-management/room-read-model.ts shares the operator projection.
-  The COO consumes that projection alongside effective progress and next action.
-- apps/web/lib/backlog/initiative-readiness/work-capsule-terminal-transition.ts
-  remains the completion authority: readiness, objective reconciliation and CAS,
-  then one immutable handoff in the successful transaction. The COO never writes
-  deliveryHandoff or PASS directly.
-- Existing evidence result.followOnRefs carries separately owned BI references.
-  Later learning or a new request goes there; it cannot rewrite current acceptance.
-
-### Implementation and acceptance sequence for P2
-
-1. Obtain classification, independent current design/plan receipts and coverage.
-   The latest native design/spec requests at design head 14ee8608dd4d ended with
-   unknown execution outcomes again. Preserve their identities and reconcile;
-   no replacement, stale pass or downgraded delivery shape is a remedy.
-2. Claim only actual P2 source paths in its own governed worktree; consume the
-   returned testImpact and guard obligations before red tests. Reuse the above
-   merged contract and existing room/task recovery owners.
-3. Add failing cases for immutable agreement through retry/restart, changed
-   acceptance, dependency release, provider recovery, cancelled work, denied
-   authority and result acknowledgement without verified advancement.
-4. Implement durable owner/action/acknowledgement/next-check/result state through
-   existing Workroom/task/checkpoint facilities with revision fencing. Keep
-   uncertain external effects on their original reconciliation path.
-5. Align canonical COO persona, standing task, skills and reachable tool context;
-   qualify any actual permission change through its own authority gate. Prove
-   direct and scheduled paths resolve the same canonical principal.
-6. Run affected tests/typecheck, exact-tree shared integration, independent review,
-   protected publication and canonical served acceptance. Finite closeout tests
-   are coordinated here under BI-A798975C; record integration evidence and its limits.
-
-The acceptance replay must show provider hold -> owned permitted recovery ->
-verified advancement, external interruption without the old conversation,
-dependency continuation, and one deduplicated genuine human decision. Completion
-must retain the agreed outcome and produce a durable handoff; separately owned
-follow-ons do not reopen it. Preserve explicit unavailable peer guidance rather
-than assuming a trusted pairing means that guidance was read.
-
-### Current unblocking evidence
-
-The finite-delivery owner normally released all thirty idle path claims. A fresh
-ordinary claim for the canonical shape architecture page succeeded, so the old
-forced shared-edit approval is no longer needed for this work. P1 now includes
-the real canonical documentation correction and current main's provider-hold
-capacity fix. P1 now integrates protected main PRs 6586, 6587 and 6588 at source
-a958958135a5ff2ecb1598f9a58ce4a5a049f63a. The expanded source-local suite has
-368 passes, zero failures and three opt-in PostgreSQL skips. Application and
-test typechecks pass. PR 6586's four Windows conformance cases pass alone.
-The full host preflight completed at 2026-10-26T01:57:18.465Z with 84 of 85
-checks passing; trusted-startup cancellation still reported owned descendants
-at cleanup. BI-BFDB98B6 carries the same-head fixture h3RxaL counterexample.
-No integration lease or passing gate record exists; do not repeat it unchanged.
-
-Native current design, spec and plan approvals are real receipts. Earlier
-uncertain executions remain historical under BI-7906C73E. Architecture tasks
-5D5CAF6B0BCB and 768EA9526890 reached their reader budget without a verdict;
-audits show literal cursor values 0 and 1 rejected by the immutable reader.
-The separately admitted BI-E8237EAE repair shares actionable error feedback and
-first-read guidance. Its six regressions fail before the repair and pass after;
-133 related tests, both typechecks and applicable local guards pass. Shared
-publication and served architecture recovery remain unrun.
-
-The native finite executor transfer still requires recovery under BI-5366EF78;
-coordination acknowledgement does not transfer its authority. The attempted
-COO briefing remains refused, so acknowledgement and tool qualification are
-unverified. No runtime code publication, merge, deployment or full COO activation
-is claimed. Resolve the existing gate and reader defects through their owners,
-then obtain exact-tree integration, independent publication review and served
-acceptance; technical recovery does not require a founder rubber stamp.
-### Final coordination transfer and current verification
-
-The human in "Prioritize DPF platform design" directed transfer of its remaining
-work before archiving that chat. This chat accepted coordination of BI-A798975C's
-remaining finite acceptance and native handoff recovery. Its native executor has
-not transferred: the governed request returned handoff-transaction-required with
-no request identity. Resolve that command transaction through its owning path;
-this planning acknowledgement grants no control of WC-5D6B124A. Nothing depends
-on further action in the archived chat.
-
-The receiver read final-archive-handoff.json and verified SHA256
-5247e1fa23826592fc9286f9092f8a1107f7bdfb80c014ce34ce2b67035daf0f.
-Remaining finite acceptance is canonical completion/replay, changed criteria
-reconciliation, missing evidence blocking, immutable completed handoff and
-separately owned follow-ons. The existing UI proofs remain scoped evidence.
-
-An independent client assessment at f1ed74cb48f6416ea32da6f48f569abb334bf4d3
-found a deadline payload discriminator regression. P1 repaired that finding with
-a failing then passing runner-level test and six graph evidence tests at
-3a91aa3f589b. The suite at that source has 317 passes, zero failures and three
-opt-in PostgreSQL skips; typecheck passes. The old changes-requested assessment
-is preserved and does not become a pass after an author repair. Current shared
-gate and independent publication review still require their own receipts.
+Canonical research/ownership grounding is in
+../research/2026-10-26-coo-installation-coordination.md. Implementation admission,
+exact-source publication and cross-install served acceptance remain separate gates.

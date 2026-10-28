@@ -52,6 +52,13 @@ describe("bottleneckSentence", () => {
     )).toMatch(/^1 room is held at merge in b, typically waiting 1h/);
   });
 
+  it("draws the busiest shape the archetype binds to its delivery stage, else the busiest shape", () => {
+    const flow = { shapes: [shape("payables-watch", 9, "awaiting-person"), shape("delivery-small", 3, "awaiting-person")] };
+    expect(heroShape(flow, new Set(["delivery-small@1.0.0"]))?.shapeKey).toBe("delivery-small");
+    expect(heroShape(flow, new Set(["delivery-large@1.0.0"]))?.shapeKey).toBe("payables-watch");
+    expect(heroShape(flow)?.shapeKey).toBe("payables-watch");
+  });
+
   it("says nothing when nothing waits", () => {
     expect(bottleneckSentence({ shapes: [] }, (k) => k)).toBeNull();
     expect(heroShape({ shapes: [] })).toBeNull();

@@ -205,11 +205,13 @@ describe("bounded recovery packet round trip", () => {
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: gate[0], taskAuthorityKey: "client-forgery" }, "AGT-AUTHOR", "human", context);
     expect(read.success, JSON.stringify(read)).toBe(true);
     const packet = packetFrom(read);
+    const originalKey = packet.requestKey.replace(/:reviewer:[a-f0-9]{64}$/, "");
     expect(mocks.historyMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
       userId: "human", status: { notIn: ["completed", "canceled", "rejected", "archived"] },
-      AND: [{ a2aMetadata: { path: ["idempotencyKey"], equals: packet.requestKey } },
+      AND: [{ OR: [{ a2aMetadata: { path: ["idempotencyKey"], equals: originalKey } },
+        { a2aMetadata: { path: ["idempotencyKey"], string_starts_with: `${originalKey}:reviewer:` } }] },
         { a2aMetadata: { path: ["tokenSource"], equals: "oauth" } }],
-    } }));
+    }, take: 501, orderBy: [{ id: "asc" }] }));
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
     expect(mocks.authority).toHaveBeenCalledWith({ tokenId: "access", userId: "human", source: "oauth" });
     expect((await authorizeCoworkerRequest({ ...packet, requestKey: `${packet.requestKey}:changed` }, "human", context)).refusal).toBeDefined();
@@ -228,7 +230,8 @@ describe("bounded recovery packet round trip", () => {
       taskRunId, userId: "human", currentAgentId: old.targetAgent, status: "input-required", authorityScope,
       updatedAt: new Date("2026-10-16T00:00:00Z"),
       a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: old.targetAgent,
-        ...(hasOAuthMetadata ? { tokenSource: "oauth", apiTokenId: "access" } : {}),
+        initiativeReviewBinding: old.initiativeReviewBinding,
+        ...(hasOAuthMetadata ? { tokenSource: "oauth", apiTokenId: "access", tokenCapability: "write" } : {}),
         requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
           title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
           riskClass: "bounded-write", authorityScope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
@@ -241,14 +244,7 @@ describe("bounded recovery packet round trip", () => {
     };
     mocks.history.mockImplementation(async ({ where }) =>
       where.taskRunId === taskRunId && where.userId === row.userId ? row : null);
-    mocks.historyMany.mockImplementation(async ({ where }) => {
-      const key = where.AND.find((entry: { a2aMetadata: { path: string[] } }) =>
-        entry.a2aMetadata.path[0] === "idempotencyKey")?.a2aMetadata.equals;
-      const source = where.AND.find((entry: { a2aMetadata: { path: string[] } }) =>
-        entry.a2aMetadata.path[0] === "tokenSource")?.a2aMetadata.equals;
-      return where.userId === row.userId && !where.status.notIn.includes(row.status)
-        && key === row.a2aMetadata.idempotencyKey && source === row.a2aMetadata.tokenSource ? [row] : [];
-    });
+    mocks.historyMany.mockImplementation(async ({ where }) => matchesHistoricalReview(row, where) ? [row] : []);
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: "design-spec" }, "AGT-AUTHOR", "human", context);
     if (hasOAuthMetadata) {
       expect(read).toMatchObject({ success: false, error: "original_review_recovery_required",
@@ -272,4 +268,30 @@ describe("bounded recovery packet round trip", () => {
 
 function packetFrom(result: ToolResult) {
   return (result.data!.recovery as InitiativeReviewerRecovery).reviewerRoutes[0]!.requestCoworker;
+}
+
+// Model the query's Boolean predicates instead of assuming every AND child is
+// one JSON leaf. Unsupported fixture queries fail rather than hide a saved task.
+function matchesHistoricalReview(row: { userId: string; status: string; a2aMetadata: Record<string, unknown> },
+  where: Record<string, unknown>): boolean {
+  return Object.entries(where).every(([key, value]) => {
+    if (key === "AND" || key === "OR") {
+      if (!Array.isArray(value)) throw new Error("Unsupported historical-review Boolean fixture");
+      const matches = value.map(clause => matchesHistoricalReview(row, clause));
+      return key === "AND" ? matches.every(Boolean) : matches.some(Boolean);
+    }
+    if (key === "userId") return row.userId === value;
+    if (key === "status" && value && typeof value === "object" && "notIn" in value && Array.isArray(value.notIn)) {
+      return !value.notIn.includes(row.status);
+    }
+    if (key === "a2aMetadata" && value && typeof value === "object" && "path" in value
+      && Array.isArray(value.path) && value.path.length === 1) {
+      const saved = row.a2aMetadata[String(value.path[0])];
+      if ("equals" in value) return saved === value.equals;
+      if ("string_starts_with" in value && typeof value.string_starts_with === "string") {
+        return typeof saved === "string" && saved.startsWith(value.string_starts_with);
+      }
+    }
+    throw new Error(`Unsupported historical-review fixture predicate: ${key}`);
+  });
 }

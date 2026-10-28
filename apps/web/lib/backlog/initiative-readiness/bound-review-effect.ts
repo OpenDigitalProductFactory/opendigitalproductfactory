@@ -5,9 +5,12 @@ import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import type { InitiativeArtifactRef, InitiativeGateKey, InitiativeGateReceipt } from "./receipt-schema";
 import { validInitiativeGateReceipt } from "./receipt-validation";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
-import { hasExecutionUncertainty } from "@/lib/shared/execution-uncertainty";
-import { captureTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { taskExecutionEligible, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
 import { isRolledBackPostgresConflict } from "@/lib/shared/postgres-transaction-conflict";
+import { assertReassessmentOwnerSupport } from "@/lib/shared/reassessment-owner-versions";
+import { parsePresentReassessmentRelation } from "@/lib/mcp-task-reassessment-policy";
+import { parseReassessmentRootLocatorV2 } from "@/lib/routing/reassessment-phase-contract";
+import { validateReassessmentCommitBoundary } from "@/lib/routing/reassessment-execution-scope";
 
 /** Internal context only: never accepted from tool arguments. This identifies an
  * effect; it does not settle a provider execution or authorize its replay. */
@@ -25,7 +28,7 @@ export type BoundReviewScope = {
   authorityDecisionId: string | null;
 };
 type Refusal = { ok: false; code: string; error: string };
-type LockedReviewExecution = { status: string; progressPayload: unknown };
+type LockedReviewExecution = { status: string; progressPayload: unknown; a2aMetadata: unknown; reassessmentItemsLocked?: boolean };
 type ReviewEffectLock = { refusal: Refusal | null; execution: LockedReviewExecution | null };
 const refuse = (error: string): Refusal => ({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error });
 const object = (value: unknown): Record<string, unknown> =>
@@ -73,6 +76,7 @@ export async function readBoundReviewAuthorityTask(
 export async function lockBoundReviewEffect(tx: Prisma.TransactionClient, scope: BoundReviewScope,
   organizationId: string | null): Promise<ReviewEffectLock> {
   const bound = scope.boundReviewTask;
+  assertReassessmentOwnerSupport("writer", 2);
   const denied = (refusal: Refusal): ReviewEffectLock => ({ refusal, execution: null });
   if (!bound) return { refusal: null, execution: null };
   if (!bound.taskRunId || !/^[a-f0-9]{64}$/.test(bound.requestDigest)) {
@@ -97,16 +101,41 @@ export async function lockBoundReviewEffect(tx: Prisma.TransactionClient, scope:
     || await readBoundReviewAuthorityTask(tx, scope.authorityDecisionId, scope, organizationId) !== bound.taskRunId) {
     return denied({ ok: false, code: "AUTHORIZATION_DENIED", error: "The writer allow decision does not identify this exact review task." });
   }
-  return { refusal: null, execution: { status: task.status, progressPayload: task.progressPayload } };
+  const present = parsePresentReassessmentRelation(binding.presentReassessment);
+  let reassessmentItemsLocked = false;
+  if (present) {
+    const items = await tx.backlogItem.findMany({ where: { itemId: { in: [scope.itemId, present.authorizationItemId] } },
+      select: { id: true, itemId: true, organizationId: true } });
+    const expected = new Set([scope.itemId, present.authorizationItemId]);
+    if (items.length === expected.size && items.every(row => expected.has(row.itemId) && row.organizationId === organizationId)) {
+      for (const row of items.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)) {
+        await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${row.id} FOR UPDATE`;
+      }
+      reassessmentItemsLocked = true;
+    }
+  }
+  return { refusal: null, execution: { status: task.status, progressPayload: task.progressPayload,
+    a2aMetadata: task.a2aMetadata, reassessmentItemsLocked } };
 }
 
 /** Call after genuine winner readback, while the original TaskRun lock is held. */
-export function checkBoundReviewWriteExecution(scope: BoundReviewScope, locked: LockedReviewExecution | null): Refusal | null {
+export async function checkBoundReviewWriteExecution(scope: BoundReviewScope, locked: LockedReviewExecution | null,
+  tx?: Prisma.TransactionClient): Promise<Refusal | null> {
   if (!scope.boundReviewTask) return null;
-  if (!locked || locked.status !== "working" || hasExecutionUncertainty(locked.progressPayload)
-    || !sameTaskExecutionFence(scope.boundReviewTask.executionFence, captureTaskExecutionFence(locked.progressPayload, scope.boundReviewTask.requestDigest))) {
+  if (!locked || !taskExecutionEligible({ ...locked, requestDigest: scope.boundReviewTask.requestDigest,
+    executionFence: scope.boundReviewTask.executionFence })) {
     return { ok: false, code: "AUTHORIZATION_DENIED",
       error: "The bound review execution is held, uncertain, unversioned or displaced. No new review effect was published." };
+  }
+  const metadata = object(locked.a2aMetadata), binding = object(metadata.initiativeReviewBinding);
+  const marker = metadata.reassessmentExecution;
+  if (Object.hasOwn(binding, "presentReassessment")
+    || (Object.hasOwn(metadata, "reassessmentExecution") && object(marker).schemaVersion !== 1)) {
+    if (!tx || !locked.reassessmentItemsLocked || !parsePresentReassessmentRelation(binding.presentReassessment) || !parseReassessmentRootLocatorV2(marker)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current reassessment writer authority is unproven." };
+    }
+    try { await validateReassessmentCommitBoundary(tx, scope.boundReviewTask); }
+    catch { return { ok: false, code: "AUTHORIZATION_DENIED", error: "The reassessment's persisted seal or current publication authority changed." }; }
   }
   return null;
 }

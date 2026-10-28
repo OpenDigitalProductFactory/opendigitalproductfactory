@@ -75,6 +75,31 @@ export function cliFailureSignal(stderr: string): string {
   return stderr.slice(-2_000);
 }
 
+/** Secret-shaped substrings never reach a log line, whatever the CLI echoed. */
+const CLI_SECRET_PATTERNS: RegExp[] = [
+  /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*/g,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
+  /\bsk-[A-Za-z0-9_-]{8,}/g,
+];
+const CLI_FAILURE_LOG_LIMIT = 500;
+
+/**
+ * BI-PIR-0371f80d: the CLI's verdict for a failed run, bounded and redacted for
+ * the operator log, with an allowlisted hint the run's diagnostics may keep.
+ * The text itself is never persisted (execution-uncertainty.ts).
+ */
+export function describeCliFailure(stderr: string): { hint: "quota" | "auth" | "model" | "unclassified"; signal: string; logLine: string } {
+  const signal = cliFailureSignal(stderr);
+  // Auth first: a refresh failure can also mention throttling (D2).
+  const hint = looksLikeCliAuthFailure(signal) ? "auth"
+    : looksLikeCliRateLimit(signal) ? "quota"
+    : looksLikeCliUnsupportedModel(signal) ? "model" : "unclassified";
+  let logLine = signal.trim();
+  for (const pattern of CLI_SECRET_PATTERNS) logLine = logLine.replace(pattern, "[redacted]");
+  if (logLine.length > CLI_FAILURE_LOG_LIMIT) logLine = `${logLine.slice(0, CLI_FAILURE_LOG_LIMIT)}…`;
+  return { hint, signal, logLine };
+}
+
 export function looksLikeCliAuthFailure(text: string): boolean {
   return CLI_AUTH_FAILURE_PATTERNS.some((p) => p.test(text));
 }
@@ -372,7 +397,15 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
             const diagnostics = { ...localDiagnostics, terminalResult: parseCliTerminalResultMetadata(stdout) };
             // Codex's native workspace tools can commit before any stdout.
             if (diagnostics.timedOut || code !== 0 || !stdout.trim() || stderr.includes("DPF_CLI_TIMEOUT")) {
-              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+              // The run stays uncertain (native effects may have committed), but
+              // the CLI's own verdict is logged and classified, never dropped.
+              const failure = stderr.trim() ? describeCliFailure(stderr) : null;
+              if (failure) {
+                console.warn(`[codex-cli-adapter] CLI failed: exit=${code ?? "?"} model=${modelId} hint=${failure.hint} verdict=${JSON.stringify(failure.logLine)}`);
+                // A stated usage cap is capacity, not a reason to redispatch every tick.
+                if (failure.hint === "quota") void recordCliRateLimit("codex-cli", providerId, failure.signal, poolIdentity);
+              }
+              reject(new NativeCliExecutionUncertainError(providerId, failure ? { ...diagnostics, cliFailureHint: failure.hint } : diagnostics));
             } else {
               resolve({ stdout, diagnostics });
             }

@@ -30,6 +30,7 @@ import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./cha
 import { assertWorkroomPublishable } from "./publication-refusal";
 import { assertScopeClaimLease } from "./scope-claim-lease";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
+import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import {
   CapsuleBranchOccupiedError,
   isReusableLiveCapsule,
@@ -809,7 +810,7 @@ export async function updateWorkCapsuleStatus(args: {
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
   await assertWorkroomPublishable({ ...capsule, capsuleId: args.capsuleId, status: args.status, backlogItem: args.db.backlogItem });
   if (args.status === "complete" && hasGovernedLink) {
-    return completeGovernedWorkCapsuleStatus({
+    const completed = await completeGovernedWorkCapsuleStatus({
       db: args.db,
       capsuleId: args.capsuleId,
       expectedStatus: capsule.status,
@@ -817,6 +818,8 @@ export async function updateWorkCapsuleStatus(args: {
       actor: args.actor,
       evaluatedAt: (args.now ?? new Date()).toISOString(),
     });
+    await closeEndedRoomSteps(args, capsule.status);
+    return completed;
   }
 
   const currentWorkspaceState =
@@ -829,7 +832,7 @@ export async function updateWorkCapsuleStatus(args: {
     until: new Date(now.getTime() + STATUS_OVERRIDE_TTL_MS).toISOString(),
   };
 
-  return inTransaction(args.db, async (tx) => {
+  const updated = await inTransaction(args.db, async (tx) => {
     const updated = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
@@ -849,4 +852,19 @@ export async function updateWorkCapsuleStatus(args: {
     });
     return updated;
   });
+  await closeEndedRoomSteps({ ...args, now }, capsule.status);
+  return updated;
+}
+
+/**
+ * A room that ends stops being driven, so nothing else closes its open steps
+ * (BI-C9F1DE01). Close them once the status is committed. Inside a caller's
+ * transaction the commit is not ours to see; the hourly reconciliation in the
+ * queue metrics aggregator closes those instead.
+ */
+async function closeEndedRoomSteps(args: { db: CapsuleDb; capsuleId: string; status: string; now?: Date }, priorStatus: string) {
+  if (!TERMINAL_WORKROOM_STATUSES.has(args.status) || TERMINAL_WORKROOM_STATUSES.has(priorStatus)) return;
+  if (!("$transaction" in args.db)) return;
+  const { closeStageTelemetryForEndedRoom } = await import("@/lib/work-management/workroom-stage-telemetry");
+  await closeStageTelemetryForEndedRoom(args.capsuleId, args.now ?? new Date());
 }

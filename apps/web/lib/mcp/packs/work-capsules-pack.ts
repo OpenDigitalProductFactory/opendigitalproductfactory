@@ -277,6 +277,18 @@ const definitions: ToolDefinition[] = [
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        checkpoint: {
+          type: "object",
+          description: "Optional note for whoever takes this room over; the latest one is kept.",
+          properties: {
+            nextAction: { type: "string" },
+            addressing: { type: "array", items: { type: "string" }, maxItems: 20 },
+            uncommittedPaths: { type: "array", items: { type: "string" }, maxItems: 50 },
+            headSha: { type: "string", pattern: "^[0-9a-f]{40}$" },
+            pushed: { type: "boolean" },
+            openRisks: { type: "array", items: { type: "string" }, maxItems: 20 },
+          },
+        },
       },
       required: ["capsuleId"],
     },
@@ -475,6 +487,9 @@ const definitions: ToolDefinition[] = [
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        capsuleIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20, description: "Hand over a set of your rooms instead of one." },
+        dryRun: { type: "boolean", description: "With capsuleIds: plan only (default true)." },
+        planDigest: { type: "string", description: "The dry run's planDigest; required to apply." },
         phase: { type: "string", enum: ["request", "acknowledge"], description: "Request a same-mandate handoff or acknowledge it as the receiving assistant." },
         requestId: { type: "string", description: "Request activity id to acknowledge; returned by the request phase." },
         targetAgentId: { type: "string", description: "Semantic id of the already-admitted receiving assistant." },
@@ -486,7 +501,7 @@ const definitions: ToolDefinition[] = [
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
         expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
-      required: ["capsuleId"],
+      // The handler requires capsuleId, or capsuleIds for a batched handover.
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,

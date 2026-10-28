@@ -622,8 +622,10 @@
         "capability-matrix-verified-2026-06-20",
         "2026-06-26-refresh-delivery-surface-sweep",
         "2026-07-24-refresh-bi-14e9f7ce-closeout-grok-hook-portability",
+        "2026-10-14-refresh-bi-742d707b-which-hooks-each-client-runs",
         "governance-outcomes-g1g9-multi-client-parity",
         "suggested-client-adapter-checklist-opencode-gemini-cursor",
+        "adding-a-client-the-updaters-adapter-contract-bi-d43723d7",
         "what-this-currently-tells-us-the-open-adoption-gaps",
         "refresh-ritual-monthly-how-this-stays-fresh",
         "related"
@@ -910,6 +912,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "restricted-present-reassessment",
         "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
@@ -1194,7 +1197,8 @@
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
         "task-specific-operating-rules",
-        "a-refusal-carries-its-own-remedy"
+        "a-refusal-carries-its-own-remedy",
+        "host-reservation-settlement"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -1340,6 +1344,7 @@
         "the-three-laws",
         "the-standards-p1p13",
         "enforcement-how-subsequent-changes-stay-conformant",
+        "restricted-review-surface",
         "how-to-apply-quick-checklist-when-changing-a-model-facing-surface",
         "related"
       ]
@@ -1514,6 +1519,7 @@
       "anchors": [
         "delivery-surfaces-runbook",
         "task-specific-operating-rules",
+        "taking-over-another-executors-work",
         "contributor-preview-binding-and-cleanup"
       ]
     },
@@ -2027,6 +2033,7 @@
         "initiative-readiness-runbook-who-does-what-when-through-the-gates",
         "0-two-shapes-do-not-conflate-them",
         "approval-status-is-separate-from-original-action-evidence",
+        "delivery-closes-non-contractual-work-bi-b1b44777",
         "medium-body-criteria-and-independent-acceptance",
         "1-the-lifecycle-sequence",
         "2-the-gates-role-actor-evidence-feature-profile",
@@ -2037,7 +2044,8 @@
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "approval-outcome-readback",
         "anti-patterns-observed",
-        "original-review-recovery-across-connection-changes"
+        "original-review-recovery-across-connection-changes",
+        "a-present-assessment-authorized-by-an-approved-policy"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2178,6 +2186,7 @@
         "parent-bounded-local-review-execution-bi-03ac2fd9",
         "recovering-an-original-initiative-review-after-a-connection-change",
         "canonical-review-writer-execution-identity",
+        "explicitly-authorized-present-reassessments",
         "bounded-workroom-activity-reads"
       ]
     },
@@ -2897,6 +2906,23 @@
         "a-statement-names-its-room",
         "the-room-inspector-renders-what-the-projections-resolve",
         "a-room-with-no-workitem-is-its-own-case"
+      ]
+    },
+    "docs/audits/2026-10-22-review-reassessment-restore-availability.md": {
+      "publicHref": "/audits/2026-10-22-review-reassessment-restore-availability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "recovery-availability-on-the-self-upgrade-page",
+        "finding-and-approved-scope",
+        "prototype-and-fit-decision",
+        "implementation-plan",
+        "verification-and-publication",
+        "task-and-scorecard-contract",
+        "source-and-delivery-checks",
+        "served-verification-26-october",
+        "sources"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -3815,6 +3841,7 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
+        "one-queue",
         "why",
         "how-to-apply",
         "evidence-led-ecosystem-absorption",
@@ -5234,6 +5261,8 @@
       "anchors": [
         "rule",
         "why",
+        "outcomes-define-done-founder-direction-2026-10-27",
+        "nothing-waits-on-a-person-indefinitely-operator-direction-2026-10-27",
         "how-to-apply",
         "related"
       ]
@@ -5557,6 +5586,25 @@
         "observed-real-world-patterns-from-recent-high-quality-prs",
         "the-minimal-official-template",
         "recommended-prompt-for-future-prs-copy-paste-ready"
+      ]
+    },
+    "docs/history/2026-10-16-review-settlement-investigation.md": {
+      "publicHref": "/history/2026-10-16-review-settlement-investigation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-settlement-historical-investigation-and-sequencing",
+        "ordered-implementation-plan",
+        "p1-establish-executable-evidence-adapters",
+        "p2-consolidate-qualification-and-integrate-the-writer-fence",
+        "p3-admit-one-same-task-continuation",
+        "p4-qualify-delivery-and-served-behavior",
+        "backlog-coverage",
+        "finite-unsupported-boundary-and-resumption",
+        "october-19-bounded-source-recovery-original-proof-inventory",
+        "october-24-upstream-historical-plan-clarification",
+        "october-23-bounded-recovery-issued-review-admission"
       ]
     },
     "docs/install/cloud-single-vm.md": {
@@ -5899,6 +5947,7 @@
         "other-flags",
         "what-gets-registered",
         "reading-the-output",
+        "who-owns-a-worktree-bi-83345811",
         "checking-it-ran",
         "scoping-to-one-branch-and-the-merge-trigger-bi-848360ef",
         "related"
@@ -6089,8 +6138,9 @@
       "publishedPortal": false,
       "anchors": [
         "acceptance-sweep-operator-runbook",
-        "medium-work-whose-criteria-are-in-its-body",
+        "delivered-work-closes-on-delivery-since-2026-10-27",
         "closing-items-the-gate-already-allows-off-by-default",
+        "customer-reported-work-one-question",
         "what-the-summary-tells-you",
         "who-verifies-an-item-that-is-not-closable",
         "how-the-portal-knows-work-was-merged",
@@ -6332,7 +6382,10 @@
         "activation-rollback-and-ai-ops",
         "recorded-initial-candidate",
         "qualification-progress-on-october-25-2026-chicago",
-        "fresh-model-control-result-2026-10-26-0326-utc"
+        "fresh-model-control-result-2026-10-26-0326-utc",
+        "managed-runner-candidate-october-26-2026",
+        "managed-api-qualification-october-26-2026-1511-utc",
+        "review-correction-to-the-historical-api-report"
       ]
     },
     "docs/operations/mobile-privacy-policy-draft.md": {
@@ -6383,6 +6436,7 @@
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
         "alert-delivery",
+        "ai-capacity-watch-bi-24092dc9",
         "log-capture-runs-by-default-bi-f8024a9d",
         "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
@@ -9652,6 +9706,7 @@
         "failure-class-host-out-of-memory-candidate-build-enomem",
         "failure-class-promoter-context-n1-a-new-copy-made-the-candidate-unbuildable",
         "failure-class-capability-state-stale-a-release-moved-the-capability-catalog",
+        "failure-class-reassessment-compatibility-unproven-portal-could-not-probe-the-candidate",
         "failure-class-migration-unique-violation-p3018-23505",
         "references"
       ]
@@ -11862,6 +11917,7 @@
         "overview",
         "accounts-and-provider-setup",
         "routing-status-and-temporary-pauses",
+        "when-the-platform-loses-ai-capacity",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",
@@ -11894,6 +11950,7 @@
         "what-the-dial-actually-changes",
         "what-it-does",
         "coo-supervision-and-current-delivery-status",
+        "which-installation-the-coo-coordinates",
         "when-it-runs",
         "how-it-stays-current",
         "what-it-will-not-do",
@@ -12111,6 +12168,7 @@
         "anthropic-oauth",
         "codex-oauth",
         "docker-model-runner-ollama",
+        "runner-configuration-the-platform-keeps-in-place",
         "adding-a-new-oauth-provider",
         "common-pitfalls"
       ]
@@ -13231,6 +13289,7 @@
         "use-product-direction",
         "activate-product-demand-with-evidence",
         "learn-from-product-outcomes",
+        "outcomes-of-delivered-platform-work",
         "read-the-evidence-derived-roadmap",
         "build-continuous-product-intelligence",
         "schedule-recurring-product-work",
@@ -13419,6 +13478,9 @@
       "anchors": [
         "use-this-doc-for",
         "workflow",
+        "add-a-file",
+        "collections",
+        "who-can-read-a-document",
         "office-files",
         "export",
         "slide-previews",
@@ -13509,7 +13571,9 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "export"
+        "export",
+        "boards",
+        "ask-a-coworker-to-build-a-tracker"
       ]
     },
     "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {

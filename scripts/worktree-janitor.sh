@@ -9,6 +9,8 @@
 # FLAGS
 #   --dry-run        (default) Print candidates only; do nothing destructive.
 #   --live           Run live: git worktree remove + branch -D for PRUNE candidates.
+#                    A stale branch with commits on no remote is first saved at
+#                    refs/janitor-backup/<YYYY-MM-DD>/<branch>; if that fails it is KEPT.
 #   --grace-days N   Days without a commit after which a worktree is a candidate
 #                    (default: 14). Merged worktrees are candidates immediately.
 #   --force          Also remove worktrees with untracked files (last resort;
@@ -142,6 +144,25 @@ has_merged_pr() {
   [ "${count:-0}" -gt 0 ]
 }
 
+# ── Unpushed-work backup (BI-EBBBDF40) ───────────────────────────────────
+# A stale branch is unmerged by definition, and `branch -D` leaves commits that
+# are on no remote reachable only from the reflog. Before deleting, pin any
+# such tip at refs/janitor-backup/<date>/<branch> (the 2026-10-21 live run had
+# 14 of these, backed up by hand). Returns non-zero when the branch has
+# unpushed commits and the ref could not be written — the caller KEEPs then.
+backup_date="$(date +%Y-%m-%d)"
+backup_unpushed() {
+  local branch="$1" unpushed tip ref
+  unpushed="$("$GIT_BIN" -C "$root" rev-list --count "refs/heads/$branch" --not --remotes 2>/dev/null)" || {
+    warn "cannot count unpushed commits on $branch"; return 1; }
+  [ "${unpushed:-0}" -gt 0 ] || return 0
+  ref="refs/janitor-backup/$backup_date/$branch"
+  tip="$("$GIT_BIN" -C "$root" rev-parse "refs/heads/$branch" 2>/dev/null)" &&
+    "$GIT_BIN" -C "$root" update-ref "$ref" "$tip" 2>/dev/null || {
+    warn "could not write backup ref $ref for $unpushed unpushed commit(s)"; return 1; }
+  ok "backed up $unpushed unpushed commit(s) of $branch at $ref"
+}
+
 printf '\nWorktree janitor — %s (grace=%d days, %s)\n\n' \
   "$([ "$DRY_RUN" = "1" ] && echo "DRY RUN" || echo "LIVE")" \
   "$GRACE_DAYS" "$(date)"
@@ -215,6 +236,8 @@ while IFS= read -r wt_path; do
     age_days=$(( age_secs / 86400 ))
     if [ "$dirty" = "1" ]; then
       record KEEP "$wt_path" "branch=$branch stale ${age_days}d but dirty; manual review required"
+    elif [ "$DRY_RUN" = "0" ] && ! backup_unpushed "$branch"; then
+      record KEEP "$wt_path" "branch=$branch stale ${age_days}d but unpushed commits could not be backed up"
     else
       record PRUNE "$wt_path" "branch=$branch stale ${age_days}d (>${GRACE_DAYS}d), unmerged, clean"
       if [ "$DRY_RUN" = "0" ]; then

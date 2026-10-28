@@ -133,6 +133,32 @@ test("runGuards treats a killed guard SELF-TEST as a runner failure, not a broke
   assert.match(runnerFailures[0], /self-test/);
 });
 
+// ── runGuards — per-guard results for the outcome record (BI-FEDD8F45) ───────
+
+test("runGuards returns one result per guard: passed, refused, self-test-failed, runner-failed", () => {
+  const guards = ["check-no-alpha.mjs", "check-no-beta.mjs", "check-no-gamma.mjs", "check-no-delta.mjs"];
+  const tests = new Set(["check-no-gamma.test.mjs"]);
+  const spawn = (argv) => {
+    const file = String(argv[argv.length - 1]);
+    if (file.includes("check-no-alpha")) return { status: 0 };
+    if (file.includes("check-no-beta")) return { status: 1 };
+    if (file.includes("check-no-gamma.test")) return { status: 1, stdout: "not ok 1" };
+    return { status: null, signal: "SIGKILL" };
+  };
+  let clock = 0;
+  const { results } = runGuards({ guards, tests, spawn, maxRetries: 0, now: () => (clock += 10) });
+  assert.deepEqual(
+    results.map(({ guard, verdict }) => [guard, verdict]),
+    [
+      ["check-no-alpha.mjs", "passed"],
+      ["check-no-beta.mjs", "refused"],
+      ["check-no-gamma.mjs", "self-test-failed"],
+      ["check-no-delta.mjs", "runner-failed"],
+    ],
+  );
+  assert.ok(results.every((r) => r.durationMs >= 0));
+});
+
 // ── summarizeGuardRun — distinguishable in exit code AND message ─────────────
 
 test("a violation exits 1 and names it a violation", () => {
