@@ -16,6 +16,7 @@
 
 import { prisma } from "./client";
 import { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
+import { assertRelationWrite, toRelationType, type RelationType } from "./relation-vocabulary";
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
@@ -66,13 +67,16 @@ async function addGraphNodeLabels(
   );
 }
 
-/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged. */
+/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged.
+ *  The type must be in the relation vocabulary (BI-85389A35): an unregistered or
+ *  retired type, or a missing required prop or qualifier, throws before the write. */
 export async function upsertGraphEdge(
   srcKey: string,
   dstKey: string,
-  relType: string,
+  relType: RelationType,
   props: Record<string, unknown> = {},
 ): Promise<void> {
+  assertRelationWrite(relType, props);
   await prisma.$executeRawUnsafe(
     `INSERT INTO graph_edge (src_key, dst_key, rel_type, props)
      VALUES ($1, $2, $3, $4::jsonb)
@@ -94,7 +98,7 @@ export async function upsertGraphEdge(
  *  never touched. */
 export async function replaceGraphEdgesFromSource(
   srcKey: string,
-  relType: string,
+  relType: RelationType,
   dstKeys: string[],
 ): Promise<void> {
   await prisma.$executeRawUnsafe(
@@ -515,7 +519,7 @@ export async function syncInventoryRelationship(rel: {
   const neoType = rel.relationshipType.toUpperCase();
 
   if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
-    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, neoType, {
+    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, toRelationType(neoType), {
       syncedAt: nowIso(),
     });
     return;
@@ -587,7 +591,7 @@ export async function syncEaRelationship(rel: {
 }): Promise<void> {
   // A relationship is also identified by relationshipId; the mirror keys edges by
   // (src,dst,rel_type) and stores relationshipId as a prop (used by deleteEaRelationship).
-  await upsertGraphEdge(rel.fromElementId, rel.toElementId, rel.neoType, {
+  await upsertGraphEdge(rel.fromElementId, rel.toElementId, toRelationType(rel.neoType), {
     relationshipId: rel.id,
     notationId: rel.notationSlug,
     relationshipType: rel.relationshipTypeSlug,
