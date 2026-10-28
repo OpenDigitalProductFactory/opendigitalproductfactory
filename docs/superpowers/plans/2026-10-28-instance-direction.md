@@ -38,3 +38,23 @@ Each phase is test-first: write the failing test, make it pass, then run the pac
 
 - User guide page for business settings: the Direction panel and the setup step.
 - Unit tests, typecheck, guards, and a served-target UX check with screenshots.
+
+## Backlog coverage
+
+| Deliverable | Backlog item | Requirements | Contract | Flow | Verification |
+|---|---|---|---|---|---|
+| capture-and-edit | BI-916216E7 | AC-1, AC-2, AC-3, AC-4 | `docs/superpowers/specs/2026-10-28-instance-direction-design.md` | `/storefront/settings/business?section=direction` | `apps/web/lib/organization-direction/direction.test.ts`, `apps/web/lib/attention/sources/organization-direction.test.ts` |
+| decision-layers-read | BI-8AB6B4F7 | AC-5, AC-6 | `docs/superpowers/specs/2026-10-28-instance-direction-design.md` | `mcp initialize ORGANIZATION CONTEXT`, `evaluate_org_business_decision` | `apps/web/lib/mcp/org-context-bundle.test.ts`, `apps/web/lib/onboarding/apply-mission-prompt.test.ts` |
+
+BI-916216E7 acceptance, quoted from the item:
+
+- AC-1 Setup asks for mission, vision and outcomes. Each can be skipped and is shown as missing.
+- AC-2 The owner can edit them later. Each change is versioned: one revision per save, recording who changed it.
+- AC-3 No agent path writes an instance outcome without the owner's action. Fields start empty. A suggested mission starter is applied only when the owner clicks it.
+- AC-4 A skipped or incomplete direction leaves exactly one Needs-you item, linking to the panel. It never blocks setup. Existing installs see it too.
+
+BI-8AB6B4F7 acceptance, quoted from the item:
+
+- AC-1 The org context bundle and prompt block carry the vision and instance outcomes.
+- AC-2 evaluate_org_business_decision (WWWD) and evaluate_profession_decision (WSID) read them as context. So does principle_decide (WWMD) when the decision is scoped to an organization. Each records on its ledger which outcomes it read.
+- AC-3 When none are recorded, the decision says so. Nothing is invented.
