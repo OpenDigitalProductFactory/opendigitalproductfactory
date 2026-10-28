@@ -25,7 +25,7 @@ tool, reviewer role or execution authority is introduced.
 
 WWMD DI-A7009B9406C3 recommends the existing active Release Acceptance reviewer
 AGT-132, rather than author self-review or another overlapping role. Add only
-file_read and initiative_design_review to its canonical profile. Keep the
+file_read, initiative_design_review and workroom_evidence_write to its canonical profile. Keep the
 primary reviewer's existing grants and every delivery-actor exclusion.
 
 ## Ordered repair
@@ -34,6 +34,9 @@ primary reviewer's existing grants and every delivery-actor exclusion.
    exact-task run whose canonical receipt already exists.
 2. Record research and immutable plan coverage for this ordered fix.
 3. Provision AGT-132 through canonical seeded grants, honoring durable revocations.
+   The scheduled review stage also requires record_workroom_evidence, backed by
+   workroom_evidence_write. Its full grant bundle must be available on the second
+   reviewer, so the scheduler can start it and record the completing stage evidence.
    Reconcile failed exact-task receipts through the existing compare-and-set
    completion writer and background scan, without another inference. Preserve
    canceled, rejected, archived and displaced executions. Failed runs with a
@@ -63,6 +66,24 @@ migration or visual interface change is required. The source change does not
 claim to resolve native process settlement: unknown historical executions stay
 held and their original evidence remains available.
 
+## Live follow-up: complete the scheduled reviewer grant bundle
+
+PR #6721 and upgrade SUR-5FADD163 deployed at 4f00cb56885b0c7e801728fdd5c2566f442a91dd.
+The live preflight returned CAN-TEST. AGT-132 is active, unarchived and in_process,
+and the dispatcher created WC-PIR-CAP-AB63E190 for the independent review.
+The scheduled run then refused before inference: required governed tool
+record_workroom_evidence was not authorized. The canonical tool registry maps it
+to workroom_evidence_write; the first grant change omitted that prerequisite.
+
+Complete the same WWMD-selected existing reviewer with that narrow grant.
+First extend the seeded reviewer invariant to require the entire scheduled PIR
+bundle while excluding the delivery actor; reproduce its failure before changing
+the registry. Regenerate capability inventory, run DB tests/typechecks and the
+governed publication gates, then self-upgrade and rerun the existing scheduled task.
+Do not create another task, change room ownership, bypass the denied private author
+room, relax independence, or edit live grants directly. Acceptance still requires
+the genuine PIR receipt and closure of BI-CAP-AB63E190; the other two are done.
+
 ## Backlog coverage
 
 BI-AA8EE6CE has atomic coverage receipt `cmvsjgna700km01mf55h2ykid`,
@@ -70,3 +91,9 @@ bound to this ordered design at `5a081d38986ca8aed17de484696116ecb4aa918e`.
 Research receipt: `initiative-48d6d442-3585-4747-94fa-d7b84874831e`.
 Implementation admission: `IRD-6C54B08185E0`, WC-9C19B12A.
 The PIR-RECOVERY deliverable maps to BI-AA8EE6CE with no independent children.
+
+The follow-up uses WC-3DB16894 and implementation admission IRD-841F333BBFF9.
+Its pre-code atomic coverage receipt is cmvsoc1w10apu01msubtmz1xr, bound to
+1d287f75d27f0599743e03e502ba2de72db4b8a8. The full scheduled-review grant
+invariant failed first (one failure, two passes), then passed after adding the
+workroom evidence writer to the existing reviewer profile.
