@@ -122,6 +122,12 @@ describe("resolveWorkspaceTwinPresentation", () => {
 });
 
 describe("loadWorkspaceTwinPresentation — live overlay", () => {
+  it("does not label demo boarding rooms as the live rescue operating day", async () => {
+    const result = await loadWorkspaceTwinPresentation("pet-rescue", null, { db: fakeDb({ archetypeId: "pet-rescue", name: "Synthetic rescue" }), now: NOW });
+    expect(result?.demo).toBe(false);
+    expect(result?.roomsOperations).toBeNull();
+    expect(result?.roomsOperationsDemo).toBe(false);
+  });
   it("uses the live projection (demo: false) when the org is configured", async () => {
     const result = await loadWorkspaceTwinPresentation(SAMPLE.archetypeId, null, {
       db: fakeDb({ archetypeId: SAMPLE.archetypeId, name: "Acme Co" }),

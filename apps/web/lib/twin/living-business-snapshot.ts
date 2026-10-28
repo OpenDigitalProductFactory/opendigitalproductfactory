@@ -1,3 +1,6 @@
+import { projectCustomerOperations } from "@dpf/storefront-templates/operations";
+import { DPF_CUSTOMER_RECORD_LINKS, loadCustomerOperatingFacts, type CustomerOperationsClient } from "./customer-operations-loader";
+import type { UserContext } from "@/lib/permissions";
 // apps/web/lib/twin/living-business-snapshot.ts
 //
 // The live projection for the operational twin (EP-LIVING-BUSINESS-VIZ P3,
@@ -35,7 +38,7 @@ import {
   longestWaitMs,
 } from "./booking-queue-projection";
 import { activeAwarePresence, loadTwinWorkforceView } from "./live-workforce-activity";
-import type { LiveTwinSnapshot } from "./operations-snapshot";
+import type { LiveTwinSnapshot } from "@dpf/storefront-templates/operations";
 import {
   createOperationsLoadRuntime,
   type OperationsProjectionDiagnostics,
@@ -95,7 +98,7 @@ import type { TwinCogSnapshot, TwinQueueSnapshot, TwinZoneSnapshot } from "./twi
 type FindMany = (args: unknown) => Promise<unknown>;
 export type LivingBusinessClient = WorkforceRosterClient &
   OrgLocaleClient &
-  ArchetypeOutcomeFactsClient & {
+  ArchetypeOutcomeFactsClient & CustomerOperationsClient & {
     storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
     bill: { findMany: FindMany };
     /** Optional — outcomes (paid-invoice revenue) degrade to empty if absent. */
@@ -164,7 +167,7 @@ interface InvoiceRow {
   currency: string | null;
 }
 
-export type { LiveTwinSnapshot } from "./operations-snapshot";
+export type { LiveTwinSnapshot } from "@dpf/storefront-templates/operations";
 export { humanizeWait, statusIntent } from "./operations-format";
 export {
   bookingsToQueueItems,
@@ -409,6 +412,8 @@ export function bookingsToFeed(bookings: BookingRow[], workNoun: string, limit =
 
 export interface LivingBusinessLoadOptions {
   db?: LivingBusinessClient;
+  /** Server-derived current authority; missing context never enables customer reads. */
+  viewer?: UserContext;
   now?: Date;
   clock?: () => number;
   loadWorkroomStageCounts?: () => Promise<Map<string, { wip: number; depth: number }>>;
@@ -452,6 +457,10 @@ export async function loadLivingBusinessProjection(
   if (!def) return null;
 
   const profile: TwinProfile = deriveTwinProfile(def);
+  if (profile.template === "TENANTS") {
+    const facts = await loadCustomerOperatingFacts({ db, viewer: opts?.viewer, runtime });
+    return { twin: { live: true, archetypeId, archetypeName: config?.archetype?.name ?? def.name, template: profile.template, ...projectCustomerOperations(facts, now, DPF_CUSTOMER_RECORD_LINKS) }, diagnostics: runtime.complete() };
+  }
 
   const in90 = new Date(now.getTime() - 90 * 86_400_000);
   let localeReadFailed = false;
@@ -590,6 +599,7 @@ export async function loadLivingBusinessProjection(
       archetypeId,
       storefrontId: config.id,
       organizationId: config.organizationId,
+      viewer: opts?.viewer,
       since: in90,
       db,
       runtime,
@@ -725,7 +735,7 @@ export async function loadLivingBusinessProjection(
     currency: orgCurrency,
     locale: orgLocaleStr,
     paidRevenue,
-    deliveredJobs: paidInvoices.length,
+    deliveredJobs: null, // Paid invoices prove payment, not completed delivery.
     facts: outcomeFacts,
   });
 
@@ -785,15 +795,4 @@ export async function loadLivingBusinessProjection(
     }),
   };
   return { twin, diagnostics: runtime.complete() };
-}
-
-/**
- * Compatibility facade for existing TwinView callers. New Operations surfaces
- * consume `loadVersionedOperationsSnapshot` and one bounded selector.
- */
-export async function loadLivingBusinessSnapshot(
-  opts?: LivingBusinessLoadOptions,
-): Promise<LiveTwinSnapshot | null> {
-  const loaded = await loadLivingBusinessProjection(opts);
-  return loaded?.twin ?? null;
 }

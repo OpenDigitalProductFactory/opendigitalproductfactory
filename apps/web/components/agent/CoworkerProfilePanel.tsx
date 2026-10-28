@@ -6,12 +6,12 @@ import {
   getCoworkerSelfTaskCadenceInfo,
 } from "@/lib/actions/proactivity";
 import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
 import {
   describeProactivityEffects,
   type CoworkerSelfTaskCadenceInfo,
 } from "@/lib/proactivity/proactivity-effects";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 type Props = {
   agent: AgentInfo;

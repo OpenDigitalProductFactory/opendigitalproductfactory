@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveWorkroomPosture, type WorkroomPostureContext } from "./room-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 
 const NINE_TO_FIVE: WeeklySchedule = {

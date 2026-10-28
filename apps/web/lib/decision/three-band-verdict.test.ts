@@ -9,7 +9,7 @@ import {
   type DecisionBands,
   type DecisionOption,
   type DecisionPrinciple,
-} from "./option-scoring";
+} from "@dpf/validators/judgment/option-scoring";
 import { mapConsultOutcome } from "./kernel-consult-ledger";
 
 const bands = (over: Partial<DecisionBands> = {}): DecisionBands => ({

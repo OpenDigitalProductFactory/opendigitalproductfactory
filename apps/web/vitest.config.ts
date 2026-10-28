@@ -187,7 +187,7 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/finance-templates/src/index.ts"),
       },
       {
-        find: "@dpf/storefront-templates",
+        find: /^@dpf\/storefront-templates$/,
         replacement: resolve(rootDir, "packages/storefront-templates/src/index.ts"),
       },
       {
@@ -199,7 +199,7 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/i18n/src/index.ts"),
       },
       {
-        find: "@dpf/validators",
+        find: /^@dpf\/validators$/,
         replacement: resolve(rootDir, "packages/validators/src/index.ts"),
       },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },

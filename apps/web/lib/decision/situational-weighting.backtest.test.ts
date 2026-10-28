@@ -15,7 +15,7 @@
 //      promotes proper-fix instead of cranking weights.
 
 import { describe, expect, it } from "vitest";
-import { decide, type DecisionOption, type DecisionPrinciple } from "./option-scoring";
+import { decide, type DecisionOption, type DecisionPrinciple } from "@dpf/validators/judgment/option-scoring";
 
 // ─── Real authored vectors (from the founder-kernel wiki frontmatter) ────────
 const ARCHITECTURE_VECTOR = {
