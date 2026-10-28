@@ -12,7 +12,7 @@ workroom: WC-1966F6F3
 | Backlog / Workroom | BI-24092DC9 / WC-1966F6F3 |
 | Profile | fix (ordered deliverables live here; no separate plan) |
 | WWMD | DI-BA01CDC705DB (host and surface), DI-E5208C7D1666 (window and thresholds, agent override of a near-tie), DI-80DB1197D7E4 (absorb intake dedup) |
-| Builds on | BI-A53C594E / PR #6680 (subscription OAuth renewal and its Needs-you item), PR #6679 (Codex usage limit as quota), BI-ADB574AB (monitor-clears rows), BI-51F6A428 (reach gate) |
+| Builds on | BI-A53C594E / PR #6680 (subscription OAuth renewal and its Needs-you item), PR #6679 (Codex usage limit as quota), BI-ADB574AB (monitor-clears rows), the issue-report reach gate (`lib/quality/issue-report-promotion.ts`) |
 | Leaves to | BI-AE428731, BI-02A513D1, BI-DDDC8E9D (providers page status, per-provider classification) |
 
 ## Defect
