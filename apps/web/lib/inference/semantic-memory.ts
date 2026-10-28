@@ -2,9 +2,11 @@
 // Store and recall conversation memories using pgvector.
 
 import { generateEmbedding, generateEmbeddingDetailed } from "./embedding";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   upsertVectors,
   searchSimilar,
+  searchLexical,
   scrollPoints,
   VECTOR_COLLECTIONS,
   type MatchClause,
@@ -448,8 +450,13 @@ export async function searchPlatformKnowledge(params: {
   query: string;
   entityType?: string;
   limit?: number;
+  /** Query-time deadline for embedding the query; indexing keeps the default. */
+  embedTimeoutMs?: number;
 }): Promise<PlatformKnowledgeSearch> {
-  const embedded = await generateEmbeddingDetailed(params.query);
+  const embedded = await generateEmbeddingDetailed(
+    params.query,
+    params.embedTimeoutMs === undefined ? undefined : { timeoutMs: params.embedTimeoutMs },
+  );
   if (embedded.status !== "ok") {
     // The reason matters. A capacity deferral is retryable and says nothing
     // about the corpus or the model; a failure is neither. Reporting the
@@ -491,6 +498,57 @@ export async function searchPlatformKnowledge(params: {
       score: r.score,
     })),
   };
+}
+
+/** Words worth matching: lowercased, de-duplicated, at least two characters. */
+function lexicalTerms(query: string): string[] {
+  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
+  return [...new Set(words)].slice(0, 12);
+}
+
+/**
+ * Term match over the same platform-knowledge rows, with no embedding step
+ * (BI-MCP-EFF-4F823E5B). For a caller that would otherwise have nothing to
+ * say while the embedding backend is stalled. Its scores are the fraction of
+ * query terms matched, not similarities, so it is deliberately a separate
+ * function: callers that threshold on cosine scores (duplicate detection,
+ * epic overlap) must never receive these.
+ */
+export async function searchPlatformKnowledgeLexical(params: {
+  query: string;
+  entityType?: string;
+  limit?: number;
+}): Promise<PlatformKnowledgeSearch> {
+  const terms = lexicalTerms(params.query);
+  if (terms.length === 0) return { status: "ok", results: [] };
+  const filter = params.entityType
+    ? { must: [{ key: "entityType", match: { value: params.entityType } }] }
+    : undefined;
+  try {
+    const rows = await searchLexical(
+      VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
+      terms,
+      ["title", "contentPreview"],
+      filter,
+      params.limit ?? 5,
+    );
+    return {
+      status: "ok",
+      results: rows.map((r) => ({
+        entityId: String(r.payload["entityId"] ?? ""),
+        entityType: String(r.payload["entityType"] ?? ""),
+        title: String(r.payload["title"] ?? ""),
+        score: r.score,
+      })),
+    };
+  } catch (e) {
+    return {
+      status: "unavailable",
+      code: "search_unavailable",
+      reason: `the lexical fallback query failed (${getErrorMessage(e)})`,
+      results: [],
+    };
+  }
 }
 
 // ─── Store Capability Knowledge ────────────────────────────────────────────

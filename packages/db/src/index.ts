@@ -102,6 +102,7 @@ export {
   ensurePayloadIndexes,
   upsertVectors,
   searchSimilar,
+  searchLexical,
   scrollPoints,
   deleteVectors,
   isVectorStoreHealthy,
