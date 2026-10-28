@@ -16,7 +16,9 @@ import {
   SANDBOX_CONTAINER,
   buildSpecialistInstructions,
   buildSpecialistTaskPrompt,
+  credentialFileExports,
   ensureSandboxNodeUser,
+  removeSandboxFiles,
   runSandboxAgentCli,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
@@ -91,7 +93,8 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
  * Flow:
  * 1. Resolve auth from portal credential store (OAuth token or API key)
  * 2. Write prompt to a temp file in the sandbox (avoids shell escaping issues)
- * 3. Inject auth env var + run: claude --bare -p - --dangerously-skip-permissions --output-format json
+ * 3. Write the credential to a 600 node-owned file the runner loads into the
+ *    CLI's env and deletes, then run: claude --bare -p - --dangerously-skip-permissions --output-format json
  * 4. Parse JSON output, extract .result field for content
  */
 export async function dispatchClaudeTask(params: {
@@ -146,20 +149,16 @@ export async function dispatchClaudeTask(params: {
     // prompts). 644 so the non-root node user can read it.
     await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: promptFile, content: taskPrompt, mode: "644" });
 
-    // Inject auth credentials into the sandbox container, then assemble the
-    // runner script (avoids shell quoting issues with $(cat ...) in busybox ash).
-    let authExportLine: string;
-    let useBareflag: boolean;
-    if (auth.mode === "oauth") {
-      // OAuth (Max Plan): write raw token to task-specific temp file (644).
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.tokenJson, mode: "644" });
-      authExportLine = `export CLAUDE_CODE_OAUTH_TOKEN=$(cat ${tokenFile})`;
-      useBareflag = false;  // --bare disables OAuth
-    } else {
-      // API key mode
-      authExportLine = `export ANTHROPIC_API_KEY=${auth.apiKey}`;
-      useBareflag = true;   // --bare is safe with API key
-    }
+    // Both auth modes go through one credential file: written 600 under umask
+    // 077, owned by node (the CLI's user), loaded into the CLI's env by the
+    // runner and deleted before the CLI starts. The value is never inlined in
+    // the runner script, which is world-readable, and never left in the shared
+    // /tmp where a later build's agent could read it.
+    const credential = auth.mode === "oauth"
+      ? { envVar: "CLAUDE_CODE_OAUTH_TOKEN", value: auth.tokenJson }
+      : { envVar: "ANTHROPIC_API_KEY", value: auth.apiKey };
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: credential.value, secret: true, chownNodeUser: true });
+    const useBareflag = auth.mode !== "oauth";  // --bare disables OAuth; safe with an API key
 
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
     const bareFlag = useBareflag ? "--bare " : "";
@@ -172,7 +171,7 @@ export async function dispatchClaudeTask(params: {
       `cd ${workdir}`,
       // The repo SessionStart hook would call the build clone a shared root clone.
       "export DPF_SKIP_CLONE_OCCUPANCY=1",
-      authExportLine,
+      ...credentialFileExports(credential.envVar, tokenFile),
       `exec claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
     ].join("\n");
     await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
@@ -268,5 +267,9 @@ export async function dispatchClaudeTask(params: {
       executedTools: [],
       durationMs,
     };
+  } finally {
+    // The runner deletes the credential once read; this covers a run that
+    // failed before the runner reached that line.
+    await removeSandboxFiles(SANDBOX_CONTAINER, [tokenFile]);
   }
 }

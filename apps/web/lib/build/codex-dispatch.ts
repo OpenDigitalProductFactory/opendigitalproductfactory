@@ -85,11 +85,12 @@ async function injectCodexAuth(providerId: string): Promise<void> {
   });
 
   // Write auth.json to ~/.codex/ in the sandbox container (root — codex runs as
-  // root). No chmod (mode omitted): matches the original default-perms write.
+  // root), 600 under umask 077 so no other user can read the OAuth tokens.
   await writeSandboxFile({
     containerId: SANDBOX_CONTAINER,
     path: "/root/.codex/auth.json",
     content: authJson,
+    secret: true,
     mkdirParents: "/root/.codex",
   });
 }

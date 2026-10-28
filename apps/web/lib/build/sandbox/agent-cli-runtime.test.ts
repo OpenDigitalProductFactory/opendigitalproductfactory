@@ -51,7 +51,13 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyUtil: () => ({ promisify: (fn: Function) => fn }),
 }));
 
-import { writeSandboxFile, dockerExecWriteStdin, buildSpecialistTaskPrompt } from "./agent-cli-runtime";
+import {
+  writeSandboxFile,
+  dockerExecWriteStdin,
+  buildSpecialistTaskPrompt,
+  credentialFileExports,
+  removeSandboxFiles,
+} from "./agent-cli-runtime";
 import type { AssignedTask } from "../task-dependency-graph";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -277,5 +283,59 @@ describe("buildSpecialistTaskPrompt — the build's own checkout (BI-C36D23B9)",
     const prompt = buildSpecialistTaskPrompt({ task, instructions: "x", workdir: "/workspace/.builds/FB-1" });
     expect(prompt).toMatch(/this build's own checkout/i);
     expect(prompt).toMatch(/do not create another git worktree, clone, or branch/i);
+  });
+});
+
+// A credential file must never be readable by another user in the shared
+// sandbox, not even between the write and the chmod, and must not outlive the
+// moment the CLI reads it.
+describe("credential files in the shared sandbox", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("writes a secret under umask 077 and leaves it 600, whatever mode was asked for", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = writeSandboxFile({
+      containerId: "dpf-sandbox-1",
+      path: "/tmp/claude-token-x.txt",
+      content: "sk-ant-oat01-SECRET",
+      secret: true,
+      chownNodeUser: true,
+      mode: "644",
+    });
+    proc.emit("close", 0);
+    await p;
+
+    const inner = (mockSpawn.mock.calls[0] as [string, string[]])[1].at(-1) as string;
+    expect(inner).toBe(
+      "umask 077 && base64 -d > '/tmp/claude-token-x.txt' && chown node:node '/tmp/claude-token-x.txt' && chmod 600 '/tmp/claude-token-x.txt'",
+    );
+  });
+
+  it("leaves a non-secret write unchanged", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = writeSandboxFile({ containerId: "dpf-sandbox-1", path: "/tmp/cli-run.sh", content: "x", mode: "755" });
+    proc.emit("close", 0);
+    await p;
+
+    const inner = (mockSpawn.mock.calls[0] as [string, string[]])[1].at(-1) as string;
+    expect(inner).not.toContain("umask");
+  });
+
+  it("emits runner lines that load the file into the env var and then delete it", () => {
+    expect(credentialFileExports("ANTHROPIC_API_KEY", "/tmp/k.txt")).toEqual([
+      `export ANTHROPIC_API_KEY="$(cat '/tmp/k.txt')"`,
+      "rm -f '/tmp/k.txt'",
+    ]);
+  });
+
+  it("never throws from best-effort cleanup", async () => {
+    await expect(removeSandboxFiles("dpf-sandbox-1", ["/tmp/k.txt"])).resolves.toBeUndefined();
+    await expect(removeSandboxFiles("dpf-sandbox-1", [])).resolves.toBeUndefined();
   });
 });
