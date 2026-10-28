@@ -234,9 +234,40 @@ Anti-patterns avoided:
    - **A6a:** layouts from the twin template, which need no new data.
    - **A6b:** refinements. Waits on the facet decision (BI-7EE5681A).
 
-Each item is filed under BI-B3D87B06 once the design is approved. Every item that replaces something in §6 retires or redirects it in the same PR and updates the user guide; an item is not done while the old view still draws its own copy. The UX-fit, accessibility and `principle_decide` (`human_cognitive_load`) gates apply to A2 and A3, and the critic's findings on the served page are recorded against the calibrated corpus.
+The items are filed (2026-10-28): A0 BI-930A4C88, A1 BI-7ACC31F9, A2 BI-3791FDD8, A3 BI-94C9AFC1, A4 BI-D8A6F0F2, A5 BI-AC930585, A6a BI-B0D8394B and A6b BI-7EE5681A. The phased plan is [Work Atlas implementation plan](../plans/2026-10-28-work-atlas-implementation.md). Every item that replaces something in §6 retires or redirects it in the same PR and updates the user guide; an item is not done while the old view still draws its own copy. The UX-fit, accessibility and `principle_decide` (`human_cognitive_load`) gates apply to A2 and A3, and the critic's findings on the served page are recorded against the calibrated corpus.
 
 ## 10. Owner decisions and open questions
 
 1. **Decided (owner, 2026-10-27):** the Atlas leads `/ops/workrooms`. The `/workspace` home keeps its existing L0 callout, which links into the Atlas.
 2. **Open:** does Build Studio's `/build` fleet rail fold into the Atlas as a filter, retiring a separate home, or stay as a delivery-only view?
+
+## 11. Governed scope manifest
+
+**OBJ-ONE-PICTURE:** An operator sees every non-archived workroom on the install, and which ones need them, on one screen at `/ops/workrooms`, with no row cap on the overview.
+
+**OBJ-ONE-VOCABULARY:** Every surface that counts or groups workrooms by health uses one shared classification, so no two pages disagree about the same room.
+
+**OBJ-ONE-PROJECTION:** People and agents read the same bounded atlas projection, so the portal and `list_workrooms` return the same picture.
+
+**OBJ-DISCLOSE:** From the overview an operator can open a group's rows and a room's step checklist, live action and blocker without leaving the page, and that checklist agrees with the room detail page.
+
+**OBJ-RHYTHM-AND-AGE:** Standing operations show their recent runs, and project rooms show their age at a step against that step's usual time, falling back honestly when no usual time is measured.
+
+**OBJ-NO-PARALLEL-VIEWS:** Each surface the Atlas replaces is retired or redirected in the same change that replaces it, with the user guide updated in that change.
+
+**OBJ-BUSINESS-LAYOUT:** Each business sees its work in a layout derived from its archetype's twin template, refined by recorded operating refinements once they exist, while the state glyphs never change between businesses.
+
+**OBJ-UX-AUTHORITY:** UX-fit, accessibility and cognitive-load evidence, and critique calibrated by the owner's verdicts, gate the user-facing steps.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+| --- | --- | --- |
+| AC-ONE-PICTURE | OBJ-ONE-PICTURE | On the served target, `/ops/workrooms` leads with the day's question, five triage counts and one glyph cell per non-archived room, with no 200-room cap. |
+| AC-ONE-VOCABULARY | OBJ-ONE-VOCABULARY | One exported classifier yields the six atlas states; the operator summary, Build Studio rail and delivery task hub derive membership from it, and a guard test fails a new local health grouping. |
+| AC-ONE-PROJECTION | OBJ-ONE-PROJECTION | The portal loader and `list_workrooms` with `view: "atlas"` return identical tuples for the same install, within about 120 bytes per room. |
+| AC-DISCLOSE | OBJ-DISCLOSE | Selecting a cell shows the room's stages, current step, live action and, for need or stuck rooms, who must act or the recorded cause; a parity test proves it matches `buildWorkroomFlowMap`. |
+| AC-RHYTHM | OBJ-RHYTHM-AND-AGE | Every standing room shows its last 14 recorded runs as on time, late or missed, with missed distinct from late without colour. |
+| AC-AGE | OBJ-RHYTHM-AND-AGE | The stage lens bands a room's age by its stage queue P50 and P85 when telemetry exists, and otherwise labels the column as absolute age with no bands. |
+| AC-RETIRE | OBJ-NO-PARALLEL-VIEWS | After the step that replaces them, the lead band, operator groups, `WorkroomInventory`, `HeldWorkroomsList` and `PortfolioActivityTree` no longer render, and their old links resolve to the matching Atlas filter. |
+| AC-LAYOUT | OBJ-BUSINESS-LAYOUT | The layout shown equals `deriveTwinProfile`'s template for the install's archetype, a fixture test per shipped template asserts glyphs identical to TENANTS, and unplaceable rooms appear under "Not yet placed". |
+| AC-REFINE | OBJ-BUSINESS-LAYOUT | Once organization refinements are recorded, the layout's lanes, panels and standing checks follow them, and no per-leaf refinement field is added. |
+| AC-UX | OBJ-UX-AUTHORITY | UX-fit evidence under `docs/ux-fit/`, an accessibility review and a `human_cognitive_load` decision are recorded for the map and the inspector, and the critique corpus holds owner-verdicted entries for `/ops/workrooms`. |
