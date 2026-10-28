@@ -311,7 +311,10 @@ describe("planRoomEndClosures", () => {
       [Q("repair"), "WC-1:run", "cancelled", "cancelled", "system"],
       [Q("merge"), "WC-2:run", "cancelled", "cancelled", "system"],
     ]);
-    expect(out.every((t) => t.itemKind === "workroom-stage" && t.occurredAt.getTime() === at(30).getTime())).toBe(true);
+    expect(out.every((t) => t.itemKind === "workroom-stage")).toBe(true);
+    // The cancel lands strictly after its release, so "latest event" never ties
+    // on a released step and reads it as still open.
+    expect(out.map((t) => t.occurredAt.getTime() - at(30).getTime())).toEqual([0, 1, 0]);
   });
 
   it("leaves closed steps alone, so running it twice writes nothing the second time", () => {

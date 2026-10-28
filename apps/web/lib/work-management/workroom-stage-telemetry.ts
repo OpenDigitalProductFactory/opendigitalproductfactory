@@ -334,8 +334,10 @@ export function planRoomEndClosures(
     if (event.transition === "finished" || event.transition === "cancelled") continue;
     const occurredAt = new Date(Math.max(at.getTime(), event.occurredAt.getTime() + 1));
     const base = { queueKey: event.queueKey, itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: event.itemId, laneKey: null, actorType: "system" as const, occurredAt };
-    if (event.transition === "held") out.push({ ...base, transition: "released", outcome: null });
-    out.push({ ...base, transition: "cancelled", outcome: "cancelled" });
+    // The cancel lands 1ms after its release: equal timestamps leave "latest event" ambiguous.
+    const released = event.transition === "held";
+    if (released) out.push({ ...base, transition: "released", outcome: null });
+    out.push({ ...base, occurredAt: new Date(occurredAt.getTime() + (released ? 1 : 0)), transition: "cancelled", outcome: "cancelled" });
   }
   return out;
 }
@@ -425,7 +427,7 @@ export async function reconcileEndedRoomStageTelemetry(): Promise<number> {
       SELECT DISTINCT ON (e."queueKey", e."itemId") e."queueKey", e."itemId", e."transition", e."occurredAt"
       FROM "QueueTelemetryEvent" e
       WHERE e."itemKind" = ${WORKROOM_STAGE_ITEM_KIND}
-      ORDER BY e."queueKey", e."itemId", e."occurredAt" DESC
+      ORDER BY e."queueKey", e."itemId", e."occurredAt" DESC, e."createdAt" DESC
     )
     SELECT l."queueKey", l."itemId", l."transition", l."occurredAt", w."updatedAt" AS "endedAt"
     FROM latest l
@@ -446,7 +448,7 @@ async function readOpenStageFromTelemetry(capsuleId: string): Promise<string | n
   const { prisma } = await import("@dpf/db");
   const latest = await prisma.queueTelemetryEvent.findFirst({
     where: { itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: { startsWith: `${capsuleId}:` } },
-    orderBy: { occurredAt: "desc" },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
     select: { queueKey: true, transition: true },
   });
   if (!latest || latest.transition === "finished" || latest.transition === "cancelled") return null;
