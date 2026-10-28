@@ -76,6 +76,7 @@ import {
   resolvePregateGateContext,
   reviveInterruptedQueuedGateState,
   shouldReuseExistingPass,
+  shouldTakeReducedTier,
   shouldUseShell,
   stripForceRerunFlag,
 } from "./pregate.mjs";
@@ -773,4 +774,12 @@ test("the force flag is consumed by the wrapper and never forwarded to the gate"
   );
   assert.deepEqual(stripForceRerunFlag([]), []);
   assert.deepEqual(stripForceRerunFlag(["--no-push"]), ["--no-push"]);
+});
+
+test("BI-25CB699C: only a main refresh of a passed published head takes the reduced tier", () => {
+  assert.equal(shouldTakeReducedTier({ classification: "main-refresh" }), true);
+  for (const classification of ["authored-correction", "unchanged-head", "commit-metadata", null]) {
+    assert.equal(shouldTakeReducedTier({ classification }), false, String(classification));
+  }
+  assert.equal(shouldTakeReducedTier({ args: ["--force-rerun"], classification: "main-refresh" }), false);
 });

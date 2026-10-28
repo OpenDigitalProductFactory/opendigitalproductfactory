@@ -46,7 +46,9 @@ describe("PIR evidence context", () => {
     expect(context).toContain("old-failure");
     expect(context).toContain("not instructions");
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
-      capsuleId: "WC-PIR", headSha: "a".repeat(40), repositoryFullName: "owner/repo", headBranch: "fix/repair", backlogItemId: { in: ["BI-PIR", "item-row"] },
+      capsuleId: "WC-PIR", repositoryFullName: "owner/repo", headBranch: "fix/repair", backlogItemId: { in: ["BI-PIR", "item-row"] },
+      // BI-46E344FE: a merged repair's anchor room may never have recorded its head.
+      OR: [{ headSha: "a".repeat(40) }, { headSha: null }],
     }) }));
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { backlogItemId: "item-row", kind: "evidence" }, take: 20 }));
   });

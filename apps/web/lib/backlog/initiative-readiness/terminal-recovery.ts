@@ -27,7 +27,8 @@ import { readRepositoryProviderBlob } from "./repository-artifact";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
-import { defaultLoadMergedRepairSource, type MergedRepairSource } from "./merged-repair-source";
+import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
+import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
 
 export type { MergedRepairSource } from "./merged-repair-source";
 export { defaultLoadMergedRepairSource } from "./merged-repair-source";
@@ -122,9 +123,22 @@ export type TerminalRecoveryPorts = {
     headBranch?: string;
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
+  /** BI-46E344FE: a delivery of several squash commits, reviewed as their ordered union. */
+  discoverCommitRange?(args: { repositoryFullName: string; ranges: CommitRange[] }): Promise<Awaited<ReturnType<typeof discoverCommitRangeArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
   loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
 };
+
+/** The PIR's bound artifact: one repair blob at `commitSha`, or the whole commit range (BI-46E344FE). */
+function pirCanonicalArtifact(
+  discovered: Awaited<ReturnType<TerminalRecoveryPorts["discoverArtifact"]>>,
+  commitSha: string,
+): NonNullable<Parameters<TerminalRecoveryPorts["resolveRecovery"]>[0]["canonicalArtifact"]> {
+  if (!discovered.resolved) return { resolved: false, nextAction: discovered.nextAction };
+  return "kind" in discovered.artifact
+    ? { resolved: true, kind: "repo-commit-range", ranges: discovered.artifact.ranges, digest: discovered.artifact.digest }
+    : { resolved: true, ...discovered.artifact, commitSha };
+}
 
 function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string): TerminalInitiativeRecovery {
   return {
@@ -440,6 +454,7 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
   verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
   discoverArtifact: discoverCanonicalReviewArtifact,
+  discoverCommitRange: (args) => discoverCommitRangeArtifact(args),
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
   loadPlanArtifact: loadPlanReviewArtifact,
 };
@@ -495,12 +510,16 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const routeMergedRepairReview = async (source: MergedRepairSource): Promise<TerminalInitiativeRecovery> => {
     if (source.kind === "unavailable") return escalation(source.reason, source.nextAction);
     const room = source.room;
-    const discovered = await ports.discoverArtifact({
-      repositoryFullName: room.repositoryFullName!,
-      baseSha: source.parentSha,
-      headSha: source.mergedCommitSha,
-      purpose: "post-implementation-review",
-    });
+    // BI-46E344FE: several delivering commits are reviewed together, oldest first.
+    const ranges = mergedRepairCommits(source).map((commit) => ({ baseSha: commit.parentSha, headSha: commit.sha }));
+    const discovered = ranges.length > 1
+      ? await (ports.discoverCommitRange ?? discoverCommitRangeArtifact)({ repositoryFullName: room.repositoryFullName!, ranges })
+      : await ports.discoverArtifact({
+        repositoryFullName: room.repositoryFullName!,
+        baseSha: source.parentSha,
+        headSha: source.mergedCommitSha,
+        purpose: "post-implementation-review",
+      });
     const excluded = new Set(source.deliveryActorIds);
     return ports.resolveRecovery({
       decision: pirOnly,
@@ -512,9 +531,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
         branchName: room.headBranch!,
         headSha: room.headSha!,
       },
-      canonicalArtifact: discovered.resolved
-        ? { resolved: true, ...discovered.artifact, commitSha: source.mergedCommitSha }
-        : { resolved: false, nextAction: discovered.nextAction },
+      canonicalArtifact: pirCanonicalArtifact(discovered, source.mergedCommitSha),
       expectedCurrentBaselineId: null,
       isReviewerEligible: async (agentId) => !excluded.has(agentId),
     });
@@ -578,9 +595,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
       currentAgentId: args.currentAgentId,
       db: prisma as never,
       dispatchContext,
-      canonicalArtifact: discovered.resolved
-        ? { resolved: true, ...discovered.artifact, commitSha: room.headSha }
-        : { resolved: false, nextAction: discovered.nextAction },
+      canonicalArtifact: pirCanonicalArtifact(discovered, room.headSha),
       expectedCurrentBaselineId: null,
     });
   }

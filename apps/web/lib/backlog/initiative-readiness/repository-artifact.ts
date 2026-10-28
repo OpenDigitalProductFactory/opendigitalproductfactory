@@ -9,11 +9,23 @@ import {
   resolveRepoIdentity,
   type GithubReadTransport,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
-import { ok, type ActionSuccess } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { canonicalPlanMatchesArtifact, type CanonicalPlanSourceProof } from "./canonical-plan-source";
+import {
+  changesFromProviderCompare,
+  commitRangeDigest,
+  commitRangeHead,
+  parseRepoCommitRangeRef,
+  providerPatchText,
+  renderCommitRangeText,
+  type CommitRange,
+  type ProviderRangeFile,
+  type RangeChange,
+  type RepoCommitRangeRef,
+} from "./repo-commit-range";
 
 type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
 
@@ -274,6 +286,52 @@ export async function readRepositoryProviderBlob(args: {
   }
 }
 
+type ProviderCompareResult = ActionResult<ProviderRangeFile[]>;
+
+/** BI-46E344FE: one range's canonical change list, from the provider compare. */
+async function fetchProviderCompare(args: {
+  owner: string; repo: string; token: string | null; range: CommitRange; fetchImpl: typeof fetch;
+}): Promise<ProviderCompareResult> {
+  const result = await fetchGithubJson({
+    url: `https://api.github.com/repos/${encodeURIComponent(args.owner)}/${encodeURIComponent(args.repo)}/compare/${
+      encodeURIComponent(args.range.baseSha)}...${encodeURIComponent(args.range.headSha)}`,
+    token: args.token, fetchImpl: args.fetchImpl,
+  });
+  if (!result.ok) return { ok: false, error: providerFailureMessage(result, { unavailable: "the merged change", unreadable: "comparison metadata" }) };
+  const files = changesFromProviderCompare(result.data);
+  return files ? ok(files)
+    : err(`Repository provider returned an unreadable or truncated file list for ${args.range.baseSha.slice(0, 12)}..${args.range.headSha.slice(0, 12)}.`);
+}
+
+/** BI-46E344FE: the reader's provider fallback for a commit range on the canonical repository. */
+export async function readRepositoryProviderCompare(args: CommitRange & {
+  repositoryFullName: string;
+  db?: Pick<RepositoryArtifactDb, "credentialEntry" | "platformDevConfig" | "scheduledJob">;
+  fetchImpl?: typeof fetch;
+}): Promise<ProviderCompareResult> {
+  const db = args.db ?? prisma;
+  let repo: Awaited<ReturnType<typeof resolveRepoIdentity>>;
+  let token: string | null;
+  try {
+    [repo, token] = await Promise.all([resolveRepoIdentity(db), resolveGithubToken(db)]);
+  } catch {
+    return { ok: false, error: "Repository provider configuration is unavailable." };
+  }
+  if (`${repo.owner}/${repo.name}`.toLocaleLowerCase("en-US") !== args.repositoryFullName.toLocaleLowerCase("en-US")) {
+    return { ok: false, error: "Requested repository is not this installation's canonical repository." };
+  }
+  let transport: GithubReadTransport | null = null;
+  try {
+    if (!args.fetchImpl) transport = createGithubReadTransport();
+    return await fetchProviderCompare({ owner: repo.owner, repo: repo.name, token,
+      range: { baseSha: args.baseSha, headSha: args.headSha }, fetchImpl: args.fetchImpl ?? transport!.fetch });
+  } catch {
+    return { ok: false, error: "Repository provider transport is unavailable." };
+  } finally {
+    await transport?.close().catch(() => {});
+  }
+}
+
 function dcoEmail(payload: unknown): string | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const commit = (payload as Record<string, unknown>).commit;
@@ -308,7 +366,8 @@ function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | 
 export type MergedRepairProof = { workroomId: string; commitSha: string };
 
 export async function resolveRepositoryArtifact(args: {
-  locator: RepositoryLocator;
+  /** A repository blob, or (BI-46E344FE) a merged repair's whole commit range. */
+  locator: RepositoryLocator | RepoCommitRangeRef;
   subject: InitiativeSubject;
   mergedRepairProof?: MergedRepairProof;
   /** Internal context from the accepted TaskRun; never a caller-selected head. */
@@ -327,13 +386,15 @@ export async function resolveRepositoryArtifact(args: {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Canonical repository identity is unavailable." };
   }
   const expectedFullName = `${expectedRepo.owner}/${expectedRepo.name}`;
-  const encodedPath = encodePath(args.locator.path);
+  const range = args.locator.kind === "repo-commit-range" ? parseRepoCommitRangeRef(args.locator) : null;
+  const blob = args.locator.kind === "repo-blob-at-commit" ? args.locator : null;
   if (args.locator.repositoryFullName.toLocaleLowerCase("en-US") !== expectedFullName.toLocaleLowerCase("en-US")
-    || !/^[a-f0-9]{40}$/i.test(args.locator.commitSha)
-    || !/^[a-f0-9]{40}$/i.test(args.locator.providerBlobId)
-    || !encodedPath) {
-    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository artifact locator is not a recognized immutable provider blob." };
+    || (blob ? !/^[a-f0-9]{40}$/i.test(blob.commitSha) || !/^[a-f0-9]{40}$/i.test(blob.providerBlobId) || !encodePath(blob.path)
+      : !range)) {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository artifact locator is not a recognized immutable provider blob or commit range." };
   }
+  // The commit the artifact is read at: the blob's commit, or the range's newest head.
+  const locatorCommitSha = blob ? blob.commitSha : commitRangeHead(range!.ranges);
 
   const subjectWhere = args.subject.kind === "backlog-item"
     ? { backlogItemId: args.subject.id }
@@ -352,7 +413,7 @@ export async function resolveRepositoryArtifact(args: {
   const liveCapsule = { archivedAt: null, status: { notIn: ["abandoned", "cancelled"] } };
   const mergedRepair = args.mergedRepairProof && args.workroomRef
     && args.mergedRepairProof.workroomId === args.workroomRef.workroomId
-    && args.mergedRepairProof.commitSha.toLowerCase() === args.locator.commitSha.toLowerCase()
+    && args.mergedRepairProof.commitSha.toLowerCase() === locatorCommitSha.toLowerCase()
     ? args.mergedRepairProof : null;
   const candidates = await db.workroom.findMany({
     where: {
@@ -378,9 +439,9 @@ export async function resolveRepositoryArtifact(args: {
   });
   const boundRoom = args.workroomRef;
   const planProof = args.canonicalPlanProof;
-  if (planProof && (!boundRoom || args.subject.kind !== "backlog-item" || planProof.itemId !== args.subject.id
+  if (planProof && (!boundRoom || !blob || args.subject.kind !== "backlog-item" || planProof.itemId !== args.subject.id
     || !planProof.baselineId || !planProof.scopeOwnerItemId || !/^sha256:[a-f0-9]{64}$/i.test(planProof.digest)
-    || !canonicalPlanMatchesArtifact(planProof, args.locator))) {
+    || !canonicalPlanMatchesArtifact(planProof, blob))) {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan proof does not match this accepted review's subject and immutable artifact." };
   }
   if (boundRoom && (boundRoom.kind !== "workroom-head"
@@ -388,15 +449,24 @@ export async function resolveRepositoryArtifact(args: {
     || !/^[a-f0-9]{40}$/i.test(boundRoom.headSha))) {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The accepted review's workroom binding is invalid for this repository artifact." };
   }
+  // BI-46E344FE: a merged repair's anchor room that never recorded its head is
+  // anchored to the merged head; the writer's trunk proof is what admits it.
+  const recordedHead = (candidate: (typeof candidates)[number]) => candidate.headSha
+    ?? (mergedRepair && candidate.capsuleId === mergedRepair.workroomId ? mergedRepair.commitSha : null);
   const capsules = candidates.filter((candidate) => boundRoom
     ? candidate.capsuleId === boundRoom.workroomId && candidate.headBranch === boundRoom.branchName
-      && candidate.headSha?.toLowerCase() === boundRoom.headSha.toLowerCase()
-    : (candidate.headSha ?? "").toLowerCase() === args.locator.commitSha.toLowerCase());
+      && recordedHead(candidate)?.toLowerCase() === boundRoom.headSha.toLowerCase()
+    : (candidate.headSha ?? "").toLowerCase() === locatorCommitSha.toLowerCase());
+  // A live room's multi-file review reads its own range, which ends at its head.
+  if (range && boundRoom && !mergedRepair && locatorCommitSha.toLowerCase() !== boundRoom.headSha.toLowerCase()) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "A commit range review must end at its Workroom's head, or be the item's merged repair proven on the trunk." };
+  }
   if (capsules.length > 1) {
     return {
       ok: false,
       code: "CANONICAL_DESIGN_AMBIGUOUS",
-      error: `Commit ${args.locator.commitSha} is claimed by more than one live workroom for this subject (${
+      error: `Commit ${locatorCommitSha} is claimed by more than one live workroom for this subject (${
         capsules.map(describeCapsuleHead).join("; ")
       }). Complete or abandon the workrooms that no longer own this branch, leaving exactly one.`,
     };
@@ -413,9 +483,9 @@ export async function resolveRepositoryArtifact(args: {
         // BI-77C600B2: a plain implementation claim can be refused at the very
         // research gate this receipt satisfies; a design-intent claim cannot.
         ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Bind one first: claim_backlog_item_for_work with workIntent "design" (it does not owe research), or adopt_worktree; then retry.`
-        : `No live workroom for this subject records head ${args.locator.commitSha}: ${
+        : `No live workroom for this subject records head ${locatorCommitSha}: ${
           candidates.map(describeCapsuleHead).join("; ")
-        }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${args.locator.commitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,
+        }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${locatorCommitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,
     };
   }
   let token: string | null;
@@ -438,41 +508,49 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
-    if (boundRoom && !planProof && !mergedRepair && boundRoom.headSha.toLowerCase() !== args.locator.commitSha.toLowerCase()) {
+    if (blob && boundRoom && !planProof && !mergedRepair && boundRoom.headSha.toLowerCase() !== blob.commitSha.toLowerCase()) {
       // The review retains the immutable original locator. A later branch head
       // may own it only when the provider proves the same path/blob is present.
       const currentBlob = await fetchRepositoryProviderBlob({
         owner: expectedRepo.owner, repo: expectedRepo.name, token, commitSha: boundRoom.headSha,
-        path: args.locator.path, expectedBlobId: args.locator.providerBlobId, fetchImpl,
+        path: blob.path, expectedBlobId: blob.providerBlobId, fetchImpl,
       });
       if (!currentBlob.ok) return { ok: false,
         code: currentBlob.code === "IMMUTABLE_BLOB_MISMATCH" ? "CANONICAL_DESIGN_AMBIGUOUS" : "CANONICAL_DESIGN_REQUIRED",
         error: currentBlob.error };
     }
-    const commitResult = await fetchGithubJson({
-      url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
-      token,
-      fetchImpl,
-    });
-    if (!commitResult.ok) {
-      return {
-        ok: false,
-        code: commitResult.kind === "unreadable" ? "ARTIFACT_AUTHOR_REQUIRED" : "CANONICAL_DESIGN_REQUIRED",
-        error: providerFailureMessage(commitResult, {
-          unavailable: "immutable commit provenance",
-          unreadable: "commit provenance",
-        }),
-      };
+    // BI-46E344FE: every commit of a range carries the same sign-off identity,
+    // so one accountable author answers for the whole reviewed change.
+    let email: string | null = null;
+    for (const commitSha of blob ? [blob.commitSha] : range!.ranges.map((r) => r.headSha)) {
+      const commitResult = await fetchGithubJson({
+        url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(commitSha)}`,
+        token,
+        fetchImpl,
+      });
+      if (!commitResult.ok) {
+        return {
+          ok: false,
+          code: commitResult.kind === "unreadable" ? "ARTIFACT_AUTHOR_REQUIRED" : "CANONICAL_DESIGN_REQUIRED",
+          error: providerFailureMessage(commitResult, {
+            unavailable: "immutable commit provenance",
+            unreadable: "commit provenance",
+          }),
+        };
+      }
+      const commitEmail = dcoEmail(commitResult.data);
+      if (!commitEmail || (email !== null && commitEmail !== email)) {
+        return {
+          ok: false,
+          code: "ARTIFACT_AUTHOR_REQUIRED",
+          error: commitEmail
+            ? `The reviewed commits carry different sign-off identities (${email}, ${commitEmail}), so one accountable author cannot be recorded for the change.`
+            : `Commit ${commitSha} carries no single "Signed-off-by: Name <email>" trailer. Sign the commit off (git commit -s), push the rewritten sha, re-sync the workroom head with adopt_worktree, then retry.`,
+        };
+      }
+      email = commitEmail;
     }
-    const commitPayload = commitResult.data;
-    const email = dcoEmail(commitPayload);
-    if (!email) {
-      return {
-        ok: false,
-        code: "ARTIFACT_AUTHOR_REQUIRED",
-        error: `Commit ${args.locator.commitSha} carries no single "Signed-off-by: Name <email>" trailer. Sign the commit off (git commit -s), push the rewritten sha, re-sync the workroom head with adopt_worktree, then retry.`,
-      };
-    }
+    if (!email) return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "The reviewed commit carries no sign-off identity." };
     const capsule = capsules[0]!;
   // The accountable author is the capsule owner. The DCO sign-off is the
   // corroborating evidence: where the install has registered that email to a
@@ -504,7 +582,7 @@ export async function resolveRepositoryArtifact(args: {
     return {
       ok: false,
       code: "ARTIFACT_AUTHOR_REQUIRED",
-      error: `Commit ${args.locator.commitSha} is signed off by ${email}, registered to principal ${signOffPrincipalId}, but workroom ${capsule.capsuleId} is owned by principal ${authorPrincipalId}. Record the artifact from the workroom whose owner signed the commit, or correct the email alias.`,
+      error: `Commit ${locatorCommitSha} is signed off by ${email}, registered to principal ${signOffPrincipalId}, but workroom ${capsule.capsuleId} is owned by principal ${authorPrincipalId}. Record the artifact from the workroom whose owner signed the commit, or correct the email alias.`,
     };
   }
   // Agent participation is optional context. An external Claude/Codex/Grok
@@ -523,13 +601,29 @@ export async function resolveRepositoryArtifact(args: {
     : [];
     const authorAgentId = soleAgentId && agentAliases.length === 1 ? soleAgentId : null;
 
+    let verified: { digest: string; bytes: Uint8Array };
+    if (range) {
+      // BI-46E344FE: re-read every range at the provider and require the bound digest.
+      const changes: RangeChange[] = [];
+      for (const r of range.ranges) {
+        const compared = await fetchProviderCompare({ owner: expectedRepo.owner, repo: expectedRepo.name, token, range: r, fetchImpl });
+        if (!compared.ok) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: compared.error };
+        changes.push({ range: r, files: compared.data, patch: providerPatchText(compared.data) });
+      }
+      const digest = commitRangeDigest(changes);
+      if (digest !== range.digest) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+          error: `The merged change resolves to ${digest}, not the bound ${range.digest}. Read get_backlog_item with recoveryGate "post-implementation-review" for the current request.` };
+      }
+      verified = { digest, bytes: Buffer.from(renderCommitRangeText(changes, digest), "utf8") };
+    } else {
     const providerBlob = await fetchRepositoryProviderBlob({
     owner: expectedRepo.owner,
     repo: expectedRepo.name,
     token,
-    commitSha: args.locator.commitSha,
-    path: args.locator.path,
-    expectedBlobId: args.locator.providerBlobId,
+    commitSha: blob!.commitSha,
+    path: blob!.path,
+    expectedBlobId: blob!.providerBlobId,
     fetchImpl,
   });
     if (!providerBlob.ok) {
@@ -545,11 +639,12 @@ export async function resolveRepositoryArtifact(args: {
     if (planProof && digest !== planProof.digest) {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified immutable plan bytes do not match the current coverage digest." };
     }
+    verified = { digest, bytes: providerBlob.data };
+    }
     return {
       ok: true,
       artifact: {
-        digest,
-        bytes: providerBlob.data,
+        ...verified,
         authorPrincipalId,
         authorAgentId,
         authorEmail: email,

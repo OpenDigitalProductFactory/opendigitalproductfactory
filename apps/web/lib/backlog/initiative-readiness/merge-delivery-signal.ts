@@ -474,7 +474,8 @@ async function trunkHasRevertOf(root: string, trunkRef: string, commit: TrunkCom
  * - exactly one parent, so `parent..commit` is the whole delivered change.
  *
  * More than one standing delivering commit is reported, never narrowed to a
- * convenient one: a delivery split across PRs has no single reviewable range.
+ * convenient one. They are returned oldest first: a delivery split across PRs
+ * is reviewed as the ordered union of its ranges (BI-46E344FE).
  * `null` means git could not answer.
  */
 export type MergedDeliveryCommit = { sha: string; parentSha: string; subject: string };
@@ -482,7 +483,18 @@ export type MergedDeliveryCommit = { sha: string; parentSha: string; subject: st
 export async function findMergedDeliveryCommits(
   root: string,
   item: { itemId: string; workType: string | null },
-  options: { roomPullRequests?: readonly number[]; after?: Date | null; trunkRef?: string } = {},
+  options: {
+    roomPullRequests?: readonly number[];
+    /**
+     * BI-46E344FE: PRs the PR-submit actuator recorded for the CURRENT attempt
+     * (`deliveryAttemptPullRequests`, which stops at the latest reopen). That
+     * record postdates the reopen, so its squash commit counts even when it was
+     * merged before the reopen, provided it delivers the item by message.
+     */
+    attestedPullRequests?: readonly number[];
+    after?: Date | null;
+    trunkRef?: string;
+  } = {},
 ): Promise<MergedDeliveryCommit[] | null> {
   const trunkRef = options.trunkRef ?? "origin/main";
   const after = options.after ?? null;
@@ -502,14 +514,36 @@ export async function findMergedDeliveryCommits(
         if (standing(c) && c.subject.endsWith(marker)) candidates.set(c.sha, c);
       }
     }
+    for (const prNumber of new Set(options.attestedPullRequests ?? [])) {
+      if (!Number.isInteger(prNumber) || prNumber <= 0) continue;
+      const marker = `(#${prNumber})`;
+      for (const c of await readTrunkCommits(root, trunkRef, [marker], 20)) {
+        if (!c.subject.startsWith("Revert ") && c.subject.endsWith(marker) && trunkCommitDeliversItem(c, item)) candidates.set(c.sha, c);
+      }
+    }
     const delivered: MergedDeliveryCommit[] = [];
     for (const c of candidates.values()) {
       if (c.parents.length !== 1 || await trunkHasRevertOf(root, trunkRef, c)) continue;
-      delivered.push({ sha: c.sha, parentSha: c.parents[0]!, subject: c.subject });
+      // BI-46E344FE: oldest first, so a split delivery is reviewed in trunk order.
+      let at = delivered.length;
+      while (at > 0 && await isAncestor(root, c.sha, delivered[at - 1]!.sha)) at -= 1;
+      delivered.splice(at, 0, { sha: c.sha, parentSha: c.parents[0]!, subject: c.subject });
     }
     return delivered;
   } catch {
     return null;
+  }
+}
+
+/** Whether `ancestor` precedes `descendant` on the trunk; a git failure is thrown to the caller's `null`. */
+async function isAncestor(root: string, ancestor: string, descendant: string): Promise<boolean> {
+  try {
+    await execFileAsync("git", trustedGitArgs(root, ["merge-base", "--is-ancestor", ancestor, descendant]),
+      { timeout: 5000, windowsHide: true });
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return false;
+    throw error;
   }
 }
 
@@ -543,6 +577,7 @@ export async function resolveMergedDeliveryCommitFromDb(
       if (!(await trunkRefExists(root))) continue;
       const commits = await findMergedDeliveryCommits(root, { itemId: args.itemId, workType: args.workType }, {
         roomPullRequests: args.roomPullRequests,
+        attestedPullRequests: deliveryAttemptPullRequests(transitions),
         after: latestReopenAt(transitions),
       });
       if (commits === null) return { kind: "signal-unavailable" };

@@ -1,6 +1,7 @@
 import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
 import { parsePresentReassessmentRelation, type PresentReassessmentRelation } from "./mcp-task-reassessment-policy";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { parseRepoCommitRangeRef, type RepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
 import {
   IMMUTABLE_PAGE_READER_TOOLS,
   immutablePageReaderForArtifact,
@@ -66,7 +67,9 @@ export type InitiativeReviewArtifactRef =
     repositoryFullName: string;
     revisionId: string;
     valueDigest: string;
-  };
+  }
+  // BI-46E344FE: a merged repair's whole change, bound only by a post-implementation review.
+  | RepoCommitRangeRef;
 
 const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
 
@@ -130,7 +133,7 @@ export function parseInitiativeReviewArtifactRef(value: unknown): InitiativeRevi
   const documentRef = artifactRef["kind"] === "document-version" && repositoryFullName && versionId && valueDigest
     ? { kind: "document-version" as const, repositoryFullName, versionId, valueDigest }
     : null;
-  return repoBlobRef ?? revisionRef ?? documentRef;
+  return repoBlobRef ?? revisionRef ?? documentRef ?? parseRepoCommitRangeRef(artifactRef);
 }
 
 export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {

@@ -142,6 +142,51 @@ describe("post-implementation review after merge (BI-CE661173)", () => {
     expect(p.discoverArtifact).not.toHaveBeenCalled();
   });
 
+  // BI-46E344FE: the whole merged change, not one file of it.
+  const rangeDigest = `sha256:${"9".repeat(64)}`;
+
+  it("binds a repair with several implementation files to its whole merged range", async () => {
+    const p = ports({});
+    vi.mocked(p.discoverArtifact).mockResolvedValue({ resolved: true,
+      artifact: { kind: "repo-commit-range", ranges: [{ baseSha: parentSha, headSha: mergedSha }], digest: rangeDigest } });
+    const result = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: null, ports: p });
+
+    expect(result.escalations).toEqual([]);
+    const binding = result.reviewerRoutes[0]!.requestCoworker.initiativeReviewBinding;
+    expect(binding).toMatchObject({
+      writerToolName: "record_initiative_post_implementation_review",
+      workroomRef: { workroomId: archivedRoom.capsuleId, headSha },
+      artifactRef: { kind: "repo-commit-range", repositoryFullName: archivedRoom.repositoryFullName,
+        ranges: [{ baseSha: parentSha, headSha: mergedSha }], digest: rangeDigest },
+    });
+    // The reviewer reads the range through the immutable page reader, bound to its digest.
+    expect(result.reviewerRoutes[0]!.requestCoworker.objective).toContain(`repo-commit-range/${parentSha}..${mergedSha}`);
+    expect(result.reviewerRoutes[0]!.requestCoworker.objective).toContain(rangeDigest);
+  });
+
+  it("reviews a delivery split across several squash commits as their ordered union", async () => {
+    const first = { sha: "c".repeat(40), parentSha: "d".repeat(40) };
+    const p = ports({ source: { kind: "found", room: archivedRoom, mergedCommitSha: mergedSha, parentSha,
+      commits: [first, { sha: mergedSha, parentSha }], deliveryActorIds: ["AGT-AUTHOR"] } });
+    const ranges = [{ baseSha: first.parentSha, headSha: first.sha }, { baseSha: parentSha, headSha: mergedSha }];
+    p.discoverCommitRange = vi.fn().mockResolvedValue({ resolved: true, artifact: { kind: "repo-commit-range", ranges, digest: rangeDigest } });
+    const result = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: null, ports: p });
+
+    expect(result.escalations).toEqual([]);
+    expect(p.discoverCommitRange).toHaveBeenCalledWith({ repositoryFullName: archivedRoom.repositoryFullName, ranges });
+    expect(p.discoverArtifact).not.toHaveBeenCalled();
+    expect(result.reviewerRoutes[0]!.requestCoworker.initiativeReviewBinding).toMatchObject({
+      artifactRef: { kind: "repo-commit-range", ranges, digest: rangeDigest } });
+  });
+
+  it("keeps a single-file merged repair bound to its one blob", async () => {
+    const p = ports({ source: { kind: "found", room: archivedRoom, mergedCommitSha: mergedSha, parentSha,
+      commits: [{ sha: mergedSha, parentSha }], deliveryActorIds: ["AGT-AUTHOR"] } });
+    const result = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: null, ports: p });
+    expect(result.reviewerRoutes[0]!.requestCoworker.initiativeReviewBinding).toMatchObject({
+      artifactRef: { kind: "repo-blob-at-commit", commitSha: mergedSha, path: "apps/web/lib/fix.ts" } });
+  });
+
   it("does not read a retired room for a review other than PIR", async () => {
     const p = ports({});
     const designOwed: InitiativeReadinessDecision = { ...pirDecision,

@@ -104,6 +104,8 @@ function makeFetch(opts: {
   extra?: Record<string, unknown>;
   postStatus?: number;
   modelsStatus?: number;
+  /** `/engines/status` llama.cpp identity; defaults to an engine not qualified for speculation. */
+  engine?: string;
 }) {
   let configured = opts.configured ?? null;
   let keepAlive = opts.keepAlive !== undefined ? opts.keepAlive : configured == null ? null : "-1";
@@ -132,6 +134,9 @@ function makeFetch(opts: {
       calls.getConfigure++;
       const entry = configured == null ? {} : { Config: config() };
       return { ok: true, status: 200, json: async () => [entry] } as unknown as Response;
+    }
+    if (u.endsWith("/engines/status")) {
+      return { ok: true, status: 200, json: async () => ({ "llama.cpp": opts.engine ?? "Running: llama.cpp b7000-cpu (sha256:x) build" }) } as unknown as Response;
     }
     if (u.includes("/models")) {
       calls.models++;
@@ -237,10 +242,10 @@ describe("reconcileLocalModelContext", () => {
 
   it("keeps stored runtime flags when re-pinning residency", async () => {
     mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
-    const f = makeFetch({ configured: 49_152, keepAlive: null, extra: { "runtime-flags": ["--spec-type", "ngram-mod"] } });
+    const f = makeFetch({ configured: 49_152, keepAlive: null, extra: { "runtime-flags": ["--threads", "8"] } });
     await reconcileLocalModelContext(f.fetchImpl);
     expect(f.calls.postBodies).toEqual([
-      { "runtime-flags": ["--spec-type", "ngram-mod"], model: GEN, "context-size": 49_152, keep_alive: "-1" },
+      { "runtime-flags": ["--threads", "8"], model: GEN, "context-size": 49_152, keep_alive: "-1" },
     ]);
   });
 
@@ -257,6 +262,56 @@ describe("reconcileLocalModelContext", () => {
     const f = makeFetch({ configured: RECOMMENDED_BUILD_CONTEXT_TOKENS, keepAlive: "-1" });
     expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
     expect(f.calls.post).toBe(0);
+  });
+
+  describe("n-gram speculation (BI-0D208EBB)", () => {
+    const QUALIFIED = "Running: llama.cpp b9879-cuda (sha256:57130b8a) 72874f5";
+    const SPEC = ["--spec-type", "ngram-mod"];
+
+    it("adds the speculation flags with context and residency on the qualified engine", async () => {
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const f = makeFetch({ configured: 40_960, engine: QUALIFIED });
+      const r = await reconcileLocalModelContext(f.fetchImpl);
+      expect(r.status).toBe("pinned");
+      expect(f.calls.postBodies).toEqual([{ "runtime-flags": SPEC, model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
+    });
+
+    it("is write-free once the qualified engine already carries them", async () => {
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": SPEC } });
+      expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
+      expect(f.calls.post).toBe(0);
+    });
+
+    it("carries them on a context raise", async () => {
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
+      const f = makeFetch({ configured: 4096, engine: QUALIFIED });
+      await reconcileLocalModelContext(f.fetchImpl);
+      expect(f.calls.postBodies[0]?.["runtime-flags"]).toEqual(SPEC);
+    });
+
+    it("never adds them on an engine that was not qualified", async () => {
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const f = makeFetch({ configured: 40_960 });
+      expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
+      expect(f.calls.post).toBe(0);
+    });
+
+    it("removes them when the operator turns speculation off", async () => {
+      mockPrisma.platformConfig.findUnique.mockImplementation(configByKey({ "local.speculativeDecoding": "off" }));
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": SPEC } });
+      expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("pinned");
+      expect(f.calls.postBodies).toEqual([{ model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
+    });
+
+    it("leaves operator-chosen runtime flags alone", async () => {
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const own = ["--spec-type", "ngram-simple"];
+      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": own } });
+      expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
+      expect(f.calls.post).toBe(0);
+    });
   });
 
   it("leaves the embedding model alone (no generation model installed)", async () => {

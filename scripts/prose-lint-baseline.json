@@ -9167,6 +9167,14 @@
     "longSentences": 0,
     "textMass": 160
   },
+  "apps/web/components/wiki/WikiBacklinksPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
   "apps/web/components/wiki/WikiPageEditor.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

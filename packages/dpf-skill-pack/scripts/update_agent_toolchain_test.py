@@ -159,9 +159,12 @@ class InstallGrokHooksTest(unittest.TestCase):
             # number only while every guard sat in exactly one matcher group;
             # workroom-claim-guard.mjs (BI-0B292D84) is wired on both the shell
             # and the write matcher, exactly as hooks.json wires it for Claude,
-            # so len(GROK_HOOK_GUARDS) undercounts. The matchers are disjoint,
+            # so a count of unique names undercounts. The matchers are disjoint,
             # so a guard in two groups still fires at most once per call.
-            wired_entries = sum(len(guards) for _matcher, guards in updater.GROK_PRETOOLUSE_GROUPS)
+            wired_entries = sum(
+                1 for row in updater.client_hook_coverage(managed, "grok")
+                if row["event"] == "PreToolUse" and row["state"] == "wired"
+            )
             self.assertIn(f"wired {wired_entries} PreToolUse guard", status)
             self.assertIn("matcher group", status)
             self.assertIn("SessionStart+Stop", status)
@@ -180,7 +183,7 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
             shell_group = next(e for e in entries if "Shell" in str(e.get("matcher")))
             self.assertTrue(any("lease-guard.mjs" in h["command"] for h in shell_group["hooks"]))
-            for guard in updater.GROK_HOOK_GUARDS:
+            for guard in {updater.hook_script_basename(c) for c in cmds}:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
             session_cmds = [
                 h["command"]
@@ -1371,8 +1374,9 @@ class ProcessSpineHealthTest(unittest.TestCase):
 class GrokCodexGuardSyncTest(unittest.TestCase):
     """Drift guard (BI-14E9F7CE, EP-CLIENT-HOOK-PLANE).
 
-    GROK_HOOK_GUARDS / CODEX_BASH_GUARDS / CODEX_ASK_GUARDS / CODEX_WRITE_GUARDS
-    are hand-maintained tuples, wholly independent of hooks/hooks.json. That is
+    CODEX_BASH_GUARDS / CODEX_ASK_GUARDS / CODEX_WRITE_GUARDS are hand-maintained
+    tuples, wholly independent of hooks/hooks.json. Grok's plane is generated from
+    hooks.json since BI-742D707B; these tests read that generated payload. That is
     load-bearing, not incidental: live probe (BI-883FC2FC, Grok 0.2.87) proved
     Grok's hook-execution plane IGNORES the plugin-bundled hooks/hooks.json
     entirely (a plugin shows has_hooks=true in inventory yet contributes
@@ -1380,7 +1384,7 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
     for Grok's actual guard enforcement regardless of whether that variable
     resolves. The REAL enforcement path for Grok is the global
     ~/.grok/hooks/dpf-guards.json this script writes with fully pre-resolved
-    absolute paths (install_grok_hooks) -- so GROK_HOOK_GUARDS is the only
+    absolute paths (install_grok_hooks) -- so that generated payload is the only
     thing that wires a guard to Grok at all. Codex differs: it DOES load the
     plugin-bundled hooks.json from its plugin cache, so the CODEX_* tuples are
     the coverage proof install_codex_hooks checks that cache against before
@@ -1425,19 +1429,31 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
         src = (cls._skill_pack() / "hooks" / basename).read_text(encoding="utf-8")
         return "emitDeny(" in src
 
-    def test_grok_hook_guards_match_every_blocking_pretooluse_guard_in_hooks_json(self) -> None:
-        by_matcher = self._pretooluse_guards_by_matcher()
-        all_guards = {name for names in by_matcher.values() for name in names}
-        blocking = {name for name in all_guards if self._is_blocking(name)}
-        self.assertEqual(
-            set(updater.GROK_HOOK_GUARDS),
-            blocking,
-            "GROK_HOOK_GUARDS has drifted from hooks/hooks.json's blocking PreToolUse "
-            "guards. Grok's hook plane ignores plugin-bundled hooks.json (BI-883FC2FC) -- "
-            "GROK_HOOK_GUARDS is the ONLY thing wiring a guard into Grok's global "
-            "~/.grok/hooks/dpf-guards.json. Add/remove it there too or it silently never "
-            "fires on Grok.",
-        )
+    @classmethod
+    def _grok_wired_by_matcher(cls) -> dict[str, set[str]]:
+        aliases = updater.client_hook_planes(cls._skill_pack())["clients"]["grok"].get("matchers", {})
+        unaliased = {grok: claude for claude, grok in aliases.items()}
+        payload = updater.build_grok_hooks_payload(cls._skill_pack(), dry_run=True)
+        wired: dict[str, set[str]] = {}
+        for group in payload["hooks"].get("PreToolUse", []):
+            matcher = unaliased.get(group["matcher"], group["matcher"])
+            wired.setdefault(matcher, set()).update(
+                updater.hook_script_basename(h["command"]) for h in group["hooks"]
+            )
+        return wired
+
+    def test_grok_wires_every_blocking_guard_on_every_matcher_hooks_json_uses(self) -> None:
+        # Read the generated payload, not a tuple: BI-742D707B found raw-tool-guard
+        # listed for Grok yet wired in no group, and the write-path root-clone-guard
+        # missing, while a set-membership check passed.
+        wired = self._grok_wired_by_matcher()
+        for matcher, names in self._pretooluse_guards_by_matcher().items():
+            blocking = {name for name in names if self._is_blocking(name)}
+            self.assertEqual(
+                blocking - wired.get(matcher, set()),
+                set(),
+                f"blocking guards on {matcher} never reach Grok's ~/.grok/hooks/dpf-guards.json",
+            )
 
     def test_codex_guard_tuples_match_hooks_json_per_matcher(self) -> None:
         by_matcher = self._pretooluse_guards_by_matcher()
@@ -1471,7 +1487,160 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
             | set(updater.CODEX_WRITE_GUARDS)
         )
         self.assertEqual(blocking, codex_all, "a blocking guard is missing from the Codex tuples")
-        self.assertEqual(blocking, set(updater.GROK_HOOK_GUARDS), "a blocking guard is missing from GROK_HOOK_GUARDS")
+        grok_all = {name for names in self._grok_wired_by_matcher().values() for name in names}
+        self.assertEqual(blocking - grok_all, set(), "a blocking guard is missing from Grok's generated plane")
+
+
+class ClientHookPlaneCoverageTest(unittest.TestCase):
+    """Every hooks.json entry is wired, bundled or excluded with a reason, per client (BI-742D707B).
+
+    hooks.json is what Claude runs. Codex loads it too, minus events it lacks.
+    Grok ignores it and runs only the payload this script generates, which used
+    to come from hand-kept tuples: raw-tool-guard sat in GROK_HOOK_GUARDS but in
+    no matcher group, so it never reached Grok, and the write-path
+    root-clone-guard was missing. These tests read the generated payload itself,
+    so a hooks.json entry cannot be dropped for any client without a recorded
+    reason in hooks/client-hook-planes.json.
+    """
+
+    @classmethod
+    def _clients(cls) -> list[str]:
+        return list(updater.client_hook_planes(cls._skill_pack())["clients"])
+
+    @staticmethod
+    def _skill_pack() -> Path:
+        return Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def _entries(cls) -> list[tuple[str, str, str]]:
+        data = json.loads((cls._skill_pack() / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        out = []
+        for event, groups in data["hooks"].items():
+            for group in groups:
+                for hook in group["hooks"]:
+                    out.append((event, str(group.get("matcher", "")), updater.hook_script_basename(hook["command"])))
+        return out
+
+    def test_every_entry_is_accounted_for_on_every_client(self) -> None:
+        entries = self._entries()
+        for client in self._clients():
+            rows = updater.client_hook_coverage(self._skill_pack(), client)
+            self.assertEqual(len(rows), len(entries), client)
+            for row in rows:
+                self.assertIn(row["state"], ("wired", "bundled", "excluded"), f"{client}: {row}")
+                if row["state"] != "wired":
+                    self.assertTrue(str(row.get("reason", "")).strip(), f"{client}: {row} has no reason")
+
+    def test_grok_payload_carries_every_entry_coverage_calls_wired(self) -> None:
+        planes = updater.client_hook_planes(self._skill_pack())
+        aliases = planes["clients"]["grok"].get("matchers", {})
+        payload = updater.build_grok_hooks_payload(self._skill_pack(), dry_run=True)
+        wired: set[tuple[str, str, str]] = set()
+        for event, groups in payload["hooks"].items():
+            for group in groups:
+                for hook in group["hooks"]:
+                    wired.add((event, str(group.get("matcher", "")), updater.hook_script_basename(hook["command"])))
+        for row in updater.client_hook_coverage(self._skill_pack(), "grok"):
+            matcher = aliases.get(row["matcher"], row["matcher"])
+            key = (row["event"], matcher, row["script"])
+            if row["state"] == "wired":
+                self.assertIn(key, wired, f"coverage says wired but the Grok payload lacks {key}")
+            elif row["state"] == "excluded":
+                self.assertNotIn(key, wired, f"excluded on Grok but still wired: {key}")
+            else:
+                substitute = row["substitute"]
+                self.assertIn((row["event"], matcher, substitute), wired, f"{key} bundled into {substitute}, which is not wired")
+
+    def test_grok_wires_the_two_guards_it_used_to_drop(self) -> None:
+        payload = updater.build_grok_hooks_payload(self._skill_pack(), dry_run=True)
+        groups = payload["hooks"]["PreToolUse"]
+
+        def scripts(fragment: str) -> set[str]:
+            group = next(g for g in groups if fragment in g["matcher"])
+            return {updater.hook_script_basename(h["command"]) for h in group["hooks"]}
+
+        self.assertIn("raw-tool-guard.mjs", scripts("Shell"))
+        self.assertIn("root-clone-guard.mjs", scripts("Write"))
+
+    def test_grok_commands_keep_their_arguments(self) -> None:
+        payload = updater.build_grok_hooks_payload(self._skill_pack(), dry_run=True)
+        start = [h["command"] for g in payload["hooks"]["SessionStart"] for h in g["hooks"]]
+        snapshot = [c for c in start if "uncommitted-work-guard.mjs" in c]
+        self.assertEqual(len(snapshot), 1, start)
+        self.assertTrue(snapshot[0].rstrip().endswith("--snapshot"), snapshot[0])
+        self.assertFalse(any("${CLAUDE_PLUGIN_ROOT}" in c for c in start))
+
+    def test_claude_and_codex_counts_match_the_founder_observation(self) -> None:
+        total = len(self._entries())
+        wired = lambda client: sum(1 for r in updater.client_hook_coverage(self._skill_pack(), client) if r["state"] == "wired")
+        self.assertEqual(wired("claude-code"), total)
+        # Codex has no WorktreeCreate event: 34 entries today, 33 trusted.
+        worktree_create = sum(1 for e in self._entries() if e[0] == "WorktreeCreate")
+        self.assertEqual(wired("codex"), total - worktree_create)
+
+    def test_an_existing_hand_kept_grok_file_converges_on_the_next_updater_run(self) -> None:
+        # Upgrade path: the hourly toolchain agent (Windows task, launchd,
+        # systemd) runs this updater when the served pack's digest changes. The
+        # pre-BI-742D707B file had 17 entries and no raw-tool-guard; one run must
+        # replace it with the generated plane, and a second run must not touch it.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(self._skill_pack(), managed, dry_run=False)
+            hook_file = updater.grok_hooks_file(home)
+            hook_file.parent.mkdir(parents=True)
+            old = {"hooks": {"PreToolUse": [{"matcher": "Shell|Bash|run_terminal_command|run_terminal_cmd", "hooks": [
+                {"type": "command", "command": f'node "{managed / "hooks" / "lease-guard.mjs"}"', "timeout": 15}]}]}}
+            hook_file.write_text(json.dumps(old), encoding="utf-8")
+
+            first = updater.install_grok_hooks(managed, home, dry_run=False)
+            converged = json.loads(hook_file.read_text(encoding="utf-8"))
+            self.assertEqual(converged, updater.build_grok_hooks_payload(managed))
+            self.assertIn("raw-tool-guard.mjs", hook_file.read_text(encoding="utf-8"))
+            self.assertNotIn("unchanged", first)
+
+            second = updater.install_grok_hooks(managed, home, dry_run=False)
+            self.assertIn("unchanged", second)
+
+    def test_every_discovered_client_kind_has_a_plane(self) -> None:
+        # toolchain_convergence.DISCOVERY is what a host run finds installed. A
+        # client it can find but this file does not name would have no stated
+        # hook coverage at all; grok-sandbox is the Build Studio dispatch plane.
+        import toolchain_convergence
+
+        self.assertEqual(
+            set(self._clients()),
+            set(toolchain_convergence.DISCOVERY) | {"grok-sandbox"},
+        )
+
+    def test_the_sandbox_generator_matches_the_host_generator(self) -> None:
+        # The Build Studio sandbox has Node but no Python, so it builds Grok's
+        # plane with hooks/lib/grok-hook-plane.mjs. Both read the same two files;
+        # this pins their output equal for the same hooks directory.
+        import shutil
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not on PATH")
+        pack = self._skill_pack()
+        result = subprocess.run(
+            [node, str(pack / "hooks" / "lib" / "grok-hook-plane.mjs"), str(pack), str(pack / "hooks")],
+            capture_output=True, text=True, check=True, timeout=60,
+        )
+        self.assertEqual(json.loads(result.stdout), updater.build_grok_hooks_payload(pack, dry_run=True))
+
+    def test_every_exclusion_names_a_real_entry(self) -> None:
+        entries = {(event, script) for event, _matcher, script in self._entries()}
+        planes = updater.client_hook_planes(self._skill_pack())
+        for client, plane in planes["clients"].items():
+            if "sameAs" in plane:
+                self.assertIn(plane["sameAs"], planes["clients"], client)
+            for key in plane.get("excluded", {}):
+                event, _, script = key.partition(":")
+                if script == "*":
+                    self.assertTrue(any(e == event for e, _ in entries), f"{client}: {key}")
+                else:
+                    self.assertIn((event, script), entries, f"{client}: stale exclusion {key}")
 
 
 class CodexHookTrustTest(unittest.TestCase):

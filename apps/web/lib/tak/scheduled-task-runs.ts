@@ -273,10 +273,23 @@ export function detectScheduledRequiredToolFailure(input: {
 }): string | null {
   const outcome = classifyScheduledRequiredTools(input);
   if (outcome.kind !== "absent") return null;
+  // BI-CAP-B5F50D1F: a writer the run called and the server refused was not
+  // "attached and not called". Name the refusals so nobody hunts for a model
+  // refusal or a missing tool that does not exist.
+  const refusals = refusedCalls(input.executedTools, outcome.toolName);
+  if (refusals.length > 0) {
+    const codes = [...new Set(refusals.map((call) => call.result?.error?.trim() || "no error code"))].join(", ");
+    return `required governed tool ${outcome.toolName} was called ${refusals.length} time${refusals.length === 1 ? "" : "s"} and refused every time (${codes})`;
+  }
   const offered = input.attachedToolNames?.includes(outcome.toolName)
     ? "; it was attached to the run and not called"
     : "";
   return `required governed tool ${outcome.toolName} executed zero times${offered}`;
+}
+
+/** Calls of `toolName` the server refused (success false, not an approval wait). */
+function refusedCalls(executed: ScheduledRunToolExecution[], toolName: string): ScheduledRunToolExecution[] {
+  return executed.filter((call) => call.name === toolName && call.result?.success === false && call.result.error !== "approval_required");
 }
 
 /** The writer every Workroom stage run records its stage evidence through. */
@@ -341,6 +354,8 @@ export function scheduledRequiredToolCorrection(input: {
 }): { toolName: string; message: string } | null {
   const outcome = classifyScheduledRequiredTools(input);
   if (outcome.kind !== "absent" || !input.attachedToolNames.includes(outcome.toolName)) return null;
+  // The model called it and read the refusal; telling it "you did not call it" is false (BI-CAP-B5F50D1F).
+  if (refusedCalls(input.executedTools, outcome.toolName).length > 0) return null;
   const tool = outcome.toolName;
   return { toolName: tool, message: `${tool} is attached to this run: it is in your tool list now. Your answer did not call it, and it is the only thing that records this run. `
     + `Call ${tool} now. If you could not do the work, call it with outcome "blocked" and say what blocked you. `

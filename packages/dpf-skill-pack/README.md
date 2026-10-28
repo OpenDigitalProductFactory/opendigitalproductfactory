@@ -48,9 +48,14 @@ caches. Codex, Grok, and Claude have safe disable adapters (`enabled = false` /
 `grok plugin disable` / `claude plugin disable`); Antigravity remains
 **unsupported-until-proven** (no non-interactive plugin disable CLI — skills are
 file-synced only). Grok also materializes a global
-`~/.grok/hooks/dpf-guards.json` (PreToolUse + SessionStart + SessionEnd/Stop)
-because its hook plane ignores plugin-bundled hooks; Build Studio Grok seeds
-the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232). Wave 3 client
+`~/.grok/hooks/dpf-guards.json` because its hook plane ignores plugin-bundled
+hooks; it is generated from `hooks/hooks.json` minus the Grok exclusions in
+`hooks/client-hook-planes.json` (BI-742D707B). Which hooks each client runs, and
+why any is left out, is the generated "By client" table in
+[`hooks/README.md`](hooks/README.md#by-client). Build Studio Grok seeds
+the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232) and generates the
+sandbox hook file with `hooks/lib/grok-hook-plane.mjs`, the Node twin of the
+host generator (BI-413882E5). Wave 3 client
 equalize: BI-A4BEFE99.
 
 ## Skills shipped in v0.1.0

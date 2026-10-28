@@ -1,7 +1,9 @@
 import type { BacklogStatus } from "@/lib/backlog/transitions";
 
 import { acceptanceEnteredAt, type AcceptanceAgeBasis } from "./acceptance-age";
-import { ACCEPTANCE_CANDIDATE_WHERE, retainedClosureObligation } from "./acceptance-sweep-page";
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
+
+import { ACCEPTANCE_CANDIDATE_WHERE, ACCEPTANCE_OBLIGATION_WHERE, retainedClosureObligation } from "./acceptance-sweep-page";
 
 // The awaiting-acceptance pool's age, measured every sweep run (BI-DF255666).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md
@@ -25,7 +27,11 @@ export type AcceptancePoolAge = {
   ageBasis: AcceptanceAgeBasis;
   ageDays: number;
 };
-export type AcceptancePoolAges = Map<string, AcceptancePoolAge> & { candidateCount?: number };
+export type AcceptancePoolAges = Map<string, AcceptancePoolAge> & {
+  candidateCount?: number;
+  /** BI-C5794F1D: obligations left out because a peer installation owns them (work-sync mirrors). */
+  peerOwnedSkipped?: number;
+};
 
 /** Whole days in the state. */
 export function acceptanceAgeDays(enteredAt: Date, now: Date): number {
@@ -62,8 +68,15 @@ export type AcceptancePoolAgeDb = {
   };
 };
 
+/** Optional so a reader without it still ages the pool; the run then reports zero skipped. */
+type PeerOwnedCountDb = {
+  backlogItem: {
+    count?(args: { where: typeof ACCEPTANCE_OBLIGATION_WHERE & { body: { contains: string } } }): Promise<number>;
+  };
+};
+
 /** Every awaiting-acceptance item's entry and age, keyed by row id. */
-export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb, now: Date): Promise<AcceptancePoolAges> {
+export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb & PeerOwnedCountDb, now: Date): Promise<AcceptancePoolAges> {
   const items = await db.backlogItem.findMany({
     where: ACCEPTANCE_CANDIDATE_WHERE,
     select: { id: true, itemId: true, createdAt: true, status: true,
@@ -90,6 +103,12 @@ export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb, now: Date)
   // Pagination also visits historical candidates rejected by the latest-status
   // predicate. Include that read cost in the revisit estimate, not pool.size.
   ages.candidateCount = items.length;
+  if (db.backlogItem.count) {
+    // The same marker prefilter the candidate predicate excludes on.
+    ages.peerOwnedSkipped = await db.backlogItem.count({
+      where: { ...ACCEPTANCE_OBLIGATION_WHERE, body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
+    });
+  }
   for (const item of items) {
     if (item.status === "done" && !retainedClosureObligation({ ...item, agentId: null, claimedByAgentId: null })) continue;
     const terminal = item.status === "done" ? item.activities?.[0] : null;

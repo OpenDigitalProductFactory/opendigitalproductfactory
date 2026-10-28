@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
-import { emitDeny, inDpfWorkspace, readHookPayload } from "./lib/hook-io.mjs";
+import { emitDeny, inDpfWorkspace, isFileWriteTool, readHookPayload } from "./lib/hook-io.mjs";
 
 const SOURCE_RE = /^(apps\/web\/(?:app|lib)\/.*\.(?:ts|tsx)|packages\/[^/]+\/(?:src|prisma)\/.*\.(?:ts|tsx|sql|prisma))$/;
 const EXCLUDED_RE = /(?:\.(?:test|spec|stories)\.(?:ts|tsx)$|__tests__\/|\/generated\/)/;
@@ -21,7 +21,7 @@ function normalizePath(file, cwd = process.cwd()) {
 }
 
 function isProductionSourceEdit(toolName, toolInput, cwd) {
-  if (!["Write", "Edit", "MultiEdit"].includes(String(toolName))) return false;
+  if (!isFileWriteTool(toolName)) return false;
   const file = normalizePath(toolInput?.file_path ?? toolInput?.filePath, cwd);
   return SOURCE_RE.test(file) && !EXCLUDED_RE.test(file);
 }
