@@ -1,3 +1,4 @@
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { Prisma } from "@dpf/db";
 import type { RemoteTaskSubmitAuth } from "@/lib/mcp-task-submit-types";
 import { parseEngagementTaskBinding, engagementInputDigest, buildEngagementTaskPrompt, ENGAGEMENT_READ_TOOLS } from "@/lib/coworker-service-catalog/engagement-task-binding";
@@ -162,6 +163,9 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
         source: verified.source,
       },
       userContext: verified.userContext,
+      ...(reviewPacket?.binding.presentReassessment && input.context?.authorityDecisionId && input.context.agentId
+        ? { presentReviewAuthority: { authorityDecisionId: input.context.authorityDecisionId,
+            actingAgentId: input.context.agentId, tokenGrantScopes: input.context.tokenGrantScopes ?? [] } } : {}),
       params: {
         agentId: input.targetAgent,
         routeContext: input.context?.routeContext ?? "/build",
@@ -240,18 +244,47 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
       if (access.decision.level !== "content") throw new Error("engagement_read_access_refused");
     }
     const taskRunId = record(record(engagement.metadata).fulfillment).taskRunId;
-    if (text(taskRunId)) await reconcileEngagementTaskResult(taskRunId, prisma);
+    if (text(taskRunId)) {
+      try { await reconcileEngagementTaskResult(taskRunId, db); }
+      catch {
+        return { success: false, error: "engagement_projection_unavailable", entityId: engagementId,
+          message: "The original task is persisted but engagement result projection failed. Retry observation; no execution was requested.",
+          data: { engagementId, taskRunId, observedEngagementStatus: engagement.status, nextAction: "Observe this same engagementId again; inspect engagement-result-projection phase timings if it persists.", executionRequested: false } };
+      }
+    }
     const latest = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
     return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
   }
   const supplied = record(locator);
+  if (Object.keys(supplied).some(key => !["workroomId", "stageKey", "artifactRef", "guidanceArtifacts", "visualEvidenceRef"].includes(key))) return { success: false, error: "engagement_locator_invalid", message: "Use the original artifact and current room stage; original request inputs cannot be replaced." };
+  const room = typeof supplied.workroomId === "string" ? await prisma.workroom.findUnique({ where: { capsuleId: supplied.workroomId }, select: { headSha: true } }) : null;
   const binding = parseEngagementTaskBinding({
     version: 1, engagementId, offerId: engagement.offerId, serviceId: engagement.serviceId,
     providerAgentId: engagement.providerAgentId, actorAgentId: context.agentId, userId,
-    workroomId: supplied.workroomId, stageKey: supplied.stageKey, artifactRef: supplied.artifactRef,
+    workroomId: supplied.workroomId, stageKey: supplied.stageKey, artifactRef: supplied.artifactRef, roomHeadSha: room?.headSha,
+    ...(supplied.guidanceArtifacts !== undefined ? { guidanceArtifacts: supplied.guidanceArtifacts } : {}),
+    ...(supplied.visualEvidenceRef !== undefined ? {visualEvidenceRef:supplied.visualEvidenceRef} : {}),
     inputDigest: engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload),
   });
   if (!binding) return { success: false, error: "engagement_locator_invalid", message: "Provide the current Workroom stage and immutable repository artifact locator." };
+  const existing = record(record(engagement.metadata).fulfillment);
+  if (existing.taskRunId) {
+    if (canonicalJson(existing.binding) !== canonicalJson(binding)) return { success: false, error: "engagement_already_bound", message: "Read the original engagementId without fulfillment to observe its existing task; do not submit a different revision or stage." };
+    if (engagement.status === "unavailable") {
+      return {success:false,error:"engagement_execution_proof_required",entityId:engagementId,
+        message:"No execution was requested. The original specialist contribution is incomplete and native capability/closure/effect proof is unavailable. Obtain the existing recovery owner's supported finite disposition; do not replay this task or create a replacement request.",
+        data:{engagementId,taskRunId:existing.taskRunId,executionRequested:false,resumable:false}};
+    } else if (engagement.status === "failed") {
+    const { resumeUnstartedEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-pre-admission-recovery");
+    await resumeUnstartedEngagementTask({ taskRunId: String(existing.taskRunId), binding,
+      token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });
+    } else if (["accepted", "in-progress"].includes(engagement.status)) {
+      const { resumeCapacityWaitingEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-capacity-recovery");
+      await resumeCapacityWaitingEngagementTask({ taskRunId: String(existing.taskRunId), binding,
+        token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });
+    }
+    return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
+  }
   const token: RemoteTaskSubmitAuth = { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource };
   const scope = ["coworker_engagement_write", "file_read", "registry_read", ...ENGAGEMENT_READ_TOOLS.map(name => `tool:${name}`)];
   const prompt = buildEngagementTaskPrompt(binding, engagement);

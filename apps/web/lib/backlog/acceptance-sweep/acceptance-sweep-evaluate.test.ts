@@ -177,7 +177,9 @@ describe("authorAgentIdFrom", () => {
 describe("evaluateOwedAcceptance", () => {
   const item = { id: "row-3", itemId: "BI-AA000003", claimedByAgentId: null, agentId: null };
 
-  it("retains unresolved acceptance when the item closes after page selection", async () => {
+  // BI-C899BB40: a done item owes no acceptance; any bounded step is the
+  // confirmation lane's, never a re-added ACCEPTANCE_EVIDENCE_REQUIRED.
+  it("owes nothing and routes nothing when the item closes after page selection", async () => {
     const resolveOwner = vi.fn();
     const result = await evaluateOwedAcceptance({ ...item, status: "awaiting-acceptance" }, {
       loadAuthorAgentId: vi.fn().mockResolvedValue(null),
@@ -189,7 +191,8 @@ describe("evaluateOwedAcceptance", () => {
       resolveOwner,
     });
     expect(result?.closable).toBe(false);
-    expect(result?.owed.map(entry => entry.code)).toContain("ACCEPTANCE_EVIDENCE_REQUIRED");
+    expect(result?.owed).toEqual([]);
+    expect(result?.unroutable).toEqual([]);
     expect(resolveOwner).not.toHaveBeenCalled();
   });
 

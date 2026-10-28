@@ -32,8 +32,11 @@ is unavailable and does not offer or queue an upgrade.
    trigger.
 
    A waiting update stays named on the card while an upgrade is running
-   (**Installing now**) and after one fails (**Update still pending**), so a
-   failed or in-progress attempt never reads as being up to date.
+   (**Installing now**) and after one fails (**Update still pending**). If an
+   update was installed but its resumed completion step reported that the
+   drain had already ended, the card checks that the failed attempt's target
+   is actually running before disregarding that specific reporting error.
+   Other failures remain visible, even when the install is current.
 2. Review the pending upgrade and what it will change before triggering anything.
    **What's in this update?** compares the running build with the resolved
    update. Consumer installs read published source changes without needing a
@@ -122,9 +125,13 @@ upgrade. Nothing is lost by waiting.
 
 ## What Is Reversible
 
-- A failed upgrade is **automatically rolled back** and its promoter container is
-  force-removed, so a broken build cannot leave the install in a half-swapped
-  state.
+- Saving a recovery point does not make restoration available. The page keeps
+  the backup and run history visible and explains why restoration is unavailable.
+  Canonical database restoration is currently blocked until the platform can
+  prove that review history remains intact.
+- A failed upgrade can use the previous version only when that version is
+  compatible with the retained history. Read the deployment details after a
+  failure; automatic restoration is not guaranteed.
 - Candidate promoter preparation and the application build use Docker BuildKit
   and the same bounded wall-clock budget (default **25 minutes**). If either
   build stalls, it is killed and the deployment is marked failed with a
@@ -143,6 +150,9 @@ upgrade. Nothing is lost by waiting.
   along with whether re-running is likely to help. Some causes (your changes
   clashing with the update, uncommitted local edits) will not clear on a retry
   and say so; those need a decision rather than another attempt.
+- A failure recorded after the target version starts does not prove a rollback
+  occurred. The card identifies when that version is running and the failure
+  still needs review; it does not claim the previous version is running.
 - The deployment log remains the full diagnosis behind that summary. Read it
   when the stated cause is not enough, not to discover what the cause was.
 - If dispatch is indeterminate, leave the action alone while the server
@@ -173,6 +183,22 @@ Each client gets one of these labels:
 - **Version unknown**: it did not say which tools it loaded, usually because
   its copy predates this check.
 - **Not seen this week**: it has not connected in the last 7 days.
+
+When a client is behind, a **Why** line says what differs, for example that the files it loaded differ from the released ones.
+
+Each computer that runs these tools also keeps them current on its own. A background job checks hourly and at login, and the card shows how that job last did:
+- it updates on its own;
+- it has been failing, and since when;
+- it is waiting for a person;
+- it is turned off;
+- it could not reach the portal;
+- it runs a newer copy from its own source checkout.
+
+If a computer has been failing, or waiting for a person, for more than a day, one item appears in your attention list. It names the single thing needed, for example confirming that the portal's new identity is yours. A computer that is up to date, turned off or simply quiet raises nothing.
+
+When a client such as Grok or Codex updates itself and the DPF tools stop working with the new version, the item names that client and version. The fix is a DPF update for that version. It arrives like any other update, and you do not need to do anything on the computer.
+
+Each update also looks for agent tools installed since the last one. A tool DPF does not support yet, such as VS Code or the Gemini CLI, is listed in the update's report rather than skipped without a word. Old Claude Code records for project folders that no longer exist are removed once, through Claude Code itself, after a backup.
 
 After an update that ships new agent tools, the portal posts one notification
 that names the clients still behind. Restarting the portal without an update

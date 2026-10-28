@@ -1,0 +1,9 @@
+{
+  "rosterCoverage": {
+    "heading": "Archetype roster",
+    "staffedLabel": "Staffed of required",
+    "missingLabel": "Missing roles",
+    "platformOrchestrators": "platform orchestrators",
+    "completeHint": "every required role is staffed"
+  }
+}

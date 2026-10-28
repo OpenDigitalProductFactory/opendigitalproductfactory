@@ -18,6 +18,33 @@ order: 2
 4. Publish only when the content is ready to be treated as the current operating record.
 5. Archive documents that should remain discoverable as history but should not guide current work.
 
+## Add a File
+
+Drop a file on the box at the top of Managed Documents, or select **Choose file**. Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text and markdown files up to 20 MB are accepted (hover over **Choose file** to see the list). The file becomes a managed document that you own, and the page opens it. Its PDF, searchable text and previews appear as soon as the background conversion finishes, exactly as for a file a coworker saved.
+
+A file you drop while a collection marked **Only me** is open is a restricted document too (see below). Otherwise everyone who can open Managed Documents can read it.
+
+## Collections
+
+A collection groups documents, like a folder. The collections you can open are listed above the search box; select one to see only its documents, or **All documents** to see everything.
+
+- **New collection** creates one. Tick **Only me** to make the collection itself restricted.
+- A file you drop while a collection is open is added to that collection.
+- A collection only shows the documents you may read. A restricted document in a shared collection stays hidden from people who may not read it, and a restricted collection is hidden as a whole.
+
+An AI coworker files a document in a collection with `doc_link` and the reference type `contains`.
+
+## Who Can Read a Document
+
+Every document has an access setting.
+
+- **Organization** (the default): everyone who can open Managed Documents can read it.
+- **Restricted**: only its owner, the person who created it, and anyone given access to it can read it. Access given to a person can have an end date; after that date it no longer counts.
+
+A restricted document you may not read does not appear anywhere for you: not in the list, in search results (including searches by meaning), in another document's references, or as a file, PDF, slide preview or export. Opening its address answers "not found", the same as a document that does not exist.
+
+AI coworkers follow the same rule for the person they act for. A coworker working for you sees exactly the documents you may read, and a restricted document a coworker saves for you is owned by you. Saving a new version keeps the document's access setting and owner; only the owner or creator can change who may read a restricted document.
+
 ## Office Files
 
 A document can be a stored file: a Word, Excel, PowerPoint, OpenDocument or RTF file saved by a coworker or an integration. After it is saved, the platform converts it in the background into a PDF and a plain-text copy.

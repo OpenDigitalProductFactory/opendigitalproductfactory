@@ -68,7 +68,7 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 Confirm a real pass by the artifacts, not the exit code:
 
 1. The run ends with the literal line `gate passed`.
-2. It wrote `.git/worktrees/<name>/dpf-local-ci-metadata.json` (path is echoed as `[local-integration-ci] metadata …`), and in that record **`candidateSha` is the commit you are about to push** and `baseSha` is the `origin/main` it merged against. Also check `evidencePlan.evidenceTier` / `fullSuite` describe the coverage you expected.
+2. It wrote `.git/worktrees/<name>/dpf-local-ci-metadata.json` (path is echoed as `[local-integration-ci] metadata …`), and in that record **`candidateSha` is the commit you are about to push** and `baseSha` is the `origin/main` it merged against. Read `execution.vitestCoverage` for completed local coverage; missing or incomplete receipts remain unknown. `evidencePlan` describes planned policy, not tests executed.
 3. Sanity-check the log actually contains gate work. `grep -v "admission queued"` — if nothing but queue polling remains, nothing ran.
 
 Then push normally: with a valid record for the head SHA the pre-push hook admits the push, and `DPF_SKIP_PREPUSH_GATE` is **not** needed.

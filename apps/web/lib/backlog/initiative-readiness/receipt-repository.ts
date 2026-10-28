@@ -13,6 +13,7 @@ import {
 import type { ReadinessProfile } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
+import { commitRangeHead, commitRangesEqual } from "./repo-commit-range";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
 import { boundReviewReceiptId, checkBoundReviewWriteExecution, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
@@ -134,10 +135,50 @@ export async function recordInitiativeGateReceipt(args: {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "The accepted plan review no longer matches the current canonical baseline and coverage. Reconcile the server-issued packet; do not substitute a different artifact under the original request key." };
   }
+  // BI-CE661173: a post-implementation review bound to a merged squash commit
+  // (not its room's recorded head) is accepted only when the trunk, read now,
+  // still names that commit as the item's delivery from that room.
+  // BI-46E344FE: a commit range binds a merged repair's whole change, and only
+  // a post-implementation review binds one. A room that never recorded its head
+  // is anchored to the merged head, so it too needs the trunk's proof.
+  const rangeArtifact = args.artifactRef.kind === "repo-commit-range" ? args.artifactRef : null;
+  if (rangeArtifact && args.gate !== "post-implementation-review") {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Only a post-implementation review binds a commit range." };
+  }
+  const artifactHead = args.artifactRef.kind === "repo-blob-at-commit" ? args.artifactRef.commitSha
+    : rangeArtifact ? commitRangeHead(rangeArtifact.ranges) : null;
+  const headlessAnchor = args.gate === "post-implementation-review" && args.workroomRef && artifactHead
+    ? (await prisma.workroom.findUnique({ where: { capsuleId: args.workroomRef.workroomId }, select: { headSha: true } }))?.headSha === null
+    : false;
+  const mergedRepairReview = args.gate === "post-implementation-review" && args.workroomRef && artifactHead
+    && (headlessAnchor || (rangeArtifact?.ranges.length ?? 1) > 1
+      || artifactHead.toLowerCase() !== args.workroomRef.headSha.toLowerCase());
+  let mergedRepairProof: { workroomId: string; commitSha: string } | undefined;
+  if (mergedRepairReview) {
+    const { defaultLoadMergedRepairSource } = await import("./merged-repair-source");
+    const source = await defaultLoadMergedRepairSource({ itemId: item.itemId, refusedWorkroomId: args.workroomRef!.workroomId });
+    const ref = args.workroomRef!;
+    const delivered = source.kind === "found"
+      ? (source.commits ?? [{ sha: source.mergedCommitSha, parentSha: source.parentSha }]).map((commit) => ({ baseSha: commit.parentSha.toLowerCase(), headSha: commit.sha.toLowerCase() })) : [];
+    const sameSource = source.kind === "found" && (rangeArtifact
+      ? commitRangesEqual(delivered, rangeArtifact.ranges.map((r) => ({ baseSha: r.baseSha.toLowerCase(), headSha: r.headSha.toLowerCase() })))
+      : delivered.length === 1 && delivered[0]!.headSha === artifactHead!.toLowerCase());
+    if (source.kind !== "found" || !sameSource
+      || source.room.capsuleId !== ref.workroomId || source.room.headBranch !== ref.branchName
+      || source.room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+        error: "The reviewed commit is no longer the item's merged repair from this Workroom on the trunk. Read get_backlog_item with recoveryGate \"post-implementation-review\" for the current request; do not substitute a commit." };
+    }
+    if (source.deliveryActorIds.includes(args.reviewerAgentId)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "A delivery actor cannot record the post-implementation review of its own repair." };
+    }
+    mergedRepairProof = { workroomId: ref.workroomId, commitSha: source.mergedCommitSha };
+  }
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
     workroomRef: args.workroomRef,
     canonicalPlanProof: canonicalPlanProof ?? undefined,
+    ...(mergedRepairProof ? { mergedRepairProof } : {}),
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
@@ -195,7 +236,7 @@ export async function recordInitiativeGateReceipt(args: {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan baseline or coverage changed before receipt publication." };
       }
     }
-    if (args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit") {
+    if (args.workroomRef && (args.artifactRef.kind === "repo-blob-at-commit" || rangeArtifact)) {
       const ref = args.workroomRef;
       // Provider verification happens outside the transaction. Lock the exact
       // room before append so ownership/head cannot change underneath its proof.
@@ -204,9 +245,11 @@ export async function recordInitiativeGateReceipt(args: {
         backlogItemId: true, repositoryFullName: true, headBranch: true, headSha: true,
         archivedAt: true, status: true, createdByPrincipalId: true,
       } });
-      if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
+      if (!room || (room.archivedAt && !mergedRepairProof) || ["abandoned", "cancelled"].includes(room.status)
         || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
-        || room.headBranch !== ref.branchName || room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()
+        || room.headBranch !== ref.branchName
+        // A headless anchor room carries the trunk-proven merged head (BI-46E344FE).
+        || (room.headSha ?? (mergedRepairProof ? mergedRepairProof.commitSha : null))?.toLowerCase() !== ref.headSha.toLowerCase()
         || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
           error: "The accepted review's workroom or accountable owner changed before receipt publication. Reconcile the actual workroom and review packet." };
@@ -257,7 +300,7 @@ export async function recordInitiativeGateReceipt(args: {
       receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
-    const executionRefusal = checkBoundReviewWriteExecution(args, taskLock.execution);
+    const executionRefusal = await checkBoundReviewWriteExecution(args, taskLock.execution, tx);
     if (executionRefusal) return executionRefusal;
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },

@@ -180,6 +180,20 @@ export function ensureInngestKeys(text, newline, exported = process.env) {
   return text;
 }
 
+// BI-084F85E5: the PKI bootstrap turns the remote-action channel on when it
+// writes the trust bundle (BI-28EFE18A), but only on a fresh bootstrap. An
+// install whose trust bundle predates that has the channel configured and off,
+// so the host-upkeep agent can never be dispatched to. Converge it here, on
+// every upgrade; an operator's explicit value, including 0, is kept.
+export const REMOTE_ACTION_DISPATCH_KEY = "DPF_REMOTE_ACTION_DISPATCH_ENABLED";
+export const EDGE_ACTION_DISPATCH_CONFIGURED_KEY = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED";
+
+export function ensureRemoteActionDispatch(text, newline) {
+  if (envValue(text, EDGE_ACTION_DISPATCH_CONFIGURED_KEY) !== "1") return text;
+  if (new RegExp(`^${REMOTE_ACTION_DISPATCH_KEY}=`, "m").test(text)) return text;
+  return `${text}${text && !text.endsWith("\n") ? newline : ""}${REMOTE_ACTION_DISPATCH_KEY}=1${newline}`;
+}
+
 export function updateEnv(bytes, releaseTag, ghcrOwner) {
   let text = bytes?.toString("utf8") ?? "";
   const preExisting = text.trim().length > 0;
@@ -200,6 +214,7 @@ export function updateEnv(bytes, releaseTag, ghcrOwner) {
   text = ensureGppPermitSecret(text, newline);
   text = ensureDedicatedSigningKeys(text, newline);
   text = ensureInngestKeys(text, newline);
+  text = ensureRemoteActionDispatch(text, newline);
   return Buffer.from(text);
 }
 

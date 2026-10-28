@@ -157,6 +157,38 @@
       "label": "Settle",
       "exitCriteria": []
     },
+    "platform-delivery::5.3.2": {
+      "label": "Plan Product Release",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.3.3": {
+      "label": "Design & Develop",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.3.4": {
+      "label": "Build, Integrate & Test",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.3.5": {
+      "label": "Accept & Publish Release",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.4.2": {
+      "label": "Plan & Approve Deployment",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.4.3": {
+      "label": "Fulfill Deployment",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.4.4": {
+      "label": "Validate Deployment",
+      "exitCriteria": []
+    },
+    "platform-delivery::5.4.5": {
+      "label": "Observe Deployment",
+      "exitCriteria": []
+    },
     "tech-currency::approaching-eol": {
       "label": "Approaching EOL",
       "exitCriteria": []
@@ -360,6 +392,38 @@
       "band": "on-track"
     },
     "ovsm::settle::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.3.2::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.3.3::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.3.4::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.3.5::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.4.2::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.4.3::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.4.4::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "platform-delivery::5.4.5::in-stage": {
       "label": "In stage",
       "band": "on-track"
     },

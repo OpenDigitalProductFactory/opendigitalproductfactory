@@ -13,6 +13,7 @@ export const SETUP_STEPS = [
   "storefront",          // /storefront — customer-facing portal setup
   "mailroom",            // /workspace/mailroom — declare the mailboxes the Mailroom reads, or learn what it would do (design 2026-09-09 §4.9)
   "platform-development",// /admin/platform-development — contribution mode
+  "monitoring",          // /admin/settings/monitoring — only while runtime:deep-observability is undecided
   "build-studio",        // /build — show the self-development capability
   "meet-your-coo",       // /workspace — optionally choose a conversational name for the standing COO
   "workspace",           // /workspace — see the workspace, meet the COO
@@ -28,6 +29,7 @@ export const STEP_ROUTES: Record<string, string> = {
   "storefront": "/storefront",
   "mailroom": "/workspace/mailroom",
   "platform-development": "/admin/platform-development",
+  "monitoring": "/admin/settings/monitoring",
   "build-studio": "/build",
   "meet-your-coo": "/workspace",
   "workspace": "/workspace",
@@ -38,6 +40,27 @@ export const STEP_ROUTES: Record<string, string> = {
 
 export type SetupStep = (typeof SETUP_STEPS)[number];
 export type StepStatus = "pending" | "completed" | "skipped";
+
+/** install-state `runtimeCapabilityDecisions["runtime:deep-observability"].decision`. */
+export type MonitoringCapabilityDecision = "enabled" | "disabled" | "undecided";
+
+export function parseMonitoringCapabilityDecision(
+  value: string | null | undefined,
+): MonitoringCapabilityDecision | null {
+  if (value === "enabled" || value === "disabled" || value === "undecided") return value;
+  return null;
+}
+
+/**
+ * Monitoring is offered only while nobody has chosen the capability.
+ * Enabled, disabled, or a missing record hides the step.
+ */
+export function visibleSetupSteps(
+  monitoringDecision: MonitoringCapabilityDecision | null | undefined,
+): SetupStep[] {
+  if (monitoringDecision === "undecided") return [...SETUP_STEPS];
+  return SETUP_STEPS.filter((step) => step !== "monitoring");
+}
 
 export type SetupContext = {
   orgName?: string;
@@ -55,6 +78,12 @@ export type SetupContext = {
    * boolean goes stale the moment the owner connects or attests one.
    */
   cloudProviderReadiness?: "none" | "public-only" | "ready";
+  /**
+   * Live install-state decision for runtime:deep-observability.
+   * Only "undecided" offers the monitoring step. Computed in getSetupContext,
+   * not stored — a stored copy would hide or show the step after the host moved on.
+   */
+  monitoringCapabilityDecision?: MonitoringCapabilityDecision;
   cooConversationalName?: string;
   skippedSteps?: string[];
   /** The owner skipped the Mailroom step with no mailbox to connect; the page

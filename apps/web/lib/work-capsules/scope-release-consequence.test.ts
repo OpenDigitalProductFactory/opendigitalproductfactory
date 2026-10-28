@@ -69,7 +69,7 @@ describe("delegated own-scope release", () => {
       refinement: { declared: "authority", reason: "refinement-unavailable" } });
   });
 
-  it("retains independent policy limits even when an effect is ordinary", () => {
+  it("retains independent policy limits even when an effect is ordinary", async () => {
     const action = { sideEffect: true, executionMode: "immediate" as const, consequence: null };
     const input = { action, dataPolicy: { sensitivity: "internal" as const }, operatorRequiresApproval: true,
       steering: "connection-delegation" as const };
@@ -78,6 +78,7 @@ describe("delegated own-scope release", () => {
     expect(resolveEscalation({ ...input, action: { ...action, workCaseConsequential: true } }).verdict).toBe("human");
     const handoff = workCapsulesPack.definitions.find(entry => entry.name === "reassign_workroom_executor")!;
     expect(handoff.consequence).toBe("authority");
-    expect(handoff.consequenceForCall).toBeUndefined();
+    expect(handoff.consequenceForCall).toBeTypeOf("function");
+    await expect(handoff.consequenceForCall!({ toolName: "reassign_workroom_executor", params: { capsuleId: "WC-LEGACY", toExecutorKind: "codex-desktop" }, userId: "user-1" })).resolves.toMatchObject({ consequence: "authority" });
   });
 });

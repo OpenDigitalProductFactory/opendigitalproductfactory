@@ -18,6 +18,7 @@ import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mj
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 import { readHostAttemptContext, resolveHostAttempt, hostResumePin } from "./lib/host-resource-attempt.mjs";
+import { observeHostReservation } from "./lib/host-reservation-observation.mjs";
 
 const PROFILE_CONTRACT = JSON.parse(readFileSync(
   new URL("../apps/web/lib/nonprod/host-resource-profiles.json", import.meta.url),
@@ -448,8 +449,11 @@ async function main() {
 
   if (claim?.data?.admission?.status !== "admitted") throw Object.assign(new Error("Host admission unproven."),
     { code: "host_admission_refused", reason: "admission-response-unproven", commandExecuted: false });
+  const observeReservation = () => observeHostReservation({ binding: claim.data.lease,
+    call: (name, params) => mcpCall(name, params, connection) });
+  const reportReservation = observation => process.stderr.write(JSON.stringify(observation) + "\n");
   try { resolveHostAttempt(identify(), hostResumePin(attempt, leaseId)); } catch {
-    await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
+    reportReservation(await observeReservation());
     process.exitCode = 82;
     return;
   }
@@ -465,19 +469,13 @@ async function main() {
       ownerSessionId,
       ttlMinutes: 10,
     }, connection),
-    release: async () => {
-      const reply = await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
-      const lease = reply?.data?.lease;
-      if (reply?.success !== true || reply.entityId !== leaseId || lease?.leaseId !== leaseId
-        || lease.ownerSessionId !== ownerSessionId || !["released", "cancelled", "expired"].includes(lease.status)) {
-        throw new Error("host_lease_cleanup_unproven");
-      }
-    },
+    observeReservation,
     onEvent: event => {
-      if (event.type === "release-failed") process.stderr.write(JSON.stringify({
-        status: "cleanup-unproven", cleanupVerified: false, commandExecuted: child.commandExecuted, leaseId,
-        recovery: { tool: "release_nonprod_environment_lease", arguments: { leaseId, ownerSessionId } },
-      }) + "\n");
+      if (event.type === "reservation-observed") reportReservation(event.observation);
+      if (event.type === "reservation-observation-unavailable") reportReservation({
+        status: "host-reservation", mode: "natural-expiry", leaseId,
+        reservationState: "unknown", processCleanupVerified: false, reason: "readback-unavailable",
+      });
     },
   });
   if (result.status !== "completed") {

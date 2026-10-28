@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 678,
+  "routeCount": 681,
   "routes": [
     {
       "routePath": "/",
@@ -864,6 +864,17 @@
         "path"
       ],
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
+    },
+    {
+      "routePath": "/api/documents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/documents/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/documents/[documentId]/content",
@@ -4295,6 +4306,22 @@
       "exposure": "authenticated"
     },
     {
+      "routePath": "/api/workspace/cases/[caseKey]/projection",
+      "kind": "route",
+      "segments": [
+        "api",
+        "workspace",
+        "cases",
+        "[caseKey]",
+        "projection"
+      ],
+      "dynamicParams": [
+        "caseKey"
+      ],
+      "file": "apps/web/app/api/workspace/cases/[caseKey]/projection/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/area/[key]",
       "kind": "page",
       "segments": [
@@ -5856,6 +5883,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/dev-loop/page.tsx"
+    },
+    {
+      "routePath": "/ops/gate-efficacy",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "gate-efficacy"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/gate-efficacy/page.tsx"
     },
     {
       "routePath": "/ops/health",

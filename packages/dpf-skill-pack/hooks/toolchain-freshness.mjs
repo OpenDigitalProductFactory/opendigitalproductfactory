@@ -14,7 +14,9 @@
 // - With no Python, it fetches the manifest itself and compares versions. It
 //   can prove a copy stale, but not current, so a version match is "unknown".
 // - The network wait is 2 seconds. Offline is "unknown", never "current".
-// - It always prints one line (current, stale or unknown). It never writes.
+// - It always prints one line (current, stale or unknown). It writes nothing;
+//   when a copy is stale it may start (or install) the host agent, which does
+//   the writing (BI-65C17737).
 //
 // Clients: Claude Code and Codex load it from hooks/hooks.json. Grok runs
 // plugin hooks only from ~/.grok/hooks, so grok-session-start.mjs calls this
@@ -206,6 +208,86 @@ export async function versionOnlyCheck(env, why) {
   return { status: "unknown", reference, reason: `${why}, so only versions were compared: no copy is older than ${want}, but content was not checked` };
 }
 
+// ── host agent backstop (BI-65C17737, spec 2026-10-27 M8) ──────────────────
+//
+// The host agent (scripts/toolchain_agent.py) converges this machine on its
+// own. When a session finds a stale copy, the hook starts that agent once
+// (never waiting for it) or installs it on a pinned host that has none, and
+// says that no approval is needed: only a restart loads the result. It reads
+// the agent's state file for anything the operator must do. No network call.
+
+const AGENT_LABEL = "local.dpf.toolchain-agent";
+const AGENT_UNIT = "dpf-toolchain-agent";
+const AGENT_TASK = "DPF Toolchain Agent";
+const KICK_INTERVAL_MS = 10 * 60 * 1000;
+
+/** Plain-language next step for each agent problem code. */
+const OPERATOR_STEPS = {
+  identity_changed: "this portal's identity changed since it was paired. Ask the user once whether to trust the new identity before any update",
+  identity_mismatch: "the portal is signed by a different installation than the one paired. Ask the user before any update",
+  "not-paired": "this host has not been paired with a portal yet. One approved update from the portal pairs it and installs the agent",
+  "ambiguous-origin": "several portals are paired. The user chooses one in ~/.dpf/toolchain-agent/config.json ({\"origin\": \"https://…\"})",
+  "not-bootstrapped": "the DPF tools were never installed on this host. One approved update from the portal installs them and the agent",
+};
+
+function agentScheduled(home, platform) {
+  if (platform === "darwin") return existsSync(join(home, "Library", "LaunchAgents", `${AGENT_LABEL}.plist`));
+  if (platform === "win32") return existsSync(join(home, ".dpf", "toolchain-agent", "schedule.json"));
+  return existsSync(join(home, ".config", "systemd", "user", `${AGENT_UNIT}.timer`));
+}
+
+function kickCommand(platform, uid) {
+  if (platform === "darwin") return ["launchctl", ["kickstart", `gui/${uid}/${AGENT_LABEL}`]];
+  if (platform === "win32") return ["schtasks", ["/Run", "/TN", AGENT_TASK]];
+  return ["systemctl", ["--user", "start", "--no-block", `${AGENT_UNIT}.service`]];
+}
+
+/**
+ * Lines to add after the freshness report. `options.run(cmd, args)` is the
+ * process launcher (spawnSync by default), injected so tests never start a job.
+ */
+export function agentBackstop(report, env = process.env, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const now = options.now ?? Date.now();
+  const uid = options.uid ?? (typeof process.getuid === "function" ? process.getuid() : 0);
+  const run = options.run ?? ((cmd, args) => spawnSync(cmd, args, { encoding: "utf8", timeout: 15000, windowsHide: true }));
+  const home = homeDir(env);
+  const state = readJson(join(home, ".dpf", "toolchain-agent", "state.json")) ?? {};
+  const lines = [];
+  if (state.status === "needs-operator" && state.code) {
+    const step = OPERATOR_STEPS[state.code] ?? `the host agent stopped with ${state.code}${state.detail ? ` (${state.detail})` : ""}`;
+    lines.push(`DPF host agent needs the operator: ${step}.`);
+    return lines;
+  }
+  if (report?.status !== "stale") return lines;
+  if (state.status === "opted-out") {
+    lines.push("The DPF host agent is opted out on this host (~/.dpf/toolchain-agent/config.json), so updates still need the user's approval once per update.");
+    return lines;
+  }
+  const pins = readJson(join(home, ".dpf", "trusted-installations.json"))?.installations;
+  const paired = pins && typeof pins === "object" && Object.keys(pins).length > 0;
+  const agentScript = join(home, ".agents", "plugins", "plugins", "dpf-platform", "scripts", "toolchain_agent.py");
+  if (agentScheduled(home, platform)) {
+    const lastCheck = Number(state.lastCheckAt ?? 0) * 1000;
+    if (now - lastCheck >= KICK_INTERVAL_MS) {
+      const [cmd, args] = kickCommand(platform, uid);
+      run(cmd, args);
+    }
+    lines.push("The DPF host agent is updating these copies now; no approval is needed. When it finishes, the user only needs to restart this client (Claude Code: /reload-plugins).");
+    return lines;
+  }
+  if (paired && existsSync(agentScript)) {
+    const [python, ...prefix] = pythonCandidates(env, platform)[0] ?? [];
+    if (python) {
+      run(python, [...prefix, agentScript, "install"]);
+      lines.push("Installed the DPF host agent; it is updating these copies now, so no approval is needed. Afterwards the user only needs to restart this client (Claude Code: /reload-plugins).");
+      return lines;
+    }
+  }
+  lines.push("This host has no DPF host agent yet. Ask the user once to approve an update from the portal; that update also installs the agent, so later updates need no approval.");
+  return lines;
+}
+
 /** The one line (or block) the session sees. */
 export function renderReport(report) {
   const tail = `(${BACKLOG_ID}; silence: DPF_SKIP_PLUGIN_COPY_CHECK=1)`;
@@ -240,8 +322,15 @@ async function main() {
   } catch (error) {
     report = { status: "unknown", reason: `the check failed (${error?.message ?? error})` };
   }
+  let backstop = [];
+  try {
+    backstop = agentBackstop(report, env);
+  } catch {
+    backstop = [];
+  }
+  const context = [renderReport(report), ...backstop].join("\n");
   process.stdout.write(
-    JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: renderReport(report) } }),
+    JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } }),
   );
 }
 

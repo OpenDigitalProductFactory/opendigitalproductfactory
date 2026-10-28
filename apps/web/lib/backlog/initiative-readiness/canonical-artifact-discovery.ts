@@ -1,9 +1,12 @@
 import { prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
-import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { NO_MARKED_OBJECTIVE_STATEMENTS, parseInitiativeScopeManifest } from "./baseline-manifest";
 import type { CurrentDesignEvidence } from "./judged-design-artifact";
+import { prepareCurrentArtifactObservation } from "./current-artifact-observation";
+import { prepareCurrentResearchObservation, type CurrentResearchPorts } from "./current-research-artifact";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
+import { changesFromProviderCompare, commitRangeDigest, type CommitRange } from "./repo-commit-range";
 
 import {
   cancelGithubResponseBody,
@@ -27,7 +30,9 @@ type BoundDesign = {
   artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
   room: { capsuleId: string; repositoryFullName: string; baseSha: string; headSha: string; headBranch: string };
 };
-type CurrentDesignBinding = BoundDesign | { kind: "not-applicable" | "unavailable" };
+type CurrentDesignBinding = BoundDesign
+  | { kind: "not-applicable"; mayInheritResearch?: true }
+  | { kind: "unavailable" };
 type ClaimSource = {
   repositoryFullName: string; headBranch: string;
   baseSha?: string | null; headSha?: string | null;
@@ -43,7 +48,8 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, cla
   const baseline = parseReadinessBaselines(activities, item.itemId);
   if (baseline.malformed || baseline.ambiguous) return { kind: "unavailable" };
   // A child with only inherited scope never authors a parent amendment.
-  if (!baseline.current || baseline.current.origin === "item-body") return { kind: "not-applicable" };
+  if (!baseline.current) return { kind: "not-applicable", mayInheritResearch: true };
+  if (baseline.current.origin === "item-body") return { kind: "not-applicable" };
   if (!baseline.current.artifactRef) return { kind: "unavailable" };
   if (baseline.current.artifactRef.kind !== "repo-blob-at-commit") return { kind: "not-applicable" };
   // A claim tuple narrows the persisted subject binding; it supplies neither
@@ -84,8 +90,26 @@ export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
   const bytes = await readRepositoryProviderBlob({ repositoryFullName: binding.room.repositoryFullName,
     commitSha: binding.room.headSha, path: discovered.resolved ? discovered.artifact.path : binding.artifactRef.path,
     expectedBlobId: discovered.resolved ? discovered.artifact.providerBlobId : null });
-  return bytes.ok ? { state: "verified", digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}` }
-    : { state: "unavailable" };
+  if (!bytes.ok) return { state: "unavailable" };
+  return {
+    state: "verified",
+    digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}`,
+    ...missingObjectiveError(bytes.data),
+  };
+}
+
+/** Only a missing-objective parse is surfaced. Other read failures keep their own remedies. */
+function missingObjectiveError(data: Uint8Array): { scopeManifestError: string } | Record<string, never> {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return {};
+  }
+  const manifest = parseInitiativeScopeManifest(text);
+  return manifest.ok || manifest.error !== NO_MARKED_OBJECTIVE_STATEMENTS
+    ? {}
+    : { scopeManifestError: manifest.error };
 }
 
 /** Provider work stays outside transactions; only this server closure crosses admission. */
@@ -97,6 +121,7 @@ export async function prepareCurrentDesignObservation(args: {
     loadBinding: (itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource) => Promise<CurrentDesignBinding>;
     readCurrentArtifact: (binding: BoundDesign) => Promise<CurrentDesignEvidence>;
     lockBinding: (binding: BoundDesign, db: CurrentDesignDb) => Promise<void>;
+    research: CurrentResearchPorts;
   }>;
 }): Promise<{ evidence: CurrentDesignEvidence; admissionGuard: (tx: CurrentDesignDb) => Promise<CurrentDesignEvidence> }> {
   const db = args.db ?? prisma;
@@ -106,28 +131,26 @@ export async function prepareCurrentDesignObservation(args: {
     headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
   const unavailable = { state: "unavailable" } as const;
-  let initial: CurrentDesignBinding;
-  let evidence: CurrentDesignEvidence;
-  try {
-    initial = await load(args.itemId, db, claimSource);
-    evidence = initial.kind === "bound" ? await read(initial) : { state: initial.kind };
-    if (canonicalJson(await load(args.itemId, db, claimSource)) !== canonicalJson(initial)) evidence = unavailable;
-  } catch {
-    initial = { kind: "unavailable" }; evidence = unavailable;
-  }
-  return { evidence, admissionGuard: async tx => {
-    if (evidence.state === "unavailable") return unavailable;
-    try {
-      if (initial.kind === "bound") {
-        if (args.ports?.lockBinding) await args.ports.lockBinding(initial, tx);
-        else {
-          if (!tx.$queryRaw) return unavailable;
-          await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${initial.itemRowId} FOR UPDATE`;
-          await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${initial.room.capsuleId} FOR SHARE`;
-        }
-      }
-      return canonicalJson(await load(args.itemId, tx, claimSource)) === canonicalJson(initial) ? evidence : unavailable;
-    } catch { return unavailable; }
+  let mayInheritResearch = false;
+  const design = await prepareCurrentArtifactObservation<CurrentDesignBinding, CurrentDesignEvidence>({
+    db, load: currentDb => load(args.itemId, currentDb as CurrentDesignDb, claimSource), read,
+    unbound: binding => {
+      mayInheritResearch = binding.kind === "not-applicable" && binding.mayInheritResearch === true;
+      return { state: binding.kind };
+    }, unavailable,
+    isUnavailable: evidence => evidence.state === "unavailable",
+    lock: args.ports?.lockBinding ? (binding, currentDb) => args.ports!.lockBinding!(binding, currentDb as CurrentDesignDb) : undefined,
+  });
+  // Own body/document baselines cannot inherit, so do not fetch unused research
+  // bytes for those subjects. The projector remains the inheritance authority.
+  const research = design.evidence.state === "not-applicable" && mayInheritResearch
+    ? await prepareCurrentResearchObservation({ itemId: args.itemId, db, claimSource, ports: args.ports?.research }) : null;
+  const combine = (evidence: CurrentDesignEvidence, ownResearch: CurrentDesignEvidence["research"]) =>
+    ownResearch ? { ...evidence, research: ownResearch } : evidence;
+  return { evidence: combine(design.evidence, research?.evidence), admissionGuard: async tx => {
+    const ownResearch = research ? await research.admissionGuard(tx) : undefined;
+    const evidence = await design.admissionGuard(tx);
+    return combine(evidence, ownResearch);
   } };
 }
 
@@ -136,8 +159,11 @@ export type DiscoveredCanonicalArtifact = {
   providerBlobId: string;
 };
 
+/** BI-46E344FE: a post-implementation review of a multi-file repair binds its whole range. */
+export type DiscoveredCommitRangeArtifact = { kind: "repo-commit-range"; ranges: CommitRange[]; digest: string };
+
 export type CanonicalArtifactDiscoveryResult =
-  | { resolved: true; artifact: DiscoveredCanonicalArtifact }
+  | { resolved: true; artifact: DiscoveredCanonicalArtifact | DiscoveredCommitRangeArtifact }
   | {
     resolved: false;
     code: "no-canonical-design" | "ambiguous-canonical-design" | "no-repair-artifact" | "ambiguous-repair-artifact" | "provider-unavailable";
@@ -261,9 +287,13 @@ export async function discoverCanonicalReviewArtifact(args: {
 /** Design gates retain their design-only contract; only PIR may bind repair source. */
 export async function discoverCanonicalDesignArtifact(
   args: Omit<Parameters<typeof discoverCanonicalReviewArtifact>[0], "purpose">,
-): Promise<CanonicalArtifactDiscoveryResult> {
-  return discoverCanonicalReviewArtifact({ ...args, purpose: undefined });
+): Promise<CanonicalDesignDiscoveryResult> {
+  // Without the PIR purpose discovery never binds a commit range.
+  return discoverCanonicalReviewArtifact({ ...args, purpose: undefined }) as Promise<CanonicalDesignDiscoveryResult>;
 }
+
+export type CanonicalDesignDiscoveryResult = Exclude<CanonicalArtifactDiscoveryResult, { resolved: true }>
+  | { resolved: true; artifact: DiscoveredCanonicalArtifact };
 
 async function discoverCanonicalDesignArtifactWithFetch(
   args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review";
@@ -372,7 +402,7 @@ async function discoverCanonicalDesignArtifactWithFetch(
     .sort((left, right) => left.filename.localeCompare(right.filename));
   if (candidates.length === 0) {
     if (args.purpose === "post-implementation-review") {
-      return discoverRepairArtifact(files);
+      return discoverRepairArtifact(files, payload, { baseSha: args.baseSha, headSha: args.headSha });
     }
     return {
       resolved: false,
@@ -411,8 +441,13 @@ function isVersionOnlyChange(file: CompareFile): boolean {
     && changed.some((line) => line.startsWith("+")) && changed.some((line) => line.startsWith("-"));
 }
 
-/** A single implementation artifact may be accompanied by tests, explanatory docs and version bumps. */
-function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscoveryResult {
+/**
+ * A single implementation artifact may be accompanied by tests, explanatory docs
+ * and version bumps, and is bound as that one blob. A repair with several
+ * implementation files is bound whole, as its compared range (BI-46E344FE):
+ * no file is chosen arbitrarily, and none is left out of the review.
+ */
+function discoverRepairArtifact(files: CompareFile[], payload: unknown, range: CommitRange): CanonicalArtifactDiscoveryResult {
   const valid = files.filter((file) => /^[a-f0-9]{40}$/i.test(file.sha)
     && !file.filename.includes("\\")
     && file.filename.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."));
@@ -426,11 +461,19 @@ function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscover
     const file = candidates[0]!;
     return { resolved: true, artifact: { path: file.filename, providerBlobId: file.sha } };
   }
+  if (candidates.length > 1) {
+    const changes = changesFromProviderCompare(payload);
+    if (!changes) {
+      return { resolved: false, code: "provider-unavailable",
+        nextAction: "Repository provider returned an incomplete file list for the repair range. Retry once provider access is restored." };
+    }
+    const ranges = [{ baseSha: range.baseSha.toLowerCase(), headSha: range.headSha.toLowerCase() }];
+    return { resolved: true, artifact: { kind: "repo-commit-range", ranges,
+      digest: commitRangeDigest([{ range: ranges[0]!, files: changes }]) } };
+  }
   return {
     resolved: false,
-    code: candidates.length > 1 ? "ambiguous-repair-artifact" : "no-repair-artifact",
-    nextAction: candidates.length > 1
-      ? `The repair has multiple implementation artifacts (${candidates.map((file) => file.filename).join(", ")}). Narrow the review to an independently reviewable repair or use its existing canonical design. No artifact was selected arbitrarily.`
-      : "The recorded range contains no unique surviving repair artifact. Verify the pushed base/head and repair scope; a post-implementation review does not require a new design document.",
+    code: "no-repair-artifact",
+    nextAction: "The recorded range contains no unique surviving repair artifact. Verify the pushed base/head and repair scope; a post-implementation review does not require a new design document.",
   };
 }

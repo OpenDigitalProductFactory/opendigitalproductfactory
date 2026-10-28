@@ -117,6 +117,8 @@
   "providerAndModelCatalog": "Provider and model catalog",
   "routingTraffic": "Routing traffic",
   "searchByNameTaskModelOrIdentifier": "Search by name, task, model or identifier",
+  "noMatchingProviders": "No matching providers",
+  "clearSearchOrTryProviderOrModel": "Clear the search or try a provider or model name.",
   "settingsOverrides": "Settings & overrides",
   "eligibilityEvidenceUnavailable": "Eligibility evidence unavailable",
   "exposedCatalogModels": "exposed catalog models",

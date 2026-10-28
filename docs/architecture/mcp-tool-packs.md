@@ -166,6 +166,19 @@ with an audit retaining the original declaration and trusted approval reference.
 It changes no principal clearance or membership. The operator workflow is in
 [Work rooms](../user-guide/workspace/work-rooms.md).
 
+`list_workrooms(view="definitions")` returns a bounded catalogue from the
+canonical source registry and review-profile composer. Omitting `view` retains
+instance observations. Definition pages include sparse sources and canonical
+aliases, with profile composition status, fingerprints and canonical conflict reasons. They report
+`not-exercised` occurrence assessment and `unknown` organization applicability;
+definition counts never stand in for successful execution or coverage.
+
+The view keeps `view_platform`, `work_capsule_read` and native user context.
+It reads no room records. Instance filters and cursors are refused, and a
+changed definition inventory requires a fresh traversal. Whole pages fit the
+existing result budget; a refusal never advances past unseen definitions.
+The full contract is in [Workroom review profiles](workroom-review-profile-contract.md).
+
 `list_workrooms` accepts `headBranch` and `pullRequestNumber` so an assistant
 asked to take over a PR can find its room (BI-679D2BF6). For an OAuth
 assistant, a lookup also matches the person's rooms that another assistant
@@ -173,6 +186,22 @@ created. Those rows carry only the fields `workroom_assistant_not_admitted`
 already discloses, plus the `reassign_workroom_executor` call. An unfiltered
 listing keeps the person-and-assistant scope. The design is the executor
 takeover design under BI-E2871BDE.
+
+`workroom_assistant_not_admitted` also returns the room's stored executor
+`checkpoint`, its bound `pullRequest` and `leaseExpiresAt`, so the assistant
+can decide on a takeover without reading the room's history (BI-D4144471).
+`reassign_workroom_executor` accepts `capsuleIds` (1 to 20) instead of
+`capsuleId` to hand over a set of rooms. The call is a dry run by default: it
+returns each room's executor, lease holder and checkpoint, plus a `planDigest`
+over the sorted (room, executor, lease holder) tuples. A dry run changes
+nothing, so it needs no approval. Applying (`dryRun: false`) needs that digest,
+and the approval fingerprint covers the set and the digest. If any room changed
+since the dry run, the whole call is refused. Otherwise each room goes through
+the single-room handover with its planned lease holder. A room taken in between
+is skipped and reported, and each handed-over room records its own
+`executor-changed` activity with its checkpoint. The governed OAuth check
+applies the single-room handover rule to every listed room and refuses the
+whole call if any room fails it.
 
 `work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
 `adopt_worktree`, so a field added there reaches both convene paths at once. That is how
@@ -205,7 +234,9 @@ Three properties make the binding honest rather than merely present. The id is *
 handlers came from **inline** `case` bodies rather than a sibling handler module. It owns the
 three platform-feedback tools — `report_quality_issue` (→ `createPlatformIssueReport`),
 `escalate_feedback_upstream` (→ `escalateReportUpstream`), and `register_tech_debt`
-(`createTechDebtItem` + a direct `prisma` write). Each handler lazy-imports its dependency and
+(`createTechDebtItem` + a direct `prisma` write). `register_tech_debt` takes an optional
+`outcome` and `howWeKnow`; without an outcome the item records that the shortcut is replaced
+by the intended design (BI-458CCA8D). Each handler lazy-imports its dependency and
 reproduces the former switch case verbatim; the three definitions and switch cases (and the
 now-unused helper imports) are gone from `mcp-tools.ts`.
 

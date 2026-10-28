@@ -51,15 +51,90 @@ vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
 vi.mock("./mcp-task-review-outcome", () => ({ loadTaskInitiativeReviewOutcome: vi.fn().mockResolvedValue(null) }));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import { resumeApprovedTask } from "./mcp-task-submit-approval-recovery";
+import { captureTaskExecutionFence } from "./shared/task-execution-fence";
+import { settleRemoteTask } from "./mcp-task-attempt-state";
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   db.createEnvelope.mockResolvedValue({ id: "ENV-REPLACEMENT" });
   db.updateEnvelopes.mockResolvedValue({ count: 1 });
   db.createToolExecution.mockResolvedValue({ id: "tool-proposal-new" });
   db.updateMany.mockResolvedValue({ count: 1 });
   db.transaction.mockImplementation(async (callback: (tx: unknown) => unknown, tx: unknown) => callback(tx));
   db.findModelConfig.mockResolvedValue({ minimumTier: "strong", budgetClass: "quality_first" });
+});
+
+it("refuses a displaced bound approval before marking working or invoking its tool", async () => {
+  const digest = "b".repeat(64);
+  const captured = { schemaVersion: 1, reservation: "original-reservation", dispatchClaim: "original-dispatch", authorityDigest: null, requestDigest: digest };
+  const binding = { writerToolName: "record_initiative_design_review", itemId: "BI-7906C73E", gate: "spec-approval",
+    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40), path: "docs/review.md", providerBlobId: "c".repeat(40) } };
+  const existing = { id: "fixture-row", taskRunId: "TR-BOUND-FIXTURE", userId: "human", threadId: "fixture-thread", contextId: "fixture-thread",
+    status: "input-required", updatedAt: new Date("2026-10-20T01:00:00Z"), completedAt: null, lastHeartbeatAt: null,
+    currentAgentId: "AGT-WS-REVIEW", a2aMetadata: { trigger: "external-mcp", requestDigest: digest, requestedAgentId: "AGT-WS-REVIEW", initiativeReviewBinding: binding },
+    progressPayload: { resumeReservedAt: "later-reservation", dispatch: { claimedAt: "later-dispatch" } } };
+  db.findEnvelope.mockResolvedValue({ id: "ENV-FIXTURE", threadId: "fixture-thread", manifestActionId: binding.writerToolName });
+  db.findToolExecution.mockResolvedValue({ parameters: { decision: "pass", reason: "Fixture only", findings: [], resolvedFindingRefs: [], _taskExecutionFence: captured } });
+  db.findUnique.mockResolvedValue({ status: "working" });
+  autonomous.executeTool.mockResolvedValue({ success: true, message: "Mocked effect" });
+  await resumeApprovedTask({ existing, userId: "human", tokenId: "fixture-token", tokenScope: "write",
+    userContext: { platformRole: "developer", isSuperuser: false }, routeContext: "/build", agentId: "AGT-WS-REVIEW", riskClass: "bounded-write", reviewWriterToolName: binding.writerToolName });
+  expect(autonomous.executeTool).not.toHaveBeenCalled();
+  expect(db.updateMany).not.toHaveBeenCalled();
+  expect(db.update).not.toHaveBeenCalled();
+});
+
+it.each(["current", "uncertain", "authority", "canceled", "owner", "actor", "request", "cas-lost"])("settles approved bound execution only while its full identity remains current: %s", async mode => {
+  const requestDigest = "d".repeat(64);
+  const progressPayload: Record<string, unknown> = { resumeReservedAt: "original", reviewExecutionAuthority: { schemaVersion: 1, tokenId: "original" } };
+  const executionFence = captureTaskExecutionFence(progressPayload, requestDigest)!;
+  const current = { status: "working", userId: "human", currentAgentId: "reviewer", updatedAt: new Date(),
+    a2aMetadata: { requestDigest }, progressPayload };
+  if (mode === "uncertain") progressPayload.executionUncertainty = { settlement: "unknown" };
+  if (mode === "authority") progressPayload.reviewExecutionAuthority = { schemaVersion: 1, tokenId: "later" };
+  if (mode === "canceled") current.status = "canceled";
+  if (mode === "owner") current.userId = "other";
+  if (mode === "actor") current.currentAgentId = "other";
+  if (mode === "request") current.a2aMetadata.requestDigest = "e".repeat(64);
+  db.findUnique.mockResolvedValue(current);
+  if (mode === "cas-lost") db.updateMany.mockImplementationOnce(async () => {
+    db.findUnique.mockResolvedValue({ ...current, status: "canceled" }); return { count: 0 };
+  });
+  const result = await settleRemoteTask({ where: { taskRunId: "bound" }, data: { status: "completed", progressPayload: { summary: "Approved result" } } },
+    "original", null, { executionFence, userId: "human", agentId: "reviewer" });
+  if (mode === "current") expect(result).toBeNull();
+  else {
+    expect(result).not.toBeNull();
+    if (mode !== "cas-lost") expect(db.updateMany).not.toHaveBeenCalled();
+  }
+  expect(db.update).not.toHaveBeenCalled();
+});
+
+it("admits only one concurrent exact bound approval resume", async () => {
+  const requestDigest = "f".repeat(64), agentId = "reviewer", taskRunId = "bound-concurrent";
+  const binding = { writerToolName: "record_initiative_design_review", itemId: "BI-7906C73E", gate: "spec-approval",
+    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40),
+      path: "docs/review.md", providerBlobId: "b".repeat(40) } };
+  const original = { id: "row", taskRunId, userId: "human", threadId: "thread", contextId: null,
+    currentAgentId: agentId, status: "input-required", updatedAt: new Date(100), completedAt: null, lastHeartbeatAt: null,
+    progressPayload: {}, a2aMetadata: { requestDigest, requestedAgentId: agentId, initiativeReviewBinding: binding } };
+  let current = structuredClone(original);
+  db.findEnvelope.mockResolvedValue({ id: "envelope", threadId: "thread", manifestActionId: binding.writerToolName });
+  db.findToolExecution.mockResolvedValue({ parameters: { decision: "pass", _taskExecutionFence: captureTaskExecutionFence({}, requestDigest) } });
+  db.findUnique.mockImplementation(async () => structuredClone(current));
+  db.updateMany.mockImplementation(async ({ where, data }) => {
+    if (where.status !== current.status || where.updatedAt.getTime() !== current.updatedAt.getTime()) return { count: 0 };
+    current = { ...current, ...data, updatedAt: new Date(current.updatedAt.getTime() + 1) }; return { count: 1 };
+  });
+  autonomous.executeTool.mockResolvedValue({ success: true, message: "One approved tool call" });
+  const input = { existing: original, userId: "human", tokenId: "token", tokenScope: "write" as const,
+    userContext: { platformRole: "developer", isSuperuser: false }, routeContext: "/build", agentId,
+    riskClass: "bounded-write", reviewWriterToolName: binding.writerToolName };
+  const results = await Promise.all([resumeApprovedTask(input), resumeApprovedTask(input)]);
+  expect(results.filter(Boolean)).toHaveLength(1);
+  expect(autonomous.executeTool).toHaveBeenCalledOnce();
+  expect(current.status).toBe("completed");
 });
 
 describe("submitRemoteCoworkerTask approval recovery", () => {
@@ -108,17 +183,17 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       contextId: "thread-f48", status: "failed",
       progressPayload: { summary: `No live workroom for this subject records head ${commitSha}: WC-31648CD6 has an old head.` },
       a2aMetadata: {
-        idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-F48", requestDigest,
+        idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-F48", requestDigest, requestedAgentId: params.agentId,
         initiativeReviewBinding: params.initiativeReviewBinding,
       },
       lastHeartbeatAt: new Date(Date.now() - 60_000), completedAt: new Date(), updatedAt: new Date(),
     };
-    const recovered = { ...failed, status: "input-required", completedAt: null, updatedAt: new Date() };
+    const recovered = { ...failed, currentAgentId: params.agentId, status: "input-required", completedAt: null, updatedAt: new Date() };
     db.findFirst.mockResolvedValue(failed);
     db.findUnique
       .mockResolvedValueOnce(failed)
       .mockResolvedValueOnce(recovered)
-      .mockResolvedValueOnce({ status: "working" });
+      .mockResolvedValue({ ...recovered, status: "working" });
     db.findWorkrooms.mockResolvedValue([{ capsuleId: "WC-31648CD6", headSha: commitSha }]);
     const envelope = {
       id: "cmtdnvz9p00pk01njobcvcjkj", coworkerAgentId: params.agentId,
@@ -134,7 +209,8 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     const writerArgs = { decision: "pass", profile: "fix", artifactRole: "design-spec", findings: [] };
     const proposal = {
       id: "cmtdnvzar00pm01nj2a9svwna", threadId: "thread-f48", agentId: params.agentId,
-      userId: "user-1", toolName: approvalBinding.toolName, parameters: writerArgs,
+      userId: "user-1", toolName: approvalBinding.toolName,
+      parameters: { ...writerArgs, _taskExecutionFence: captureTaskExecutionFence(failed.progressPayload, requestDigest) },
       result: { data: { envelopeId: envelope.id } }, success: false,
       executionMode: "proposal", routeContext: "/build", auditClass: "governed",
       capabilityId: null, summary: "Approval required", apiTokenId: "PAT-F48",
@@ -144,7 +220,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     db.findToolExecution
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(proposal)
-      .mockResolvedValueOnce({ parameters: writerArgs });
+      .mockResolvedValueOnce({ parameters: proposal.parameters });
     autonomous.executeTool.mockResolvedValue({ success: true, message: "Design baseline recorded.", entityId: "baseline-f48" });
 
     const outcome = await submitRemoteCoworkerTask({
@@ -264,7 +340,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.executeTool).not.toHaveBeenCalled();
   });
-  it.each(["none", "legacy", "explicit", "captured-fence"])("consumes an approved exact-call envelope with %s retry exhaustion", async (exhaustion) => {
+  it.each(["none", "legacy", "explicit", "captured-fence"])("preserves unbound approved exact-call execution with %s retry exhaustion", async (exhaustion) => {
     const taskExecutionFence = exhaustion === "captured-fence" ? {
       schemaVersion: 1, reservation: "original-reservation", dispatchClaim: "original-dispatch",
       authorityDigest: "a".repeat(64), requestDigest: "b".repeat(64),
@@ -273,7 +349,8 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     const submit = (tokenId: string, params: Record<string, unknown>) => submitRemoteCoworkerTask({
       token: { tokenId, userId: "user-1", capability: "write", source: "pat" }, userContext, params,
     });
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({ status: "working", progressPayload: taskExecutionFence
+      ? { resumeReservedAt: "later-reservation", dispatch: { claimedAt: "later-dispatch" } } : {} });
     autonomous.executeTool.mockResolvedValue({ success: true, message: "Receipt recorded.", entityId: "REC-1" });
     const retryProgress = exhaustion === "none" ? {} : {
       terminalWriterWait: {
@@ -384,6 +461,9 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
         updatedAt: new Date("2026-08-24T07:00:00.000Z"),
       },
       data: {
+        status: "working",
+        lastHeartbeatAt: expect.any(Date),
+        completedAt: null,
         progressPayload: {
           ...retryProgress,
           ...(taskExecutionFence ? { resumeReservedAt: "later-reservation", dispatch: { claimedAt: "later-dispatch" } } : {}),
@@ -399,12 +479,8 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
         },
       },
     });
-    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ // guarded working transition (BI-D208E70C)
-      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVED" }),
-      data: { status: "working", lastHeartbeatAt: expect.any(Date) },
-    }));
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVED" },
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVED", status: "working" }),
       data: {
         status: "completed",
         completedAt: expect.any(Date),
@@ -418,7 +494,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
           resumedFromApproval: true,
         }),
       },
-    });
+    }));
     expect(outcome).toMatchObject({
       kind: "result",
       result: {
@@ -430,7 +506,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     });
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
-    const completed = db.update.mock.calls.find(([args]) => args.data.status === "completed")?.[0];
+    const completed = db.updateMany.mock.calls.find(([args]) => args.data.status === "completed")?.[0];
     expect(completed.data.progressPayload.requiresApproval).toBe(false);
     expect(completed.data.progressPayload.terminalWriterWait).toBeUndefined();
     expect(completed.data.progressPayload.terminalWriterEscalation).toBeUndefined();

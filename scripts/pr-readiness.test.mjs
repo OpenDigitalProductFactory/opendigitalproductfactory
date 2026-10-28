@@ -21,6 +21,19 @@ test("PR readiness supplies a working shell to nested fixtures", async () => {
   assert.equal(result.ok, true, result.output);
 });
 
+test("PR readiness blocks an executed guard violation that explains a module error", async () => {
+  const gate = await runGate({ name: "Fixture Script Imports", env: {}, command: [process.execPath,
+    ["-e", "console.error('[fixture-script-imports] FAILED: That test dies with ERR_MODULE_NOT_FOUND before its assertion.');process.exit(1)"]],
+  });
+  assert.equal(gate.exitCode, 1);
+  assert.equal(gate.outcome, null);
+  assert.equal(gate.ok, false);
+  assert.equal(gate.skippedEnvironment, false);
+  const readiness = evaluateReadiness({ repo: cleanRepo, gateResults: [gate], prBody: "" });
+  assert.equal(readiness.ready, false);
+  assert.match(readiness.blockers.join("\n"), /Fixture Script Imports failed locally/);
+});
+
 const cleanRepo = {
   headSha: "a".repeat(40),
   branch: "feat/example",

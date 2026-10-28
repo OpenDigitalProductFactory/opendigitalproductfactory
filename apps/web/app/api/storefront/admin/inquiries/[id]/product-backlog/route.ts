@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { createStorefrontInquiryBacklogDraft } from "@/lib/governed-backlog-workflow";
 import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
+import { customerInquiryOutcome } from "@/lib/backlog/intake-outcome";
 
 export async function POST(
   req: NextRequest,
@@ -95,6 +96,12 @@ export async function POST(
     source: draft.source,
     priority: draft.priority,
     body: draft.body,
+    // BI-B1B44777: a customer inquiry is filed with the outcome the customer is owed.
+    outcome: customerInquiryOutcome({
+      customerName: inquiry.customerName,
+      inquiryRef: inquiry.inquiryRef,
+      itemLabel: digitalProduct.name,
+    }),
     organizationId: inquiry.storefront.organizationId,
     digitalProductId: digitalProduct.id,
     submittedById: user.id,

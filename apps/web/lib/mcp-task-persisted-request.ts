@@ -8,7 +8,7 @@ import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 import { parseDurableInferenceTaskMetadata } from "./mcp-task-durable-inference-contract";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
-import { parseEngagementTaskBinding } from "./coworker-service-catalog/engagement-fulfillment";
+import { parseEngagementTaskBinding } from "./coworker-service-catalog/engagement-task-binding";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 

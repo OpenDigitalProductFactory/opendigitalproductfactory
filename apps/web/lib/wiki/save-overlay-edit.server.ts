@@ -19,17 +19,15 @@ import "server-only";
 import { prisma } from "@dpf/db";
 import {
   appendRevision,
-  getWikiPage,
-  linkPages,
   upsertWikiPage,
   type UpsertWikiPageInput,
   type WikiPageKind,
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
-import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 import { revalidatePath } from "next/cache";
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,37 +85,6 @@ async function requireOrganization(): Promise<{ id: string }> {
   return { id: org.id };
 }
 
-/**
- * Sync the wikilink graph for a freshly-saved page. Each `[[slug]]` token
- * that resolves to a real page in the same scope (overlay first, kernel
- * fallback) becomes a WikiPageLink edge. Dangling references are not
- * upserted — the lint detector flags them on the published path.
- *
- * Source citations (`[[raw-sources/...]]`) are skipped: they live on the
- * `WikiPageSource` join table and are managed by the proposal/commit step
- * (Phase 2.3), not by manual edits. Manual edits to source citations
- * happen via the page's `sources:` frontmatter — out of scope for v1 edit.
- */
-async function syncOutLinks(
-  fromPageId: string,
-  body: string,
-  organizationId: string,
-): Promise<void> {
-  const slugs = extractWikilinks(body).filter(
-    (s) => !s.startsWith("raw-sources/"),
-  );
-  if (slugs.length === 0) return;
-  for (const slug of slugs) {
-    const target = (await getWikiPage(prisma, {
-      organizationId,
-      slug,
-    })) as { id: string } | null;
-    if (target && target.id !== fromPageId) {
-      await linkPages(prisma, { fromPageId, toPageId: target.id });
-    }
-  }
-}
-
 function readKernelVersionFromManifest(): string | null {
   // The seed-wiki-kernel module already reads the manifest at __dirname-
   // relative path during seeding; we re-read at edit time so the
@@ -166,12 +133,12 @@ export async function saveOverlayEditForAuthenticatedUser(
 ): Promise<SaveWikiOverlayEditResult> {
   try {
     if (!userId.trim()) return { ok: false, error: "Unauthorized" };
-    const org = await requireOrganization();
     if (mode === "critique-draft-create" && (input.status !== "draft" || input.pageKind !== "heuristic"
       || !input.slug.startsWith("craft/ux-design/") || input.pageId || input.overridesKernelPageId
       || (input.metadata?.verdictAuthority && !["agent-proposed", "founder", "designer"].includes(String(input.metadata.verdictAuthority))))) {
       return { ok: false, error: "Critique capture creates a new draft only." };
     }
+    const org = await requireOrganization();
 
     // Reject empty body / missing title at the action boundary so the form
     // gets a typed error rather than relying on a Prisma null-constraint
@@ -286,14 +253,7 @@ export async function saveOverlayEditForAuthenticatedUser(
         : null,
     };
 
-    // Capture's narrow grant never overwrites an existing or calibrated page.
-    // A unique-key collision is a refused capture, including concurrent calls.
-    const saved = (await (mode === "critique-draft-create"
-      ? prisma.wikiPage.create({ data: { organizationId: org.id, slug: input.slug,
-          title: input.title.trim(), body: input.body, pageKind: "heuristic", status: "draft",
-          isKernel: false, abstract: input.abstract ?? null,
-          ...(input.metadata ? { metadata: input.metadata as import("@dpf/db").Prisma.InputJsonValue } : {}) } })
-      : upsertWikiPage(prisma, upsertInput))) as {
+    const saved = (await upsertWikiPage(prisma, upsertInput)) as {
       id: string;
       slug: string;
       status: WikiPageStatus;
@@ -308,7 +268,7 @@ export async function saveOverlayEditForAuthenticatedUser(
       createdById: userId,
     });
 
-    await syncOutLinks(saved.id, input.body, org.id);
+    await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body: input.body });
 
     // BI-8AC24F3D: this action is what the portal Edit page calls, so flipping
     // Status to `published` here IS how an operator publishes a craft override.

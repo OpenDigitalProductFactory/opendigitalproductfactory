@@ -107,6 +107,18 @@ A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-0
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
 `STANDING_ROOM_SCAN_LIMIT`.
 
+Before it plans those rooms, each tick runs the **per-room overseer duty** (BI-8E1486FA,
+`workroom-overseer-duty.ts` rules, `workroom-overseer-run.ts` reads and writes). For every
+non-standing delivery room it closes the room as delivered (`archived`, scope released) when
+its item is done or retired, when its lease is past the 24-hour resume grace on a merged
+branch, or when it is a merged duplicate of another live room for the same item. A room whose
+session is gone with unmerged commits, or whose drive hold has lasted 48 ticks, is routed to
+its Process Overseer as one Attention item (`workroom-overseer:<capsuleId>`, listed by the
+workroom-stall source) and the hold is concluded with a recorded outcome. Each change writes a
+`workroom-overseer` activity naming the rule; `DPF_WORKROOM_OVERSEER_DRY_RUN=1` logs the
+cycle summary and writes nothing. Design: the October 27 amendment of
+[Coordinated Workrooms](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md).
+
 That same standing drive performs a bounded, best-effort notification reconciliation for
 Workroom-owned facts such as approval, review, lease expiry, and terminal state. Durable async
 inference transitions do not wait for that cadence: the event-only Task Hub consumer re-reads the
@@ -150,6 +162,8 @@ registry shape is unchanged. Design: `docs/superpowers/specs/2026-09-02-proactiv
 The reviewer's receipt is the stage's evidence (BI-80738C08): once every review receipt
 the stage declares has passed for the room's current head, the next tick advances it. A
 failing receipt blocks the stage and shows in the room with its finding count.
+
+A scheduled run may record its own assigned non-governed stage as blocked without a per-report approval (BI-E458A9CB). This default mandate requires the persisted run, coworker assignment, room, shape version, stage and declared evidence kind to match, with a nonblank summary. Explicit always-approve policy remains in force. It does not authorize a completed report or the blocked business action. The existing permission and consequence gates still apply; see [Workroom cycle continuity](workroom-cycle-continuity.md).
 
 Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
 `governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
@@ -866,6 +880,23 @@ call now answers with `stageReach`: whether the next drive tick can advance the
 stage from it, or why not (a blocker, not the current stage, accountable to
 someone else, or no driven stage yet).
 
+**An answered dispatch is not run again (BI-CAP-B5F50D1F).** A stage task keeps
+the drive's own cron, so after a successful run its next tick can start before
+the drive reads that run's evidence and stops the room. On 2026-10-28 room
+WC-PIR-MCP-EFF-852B5BBE recorded its review at 11:51:02, was run again at
+12:00:00 and was stopped by the drive at 12:00:16. The writer refused the
+second review, the run was filed as an error, and it left a `blocked` record
+after the completed one. Six of that day's ten review errors were this. The
+scheduler now asks first whether the task's own dispatch (its checkpoint's
+`confirmedEffect.recordedAt`) already has completing evidence, by the same rule
+the drive earns receipts with (`stageHasCompletingEvidence`). If it does, the
+model is not run and the task records `unchanged`
+(`apps/web/lib/work-management/stage-dispatch-answered.ts`). The drive still
+owns the advance. A task with no checkpoint, another task's checkpoint, a
+graph shape or a failed read runs as before. A required writer that was
+called and refused on every call is now reported as "called N times and
+refused (codes)", never as "attached and not called".
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was
@@ -916,12 +947,13 @@ had no task at all, because an old `dispatch_agent` record never created one.
 Some had a task whose run had already failed. Some had a task that the pause
 itself had switched off before the scheduler ran it. The sequential drive now
 reads the room's task, and the latch holds only while the queued run is
-outstanding:
+outstanding or waiting for a recorded approval outcome:
 
-- If no task exists, or no enqueue was recorded, the latch releases.
+- A proposed task stays parked until its linked approvals show execution. Waiting, declined, expired, failed, cancelled, not-run and unknown outcomes do not trigger another request on the next day. Graph tokens apply the same rule to their own task, and the scheduler does not rearm the proposed required action's cron. Execution alone still does not complete the stage.
+- If no task exists, or no enqueue was recorded, the ordinary execution latch releases.
 - An unfinished run keeps the room paused for up to 2 hours, with the task left
   active so it can still run.
-- A run that finished without a completing receipt is a failure. The room is
+- Outside that approval wait, a run that finished without a completing receipt is a failure. The room is
   retried after a backoff of 15 minutes, then 30.
 - After three failures in one cycle the room stays paused, and its ledger and
   trail row name the last error. A new cycle resets the count.
@@ -1201,3 +1233,14 @@ fallback or grants execution authority.
 Measured on the development install 2026-09-09: **67 merged bug fixes stalled at completion, 0 with a live room, 0 with a readable shape.** `smallShapeAcceptance` — the clause that lets a small or break-fix item be accepted by a runtime check or a failing-to-passing test, with no spec, no plan and no reconciliation receipt — could therefore never fire for the population it was written to serve. Across the whole install only 46 of 353 live rooms carried a shape claim at all.
 
 A closed or completed room is now consulted as a **fallback**, newest first. A live room still wins, so an in-flight re-shape is honoured over a historical one. An `abandoned` or `superseded` room is still never consulted: abandoning the work is a statement that its shape claim no longer stands.
+
+## Finite delivery identity
+
+New finite delivery rooms retain their initial outcome, canonical criterion
+identity and scoped linked-installation context in workspaceState and the initial
+audit payload. Shape and authority rules still bound action. The room and MCP
+readers share one agreement projection. The successful governed terminal
+transaction retains its evidence-backed handoff in that state and the existing
+audit event. Different criterion statements require reconciliation; separately
+linked follow-on BIs leave the completed delivery intact.
+See [finite delivery agreements](../user-guide/workspace/finite-delivery-agreements.md).

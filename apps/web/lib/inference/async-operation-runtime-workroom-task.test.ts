@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     $transaction: vi.fn(),
   },
   tx: {
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "workroom-row-1" }]),
     workroom: { findUnique: vi.fn(), updateMany: vi.fn() },
     taskRun: { findUnique: vi.fn(), create: vi.fn() },
   },
@@ -37,6 +38,7 @@ vi.mock("@/lib/execution/adapters/async-operation-events", () => ({
 
 import { DURABLE_INFERENCE_TASK_CONTRACT_FAMILY } from "@/lib/mcp-task-durable-inference-contract";
 import { admitPrismaDurableAsyncOperation } from "./async-operation-runtime";
+import type { AdmitDurableAsyncOperationInput, AsyncOperationAdmissionDependencies } from "./async-operation-lifecycle";
 import { canonicalWorkroomDurableTaskRunId } from "./async-operation-workroom-task";
 
 const requestDigest = "d".repeat(64);
@@ -141,6 +143,40 @@ describe("Prisma Workroom-bound durable task admission", () => {
       .mockResolvedValueOnce({ operationId: "async-op-1", replayed: false })
       .mockResolvedValueOnce({ operationId: "async-op-1", replayed: true });
     mocks.enqueueWake.mockResolvedValue(undefined);
+  });
+
+  it("rechecks direct Workroom action admission through the actual store transaction", async () => {
+    const binding = { kind: "workroom" as const, workroomId: "workroom-row-1", requestKey: input.request.requestKey, requestDigest };
+    mocks.resolveBinding.mockImplementation(async ({ db, requested }) => {
+      expect(requested).toBe("action");
+      if (db === mocks.tx) throw new Error("ASYNC_OPERATION_AUTHORITY_DENIED");
+      return binding;
+    });
+    // Keep the lifecycle adapter bounded while exercising the real production store.
+    mocks.admitDurableOperation.mockReset().mockImplementation(async (candidate: AdmitDurableAsyncOperationInput, dependencies: AsyncOperationAdmissionDependencies) => {
+      const resolved = await dependencies.resolveBinding();
+      return dependencies.store.createOrReplay({ ...candidate, binding: resolved,
+        authorityScopeKey: "workroom:workroom-row-1", requestKey: resolved.requestKey,
+        requestDigest, bindingDigest: "b".repeat(64) });
+    });
+    await expect(admitPrismaDurableAsyncOperation({ ...input, contractFamily: "research" })).rejects.toThrow("ASYNC_OPERATION_AUTHORITY_DENIED");
+    expect(mocks.resolveBinding).toHaveBeenCalledTimes(2);
+    expect(mocks.resolveBinding).toHaveBeenLastCalledWith(expect.objectContaining({ db: mocks.tx, actor: input.actor, requested: "action" }));
+    expect(mocks.tx.$queryRaw).toHaveBeenCalled();
+    expect(mocks.tx.taskRun.create).not.toHaveBeenCalled();
+    expect(mocks.enqueueWake).not.toHaveBeenCalled();
+  });
+
+  it("rechecks action authority inside the TaskRun mutation transaction", async () => {
+    mocks.resolveAuthority.mockImplementation(async ({ db, requested }) => {
+      if (db === mocks.tx) { expect(requested).toBe("action"); throw new Error("ASYNC_OPERATION_AUTHORITY_DENIED"); }
+      return { kind: "workroom", workroomId: "workroom-row-1" };
+    });
+    await expect(admitPrismaDurableAsyncOperation(input)).rejects.toThrow("ASYNC_OPERATION_AUTHORITY_DENIED");
+    expect(mocks.tx.$queryRaw).toHaveBeenCalled();
+    expect(mocks.tx.taskRun.create).not.toHaveBeenCalled();
+    expect(mocks.tx.workroom.updateMany).not.toHaveBeenCalled();
+    expect(mocks.enqueueWake).not.toHaveBeenCalled();
   });
 
   it("persists and projects one canonical TaskRun before the provider wake, then replays without duplication", async () => {

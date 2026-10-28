@@ -1,41 +1,38 @@
+import { engagementVisualDeliveryRecorder, type EngagementVisualEvidence } from "./coworker-service-catalog/engagement-visual-evidence";
+import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
-import { captureTaskExecutionFence } from "./shared/task-execution-fence";
-import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { captureTaskExecutionFence, sameTaskExecutionFence } from "./shared/task-execution-fence";
+import { withPersistedReassessmentExecution } from "./mcp-task-reassessment-capture";
+import { assertReassessmentOwnerSupport } from "./shared/reassessment-owner-versions";
+import { createReassessmentReceiptCheck } from "./mcp-task-review-receipt-stop";
+import { parseReassessmentRootLocatorV2 } from "./routing/reassessment-phase-contract";
+import { currentReassessmentExecution, hasPersistedReassessmentExecution, isReassessmentExecutionError,
+  matchesPersistedReassessmentScope, refuseReassessmentExecution } from "./routing/reassessment-execution-scope";
+import { projectRemoteTaskReplay, optionalString, remoteTaskContent } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
+import { currentReadEvidencePolicy, withReadEvidencePolicy } from "./tak/read-evidence-policy";
 import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
-import { loadPirEvidenceContext } from "./pir-evidence-context";
 import { remoteReviewSensitivity } from "./mcp-task-review-sensitivity";
-import { loadReviewerProfile } from "./backlog/initiative-readiness/reviewer-profile";
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
-import type { RequestContract } from "@/lib/routing/request-contract";
-import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome, persistedReviewCompletionData } from "./mcp-task-review-outcome";
+import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 import { foldNativeMcpExecutions } from "@/lib/tak/native-mcp-executions";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
+import { prepareRemoteReviewAttempt } from "./mcp-task-reassessment-preparation";
 import {
   executeAutonomousAgenticLoop,
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
-import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
-import {
-  createInitiativeReviewTerminalToolPolicy,
-  enterTerminalWriterPhase,
-  terminalWriterFailureMessage as describeTerminalWriterFailure,
-} from "@/lib/tak/terminal-tool-policy";
+import { terminalWriterFailureMessage as describeTerminalWriterFailure } from "@/lib/tak/terminal-tool-policy";
 import {
   createResourceWaitProjection,
   preInferenceResourceWait,
   RESOURCE_WAIT_MAX_ATTEMPTS,
 } from "./mcp-task-capacity-contract";
-import {
-  narrowInitiativeReviewTools,
-  requiredToolNames,
-  requiresInitiativeReviewEffort,
-} from "./mcp-task-review-contract";
 import type { RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
@@ -50,14 +47,6 @@ import {
   terminalWriterEscalationWaitReason,
   terminalWriterRetryIsExhausted,
 } from "./mcp-task-terminal-writer-escalation";
-
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function remoteTaskContent(text: string) {
-  return [{ type: "text", text }];
-}
 
 function approvalRequiredEnvelopeId(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -85,7 +74,7 @@ export async function executeRemoteTaskAttempt(input: {
 }): Promise<RemoteTaskSubmitOutcome> {
   const { run, token, userContext, parsed } = input;
   const admittedRun = await prisma.taskRun.findUnique({
-    where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true },
+    where: { taskRunId: run.taskRunId }, select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
   });
   if (!admittedRun || !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(admittedRun.status)) {
     return {
@@ -108,26 +97,46 @@ export async function executeRemoteTaskAttempt(input: {
     || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
-  const taskExecutionFence = parsed.initiativeReviewBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
+  const reassessmentExecution = hasPersistedReassessmentExecution(admittedRun.a2aMetadata);
+  const taskExecutionFence = parsed.initiativeReviewBinding || parsed.engagementBinding || reassessmentExecution ? captureTaskExecutionFence(admittedRun.progressPayload,
     (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
-    settleRemoteTask(args, reservation, dispatchClaim);
-  // A lost acknowledgement is recovery work, not another independent assessment.
-  // Keep the same bound receipt and let the fenced settlement preserve cancellation.
+    settleRemoteTask(args, reservation, dispatchClaim, parsed.initiativeReviewBinding || reassessmentExecution ? {
+      executionFence: taskExecutionFence ?? null, userId: token.userId, agentId: parsed.agentId,
+    } : undefined);
+  const receiptCompletion = async (outcome: NonNullable<Awaited<ReturnType<typeof loadTaskInitiativeReviewOutcome>>>,
+    replay: { idempotentReplay: boolean; resumedFromTerminalWriterWait?: boolean; resumedFromCapacity?: boolean } = { idempotentReplay: true }) => {
+    const completed = { kind: "result" as const, result: { taskRunId: run.taskRunId, status: "completed", ...replay,
+      requiresApproval: false, resumable: false, content: remoteTaskContent(outcome.summary), structuredContent: outcome, isError: false } };
+    if (await reconcilePersistedReviewStatus(run.taskRunId, admittedRun.progressPayload, outcome, admittedRun)) return completed;
+    const readCurrent = () => prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId },
+      select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true, userId: true, currentAgentId: true } });
+    let current = await readCurrent();
+    const metadata = current?.a2aMetadata && typeof current.a2aMetadata === "object" && !Array.isArray(current.a2aMetadata)
+      ? current.a2aMetadata as Record<string, unknown> : {};
+    // Heartbeats change the row version without granting a new generation.
+    // Refresh only receipt settlement once; cancellation and a new fence win.
+    if (current && current.userId === token.userId && current.currentAgentId
+      && resolveCanonicalAgentId(current.currentAgentId) === resolveCanonicalAgentId(parsed.agentId)
+      && taskExecutionFence && metadata.requestDigest === taskExecutionFence.requestDigest
+      && sameTaskExecutionFence(taskExecutionFence, captureTaskExecutionFence(current.progressPayload, metadata.requestDigest))) {
+      if (await reconcilePersistedReviewStatus(run.taskRunId, current.progressPayload, outcome, current)) return completed;
+      current = await readCurrent();
+    }
+    return current ? projectRemoteTaskReplay({ existing: { ...current, taskRunId: run.taskRunId }, requestMatches: true })
+      : { kind: "result" as const, result: { taskRunId: run.taskRunId, status: "unknown", resumable: false, requiresApproval: false, isError: true } };
+  };
+  // Recover lost acknowledgements from the bound receipt under the same fence.
   const priorReview = parsed.initiativeReviewBinding
     ? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
     : null;
-  if (priorReview) {
-    const displaced = await settle({
-      where: { taskRunId: run.taskRunId },
-      data: persistedReviewCompletionData(admittedRun.progressPayload, priorReview),
-    });
-    return displaced ?? { kind: "result", result: {
-      taskRunId: run.taskRunId, status: "completed", idempotentReplay: true,
-      requiresApproval: false, resumable: false, content: remoteTaskContent(priorReview.summary),
-      structuredContent: priorReview, isError: false,
-    } };
-  }
+  if (priorReview) return receiptCompletion(priorReview);
+  const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
+    && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
+  if (Object.hasOwn(progress, "reassessmentQuarantine")) return { kind: "result", result: {
+    taskRunId: run.taskRunId, status: "input-required", resumable: false, requiresApproval: false,
+    progressPayload: admittedRun.progressPayload, content: remoteTaskContent("This predecessor is quarantined; its original evidence remains retained."),
+  } };
   if (hasExecutionUncertainty(admittedRun.progressPayload)) {
     const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
       && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
@@ -139,191 +148,129 @@ export async function executeRemoteTaskAttempt(input: {
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
-  if (parsed.engagementBinding) {
-    const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
-    try {
-      await reconcileEngagementTaskResult(run.taskRunId);
-      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
-      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
-      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
-    }
-  }
-  const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
-    && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
-  // Stable authority and immutable windows survive every parked/terminal result;
-  // transient writer/capacity markers are still rebuilt by their owning branch.
+  // Retain stable authority/windows; each branch rebuilds transient waits.
   const recoveryCheckpoint = Object.fromEntries(["reviewExecutionAuthority", "deadlineAt", "expiresAt"]
     .filter(key => progress[key] !== undefined).map(key => [key, progress[key]])) as Prisma.InputJsonObject;
-  if (progress.reviewExecutionAuthority !== undefined) {
-    const { revalidateReviewExecutionAuthority } = await import("./mcp-task-review-recovery");
-    if (!await revalidateReviewExecutionAuthority({ token, parsed, userContext,
-      metadata: admittedRun.a2aMetadata, progress })) {
-      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
-        status: "input-required", completedAt: null, progressPayload: {
-          ...progress,
-          errorCode: "review_execution_authority_refused", requiresApproval: false,
-        } as Prisma.InputJsonValue,
-      } });
-      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required", isError: true,
-        content: remoteTaskContent("Current review execution authority was refused; no inference was dispatched."),
-        structuredContent: { error: "review_execution_authority_refused" } } };
-    }
-  }
-  const agent = await resolveAutonomousWorkAgent({
-    agentId: parsed.agentId,
-    routeContext: parsed.routeContext,
-    userContext,
-  });
-  const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = parsed.engagementBinding ? modelRoutingAgentId : resolveCanonicalAgentId(modelRoutingAgentId);
-  if (parsed.engagementBinding) {
-    const { engagementProviderIdentityRefs } = await import("./coworker-service-catalog/engagement-fulfillment");
-    if (!engagementProviderIdentityRefs(parsed.engagementBinding.providerAgentId).includes(resolvedAgentId)) throw new Error("Engagement provider identity changed during runtime resolution.");
-  }
-  const requestedAgentId = parsed.agentId;
-  const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
-  let routingConfig: {
-    minimumTier: string;
-    budgetClass: string;
-    pinnedProviderId: string | null;
-    pinnedModelId: string | null;
-    residencyPolicy: string | null;
-  } | null = null;
-  // An explicit alias is itself an operator-selectable coworker identity, so
-  // its assignment wins. A canonical request keeps the established resolved
-  // slug first because the coworker management surface stores assignments by
-  // slug. Grants and audit remain canonical in both cases.
-  const configAgentIds = requestedAgentId === requestedCanonicalAgentId
-    ? [modelRoutingAgentId, requestedAgentId]
-    : [requestedAgentId, modelRoutingAgentId];
-  for (const configAgentId of new Set(configAgentIds)) {
-    routingConfig = await prisma.agentModelConfig?.findUnique({
-      where: { agentId: configAgentId },
-      select: {
-        minimumTier: true,
-        budgetClass: true,
-        pinnedProviderId: true,
-        pinnedModelId: true,
-        residencyPolicy: true,
-      },
-    }).catch(() => null) ?? null;
-    if (routingConfig) break;
-  }
-  const modelRequirements = routingConfig
-    ? {
-        defaultMinimumTier: routingConfig.minimumTier,
-        defaultBudgetClass: routingConfig.budgetClass,
-        ...(routingConfig.pinnedProviderId
-          ? { preferredProviderId: routingConfig.pinnedProviderId }
-          : {}),
-        ...(routingConfig.pinnedModelId
-          ? { preferredModelId: routingConfig.pinnedModelId }
-          : {}),
-        // BI-8CFA1CA8: residency is read as the stated policy it is. This used
-        // to be inferred from `pinnedProviderId === "local"`, which let a
-        // routing preference silently set — or silently clear — a data
-        // guarantee. The migration wrote the policy explicitly for every
-        // config that was local-pinned, so behaviour is unchanged.
-        ...(routingConfig.residencyPolicy
-          ? {
-              residencyPolicy:
-                routingConfig.residencyPolicy as RequestContract["residencyPolicy"],
-            }
-          : {}),
-      }
-    : null;
-  const toolMode = parsed.riskClass === "read" ? "advise" : "act";
-  const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
-  const resolvedTools = await resolveAutonomousWorkTools({
-    userContext,
-    agentId: resolvedAgentId,
-    mode: toolMode,
-    externalAccessEnabled: true,
-    routeContext: parsed.routeContext,
-    intentQuery: parsed.prompt,
-    requiredToolNames: exactRequiredToolNames,
-  });
-  const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
-    ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
-  const reviewTools = narrowInitiativeReviewTools(
-    resolvedTools,
-    exactRequiredToolNames,
-    parsed.initiativeReviewBinding,
-    parsed.prompt,
-    reviewProfile,
-  );
-  const tools = parsed.engagementBinding ? {
-    ...reviewTools,
-    tools: reviewTools.tools.filter(tool => exactRequiredToolNames.includes(tool.name)),
-    toolsForProvider: reviewTools.toolsForProvider.filter(tool => {
-      const fn = tool.function;
-      const name = fn && typeof fn === "object" && "name" in fn ? fn.name : tool.name;
-      return typeof name === "string" && exactRequiredToolNames.includes(name);
-    }),
-    deferredTools: reviewTools.deferredTools.filter(tool => exactRequiredToolNames.includes(tool.name)),
-  } : reviewTools;
-  const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
-    ? deriveEffortWarrant({
-        reasoningDepth: "high",
-        availableToolNames: [
-          ...tools.tools.map((tool) => tool.name),
-          ...tools.deferredTools.map((tool) => tool.name),
-        ],
-        messageChars: parsed.prompt.length,
-      })
-    : undefined;
-  const baseTerminalToolPolicy = parsed.initiativeReviewBinding
-    ? createInitiativeReviewTerminalToolPolicy(
-        parsed.initiativeReviewBinding.writerToolName,
-        exactRequiredToolNames,
-        parsed.initiativeReviewBinding.artifactRef,
-      )
-    : null;
-  const terminalToolPolicy = baseTerminalToolPolicy && input.resumeKind === "terminal-writer"
-    ? enterTerminalWriterPhase(baseTerminalToolPolicy)
-    : baseTerminalToolPolicy;
-  const resumedFlag = !input.idempotentReplay
-    ? {}
-    : input.resumeKind === "terminal-writer"
-      ? { resumedFromTerminalWriterWait: true }
-      : { resumedFromCapacity: true };
-  const conversation = remoteTaskConversation({
-    systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
-    prompt: parsed.prompt,
-    resumeKind: input.resumeKind,
-    terminalWriterContext: input.terminalWriterContext,
-  });
-
-  // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
-  const attemptStartedMs = Date.now();
+  const resumedFlag = !input.idempotentReplay ? {} : input.resumeKind === "terminal-writer"
+    ? { resumedFromTerminalWriterWait: true } : { resumedFromCapacity: true };
+  let loopEntered = false;
   try {
-    const result = await executeAutonomousAgenticLoop({
-      systemPrompt: conversation.systemPrompt,
-      systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: conversation.chatHistory,
-      sensitivity: await remoteReviewSensitivity(parsed, token, agent.sensitivity ?? "internal"),
-      tools: tools.tools,
-      toolsForProvider: tools.toolsForProvider,
-      deferredTools: tools.deferredTools,
-      userId: token.userId,
-      routeContext: parsed.routeContext,
-      agentId: resolvedAgentId,
-      threadId: input.threadId,
-      taskRunId: run.taskRunId,
-      apiTokenId: token.tokenId,
-      taskExecutionFence,
-      tokenScope: token.capability,
-      // The task's authority scope bounds the reviewer's nested governed dispatch
-      // (a writer re-reading its bound artifact); without it that check sees no grants (BI-F8C661D0).
-      tokenGrantScopes: parsed.authorityScope,
-      taskType: "external-mcp",
-      agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
-      ...(effortWarrant ? { effortWarrant } : {}),
-      ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
-      ...(modelRequirements ? { modelRequirements } : {}),
-    });
+    if (reassessmentExecution && currentReadEvidencePolicy()) {
+      refuseReassessmentExecution("reassessment-read-evidence-scope-conflict");
+    }
+    let visualEvidence: EngagementVisualEvidence | null = null;
+    if (parsed.engagementBinding) {
+      const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+      try {
+        await reconcileEngagementTaskResult(run.taskRunId);
+        visualEvidence = (await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed })).visualEvidence;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+        const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+        return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+      }
+    }
+    if (reassessmentExecution) assertReassessmentOwnerSupport("worker", 2);
+    if (reassessmentExecution && !matchesPersistedReassessmentScope(admittedRun.a2aMetadata, run.taskRunId)) {
+      if (!parsed.initiativeReviewBinding) refuseReassessmentExecution("reassessment-manifest-invalid", "The accepted reassessment has no review binding.");
+      const persistedInput = { taskRunRecordId: run.id, taskRunId: run.taskRunId,
+        userId: token.userId, agentId: resolveCanonicalAgentId(parsed.agentId), binding: parsed.initiativeReviewBinding,
+        requestDigest: (admittedRun.a2aMetadata as Record<string, unknown>).requestDigest as string,
+        executionFence: taskExecutionFence ?? null, a2aMetadata: admittedRun.a2aMetadata, progressPayload: admittedRun.progressPayload,
+      };
+      const execute = () => executeRemoteTaskAttempt({ ...input, expectedReservation: reservation, expectedDispatchClaim: dispatchClaim });
+      if (parseReassessmentRootLocatorV2((admittedRun.a2aMetadata as Record<string, unknown>).reassessmentExecution)) {
+        const { withPresentReassessmentWorker } = await import("./mcp-task-reassessment-worker");
+        return await withPresentReassessmentWorker({ persistedInput, parsed, token, userContext, threadId: input.threadId,
+          resumeKind: input.resumeKind, terminalWriterContext: input.terminalWriterContext }, {
+          resolveAgent: resolveAutonomousWorkAgent, resolveTools: resolveAutonomousWorkTools, resolveSensitivity: remoteReviewSensitivity,
+        }, execute);
+      }
+      return await withPersistedReassessmentExecution(persistedInput, execute);
+    }
+    if (progress.reviewExecutionAuthority !== undefined) {
+      const { revalidateReviewExecutionAuthority } = await import("./mcp-task-review-recovery");
+      if (!await revalidateReviewExecutionAuthority({ token, parsed, userContext,
+        metadata: admittedRun.a2aMetadata, progress })) {
+        const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+          status: "input-required", completedAt: null, progressPayload: {
+            ...progress,
+            errorCode: "review_execution_authority_refused", requiresApproval: false,
+          } as Prisma.InputJsonValue,
+        } });
+        return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required", isError: true,
+          content: remoteTaskContent("Current review execution authority was refused; no inference was dispatched."),
+          structuredContent: { error: "review_execution_authority_refused" } } };
+      }
+    }
+    const { agent, resolvedAgentId, modelRequirements, tools, effortWarrant, terminalToolPolicy, conversation: preparedConversation } =
+      await prepareRemoteReviewAttempt({ parsed, userContext, restricted: reassessmentExecution,
+        resumeKind: input.resumeKind, terminalWriterContext: input.terminalWriterContext,
+        validateResolvedAgent: resolved => {
+          const scope = currentReassessmentExecution();
+          if (reassessmentExecution && (!scope || scope.agentId !== resolved || !sameTaskExecutionFence(scope.executionFence, taskExecutionFence))) {
+            refuseReassessmentExecution("reassessment-execution-conflict", "The resolved reviewer or full execution fence differs from the sealed reassessment admission.");
+          }
+        } }, { resolveAgent: resolveAutonomousWorkAgent, resolveTools: resolveAutonomousWorkTools });
+
+    // Preparation already includes terminal-writer context; engagement adds only its validated image inputs.
+    const conversation = visualEvidence?.inputs.length ? remoteTaskConversation({
+      systemPrompt: preparedConversation.systemPrompt,
+      prompt: parsed.prompt,
+      visualInputs: visualEvidence.inputs,
+    }) : preparedConversation;
+    const readEvidencePolicy = parsed.engagementBinding
+      ? (await import("./coworker-service-catalog/engagement-read-completion")).engagementReadCompletion(run.taskRunId, parsed.engagementBinding)
+      : undefined;
+    if (readEvidencePolicy) readEvidencePolicy.mintReadOnlySession = async () =>
+      (await import("./mcp/session-token")).createMcpSessionToken({
+        userId: token.userId, agentId: resolvedAgentId, threadId: input.threadId,
+        routeContext: parsed.routeContext, taskRunId: run.taskRunId, taskExecutionFence,
+        scopes: ["file_read", "registry_read"], capability: "read",
+      });
+    if (readEvidencePolicy && parsed.engagementBinding) {
+      readEvidencePolicy.recordImageInputDelivery = engagementVisualDeliveryRecorder(
+        run.taskRunId, parsed.engagementBinding, taskExecutionFence ?? null, visualEvidence,
+      );
+    }
+    // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
+    const attemptStartedMs = Date.now();
+    loopEntered = true;
+    const runLoop = async () => withReadEvidencePolicy(
+      readEvidencePolicy, async () => executeAutonomousAgenticLoop({
+        ...(reassessmentExecution ? { canonicalReviewReceipt: createReassessmentReceiptCheck(run.taskRunId, parsed.initiativeReviewBinding) } : {}),
+        systemPrompt: conversation.systemPrompt,
+        systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
+        chatHistory: conversation.chatHistory,
+        sensitivity: await remoteReviewSensitivity(parsed, token, agent.sensitivity ?? "internal"),
+        tools: tools.tools,
+        toolsForProvider: tools.toolsForProvider,
+        deferredTools: tools.deferredTools,
+        userId: token.userId,
+        routeContext: parsed.routeContext,
+        agentId: resolvedAgentId,
+        threadId: input.threadId,
+        taskRunId: run.taskRunId,
+        apiTokenId: token.tokenId,
+        taskExecutionFence,
+        tokenScope: token.capability,
+        // Bound nested writer reads by the task's grant scope (BI-F8C661D0).
+        tokenGrantScopes: parsed.authorityScope,
+        taskType: "external-mcp",
+        agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
+        ...(effortWarrant ? { effortWarrant } : {}),
+        ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
+        ...(modelRequirements ? { modelRequirements } : {}),
+      }),
+    );
+
+    const result = await (parsed.engagementBinding ? withInferenceAuthorityCheck(async () => {
+      const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
+      await validateEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+      const current = await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true } });
+      return current?.status === "working" && !hasExecutionUncertainty(current.progressPayload) && sameTaskExecutionFence(taskExecutionFence,
+        captureTaskExecutionFence(current.progressPayload, (current.a2aMetadata as Record<string, unknown> | null)?.requestDigest));
+    }, runLoop) : runLoop());
 
     // BI-2E479619: a CLI adapter runs the governed tools natively, so the
     // loop's records can miss them. Fold this attempt's native rows (deduped
@@ -341,9 +288,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? result.executedTools?.filter((tool) => tool.name === parsed.initiativeReviewBinding!.writerToolName && tool.result.success).at(-1)?.result
       : undefined;
     const receiptId = optionalString(writerResult?.data?.["receiptId"]);
-    // The persisted receipt is the authority, not this turn's records: before
-    // anything is classified as a missing writer, consult the receipt this
-    // TaskRun's writer recorded (also one minted by an earlier attempt).
+    // The TaskRun's persisted receipt wins over incomplete turn records.
     const persistedOutcome = parsed.initiativeReviewBinding
       ? (receiptId ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null)
         ?? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
@@ -369,6 +314,8 @@ export async function executeRemoteTaskAttempt(input: {
         executedToolCount: result.executedTools?.length ?? 0,
         capacityAttempt: input.capacityAttempt,
         ...(persistedOutcome ? { reviewOutcome: persistedOutcome } : {}),
+        ...(parsed.engagementBinding&&result.readEvidenceInspection&&!result.readEvidenceInspection.check.complete
+          ?{engagementContributionAttempt:{version:1,validated:false,...result.readEvidenceInspection}}:{}),
       },
     });
 
@@ -400,10 +347,12 @@ export async function executeRemoteTaskAttempt(input: {
         content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE), isError: false,
       } };
     }
-    // The loop is not trusted to self-report a missing writer: main enforces this
-    // at the completion boundary (#4925, #4930) so a review cannot pass without
-    // the governed writer having been attempted. Ported verbatim into the async
-    // flow, which previously relied on result.failure alone.
+    const readHold = parsed.engagementBinding ? await (await import("./coworker-service-catalog/engagement-read-completion")).engagementIncompleteOutcome({
+      policy: readEvidencePolicy!, taskRunId: run.taskRunId, result, checkpoint: recoveryCheckpoint,
+      flags: resumedFlag, skip: !!preInferenceResourceWait(result),
+    }) : null;
+    if (readHold) return (await settle(readHold.settlement)) ?? readHold.outcome;
+    // Enforce the terminal writer at async completion as main does (#4925, #4930).
     const terminalWriterExecutions = terminalToolPolicy
       ? (result.executedTools ?? []).filter((tool) => tool.name === terminalToolPolicy.writerToolName)
       : [];
@@ -417,9 +366,7 @@ export async function executeRemoteTaskAttempt(input: {
     const terminalWriterMissing = terminalToolPolicy !== null
       && !terminalWriterSucceeded
       && terminalWriterApprovalEnvelopeId === null;
-    // BI-C35576A9: record the contract the provider that RAN was held to, never a
-    // hard-coded claim. A CLI adapter is receipt-verified; an HTTP adapter forced
-    // the call. Undefined when nothing ran, so a throw never invents a contract.
+    // BI-C35576A9: record the actual provider's contract, undefined if none ran.
     const terminalWriterContract = terminalWriterDispatchContractForProvider(
       (result as { providerId?: string }).providerId,
     );
@@ -764,6 +711,26 @@ export async function executeRemoteTaskAttempt(input: {
       },
     };
   } catch (err) {
+    if (!reassessmentExecution && !loopEntered) throw err;
+    let receiptReadUnavailable = false;
+    const committedOutcome = parsed.initiativeReviewBinding
+      ? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
+        .catch(() => { receiptReadUnavailable = true; return null; }) : null;
+    if (committedOutcome) return receiptCompletion(committedOutcome, { idempotentReplay: input.idempotentReplay, ...resumedFlag });
+    if (receiptReadUnavailable || (reassessmentExecution && isReassessmentExecutionError(err)
+      && ["reassessment-capture-incomplete", "reassessment-effect-outcome-uncertain"].includes(err.code))) {
+      const uncertainty = { ...executionUncertaintyFromError(err), observedAt: new Date().toISOString() };
+      const summary = receiptReadUnavailable ? `Canonical review receipt readback is unavailable. ${EXECUTION_UNCERTAIN_MESSAGE}` : EXECUTION_UNCERTAIN_MESSAGE;
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+        status: "input-required", completedAt: null, progressPayload: {
+          ...progress, summary, requiresApproval: false, executionUncertainty: uncertainty, ...resumedFlag,
+        } as Prisma.InputJsonValue,
+      } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required",
+        idempotentReplay: input.idempotentReplay, ...resumedFlag, requiresApproval: false, resumable: false,
+        waitReason: "execution-uncertain", structuredContent: { error: "execution_uncertain", executionUncertainty: uncertainty,
+          ...(receiptReadUnavailable ? { receiptReadback: "unavailable" } : {}) }, content: remoteTaskContent(summary), isError: false } };
+    }
     const message = err instanceof Error ? err.message : "Unknown remote coworker execution error";
     const displaced = await settle({
       where: { taskRunId: run.taskRunId },

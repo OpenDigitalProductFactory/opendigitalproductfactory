@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "ops-page-two-tables",
+  "decisionInteractionId": "DI-E8D70429915B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/gate-efficacy/page.tsx",
+      "apps/web/components/ops/GateEfficacyTables.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "ops-page-two-tables",
+      "mcp-report-only",
+      "section-on-dev-loop",
+      "full-dashboard"
+    ]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Read-only operator view for GPP §11 and guard efficacy (BI-FEDD8F45), composed from report-kit StatCard, DataTable and StatusBadge in the existing ops shell. The lead band states the period, what was observed and which measures are unknown, and marks the owner-first next action (none needed). Four StatCards; both tables sit behind collapsed disclosure; every value shows numerator of denominator and its unit; unknown renders as a warning badge, never zero or success. No inputs, filters or write controls. Rejected: MCP-only (operator must ask an agent), a section on /ops/dev-loop (mixes coordination with efficacy), a charted dashboard (cognitive load without new information)."
+  }
+}

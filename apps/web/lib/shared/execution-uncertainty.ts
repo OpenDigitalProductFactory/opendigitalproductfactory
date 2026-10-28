@@ -30,6 +30,8 @@ export type NativeCliDiagnostics = {
   stderrPresent: boolean;
   childProcessClosure: "unverified";
   terminalResult?: CliTerminalResultMetadata;
+  /** Classification of the CLI's own stderr verdict; the stderr text itself is never kept. */
+  cliFailureHint?: typeof CLI_RESULT_HINTS[number];
 };
 
 export function sanitizeNativeCliDiagnostics(value: unknown): NativeCliDiagnostics | undefined {
@@ -52,6 +54,8 @@ export function sanitizeNativeCliDiagnostics(value: unknown): NativeCliDiagnosti
     stdoutPresent: row.stdoutPresent === true, stderrPresent: row.stderrPresent === true,
     childProcessClosure: "unverified",
     ...(terminalResult ? { terminalResult } : {}),
+    ...(row.cliFailureHint !== undefined
+      ? { cliFailureHint: CLI_RESULT_HINTS.find(value => value === row.cliFailureHint) ?? "unclassified" } : {}),
   };
 }
 

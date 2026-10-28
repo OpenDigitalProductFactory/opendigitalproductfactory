@@ -64,6 +64,34 @@ describe("PATCH /api/v1/ops/backlog/:id terminal readiness", () => {
   });
 });
 
+describe("PATCH /api/v1/ops/backlog/:id peer-owned mirror (BI-C5794F1D)", () => {
+  const origin = `inst_${"e".repeat(32)}`;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authenticateRequest.mockResolvedValue({ user: { id: "user-1" } });
+    mocks.findUnique.mockResolvedValue({
+      id: "bi-row", itemId: "BI-PEER", status: "awaiting-acceptance", organizationId: null,
+      body: `Peer\n\n[origin:federatedWork:${origin}:BI-PEER]`,
+    });
+  });
+
+  it("refuses a status change and names the owning installation", async () => {
+    const response = await PATCH(new Request("http://localhost/api/v1/ops/backlog/bi-row", {
+      method: "PATCH",
+      body: JSON.stringify({ status: "done" }),
+      headers: { "content-type": "application/json" },
+    }), { params: Promise.resolve({ id: "bi-row" }) });
+
+    expect(response.status).toBe(409);
+    const payload = await response.json();
+    expect(payload.code).toBe("PEER_OWNED_ITEM");
+    expect(payload.message).toContain(`owned by installation ${origin}`);
+    expect(mocks.completeTerminal).not.toHaveBeenCalled();
+    expect(mocks.updateItem).not.toHaveBeenCalled();
+  });
+});
+
 describe("DELETE /api/v1/ops/backlog/:id initiative retention", () => {
   beforeEach(() => {
     vi.clearAllMocks();

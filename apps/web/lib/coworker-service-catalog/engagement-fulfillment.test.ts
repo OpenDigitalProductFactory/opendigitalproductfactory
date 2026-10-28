@@ -1,13 +1,21 @@
+import { compactEngagementRead } from "./engagement-read-provenance";
 import { describe, expect, it, vi } from "vitest";
 import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask, engagementProviderIdentityRefs, reconcileEngagementTaskResult } from "./engagement-fulfillment";
 import { fulfillCoworkerEngagement } from "@/lib/mcp/external-coworker-task-adapter";
 import { parseRemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 const admission = vi.hoisted(() => ({ allowed: true }));
+const capacityWake = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock("./engagement-capacity-recovery", () => ({ resumeCapacityWaitingEngagementTask: capacityWake }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: async ({ requested }: { requested: string }) => ({ decision: { level: admission.allowed ? requested : "none", reason: "not-admitted" } }) }));
 
 const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) } as const;
 const binding = { version: 1, engagementId: "CE-1", offerId: "offer-1", serviceId: "service-1", providerAgentId: "ux-critic", actorAgentId: "coding-agent", userId: "user-1", workroomId: "WC-1", stageKey: "design", inputDigest: engagementInputDigest("Review design", { artifactRef }), artifactRef } as const;
+const readEvidence = () => [
+  compactEngagementRead("read-1", "read_source_at_version", { repositoryFullName: artifactRef.repositoryFullName, version: artifactRef.commitSha, path: artifactRef.path, expectedBlobId: artifactRef.providerBlobId }, { success: true, message: "read", data: { repositoryFullName: artifactRef.repositoryFullName, version: artifactRef.commitSha, path: artifactRef.path, blobId: artifactRef.providerBlobId, content: "Prototype", startLine: 1, endLine: 1, totalLines: 1, hasMore: false, nextCursor: null } })!,
+  compactEngagementRead("wiki-1", "wiki_query", {}, { success: true, message: "read", data: { results: [{ slug: "professions/ux-design/hierarchy", contentPreview: "Relevant surface detail" }] } })!,
+  compactEngagementRead("critique-1", "search_ux_critique_corpus", { calibratedOnly: true }, { success: true, message: "none", data: { total: 0, grounding: "UNGROUNDED" } })!,
+];
 const snapshot = () => ({
   engagement: { engagementId: "CE-1", offerId: "offer-1", serviceId: "service-1", providerAgentId: "ux-critic", requestedByUserId: "user-1", requestedByAgentId: "coding-agent", requestedOutcome: "Review design", inputPayload: { artifactRef }, status: "requested", approvalContext: { required: false }, metadata: {} },
   offer: { offerId: "offer-1", serviceId: "service-1", status: "active", authorityBoundary: "advice-only", riskTier: "low", availabilityScope: "internal", budgetEnvelope: {}, requiredApprovals: [], expiresAt: null },
@@ -23,6 +31,26 @@ describe("bounded advisory engagement fulfillment", () => {
     const context = { agentId: binding.actorAgentId, apiTokenId: "token-1", authSource: "pat", userContext: { userId: "user-1", isSuperuser: false, platformRole: "developer" } };
     await expect(fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, context as never, fakeDb as never)).rejects.toThrow(/read_scope_refused/);
   });
+  it("a lost-response retry observes its existing task without submitting again", async () => {
+    const currentBinding = { ...binding, roomHeadSha: artifactRef.commitSha };
+    const engagement = { ...snapshot().engagement, status: "completed", metadata: { fulfillment: { binding: currentBinding, taskRunId: "TR-ORIGINAL" }, result: { summary: "Actual persisted result" } } };
+    const fakeDb = { $queryRaw: vi.fn().mockResolvedValue([]), coworkerEngagement: { findFirst: async () => engagement, findUnique: async () => engagement },
+      mcpApiToken: { findUnique: async () => ({ userId: binding.userId, kind: "operator", revokedAt: null, expiresAt: null }) },
+      workroom: { findUnique: async () => ({ ...snapshot().room, id: "room-row-1" }) }, taskRun: { findUnique: async () => null } };
+    const context = { agentId: binding.actorAgentId, apiTokenId: "token-1", authSource: "pat", tokenScope: "write", userContext: { userId: binding.userId } };
+    const result = await fulfillCoworkerEngagement(binding.engagementId, { workroomId: binding.workroomId, stageKey: binding.stageKey, artifactRef }, binding.userId, context as never, fakeDb as never);
+    expect(result).toMatchObject({ success: true, data: { status: "completed", fulfillment: { taskRunId: "TR-ORIGINAL" }, result: { summary: "Actual persisted result" } } });
+  });
+  it("refuses legacy INV5 with zero governed rows and unknown native capability/closure without dispatch", async () => {
+    const currentBinding={...binding,roomHeadSha:artifactRef.commitSha};
+    const engagement={...snapshot().engagement,status:"unavailable",metadata:{fulfillment:{binding:currentBinding,taskRunId:"TR-ORIGINAL"}}};
+    const observe=vi.fn();const fakeDb={coworkerEngagement:{findFirst:async()=>engagement},workroom:{findUnique:async()=>snapshot().room},taskRun:{findUnique:observe}};
+    const context={agentId:binding.actorAgentId,apiTokenId:"original-oauth",authSource:"oauth",tokenScope:"write",userContext:{userId:binding.userId}};
+    capacityWake.mockClear();
+    const result=await fulfillCoworkerEngagement(binding.engagementId,{workroomId:binding.workroomId,stageKey:binding.stageKey,artifactRef},binding.userId,context as never,fakeDb as never);
+    expect(result).toMatchObject({success:false,error:"engagement_execution_proof_required",data:{engagementId:binding.engagementId,taskRunId:"TR-ORIGINAL",executionRequested:false,resumable:false}});
+    expect(observe).not.toHaveBeenCalled();expect(capacityWake).not.toHaveBeenCalled();
+  });
   it("uses the registered canonical/runtime provider pair and no unrelated aliases", () => {
     expect(engagementProviderIdentityRefs("AGT-906")).toEqual(["AGT-906", "ux-design-critic"]);
     expect(engagementProviderIdentityRefs("ux-design-critic")).toEqual(["AGT-906", "ux-design-critic"]);
@@ -30,12 +58,14 @@ describe("bounded advisory engagement fulfillment", () => {
   });
   it("reprojects an unknown original task only from its actual persisted state and evidence", async () => {
     const result = { summary: "Use compact rows", criteria: ["Surface detail"], corpusRefs: ["professions/ux-design/hierarchy"], findings: [] };
-    const task = { status: "input-required", progressPayload: { executionUncertainty: { outcome: "unknown" }, summary: JSON.stringify(result) }, a2aMetadata: { engagementBinding: binding }, completedAt: null };
+    const task = { status: "input-required", progressPayload: { executionUncertainty: { outcome: "unknown" }, summary: JSON.stringify(result) }, a2aMetadata: { engagementBinding: binding, engagementReadEvidence: readEvidence() }, completedAt: null };
     const engagement = { ...snapshot().engagement, id: "row-1", status: "unknown", updatedAt: new Date(), metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding } } };
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const returned = vi.fn().mockResolvedValue({ id: "return-1" });
     const fakeDb = {
+      $queryRaw: vi.fn().mockResolvedValue([]), workroomActivity: { create: returned },
       taskRun: { findUnique: async () => task }, coworkerEngagement: { findUnique: async () => engagement, updateMany },
-      workroom: { findUnique: async () => snapshot().room },
+      workroom: { findUnique: async () => ({ ...snapshot().room, id: "room-row-1" }) },
       agent: { findUnique: async () => ({ agentId: "ux-design-critic", name: "ux-design-critic", slugId: "ux-design-critic" }) },
       toolExecution: { findMany: async () => [
         { id: "read-1", toolName: "read_source_at_version", success: true, parameters: { repositoryFullName: "owner/repo", version: artifactRef.commitSha, path: artifactRef.path, expectedBlobId: artifactRef.providerBlobId }, result: {} },
@@ -48,6 +78,10 @@ describe("bounded advisory engagement fulfillment", () => {
     task.status = "completed";
     task.progressPayload = { summary: JSON.stringify(result) } as typeof task.progressPayload;
     await reconcileEngagementTaskResult("TR-ORIGINAL", fakeDb as never);
+    expect(returned).toHaveBeenCalledOnce();
+    engagement.status = "completed";
+    await reconcileEngagementTaskResult("TR-ORIGINAL", fakeDb as never);
+    expect(returned).toHaveBeenCalledOnce();
     expect(updateMany.mock.calls[0]![0].data).toMatchObject({ status: "completed", metadata: { result: { advisoryOnly: true, authorDisposition: "pending", sourceExecutionIds: ["read-1"] } } });
   });
   function authorityDb() {
@@ -74,6 +108,13 @@ describe("bounded advisory engagement fulfillment", () => {
     for (const change of [{ riskClass: "bounded-write" }, { threadId: "foreign" }, { agentId: "foreign" }, { idempotencyKey: "new-key" }, { authorityScope: [...execution.authorityScope, "tool:execute_script"] }]) {
       expect(typeof parseRemoteTaskSubmitParams({ ...packet, ...change })).toBe("string");
     }
+  });
+  it("requires supplied rendered inputs at first UX Critic binding while preserving existing legacy scope",()=>{
+    const state=snapshot(),b={...binding,serviceId:"svc-ux-design-critique"};
+    state.engagement.serviceId=b.serviceId;state.offer.serviceId=b.serviceId;state.service.serviceId=b.serviceId;
+    expect(()=>assertEngagementSnapshot(b,state)).toThrow(/rendered_input_required/);
+    state.engagement.metadata={fulfillment:{taskRunId:"TR-original",binding:b}};
+    expect(()=>assertEngagementSnapshot(b,state,"TR-original")).not.toThrow();
   });
   it("checks live authority before atomically associating the original request", async () => {
     admission.allowed = true;
@@ -105,7 +146,7 @@ describe("bounded advisory engagement fulfillment", () => {
     const fake = authorityDb();
     const currentBinding = { ...binding, providerAgentId: "AGT-906" };
     // Isolate authority ownership: this fixture's canonical provider is qualified.
-    // The live UX critic still lacks file_read; this fixture does not grant it.
+    // Fixture grants are synthetic; live grants are revalidated by the runtime.
     const canonical = { ...fake.provider, agentId: "AGT-906" };
     const runtime = { ...fake.provider, agentId: "ux-design-critic", toolGrants: [] as Array<{ grantKey: string }> };
     Object.assign(fake.state.engagement, { providerAgentId: "AGT-906" });
@@ -178,14 +219,25 @@ describe("bounded advisory engagement fulfillment", () => {
       { id: "read-1", toolName: "read_source_at_version", success: true, parameters: { repositoryFullName: "owner/repo", version: artifactRef.commitSha, path: artifactRef.path, expectedBlobId: artifactRef.providerBlobId }, result: {} },
       { id: "wiki-1", toolName: "wiki_query", success: true, parameters: {}, result: { data: { results: [{ slug: "professions/ux-design/hierarchy" }] } } },
     ];
-    expect(validateEngagementContribution(binding, content, executions)).toMatchObject({ summary: "Use compact rows", sourceExecutionIds: ["read-1"], corpusExecutionIds: ["wiki-1"] });
+    expect(validateEngagementContribution(binding, content, executions)).toBeNull(); // metrics-only audits cannot prove a read
+    expect(validateEngagementContribution(binding, content, executions, undefined, readEvidence())).toMatchObject({ summary: "Use compact rows", sourceExecutionIds: ["read-1"], corpusExecutionIds: ["wiki-1"] });
     expect(validateEngagementContribution(binding, content, [])).toBeNull();
     expect(validateEngagementContribution(binding, content, executions.map(row => ({ ...row, success: false })))).toBeNull();
     expect(validateEngagementContribution(binding, content.replace("professions/ux-design/hierarchy", "invented-page"), executions)).toBeNull();
     expect(validateEngagementContribution(binding, "Task completed", executions)).toBeNull();
   });
+  it("preserves a free-text original revision while room head is newer", () => {
+    const state = snapshot();
+    state.engagement.inputPayload = { "surface-or-prototype": "owner/repo@" + artifactRef.commitSha + " docs/design.md" } as never;
+    state.room.headSha = "c".repeat(40);
+    const original = { ...binding, roomHeadSha: state.room.headSha, inputDigest: engagementInputDigest(state.engagement.requestedOutcome, state.engagement.inputPayload) };
+    expect(() => assertEngagementSnapshot(original, state)).not.toThrow();
+    expect(() => assertEngagementSnapshot({ ...original, artifactRef: { ...artifactRef, path: "docs/other.md" } }, state)).toThrow(/original_artifact/);
+    expect(() => assertEngagementSnapshot({ ...original, artifactRef: { ...artifactRef, commitSha: state.room.headSha } }, state)).toThrow(/original_revision_required/);
+  });
   it("validates an immutable bound request", () => {
     expect(parseEngagementTaskBinding(binding)).toEqual(binding);
+    expect(() => assertEngagementSnapshot({ ...binding, artifactRef: { ...artifactRef, providerBlobId: "c".repeat(40) } }, snapshot())).toThrow(/original_artifact/);
     expect(() => assertEngagementSnapshot(binding, snapshot())).not.toThrow();
   });
   it.each([
@@ -235,4 +287,71 @@ it("does not treat an uncalibrated UX search as calibration evidence", () => {
     { id: "critique-1", toolName: "search_ux_critique_corpus", success: true, parameters: { calibratedOnly: false }, result: { data: { total: 1, grounding: "grounded" } } },
   ];
   expect(validateEngagementContribution(binding, contribution, executions, "ux-design")).toBeNull();
+});
+
+it("rolls back completion when the Workroom return fails, then safely retries once", async () => {
+  const task = { status: "completed", progressPayload: { summary: JSON.stringify({ summary: "Critique", criteria: ["Hierarchy"], corpusRefs: ["professions/ux-design/hierarchy"], findings: [] }) }, a2aMetadata: { engagementBinding: binding, engagementReadEvidence: readEvidence() }, completedAt: new Date() };
+  let engagement = { ...snapshot().engagement, id: "row-1", status: "accepted", updatedAt: new Date(), metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding } } };
+  let returnWrites = 0; let failReturn = true;
+  const tx = { $queryRaw: async () => [], taskRun: { findUnique: async () => task }, agent: { findUnique: async () => ({ agentId: "ux-design-critic", name: "ux-design-critic", slugId: "ux-design-critic" }) },
+    coworkerEngagement: { findUnique: async () => engagement, updateMany: async ({ data }: { data: object }) => { engagement = { ...engagement, ...data }; return { count: 1 }; } },
+    workroom: { findUnique: async () => ({ id: "room-1" }) }, workroomActivity: { create: async () => { if (failReturn) throw new Error("return unavailable"); returnWrites++; return { id: "return-1" }; } },
+    toolExecution: { findMany: async () => readEvidence().map(row => ({ id: row.executionId, success: true, toolName: row.kind === "source" ? "read_source_at_version" : row.kind === "corpus" ? "wiki_query" : "search_ux_critique_corpus", parameters: {}, result: {} })) } };
+  const database = { $transaction: async (work: (db: typeof tx) => Promise<void>) => { const prior = engagement; try { return await work(tx); } catch (error) { engagement = prior; throw error; } } };
+  await expect(reconcileEngagementTaskResult("TR-ORIGINAL", database as never)).rejects.toThrow("return unavailable");
+  expect(engagement.status).toBe("accepted");
+  failReturn = false;
+  await reconcileEngagementTaskResult("TR-ORIGINAL", database as never);
+  await reconcileEngagementTaskResult("TR-ORIGINAL", database as never);
+  expect(engagement.status).toBe("completed");
+  expect(returnWrites).toBe(1);
+});
+
+it("reports a projection interruption as actionable observation failure without execution", async () => {
+  const engagement = { ...snapshot().engagement, status: "accepted", metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding } } };
+  const fake = { $queryRaw: vi.fn().mockRejectedValue(new Error("transaction expired")), coworkerEngagement: { findFirst: async () => engagement },
+    mcpApiToken: { findUnique: async () => ({ kind: "operator", userId: binding.userId, revokedAt: null, expiresAt: null }) },
+    workroom: { findUnique: async () => ({ id: "room", capsuleId: binding.workroomId }) } };
+  const result = await fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, { agentId: binding.actorAgentId, apiTokenId: "current", authSource: "pat", tokenScope: "write", userContext: { userId: binding.userId } } as never, fake as never);
+  expect(result).toMatchObject({ success: false, error: "engagement_projection_unavailable", data: { taskRunId: "TR-ORIGINAL", executionRequested: false } });
+});
+
+it("projects an actionable capacity pause even while engagement remains accepted", async () => {
+  const wait = { schemaVersion: 1, kind: "provider-capacity", failureKind: "busy", resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-10-25T22:24:14Z", nextAttemptAt: "2026-10-25T22:25:14Z" };
+  const engagement = { ...snapshot().engagement, id: "ce-row", status: "accepted", updatedAt: new Date(), metadata: { fulfillment: { binding, taskRunId: "TR-ORIGINAL" } } };
+  const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+  const fake = { $queryRaw: async () => [], taskRun: { findUnique: async () => ({ status: "submitted", progressPayload: { resourceWait: wait, executedToolCount: 0, summary: "Provider refused before tools" }, a2aMetadata: { engagementBinding: binding } }) }, coworkerEngagement: { findUnique: async () => engagement, updateMany } };
+  await reconcileEngagementTaskResult("TR-ORIGINAL", fake as never);
+  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "accepted", metadata: expect.objectContaining({ fulfillment: expect.objectContaining({ waitReason: "provider-capacity", resourceWait: wait, nextAction: expect.stringMatching(/identical fulfillment.*recorded retry time/i) }) }) }) }));
+});
+
+it("explicit identical fulfillment requests a safe capacity wake; observation never does", async () => {
+  capacityWake.mockClear();
+  const storedBinding = { ...binding, roomHeadSha: artifactRef.commitSha };
+  const engagement = { ...snapshot().engagement, status: "accepted", metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding: storedBinding } } };
+  const fake = { $queryRaw: async () => [], coworkerEngagement: { findFirst: async () => engagement, findUnique: async () => engagement }, mcpApiToken: { findUnique: async () => ({ userId: binding.userId, kind: "operator", revokedAt: null, expiresAt: null }) }, workroom: { findUnique: async () => ({ ...snapshot().room, id: "room-row" }) }, taskRun: { findUnique: async () => null } };
+  const context = { agentId: binding.actorAgentId, apiTokenId: "current", authSource: "pat", tokenScope: "write", userContext: { userId: binding.userId } };
+  await fulfillCoworkerEngagement(binding.engagementId, { workroomId: binding.workroomId, stageKey: binding.stageKey, artifactRef }, binding.userId, context as never, fake as never);
+  expect(capacityWake).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ taskRunId: "TR-ORIGINAL", binding: storedBinding, token: expect.objectContaining({ tokenId: "current" }) }));
+  await fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, context as never, fake as never);
+  expect(capacityWake).toHaveBeenCalledTimes(1);
+});
+
+it("persists and returns a visual contribution only with its actual same-attempt image delivery",async()=>{
+ const currentBinding={...binding,visualEvidenceRef:{kind:"document-version" as const,repositoryFullName:"owner/repo",versionId:"manifest",valueDigest:"e".repeat(64)}};
+ const fence={schemaVersion:1,reservation:null,dispatchClaim:"attempt",authorityDigest:null,requestDigest:"d".repeat(64)};
+ const receipt={version:1,manifestRef:currentBinding.visualEvidenceRef,captures:[{versionId:"capture-1",sha256:"f".repeat(64)}],deliveredAt:new Date().toISOString(),providerId:"codex",modelId:"actual",dispatchFence:fence};
+ const contribution={summary:"Make the routing decision clearer",criteria:["Hierarchy"],corpusRefs:["professions/ux-design/hierarchy"],findings:[{observation:"Repeated labels obscure routing stages",proposal:"Use distinct stage labels"}]};
+ const task={status:"completed",completedAt:new Date(),progressPayload:{summary:JSON.stringify(contribution),dispatch:{claimedAt:"attempt"}},a2aMetadata:{engagementBinding:currentBinding,requestDigest:fence.requestDigest,engagementReadEvidence:readEvidence(),engagementVisualDelivery:undefined as unknown}};
+ const engagement={...snapshot().engagement,id:"row-1",status:"in-progress",updatedAt:new Date(),metadata:{fulfillment:{taskRunId:"TR-original",binding:currentBinding}}};
+ const updateMany=vi.fn(async(_args: any)=>({count:1})),returned=vi.fn();
+ const db={$queryRaw:vi.fn(),taskRun:{findUnique:async()=>task},coworkerEngagement:{findUnique:async()=>engagement,updateMany},
+ agent:{findUnique:async()=>({agentId:"ux-design-critic",name:"UX Design Critic",slugId:"ux-design-critic"})},
+ toolExecution:{findMany:async()=>readEvidence().map(e=>({id:e.executionId,success:true,toolName:e.kind,parameters:{},result:{}}))},workroom:{findUnique:async()=>({id:"room-row"})},workroomActivity:{create:returned}};
+ await reconcileEngagementTaskResult("TR-original",db as never);expect(returned).not.toHaveBeenCalled();expect(updateMany.mock.calls[0][0].data.status).toBe("unavailable");
+ task.a2aMetadata.engagementVisualDelivery=receipt;updateMany.mockClear();
+ await reconcileEngagementTaskResult("TR-original",db as never);
+ expect(returned).toHaveBeenCalledOnce();expect(updateMany.mock.calls[0][0].data.metadata.result).toMatchObject({taskRunId:"TR-original",engagementId:"CE-1",renderedEvidence:receipt,advisoryOnly:true,authorDisposition:"pending"});
+ task.progressPayload.dispatch.claimedAt="different-attempt";returned.mockClear();
+ await reconcileEngagementTaskResult("TR-original",db as never);expect(returned).not.toHaveBeenCalled();
 });

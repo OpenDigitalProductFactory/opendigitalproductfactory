@@ -1,5 +1,6 @@
 import { INITIATIVE_GATE_KEYS } from "./receipt-schema";
 import { READINESS_PROFILES } from "./types";
+import { parseRepoCommitRangeRef } from "./repo-commit-range";
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -14,11 +15,12 @@ export function validStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(validString);
 }
 
-function validArtifactRef(input: unknown): boolean {
+export function validInitiativeArtifactRef(input: unknown): boolean {
   const value = object(input);
   if (!value) return false;
   if (value.kind === "feature-build-revision") return validString(value.revisionId);
   if (value.kind === "document-version") return validString(value.versionId);
+  if (value.kind === "repo-commit-range") return parseRepoCommitRangeRef(value) !== null;
   return value.kind === "repo-blob-at-commit"
     && validString(value.repositoryFullName) && validString(value.commitSha)
     && validString(value.path) && validString(value.providerBlobId);
@@ -60,7 +62,7 @@ export function validInitiativeGateReceipt(
     && Boolean(subject && ["backlog-item", "epic", "feature-build", "task-run"].includes(String(subject.kind)))
     && validString(subject?.id)
     && (!expected.subject || (subject?.kind === expected.subject.kind && subject.id === expected.subject.id))
-    && validArtifactRef(payload.artifactRef) && validAuthoritySnapshot(payload.authoritySnapshot)
+    && validInitiativeArtifactRef(payload.artifactRef) && validAuthoritySnapshot(payload.authoritySnapshot)
     && validStringArray(payload.findingRefs) && validStringArray(payload.resolvedFindingRefs)
     && (gate !== "classification" || payload.decision !== "pass"
       || (READINESS_PROFILES as readonly string[]).includes(String(payload.selectedProfile)))

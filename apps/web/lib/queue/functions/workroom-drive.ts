@@ -1,5 +1,3 @@
-// apps/web/lib/queue/functions/workroom-drive.ts
-//
 // BI-FCD639D9 — the standing Workroom drive. DPF owns wake, lease, dispatch,
 // attention, and stop. Codex/Claude/Grok/embedded coworkers are interchangeable
 // workers behind ScheduledAgentTask. Quiet rooms do not wake.
@@ -16,9 +14,10 @@ import {
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
-import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
+import { liveDriveTaskOwnerEffects, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
+import { isRecord } from "@/lib/shared/coerce";
 import {
   jsiSchemePresent,
   resolveCoordinatorEligibility,
@@ -86,6 +85,7 @@ import {
 import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
+import { overseeDriveRooms, type DriveOverseerDeps, type DriveOverseerResult } from "./workroom-overseer-run"; // BI-8E1486FA
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
@@ -114,6 +114,7 @@ export type WorkroomDriveRoom = {
   stageDispatchedAt?: Date | null;
   /** BI-7C0B2BD6: what the room's task shows about the queued run; null when no task exists, absent when unread. */
   stageRun?: StageRunObservation | null;
+  stageRunsByTask?: Readonly<Record<string, StageRunObservation | null>>;
   /** Graph rooms only (Phase 3c): when each marked stage most recently started. */
   stageDispatchedAtByStage?: ReadonlyMap<string, Date> | null;
   /** Graph rooms only (PR-3c-5): each live sub-shape child's status and drive action/reason, by capsule id. */
@@ -183,7 +184,7 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
   notifyDeadline?: (input: DeadlineNoticeInput) => Promise<boolean>;
 };
 
-export type WorkroomDriveResult = {
+export type WorkroomDriveResult = DriveOverseerResult & {
   runId: string;
   scanned: number;
   dispatched: number;
@@ -199,12 +200,6 @@ export type WorkroomDriveResult = {
 
 // One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
 const TERMINAL = TERMINAL_WORKROOM_STATUSES;
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   const declared = readWorkroomPostureClaim(scopeClaims)?.proactivityLevel;
@@ -414,7 +409,7 @@ export async function applyDrivePlan(input: {
 
 export async function runWorkroomDriveJob(
   now: Date = new Date(),
-  deps?: {
+  deps?: DriveOverseerDeps & {
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
@@ -465,6 +460,7 @@ export async function runWorkroomDriveJob(
     // BI-7C0B2BD6: the writeback latch reads each room's task, so it holds only while a run is outstanding.
     rooms = await withStageRuns(rooms);
   }
+  const overseen = await overseeDriveRooms(rooms, now, deps); rooms = overseen.rooms; // BI-8E1486FA: close finished rooms first
   const effects = deps?.effects ?? createWorkroomDriveEffects();
   // BI-7C0B2BD6 / DI-7109D22D4812: dispatch no more than agent capacity allows; the rest wait, oldest first.
   rooms = orderRoomsOldestWaitingFirst(rooms);
@@ -519,8 +515,9 @@ export async function runWorkroomDriveJob(
       coordinatorEligibility: room.coordinatorEligibility,
       now,
       priorDrive: priorDriveFromStored(stored),
-      writebackRetry: readWritebackRetry(asRecord(room.workspaceState)?.workroomDrive),
+      writebackRetry: readWritebackRetry(isRecord(room.workspaceState) ? room.workspaceState.workroomDrive : undefined),
       ...(room.stageRun !== undefined ? { stageRun: room.stageRun } : {}),
+      ...(room.stageRunsByTask !== undefined ? { stageRunsByTask: room.stageRunsByTask } : {}),
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
       ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
@@ -530,7 +527,9 @@ export async function runWorkroomDriveJob(
     const resolved = await resolveWithReview(room, driveInput);
     // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
     // BI-7C0B2BD6: then the capacity cap, so a stood-down room never takes a dispatch slot.
-    const plan = admit(gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus));
+    const itemPlan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+    // BI-9CD95438: applyDrivePlan still records the hold; known-held rooms do not spend a slot.
+    const plan = readWorkroomQueueHold(room.workspaceState) ? itemPlan : admit(itemPlan);
     const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
@@ -573,7 +572,7 @@ export async function runWorkroomDriveJob(
     attention,
     stopped,
     skipped,
-    plans,
+    plans, ...(overseen.overseer ? { overseer: overseen.overseer } : {}), // absent when the duty did not run, so caller-supplied ticks are unchanged
   };
 }
 
@@ -672,23 +671,11 @@ export function createWorkroomDriveEffects(
 ): WorkroomDriveEffects {
   return {
     ...createSubShapeChildEffects(loadDb as never),
-    // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
-    // blockage can name who clears it instead of waiting on nobody. Composed
-    // from the same lineage walk the room workforce read uses, so the two
-    // cannot disagree about who answers for a room.
-    async resolveAccountability(roomId) {
-      const prisma = await loadDb();
-      const { resolveRoomAccountabilityFromDb } = await import(
-        "@/lib/work-management/room-workforce.server"
-      );
-      return resolveRoomAccountabilityFromDb(
-        prisma as unknown as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
-        { workroomId: roomId },
-      );
-    },
-    async resolvePrincipalUserId(principalId) {
-      return activeUserIdForHumanPrincipal((await loadDb()) as never, principalId);
-    },
+    // BI-12A083B4: the drive asks accountability only when a tick ends stuck,
+    // so a blockage can name who clears it instead of waiting on nobody.
+    // BI-D13FA12A/BI-17238133: the same effects name a task's owner, shared
+    // with the scheduled-room mandate that re-checks it.
+    ...liveDriveTaskOwnerEffects(loadDb),
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),
     notifyDeadline: async (input) => (await import("@/lib/work-management/workroom-deadline-notice")).notifyWorkroomDeadline(input),
@@ -713,7 +700,7 @@ export function createWorkroomDriveEffects(
                 AND: [{ leaseExpiresAt: { gt: clock() } }],
               } : {}),
             },
-            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: snapshot } as object },
+            data: { workspaceState: { ...(isRecord(current.workspaceState) ? current.workspaceState : {}), workroomDrive: snapshot } as object },
           });
           if (updated.count !== 1) return null;
         }

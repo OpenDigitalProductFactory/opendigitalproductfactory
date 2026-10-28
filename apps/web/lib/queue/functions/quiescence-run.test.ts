@@ -408,4 +408,40 @@ describe("quiescence coordinator — an upgrade waits for work (BI-F9EE05E5)", (
     expect(world.transitions).not.toContain("awaiting-operator");
     expect(world.levels.at(-1)).toBe("normal");
   });
+
+  it("keeps the five-minute bound across durable replay and scheduling delay", async () => {
+    world.budgetMs = 5 * MIN;
+    const cache = new Map<string, unknown>();
+    const suspendedWaits = new Set<string>();
+    const suspended = new Error("durable suspension");
+    const replayStep = {
+      ...step,
+      run: async (id: string, fn: () => unknown) => {
+        if (!cache.has(id)) cache.set(id, await fn());
+        return cache.get(id);
+      },
+      waitForEvent: async (id: string, opts: { event: string }) => {
+        if (opts.event !== "ops/quiescence.control") throw new Error("Unexpected swap");
+        if (suspendedWaits.has(id)) return null;
+        suspendedWaits.add(id);
+        vi.setSystemTime(Date.now() + MIN);
+        throw suspended;
+      },
+    };
+    const handler = (quiescenceRun as unknown as { handler: (ctx: unknown) => Promise<Record<string, unknown>> }).handler;
+    let result: unknown;
+    for (let replay = 0; replay < 12; replay++) {
+      try {
+        result = await handler({ event: { data: { runId: "QR-1", budgetMs: 5 * MIN } }, step: replayStep });
+        break;
+      } catch (error) {
+        if (error !== suspended) throw error;
+      }
+    }
+    expect(result).toMatchObject({ outcome: "deferred" });
+    expect(suspendedWaits.size).toBe(5);
+    const q = await import("@/lib/self-upgrade/quiescence");
+    expect(q.transitionState).toHaveBeenCalledWith("QR-1", "deferred", expect.objectContaining({ actualWaitMs: 5 * MIN }));
+  });
+
 });

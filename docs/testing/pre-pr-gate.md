@@ -406,6 +406,14 @@ state used by `pregate:status`. Its evidence carries no lease id because it
 never enters the scarce sandbox. A failed documentation check is a failed gate;
 it does not retry by consuming the heavyweight lane.
 
+`pregate.mjs` hands every diff to this gate, docs-only included (BI-78176241).
+It used to exit 0 on a docs-only diff before the gate started, so the lane
+never ran, no record was written, and the publish guard refused every
+docs-only push. "Docs-only" has one definition, `classifyDocsOnlyDiff` in
+`scripts/lib/ci-evidence-plan.mjs`. The planner, this lane, the pre-push
+exemption and sandbox admission all call it. If the lane declines a docs-only
+diff, the gate runs the full sandbox path. It does not exit 0 without a record.
+
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
 gate owns the lease-claim / heartbeat / fenced-run / descendant-quiescence /
@@ -944,6 +952,12 @@ does not reserve capacity or authorize a later claim. That late check records
 `blocked_quiescence` for an ordinary run and parks with the same exit 75, while
 preserving existing evidence on `--finalize-evidence`. Neither check polls:
 resume after the server-owned quiescence coordinator completes.
+An already-running durable resumer retains its original reservation pin when
+its child returns the canonical `local_ci_quiescence_wait` packet. It waits
+within its original deadline, then retries that same pin. Only a validated
+`local_ci_durable_wait` handoff can replace the pin. Missing, malformed,
+foreign or mixed quiescence/handoff observations stop unrun; exit 75 alone
+does not authorize a replacement reservation.
 If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts

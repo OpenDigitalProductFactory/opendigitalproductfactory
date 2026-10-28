@@ -15,6 +15,9 @@ convergence policy of its own beyond what is named here.
 - **Report.** `--report-json` records, per client and scope, the version,
   digest and auth mode before and after, the action taken, any backup, and
   whether a restart is needed, plus each client CLI's own `--version`.
+  Success is the client's own read-back (BI-1DCF9F23, spec M3): each row is
+  checked against what that client actually holds, never against an exit
+  code. A client whose CLI is missing is `absent`; a dry run is a `preview`.
 - **Claude scopes.** A `dpf` server in a project's local-scope settings that
   duplicates the plugin connector is backed up and removed through
   `claude mcp remove dpf -s local`. The cached descriptor of every project
@@ -24,22 +27,28 @@ convergence policy of its own beyond what is named here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 DECLARATION_HEADER = "X-DPF-Toolchain"
-DECLARATION_QUERY_KEYS = ("dpf_pack", "dpf_digest", "dpf_client")
+DECLARATION_QUERY_KEYS = ("dpf_pack", "dpf_digest", "dpf_client", "dpf_converge")
 DEFAULT_CARRIERS = {"claude-code": "header", "codex": "header", "grok": "query", "antigravity": "header"}
 CANONICAL_MCP_URL = "https://localhost/api/mcp/v1?tier=full"
 # Current copies template DPF_CLAUDE_MCP_URL, legacy ones DPF_MCP_URL (BI-D6A6462A).
 _TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 RESTART_ACTIONS = ("updated", "retired")
+# Rows with nothing of the client's own to read back.
+_NO_READBACK = ("absent", "skipped", "failed", "prunable", "pruned", "retired", "unrun", "unproven", "preview")
+_ABSENT = re.compile(r"^(absent:|skipped: .*\bnot found\b)")
 
 
 def _updater():
@@ -77,6 +86,17 @@ class Declarations:
         self.pack = version.split("+", 1)[0]
         self.digest = delivered_digest(skill_pack)
         self.manifest = manifest or {}
+        #: The pack's own skills and their digest: what Antigravity's skills directory must hold.
+        self.skill_names: Optional[list[str]] = pack_skill_names(skill_pack)
+        self.skills_digest = skills_digest(skill_pack / "skills", self.skill_names)
+
+    @property
+    def delivered(self) -> str:
+        """The version a delivery stamps into client manifests (BI-4F9E3221).
+
+        Connectors still declare the base `pack`: the floor compares it.
+        """
+        return f"{self.pack}+c.{self.digest[:12]}"
 
     @classmethod
     def of(cls, pack: str, digest: str, manifest: Optional[Mapping[str, Any]] = None) -> "Declarations":
@@ -85,6 +105,8 @@ class Declarations:
         declared.pack = pack.split("+", 1)[0]
         declared.digest = digest
         declared.manifest = manifest or {}
+        declared.skill_names = None
+        declared.skills_digest = None
         return declared
 
     def enabled(self) -> bool:
@@ -95,13 +117,19 @@ class Declarations:
         chosen = shape.get("declarationCarrier") if isinstance(shape, Mapping) else None
         return chosen if chosen in ("query", "header") else DEFAULT_CARRIERS.get(client, "header")
 
+    #: `status[:code][@epochSeconds]` from the host agent's state (BI-3E66F76F), or None.
+    converge: Optional[str] = None
+
     def header_value(self, client: str) -> str:
-        return f"pack={self.pack};digest={self.digest[:16]};client={client}"
+        value = f"pack={self.pack};digest={self.digest[:16]};client={client}"
+        return f"{value};converge={self.converge}" if self.converge else value
 
     def query_url(self, url: str, client: str) -> str:
         parts = urlsplit(url)
         query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in DECLARATION_QUERY_KEYS]
         query += [("dpf_pack", self.pack), ("dpf_digest", self.digest[:16]), ("dpf_client", client)]
+        if self.converge:
+            query.append(("dpf_converge", self.converge))
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
     def declare_server(self, server: dict[str, Any], client: str) -> dict[str, Any]:
@@ -117,6 +145,31 @@ class Declarations:
         headers[DECLARATION_HEADER] = self.header_value(client)
         declared["headers"] = headers
         return declared
+
+
+_CONVERGE_STATUSES = {"ok", "failed", "needs-operator", "opted-out", "offline", "ahead-of-portal", "busy"}
+_CONVERGE_CODE = re.compile(r"^[a-z0-9_.-]{1,48}$")
+
+
+def agent_converge_token(home: Path) -> Optional[str]:
+    """How the host agent last fared, as `status[:code][@epochSeconds]` (BI-3E66F76F).
+
+    Read from ~/.dpf/toolchain-agent/state.json, the agent's own file. Each
+    connector carries it so the portal can show why a client is behind and
+    escalate a host that has failed for a day. It reflects the agent's last
+    completed run, so it lags one run behind the current one by design.
+    """
+    state = _read_json(home / ".dpf" / "toolchain-agent" / "state.json")
+    if not isinstance(state, dict) or state.get("status") not in _CONVERGE_STATUSES:
+        return None
+    token = str(state["status"])
+    code = state.get("code")
+    if isinstance(code, str) and _CONVERGE_CODE.match(code):
+        token += f":{code}"
+    since = state.get("failureSince")
+    if token.split(":", 1)[0] in ("failed", "needs-operator") and isinstance(since, (int, float)) and since > 0:
+        token += f"@{int(since)}"
+    return token
 
 
 def declare_grok_descriptor(managed: Path, declarations: Declarations, dry_run: bool) -> bool:
@@ -293,24 +346,80 @@ def _codex_auth(home: Path) -> Optional[str]:
 
 
 def copy_state(copy: Path, auth: Optional[str]) -> dict[str, Optional[str]]:
-    from installed_copy_freshness import delivered_digest, pack_version as manifest_version
+    from installed_copy_freshness import delivered_digest, installed_version, pack_version as manifest_version
 
     if not copy.is_dir():
         return {"version": None, "digest": None, "authMode": auth}
-    return {"version": manifest_version(copy), "digest": delivered_digest(copy), "authMode": auth}
+    # The exact string, `+c.<digest>` stamp included: the Claude read-back
+    # compares it with the delivered version (BI-4F9E3221), so the base
+    # version alone failed every converged project and local row.
+    return {"version": installed_version(copy) or manifest_version(copy), "digest": delivered_digest(copy), "authMode": auth}
 
 
-def snapshot(home: Path) -> dict[tuple[str, str], dict[str, Optional[str]]]:
-    """The installed state of every client copy and scope on this host."""
+def grok_installed_copy() -> Optional[Path]:
+    """The copy Grok itself loads, as `grok plugin list --json` reports it."""
+    updater = _updater()
+    grok = updater.resolve_grok_binary()
+    if not grok:
+        return None
+    try:
+        listed = subprocess.run([grok, "plugin", "list", "--json"], capture_output=True, text=True, timeout=30)
+        plugins = json.loads(listed.stdout or "[]") if listed.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    for plugin in plugins if isinstance(plugins, list) else []:
+        if isinstance(plugin, dict) and plugin.get("name") == updater.PLUGIN_NAME and isinstance(plugin.get("path"), str):
+            return Path(plugin["path"])
+    return None
+
+
+def pack_skill_names(pack: Path) -> list[str]:
+    """The skill directories a pack ships; an operator's own skills are not among them."""
+    root = pack / "skills"
+    if not root.is_dir():
+        return []
+    return sorted(entry.name for entry in root.iterdir() if (entry / "SKILL.md").is_file())
+
+
+def skills_digest(root: Path, names: list[str]) -> Optional[str]:
+    """One digest over the named skill directories under `root`, or None when there are none."""
+    from installed_copy_freshness import delivered_digest
+
+    if not names:
+        return None
+    digest = hashlib.sha256()
+    for name in names:
+        skill = root / name
+        digest.update(name.encode("utf-8") + b"\0")
+        digest.update((delivered_digest(skill) if skill.is_dir() else "missing").encode("ascii"))
+    return digest.hexdigest()
+
+
+def antigravity_skills_path(home: Path) -> Path:
+    return home / ".gemini" / "antigravity" / "skills"
+
+
+def _antigravity_state(home: Path, names: list[str]) -> dict[str, Optional[str]]:
+    config = _read_json(_updater().antigravity_mcp_config_path(home))
+    server = ((config or {}).get("mcpServers") or {}).get("dpf") if isinstance(config, dict) else None
+    url = server.get("serverUrl") if isinstance(server, dict) else None
+    return {"version": None, "digest": skills_digest(antigravity_skills_path(home), names),
+            "authMode": _auth_from_json_server(server) if server is not None else None,
+            "endpoint": url if isinstance(url, str) else None}
+
+
+def snapshot(home: Path, skill_names: Optional[list[str]] = None) -> dict[tuple[str, str], dict[str, Optional[str]]]:
+    """The installed state of every client copy and scope on this host, as each client holds it."""
     updater = _updater()
     shared = updater.shared_managed_plugin_path(home)
-    antigravity = _read_json(updater.antigravity_mcp_config_path(home))
+    grok = grok_installed_copy()
     states: dict[tuple[str, str], dict[str, Optional[str]]] = {
         ("shared", "copy"): copy_state(shared, _descriptor_auth(shared)),
         ("codex", "user"): copy_state(updater.codex_managed_plugin_path(home), _codex_auth(home)),
-        ("grok", "user"): copy_state(shared, "bearer"),
-        ("antigravity", "user"): copy_state(shared, _auth_from_json_server(
-            ((antigravity or {}).get("mcpServers") or {}).get("dpf") if isinstance(antigravity, dict) else None)),
+        # Grok's own plugin store and Antigravity's own skills and MCP config,
+        # never the shared copy they are installed from (spec M3).
+        ("grok", "user"): copy_state(grok, "bearer") if grok else {"version": None, "digest": None, "authMode": None},
+        ("antigravity", "user"): _antigravity_state(home, skill_names if skill_names is not None else pack_skill_names(shared)),
     }
     for entry in updater.claude_plugin_records(home):
         install = entry.get("installPath")
@@ -324,6 +433,60 @@ def snapshot(home: Path) -> dict[tuple[str, str], dict[str, Optional[str]]]:
 
 _CLI_COMMANDS = {"claude-code": "resolve_claude_binary", "codex": "resolve_codex_binary",
                  "grok": "resolve_grok_binary", "antigravity": "resolve_antigravity_binary"}
+
+
+#: How each client shows it is installed (spec M6): a binary, or an app bundle
+#: under an applications folder. A config folder alone is leftover evidence of
+#: an uninstalled client, not an install. Clients in DEFAULT_CARRIERS have an
+#: adapter; any other client found here is reported `unproven`.
+DISCOVERY: dict[str, dict[str, tuple[str, ...]]] = {
+    "claude-code": {"binaries": ("claude",), "apps": ("Claude.app",)},
+    "codex": {"binaries": ("codex",), "apps": ("Codex.app",)},
+    "grok": {"binaries": ("grok",), "apps": ()},
+    "antigravity": {"binaries": ("agy",), "apps": ("Antigravity.app",)},
+    "vscode": {"binaries": ("code",), "apps": ("Visual Studio Code.app", "Microsoft VS Code/Code.exe")},
+    "cursor": {"binaries": ("cursor",), "apps": ("Cursor.app", "cursor/Cursor.exe")},
+    "gemini-cli": {"binaries": ("gemini",), "apps": ()},
+    "opencode": {"binaries": ("opencode",), "apps": ()},
+}
+
+
+def _relocated_home() -> bool:
+    return bool(os.environ.get("DPF_AGENT_TOOLCHAIN_HOME"))
+
+
+def default_app_roots(home: Path) -> list[Path]:
+    # A fixture or relocated home is searched only within itself, so a test
+    # never reports this host's own clients.
+    if _relocated_home():
+        return [home / "Applications"]
+    if sys.platform == "darwin":
+        return [Path("/Applications"), home / "Applications"]
+    if sys.platform.startswith("win") and os.environ.get("LOCALAPPDATA"):
+        return [Path(os.environ["LOCALAPPDATA"]) / "Programs"]
+    return []
+
+
+def discover_clients(home: Path, which: Any = None, app_roots: Optional[list[Path]] = None) -> dict[str, list[str]]:
+    """Every client installed on this host and the evidence for it, found on every run (spec M6)."""
+    updater = _updater()
+    roots = default_app_roots(home) if app_roots is None else app_roots
+    if which is None:
+        local = str(home / ".local" / "bin")
+        which = (lambda name: shutil.which(name, path=local)) if _relocated_home() else shutil.which
+    found: dict[str, list[str]] = {}
+    for client, shape in DISCOVERY.items():
+        resolver = _CLI_COMMANDS.get(client)
+        binary = getattr(updater, resolver)() if resolver else None
+        for name in () if binary else shape["binaries"]:
+            binary = which(name)
+            if binary:
+                break
+        evidence = [binary] if binary else []
+        evidence += [str(root / app) for root in roots for app in shape["apps"] if (root / app).exists()]
+        if evidence:
+            found[client] = evidence
+    return found
 
 
 def cli_versions() -> dict[str, Optional[str]]:
@@ -347,34 +510,91 @@ def cli_versions() -> dict[str, Optional[str]]:
 class ConvergenceReport:
     """Collects one entry per client and scope; written by `--report-json`."""
 
-    def __init__(self, home: Path, declarations: Declarations, manifest: Optional[Mapping[str, Any]]) -> None:
+    def __init__(self, home: Path, declarations: Declarations, manifest: Optional[Mapping[str, Any]],
+                 endpoint: Optional[str] = None) -> None:
         self.home = home
         self.declarations = declarations
         self.manifest = manifest or {}
-        self.before = snapshot(home)
+        #: The MCP endpoint the updater wrote; connectors are read back against it.
+        self.endpoint = endpoint
+        self.before = snapshot(home, declarations.skill_names)
         self.entries: list[dict[str, Any]] = []
+        self.discovered: dict[str, list[str]] = {}
+        self.permission_entries: list[dict[str, Any]] = []
 
     def add(self, client: str, scope: str, status: str = "", action: Optional[str] = None,
             backup_path: Optional[str] = None, detail: Optional[str] = None) -> None:
         self.entries.append({"client": client, "scope": scope, "status": status, "action": action,
                              "backupPath": backup_path, "detail": detail})
 
+    def add_discovery(self, found: Mapping[str, list[str]]) -> None:
+        """Report every installed client DPF cannot converge, never skipping one silently (spec M6)."""
+        self.discovered = dict(found)
+        for client, evidence in found.items():
+            if client not in DEFAULT_CARRIERS:
+                self.add(client, "discovery", action="unproven",
+                         detail=f"installed ({', '.join(evidence)}); DPF has no adapter for it yet, so its DPF tools are "
+                                "not managed. See \"Adding a client\" in docs/architecture/agent-client-capability-parity.md.")
+
+    def add_permissions(self, entries: list[dict[str, Any]]) -> None:
+        """Sanitized permission metadata is distinct from installed pack proof."""
+        self.permission_entries.extend(entries)
+
+    def readback_failure(self, client: str, scope: str, now: Mapping[str, Any]) -> Optional[str]:
+        """Why this client's own view is not the delivered pack, or None when it is (spec M3)."""
+        declared = self.declarations
+        if client == "claude-code" and scope.startswith(("project:", "local:")):
+            if now.get("digest") != declared.digest or now.get("version") != declared.delivered:
+                return ("read-back: installed content does not match the expected pack; supported update "
+                        "remains unverified, client-owned cache retained.")
+            return None
+        if client in ("shared", "codex", "grok"):
+            if now.get("digest") != declared.digest:
+                where = {"shared": "the shared copy", "codex": "Codex's plugin source", "grok": "Grok's plugin store"}[client]
+                return f"read-back: {where} does not hold the delivered pack."
+            if client == "shared":
+                return self._endpoint_failure(_descriptor_url(self.home), "the Claude desktop connector descriptor")
+            return None
+        if client == "antigravity":
+            if declared.skill_names is None:
+                return None
+            if now.get("digest") != declared.skills_digest:
+                return "read-back: Antigravity's skills directory does not hold the delivered skills."
+            return self._endpoint_failure(now.get("endpoint"), "Antigravity's MCP config")
+        return None
+
+    def _endpoint_failure(self, found: Optional[str], where: str) -> Optional[str]:
+        from installed_copy_freshness import _endpoint
+
+        if not self.endpoint or not found:
+            return None if not self.endpoint else f"read-back: {where} names no dpf endpoint."
+        if _endpoint(found) != _endpoint(self.endpoint):
+            return f"read-back: {where} names a different endpoint than the one written."
+        return None
+
     def finish(self, dry_run: bool) -> dict[str, Any]:
-        after = snapshot(self.home)
+        after = snapshot(self.home, self.declarations.skill_names)
         versions = cli_versions()
         clients: list[dict[str, Any]] = []
         for entry in self.entries:
             key = (entry["client"], entry["scope"])
             before = self.before.get(key) or {"version": None, "digest": None, "authMode": None}
-            now = after.get(key) or before
+            now = after.get(key) or {"version": None, "digest": None, "authMode": None}
             action = entry["action"] or _derive_action(entry["status"], before, now)
-            content_failed = (not dry_run and entry["client"] == "claude-code"
-                              and entry["scope"].startswith(("project:", "local:"))
-                              and action != "prunable"
-                              and (key not in after or now.get("digest") != self.declarations.digest
-                                   or now.get("version") != self.declarations.pack))
-            if content_failed:
-                action = "failed"
+            failure = None
+            apps = [path for path in self.discovered.get(entry["client"], []) if path.endswith((".app", ".exe"))]
+            if action == "absent" and apps:
+                # Installed, but without the CLI DPF converges it through (spec M6).
+                action = "unproven"
+                entry = {**entry, "detail": f"{', '.join(apps)} is installed, but its CLI is not, so DPF cannot update "
+                                            f"its tools ({entry['status']})"}
+            if dry_run:
+                # A dry run writes nothing, so nothing is converged or written (BI-81AB897A E3).
+                action = action if action in ("absent", "failed", "unproven", "prunable") else "preview"
+            elif action not in _NO_READBACK:
+                failure = self.readback_failure(entry["client"], entry["scope"], now)
+                if failure:
+                    action = "failed"
             row: dict[str, Any] = {
                 "client": entry["client"], "scope": entry["scope"],
                 "before": before, "after": now, "action": action,
@@ -385,16 +605,21 @@ class ConvergenceReport:
                 row["backupPath"] = entry["backupPath"]
             if entry["detail"] or entry["status"]:
                 row["detail"] = entry["detail"] or entry["status"]
-            if content_failed:
-                row["detail"] = "Installed content does not match the expected pack; supported update remains unverified, client-owned cache retained."
+            if failure:
+                row["detail"] = failure
             clients.append(row)
+        for entry in self.permission_entries:
+            clients.append({**entry, "cliVersion": versions.get(entry["client"])})
         source: dict[str, Any] = {"kind": "portal" if self.manifest else "local"}
         if self.manifest:
             source.update({"deviceId": self.manifest.get("deviceId"), "mcpEndpoint": self.manifest.get("mcpEndpoint"),
                            "releaseId": self.manifest.get("releaseId")})
+        actions = [row["action"] for row in clients]
+        result = ("failed" if "failed" in actions else "preview" if dry_run
+                  else "unverified" if "unrun" in actions else "converged")
         return {
             "schemaVersion": 1,
-            "result": "failed" if any(row["action"] == "failed" for row in clients) else "converged",
+            "result": result,
             "dryRun": dry_run,
             "source": source,
             "packVersion": self.declarations.pack,
@@ -409,9 +634,21 @@ class ConvergenceReport:
         return payload
 
 
+def _descriptor_url(home: Path) -> Optional[str]:
+    """The endpoint the shared copy's Claude descriptor names, its template default resolved."""
+    from installed_copy_freshness import installed_connector
+
+    found = installed_connector(_updater().shared_managed_plugin_path(home), {})
+    return found[0] if found else None
+
+
 def _derive_action(status: str, before: Mapping[str, Any], after: Mapping[str, Any]) -> str:
     if status.startswith("failed"):
         return "failed"
+    if _ABSENT.match(status):
+        return "absent"
+    if status == "skipped by flag":
+        return "skipped"
     return "unchanged" if dict(before) == dict(after) else "updated"
 
 
@@ -443,8 +680,13 @@ def record_claude_scopes(
     if not local_record_found and local_status.startswith("failed:"):
         report.add("claude-code", "local", local_status)
     for bucket, projects in (project_outcome.get("plugins") or {}).items():
+        if bucket == "pruned" and "prune" in project_outcome:
+            continue  # reported below, from what pruning did (spec M10)
         for project in projects:
             report.add("claude-code", f"project:{project}", action=_PROJECT_ACTIONS.get(bucket, "failed"))
+    for row in project_outcome.get("prune") or []:
+        report.add("claude-code", f"project:{row['project']}", action=row["action"],
+                   backup_path=row.get("backupPath"), detail=row.get("detail"))
     for project, backup in project_outcome.get("retired") or []:
         report.add("claude-code", f"project-mcp-json:{project}", action="retired", backup_path=str(backup),
                    detail="duplicate project .mcp.json dpf connector disabled")

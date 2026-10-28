@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { prisma } from "@dpf/db";
 import { namespaceMessages } from "@dpf/i18n";
 
+import { AccountAgentAccessPanel } from "@/components/admin/AccountAgentAccessPanel";
 import { AcceptanceSweepCloseAuthorisationCard } from "@/components/admin/AcceptanceSweepCloseAuthorisationCard";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { AuthorStagePreauthorisationCard } from "@/components/admin/AuthorStagePreauthorisationCard";
@@ -46,7 +47,12 @@ import {
   type InstallationIntentDb,
 } from "@/lib/installation-journey/operating-intent";
 
-export default async function AdminPlatformDevelopmentPage() {
+export default async function AdminPlatformDevelopmentPage(props: {
+  searchParams?: Promise<{ account?: string | string[] }>;
+} = {}) {
+  // BI-DB506554: the handover plan links ?account=<email>#agent-access.
+  const requestedAccount = (await props.searchParams)?.account;
+  const initialAccount = typeof requestedAccount === "string" ? requestedAccount : null;
   const config = await getPlatformDevConfig();
   const policyState: PlatformDevPolicyState = config?.policyState ?? "policy_pending";
   const untrackedCount = (config?.contributionMode === "private" || config?.contributionMode === "fork_only")
@@ -163,6 +169,7 @@ export default async function AdminPlatformDevelopmentPage() {
       {/* The People panel reads admin; the source-client form reads setup. */}
       <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin"), setup: namespaceMessages(language, "setup") }}>
         <McpOAuthClientManager />
+        <AccountAgentAccessPanel initialAccount={initialAccount} />
       </MessagesProvider>
     </div>
   );

@@ -40,12 +40,22 @@ After a decision, another request may fill the cleared place; the pending total
 shows your progress. The displayed-item count also includes other notices and
 is not the full approval total. If the queue cannot be read, it says unavailable.
 
+A coworker's approval-status check sees requests from that coworker only. An
+empty result does not mean your whole Inbox is empty; other coworkers may still
+need your decision. Use the Inbox's pending total for the requests you can access.
+
 An approval and a completed action are separate facts. The result says whether
 the action completed, failed, could not run, or expired, and explains the next
 step. Older decisions without a recorded result say the outcome is unknown.
 Do not approve again just because the original card disappeared; your assistant
 can check the result and the affected work first. You can only read your own
 approval results.
+
+For a failed handoff, a verified saved refusal explains why transfer stopped.
+**Inspect original Workroom** opens the original room only when you still have
+access. Missing or conflicting execution evidence stays explicit; a result or
+inspection link does not authorize another attempt. Private handler text stays
+out of the result.
 
 Your assistant can also check the stored action evidence for an approved
 provider-account test without running the test again. It reports the saved test
@@ -328,6 +338,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Click a tile to jump directly into the relevant area
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
+- See your calendar in Google Calendar, Outlook or Apple Calendar: on the business calendar, under **Subscribe from another calendar app**, select **Create link** and copy the private link into your calendar app. The link is shown once. It carries only what your role can see, and **Replace link** or **Turn off** stops the old link at once. Links from before this change, which used your account id, no longer work; create a new one.
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Check [which file formats](supported-file-formats.md) coworker attachments, onboarding uploads, and Workbook imports can read
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.

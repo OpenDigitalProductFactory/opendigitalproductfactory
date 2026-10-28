@@ -162,11 +162,8 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
     }
 
-    // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
-    // started — the dispatch event was dropped (e.g. the job engine was down),
-    // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
-    // on a queued/pending row and blocks every future upgrade (SUR-B26DF3E4).
-    // Boot mode leaves these alone — a freshly-queued run may be mid-dispatch.
+    // PERIODIC: fail stale never-dispatched queued/pending rows (SUR-B26DF3E4).
+    // Boot leaves these alone because a fresh request may be mid-dispatch.
     if (staleAfterMs > 0) {
       const staleQueued = await prisma.selfUpgradeRun.findMany({
         where: {
@@ -187,6 +184,8 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       }
     }
 
+    // BI-0E216B0E: reconcile known replay failures from independent deployment proof.
+    succeeded += await (await import("@/lib/self-upgrade/landed-swap")).healLandedSwapFalseFailures({ deployedSha, logger });
     if (succeeded || failed) {
       logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
     }
@@ -633,20 +632,9 @@ export async function resumeStrandedBuildsOnBoot(
         void (async () => {
           const { resumePreBuildPhase } = await import("@/lib/build/resume-pre-build-phase");
           const outcome = await resumePreBuildPhase(args);
-          if (outcome.kind === "skipped" && outcome.quiet) return; // BI-6F2872FC: unchanged refusal, nothing to record
-          await prisma.buildActivity
-            .create({
-              data: {
-                buildId: args.buildId,
-                tool: "resumeStrandedBuildsOnBoot",
-                summary: `Pre-build resume (${args.phase}): ${outcome.kind}${
-                  "via" in outcome ? ` via ${outcome.via} — ${outcome.detail}` : ""
-                }${"reason" in outcome ? ` — ${outcome.reason}` : ""}${
-                  "error" in outcome ? ` — ${outcome.error}` : ""
-                }`,
-              },
-            })
-            .catch(() => {});
+          // BI-6F2872FC quiet skips write nothing; other skips only when the reason changed.
+          const { recordResumeOutcomeActivity } = await import("@/lib/build/resume-outcome-activity");
+          await recordResumeOutcomeActivity(prisma, { buildId: args.buildId, phase: args.phase, outcome }).catch(() => {});
         })().catch((err) =>
           logger.error(
             "[build-resume] pre-build resume failed for %s: %s",
@@ -1086,6 +1074,8 @@ export async function register() {
             console.log(
               `[local-model-context] raised ${r.modelId} ${r.before ?? "unset"} → ${r.after} tokens`,
             );
+          } else if (r.status === "pinned") {
+            console.log(`[local-model-context] pinned ${r.modelId} resident (keep_alive -1, BI-34F71E9D)`);
           } else if (r.status === "deferred") {
             console.warn(
               `[local-model-context] raise deferred (${r.reason ?? "unknown"}); applies on next model load`,
@@ -1094,6 +1084,18 @@ export async function register() {
         };
         logCtx(await reconcileLocalModelContext());
         setInterval(() => void reconcileLocalModelContext().then(logCtx), 20 * 60 * 1000);
+        // Same net for the embedder's placement (BI-B60AFE7B): on the GPU beside
+        // a card-filling generation model, each embedder load spills VRAM and
+        // stalls generation for minutes; DMR forgets the CPU pin on restart.
+        const { reconcileLocalEmbedderPlacement } = await import(
+          "@/lib/inference/local-model-context-reconcile"
+        );
+        const logEmbed = (r: Awaited<ReturnType<typeof reconcileLocalEmbedderPlacement>>) => {
+          if (r.status === "applied") console.log(`[local-model-context] embedder ${r.modelId} pinned to CPU, resident`);
+          else if (r.status === "deferred") console.warn(`[local-model-context] embedder placement deferred (${r.reason ?? "unknown"})`);
+        };
+        logEmbed(await reconcileLocalEmbedderPlacement());
+        setInterval(() => void reconcileLocalEmbedderPlacement().then(logEmbed), 20 * 60 * 1000);
         // Same boot + periodic net for the provider ↔ default-connection status
         // split (BI-04E4F111): routing filters on AiProviderConnection.status
         // while the UI renders ModelProvider.status — see the module header.

@@ -236,7 +236,8 @@ the same account, and revoking would not have stopped a fresh sign-in
   `accountWorkHandedOverAt`.
 - `plan_account_handover` reports `liveAgentCredentials` (live access tokens
   and refresh grants), outside the digest. The approver ends them through the
-  per-person revoke under Admin > Platform Development > MCP.
+  per-account panel (see the BI-DB506554 addendum; the menu path first given
+  here did not exist).
 
 ## Addendum (2026-10-21, BI-F0E946D2): seeds name the accountable person
 
@@ -247,3 +248,35 @@ superuser who is not the accountable person. The portfolio owner walk
 lives in `packages/db/src/install-work-owner.ts`. apps/web re-exports it, and
 every task seed names a new task's owner through `findTaskOwnerUserId`. A guard
 test fails a seed that calls the guess directly.
+
+## Addendum (2026-10-27, BI-DB506554): one place to see and end an account's agent access
+
+On 2026-10-27 admin@dpf.local, handed over, still held 4 personal tokens, a
+Codex refresh grant and the credentials client "DPF Grok connection", which
+minted a token that day with no consent screen. The operator could not find
+the revoke screen: the consent page and `plan_account_handover` named
+"Admin › Platform Development › MCP", a path no menu shows.
+
+- **Location from the nav model.** `lib/navigation/admin-location.ts` builds
+  the path from `PORTAL_SHELL_SECTIONS`, the Admin record's `setupFor`, the
+  area's Setup tab label and `ADMIN_FAMILIES`:
+  Run the platform › Setup › Admin › Contributing & GitHub. A test walks every
+  step against the model, so a menu change breaks the test, not the message.
+- **Agent access for one account** (`/admin/platform-development?account=<email>#agent-access`,
+  `lib/auth/account-agent-access.ts`): the account's live personal tokens,
+  its OAuth access tokens and refresh grants grouped by client, and the
+  credentials clients it owns. Operator-gated (`manage_provider_connections`).
+- **End this account's agent access**: one governed action with a required
+  reason. It revokes every unrevoked token and refresh grant of the account
+  and its credentials clients, stamped
+  `operator_revoked_person: <reason> (by <operator>)`, the same stamp and
+  guards as the per-client control (`personRevocation`). It refuses the
+  operator's own account. Interactive registrations the account merely
+  created stay, because other people may hold grants under them.
+- **Credentials clients at the token endpoint.** principle_decide
+  DI-ECD8C6F6FFB4 chose surface (9.89) over refuse (5.93) and warn (5.76):
+  nobody reads a warning on a headless call, and refusing would break an
+  integration at handover, against DI-F60AEA3E7D84. The token endpoint is
+  unchanged. `liveAgentCredentials` now also counts `credentialsClients`,
+  and `plan_account_handover` names the panel's path and link whenever
+  anything is live.

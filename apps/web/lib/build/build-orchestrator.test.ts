@@ -447,7 +447,7 @@ describe("parseQAVerification", () => {
   it("parses alternate format: '12 passing, 3 failing'", () => {
     const result = parseQAVerification("12 passing, 3 failing");
     expect(result).toEqual({
-      typecheckPassed: true,
+      typecheckPassed: false,
       testsPassed: 12,
       testsFailed: 3,
       parseConfidence: "high",
@@ -457,7 +457,7 @@ describe("parseQAVerification", () => {
   it("parses 'N tests passed, M failures' format", () => {
     const result = parseQAVerification("5 tests passed, 1 failure");
     expect(result).toEqual({
-      typecheckPassed: true,
+      typecheckPassed: false,
       testsPassed: 5,
       testsFailed: 1,
       parseConfidence: "high",
@@ -511,9 +511,11 @@ describe("parseQAVerification", () => {
     expect(result.typecheckPassed).toBe(false);
   });
 
-  it("typecheck passes when only test results present (no typecheck keywords)", () => {
+  it("does not treat test counts with no typecheck signal as a typecheck pass", () => {
     const result = parseQAVerification("8 pass, 0 fail");
-    expect(result.typecheckPassed).toBe(true);
+    expect(result.typecheckPassed).toBe(false);
+    expect(result.testsPassed).toBe(8);
+    expect(result.testsFailed).toBe(0);
     expect(result.parseConfidence).toBe("high");
   });
 
@@ -528,6 +530,7 @@ describe("parseQAVerification", () => {
     const result = parseQAVerification(multiPkg);
     expect(result.testsPassed).toBe(180);
     expect(result.testsFailed).toBe(0);
+    expect(result.typecheckPassed).toBe(false);
   });
 
   it("flags a failure in a LATER package that a first-match parse would miss", () => {

@@ -142,7 +142,9 @@ describe("attested pull requests against a real trunk", () => {
   });
 
   it("an attested PR the trunk never received is not merged on a fresh trunk", async () => {
-    await expect(signal([999], "BI-AAAA1111")).resolves.toBe("not-merged");
+    // An item the trunk does not deliver at all: since BI-D9DC902E the trunk is
+    // searched by item id too, so BI-AAAA1111 (delivered by #101) would be merged.
+    await expect(signal([999], "BI-ZZZZ0000")).resolves.toBe("not-merged");
   });
 
   it("without the item identity, attested PRs are never read", async () => {
