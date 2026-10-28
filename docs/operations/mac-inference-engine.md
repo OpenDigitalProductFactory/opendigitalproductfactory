@@ -60,6 +60,12 @@ The tool stops only its owned test process, then restores Docker with a bounded 
 
 ## Activation, rollback and AI Ops
 
+### Native agent source rollout
+
+The October 28 activation foundations do not register a lifecycle implementation or select the corrected runtime. A portal self-upgrade does not replace a host-native Edge executable. Existing Windows installs receive that executable through the governed native install/repair entry `Install-DPFNativeEdgeNode` in `scripts/installer/native-edge-host.ps1`, called by `install-dpf.ps1`. Existing macOS and Linux installs use `dpf_native_edge_install` in `scripts/installer/native-edge-host.sh`, called by `install-dpf.sh`. These entries stage a replacement and manage the platform's existing supervision; retain enrollment and the previous binary. The executing agent performs the supported repair from verified release source and records its evidence. No operator command is needed to inspect this work.
+
+This is an explicit native install/repair step on Windows, macOS and Linux, rather than automatic portal convergence. Until the complete managed inference procedure is implemented and provisioned, the new action remains unsupported and its node permission remains absent. Keep all three platforms on their current inference selection; only physically qualified Macs may later enter the approved activation procedure. Passing source tests or running the native agent repair alone proves no inference performance gain.
+
 Managed integration is tracked separately by BI-CD4EB130 / WC-C8326144 and its
 [runtime design](../superpowers/specs/2026-10-26-mac-inference-runtime-design.md)
 and [ordered plan](../superpowers/plans/2026-10-26-mac-inference-runtime-plan.md).

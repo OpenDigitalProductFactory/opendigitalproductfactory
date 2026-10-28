@@ -41,11 +41,15 @@ export function isReadonlyDispatchActionType(actionType: string): boolean {
  * approved ChangeRequest, machine bound, and never dispatched automatically.
  */
 export const DOCKER_VM_RESTART_ACTION_TYPE = "substrate.docker-vm.restart";
+/** A bounded managed runtime transition; permission is explicit per host.
+ * This is deliberately absent from automatic host-upkeep convergence. */
+export const MANAGED_INFERENCE_ACTION_TYPE = "inference.runtime.transition";
 
 export const PRIVILEGED_DISPATCH_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
   DOCKER_VM_RESTART_ACTION_TYPE,
+  MANAGED_INFERENCE_ACTION_TYPE,
 ] as const;
 
 export function isPrivilegedDispatchActionType(actionType: string): boolean {
@@ -180,7 +184,12 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
     if (action.riskClass !== "high") return { claimable: false, reason: "privileged-action-risk-class-invalid" };
     if (!action.edgeNodeId) return { claimable: false, reason: "privileged-action-must-be-machine-bound" };
     if (!action.changeRequestApproved) return { claimable: false, reason: "approved-change-request-required" };
-    if (action.actionType !== DOCKER_VM_RESTART_ACTION_TYPE) {
+    if (action.actionType === MANAGED_INFERENCE_ACTION_TYPE
+      && (node.customerAccountId != null || node.customerSiteId != null
+        || action.customerAccountId != null || action.customerSiteId != null)) {
+      return { claimable: false, reason: "managed-inference-internal-host-required" };
+    }
+    if (action.actionType !== DOCKER_VM_RESTART_ACTION_TYPE && action.actionType !== MANAGED_INFERENCE_ACTION_TYPE) {
       const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
       if (node.organizationTrustRole !== requiredRole) {
         return { claimable: false, reason: "wrong-organization-trust-role" };
