@@ -333,3 +333,63 @@ test("the refusal names the command that re-caches an existing claim", () => {
     assert.match(text, /node scripts\/bind-worktree-cli\.mjs/);
   }
 });
+
+// ── BI-6145A168: git global options before the subcommand, and Grok's envelope ──
+
+test("git global options before the subcommand do not hide work", () => {
+  const C = ["git", "-C"].join(" ");
+  for (const cmd of [
+    `${C} D:/wt commit -m x`,
+    `${C} "D:/my wt" commit -m x`,
+    "git -c user.name=x commit -m x",
+    "git --no-pager -C /d/wt rebase main",
+    `cd D:/DPF && ${C} D:/wt merge origin/main`,
+  ]) {
+    assert.equal(isWorkCommand(cmd), true, cmd);
+  }
+  for (const cmd of [`${C} D:/wt status`, `${C} D:/wt log --grep commit`, "git -c core.pager=cat diff"]) {
+    assert.equal(isWorkCommand(cmd), false, cmd);
+  }
+});
+
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+/** A throwaway repo on an unclaimed feature branch: the guard must refuse here. */
+function unclaimedRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "claim-guard-"));
+  const g = (...a) => execFileSync("git", ["-C", dir, ...a], { stdio: "ignore" });
+  g("init", "-q");
+  g("checkout", "-q", "-b", "feat/unclaimed-probe");
+  return dir;
+}
+
+test("a Grok both-casings commit in an unclaimed worktree is refused on Grok's channel", () => {
+  const dir = unclaimedRepo();
+  try {
+    const cmd = ["git", "commit", "-m", "probe"].join(" ");
+    const out = runGuard({
+      hookEventName: "PreToolUse", hook_event_name: "PreToolUse",
+      toolName: "run_terminal_command", tool_name: "run_terminal_command",
+      toolInput: { command: cmd }, tool_input: { command: cmd },
+      cwd: dir, workspaceRoot: dir,
+    }, { DPF_WORKROOM_CLAIM_ENFORCE: undefined, DPF_ALLOW_UNCLAIMED_WORK: undefined });
+    assert.equal(JSON.parse(out).decision, "deny", out);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("git -C <unclaimed worktree> commit from another folder is refused", () => {
+  const dir = unclaimedRepo();
+  try {
+    const cmd = `${["git", "-C"].join(" ")} "${dir.replace(/\\/g, "/")}" commit -m probe`;
+    const out = runGuard(
+      { tool_name: "Bash", tool_input: { command: cmd }, cwd: tmpdir() },
+      { DPF_WORKROOM_CLAIM_ENFORCE: undefined, DPF_ALLOW_UNCLAIMED_WORK: undefined },
+    );
+    assert.match(out, /"permissionDecision":"deny"/, out);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
