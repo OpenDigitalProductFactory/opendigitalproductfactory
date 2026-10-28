@@ -85,6 +85,7 @@ import {
 import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
+import { overseeDriveRooms, type DriveOverseerDeps, type DriveOverseerResult } from "./workroom-overseer-run"; // BI-8E1486FA
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
@@ -183,7 +184,7 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
   notifyDeadline?: (input: DeadlineNoticeInput) => Promise<boolean>;
 };
 
-export type WorkroomDriveResult = {
+export type WorkroomDriveResult = DriveOverseerResult & {
   runId: string;
   scanned: number;
   dispatched: number;
@@ -408,7 +409,7 @@ export async function applyDrivePlan(input: {
 
 export async function runWorkroomDriveJob(
   now: Date = new Date(),
-  deps?: {
+  deps?: DriveOverseerDeps & {
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
@@ -459,6 +460,7 @@ export async function runWorkroomDriveJob(
     // BI-7C0B2BD6: the writeback latch reads each room's task, so it holds only while a run is outstanding.
     rooms = await withStageRuns(rooms);
   }
+  const overseen = await overseeDriveRooms(rooms, now, deps); rooms = overseen.rooms; // BI-8E1486FA: close finished rooms first
   const effects = deps?.effects ?? createWorkroomDriveEffects();
   // BI-7C0B2BD6 / DI-7109D22D4812: dispatch no more than agent capacity allows; the rest wait, oldest first.
   rooms = orderRoomsOldestWaitingFirst(rooms);
@@ -570,7 +572,7 @@ export async function runWorkroomDriveJob(
     attention,
     stopped,
     skipped,
-    plans,
+    plans, ...(overseen.overseer ? { overseer: overseen.overseer } : {}), // absent when the duty did not run, so caller-supplied ticks are unchanged
   };
 }
 
