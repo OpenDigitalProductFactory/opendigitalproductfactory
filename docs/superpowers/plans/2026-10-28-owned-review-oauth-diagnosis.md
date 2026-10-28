@@ -34,3 +34,17 @@ Contract: existing OAuth execution authority and owned semantic-review recovery.
 Flow: original-owner task read → existing shared verifier → fixed safe detail.
 Verification: predicate parity tests, recovery projection tests, canonical owner
 read. Local source checks are not live acceptance.
+
+## Existing item acceptance retained verbatim
+
+1. This authenticated review owner can read the named task's canonical status, immutable request digest, deadline, bounded unresolved node IDs and scoped remediation verification identity through a supported host-accessible route.
+2. The route enforces current owner, token, coworker and room authorization and refuses unrelated callers; it does not return raw provider output or credentials.
+3. Readback distinguishes unknown execution from settled execution. Deadline expiry alone never sets executionSettled or authorizes retry.
+4. An authorized recovery owner records genuine provider/executor reconciliation and executed canonical-runtime health evidence if an expired successor is required. retry_semantic_review retains its existing digest, evidence freshness, lineage and budget checks.
+5. Verify the route on the named task and record the result or exact remaining authority remedy. Do not mint a passing review receipt, change grants silently, resubmit blindly or edit database evidence.
+
+Coverage references: OBJ-CAP29-AUTH, AC-CAP29-1, AC-CAP29-2, AC-CAP29-3,
+AC-CAP29-4, AC-CAP29-5; existing OAuth execution authority;
+owned semantic-review recovery; original-owner task read to shared authority
+inspection; predicate parity source tests; owner recovery projection tests;
+canonical original-owner read.
