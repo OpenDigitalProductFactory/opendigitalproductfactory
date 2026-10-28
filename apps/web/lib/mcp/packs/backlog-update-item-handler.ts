@@ -12,6 +12,7 @@ import { attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
 import { BACKLOG_SENSITIVITY_VALUES, isBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 import {
   resolveProductManagementScopeRefs,
   type ProductManagementScope,
@@ -37,6 +38,11 @@ export async function handleUpdateBacklogItem(
   const data: Record<string, unknown> = {};
   if (typeof params["title"] === "string") data["title"] = params["title"];
   if (typeof params["status"] === "string") {
+    // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+    const peerOwned = peerOwnedStatusRefusal(existing.itemId, existing.body);
+    if (peerOwned) {
+      return { success: false, error: peerOwned.error, message: peerOwned.message, data: { originInstallationId: peerOwned.originInstallationId } };
+    }
     // Block direct status mutations that should go through dedicated tools.
     // - Setting status='triaging' on an already-triaged item: use the retriage flow.
     // - Leaving triaging without going through triage_backlog_item: skips rationale + audit.

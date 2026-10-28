@@ -2,6 +2,7 @@
 
 import * as crypto from "crypto";
 import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 import { prisma, attributeBacklogPortfolio } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
@@ -171,6 +172,8 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   const existing = await prisma.backlogItem.findUnique({
     where: { id },
     select: {
+      itemId: true,
+      body: true,
       status: true,
       scopeKind: true,
       archetypeCategories: true,
@@ -186,6 +189,9 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   if (input.status === "retired" && existing?.status !== "retired") {
     throw new Error("Use the governed retirement action so the retirement rationale is audited");
   }
+  // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+  const peerOwned = existing && input.status !== existing.status ? peerOwnedStatusRefusal(existing.itemId, existing.body) : null;
+  if (peerOwned) throw new Error(peerOwned.message);
   const isNowDone = input.status === "done" || input.status === "retired";
   const wasDone = existing?.status === "done" || existing?.status === "retired";
   const deferralProjection = input.status === "deferred"
@@ -329,9 +335,14 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
 
   const existing = await prisma.backlogItem.findUnique({
     where: { id },
-    select: { status: true, type: true, digitalProductId: true, epicId: true, organizationId: true },
+    select: { itemId: true, body: true, status: true, type: true, digitalProductId: true, epicId: true, organizationId: true },
   });
   if (!existing) throw new Error("Backlog item not found");
+  // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+  if (patch.status !== undefined && patch.status !== existing.status) {
+    const peerOwned = peerOwnedStatusRefusal(existing.itemId, existing.body);
+    if (peerOwned) throw new Error(peerOwned.message);
+  }
 
   // Validate ONLY the fields actually being changed.
   if (patch.title !== undefined && !patch.title.trim()) throw new Error("Title is required");
