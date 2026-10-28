@@ -16,7 +16,8 @@ it does not infer immutable identity from arbitrary caller names or timestamps.
 Other sources retain their existing persistence contract. In particular, the
 daily Workroom flow review and skill curator still increment a persistent
 signal and file it through `ingestBacklogItem` at the existing threshold of
-three. The signal's stable origin binds the backlog intake and backlink. A
+three. The signal's stable origin binds the backlog intake and backlink. The
+filed item states its outcome: the signal stops recurring (BI-458CCA8D). A
 failed intake leaves the signal available for later projection. Critical
 MCP/A2A findings keep their direct source-specific intake paths.
 
@@ -27,6 +28,15 @@ route, but the defect belongs to the tool. When the signal's evidence carries
 `tool-defect:<toolName>` (`apps/web/lib/operate/tool-defect-origin.ts`). The
 capability-need path uses the same origin. Every coworker's observation then
 becomes an occurrence of one item instead of a new item.
+
+Items filed before a shared origin existed can be folded late with
+`merge_backlog_items`. The tool is declared `irreversible`, but a call needs no
+person when both items are this installation's own, carry the same
+`[origin:…]` marker, and the duplicate is open with no claim or live Workroom
+(`apps/web/lib/demand/duplicate-merge-consequence.ts`, BI-EAFD2D09). That is the
+same fold intake performs. Every merge writes a `duplicate_merge` activity on
+the retired item with both rows' prior state, so it can be undone from the
+record. Any other merge still reaches a person.
 
 Those observer counts still describe repeated calls, not independently
 identified observations. Retry-safe observation identity for those callers is
@@ -47,6 +57,13 @@ the threshold together each read an empty backlink from their upsert, so the
 writer takes a transaction-scoped advisory lock on the signal id, re-reads the
 backlink, and files only when it is still empty. The others return the link
 the first one wrote. A failed filing leaves the link empty for a later touch.
+
+A caller whose source id names one observation passes `immutable: true`
+(BI-3EC4722F). Like `platform_issue_report`, a repeat delivery then only
+touches the signal: it never recurs and is never filed. The daily flow review
+uses this to record each work shape's review once, under the shape version
+and review day. It files a sustained bottleneck itself, through the shared
+intake, with a routing answer on the intake activity.
 
 ## Remaining learning qualification
 

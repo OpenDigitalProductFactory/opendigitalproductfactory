@@ -22,6 +22,26 @@ an action, and generic test success supplies neither a Responses verification
 receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
 initiative review or substitute for the gate's independent writer.
 
+### Delivery closes non-contractual work (BI-B1B44777)
+
+Founder direction, 2026-10-27: outcomes define done. A merge through CI and the
+merge queue closes every item that is not an aggregate (xlarge) and is not
+tagged `contractual`. The tag lives in `BacklogItem.lifecycleTags` (kernel
+decision DI-1263D968DC26). For these items the merge satisfies delivery,
+acceptance and objective reconciliation, and design, plan and specialist-review
+lanes are not owed after the change has landed.
+
+These still block:
+
+- a recorded failed review;
+- the newest `ux` or `manual` evidence being a failure;
+- a conflicting or malformed objective reconciliation.
+
+The predicate is `deliveryClosesItem` in `backlog-completion-evaluation.ts`.
+The acceptance sweep reads the same evaluation, so it closes these items under
+its recorded pre-authorisation. The independent-acceptance lanes below apply
+to contractual items. A regression found in use becomes a new item.
+
 ### Medium body criteria and independent acceptance
 
 Effective medium work, including product-linked work, can satisfy its objective
@@ -49,7 +69,8 @@ This retains source authorship; it grants no execution lease or room admission.
 The reviewer TaskRun, OAuth authority, content access and author separation must
 remain current. Missing merge proof calls for source/observation reconciliation,
 not repeated reopening of a room the reaper correctly considers delivered.
-Spec and post-implementation review retain their existing live-room requirement.
+Spec review retains its live-room requirement. Post-implementation review after
+merge does not; see the break-fix paragraph in §1.
 
 Changed criteria, source identity, organization or eligible evidence reject old
 requests. Refresh recovery for a current successor; unchanged retries reuse the
@@ -84,10 +105,93 @@ children or changing the initiative's shape.
 Break-fix post-implementation review uses the authored Workroom head and a
 provider-verified artifact. A workflow or code repair with one implementation
 file can be reviewed without a changed design document; accompanying tests
-and explanatory docs do not change that identity. Multiple implementation
-files without a canonical design remain an explicit scope ambiguity. Use the
-returned reviewer packet unchanged; deployment evidence and an independent
-receipt are still required. This does not relax design-approval gates.
+and explanatory docs do not change that identity. A repair with several
+implementation files is reviewed whole (BI-46E344FE): the review binds a
+`repo-commit-range` artifact, the compared range plus a digest of every path's
+post-change blob. The reviewer reads it with `read_source_at_version` at the
+virtual path `repo-commit-range/<base>..<head>`, bound to that digest, and the
+read fails closed if the digest differs. Use the returned reviewer packet
+unchanged; deployment evidence and an independent receipt are still required.
+This does not relax design-approval gates: only a post-implementation review
+binds a commit range.
+
+After merge the delivering room is usually archived or idle, so no live room
+exists (BI-CE661173). The review then reads the merged squash commit on
+`origin/main`, comparing its parent with the commit. The commit is the one
+that delivered the item under the PR-submit rule, or the squash commit of the
+PR the room recorded. It must be committed after the latest reopen and must not
+be reverted. The item's newest delivery room is the request's anchor: its
+recorded branch and head are what admission, the PIR evidence context and the
+receipt writer match. A room whose recorded base equals its head reads the same
+merged commit. A room that never recorded its base or head is anchored to the
+newest merged commit, and the writer accepts that missing head only with its
+own trunk proof. No live room is reopened.
+
+An item delivered by several standing squash commits is reviewed as their
+union, oldest first, in one `repo-commit-range` artifact with one range per
+commit (at most eight). The writer accepts the receipt only if the trunk still
+names exactly those commits, in that order, and the provider's change still
+matches the digest. Every commit's sign-off must name the same author.
+
+Every delivery actor is excluded from reviewing a merged repair, not just the
+caller. That set is everyone who created, held or worked in any of the item's
+rooms, plus its claimant (`delivery-actors.ts`). The receipt writer re-reads the
+trunk before it publishes. If the reviewed commit is no longer the item's
+merged delivery from that room, or the reviewer is a delivery actor, the write
+is refused.
+
+Escalations: `merged-delivery-not-found` means no standing delivering commit
+exists. `merged-delivery-ambiguous` means more than eight commits delivered the
+item.
+`delivery-actors-unbounded` means the item has too many rooms to bound the
+actor set.
+
+Every two minutes the platform reviewer dispatch
+([`server-reviewer-dispatch.ts`](../../apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts))
+checks awaiting-acceptance break-fix items whose rooms are all retired. These
+items are sampled on their own budget (five per tick), apart from the general
+pool, because most items in that pool owe nothing. It sends the issued packet on
+the authoring assistant's own live connection, so no person is involved. A room
+a person opened with no assistant (BI-D3BAF945) is carried on any live
+connection of that person. Review admission then accepts the retired anchor on
+the person's room admission, because the carrying assistant was never in the
+room. A delivery room retired by its status (`archived` or `complete`) is a
+retired anchor even when its `archivedAt` is still empty, as every merged
+break-fix room on the live install was on 2026-10-28 (BI-AA47C672).
+
+When neither the author nor the person has a live connection, the platform
+hands the review to its own reviewer instead of waiting (BI-AA47C672,
+[`platform-review-room.ts`](../../apps/web/lib/backlog/initiative-readiness/platform-review-room.ts)).
+It opens one review room per item, `WC-PIR-<id>`, keyed
+`platform-review:<itemId>`. The room names the item only through its outcome
+anchor, so it is never a delivery room. It declares the
+`platform-post-implementation-review` shape and binds its one stage to the
+packet's reviewer. The person accountable for the platform's automatic work
+owns the room. The platform appends the packet under its own issuer id, and the
+Workroom drive dispatches the reviewer through the ordinary scheduled-task path.
+The reviewer must run in-platform, hold `initiative_design_review` and not be a
+delivery actor. Otherwise nothing is opened and the anchor room records
+`no-author-connection` with a detail naming the coworker or grant that is
+missing. The writer admits the room's run only when every link is a fact the
+platform wrote and readiness, re-derived now for the same issuer identity,
+still issues that exact packet. The run writes under the platform's own
+authority, recorded with token scope `organization`. The receipt repository's
+trunk and delivery-actor checks apply unchanged. The anchor room records the
+hand-off once as `platform-reviewer`, with a growing back-off, until the review
+lands. Design-stage reviews keep their author carrier.
+
+Build Studio plan rooms (BI-27519C1A): review admission asks the Build Studio
+issuer the dispatcher used whether a review is owed, never the item projection.
+A build whose plan raised its shape owes a plan review the projection does not
+see, and admission had refused every such dispatch as "no pending review".
+
+Refusal back-off across a deploy (BI-D1DAB5AF): a standing refusal
+(`refused` or `no-author-connection`) last attempted before the current portal
+process started is retried on the first tick after the start, whatever its
+`nextAttemptAt`. The code that refused it may have been fixed by the deploy. If
+it is refused again for the same reason, the same row keeps counting attempts
+and its back-off resumes. A refusal recorded by the running process keeps its
+back-off.
 
 The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
 
@@ -254,6 +358,11 @@ read the durable result before considering a retry. The tool requires the same
 authenticated human and acting coworker; another user's or coworker's request
 returns the same unavailable response as an unknown ID. It reveals no arguments
 or raw tool results and confers no workroom admission or reviewer authority.
+
+`get_my_approval_status(mode: "pending")` lists requests from the acting
+coworker only. Its result carries `scope.coversOwnerInbox: false` and
+`ownerInboxTotal: null`. Never report its count, including zero, as the owner's
+Inbox total; other coworkers' requests are excluded (BI-83638ACC).
 
 An approved request without execution evidence remains unknown. Confirm the
 target operation's actual state before retrying; HTTP success from the approval

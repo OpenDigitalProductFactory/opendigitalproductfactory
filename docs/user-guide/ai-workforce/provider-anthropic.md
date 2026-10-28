@@ -71,4 +71,8 @@ Both providers support automatic model discovery via "Sync Models & Profiles". T
 
 ## Fallback Behavior
 
-If the subscription token expires, the platform automatically attempts to refresh it. If refresh fails, the provider status changes to "expired" and the admin must sign in again. The API Key provider is unaffected by subscription token issues — they are independent.
+The platform renews the subscription sign-in in the background about two hours before it expires, so it stays fresh even when no work is running and nobody has the provider page open. If a renewal fails, the platform tries again after 10 minutes, then 20, doubling up to every two hours, and the provider stays in routing while it retries.
+
+Retrying stops only when Anthropic says the sign-in itself is no longer valid. When that happens, the Needs-you inbox shows **Sign in to Claude / Anthropic (OAuth Subscription) again**, linking to the provider page. Sign in there and background renewal starts again. A single failed request never takes a still-valid sign-in out of routing.
+
+The API Key provider is unaffected by subscription token issues — they are independent.

@@ -687,3 +687,126 @@ or unbounded recursive spend as operating defaults. Harness optimization may
 improve how an authorized job runs; it cannot change who may authorize it or
 weaken its independent acceptance gate. No new engine, dependency or runtime
 permission is introduced by this design comparison.
+
+## October 27 amendment: the per-room overseer duty (BI-8E1486FA)
+
+**Backlog:** BI-8E1486FA. **Status:** operator direction; implementation in
+the branch that adds this section. Served-runtime acceptance is pending.
+
+Operator direction, 2026-10-27: "There should be a workroom owner who watches
+over and addresses issues like this per workroom." Rooms and items were being
+left hanging and the same mistakes repeated.
+
+### Evidence on the production install this month
+
+- WC-A4B7B438: PR #6532 merged, the room stayed live and refused a later claim
+  on the same item. Its drive recorded "the room's work item is done; the drive
+  stands down", but nothing closed the room.
+- WC-A2D58814 and WC-B9703CBC: leases expired five to six days earlier on merged
+  branches; both rooms still read `ready`.
+- WC-EC0E4382: 373 consecutive drive ticks held
+  `attention|role_stage|design-note` because "BI-985F4EC9 has no size, so its
+  investment is unknown". The item was later sized and delivered; the room never
+  concluded.
+
+The governed Workroom reaper (`work-capsule-reaper.ts`, run from the TaskRun
+watchdog) already classifies delivered and lease-expired rooms, but it acts only
+when `DPF_WORKCAPSULE_REAPER_ENABLED=1`, and it never looks at the backlog
+item, at duplicate rooms or at drive holds. The drive already reads every
+shaped room every 15 minutes and already stands a room down when its item is
+done (`drive-work-item-gate.ts`), but it never closes one. No component owned
+"this room is finished or stuck, so resolve it or hand it to someone".
+
+### Decision
+
+The duty runs inside the existing drive cycle (`runWorkroomDriveJob`), before
+rooms are driven. There is no new scheduler, table, migration, grant or agent
+role. Each cycle reads the rooms the drive already selected, applies ordered
+rules to each non-standing delivery room, and records one `workroom-overseer`
+activity naming the rule for every change it makes. Standing rooms
+(`idempotencyKey` `standing-room:*`) are excluded from every rule: they have no
+branch, no lease and no single item, and their stalls already reach the
+workroom-stall source.
+
+Rules, first match wins. Rules that resolve a room run before rules that only
+route it, so a merged duplicate is closed rather than reported:
+
+| Rule | Fires when | Effect |
+| --- | --- | --- |
+| R1 | item `done` or `retired`, and the PR merged or no PR is open | close the room, release its scope claims |
+| R2 | lease expired past the 24-hour resume grace, and the branch merged | close the room, release its scope claims |
+| R5 | another live delivery room exists for the same item, and this room's branch merged | close this room, release its scope claims |
+| R3 | lease expired past the grace, and the branch carries authored commits that are not merged | mark the room `needs resume`; raise one overseer Attention item |
+| R4 | the same drive hold has lasted 48 ticks (12 hours) or more | conclude the hold with a recorded outcome; raise one overseer Attention item |
+
+"Close" is the platform's existing delivered close-out: `archived` through
+`updateWorkCapsuleStatus`, the writer the reaper and the publication refusal
+(`deliveredCloseout`) already use. `complete` on a governed room is the
+completion-readiness transition, which needs evidence the overseer does not own.
+Scope is released through `releaseWorkCapsuleScope`. Both writers record their
+own activity rows; the overseer row adds the rule and the facts it read.
+
+Merge state comes from the reaper's existing sources, and the overseer and the
+reaper share one predicate. A room is merged when the verified GitHub
+observation for its exact head is merged; or, because a squash or rebase merge
+leaves the recorded head off main and many rooms never had their PR bound
+(WC-A2D58814, WC-B9703CBC, WC-EC0E4382), when its bound PR, or with none bound
+the newest PR observed for its repository and branch, merged after the room
+last recorded its head; or when its head is reachable from main in a runtime
+with a checkout. A newest PR that is open keeps the room open. A head recorded
+after the merge, or no observation at all, leaves the state unknown, and an
+unknown merge state never closes a room.
+
+R4 derives what it can. When the item has no size and the room declares a
+delivery shape, the size the shape implies (`DELIVERY_SHAPE_SIZE`) is recorded
+on the conclusion as the proposed fix. The drive has no governed writer for an
+item's size (`size_backlog_item` is a triage-granted MCP action), so the
+overseer does not write it: the Attention item carries the derived value to the
+owner. Any other long hold concludes as `needs owner`. Either way the hold ends
+with a recorded outcome instead of idling, and the same hold is never concluded
+twice.
+
+Attention is a projection, like every other source: the overseer writes
+`workspaceState.workroomOverseer.attention` and the workroom-stall source lists
+it under the id `workroom-overseer:<capsuleId>`, deep-linked to the room and
+addressed to the room's Process Overseer (or, failing that, its accountable
+participant). One record per room is the dedupe. A raise whose rule key is
+unchanged writes nothing; when the condition clears (the session resumed, the
+hold moved) the next cycle clears the record and says so.
+
+Every rule is idempotent: a closed room leaves the drive's selection, and the
+routing rules compare the stored rule key before writing. Each cycle logs a
+summary (rooms considered, and per rule: fired, already recorded, refused).
+`DPF_WORKROOM_OVERSEER_DRY_RUN=1` keeps the summary and writes nothing. A writer
+that refuses (for example a CAS conflict) is counted and retried next cycle,
+never retried in the same one.
+
+### Research & Benchmarking
+
+Checked 2026-10-27; no dependency is adopted.
+
+- Harness 2 (arXiv 2610.14224), the operator's reference: adopt a bounded
+  budget per attempt (the 48-tick hold budget), always conclude (every long hold
+  ends in a recorded outcome), and retain a lesson only with evidence (each
+  conclusion stores the facts it read). Reject open-ended retry.
+- [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+  and [garbage collection with owner references](https://kubernetes.io/docs/concepts/architecture/garbage-collection/):
+  adopt a level-triggered reconcile loop that compares observed state with the
+  desired state and is safe to re-run; the room's item and branch are its
+  owners, and a room whose owners are finished is collected. Reject a second
+  controller beside the drive.
+- GitHub [automatic deletion of merged head branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-the-automatic-deletion-of-branches)
+  and the [stale action](https://github.com/actions/stale): adopt automatic
+  close on a merge fact and a bounded inactivity window with one notice before
+  action. Reject closing unmerged work on inactivity alone; R3 asks the owner
+  instead.
+- ITIL 4 problem management: every record has one problem owner who sees it to
+  closure. Adopt the room's Process Overseer as that owner for anything the
+  rules cannot resolve.
+
+### Acceptance
+
+The item's acceptance criteria AC-1 to AC-4 bind. Unit tests cover each rule
+firing and not firing, standing-room exclusion, an idempotent second cycle, and
+Attention dedupe. Operational acceptance needs one served-runtime cycle that
+closes a merged room and routes an unmerged one; unit evidence does not close it.

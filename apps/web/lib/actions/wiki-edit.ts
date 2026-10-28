@@ -19,18 +19,16 @@
 import { prisma } from "@dpf/db";
 import {
   appendRevision,
-  getWikiPage,
-  linkPages,
   upsertWikiPage,
   type UpsertWikiPageInput,
   type WikiPageKind,
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
-import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -86,37 +84,6 @@ async function requireOrganization(): Promise<{ id: string }> {
     );
   }
   return { id: org.id };
-}
-
-/**
- * Sync the wikilink graph for a freshly-saved page. Each `[[slug]]` token
- * that resolves to a real page in the same scope (overlay first, kernel
- * fallback) becomes a WikiPageLink edge. Dangling references are not
- * upserted — the lint detector flags them on the published path.
- *
- * Source citations (`[[raw-sources/...]]`) are skipped: they live on the
- * `WikiPageSource` join table and are managed by the proposal/commit step
- * (Phase 2.3), not by manual edits. Manual edits to source citations
- * happen via the page's `sources:` frontmatter — out of scope for v1 edit.
- */
-async function syncOutLinks(
-  fromPageId: string,
-  body: string,
-  organizationId: string,
-): Promise<void> {
-  const slugs = extractWikilinks(body).filter(
-    (s) => !s.startsWith("raw-sources/"),
-  );
-  if (slugs.length === 0) return;
-  for (const slug of slugs) {
-    const target = (await getWikiPage(prisma, {
-      organizationId,
-      slug,
-    })) as { id: string } | null;
-    if (target && target.id !== fromPageId) {
-      await linkPages(prisma, { fromPageId, toPageId: target.id });
-    }
-  }
 }
 
 function readKernelVersionFromManifest(): string | null {
@@ -295,7 +262,7 @@ export async function saveWikiOverlayEdit(
       createdById: user.id,
     });
 
-    await syncOutLinks(saved.id, input.body, org.id);
+    await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body: input.body });
 
     // BI-8AC24F3D: this action is what the portal Edit page calls, so flipping
     // Status to `published` here IS how an operator publishes a craft override.

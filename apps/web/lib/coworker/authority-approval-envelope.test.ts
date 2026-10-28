@@ -105,6 +105,69 @@ describe("authority approval envelopes", () => {
     expect(mockDb.coworkerActionEnvelope.create).not.toHaveBeenCalled();
   });
 
+  describe("an unchanged propose-boundary call from a later run (BI-AB0CF766)", () => {
+    const NOW = new Date("2026-10-27T16:27:00Z");
+    const EARLIER_BINDING = { ...BINDING, taskRunId: "TR-SCHED-EARLIER" };
+    const LATER_BINDING = { ...BINDING, taskRunId: "TR-SCHED-LATER" };
+    const pendingTwin = (overrides: Record<string, unknown> = {}) => ({
+      id: "ENV-EARLIER",
+      status: "proposed",
+      expiresAt: new Date("2026-11-03T16:27:00Z"),
+      argsJson: { approvalBinding: EARLIER_BINDING, proposeBoundary: true },
+      ...overrides,
+    });
+    function twinDb(rows: unknown[]) {
+      const mockDb = db();
+      mockDb.coworkerActionEnvelope.findFirst.mockResolvedValue(null);
+      mockDb.coworkerActionEnvelope.create.mockResolvedValue({ id: "ENV-NEW", status: "proposed", expiresAt: NOW });
+      return { ...mockDb, coworkerActionEnvelope: { ...mockDb.coworkerActionEnvelope, findMany: vi.fn().mockResolvedValue(rows) } };
+    }
+    const raise = (mockDb: ReturnType<typeof twinDb>, binding = LATER_BINDING, proposeBoundary = true) =>
+      ensureAuthorityApprovalEnvelope(
+        { binding, authorityDecisionId: "AUTH-LATER", threadId: null, explanation: "x", proposeBoundary, now: NOW },
+        mockDb,
+      );
+
+    it("joins the earlier run's open card instead of minting another", async () => {
+      const mockDb = twinDb([pendingTwin()]);
+      await expect(raise(mockDb)).resolves.toMatchObject({ id: "ENV-EARLIER" });
+      expect(mockDb.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+      expect(mockDb.coworkerActionEnvelope.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          coworkerAgentId: "AGT-1",
+          delegatingUserId: "user-1",
+          manifestActionId: "create_backlog_item",
+          inputFingerprint: "input-fingerprint",
+          status: "proposed",
+          expiresAt: { gt: NOW },
+        }),
+      }));
+    });
+
+    it("mints its own card when any other binding term differs", async () => {
+      for (const differs of [
+        { subject: { kind: "backlog-item", id: "BI-OTHER" } },
+        { chainId: "CHAIN-OTHER" },
+        { routeContext: "/other" },
+        { decisionVersionFingerprint: "policy-other" },
+      ]) {
+        const mockDb = twinDb([pendingTwin({ argsJson: { approvalBinding: { ...EARLIER_BINDING, ...differs }, proposeBoundary: true } })]);
+        await expect(raise(mockDb)).resolves.toMatchObject({ id: "ENV-NEW" });
+      }
+    });
+
+    it("never joins a card that was not raised under the propose boundary", async () => {
+      const mockDb = twinDb([pendingTwin({ argsJson: { approvalBinding: EARLIER_BINDING } })]);
+      await expect(raise(mockDb)).resolves.toMatchObject({ id: "ENV-NEW" });
+    });
+
+    it("keeps one card per run for a request that pauses its run", async () => {
+      const mockDb = twinDb([pendingTwin()]);
+      await expect(raise(mockDb, LATER_BINDING, false)).resolves.toMatchObject({ id: "ENV-NEW" });
+      expect(mockDb.coworkerActionEnvelope.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   it("returns only an approved, unexpired envelope with its exact binding", async () => {
     const mockDb = db();
     mockDb.coworkerActionEnvelope.findFirst.mockResolvedValue({

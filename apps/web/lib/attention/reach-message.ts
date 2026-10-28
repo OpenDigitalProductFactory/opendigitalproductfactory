@@ -56,6 +56,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "scheduled-task": "A scheduled job stopped working",
   "ai-readiness-blocker": "Your AI setup is not finished",
   "platform-health": "A platform service is having trouble",
+  "agent-toolchain": "A computer's DPF tools have stopped updating",
   "provider-credential": "A connection needs reconnecting",
   "contribution-setup": "GitHub not connected",
   "compliance-source-freshness": "Compliance evidence is going out of date",

@@ -19,10 +19,11 @@
 // warnings and lease release. The uncommitted-work-guard remains on Stop; this
 // hook must not. Destructive reaping belongs to a session-lifecycle event only.
 //
-// Why not cron-first: client CLIs do not run fleets of crons; portal Inngest may
-// not see host worktrees; schedules get disabled or go dark. Session hooks fire
-// wherever dpf-platform is installed (Claude plugin, Grok global plane, Codex
-// hooks). The optional daily schedule remains a fleet backstop only.
+// ACCELERATOR, NOT OWNER (BI-99395B29, platform-function-never-depends-on-a-client).
+// The portal Inngest job `ops/worktree-janitor` owns reaping on every install;
+// many clients and threads share one install and none of them owns its upkeep.
+// This hook only lets a cleanly ending session release its own Tier-A tree
+// sooner. A client without the hook, or one that crashes, loses nothing.
 //
 // Escape hatches:
 //   DPF_SKIP_WORKTREE_SESSION_HYGIENE=1  — no-op
@@ -314,8 +315,8 @@ async function main() {
     if (n >= 20) {
       lines.push(
         `Worktree hygiene: ${n} registered worktrees on this clone (target is a bounded count). ` +
-          `Tier-A (merged+clean) worktrees are reaped on SessionEnd of that worktree; ` +
-          `fleet backstop: node scripts/worktree-janitor.mjs --dry-run --tier-a-only.`,
+          `The platform's ops/worktree-janitor job reaps Tier-A (merged+clean) worktrees; ` +
+          `SessionEnd of a worktree may reap it sooner. Preview: node scripts/worktree-janitor.mjs --dry-run --tier-a-only.`,
       );
     }
     if (!facts.isRoot && !isCanonicalSibling(facts.path, mainRoot)) {

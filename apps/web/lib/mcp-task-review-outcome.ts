@@ -101,7 +101,13 @@ const ARTIFACT_IDENTITY_KEYS: Record<InitiativeReviewBinding["artifactRef"]["kin
   "repo-blob-at-commit": ["kind", "commitSha", "path", "providerBlobId"],
   "feature-build-revision": ["kind", "revisionId"],
   "document-version": ["kind", "versionId"],
+  // BI-46E344FE: the digest names the change; the ranges name where it was read.
+  "repo-commit-range": ["kind", "repositoryFullName", "ranges", "digest"],
 };
+
+/** Range lists are compared by value; every other identity field is a string. */
+const sameIdentityValue = (left: unknown, right: unknown) => left === right
+  || (Array.isArray(left) && Array.isArray(right) && JSON.stringify(left) === JSON.stringify(right));
 
 /**
  * A receipt matches its binding when every identity key is equal and no key
@@ -112,8 +118,8 @@ const ARTIFACT_IDENTITY_KEYS: Record<InitiativeReviewBinding["artifactRef"]["kin
 function receiptArtifactMatches(bound: InitiativeReviewBinding["artifactRef"], stored: Record<string, unknown>): boolean {
   const boundFields = bound as Record<string, unknown>;
   const identity = ARTIFACT_IDENTITY_KEYS[bound.kind] ?? Object.keys(boundFields);
-  if (identity.some((key) => stored[key] !== boundFields[key])) return false;
-  return Object.entries(boundFields).every(([key, value]) => !(key in stored) || stored[key] === value);
+  if (identity.some((key) => !sameIdentityValue(stored[key], boundFields[key]))) return false;
+  return Object.entries(boundFields).every(([key, value]) => !(key in stored) || sameIdentityValue(stored[key], value));
 }
 
 /** Read the canonical receipt, never infer one from model prose or tool success. */

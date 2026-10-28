@@ -261,6 +261,43 @@ export const OVSM_GRAMMAR: LifecycleGrammar = {
   }),
 };
 
+// ─── platform-delivery ─────────────────────────────────────────────────────────────────
+// A platform delivery room on the IT4IT 3.0.1 value streams (BI-B8B3FB70): Integrate
+// (5.3.x) then Deploy (5.4.x), the 3.0.1 split of 2.x Requirement-to-Deploy. Stage keys are
+// IT4IT participationReferences, so a room's stage joins the reference model directly. Like
+// OVSM, each stage has one in-stage state; the room's own work shape carries the detail.
+const PLATFORM_DELIVERY_STAGES: readonly (readonly [string, string])[] = [
+  ["5.3.2", "Plan Product Release"],
+  ["5.3.3", "Design & Develop"],
+  ["5.3.4", "Build, Integrate & Test"],
+  ["5.3.5", "Accept & Publish Release"],
+  ["5.4.2", "Plan & Approve Deployment"],
+  ["5.4.3", "Fulfill Deployment"],
+  ["5.4.4", "Validate Deployment"],
+  ["5.4.5", "Observe Deployment"],
+];
+export const PLATFORM_DELIVERY_GRAMMAR: LifecycleGrammar = {
+  key: "platform-delivery",
+  label: "Platform delivery (IT4IT Integrate → Deploy)",
+  stages: PLATFORM_DELIVERY_STAGES.map(([key, label], index) => {
+    const next = PLATFORM_DELIVERY_STAGES[index + 1]?.[0];
+    return {
+      key,
+      label,
+      advancesTo: next ? [next] : [],
+      isTerminal: !next,
+      states: [{ key: "in-stage", label: "In stage", band: "on-track" as const, isEntry: true, isExitReady: Boolean(next) }],
+    };
+  }),
+};
+
+/** A delivery room's point on the grammar from its IT4IT stage reference; null when the reference is not on it. */
+export function resolvePlatformDeliveryPoint(participationReference: string): LifecyclePoint | null {
+  return PLATFORM_DELIVERY_STAGES.some(([key]) => key === participationReference)
+    ? { stage: participationReference, state: "in-stage" }
+    : null;
+}
+
 // ─── Registry ────────────────────────────────────────────────────────────────────────
 // ─── bookkeeping-room ──────────────────────────────────────────────────────────────────
 // The recurring day-to-day books loop as a Work Room lifecycle (BI-F8B6CF81, slice S-ROOM of
@@ -381,6 +418,7 @@ export const LIFECYCLE_GRAMMARS: Record<string, LifecycleGrammar> = {
   [TECH_CURRENCY_GRAMMAR.key]: TECH_CURRENCY_GRAMMAR,
   [OVSM_GRAMMAR.key]: OVSM_GRAMMAR,
   [BOOKKEEPING_ROOM_GRAMMAR.key]: BOOKKEEPING_ROOM_GRAMMAR,
+  [PLATFORM_DELIVERY_GRAMMAR.key]: PLATFORM_DELIVERY_GRAMMAR,
 };
 
 /**

@@ -28,8 +28,24 @@ function isBuildDebris(segments: readonly string[]): boolean {
 function isPerInstall(segments: readonly string[]): boolean {
   if (segments[0] === ".in_use") return true;
   if (segments.length === 2 && segments[0] === ".codex-plugin" && segments[1] === "plugin.json") return true;
+  // Where this copy was delivered from (BI-4F9E3221, spec row X15).
+  if (segments.length === 1 && segments[0] === ".dpf-delivery.json") return true;
   // Root connector descriptors carry per-install endpoints and the declaration.
   return segments.length === 1 && segments[0]!.endsWith(".mcp.json");
+}
+
+// BI-4F9E3221: the updater stamps `<packVersion>+c.<digest12>` into these
+// client manifests on delivery so version-keyed client caches refresh on any
+// content change. Their version value is per delivery and is hashed blank;
+// every other byte still counts. Mirrors STAMPED_MANIFESTS / blank_version in
+// installed_copy_freshness.py.
+const STAMPED_MANIFESTS = new Set([".claude-plugin/plugin.json", ".grok-plugin/plugin.json", ".antigravity-plugin/plugin.json"]);
+const VERSION_VALUE = /("version"\s*:\s*")[^"]*(")/;
+
+/** A stamped manifest's bytes with its first version value emptied. */
+function blankVersion(content: Buffer): Buffer {
+  // latin1 maps each byte to one code unit, so the rewrite preserves every other byte.
+  return Buffer.from(content.toString("latin1").replace(VERSION_VALUE, "$1$2"), "latin1");
 }
 
 function compareSegments(left: readonly string[], right: readonly string[]): number {
@@ -71,7 +87,14 @@ export function deliveredDigest(root: string): string {
   const digest = createHash("sha256");
   for (const relative of listDeliveredFiles(root)) {
     digest.update(Buffer.concat([Buffer.from(relative, "utf8"), Buffer.from([0])]));
-    digest.update(createHash("sha256").update(readFileSync(join(root, ...relative.split("/")))).digest());
+    const bytes = readFileSync(join(root, ...relative.split("/")));
+    const content = STAMPED_MANIFESTS.has(relative) ? blankVersion(bytes) : bytes;
+    digest.update(createHash("sha256").update(content).digest());
   }
   return digest.digest("hex");
+}
+
+/** The version a delivery stamps: the base pack version plus its content digest (BI-4F9E3221). */
+export function deliveredVersion(packVersion: string, packDigest: string): string {
+  return `${packVersion}+c.${packDigest.slice(0, 12)}`;
 }

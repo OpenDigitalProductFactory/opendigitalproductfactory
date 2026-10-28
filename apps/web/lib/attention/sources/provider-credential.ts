@@ -43,6 +43,7 @@ import {
   type ProviderSuitabilityDriftSignal,
 } from "@/lib/routing/provider-suitability/telemetry";
 import type { AttentionItem } from "../types";
+import { SIGN_IN_REQUIRED_STATUS, SUBSCRIPTION_RENEWAL_JOB_PREFIX } from "@/lib/inference/subscription-oauth-renewal";
 
 /** Reconnect surface — the same target the honest failure message points at. */
 export const PROVIDER_RECONNECT_ROUTE = AI_PROVIDER_CONNECTIONS_ROUTE;
@@ -294,14 +295,72 @@ export function unclearedCloudProviderToAttentionItem(
   };
 }
 
-export async function loadProviderCredentialItems(): Promise<AttentionItem[]> {
+/** A subscription account whose background renewal was refused (BI-A53C594E). */
+export type SignInRequiredAccount = { providerId: string; connectionId: string; name: string; refusedAtIso: string };
+
+type RenewalJobRow = { jobId: string; lastStatus: string | null; lastRunAt: Date | null; metadata: unknown };
+
+/**
+ * Pure: renewal rows that stopped on a confirmed refusal (invalid_grant, or no
+ * refresh token), for providers that still exist and that no operator turned
+ * off. A renewal that is only retrying is not a person's problem yet.
+ */
+export function selectSignInRequiredAccounts(
+  jobs: ReadonlyArray<RenewalJobRow>,
+  rows: ReadonlyArray<{ provider: { providerId: string; name: string; status: string } }>,
+): SignInRequiredAccount[] {
+  const providers = new Map(rows.map((row) => [row.provider.providerId, row.provider]));
+  return jobs.flatMap((job) => {
+    if (job.lastStatus !== SIGN_IN_REQUIRED_STATUS || !job.jobId.startsWith(SUBSCRIPTION_RENEWAL_JOB_PREFIX)) return [];
+    const providerId = string(object(job.metadata).providerId);
+    const provider = providerId ? providers.get(providerId) : undefined;
+    if (!provider || provider.status === "inactive") return [];
+    return [{ providerId: provider.providerId, connectionId: job.jobId.slice(SUBSCRIPTION_RENEWAL_JOB_PREFIX.length),
+      name: provider.name, refusedAtIso: (job.lastRunAt ?? new Date(0)).toISOString() }];
+  });
+}
+
+/** Same id as the expired lane, so one provider yields one item and this one wins. */
+export function signInRequiredToAttentionItem(account: SignInRequiredAccount): AttentionItem {
+  const href = `/platform/ai/providers/${encodeURIComponent(account.providerId)}`;
+  return {
+    id: `provider-credential:${account.providerId}`,
+    source: "provider-credential",
+    title: `Sign in to ${account.name} again`,
+    context:
+      `${account.name} refused to renew its saved sign-in, so the AI workforce cannot use it. ` +
+      `The platform retried and stopped only because the provider said the sign-in is no longer valid. ` +
+      `Sign in again to restore it.`,
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "bounded-write",
+    triage: { timeToAct: "none", residueReason: "needs-credential", blastRadius: account.name, decideEffort: "one-tap", irreversible: false },
+    createdAtIso: account.refusedAtIso,
+    actions: [{ kind: "open-in-context", label: "Sign in again", href }],
+    deepLink: href,
+    audience: { operator: true },
+  };
+}
+
+/** One item per id; later lanes replace earlier ones for the same provider. */
+export function mergeProviderCredentialItems(...lanes: AttentionItem[][]): AttentionItem[] {
+  return [...new Map(lanes.flat().map((item) => [item.id, item])).values()];
+}
+
+export async function loadProviderCredentialItems(db?: { scheduledJob: Pick<Db["scheduledJob"], "findMany"> }): Promise<AttentionItem[]> {
   const rows = await getProviders();
-  const items = [
-    ...selectExpiredCredentialProviders(rows).map(expiredCredentialToAttentionItem),
-    ...selectDisabledConnectedProviders(rows).map(disabledConnectedProviderToAttentionItem),
-    ...selectUnclearedCloudProviders(rows).map(unclearedCloudProviderToAttentionItem),
-  ];
-  return [...new Map(items.map((item) => [item.id, item])).values()];
+  const renewalJobs = db ? await db.scheduledJob.findMany({
+    where: { jobId: { startsWith: SUBSCRIPTION_RENEWAL_JOB_PREFIX }, lastStatus: SIGN_IN_REQUIRED_STATUS },
+    select: { jobId: true, lastStatus: true, lastRunAt: true, metadata: true },
+    take: 50,
+  }) : [];
+  return mergeProviderCredentialItems(
+    [
+      ...selectExpiredCredentialProviders(rows).map(expiredCredentialToAttentionItem),
+      ...selectDisabledConnectedProviders(rows).map(disabledConnectedProviderToAttentionItem),
+      ...selectUnclearedCloudProviders(rows).map(unclearedCloudProviderToAttentionItem),
+    ],
+    selectSignInRequiredAccounts(renewalJobs, rows).map(signInRequiredToAttentionItem),
+  );
 }
 
 export function suitabilityDriftToAttentionItem(signal: ProviderSuitabilityDriftSignal): AttentionItem {

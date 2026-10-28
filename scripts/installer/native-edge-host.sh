@@ -28,7 +28,11 @@ _dpf_native_edge_release_url() {
 
 _dpf_native_edge_acquire_macos() {
   local repo_root="$1" destination="$2" version="$3"
-  local asset="dpf-edge-node-darwin-arm64"
+  # Every release publishes both Mac builds; an Intel Mac cannot run the arm64
+  # one (BI-084F85E5). The same uname mapping as Linux.
+  local arch; arch="$(_dpf_native_edge_linux_arch)"
+  [ -n "$arch" ] || arch="arm64"
+  local asset="dpf-edge-node-darwin-$arch"
   local source_binary="$repo_root/services/edge-node-go/bin/$asset"
   local temporary_dir
   temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/dpf-native-edge.XXXXXX")"
@@ -37,7 +41,7 @@ _dpf_native_edge_acquire_macos() {
     cp "$source_binary" "$destination"
   elif command -v go >/dev/null 2>&1 && [ -f "$repo_root/services/edge-node-go/go.mod" ]; then
     (cd "$repo_root/services/edge-node-go" && \
-      GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath \
+      GOOS=darwin GOARCH="$arch" CGO_ENABLED=0 go build -trimpath \
         -ldflags "-s -w -X main.Version=${version:-dev}" \
         -o "$destination" ./cmd/dpf-edge-node)
   else

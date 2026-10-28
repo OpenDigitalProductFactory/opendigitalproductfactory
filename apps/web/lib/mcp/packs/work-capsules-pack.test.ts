@@ -772,7 +772,9 @@ describe("bounded handoff tool contract", () => {
     expect(tool.consequence).toBe("authority");
     expect(tool.consequenceForCall).toBeTypeOf("function");
     expect(tool.inputSchema.properties).toMatchObject({ phase: { enum: ["request", "acknowledge"] }, requestId: { type: "string" }, targetAgentId: { type: "string" }, expectedExecutorRef: { type: "string" } });
-    expect(tool.inputSchema.required).toEqual(["capsuleId"]);
+    // One room by capsuleId, or a batched set by capsuleIds (BI-D4144471); the handler requires one.
+    expect(tool.inputSchema.required).toBeUndefined();
+    expect(tool.inputSchema.properties).toMatchObject({ capsuleIds: { type: "array", maxItems: 20 }, dryRun: { type: "boolean" }, planDigest: { type: "string" } });
     expect(workCapsulesPack.grants.reassign_workroom_executor).toEqual(["work_capsule_write"]);
   });
 });

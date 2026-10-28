@@ -606,7 +606,7 @@ describe("SelfUpgradePage", () => {
     vi.mocked(loadConnectedAgentClients).mockResolvedValueOnce({
       release: { packVersion: "0.4.0", fingerprint: "1111111111aa" },
       truncated: false,
-      clients: [{ credentialRef: "token:b", product: "Codex", probable: false, authMode: "bearer", standing: "stale", loadedVersion: "0.3.0", loadedFingerprint: "2222222222bb", lastSeen: new Date(), behind: true }],
+      clients: [{ credentialRef: "token:b", product: "Codex", probable: false, authMode: "bearer", standing: "stale", loadedVersion: "0.3.0", loadedFingerprint: "2222222222bb", lastSeen: new Date(), behind: true, reasons: [], hostAgent: null }],
     });
 
     const listed = renderToStaticMarkup(await SelfUpgradePage());

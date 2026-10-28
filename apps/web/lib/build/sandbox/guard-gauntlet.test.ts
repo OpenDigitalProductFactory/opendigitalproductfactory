@@ -2,12 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   boundOutput,
+  buildGraderSetupCommand,
+  buildGraderTeardownCommand,
+  graderDirFor,
   parseFailedGuards,
   readWorktreeTreeSha,
   runGuardGauntlet,
 } from "./guard-gauntlet";
 
 const TREE = "a".repeat(40);
+const BASE = "b".repeat(40);
+
+/** The base-commit lookup and grader worktree setup/teardown, all succeeding. */
+const GRADER_ROUTES = [
+  { when: "merge-base origin/main HEAD", reply: `${BASE}\n` },
+  { when: "worktree add", reply: "" },
+  { when: "worktree remove", reply: "" },
+];
 
 /** A fake sandbox exec: matches on substrings of the command it is given. */
 function fakeExec(routes: Array<{ when: string; reply: string | Error }>) {
@@ -80,20 +91,93 @@ describe("readWorktreeTreeSha", () => {
 describe("runGuardGauntlet", () => {
   const workdir = "/workspace/.builds/b1";
 
-  it("runs in the BUILD's worktree, not the shared root", async () => {
+  it("grades the BUILD's tree, not the shared root, from a grader worktree beside it", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: "OK — 67 guards clean\n__DPF_GAUNTLET_EXIT__=0" },
     ]);
     await runGuardGauntlet({ exec, containerId: "c1", workdir });
 
+    const setup = exec.mock.calls.find(([, cmd]) => cmd.includes("worktree add"))?.[1];
+    expect(setup).toContain(`git -C "$W" worktree add --detach --force "$G" HEAD`);
+    expect(setup).toContain(`W='${workdir}'`);
     const gauntletCall = exec.mock.calls.find(([, cmd]) => cmd.includes("pregate-preflight"));
-    expect(gauntletCall?.[1]).toContain(`cd '${workdir}'`);
+    expect(gauntletCall?.[1]).toContain(`cd '${workdir}.grader'`);
     expect(gauntletCall?.[1]).not.toContain("cd '/workspace' &&");
+  });
+
+  it("takes the guard scripts from the build's BASE commit, not the agent's tree", async () => {
+    const exec = fakeExec([
+      ...GRADER_ROUTES,
+      { when: "rev-parse", reply: TREE },
+      { when: "pregate-preflight", reply: "OK\n__DPF_GAUNTLET_EXIT__=0" },
+    ]);
+    const result = await runGuardGauntlet({ exec, containerId: "c1", workdir });
+
+    const commands = exec.mock.calls.map(([, cmd]) => cmd);
+    const setupIndex = commands.findIndex((c) => c.includes("worktree add"));
+    const runIndex = commands.findIndex((c) => c.includes("pregate-preflight"));
+    expect(commands[setupIndex]).toContain(`checkout ${BASE} -- 'scripts'`);
+    expect(setupIndex).toBeLessThan(runIndex);
+    expect(result).toMatchObject({ ran: true, graderBaseSha: BASE });
+  });
+
+  it("removes the grader worktree after the run, even when the run cannot start", async () => {
+    const exec = fakeExec([
+      ...GRADER_ROUTES,
+      { when: "rev-parse", reply: TREE },
+      { when: "pregate-preflight", reply: new Error("container is not running") },
+    ]);
+    await runGuardGauntlet({ exec, containerId: "c1", workdir });
+
+    const commands = exec.mock.calls.map(([, cmd]) => cmd);
+    const runIndex = commands.findIndex((c) => c.includes("pregate-preflight"));
+    expect(commands.slice(runIndex + 1).some((c) => c.includes("worktree remove") && !c.includes("worktree add"))).toBe(true);
+  });
+
+  it("FAILS CLOSED when the base commit cannot be resolved: no run with the build's own guards", async () => {
+    const exec = fakeExec([
+      { when: "merge-base origin/main HEAD", reply: "" },
+      { when: "rev-parse", reply: TREE },
+    ]);
+    const result = await runGuardGauntlet({ exec, containerId: "c1", workdir });
+
+    expect(result.ran).toBe(false);
+    if (!result.ran) expect(result.reason).toContain("base commit could not be resolved");
+    expect(exec.mock.calls.some(([, cmd]) => cmd.includes("pregate-preflight"))).toBe(false);
+  });
+
+  it("reports a grader worktree that cannot be prepared as NOT-RUN", async () => {
+    const exec = fakeExec([
+      { when: "merge-base origin/main HEAD", reply: BASE },
+      { when: "worktree add", reply: new Error("fatal: invalid reference") },
+      { when: "worktree remove", reply: "" },
+      { when: "rev-parse", reply: TREE },
+    ]);
+    const result = await runGuardGauntlet({ exec, containerId: "c1", workdir });
+
+    expect(result.ran).toBe(false);
+    if (!result.ran) expect(result.reason).toContain("could not be prepared");
+    expect(exec.mock.calls.some(([, cmd]) => cmd.includes("pregate-preflight"))).toBe(false);
+  });
+
+  it("runs worktree setup and teardown through the git executor when one is given", async () => {
+    const exec = fakeExec([
+      { when: "merge-base origin/main HEAD", reply: BASE },
+      { when: "rev-parse", reply: TREE },
+      { when: "pregate-preflight", reply: "OK\n__DPF_GAUNTLET_EXIT__=0" },
+    ]);
+    const gitExec = fakeExec(GRADER_ROUTES);
+    await runGuardGauntlet({ exec, gitExec, containerId: "c1", workdir });
+
+    expect(gitExec.mock.calls.some(([, cmd]) => cmd.includes("worktree add"))).toBe(true);
+    expect(exec.mock.calls.some(([, cmd]) => cmd.includes("worktree add"))).toBe(false);
   });
 
   it("passes a clean run", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: "OK — 67 guards clean\n__DPF_GAUNTLET_EXIT__=0" },
     ]);
@@ -103,6 +187,7 @@ describe("runGuardGauntlet", () => {
 
   it("fails with the guards named", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: `${PREFLIGHT_FAILURE}\n__DPF_GAUNTLET_EXIT__=1` },
     ]);
@@ -115,6 +200,7 @@ describe("runGuardGauntlet", () => {
     // A non-zero exit that names no guard is a crash. Rendering it as a finding
     // is the mistake report-only-the-verdict-you-reached exists to prevent.
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: "Error: Cannot find module\n__DPF_GAUNTLET_EXIT__=1" },
     ]);
@@ -125,6 +211,7 @@ describe("runGuardGauntlet", () => {
 
   it("reports a timeout as NOT-RUN", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: "…\n__DPF_GAUNTLET_EXIT__=124" },
     ]);
@@ -135,6 +222,7 @@ describe("runGuardGauntlet", () => {
 
   it("reports a sandbox that could not start the command as NOT-RUN", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: new Error("container is not running") },
     ]);
@@ -145,6 +233,7 @@ describe("runGuardGauntlet", () => {
 
   it("reports missing exit status as NOT-RUN rather than guessing", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: "output with no sentinel" },
     ]);
@@ -156,6 +245,7 @@ describe("runGuardGauntlet", () => {
   it("still reaches a verdict when the tree sha cannot be read", async () => {
     // No commit yet is not a reason to withhold the guards' result.
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: new Error("no HEAD") },
       { when: "pregate-preflight", reply: "OK\n__DPF_GAUNTLET_EXIT__=0" },
     ]);
@@ -165,11 +255,40 @@ describe("runGuardGauntlet", () => {
 
   it("strips the exit sentinel from the kept output", async () => {
     const exec = fakeExec([
+      ...GRADER_ROUTES,
       { when: "rev-parse", reply: TREE },
       { when: "pregate-preflight", reply: "clean\n__DPF_GAUNTLET_EXIT__=0" },
     ]);
     const result = await runGuardGauntlet({ exec, containerId: "c1", workdir });
     if (result.ran) expect(result.output).not.toContain("__DPF_GAUNTLET_EXIT__");
+  });
+});
+
+describe("grader worktree commands", () => {
+  const workdir = "/workspace/.builds/b1";
+
+  it("puts the grader beside the build tree, never inside it", () => {
+    expect(graderDirFor(workdir)).toBe("/workspace/.builds/b1.grader");
+    expect(graderDirFor(`${workdir}/`)).toBe("/workspace/.builds/b1.grader");
+  });
+
+  it("refuses a base that is not a full commit sha", () => {
+    expect(() => buildGraderSetupCommand({ workdir, graderDir: graderDirFor(workdir), baseSha: "main; rm -rf /" }))
+      .toThrow("not a commit sha");
+  });
+
+  it("links the build's node_modules into the grader instead of installing again", () => {
+    const setup = buildGraderSetupCommand({ workdir, graderDir: graderDirFor(workdir), baseSha: BASE });
+    expect(setup).toContain("-name node_modules -prune -print");
+    expect(setup).toContain(`ln -sfn "$W/$rel" "$G/$rel"`);
+  });
+
+  it("unlinks node_modules before removing the grader, so removal never reaches the build's dependencies", () => {
+    const teardown = buildGraderTeardownCommand(workdir, graderDirFor(workdir));
+    const unlink = teardown.indexOf("-type l -name node_modules -exec rm -f");
+    expect(unlink).toBeGreaterThanOrEqual(0);
+    expect(unlink).toBeLessThan(teardown.indexOf("worktree remove"));
+    expect(unlink).toBeLessThan(teardown.indexOf(`rm -rf "$G"`));
   });
 });
 

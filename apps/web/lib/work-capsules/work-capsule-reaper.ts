@@ -26,6 +26,7 @@ import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
 import {
   parseVerifiedPullRequestObservation,
   selectLatestExactPullRequestObservation,
+  type PullRequestObservation,
 } from "../contributor-change-lanes/pull-request-observation";
 import {
   classifyWorkCapsuleLiveness,
@@ -390,6 +391,13 @@ export async function annotateDeliveredSignals(
  * Project verified provider observations onto Workroom rows. A merge is a
  * durable monotonic fact. An open PR is only a bounded liveness observation;
  * stale/closed/unknown payloads grant no liveness and no reaper authority.
+ *
+ * BI-8E1486FA: a squash or rebase merge leaves the room's recorded head off
+ * main, and many rooms never had their PR bound. So when no observation
+ * matches the exact head, the room's own PR (by number and branch) or, with
+ * none bound, the newest PR for its branch decides, provided it merged after
+ * the room last recorded its head: a head recorded later may not be in it.
+ * No observation leaves the row unknown.
  */
 export async function annotateProviderDeliverySignals(
   rows: ReaperCapsuleRow[],
@@ -398,8 +406,12 @@ export async function annotateProviderDeliverySignals(
   confirmedAt: Date | null = null,
 ): Promise<void> {
   for (const row of rows) {
-    if (!row.repositoryFullName || !row.pullRequestNumber) continue;
+    if (!row.repositoryFullName) continue;
     const head = authoredHeadSha(row);
+    if (!row.pullRequestNumber) {
+      annotateFromBranch(row, payloads, now, confirmedAt);
+      continue;
+    }
     if (!head) {
       // BI-ED6EA694: a room that never recorded its head is delivered only by its
       // own PR merging from its own branch. An open PR proves nothing about it.
@@ -414,17 +426,57 @@ export async function annotateProviderDeliverySignals(
       pullRequestNumber: row.pullRequestNumber,
       headSha: head,
     });
-    if (!observation) continue;
+    if (!observation) {
+      const bound = newestObservation(payloads, row.repositoryFullName, (pr) =>
+        pr.number === row.pullRequestNumber && (!row.headBranch || pr.headBranch === row.headBranch));
+      if (bound?.state === "merged" && mergedAfterHeadRecorded(bound, row)) row.deliveredSignal = { merged: true };
+      continue;
+    }
     if (observation.state === "merged") {
       row.deliveredSignal = { merged: true };
       continue;
     }
-    const observedAt = confirmedAt ?? new Date(observation.observedAt);
-    const age = now.getTime() - observedAt.getTime();
-    if (observation.state === "open" && age >= 0 && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS) {
-      row.pullRequestObservation = { state: "open", observedAt };
-    }
+    projectOpen(row, observation, now, confirmedAt);
   }
+}
+
+/** A room with no bound PR: the newest PR observed for its own branch decides (BI-8E1486FA). */
+function annotateFromBranch(row: ReaperCapsuleRow, payloads: readonly unknown[], now: Date, confirmedAt: Date | null): void {
+  if (!row.headBranch || !row.repositoryFullName) return;
+  const newest = newestObservation(payloads, row.repositoryFullName, (pr) => pr.headBranch === row.headBranch);
+  if (!newest) return;
+  if (newest.state === "merged") {
+    if (mergedAfterHeadRecorded(newest, row)) row.deliveredSignal = { merged: true };
+    return;
+  }
+  projectOpen(row, newest, now, confirmedAt);
+}
+
+function projectOpen(row: ReaperCapsuleRow, observation: PullRequestObservation, now: Date, confirmedAt: Date | null): void {
+  const observedAt = confirmedAt ?? new Date(observation.observedAt);
+  const age = now.getTime() - observedAt.getTime();
+  if (observation.state === "open" && age >= 0 && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS) {
+    row.pullRequestObservation = { state: "open", observedAt };
+  }
+}
+
+function newestObservation(
+  payloads: readonly unknown[],
+  repositoryFullName: string,
+  matches: (pr: PullRequestObservation) => boolean,
+): PullRequestObservation | null {
+  const repo = repositoryFullName.toLowerCase();
+  const found = payloads
+    .map(parseVerifiedPullRequestObservation)
+    .filter((pr): pr is PullRequestObservation => pr !== null && pr.repositoryFullName.toLowerCase() === repo && matches(pr));
+  return found.sort((a, b) => a.number - b.number || Date.parse(a.providerUpdatedAt) - Date.parse(b.providerUpdatedAt)).at(-1) ?? null;
+}
+
+/** The merge happened after the room last recorded its head, so that head was on the merged branch. Unknown is false. */
+function mergedAfterHeadRecorded(pr: PullRequestObservation, row: ReaperCapsuleRow): boolean {
+  if (!row.lastSyncedAt) return false;
+  const mergedAt = Date.parse(pr.mergedAt ?? pr.providerUpdatedAt);
+  return Number.isFinite(mergedAt) && mergedAt > row.lastSyncedAt.getTime();
 }
 
 function headlessRoomMerged(
@@ -445,7 +497,7 @@ function headlessRoomMerged(
   });
 }
 
-type ProviderObservationBatch = {
+export type ProviderObservationBatch = {
   payloads: unknown[];
   confirmedAt: Date | null;
 };
@@ -460,7 +512,8 @@ function githubInventoryWasUnchanged(perSourceResult: unknown): boolean {
   );
 }
 
-async function loadLatestSuccessfulProviderPayloads(
+/** Also read by the drive's overseer duty (BI-8E1486FA), so both decide merge state from one source. */
+export async function loadLatestSuccessfulProviderPayloads(
   db: ReaperDb,
 ): Promise<ProviderObservationBatch> {
   if (!db.contributorInventorySyncRun) return { payloads: [], confirmedAt: null };

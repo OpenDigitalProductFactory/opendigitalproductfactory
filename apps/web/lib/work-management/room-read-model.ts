@@ -94,6 +94,8 @@ export interface BuildWorkroomViewInput {
   shapeKey?: string | null;
   /** The room's activityKind, from the anchored Workroom. */
   activityKind?: string | null;
+  /** The anchored Workroom's change passes a governed gate chain (BI-D0DFE502). */
+  gateGoverned?: boolean;
   /** Raw scopeClaims of the anchored Workroom, for the declared-posture claim. */
   scopeClaims?: unknown;
   /** The instant the view is built. Passed in so the build stays deterministic. */
@@ -249,6 +251,7 @@ export function buildWorkroomView(
       cycleActive: Boolean(input.currentCycle),
       dueAt: boundary.timeBoundary.dueAt,
       declaration: readWorkroomPostureClaim(input.scopeClaims),
+      gateGoverned: input.gateGoverned ?? false,
     },
     input.postureContext ?? null,
     input.now ?? new Date(),

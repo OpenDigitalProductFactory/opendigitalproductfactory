@@ -14,7 +14,7 @@ import {
   type CellValue,
   type GridCapabilities,
 } from "@/lib/workbooks/types";
-import { groupRowsByColumn, cardFieldLayout } from "@/lib/workbooks/kanban-grouping";
+import { groupRowsByColumn, boardCardLayout } from "@/lib/workbooks/kanban-grouping";
 import { updateCellsAction } from "@/lib/actions/workbooks";
 import { updatePlatformCellsAction } from "@/lib/actions/platform-grid";
 
@@ -25,6 +25,8 @@ export interface KanbanBoardProps {
   rows: GridRow[];
   capabilities: GridCapabilities;
   groupByColumnId: string;
+  /** A saved board's card fields (first = title); omitted = automatic layout. */
+  cardFields?: string[];
 }
 
 function formatValue(col: ColumnDefinition | undefined, value: CellValue): string {
@@ -71,6 +73,7 @@ export function KanbanBoard({
   rows,
   capabilities,
   groupByColumnId,
+  cardFields,
 }: KanbanBoardProps) {
   const [rowData, setRowData] = useState<GridRow[]>(rows);
   const [error, setError] = useState<string | null>(null);
@@ -82,8 +85,8 @@ export function KanbanBoard({
     [rowData, columns, groupByColumnId],
   );
   const { titleColumnId, metaColumnIds } = useMemo(
-    () => cardFieldLayout(columns, groupByColumnId),
-    [columns, groupByColumnId],
+    () => boardCardLayout(columns, groupByColumnId, cardFields),
+    [columns, groupByColumnId, cardFields],
   );
   const canMove = capabilities.canEditCell;
 

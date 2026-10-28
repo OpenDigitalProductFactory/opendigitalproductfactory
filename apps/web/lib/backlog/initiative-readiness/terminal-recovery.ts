@@ -27,6 +27,11 @@ import { readRepositoryProviderBlob } from "./repository-artifact";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
+import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
+import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
+
+export type { MergedRepairSource } from "./merged-repair-source";
+export { defaultLoadMergedRepairSource } from "./merged-repair-source";
 
 export type TerminalRecoveryRoom = {
   capsuleId: string;
@@ -56,7 +61,13 @@ export type TerminalRecoveryEscalationReason =
   | "objective-mapping-identity-conflict"
   | "objective-mapping-prior-authority-active"
   | "objective-mapping-authoritative-output-exists"
-  | "canonical-artifact-unavailable";
+  | "canonical-artifact-unavailable"
+  /** BI-CE661173: no live room, and the trunk shows no standing commit that delivered the item. */
+  | "merged-delivery-not-found"
+  /** BI-CE661173: more than one standing delivering commit; no single range to review. */
+  | "merged-delivery-ambiguous"
+  /** BI-CE661173: the item's delivery actors could not be bounded, so independence cannot be proven. */
+  | "delivery-actors-unbounded";
 
 type TerminalEscalation = {
   // design-author owns RESEARCH_REQUIRED on every shape that carries it
@@ -86,6 +97,8 @@ export type TerminalRecoveryPorts = {
   validateBodyBaselineCurrent?(args: { baseline: BaselinePayload; room: TerminalRecoveryRoom; itemId: string }): Promise<boolean>;
   loadLiveRooms(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom[]>;
   loadDeliveredBodyAuthor?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom | null>;
+  /** BI-CE661173: a merged repair's review source when no Workroom is live. */
+  loadMergedRepairSource?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<MergedRepairSource>;
   loadBaselinePayloads(itemId: string): Promise<unknown[]>;
   loadEligibleEvidenceActivityIds(args: {
     itemId: string;
@@ -110,9 +123,22 @@ export type TerminalRecoveryPorts = {
     headBranch?: string;
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
+  /** BI-46E344FE: a delivery of several squash commits, reviewed as their ordered union. */
+  discoverCommitRange?(args: { repositoryFullName: string; ranges: CommitRange[] }): Promise<Awaited<ReturnType<typeof discoverCommitRangeArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
   loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
 };
+
+/** The PIR's bound artifact: one repair blob at `commitSha`, or the whole commit range (BI-46E344FE). */
+function pirCanonicalArtifact(
+  discovered: Awaited<ReturnType<TerminalRecoveryPorts["discoverArtifact"]>>,
+  commitSha: string,
+): NonNullable<Parameters<TerminalRecoveryPorts["resolveRecovery"]>[0]["canonicalArtifact"]> {
+  if (!discovered.resolved) return { resolved: false, nextAction: discovered.nextAction };
+  return "kind" in discovered.artifact
+    ? { resolved: true, kind: "repo-commit-range", ranges: discovered.artifact.ranges, digest: discovered.artifact.digest }
+    : { resolved: true, ...discovered.artifact, commitSha };
+}
 
 function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string): TerminalInitiativeRecovery {
   return {
@@ -422,11 +448,13 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   },
   loadLiveRooms: defaultLoadLiveRooms,
   loadDeliveredBodyAuthor: defaultLoadDeliveredBodyAuthor,
+  loadMergedRepairSource: (args) => defaultLoadMergedRepairSource(args),
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
   loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
   verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
   discoverArtifact: discoverCanonicalReviewArtifact,
+  discoverCommitRange: (args) => discoverCommitRangeArtifact(args),
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
   loadPlanArtifact: loadPlanReviewArtifact,
 };
@@ -467,8 +495,52 @@ export async function resolveTerminalInitiativeRecovery(args: {
     refusedWorkroomId: args.refusedWorkroomId,
   };
   const rooms = await ports.loadLiveRooms(roomArgs);
-  // Only retained body acceptance can read a retired author anchor. PIR and
-  // design/spec review still require their normal live Workroom.
+  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
+  const pirOnly = {
+    ...args.decision,
+    blockers: args.decision.blockers.filter(isPostImplementationReview),
+    unmet: args.decision.unmet.filter(isPostImplementationReview),
+  };
+  // BI-CE661173: a merged repair's Workroom is normally archived or idle by
+  // the time its post-implementation review is owed. The review then reads the
+  // merged squash commit on the trunk, anchored to the delivery's own newest
+  // room, and every delivery actor is excluded from reviewing it.
+  const owesPir = pirOnly.blockers.length + pirOnly.unmet.length > 0;
+  const routeMergedRepairReview = async (source: MergedRepairSource): Promise<TerminalInitiativeRecovery> => {
+    if (source.kind === "unavailable") return escalation(source.reason, source.nextAction);
+    const room = source.room;
+    // BI-46E344FE: several delivering commits are reviewed together, oldest first.
+    const ranges = mergedRepairCommits(source).map((commit) => ({ baseSha: commit.parentSha, headSha: commit.sha }));
+    const discovered = ranges.length > 1
+      ? await (ports.discoverCommitRange ?? discoverCommitRangeArtifact)({ repositoryFullName: room.repositoryFullName!, ranges })
+      : await ports.discoverArtifact({
+        repositoryFullName: room.repositoryFullName!,
+        baseSha: source.parentSha,
+        headSha: source.mergedCommitSha,
+        purpose: "post-implementation-review",
+      });
+    const excluded = new Set(source.deliveryActorIds);
+    return ports.resolveRecovery({
+      decision: pirOnly,
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext: {
+        workroomId: room.capsuleId,
+        repositoryFullName: room.repositoryFullName!,
+        branchName: room.headBranch!,
+        headSha: room.headSha!,
+      },
+      canonicalArtifact: pirCanonicalArtifact(discovered, source.mergedCommitSha),
+      expectedCurrentBaselineId: null,
+      isReviewerEligible: async (agentId) => !excluded.has(agentId),
+    });
+  };
+  if (rooms.length === 0 && owesPir && ports.loadMergedRepairSource) {
+    return routeMergedRepairReview(await ports.loadMergedRepairSource(roomArgs));
+  }
+  // Only retained body acceptance and a merged repair's review (above) can
+  // read a retired anchor. Design/spec review still requires a live Workroom.
   let bodyPayloads: unknown[] | undefined;
   if (rooms.length === 0 && args.decision.shapeDecision?.effective === "medium"
     && !designPhaseReviewDecision(args.decision)
@@ -502,9 +574,16 @@ export async function resolveTerminalInitiativeRecovery(args: {
   // A break-fix review assesses the repair the Workroom authored. It does not
   // create or reconcile an objective baseline. Resolve its exact source before
   // entering the baseline-owned acceptance path below (BI-594CF003).
-  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
-    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
-  if ([...args.decision.blockers, ...args.decision.unmet].some(isPostImplementationReview)) {
+  if (owesPir) {
+    // BI-CE661173 (BI-17238133): a room whose recorded base equals its head
+    // compares an empty range, though its repair merged. Review the merged
+    // squash commit instead, when the trunk proves this room's delivery.
+    if (room.baseSha.toLowerCase() === room.headSha.toLowerCase() && ports.loadMergedRepairSource) {
+      const source = await ports.loadMergedRepairSource({ itemId: args.decision.subject.id, refusedWorkroomId: room.capsuleId });
+      return routeMergedRepairReview(source.kind === "found" && source.room.capsuleId !== room.capsuleId
+        ? { kind: "unavailable", reason: "workroom-ambiguous", nextAction: "The live Workroom is not the item's newest delivery attempt. Reconcile ownership before dispatching a post-implementation reviewer." }
+        : source);
+    }
     const discovered = await ports.discoverArtifact({
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
@@ -512,17 +591,11 @@ export async function resolveTerminalInitiativeRecovery(args: {
       purpose: "post-implementation-review",
     });
     return ports.resolveRecovery({
-      decision: {
-        ...args.decision,
-        blockers: args.decision.blockers.filter(isPostImplementationReview),
-        unmet: args.decision.unmet.filter(isPostImplementationReview),
-      },
+      decision: pirOnly,
       currentAgentId: args.currentAgentId,
       db: prisma as never,
       dispatchContext,
-      canonicalArtifact: discovered.resolved
-        ? { resolved: true, ...discovered.artifact, commitSha: room.headSha }
-        : { resolved: false, nextAction: discovered.nextAction },
+      canonicalArtifact: pirCanonicalArtifact(discovered, room.headSha),
       expectedCurrentBaselineId: null,
     });
   }

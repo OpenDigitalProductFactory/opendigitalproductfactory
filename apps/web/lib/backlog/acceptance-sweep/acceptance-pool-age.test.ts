@@ -61,7 +61,7 @@ describe("loadAcceptancePoolAges", () => {
     expect(ages.get("row-a")).toEqual({ rowId: "row-a", itemId: "BI-A", enteredAt: daysAgo(5), ageBasis: "entry", ageDays: 5 });
     expect(ages.get("row-b")).toEqual({ rowId: "row-b", itemId: "BI-B", enteredAt: daysAgo(45), ageBasis: "created", ageDays: 45 });
     expect(db.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { OR: expect.arrayContaining([{ status: "awaiting-acceptance" }]) },
+      where: { OR: expect.arrayContaining([{ status: "awaiting-acceptance" }]), AND: [expect.anything()] },
     }));
     expect(db.backlogItemActivity.findMany).toHaveBeenCalledWith({
       where: {
@@ -105,5 +105,22 @@ describe("summarizePoolAge", () => {
       ageBasisCreated: 0,
       oldestAgeDays: null,
     });
+  });
+});
+
+describe("loadAcceptancePoolAges peer-owned count (BI-C5794F1D)", () => {
+  it("counts the acceptance obligations it left out because a peer installation owns them", async () => {
+    const count = vi.fn().mockResolvedValue(7);
+    const db = {
+      backlogItem: { findMany: vi.fn().mockResolvedValue([]), count },
+      backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+
+    const ages = await loadAcceptancePoolAges(db, NOW);
+
+    expect(ages.peerOwnedSkipped).toBe(7);
+    const where = count.mock.calls[0]![0].where;
+    expect(where.OR).toEqual(expect.arrayContaining([{ status: "awaiting-acceptance" }]));
+    expect(where.body).toEqual({ contains: "[origin:federatedWork:inst_" });
   });
 });

@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+// The reader resolves the configured path, so a POSIX fixture path reads as
+// a drive-letter path on a Windows host; compare against the resolved form.
+import { resolve as resolvePath } from "node:path";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -109,7 +111,7 @@ describe("connected finite native Q/E transport", () => {
     const output = vi.mocked(f.hooks.complete).mock.calls[5]![3];
     expect(output).toMatchObject({ http: { status: 200, bodyEncoding: "base64", bodyBase64: Buffer.from("[]").toString("base64") },
       observation: { snapshot: null, runners: [], decision: { defer: null, unloadIdle: false },
-        provenance: { source: "published-file", path: resolve("/fixture-state/host-gpu.json"), unknownReason: `published-snapshot-${state}` } } });
+        provenance: { source: "published-file", path: resolvePath("/fixture-state/host-gpu.json"), unknownReason: `published-snapshot-${state}` } } });
     if (state === "stale") expect(output).toMatchObject({ observation: { provenance: { readOutcome: "complete", bodyBase64: bytes.toString("base64") } } });
     else expect(output).toMatchObject({ observation: { provenance: { readOutcome: "absent", errorCode: "ENOENT" } } });
     expect(f.hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ providerStarts: 8, reservedTokens: 200, unknownEffects: 0 }));
