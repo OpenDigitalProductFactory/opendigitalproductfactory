@@ -6,7 +6,7 @@ import { can } from "@/lib/permissions";
 import { expandGrants } from "@/lib/tak/agent-grants";
 import { INITIATIVE_READINESS_LANES, readinessLaneForRole } from "@/lib/tak/initiative-readiness-tool-grants";
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "@/lib/auth/oauth-tokens";
-import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
+import { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
@@ -132,10 +132,12 @@ export async function authorizeCoworkerRequest(
   // packet, and it issues a retired anchor only for a repair the trunk proves
   // merged, to a reviewer outside every delivery actor.
   let headlessPirAnchor = false;
+  let retiredPirAnchor = false;
   if (!room && binding.gate === "post-implementation-review"
     && binding.writerToolName === "record_initiative_post_implementation_review") {
     room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId,
       status: { notIn: ["abandoned", "superseded"] } }, select: roomSelect });
+    retiredPirAnchor = Boolean(room);
     // BI-46E344FE: an anchor that never recorded its head carries the merged
     // head the issuer read from the trunk; the packet re-issue below proves it.
     headlessPirAnchor = Boolean(room) && room!.headSha === null;
@@ -155,7 +157,13 @@ export async function authorizeCoworkerRequest(
       ? room!.featureBuild?.createdById === userId
         || (room!.requestedByPrincipalId !== null && (await prisma.principalAlias.findFirst({
           where: { aliasType: "user", aliasValue: userId, issuer: "" }, select: { principalId: true } }))?.principalId === room!.requestedByPrincipalId!)
-      : (await resolveAgentWorkroomAccess({ userId, agentId: context.agentId, workroomId: room!.id, requested: "action" })).decision.level === "action";
+      : (await resolveAgentWorkroomAccess({ userId, agentId: context.agentId, workroomId: room!.id, requested: "action" })).decision.level === "action"
+        // BI-D3BAF945: a person who opened a merged repair's room with no
+        // assistant has the retired anchor's review carried on their own
+        // connection. The person must be admitted; the carrying assistant only
+        // transports the packet the issuer re-derives below, and the reviewer
+        // is chosen apart from every delivery actor.
+        || (retiredPirAnchor && (await resolveHumanWorkroomAccess({ userId, workroomId: room!.id, requested: "action" })).decision.level === "action");
   if (!admitted) {
     return deny(buildStudioRoom
       ? "Only a connection of the person who requested this Build Studio build may request its review."

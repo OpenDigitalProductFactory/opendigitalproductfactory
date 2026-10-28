@@ -21,7 +21,9 @@ vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: 
 vi.mock("@/lib/mcp-task-review-outcome", () => ({ loadTaskInitiativeReviewOutcome: mocks.outcome }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.human }));
 vi.mock("@/lib/auth/oauth-tokens", () => ({ OAUTH_EXECUTION_AUTHORITY_SELECT: {}, isCurrentOAuthExecutionAuthority: mocks.currentConsent }));
-vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
+const humanAccess = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access,
+  resolveHumanWorkroomAccess: humanAccess }));
 vi.mock("./packs/backlog-pack-read-tools", () => ({ getBacklogItem: mocks.item }));
 vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
 // This suite isolates authorization and exact issuance. The companion document
@@ -395,6 +397,22 @@ describe("consent-bound independent review request", () => {
       requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };
     expect((await authorizeCoworkerRequest(design, "human", context)).refusal?.success).toBe(false);
     expect(mocks.item).not.toHaveBeenCalled();
+  });
+  it("admits a person-opened retired PIR anchor on that person's admission, carried by an assistant the room never admitted (BI-D3BAF945)", async () => {
+    const retired = { ...await mocks.room(), status: "archived" };
+    mocks.room.mockImplementation(async ({ where }) => where.archivedAt === null ? null : retired);
+    // The person opened the room alone; their carrying assistant is not in it.
+    mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+    humanAccess.mockResolvedValue({ decision: { level: "action" } });
+    expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
+    expect(humanAccess).toHaveBeenCalledWith({ userId: "human", workroomId: "room-row", requested: "action" });
+    // A person not admitted to the room cannot have it carried.
+    humanAccess.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+    expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.success).toBe(false);
+    // A live room still needs its carrying assistant admitted.
+    mocks.room.mockResolvedValue({ ...retired, status: "ready" });
+    humanAccess.mockResolvedValue({ decision: { level: "action" } });
+    expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.success).toBe(false);
   });
   it("accepts only a regenerated packet after current human, consent, grants and exact room checks", async () => {
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
