@@ -1255,6 +1255,8 @@
           "per_task_limit": 20000
         },
         "tool_grants": [
+          "file_read",
+          "initiative_design_review",
           "registry_read",
           "backlog_read",
           "release_gate_create",
