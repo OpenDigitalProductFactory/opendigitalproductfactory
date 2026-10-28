@@ -39,16 +39,18 @@ export function persistedReviewCompletionData(progressPayload: unknown, outcome:
   };
 }
 
-/** A receipt completes the review, but cannot revive cancellation or displace a newer attempt. */
+/** A verified receipt settles even a failed response, without replaying inference.
+ * Cancellation, archival and a newer attempt still win the conditional write. */
 export async function reconcilePersistedReviewStatus(
   taskRunId: string,
   progressPayload: unknown,
   outcome: PersistedReviewOutcome,
   expected: { status: string; updatedAt: Date },
 ): Promise<boolean> {
-  if (expected.status !== "completed" && !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(expected.status)) return false;
+  if (expected.status !== "completed" && expected.status !== "failed"
+    && !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(expected.status)) return false;
   const written = await prisma.taskRun.updateMany({
-    where: { taskRunId, status: expected.status, updatedAt: expected.updatedAt },
+    where: { taskRunId, status: expected.status, updatedAt: expected.updatedAt, archivedAt: null },
     data: persistedReviewCompletionData(progressPayload, outcome),
   });
   return written.count === 1;

@@ -65,10 +65,10 @@ describe("canonical design writer refusal", () => {
     expect(calls.reserve).not.toHaveBeenCalled();
   });
 
-  it("still reserves a correctable writer refusal", async () => {
+  it.each(["input-required", "failed", "stalled"])("still reserves a correctable writer refusal from %s on the same task", async status => {
     writerRow("CLASSIFICATION_REQUIRED", "Classify the item.");
     const result = await reserveTerminalWriterReplay({
-      existing: existingFor("CLASSIFICATION_REQUIRED", "Classify the item."),
+      existing: { ...(existingFor("CLASSIFICATION_REQUIRED", "Classify the item.") as object), status } as never,
       parsed: {} as never, terminalToolPolicy: policy,
     });
     expect(result?.wait.writerToolName).toBe(wait.writerToolName);
