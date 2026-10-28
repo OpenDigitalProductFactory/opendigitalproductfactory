@@ -180,6 +180,9 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "question",
   "response",
   "error",
+  // BI-49BC21C1: the room's own recurring misses recorded as harness-edit
+  // candidates, once per room per day, by the harness evolution loop.
+  "harness-evolution-candidate",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
