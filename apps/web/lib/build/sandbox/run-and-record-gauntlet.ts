@@ -90,7 +90,24 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
       },
     }).catch(() => {});
   }
-  const outcome = await runGuardGauntlet({ exec: execInSandbox, containerId: build.sandboxId, workdir });
+
+  // A change to what grades it goes on the trail, and into the evidence the
+  // reviewer resolves, whatever the verdict (spec 2026-10-21, AC-7).
+  const { classifyGraderTouches, summarizeGraderTouches } = await import("./grader-touching-paths");
+  const graderTouches = classifyGraderTouches(diffPatch ?? "");
+  const graderSummary = summarizeGraderTouches(graderTouches);
+  if (graderSummary) {
+    await prisma.buildActivity.create({
+      data: { buildId: build.buildId, tool: "grader_touching", summary: graderSummary.slice(0, 1000) },
+    }).catch(() => {});
+  }
+
+  const outcome = await runGuardGauntlet({
+    exec: execInSandbox,
+    gitExec: (containerId, command) => execInSandbox(containerId, wrapSandboxGitCommand(command)),
+    containerId: build.sandboxId,
+    workdir,
+  });
   // Could-not-run is not a failing verdict, and must not be recorded as one.
   if (!outcome.ran) return { ran: false, reason: outcome.reason };
   if (!outcome.treeSha) {
@@ -125,15 +142,19 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
     mode: "single-branch",
     status: outcome.passed ? "passed" : "failed",
     summary: summarizeGauntlet({ passed: outcome.passed, failedGuards: outcome.failedGuards, treeSha: outcome.treeSha }),
-    evidence: buildGauntletEvidence({
-      identity,
-      workdir: outcome.workdir,
-      passed: outcome.passed,
-      failedGuards: outcome.failedGuards,
-      output: outcome.output,
-      durationMs: outcome.durationMs,
-      ...(binding ? { binding } : {}),
-    }),
+    evidence: {
+      ...buildGauntletEvidence({
+        identity,
+        workdir: outcome.workdir,
+        passed: outcome.passed,
+        failedGuards: outcome.failedGuards,
+        output: outcome.output,
+        durationMs: outcome.durationMs,
+        ...(binding ? { binding } : {}),
+      }),
+      graderBaseSha: outcome.graderBaseSha,
+      graderTouches,
+    },
   });
   return {
     ran: true,
