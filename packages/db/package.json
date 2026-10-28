@@ -17,7 +17,6 @@
     "./coworker-service-backing": "./src/coworker-service-backing.ts",
     "./ea-validation": "./src/ea-validation.ts",
     "./graph-sync": "./src/graph-sync.ts",
-    "./wiki-links": "./src/wiki-links.ts",
     "./doc-impact-graph": "./src/doc-impact-graph.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./archetype-value-stream-projection": "./src/archetype-value-stream-projection.ts",

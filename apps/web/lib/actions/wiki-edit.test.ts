@@ -14,7 +14,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@dpf/db/graph-sync", () => ({ replaceGraphEdgesFromSource: vi.fn(async () => undefined) }));
+vi.mock("@dpf/db/graph-sync", () => ({ projectWikiLinksToGraph: vi.fn(async () => undefined) }));
 
 // BI-8AC24F3D: mocked so the callsite wiring is what is under test here; the
 // helper's own contract is covered in lib/wiki/craft-override-promotion.test.ts.

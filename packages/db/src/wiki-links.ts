@@ -14,7 +14,6 @@
 //
 // Spec: docs/superpowers/specs/2026-10-14-knowledge-linking-design.md §4.1.
 
-import { replaceGraphEdgesFromSource } from "./graph-sync";
 import { extractWikilinks } from "./wiki-frontmatter";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,11 +29,13 @@ export type WikiLinkClient = {
   };
 };
 
-/** Projects a page's resolved out-links into the graph mirror. */
+/**
+ * Projects a page's resolved out-links into the graph mirror. Passed in rather
+ * than imported so this module stays free of the database client and can ride
+ * the `@dpf/db/wiki-store` subpath; the projector is `projectWikiLinksToGraph`
+ * in graph-sync.ts.
+ */
 export type ProjectWikiLinks = (fromPageId: string, toPageIds: string[]) => Promise<void>;
-
-const projectLinksToGraph: ProjectWikiLinks = (fromPageId, toPageIds) =>
-  replaceGraphEdgesFromSource(fromPageId, "LINKS_TO", toPageIds);
 
 export type ReplaceWikiPageOutLinksResult = {
   toPageIds: string[];
@@ -82,7 +83,7 @@ async function resolveWikiLinkTargets(
 export async function replaceWikiPageOutLinks(
   db: WikiLinkClient,
   page: { pageId: string; organizationId: string | null; body: string },
-  project: ProjectWikiLinks = projectLinksToGraph,
+  project: ProjectWikiLinks,
 ): Promise<ReplaceWikiPageOutLinksResult> {
   // Source citations live on WikiPageSource, not in the link graph.
   const slugs = extractWikilinks(page.body).filter((s) => !s.startsWith("raw-sources/"));
@@ -132,7 +133,7 @@ export type ReconcileWikiPageLinksResult = {
  */
 export async function reconcileWikiPageLinks(
   db: WikiLinkClient,
-  opts: { pageSize?: number; project?: ProjectWikiLinks } = {},
+  opts: { pageSize?: number; project: ProjectWikiLinks },
 ): Promise<ReconcileWikiPageLinksResult> {
   const pageSize = opts.pageSize ?? 200;
   const totals: ReconcileWikiPageLinksResult = { pages: 0, added: 0, removed: 0, projectionErrors: 0 };

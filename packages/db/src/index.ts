@@ -437,6 +437,7 @@ export {
   syncEaElement,
   syncEaRelationship,
   replaceGraphEdgesFromSource,
+  projectWikiLinksToGraph,
 } from "./graph-sync";
 // BI-23900D0A: the one writer for a wiki page's out-links, and its backfill.
 export {

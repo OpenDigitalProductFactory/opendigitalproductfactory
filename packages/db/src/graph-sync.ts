@@ -109,6 +109,11 @@ export async function replaceGraphEdgesFromSource(
   }
 }
 
+/** The `LINKS_TO` projection of a wiki page's out-links (BI-23900D0A). */
+export function projectWikiLinksToGraph(fromPageId: string, toPageIds: string[]): Promise<void> {
+  return replaceGraphEdgesFromSource(fromPageId, "LINKS_TO", toPageIds);
+}
+
 /** Resolve a Prisma TaxonomyNode FK (= TaxonomyNode.id, stored as the `pgId`
  *  property) to its semantic `nodeId`, which is the graph_node.key the read side
  *  uses. Returns null when the taxonomy row is absent. */

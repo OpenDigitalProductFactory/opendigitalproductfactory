@@ -33,7 +33,7 @@ import {
   upsertWikiPage,
   type WikiStoreClient,
 } from "@dpf/db/wiki-store";
-import type { WikiLinkClient } from "@dpf/db/wiki-links";
+import type { WikiLinkClient } from "@dpf/db/wiki-store";
 
 import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 import type {

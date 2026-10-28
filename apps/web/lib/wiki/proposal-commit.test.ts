@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 // The LINKS_TO projection is the graph mirror; its own SQL is covered in
 // packages/db/src/graph-sync.test.ts. Here it only has to be called.
-const graph = vi.hoisted(() => ({ replaceGraphEdgesFromSource: vi.fn(async () => undefined) }));
+const graph = vi.hoisted(() => ({ projectWikiLinksToGraph: vi.fn(async () => undefined) }));
 vi.mock("@dpf/db/graph-sync", () => graph);
 import {
   commitIngestProposal,
@@ -536,7 +536,7 @@ describe("commitIngestProposal — audit event", () => {
 
 describe("commitIngestProposal — link rows follow the body (BI-23900D0A)", () => {
   it("stores a labelled link to a kernel page, drops a removed link, and projects LINKS_TO", async () => {
-    graph.replaceGraphEdgesFromSource.mockClear();
+    graph.projectWikiLinksToGraph.mockClear();
     const { db, links } = makeMockClient([
       {
         id: "wp_existing",
@@ -578,6 +578,6 @@ ${"existing-content ".repeat(80)}`,
     expect(links.filter((l) => l.fromPageId === "wp_existing")).toEqual([
       { fromPageId: "wp_existing", toPageId: "wp_kernel_principle" },
     ]);
-    expect(graph.replaceGraphEdgesFromSource).toHaveBeenCalledWith("wp_existing", "LINKS_TO", ["wp_kernel_principle"]);
+    expect(graph.projectWikiLinksToGraph).toHaveBeenCalledWith("wp_existing", ["wp_kernel_principle"]);
   });
 });

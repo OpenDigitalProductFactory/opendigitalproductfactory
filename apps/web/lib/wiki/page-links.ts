@@ -7,7 +7,8 @@
 // itself lives in @dpf/db (`replaceWikiPageOutLinks`), shared with the seeders
 // and the boot backfill.
 
-import { replaceWikiPageOutLinks, type WikiLinkClient } from "@dpf/db/wiki-links";
+import { projectWikiLinksToGraph } from "@dpf/db/graph-sync";
+import { replaceWikiPageOutLinks, type WikiLinkClient } from "@dpf/db/wiki-store";
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -21,7 +22,7 @@ export async function syncWikiPageLinks(
   page: { pageId: string; organizationId: string | null; body: string },
 ): Promise<{ error: string | null }> {
   try {
-    const result = await replaceWikiPageOutLinks(db, page);
+    const result = await replaceWikiPageOutLinks(db, page, projectWikiLinksToGraph);
     if (result.projectionError) {
       console.warn(`[wiki-links] LINKS_TO projection for ${page.pageId} failed: ${result.projectionError}`);
     }

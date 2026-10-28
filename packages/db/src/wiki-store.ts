@@ -715,3 +715,15 @@ export async function listPrinciplesByTier(
     take: args.limit ?? 50,
   })) as unknown[];
 }
+
+// BI-23900D0A: the one wiki out-link writer and its backfill, re-exported here so
+// apps reach them through this existing subpath. The graph projector is passed
+// in (graph-sync.ts `projectWikiLinksToGraph`), so this module stays client-free.
+export {
+  replaceWikiPageOutLinks,
+  reconcileWikiPageLinks,
+  type WikiLinkClient,
+  type ProjectWikiLinks,
+  type ReplaceWikiPageOutLinksResult,
+  type ReconcileWikiPageLinksResult,
+} from "./wiki-links";

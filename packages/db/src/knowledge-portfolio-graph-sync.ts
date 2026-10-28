@@ -18,6 +18,7 @@ import {
   syncDigitalProduct,
   syncPortfolio,
   syncTaxonomyNode,
+  projectWikiLinksToGraph,
   syncWikiPage,
   wikiPageLabel,
 } from "./graph-sync";
@@ -78,7 +79,7 @@ async function rebuildKnowledge(): Promise<void> {
   // from its body, which is also the backfill, and replace its `LINKS_TO` edges
   // to match. Upserting from the rows alone left a link removed from a body in
   // both stores for as long as both pages lived.
-  const links = await reconcileWikiPageLinks(prisma);
+  const links = await reconcileWikiPageLinks(prisma, { project: projectWikiLinksToGraph });
   console.log(
     `Reconciled WikiPageLinks from ${links.pages} page bodies: +${links.added} -${links.removed}` +
       (links.projectionErrors > 0 ? `, ${links.projectionErrors} LINKS_TO projection error(s)` : ""),

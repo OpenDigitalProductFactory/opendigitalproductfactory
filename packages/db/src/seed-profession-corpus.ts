@@ -14,6 +14,7 @@ import type { Prisma, PrismaClient } from "../generated/client/client";
 import { extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
 import { appendRevision, attachSource, upsertWikiPage } from "./wiki-store";
 import { replaceWikiPageOutLinks } from "./wiki-links";
+import { projectWikiLinksToGraph } from "./graph-sync";
 import { extractWikilinks, professionCorpusPageSlug } from "./wiki-frontmatter";
 import type { WikiPageFrontmatter } from "./wiki-frontmatter";
 import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "./provider-compliance-source-registry";
@@ -2089,7 +2090,7 @@ export async function seedProfessionCorpus(
     }
     // Replace semantics (BI-23900D0A): the stored links become exactly what the
     // body says, so a link removed from the file is removed from the install.
-    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body });
+    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body }, projectWikiLinksToGraph);
   }
 
   if (orphanLinks.length > 0) {

@@ -35,6 +35,7 @@ import {
 } from "./wiki-store";
 import { applyWikiSlugMigrations } from "./wiki-slug-migrations";
 import { replaceWikiPageOutLinks } from "./wiki-links";
+import { projectWikiLinksToGraph } from "./graph-sync";
 import {
   parseFrontmatter as parseFrontmatterShared,
   extractWikilinks as extractWikilinksShared,
@@ -511,7 +512,7 @@ async function seedWikiPages(
     }
     // Replace semantics (BI-23900D0A): the stored links become exactly what the
     // body says, so a link removed from the file is removed from the install.
-    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body });
+    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body }, projectWikiLinksToGraph);
   }
 
   return { count: files.length, slugToId, orphanLinks, pages };

@@ -12,7 +12,7 @@ vi.mock("./client", () => ({
 }));
 
 import { prisma } from "./client";
-import { replaceGraphEdgesFromSource, syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./graph-sync";
+import { projectWikiLinksToGraph, replaceGraphEdgesFromSource, syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./graph-sync";
 
 const exec = vi.mocked(prisma.$executeRawUnsafe);
 
@@ -269,5 +269,14 @@ describe("replaceGraphEdgesFromSource (BI-23900D0A)", () => {
 
     expect(exec).toHaveBeenCalledTimes(1);
     expect(exec.mock.calls[0]?.slice(1)).toEqual(["page-a", "LINKS_TO", []]);
+  });
+});
+
+describe("projectWikiLinksToGraph (BI-23900D0A)", () => {
+  beforeEach(() => exec.mockClear());
+
+  it("replaces the page's LINKS_TO edges", async () => {
+    await projectWikiLinksToGraph("page-a", ["page-b"]);
+    expect(exec.mock.calls[0]?.slice(1)).toEqual(["page-a", "LINKS_TO", ["page-b"]]);
   });
 });
