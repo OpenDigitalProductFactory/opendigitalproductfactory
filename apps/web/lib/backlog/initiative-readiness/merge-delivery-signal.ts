@@ -474,7 +474,8 @@ async function trunkHasRevertOf(root: string, trunkRef: string, commit: TrunkCom
  * - exactly one parent, so `parent..commit` is the whole delivered change.
  *
  * More than one standing delivering commit is reported, never narrowed to a
- * convenient one: a delivery split across PRs has no single reviewable range.
+ * convenient one. They are returned oldest first: a delivery split across PRs
+ * is reviewed as the ordered union of its ranges (BI-46E344FE).
  * `null` means git could not answer.
  */
 export type MergedDeliveryCommit = { sha: string; parentSha: string; subject: string };
@@ -505,11 +506,26 @@ export async function findMergedDeliveryCommits(
     const delivered: MergedDeliveryCommit[] = [];
     for (const c of candidates.values()) {
       if (c.parents.length !== 1 || await trunkHasRevertOf(root, trunkRef, c)) continue;
-      delivered.push({ sha: c.sha, parentSha: c.parents[0]!, subject: c.subject });
+      // BI-46E344FE: oldest first, so a split delivery is reviewed in trunk order.
+      let at = delivered.length;
+      while (at > 0 && await isAncestor(root, c.sha, delivered[at - 1]!.sha)) at -= 1;
+      delivered.splice(at, 0, { sha: c.sha, parentSha: c.parents[0]!, subject: c.subject });
     }
     return delivered;
   } catch {
     return null;
+  }
+}
+
+/** Whether `ancestor` precedes `descendant` on the trunk; a git failure is thrown to the caller's `null`. */
+async function isAncestor(root: string, ancestor: string, descendant: string): Promise<boolean> {
+  try {
+    await execFileAsync("git", trustedGitArgs(root, ["merge-base", "--is-ancestor", ancestor, descendant]),
+      { timeout: 5000, windowsHide: true });
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return false;
+    throw error;
   }
 }
 
