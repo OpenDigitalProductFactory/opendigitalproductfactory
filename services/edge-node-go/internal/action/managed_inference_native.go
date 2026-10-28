@@ -291,10 +291,10 @@ func (h *NativeManagedInferenceHandler) Execute(ctx context.Context, signed Sign
 		return output, ErrNativeInferenceFailed
 	}
 	verificationErr := VerifyEnvelope(signed, h.PublicKey, h.NodeID, h.now(), nil)
-	// ErrExpired is returned only after signature, node and lifetime checks.
+	// Temporal refusals are returned only after signature, node and lifetime checks.
 	// Preserve the original receipt when time crossed after executor admission
 	// and durable nonce consumption; expiry still forbids every host effect.
-	if verificationErr != nil && verificationErr != ErrExpired {
+	if verificationErr != nil && verificationErr != ErrExpired && verificationErr != ErrNotYetValid {
 		return output, ErrNativeInferenceFailed
 	}
 	parameters, err := parseManagedInferenceParameters(signed.Parameters)

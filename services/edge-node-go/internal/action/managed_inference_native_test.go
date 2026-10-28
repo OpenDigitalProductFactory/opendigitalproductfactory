@@ -189,3 +189,23 @@ func TestNativeExpiredInvalidAuthorityCannotProduceBoundReceipt(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeClockRollbackAfterExecutorAdmissionRetainsBoundNonexecution(t *testing.T) {
+	h, original, _, called := nativeHandlerFixture(t)
+	admittedAt := h.Now()
+	issued, _ := time.Parse(time.RFC3339Nano, original.IssuedAt)
+	journal, err := OpenReplayJournal(t.TempDir(), admittedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Now = func() time.Time { return issued.Add(-maxClockSkew - time.Nanosecond) }
+	executor := Executor{NodeID: h.NodeID, PublicKey: h.PublicKey, Journal: journal, Now: func() time.Time { return admittedAt }, ManagedInference: h}
+	output, err := executor.Execute(context.Background(), original)
+	canonical, _ := CanonicalEnvelope(original.Envelope)
+	if err == nil || *called || !journal.Has(original.Nonce, admittedAt) || output.Evidence["requestDigest"] != nativeHash(canonical) || output.Evidence["sourceSha"] != strings.Repeat("a", 40) {
+		t.Fatalf("clock rollback lost nonexecution binding: %v %+v", err, output)
+	}
+	if _, err = executor.Execute(context.Background(), original); err != ErrNonceConsumed {
+		t.Fatalf("clock rollback permitted replay: %v", err)
+	}
+}
