@@ -387,3 +387,49 @@ describe("pathHasActiveClaim", () => {
     assert.equal(pathHasActiveClaim(undefined, "D:/wt/a"), false);
   });
 });
+
+// A non-terminal STATUS is not proof anyone is coming back. The server's own
+// liveness verdict (apps/web/lib/work-capsules/liveness.ts) already says when a
+// room is dead; on 2026-10-27 391 non-terminal rooms on the dev install were
+// lease-expired and still kept their trees (BI-CAA84E43).
+describe("claims honour the server's liveness verdict", () => {
+  const withVerdict = (id, path, verdict) => ({ ...room(id, path), ...verdict });
+
+  it("releases the claim of a room the server calls reapable", () => {
+    const result = parseActiveWorktreePaths(pagePayload([
+      withVerdict("dead", "D:/wt/dead", { status: "ready", liveness: "lease-expired", isReapable: true }),
+      withVerdict("live", "D:/wt/live", { liveness: "live", isReapable: false }),
+    ]));
+    assert.equal(result.available, true);
+    assert.equal(pathHasActiveClaim(result.activePaths, "D:/wt/dead"), false);
+    assert.equal(pathHasActiveClaim(result.activePaths, "D:/wt/live"), true);
+    assert.match(result.reason, /1 non-live claim\(s\) released/);
+  });
+
+  it("keeps the claim when the verdict is missing, shortened or not a plain boolean", () => {
+    const result = parseActiveWorktreePaths(pagePayload([
+      withVerdict("missing", "D:/wt/missing", {}),
+      withVerdict("shortened", "D:/wt/shortened", { isReapable: true, shortenedFields: ["isReapable"] }),
+      withVerdict("string", "D:/wt/string", { isReapable: "true" }),
+      withVerdict("paused", "D:/wt/paused", { liveness: "paused", isReapable: false }),
+      withVerdict("nosignal", "D:/wt/nosignal", { liveness: "no-signal", isReapable: false }),
+    ]));
+    for (const id of ["missing", "shortened", "string", "paused", "nosignal"]) {
+      assert.equal(pathHasActiveClaim(result.activePaths, `D:/wt/${id}`), true, id);
+    }
+  });
+
+  it("releases a reapable room whose path only its detail read carries, without reading the detail", async () => {
+    const names = [];
+    const result = await loadActiveWorkroomPaths({ env: { DPF_MCP_BEARER_TOKEN: "t" },
+      fetchImpl: async (_url, init) => {
+        names.push(JSON.parse(init.body).params.name);
+        return new Response(pagePayload([{ capsuleId: "WC-9", status: "ready", isReapable: true,
+          detail: { toolName: "get_workroom", arguments: { capsuleId: "WC-9" } } }]));
+      },
+    });
+    assert.equal(result.available, true);
+    assert.equal(result.activePaths.size, 0);
+    assert.deepEqual(names, ["list_workrooms"]);
+  });
+});
