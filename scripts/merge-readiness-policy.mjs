@@ -79,7 +79,7 @@ export function parseAggregate(source, aggregateJobId) {
   return { name, needs };
 }
 
-export function validateWorkflowConformance({ manifest, ciSource, uxSource }) {
+export function validateWorkflowConformance({ manifest, ciSource, uxSource, toolchainSource }) {
   const errors = [];
   if (!workflowHasMergeGroup(ciSource)) errors.push(`${manifest.workflows.ci} must handle merge_group`);
   if (!workflowIsCallable(uxSource)) errors.push(`${manifest.workflows.ux} must handle workflow_call`);
@@ -104,6 +104,23 @@ export function validateWorkflowConformance({ manifest, ciSource, uxSource }) {
     errors.push(`missing UX runtime job ${manifest.uxRuntimeJobId}`);
   } else if (uxRuntimeJob.name !== manifest.uxRuntimeJobName) {
     errors.push(`UX runtime job name must be ${manifest.uxRuntimeJobName}`);
+  }
+  if (manifest.workflows.toolchain) {
+    if (!workflowIsCallable(toolchainSource ?? "")) {
+      errors.push(`${manifest.workflows.toolchain} must handle workflow_call`);
+    }
+    const start = ciSource.indexOf(`  ${manifest.toolchainJobId}:\n`);
+    const tail = start < 0 ? "" : ciSource.slice(start);
+    const next = tail.slice(1).search(/\n  [a-z0-9-]+:\s*\n/);
+    const call = next < 0 ? tail : tail.slice(0, next + 1);
+    if (!call.includes(`    uses: ./${manifest.workflows.toolchain}\n`)) {
+      errors.push("toolchain job must call the canonical local workflow");
+    }
+    if (!call.includes("    needs: [changes]\n") ||
+        !call.includes("    if: needs.changes.outputs.heavy == 'true'\n") ||
+        /continue-on-error:/.test(call)) {
+      errors.push("toolchain admission must preserve exhaustive merge-group checks and failures");
+    }
   }
   const expected = jobs.filter((jobId) => jobId !== manifest.aggregateJobId).sort();
   const actual = [...aggregate.needs].sort();
@@ -158,7 +175,9 @@ function ghApi(args, input) {
 export function runLocalAudit(manifest = loadManifest()) {
   const ciSource = readFileSync(resolve(ROOT, manifest.workflows.ci), "utf8");
   const uxSource = readFileSync(resolve(ROOT, manifest.workflows.ux), "utf8");
-  return validateWorkflowConformance({ manifest, ciSource, uxSource });
+  const toolchainSource = manifest.workflows.toolchain
+    ? readFileSync(resolve(ROOT, manifest.workflows.toolchain), "utf8") : undefined;
+  return validateWorkflowConformance({ manifest, ciSource, uxSource, toolchainSource });
 }
 
 function runRemote(mode) {
