@@ -60,7 +60,14 @@ type RoomAuthor = {
  */
 type CandidateTarget = "completion" | "implementation" | "design";
 
-type Candidate = { itemId: string; room: RoomAuthor; target: CandidateTarget };
+/**
+ * Whose connection carries the request: the authoring assistant's own, or any
+ * live connection of the person the work is for (a Build Studio build, or
+ * BI-D3BAF945 a merged repair whose room a person opened with no assistant).
+ */
+type Carrier = "author-assistant" | "requesting-user";
+
+type Candidate = { itemId: string; room: RoomAuthor; target: CandidateTarget; carrier?: Carrier };
 
 /** Connections the platform prefers to carry a Build Studio room's request (spec §4). */
 export const BUILD_STUDIO_PREFERRED_CARRIER_AGENT_IDS = ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX"] as const;
@@ -83,7 +90,7 @@ type Deps = {
   findUserConnection?: (userId: string) => Promise<StandingConnection | null>;
   execute?: (args: GovernedExecuteArgs) => Promise<GovernedExecuteResult>;
   random?: () => number;
-  owedRoutes?: (itemId: string, authorAgentId: string, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
+  owedRoutes?: (itemId: string, authorAgentId: string | null, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
 };
 
 function aliasValue(principal: { aliases: Array<{ aliasValue: string }> } | null | undefined): string | null {
@@ -102,7 +109,7 @@ const principalAliases = (aliasType: string) => ({
 export async function loadRoomAuthors(
   where: { capsuleId?: string | { in: string[] }; backlogItemId?: { not: null } | { in: string[] } },
   options: { includeRetired?: boolean } = {},
-): Promise<Array<RoomAuthor & { itemId: string | null }>> {
+): Promise<Array<RoomAuthor & { itemId: string | null; personUserId: string | null }>> {
   const rooms = await prisma.workroom.findMany({
     // BI-CE661173: a merged repair's room is retired by the time its
     // post-implementation review is owed; its author still carries the request.
@@ -115,7 +122,10 @@ export async function loadRoomAuthors(
       capsuleId: true,
       backlogItemId: true,
       requestedByPrincipal: principalAliases("user"),
-      createdByPrincipal: principalAliases("agent"),
+      // BI-D3BAF945: the creator is the authoring assistant, or the person who
+      // opened the room with none.
+      createdByPrincipal: { select: { kind: true, aliases: { where: { aliasType: { in: ["agent", "user"] }, issuer: "" },
+        select: { aliasType: true, aliasValue: true }, take: 2 } } },
       participants: {
         where: { lifecycle: "active", roles: { has: "contributor" } },
         select: { principal: principalAliases("agent") },
@@ -124,12 +134,17 @@ export async function loadRoomAuthors(
   });
   return rooms.map((room) => {
     const participantAgent = room.participants.map((entry) => entry.principal).find((principal) => principal?.kind === "agent");
+    const creator = room.createdByPrincipal;
+    // An alias row without its type is read as the principal's own kind.
+    const creatorAlias = (type: "agent" | "user") => creator?.aliases
+      .find((alias) => ((alias as { aliasType?: string }).aliasType ?? (creator.kind === "agent" ? "agent" : "user")) === type)?.aliasValue ?? null;
     return {
       roomId: room.id,
       capsuleId: room.capsuleId,
       itemId: room.backlogItemId,
       userId: aliasValue(room.requestedByPrincipal),
-      agentId: aliasValue(room.createdByPrincipal?.kind === "agent" ? room.createdByPrincipal : participantAgent),
+      agentId: creator?.kind === "agent" ? creatorAlias("agent") : aliasValue(participantAgent),
+      personUserId: aliasValue(room.requestedByPrincipal) ?? (creator?.kind === "human" ? creatorAlias("user") : null),
     };
   });
 }
@@ -145,10 +160,10 @@ export async function loadRoomAuthors(
  * (BI-D35B85BF on 2026-09-24). Shuffled, so a bounded tick does not re-check
  * the same items forever (111 of 502 awaiting items had a live room).
  */
-async function loadAwaitingCandidates(): Promise<Candidate[]> {
+async function loadAwaitingCandidates(): Promise<{ live: Candidate[]; merged: Candidate[] }> {
   const rooms = await loadRoomAuthors({ backlogItemId: { not: null } });
   const itemIds = [...new Set(rooms.flatMap((room) => (room.itemId ? [room.itemId] : [])))];
-  if (itemIds.length === 0) return loadMergedBreakFixCandidates(new Set());
+  if (itemIds.length === 0) return { live: [], merged: await loadMergedBreakFixCandidates(new Set()) };
   const targetByItem = new Map((await prisma.backlogItem.findMany({
     where: { itemId: { in: itemIds }, status: { in: ["awaiting-acceptance", "open", "in-progress"] } },
     select: { itemId: true, status: true },
@@ -159,7 +174,7 @@ async function loadAwaitingCandidates(): Promise<Candidate[]> {
     if (!newestByItem.has(room.itemId)) newestByItem.set(room.itemId, room);
   }
   const candidates = [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: targetByItem.get(itemId)! }));
-  return [...candidates, ...await loadMergedBreakFixCandidates(new Set(newestByItem.keys()))];
+  return { live: candidates, merged: await loadMergedBreakFixCandidates(new Set(newestByItem.keys())) };
 }
 
 /**
@@ -199,10 +214,16 @@ async function loadMergedBreakFixCandidates(covered: ReadonlySet<string>): Promi
   if (roomByItem.size === 0) return [];
   const authors = new Map((await loadRoomAuthors({ capsuleId: { in: [...roomByItem.values()] } }, { includeRetired: true }))
     .map((room) => [room.capsuleId, room]));
-  return [...roomByItem.entries()].flatMap(([itemId, capsuleId]) => {
+  return [...roomByItem.entries()].flatMap(([itemId, capsuleId]): Candidate[] => {
     const room = authors.get(capsuleId);
-    return room?.userId && room.agentId
-      ? [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.userId, agentId: room.agentId }, target: "completion" as const }]
+    if (room?.userId && room.agentId) {
+      return [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.userId, agentId: room.agentId }, target: "completion" }];
+    }
+    // BI-D3BAF945: a person opened the room with no assistant (28 of the 35
+    // merged break-fixes on 2026-10-28). The review travels on that person's
+    // own live connection, as a Build Studio build's does.
+    return room?.personUserId
+      ? [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.personUserId, agentId: null }, target: "completion", carrier: "requesting-user" }]
       : [];
   });
 }
@@ -256,16 +277,24 @@ async function loadBuildStudioCandidates(): Promise<Candidate[]> {
   });
 }
 
+/**
+ * A shuffled bounded sample. BI-D3BAF945: merged break-fixes owe their review
+ * within 48 hours of merge, and the general pool is mostly items owing
+ * nothing, so they are sampled on their own budget rather than competing in it
+ * (one in 37 was drawn in 12 ticks on 2026-10-28).
+ */
 async function loadCandidates(limit: number, random: () => number): Promise<Candidate[]> {
-  const candidates = [...await loadAwaitingCandidates(), ...await loadBuildStudioCandidates()]
-    .map((candidate) => ({ candidate, order: random() }));
-  return candidates.sort((a, b) => a.order - b.order).slice(0, limit).map(({ candidate }) => candidate);
+  const sample = (candidates: Candidate[]) => candidates.map((candidate) => ({ candidate, order: random() }))
+    .sort((a, b) => a.order - b.order).slice(0, limit).map(({ candidate }) => candidate);
+  const awaiting = await loadAwaitingCandidates();
+  return [...sample([...awaiting.live, ...await loadBuildStudioCandidates()]), ...sample(awaiting.merged)];
 }
 
 /** The independent reviewer requests readiness issues for this item right now. */
-async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidate?: Candidate) {
+async function defaultOwedRoutes(itemId: string, authorAgentId: string | null, candidate?: Candidate) {
   if (candidate?.target === "implementation") {
-    const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId, authorAgentId });
+    const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId,
+      authorAgentId: authorAgentId ?? BUILD_STUDIO_ASSISTANT_AGENT_ID });
     return result.routed ? result.routes : null;
   }
   if (candidate?.target === "design") {
@@ -472,7 +501,8 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
   const outcomes: RouteOutcome[] = [];
   for (const candidate of await loadCandidates(deps.limit ?? 5, deps.random ?? Math.random)) {
     const base = { itemId: candidate.itemId, capsuleId: candidate.room.capsuleId, requestKey: null };
-    const routes = await owedRoutes(candidate.itemId, candidate.room.agentId!, candidate).catch(() => null);
+    const routes = await owedRoutes(candidate.itemId, candidate.room.agentId, candidate).catch(() => null);
+    const carrier: Carrier = candidate.target === "implementation" ? "requesting-user" : candidate.carrier ?? "author-assistant";
     if (routes === null) { outcomes.push({ ...base, outcome: "readiness-unavailable" }); continue; }
     if (routes.length === 0) { outcomes.push({ ...base, outcome: "nothing-owed" }); continue; }
     for (const route of routes) {
@@ -483,10 +513,10 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         ? candidate.room
         : (await loadRoomAuthors({ capsuleId: route.workroomId }, { includeRetired: true }))[0] ?? null;
       const at = { itemId: candidate.itemId, capsuleId: route.workroomId, requestKey };
-      if (!room?.userId || !room.agentId) { outcomes.push({ ...at, outcome: "no-author" }); continue; }
+      if (!room?.userId || (carrier === "author-assistant" && !room.agentId)) { outcomes.push({ ...at, outcome: "no-author" }); continue; }
       outcomes.push(await dispatchReviewerRequest({
         room, itemId: candidate.itemId, requestCoworker: route.requestCoworker,
-        carrier: candidate.target === "implementation" ? "requesting-user" : "author-assistant",
+        carrier,
         workroomId: route.workroomId, now, deps: { ...deps, findConnection, findUserConnection },
         ...(candidate.target === "implementation" ? { noConnectionSummary: BUILD_STUDIO_NO_CONNECTION_SUMMARY } : {}),
       }));

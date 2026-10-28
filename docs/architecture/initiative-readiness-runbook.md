@@ -148,10 +148,15 @@ actor set.
 
 Every two minutes the platform reviewer dispatch
 ([`server-reviewer-dispatch.ts`](../../apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts))
-checks awaiting-acceptance break-fix items whose rooms are all retired. It sends
-the issued packet on the author's own live connection, so no person is involved.
-A multi-file repair still escalates `ambiguous-repair-artifact` until a
-whole-range review artifact exists.
+checks awaiting-acceptance break-fix items whose rooms are all retired. These
+items are sampled on their own budget (five per tick), apart from the general
+pool, because most items in that pool owe nothing. It sends the issued packet on
+the authoring assistant's own live connection, so no person is involved. A room
+a person opened with no assistant (BI-D3BAF945) is carried on any live
+connection of that person. Review admission then accepts the retired anchor on
+the person's room admission, because the carrying assistant was never in the
+room. When the person has no live connection, the room records
+`no-author-connection`.
 
 The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
 
