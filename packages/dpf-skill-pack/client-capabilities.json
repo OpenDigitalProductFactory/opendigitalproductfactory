@@ -19,6 +19,18 @@
         "https://code.claude.com/docs/en/mcp",
         "https://code.claude.com/docs/en/plugins-reference"
       ],
+      "writes": [
+        {"path": "~/.agents/plugins/.claude-plugin/marketplace.json", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "DPF's own local marketplace; `claude plugin marketplace add` registers it"},
+        {"path": "~/.agents/plugins/plugins/dpf-platform/**", "owner": "dpf", "format": "tree", "writer": "direct", "cli": null, "reason": "the shared managed copy DPF delivers; Claude desktop and Grok install from it"},
+        {"path": "~/.claude/plugins/installed_plugins.json", "owner": "client", "format": "json", "writer": "cli", "cli": "claude plugin install|update --scope local|project", "reason": "Claude Code records each install itself"},
+        {"path": "~/.claude/plugins/cache/**", "owner": "client", "format": "tree", "writer": "cli", "cli": "claude plugin install|update", "reason": "Claude Code fills its own cache"},
+        {"path": "~/.claude/plugins/cache/**/claude.mcp.json", "owner": "client", "format": "json", "writer": "direct", "cli": null, "reason": "no CLI sets a cached record's connector URL; pinned to a literal endpoint (design 5.4)"},
+        {"path": "~/.claude.json", "owner": "client", "format": "json", "writer": "cli", "cli": "claude mcp remove dpf -s user|local", "reason": "a duplicate dpf server is removed through the CLI after a backup"},
+        {"path": "~/.claude/dpf-*-mcp.legacy-bak*.json", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "the backup taken before the CLI removes a duplicate user- or local-scope server"},
+        {"path": "<project>/.mcp.json", "owner": "client", "format": "json", "writer": "direct", "cli": null, "reason": "no CLI disables a project .mcp.json server; backed up, then disabled"},
+        {"path": "<project>/.mcp.json.legacy-bak*", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "the backup taken before a project .mcp.json is disabled"},
+        {"path": "<project>/.claude/settings.local.json", "owner": "client", "format": "json", "writer": "direct", "cli": null, "reason": "no CLI writes routine permissions"}
+      ],
       "capabilities": {
         "oauthHttps": {
           "value": true,
@@ -142,6 +154,15 @@
         "https://developers.openai.com/codex/mcp",
         "https://developers.openai.com/codex/config-basic"
       ],
+      "writes": [
+        {"path": "~/.agents/plugins/marketplace.json", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "DPF's own personal marketplace that `codex plugin add` installs from"},
+        {"path": "~/plugins/dpf-platform/**", "owner": "dpf", "format": "tree", "writer": "direct", "cli": null, "reason": "the Codex managed copy DPF delivers"},
+        {"path": "~/.codex/plugins/cache/**", "owner": "client", "format": "tree", "writer": "cli", "cli": "codex plugin add", "reason": "Codex fills its own cache"},
+        {"path": "~/.codex/config.toml", "owner": "client", "format": "toml", "writer": "direct", "cli": null, "reason": "`codex mcp add` sets neither http_headers nor OAuth scopes, and no CLI toggles a plugin's enabled state; every write round-trips through Codex's own parser (X14)"},
+        {"path": "~/.codex/hooks.json", "owner": "client", "format": "json", "writer": "direct", "cli": null, "reason": "no Codex CLI registers hooks"},
+        {"path": "<project>/.codex/config.toml", "owner": "client", "format": "toml", "writer": "direct", "cli": null, "reason": "no CLI writes routine permissions; parsed before writing"},
+        {"path": "<project>/.codex/rules/dpf-routine.rules", "owner": "dpf", "format": "text", "writer": "direct", "cli": null, "reason": "DPF's own marked rules file"}
+      ],
       "capabilities": {
         "oauthHttps": {
           "value": true,
@@ -264,6 +285,12 @@
         "https://docs.x.ai/build/overview",
         "https://docs.x.ai/build/cli/headless-scripting"
       ],
+      "writes": [
+        {"path": "~/.grok/installed-plugins/**", "owner": "client", "format": "tree", "writer": "cli", "cli": "grok plugin install|uninstall", "reason": "Grok's own plugin store"},
+        {"path": "~/.grok/hooks/dpf-guards.json", "owner": "dpf", "format": "json", "writer": "direct", "cli": null, "reason": "DPF's own hook file; Grok has no hooks CLI"},
+        {"path": "~/.grok/config.toml", "owner": "client", "format": "toml", "writer": "direct", "cli": null, "reason": "`grok mcp add` cannot set bearer_token_file and no CLI writes permissions; parsed before writing (X14)"},
+        {"path": "<project>/.grok/config.toml", "owner": "client", "format": "toml", "writer": "direct", "cli": null, "reason": "no CLI writes routine permissions; parsed before writing"}
+      ],
       "capabilities": {
         "oauthHttps": {
           "value": false,
@@ -384,6 +411,10 @@
       "sources": [
         "https://antigravity.google/",
         "https://github.com/google-antigravity/antigravity-cli/releases"
+      ],
+      "writes": [
+        {"path": "~/.gemini/config/mcp_config.json", "owner": "client", "format": "json", "writer": "cli", "cli": "agy mcp add|disable", "reason": "agy covers the URL and headers, so it is the only writer"},
+        {"path": "~/.gemini/antigravity/skills/**", "owner": "dpf", "format": "tree", "writer": "direct", "cli": null, "reason": "the pack's own skill directories; an operator's other skills are never touched"}
       ],
       "capabilities": {
         "oauthHttps": {

@@ -264,7 +264,7 @@ class ReportJsonTest(unittest.TestCase):
             self.assertEqual(report["source"], {"kind": "local"})
             for row in report["clients"]:
                 self.assertLessEqual({"before", "after", "action", "restartRequired", "cliVersion"}, set(row))
-                self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed"))
+                self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed", "absent"))
             shared = rows[("shared", "copy")]
             self.assertEqual((shared["before"]["digest"], shared["after"]["digest"]), (None, digest))
             self.assertEqual(shared["action"], "updated")
@@ -277,8 +277,9 @@ class ReportJsonTest(unittest.TestCase):
             self.assertEqual(rows[("claude-code", "user-mcp")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", "user-mcp")]["backupPath"]).exists())
             self.assertEqual(rows[("claude-code", f"local-mcp:{stale}")]["action"], "retired")
-            self.assertIn(("codex", "user"), rows)
-            self.assertIn(("grok", "user"), rows)
+            # No Codex, Grok or agy CLI on this host: absent, not a silent "unchanged" (spec M3).
+            for client in ("codex", "grok", "antigravity"):
+                self.assertEqual(rows[(client, "user")]["action"], "absent", client)
 
             managed = updater.shared_managed_plugin_path(home)
             header = f"pack={report['packVersion']};digest={digest[:16]};client=claude-code"

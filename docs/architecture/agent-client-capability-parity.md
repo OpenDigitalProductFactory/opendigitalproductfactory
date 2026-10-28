@@ -17,6 +17,8 @@ Since 2026-10-13 the per-client capabilities that DPF rules depend on live in on
 
 - A connection that reports a client version newer than the profile's verified version marks that client "capabilities unverified for <version>" in `get_fleet_readiness` and files one backlog item, deduplicated on `client-capability:<client>@<version>`.
 - A weekly scheduled task (`client-capability-reverify-weekly`) reads only each row's `sources[]` and the CLI versions the updater reports. It files at most one proposal item per client and never edits the profile. A source that fails marks the row `verificationStale`; two failed runs in a row raise one platform notification.
+- Each pack-loading row lists in `writes[]` every file its adapter writes, who owns it, and whether the client's own CLI writes it (BI-1DCF9F23). Where a CLI covers a setting, the CLI is the only writer: `agy mcp add` owns Antigravity's MCP config, and the `claude`, `codex` and `grok` plugin commands own their caches and records. A direct write is allowed only where no CLI covers the setting; the `reason` says why, for example that `codex mcp add` cannot set headers. `scripts/single_writer_test.py` runs the updater against a fixture home with every CLI faked and fails on any undeclared write, or a write to a CLI-covered file.
+- The updater reports success only from each client's own read-back: Grok's plugin store, Antigravity's skills directory and MCP config, Codex's plugin source, the Claude caches and the shared copy's connector. A client whose CLI is missing reports `absent`, and a dry run reports `preview`.
 
 The sections after the matrix are the dated prose history. They stay as the record of how each finding was reached.
 
