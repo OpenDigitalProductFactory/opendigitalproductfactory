@@ -375,6 +375,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/derived-artifacts-registry.test.mjs",
         "scripts/derived-artifacts-gate.test.mjs",
+        "scripts/docs-only-single-source.test.mjs",
       ),
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
