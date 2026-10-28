@@ -10,6 +10,8 @@ status: draft
 
 **Design:** [Production Authority and Development Companion Installations](../specs/2026-10-27-production-authority-development-companion-design.md)
 
+**Extends:** [Federated demand network](../specs/2026-07-19-federated-demand-network-design.md). Every phase extends existing substrate; none adds a second store of work state.
+
 **Status:** Draft. Plan coverage is recorded after the design's independent spec approval mints the `BI-CCE04F19` scope baseline. No implementation starts before then, or before plan review.
 
 ## 1. Outcome
@@ -32,7 +34,7 @@ the operator PROD install is the authority for its estate. The Windows install b
 | P2 | Re-purpose the Windows install (operator steps 1–5) | `BI-981AE847` | P1 | §8 | AC-PAC-15, AC-PAC-16 |
 | P3 | Guidance snapshot: WWWD | `BI-1B165D02` | P1 | §4.1–4.3 | AC-PAC-01, AC-PAC-02, AC-PAC-04 (guidance) |
 | P4 | Budget envelope, companion funding binding, local limit, spend reports | `BI-32EB31FD` | P3 | §4 | AC-PAC-03, AC-PAC-04 (budget), AC-PAC-05 |
-| P5 | Claim register in a private coordination repository, with fencing | `BI-30EDDB7F` | P1; operator D1 | §5 | AC-PAC-06 to AC-PAC-09 |
+| P5 | One claim at the item's home: claim requests over the existing help-offer response, claim state on the work-sync page, PR-health backstop | `BI-30EDDB7F` | P1 | §5 | AC-PAC-06 to AC-PAC-09 |
 | P6 | Organization boundary on what crosses | `BI-3E31B240` | — | §2.3, §10 | its own |
 | P7 | Estate GAID namespace, continuity, signed identity documents | `BI-7E73D523` | P0c | §7.1–7.2 | AC-PAC-13, AC-PAC-14 |
 | P8 | Cross-install rooms and threads | `BI-0F8CEAD4` | P7, P0d | §6 | AC-PAC-10 to AC-PAC-12 |
@@ -74,13 +76,12 @@ Every phase starts with a failing test reproducing the gap at the cited line on 
   - companion funding binding issuance on the authority, and its projection;
   - enforcement in `investment-balance-server.ts` admission and the model-routing cost meter;
   - a `spend-report` outbox record and authority reconciliation into showback.
-- **P5:**
-  - a claim-ref client, using git over HTTPS to the configured private repository with the installation's deploy credential, which the operator provides;
-  - signed claim records;
-  - integration in `claimWorkCapsuleScope` and `assertBacklogWorkroomClaimAvailable`;
-  - fence propagation into PR metadata and evidence;
-  - PR-health and evidence-intake fence checks;
-  - inventory display.
+- **P5:** extends existing code only; no new store, table or repository.
+  - the `help-offered` response accepts a work-synced item as its subject (`apps/web/lib/federation/demand-response.ts`);
+  - the home's handler runs `assertBacklogWorkroomClaimAvailable` and records a Workroom claim whose executor is the requesting installation;
+  - `FederatedWorkItemV1` gains claim holder installation, holder Workroom and lease expiry, published by the home and read by `work-sync.ts`;
+  - claiming a mirrored item locally sends the request instead of claiming locally, and shows "unconfirmed" while the home is unreachable;
+  - PR health refuses a PR whose Workroom is not the item's current claim, and a second open PR naming the same item.
 - **P7:**
   - issuer namespace registration and `AuthorityBinding` field;
   - GAID minting and migration with continuity records;
@@ -100,7 +101,6 @@ Every phase starts with a failing test reproducing the gap at the cited line on 
 
 | # | Item | Needed for |
 | --- | --- | --- |
-| D1 | A private coordination repository for claims (private GitHub repository or self-hosted GitLab), plus a deploy credential per installation | P5 |
 | D2 | Presence at, or remote access to, the Windows install for re-purposing | P2 |
 | D3 | The funding owner's first budget envelope for the companion (amount per bucket and period) | P4 |
 | D4 | Overlay account or Headscale server (A2A design §22 D1) | P10, and any cross-network use while production travels |
