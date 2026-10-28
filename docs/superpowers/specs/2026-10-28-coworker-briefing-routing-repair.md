@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Coworker briefing routing repair
 
 Implementation owner: BI-7CF93976. Existing provider readiness work remains BI-2ECA4E9C; durable accepted-chat continuation remains BI-B7E2DD4B.
