@@ -302,7 +302,7 @@ describe("credential files in the shared sandbox", () => {
       containerId: "dpf-sandbox-1",
       path: "/tmp/claude-token-x.txt",
       content: "sk-ant-oat01-SECRET",
-      secret: true,
+      ownerOnly: true,
       chownNodeUser: true,
       mode: "644",
     });

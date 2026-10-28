@@ -84,7 +84,7 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
     containerId: SANDBOX_CONTAINER,
     path: "/root/.codex/auth.json",
     content: authJson,
-    secret: true,
+    ownerOnly: true,
     mkdirParents: "/root/.codex",
   });
 }
@@ -161,7 +161,7 @@ async function ensureClaudeAuth(providerId: string): Promise<{ envVar: string; c
   const credential = auth.mode === "oauth"
     ? { envVar: "CLAUDE_CODE_OAUTH_TOKEN", value: auth.token, bareFlag: "" }  // --bare disables OAuth
     : { envVar: "ANTHROPIC_API_KEY", value: auth.apiKey, bareFlag: "--bare " };
-  await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: credentialFile, content: credential.value, secret: true, chownNodeUser: true });
+  await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: credentialFile, content: credential.value, ownerOnly: true, chownNodeUser: true });
   return { envVar: credential.envVar, credentialFile, bareFlag: credential.bareFlag };
 }
 

@@ -48,7 +48,7 @@ const task = {
 } as unknown as AssignedTask;
 
 function writes() {
-  return writeSandboxFile.mock.calls.map(([p]) => p as { path: string; content: string; mode?: string; secret?: boolean; chownNodeUser?: boolean });
+  return writeSandboxFile.mock.calls.map(([p]) => p as { path: string; content: string; mode?: string; ownerOnly?: boolean; chownNodeUser?: boolean });
 }
 function credentialWrite() {
   return writes().find((w) => w.path.startsWith("/tmp/claude-token-"))!;
@@ -66,7 +66,7 @@ describe("dispatchClaudeTask credential handling", () => {
     await dispatchClaudeTask({ task, buildId: "FB-1", buildContext: "", providerId: "anthropic" });
     const w = credentialWrite();
     expect(w.content).toBe(API_KEY);
-    expect(w.secret).toBe(true);
+    expect(w.ownerOnly).toBe(true);
     expect(w.chownNodeUser).toBe(true);
     expect(w.mode).toBeUndefined();
   });
@@ -93,7 +93,7 @@ describe("dispatchClaudeTask credential handling", () => {
     await dispatchClaudeTask({ task, buildId: "FB-1", buildContext: "", providerId: "anthropic-sub" });
     const w = credentialWrite();
     expect(w.content).toBe(OAUTH_TOKEN);
-    expect(w.secret).toBe(true);
+    expect(w.ownerOnly).toBe(true);
     const script = runnerScript();
     expect(script).toContain(`export CLAUDE_CODE_OAUTH_TOKEN="$(cat '${w.path}')"`);
     expect(script).not.toContain(OAUTH_TOKEN);

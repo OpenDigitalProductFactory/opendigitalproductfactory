@@ -157,7 +157,7 @@ export async function dispatchClaudeTask(params: {
     const credential = auth.mode === "oauth"
       ? { envVar: "CLAUDE_CODE_OAUTH_TOKEN", value: auth.tokenJson }
       : { envVar: "ANTHROPIC_API_KEY", value: auth.apiKey };
-    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: credential.value, secret: true, chownNodeUser: true });
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: credential.value, ownerOnly: true, chownNodeUser: true });
     const useBareflag = auth.mode !== "oauth";  // --bare disables OAuth; safe with an API key
 
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";

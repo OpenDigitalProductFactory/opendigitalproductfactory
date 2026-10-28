@@ -90,7 +90,7 @@ async function injectCodexAuth(providerId: string): Promise<void> {
     containerId: SANDBOX_CONTAINER,
     path: "/root/.codex/auth.json",
     content: authJson,
-    secret: true,
+    ownerOnly: true,
     mkdirParents: "/root/.codex",
   });
 }

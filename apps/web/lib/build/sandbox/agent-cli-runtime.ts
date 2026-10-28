@@ -264,21 +264,21 @@ export async function writeSandboxFile(params: {
   /** `chown node:node <path>` after writing (root-written file the node-user CLI
    *  must read, e.g. the per-call mcp-config). */
   chownNodeUser?: boolean;
-  /** The content is a credential. The file is created under `umask 077` and
+  /** Owner-only file, for credentials. The file is created under `umask 077` and
    *  left at mode 600, so no other user can read it, not even between the
    *  write and the chmod. Overrides `mode`. Pair with `chownNodeUser` when the
    *  node-user CLI reads it, and with `credentialFileExports` so the runner
    *  deletes it once read. */
-  secret?: boolean;
+  ownerOnly?: boolean;
   timeoutMs?: number;
   mkdirParents?: string;   // optional `mkdir -p <dir> &&` prefix target
 }): Promise<void> {
-  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents, secret } = params;
+  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents, ownerOnly } = params;
   const b64 = Buffer.from(content).toString("base64");
-  const umask = secret ? "umask 077 && " : "";
+  const umask = ownerOnly ? "umask 077 && " : "";
   const mkdir = mkdirParents ? `mkdir -p '${mkdirParents}' && ` : "";
   const chown = chownNodeUser ? ` && chown node:node '${path}'` : "";
-  const fileMode = secret ? "600" : mode;
+  const fileMode = ownerOnly ? "600" : mode;
   const chmod = fileMode ? ` && chmod ${fileMode} '${path}'` : "";
   // Content flows over stdin (see dockerExecWriteStdin); the command string is
   // secret-free. `base64 -d` reads the payload from stdin when given no file arg.
