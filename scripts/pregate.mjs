@@ -879,8 +879,10 @@ async function main() {
   }
 
   if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
-    const correction = await import("./published-correction.mjs");
-    if (shouldTakeReducedTier({ args, classification: correction.reducedTierClassification() })) {
+    // The probe only ever narrows work: a checkout without the correction
+    // module (or its packaged classifier) runs the full gate as before.
+    const correction = await import("./published-correction.mjs").catch(() => null);
+    if (correction && shouldTakeReducedTier({ args, classification: correction.reducedTierClassification() })) {
       process.stdout.write("pregate: HEAD only merges origin/main onto a passed published head — running the reduced tier (derived-artifact freshness, typecheck, affected tests); the prior PASS covers the rest.\n");
       try {
         const result = await correction.verifyPublishedCorrection();
