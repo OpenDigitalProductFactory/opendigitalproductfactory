@@ -264,23 +264,53 @@ export async function writeSandboxFile(params: {
   /** `chown node:node <path>` after writing (root-written file the node-user CLI
    *  must read, e.g. the per-call mcp-config). */
   chownNodeUser?: boolean;
+  /** Owner-only file, for credentials. The file is created under `umask 077` and
+   *  left at mode 600, so no other user can read it, not even between the
+   *  write and the chmod. Overrides `mode`. Pair with `chownNodeUser` when the
+   *  node-user CLI reads it, and with `credentialFileExports` so the runner
+   *  deletes it once read. */
+  ownerOnly?: boolean;
   timeoutMs?: number;
   mkdirParents?: string;   // optional `mkdir -p <dir> &&` prefix target
 }): Promise<void> {
-  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents } = params;
+  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents, ownerOnly } = params;
   const b64 = Buffer.from(content).toString("base64");
+  const umask = ownerOnly ? "umask 077 && " : "";
   const mkdir = mkdirParents ? `mkdir -p '${mkdirParents}' && ` : "";
   const chown = chownNodeUser ? ` && chown node:node '${path}'` : "";
-  const chmod = mode ? ` && chmod ${mode} '${path}'` : "";
+  const fileMode = ownerOnly ? "600" : mode;
+  const chmod = fileMode ? ` && chmod ${fileMode} '${path}'` : "";
   // Content flows over stdin (see dockerExecWriteStdin); the command string is
   // secret-free. `base64 -d` reads the payload from stdin when given no file arg.
   await dockerExecWriteStdin({
     containerId,
-    innerCommand: `${mkdir}base64 -d > '${path}'${chown}${chmod}`,
+    innerCommand: `${umask}${mkdir}base64 -d > '${path}'${chown}${chmod}`,
     input: b64,
     asNodeUser,
     timeoutMs: params.timeoutMs ?? 5_000,
   });
+}
+
+/**
+ * Runner-script lines that load a credential file into `envVar` and then
+ * delete the file. The CLI keeps the value in its environment; nothing left on
+ * disk can be read by a later process in the shared sandbox, including another
+ * build's agent.
+ */
+export function credentialFileExports(envVar: string, path: string): string[] {
+  return [`export ${envVar}="$(cat '${path}')"`, `rm -f '${path}'`];
+}
+
+/** Best-effort removal of sandbox files, e.g. a credential file whose runner
+ *  never started. Never throws: a failed cleanup must not fail the task. */
+export async function removeSandboxFiles(containerId: string, paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const quoted = paths.map((p) => `'${p}'`).join(" ");
+  try {
+    await sandboxExec()(`docker exec ${containerId} rm -f ${quoted}`, { timeout: 5_000 });
+  } catch {
+    // best-effort
+  }
 }
 
 /** Ensure /workspace is writable by the node user (uid 1000) and git is
