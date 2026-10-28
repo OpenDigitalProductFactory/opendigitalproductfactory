@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Work Atlas</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -158,6 +159,43 @@ dt{color:var(--muted)} dd{margin:0}
 .tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);padding:6px 8px;border-radius:6px;font-size:12px;max-width:260px;z-index:20;display:none}
 .notes{margin-top:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .notes .panel p{margin:6px 0 0;color:var(--muted);font-size:13px}
+/* ---- archetype layouts ---- */
+.layout>div,.layout>aside{grid-template-columns:minmax(0,1fr)}
+.refine{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:12px 0 0;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.refine .rg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.refine .rl{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:600}
+.lgrid{display:grid;gap:3px;min-width:560px}
+.lgrid .ch{font:11px var(--f-mono);color:var(--muted);padding:2px 6px}
+.lgrid .ch.now{color:var(--accent);font-weight:600}
+.lgrid .lh{font:600 12px var(--f-body);padding:6px 8px 6px 0;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.lgrid .lh small{font:11px var(--f-mono);color:var(--muted);font-weight:400}
+.lgrid .slot{background:var(--bg);border-radius:6px;padding:5px;min-height:30px}
+.lgrid .slot.now{background:var(--accent-soft)}
+.scroll{overflow-x:auto}
+.sub-h{font:600 12px var(--f-body);margin:14px 0 6px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.sub-h .meta{font-weight:400}
+.zones{display:grid;gap:6px;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"n d d e" "v d d e" "v a a o"}
+@media (max-width:640px){.zones{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"n d" "e d" "v a" "o o"}}
+.zone{background:var(--bg);border:1px solid var(--line);border-radius:14px 6px 18px 8px;padding:8px 10px;min-width:0}
+.zone h4{margin:0 0 6px;font:600 12px var(--f-body);display:flex;justify-content:space-between;gap:6px}
+.zone h4 span{font:11px var(--f-mono);color:var(--muted);font-weight:400}
+.zone.out{border-style:dashed;background:transparent}
+.ward{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.bed{border:1px solid var(--line);border-radius:6px;padding:6px 8px;display:grid;gap:3px;background:var(--bg);text-align:left;cursor:pointer;font:inherit;color:inherit}
+.bed .bn{font:11px var(--f-mono);color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.bed .bt{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bed .bc{font-size:11px;color:var(--muted)}
+.bed.empty{background:transparent;border-style:dashed;cursor:default}
+.bed .cell{width:12px;height:12px;cursor:inherit}
+.shaped{display:grid;gap:6px;font-size:13px}
+.shaped .sr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline}
+.shaped .sk{color:var(--muted);font-size:12px}
+.tag{font:10px var(--f-mono);padding:1px 6px;border-radius:4px;border:1px solid var(--line);white-space:nowrap}
+.tag.def{color:var(--muted)}
+.tag.gap{color:var(--need);border-color:var(--need);background:var(--need-soft)}
+.tag.part{color:var(--accent);border-color:var(--accent)}
 </style>
 
 <div class="wrap">
@@ -165,22 +203,24 @@ dt{color:var(--muted)} dd{margin:0}
     <div>
       <div class="eyebrow">Work in progress · concept <span class="illus">illustrative data</span></div>
       <h1>Every workroom, one picture</h1>
-      <p class="sub">Grey means it is moving on its own. Colour and shape mean you should look. Click any square to open the room. Click a group name to see its rows.</p>
+      <p class="sub">The squares mean the same for every business: grey moves on its own; colour and shape mean look. What changes is how they are laid out, so each business sees its own day.</p>
     </div>
     <div class="controls">
-      <label class="meta" for="arch">Archetype</label>
+      <label class="meta" for="arch">Business</label>
       <select id="arch">
         <option value="software">Software platform</option>
         <option value="restaurant">Restaurant</option>
         <option value="hvac">HVAC contractor</option>
+        <option value="vet">Veterinary practice</option>
       </select>
       <div class="seg" role="group" aria-label="Lens">
-        <button id="lensMap" aria-pressed="true">By portfolio</button>
+        <button id="lensMap" aria-pressed="true">Our day</button>
         <button id="lensStage" aria-pressed="false">By stage</button>
       </div>
       <button class="ghost" id="pause" aria-pressed="false">Pause live</button>
     </div>
   </div>
+  <div class="refine" id="refine"></div>
 
   <div class="question" id="question"></div>
   <div class="triage" id="triage"></div>
@@ -188,7 +228,7 @@ dt{color:var(--muted)} dd{margin:0}
   <div class="layout">
     <div style="display:grid;gap:16px;min-width:0">
       <section class="panel" id="mapPanel">
-        <div class="panel-head"><h2 id="lensTitle">Projects by portfolio and shape</h2><span class="meta" id="count"></span></div>
+        <div class="panel-head"><h2 id="lensTitle"></h2><span class="meta" id="count"></span></div>
         <div id="lensBody"></div>
         <div class="legend">
           <span><i class="cell"></i>waiting its turn</span>
@@ -205,16 +245,17 @@ dt{color:var(--muted)} dd{margin:0}
       </section>
     </div>
     <aside style="display:grid;gap:16px;min-width:0">
-      <section class="panel insp" id="insp"><h2>Room</h2><p class="empty">Select a square to see its steps, what it is doing now and who is accountable.</p></section>
+      <section class="panel insp" id="insp"></section>
+      <section class="panel"><div class="panel-head"><h2>How this view is shaped</h2></div><div class="shaped" id="shaped"></div></section>
       <section class="panel"><div class="panel-head"><h2>Just now</h2><span class="meta" id="clock"></span></div><ul class="feed" id="feed"></ul></section>
     </aside>
   </div>
 
   <div class="notes">
-    <div class="panel"><h2>Overview first</h2><p>One square per room, grouped by the four portfolios. 300 rooms fit without scrolling. Rooms with no portfolio get their own group so the gap stays visible.</p></div>
-    <div class="panel"><h2>Zoom and filter</h2><p>The five counts filter the map. A group name opens rows with a stage rail and the current action. The stage lens plots each room's age against the usual time for that step.</p></div>
-    <div class="panel"><h2>Details on demand</h2><p>The side panel is the room's checklist: done, current, still to do. It shows the live action, the blocker and the next person. "Open room" goes to the existing detail page.</p></div>
-    <div class="panel"><h2>Operations have a rhythm</h2><p>Standing rooms repeat; they do not advance through stages. They are drawn as their recent runs, so a missed cycle is as visible as a stuck project.</p></div>
+    <div class="panel"><h2>Same squares everywhere</h2><p>State is never re-coded per business. A person who looks after a vet practice and an HVAC firm reads both without relearning, and shape keeps it readable without colour.</p></div>
+    <div class="panel"><h2>Layout comes from the business</h2><p>Each archetype already maps to one of 13 operational layouts. The Atlas reuses that mapping: a floor and service day, a territory and technician board, an appointment book and a ward.</p></div>
+    <div class="panel"><h2>Refinements change operations, not labels</h2><p>Takeout adds a lane timed against promises. Exotics adds enclosure checks. Large animal swaps the book for a farm round. Cuisine shows up as the kitchen's production pattern.</p></div>
+    <div class="panel"><h2>Location shapes it too</h2><p>Zones are the business's own drawn service areas. The jurisdiction decides which standing checks appear. The season decides what the question asks first.</p></div>
   </div>
 </div>
 <div class="tip" id="tip" role="tooltip"></div>
@@ -224,54 +265,166 @@ dt{color:var(--muted)} dd{margin:0}
 // ---------- seeded data (illustrative) ----------
 let seed=42; const rnd=()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296};
 const pick=a=>a[Math.floor(rnd()*a.length)];
+const hash=s=>[...s].reduce((a,c)=>(a*31+c.charCodeAt(0))%2147483647,7);
+function wpick(w){let r=rnd(),a=0;for(let i=0;i<w.length;i++){a+=w[i];if(r<a)return i}return w.length-1}
+function hrs(h){if(h<1)return Math.round(h*60)+"m";if(h<48)return Math.round(h)+"h";return Math.round(h/24)+"d"}
 const PORTS=[["manufactureAndDeliver","Manufacturing and Delivery"],["productsAndServicesSold","Goods and Services for Sale"],["forEmployees","Workforce"],["foundational","Foundational"],["unplaced","Not yet placed"]];
-const ARCH={
- software:{q:"What is waiting on a person, and for how long?",unit:"rooms",total:298,
+const DEF="defined",PART="partial",GAP="not recorded yet";
+
+// refinement state per business
+const REF={
+ restaurant:{ch:new Set(["dine","take"]),pat:"order"},
+ hvac:{seg:"res",season:"heat"},
+ vet:{focus:"small"}
+};
+const REFUI={
+ restaurant:[
+  {k:"ch",label:"Serves",multi:true,opts:[["dine","Dine-in"],["take","Takeout"],["deliv","Delivery"],["cater","Catering"],["truck","Food truck"]]},
+  {k:"pat",label:"Kitchen",opts:[["order","Cook to order"],["bake","Bake ahead"],["long","Long cooks (BBQ)"],["raw","Raw / allergen-heavy (sushi)"]]}],
+ hvac:[
+  {k:"seg",label:"Customers",opts:[["res","Households"],["com","Commercial contracts"],["both","Both"]]},
+  {k:"season",label:"Season",opts:[["heat","Heating"],["cool","Cooling"],["mild","Shoulder"]]}],
+ vet:[
+  {k:"focus",label:"Treats",opts:[["small","Dogs and cats"],["exotic","Exotics"],["equine","Horses"],["large","Farm animals"],["mixed","Mixed practice"]]}]
+};
+
+// ---------- archetype configuration (derived in the real design; hand-set here) ----------
+function conf(key){
+ if(key==="software") return {
+  layout:"portfolio",q:"What is waiting on a person, and for how long?",unit:"rooms",total:298,lensTitle:"Rooms by portfolio and shape",
   portW:[.38,.08,.06,.2,.28],
   shapes:{"Small fix":["Reproduce","Repair","Runtime check","Merge","Accept"],"Medium change":["Design note","Implement","Merge","Accept"],"Large change":["Spec","Spec approval","Plan","Implement","Deploy","Merge","Accept"],"Break-fix":["Reproduce","Repair","Review","Merge"]},
   fam:{"Reproduce":"Shape","Design note":"Shape","Spec":"Shape","Spec approval":"Shape","Plan":"Shape","Repair":"Build","Implement":"Build","Runtime check":"Check","Review":"Check","Deploy":"Check","Merge":"Merge","Accept":"Accept"},
   cols:["Shape","Build","Check","Merge","Accept"],
-  titles:["Invoice matching tolerance","Self-upgrade prebuild budget","Codex TOML refresh","Restricted document access","Customer intake controller","Approval card recovery","Preview mount identity","Queue telemetry emitter","Portfolio placement backfill","Room handover in one step","Semantic review retry","Local-CI evidence capture","Host cleanup prompts","Workforce roster freshness","Archetype readiness view","Release window scheduler"],
-  verbs:{Shape:["Reading the existing spec","Drafting the design note","Checking backlog overlap"],Build:["Running unit tests","Editing the projection","Typechecking the web package"],Check:["Driving the served page","Recording runtime evidence","Waiting for local CI lease"],Merge:["In the merge queue","Resolving a conflict with main","Waiting for review"],Accept:["Waiting for owner acceptance","Collecting acceptance evidence"]},
-  people:["Mark (owner)","Release reviewer","Build coordinator"],
-  standing:["Backlog triage sweep","Operate stream sweep","Release window check","Dependency patch posture","Worktree janitor","Hive scout ingest","Nightly install verification"]},
- restaurant:{q:"Are we ready for the next service period?",unit:"orders and jobs",total:180,
-  portW:[.5,.25,.12,.08,.05],
-  shapes:{"Catering order":["Quote","Confirm","Prep","Deliver","Settle"],"Private event":["Enquiry","Menu","Deposit","Service","Settle"],"Menu change":["Idea","Cost","Taste","Launch"]},
-  fam:{"Quote":"Book","Enquiry":"Book","Idea":"Book","Confirm":"Commit","Menu":"Commit","Deposit":"Commit","Cost":"Commit","Prep":"Prepare","Taste":"Prepare","Deliver":"Serve","Service":"Serve","Launch":"Serve","Settle":"Settle"},
-  cols:["Book","Commit","Prepare","Serve","Settle"],
-  titles:["Henley wedding, 120 covers","Office lunch boxes","Autumn tasting menu","Birthday buyout Sat","Board dinner catering","Brunch menu refresh","School fundraiser trays","Rehearsal dinner"],
-  verbs:{Book:["Drafting the quote","Asking about dietary needs"],Commit:["Waiting for the deposit","Costing the menu"],Prepare:["Ordering produce","Building the prep list"],Serve:["Scheduling the van","Assigning servers"],Settle:["Sending the invoice","Chasing a late payment"]},
-  people:["Head chef","Front of house lead","Owner"],
-  standing:["Opening checklist","Inventory count","Prep list for dinner","Temperature log","Supplier order","Close and cash-up"]},
- hvac:{q:"What has to be dispatched or rescued today?",unit:"jobs",total:240,
-  portW:[.55,.2,.1,.1,.05],
-  shapes:{"Service call":["Book","Dispatch","On site","Invoice"],"Install":["Survey","Quote","Schedule","Install","Commission","Invoice"],"Maintenance plan":["Renew","Schedule","Visit","Invoice"]},
-  fam:{"Book":"Intake","Survey":"Intake","Renew":"Intake","Quote":"Intake","Dispatch":"Schedule","Schedule":"Schedule","On site":"On site","Install":"On site","Visit":"On site","Commission":"On site","Invoice":"Bill"},
-  cols:["Intake","Schedule","On site","Bill"],
-  titles:["No heat, Maple St","Rooftop unit, Grocer","Heat pump install, Lee","Boiler service, Clinic","AC not cooling, Unit 4B","Duct survey, Office park","Annual plan renewal, Patel"],
-  verbs:{Intake:["Logging the fault","Preparing the quote"],Schedule:["Finding a technician","Confirming arrival window"],"On site":["Technician on site","Waiting for a part"],Bill:["Sending the invoice","Payment overdue"]},
-  people:["Dispatcher","Lead technician","Owner"],
-  standing:["Morning dispatch board","Van stock check","Filter reorder","Plan renewals due","Callback review"]}
-};
-function wpick(w){let r=rnd(),a=0;for(let i=0;i<w.length;i++){a+=w[i];if(r<a)return i}return w.length-1}
-function hrs(h){if(h<1)return Math.round(h*60)+"m";if(h<48)return Math.round(h)+"h";return Math.round(h/24)+"d"}
+  titles:["Invoice matching tolerance","Self-upgrade prebuild budget","Codex TOML refresh","Restricted document access","Customer intake controller","Approval card recovery","Preview mount identity","Queue telemetry emitter","Portfolio placement backfill","Room handover in one step","Semantic review retry","Local-CI evidence capture"],
+  verbs:{Shape:["Reading the existing spec","Drafting the design note"],Build:["Running unit tests","Typechecking the web package"],Check:["Driving the served page","Recording runtime evidence"],Merge:["In the merge queue","Waiting for review"],Accept:["Waiting for owner acceptance"]},
+  people:["Owner","Release reviewer","Build coordinator"],
+  standing:["Backlog triage sweep","Release window check","Dependency patch posture","Worktree janitor","Nightly install verification"],
+  shaped:[["Layout","TENANTS board: groups by portfolio",DEF],["Stage families","from the value stream",DEF],["Question","from the workspace home profile",DEF]]};
 
-let rooms=[],standing=[],A,feed=[];
+ if(key==="restaurant"){
+  const R=REF.restaurant, ch=R.ch.size?R.ch:new Set(["dine"]);
+  const periods=(R.pat==="bake"?["Overnight"]:[]).concat(["Prep","Lunch","Afternoon","Dinner","Close"]);
+  const L={prep:{label:"Kitchen prep",sub:"every channel",stages:["Plan","Prep","Check","Ready"],titles:R.pat==="bake"?["Sourdough, 80 loaves","Croissant lamination","Wedding cake tiers","Morning pastry case"]:R.pat==="long"?["Brisket, 14 h smoke","Pork shoulder, 10 h","Short-rib braise","Stock reduction"]:R.pat==="raw"?["Fish delivery check-in","Rice batches","Allergen-free station set","Sashimi portioning"]:["Sauce batch","Veg prep list","Butchery for dinner","Dessert mise"]},
+   dine:{label:"Dining room",sub:"tables and parties",stages:["Booked","Seated","Served","Paid"],titles:["Party of 8, window","Table 12, birthday","Two-top, allergy note","Party of 6, late arrival","Walk-in queue"]},
+   take:{label:"Takeout",sub:"against promised pickup",stages:["Ordered","Cooking","Packed","Collected"],titles:["Order #418","Order #422","Order #431","Office order, 14 boxes"]},
+   deliv:{label:"Delivery",sub:"against promised arrival",stages:["Ordered","Cooking","With courier","Delivered"],titles:["App order #7731","App order #7740","Direct order, Elm St","App order #7752"]},
+   truck:{label:"Truck stops",sub:"commissary then stops",stages:["Stock","Travel","Serve","Pack down"],titles:["Market Square stop","Office park stop","Brewery night stop","Commissary load"]}};
+  const lanes=["prep",...["dine","take","deliv","truck"].filter(c=>ch.has(c))];
+  const primary=["dine","take","deliv","cater","truck"].find(c=>ch.has(c));
+  const Q={dine:"Are we ready for the next service?",take:"Will every order be ready when we promised?",deliv:"Which orders will reach the door late?",cater:"Is every booked event on track for its date?",truck:"Are we stocked and on time for every stop?"};
+  const st=["Opening checklist","Fridge and freezer temperatures","Supplier order","Close and cash-up"];
+  if(ch.has("dine")) st.push("Floor walk before service");
+  if(ch.has("take")) st.push("Pickup shelf check");
+  if(ch.has("deliv")) st.push("Delivery tablets and packaging");
+  if(ch.has("cater")) st.push("Event deposits chased");
+  if(ch.has("truck")) st.push("Commissary log and stop permit");
+  if(R.pat==="bake") st.push("Ovens on by 03:30","Overnight proof check");
+  if(R.pat==="long") st.push("Smoker lit by 04:00","Hot-holding temperature");
+  if(R.pat==="raw") st.push("Raw fish time and temperature","Allergen matrix check");
+  return {layout:"floor",q:Q[primary],unit:primary==="dine"?"tables and orders":"orders",lensTitle:"Today's service, by channel",
+   periods,nowIdx:periods.indexOf("Lunch"),lanes:lanes.map(k=>({k,...L[k]})),cater:ch.has("cater"),
+   ahead:["Today","Tomorrow","+2 days","+3","+4","+5","+6","Later"],
+   caterLane:{label:"Catering and events",stages:["Enquiry","Deposit","Prep","Deliver","Settle"],titles:["Henley wedding, 120 covers","Board dinner, 24","School fundraiser trays","Rehearsal dinner, 40","Office lunch boxes, 60"]},
+   fam:{Plan:"Book",Booked:"Book",Ordered:"Book",Enquiry:"Book",Stock:"Book",Prep:"Prepare",Cooking:"Prepare",Deposit:"Prepare",Check:"Prepare",Seated:"Serve",Served:"Serve",Packed:"Serve","With courier":"Serve",Deliver:"Serve",Travel:"Serve",Serve:"Serve",Ready:"Serve",Paid:"Settle",Collected:"Settle",Delivered:"Settle",Settle:"Settle","Pack down":"Settle"},
+   cols:["Book","Prepare","Serve","Settle"],
+   verbs:{Book:["Confirming the booking","Taking the order"],Prepare:["On the line","Prepping"],Serve:["At the pass","Waiting for courier"],Settle:["Taking payment","Chasing the invoice"]},
+   people:["Head chef","Front of house lead","Owner"],standing:st,
+   shaped:[["Layout","FLOOR: lanes by channel × service periods",DEF],["Service channels",[...ch].map(c=>({dine:"Dine-in",take:"Takeout",deliv:"Delivery",cater:"Catering",truck:"Food truck"})[c]).join(", "),GAP],["Kitchen pattern",{order:"Cook to order",bake:"Bake ahead",long:"Long cooks",raw:"Raw / allergen-heavy"}[R.pat],GAP],["Inspection cadence","from the county (jurisdiction)",DEF],ch.has("deliv")?["Delivery radius","from the drawn service area",DEF]:null].filter(Boolean)};
+ }
+
+ if(key==="hvac"){
+  const R=REF.hvac, com=R.seg!=="res", res=R.seg!=="com";
+  const zones=[["n","North hills"],["d","Downtown"],["e","East side"],["v","River valley"],["a","Airport industrial"],["o","Outside our area"]];
+  const techs=["Ana (lead)","Ben","Chris","Dee","Valley Air (partner)","Unassigned"];
+  const windows=["8–10","10–12","12–2","2–4","4–6","After hours"];
+  const heat=R.season==="heat",cool=R.season==="cool";
+  const resTitles=heat?["No heat, Maple St","Furnace short-cycling, Oak Ave","Boiler pressure low, Lee","No heat, elderly, Pine Ct","Heat pump frozen, Ash Rd"]:cool?["No cooling, Maple St","AC freezing up, Oak Ave","Heat pump noise, Lee","No cooling, elderly, Pine Ct","Thermostat dead, Ash Rd"]:["Annual tune-up, Patel","Duct cleaning, Ruiz","Thermostat swap, Kim","Filter plan visit, Cho"];
+  const comTitles=["Rooftop unit down, Grocer","Walk-in cooler alarm, Bistro","Server room CRAC, Clinic","Chiller fault, Office park","Boiler plant, School"];
+  const st=["Morning dispatch board","Van stock check","EPA 608 refrigerant log","Callback review"];
+  if(res) st.push("Maintenance plan renewals");
+  if(com) st.push("Planned maintenance due this week","Contract response report");
+  if(heat) st.push("Cold-snap surge watch"); if(cool) st.push("Heatwave surge watch");
+  const q=R.seg==="com"?"Which contract calls will miss their response time?":R.seg==="both"?"What has to be dispatched or rescued today?":heat?"Who has no heat, and when will someone be there?":cool?"Who has no cooling, and when will someone be there?":"Is every visit today booked into a window?";
+  return {layout:"territory",q,unit:"jobs",lensTitle:"Jobs across the service area",zones,techs,windows,nowIdx:1,com,res,
+   resTitles,comTitles,
+   shapesRes:{"Service call":["Book","Dispatch","On site","Invoice"],"Install":["Survey","Quote","Schedule","Install","Commission","Invoice"]},
+   shapesCom:{"Contract call":["Logged","Respond","On site","Report","Invoice"],"Planned maintenance":["Schedule","Visit","Report"]},
+   fam:{Book:"Intake",Survey:"Intake",Quote:"Intake",Logged:"Intake",Dispatch:"Schedule",Schedule:"Schedule",Respond:"Schedule","On site":"On site",Install:"On site",Visit:"On site",Commission:"On site",Report:"Bill",Invoice:"Bill"},
+   cols:["Intake","Schedule","On site","Bill"],
+   verbs:{Intake:["Logging the fault","Preparing the quote"],Schedule:["Finding a technician","Confirming arrival window"],"On site":["Technician on site","Waiting for a part"],Bill:["Sending the invoice","Writing the service report"]},
+   people:["Dispatcher","Lead technician","Owner","Contract manager"],standing:st,
+   shaped:[["Layout","TERRITORY: zones + technician board",DEF],["Zones","your drawn service areas",DEF],["Customers",{res:"Households",com:"Commercial contracts",both:"Both"}[R.seg],GAP],["Season",{heat:"Heating",cool:"Cooling",mild:"Shoulder"}[R.season],PART],["Refrigerant log","EPA 608 (US jurisdiction)",DEF]]};
+ }
+
+ // vet
+ const f=REF.vet.focus;
+ const clinic=f==="small"||f==="exotic"||f==="mixed", road=f==="equine"||f==="large"||f==="mixed";
+ const vets=f==="large"?["Dr Okafor","Dr Hale","Dr Brandt"]:["Dr Okafor","Dr Hale","Dr Brandt","Nurse clinic"];
+ const hours=["8–10","10–12","12–2","2–4","4–6"];
+ const T={small:["Bella, vaccination","Max, limping","Luna, dental","Ollie, spay","Milo, ear infection","Daisy, senior check"],
+  exotic:["Spike (bearded dragon), bone check","Kiwi (parrot), feather loss","Thumper (rabbit), dental","Nemo (koi), water test","Sid (tortoise), shell"],
+  equine:["Hollow Farm yard, 4 horses","Dancer, lameness work-up","Pre-purchase vetting, Ashby","Dental round, Mill Lane","Colic call, Ridge Stables"],
+  large:["Brook Farm, TB test, 140 head","Hill Top, pregnancy scan, 60 ewes","Calving, Elm Farm","Riverside Dairy, herd health","Lame cows, Moor End"]};
+ const roadT=f==="mixed"?T.large.concat(T.equine.slice(0,2)):T[f]||[];
+ const clinicT=f==="mixed"?T.small:T[f]||[];
+ const ward=f==="exotic"?{label:"Enclosures",unit:"Enclosure",n:10,titles:["Spike","Kiwi","Thumper","Sid","Pip","Basil"],check:"temp 32°C / humidity"}
+  :f==="equine"?{label:"Hospital stalls",unit:"Stall",n:6,titles:["Dancer","Bramble","Major","Willow"],check:"colic watch"}
+  :f==="large"?null:{label:"Ward kennels",unit:"Kennel",n:12,titles:["Ollie","Luna","Rex","Maisie","Toby","Coco"],check:"obs due"};
+ const st=["Controlled-drug count","Vaccine fridge temperature","Surgery list confirmed"];
+ if(f==="exotic") st.push("Enclosure temperature and humidity","UV lamp hours");
+ if(f==="equine"||f==="mixed") st.push("Vaccination and passport reminders","Truck stock check");
+ if(f==="large"||f==="mixed") st.push("Biosecurity log","Medicine withdrawal records","TB testing campaign");
+ const Q={small:"Is the day running to time, and is every inpatient checked?",exotic:"Is every enclosure in range, and is the day running to time?",equine:"Which yard visits are today, and is the hospital covered?",large:"Which farm calls must happen today, and in what order?",mixed:"Is the clinic on time while vets are out on farms?"};
+ return {layout:"vet",q:Q[f],unit:f==="large"?"farm calls":"patients",lensTitle:clinic?(road?"Clinic book, farm round and ward":"Appointment book and ward"):"The round and the hospital",
+  clinic,road,vets,hours,nowIdx:1,ward,clinicT,roadT,focus:f,
+  shapesClinic:{"Consult":["Check in","Consult","Treatment","Discharge","Bill"],"Surgery":["Admit","Pre-op","Surgery","Recovery","Discharge"]},
+  shapesRoad:{"Farm visit":["Booked","Travel","On farm","Records","Bill"]},
+  fam:{"Check in":"Arrive",Admit:"Arrive",Booked:"Arrive",Consult:"Treat",Treatment:"Treat","Pre-op":"Treat",Surgery:"Treat",Travel:"Treat","On farm":"Treat",Recovery:"Recover",Monitor:"Recover",Records:"Recover",Discharge:"Discharge",Bill:"Discharge"},
+  cols:["Arrive","Treat","Recover","Discharge"],
+  verbs:{Arrive:["Checking in","Driving to the farm"],Treat:["In consult","In theatre","On farm"],Recover:["Monitoring","Writing records"],Discharge:["Owner collecting","Sending the invoice"]},
+  people:["Duty vet","Head nurse","Practice manager"],standing:st,
+  shaped:[["Layout",(clinic?"BOOK":"TERRITORY round")+(ward?" + ROOMS":"")+(clinic&&road?" + round":""),DEF],["What it treats",{small:"Dogs and cats",exotic:"Exotics",equine:"Horses",large:"Farm animals",mixed:"Mixed"}[f],GAP],["Out on the road",road?"yes (mobile-vet as a secondary line)":"no",PART],["Drug register","controlled-drug rules (jurisdiction)",DEF]]};
+}
+
+let rooms=[],standing=[],A,feed=[],KEY="software";
+function mk(i,o){
+  const r=rnd(); let state=r<.30?"live":r<.42?"need":r<.50?"stuck":r<.60?"stale":r<.70?"done":"wait";
+  const si=state==="done"?o.stages.length:Math.floor(rnd()*o.stages.length);
+  const stage=o.stages[Math.min(si,o.stages.length-1)];
+  const p50=o.p50||(4+rnd()*20), ratio=state==="stuck"?2+rnd()*4:state==="need"?.6+rnd()*2.6:state==="stale"?1.5+rnd()*3:.1+rnd()*1.4;
+  const fam=A.fam[stage]||A.cols[0];
+  return Object.assign({id:"WC-"+Math.floor(rnd()*0xFFFFFF).toString(16).toUpperCase().padStart(6,"0"),si,stage,fam,state,
+    age:p50*ratio,p50,now:pick(A.verbs[fam]||["Working"]),who:pick(A.people),since:Math.floor(rnd()*50)+5,
+    spark:Array.from({length:12},()=>state==="stale"?0:Math.round(rnd()*(state==="live"?9:4)))},o);
+}
 function build(key){
-  seed=key==="software"?42:key==="restaurant"?7:99; A=ARCH[key]; rooms=[];
-  const shapeNames=Object.keys(A.shapes);
-  for(let i=0;i<A.total;i++){
-    const p=PORTS[wpick(A.portW)][0], sh=pick(shapeNames), st=A.shapes[sh];
-    const r=rnd(); let state=r<.30?"live":r<.42?"need":r<.50?"stuck":r<.60?"stale":r<.70?"done":"wait";
-    const si=state==="done"?st.length:Math.floor(rnd()*st.length);
-    const stage=st[Math.min(si,st.length-1)], fam=A.fam[stage];
-    const p50=4+rnd()*20, ratio=state==="stuck"?2+rnd()*4:state==="need"?.6+rnd()*2.6:state==="stale"?1.5+rnd()*3:.1+rnd()*1.4;
-    rooms.push({id:"WC-"+Math.floor(rnd()*0xFFFFFF).toString(16).toUpperCase().padStart(6,"0"),
-      title:pick(A.titles)+(rnd()<.5?"":" ("+(i%9+2)+")"),port:p,shape:sh,stages:st,si,stage,fam,state,
-      age:p50*ratio,p50,p85:p50*1.9,now:pick(A.verbs[fam]||["Working"]),
-      who:pick(A.people),since:Math.floor(rnd()*50)+5,
-      spark:Array.from({length:12},()=>state==="stale"?0:Math.round(rnd()*(state==="live"?9:4)))});
+  KEY=key; A=conf(key); seed=hash(key+JSON.stringify(REF[key]||{},(k,v)=>v instanceof Set?[...v].sort():v)); rooms=[];
+  if(A.layout==="portfolio"){
+    const names=Object.keys(A.shapes);
+    for(let i=0;i<A.total;i++){const sh=pick(names);rooms.push(mk(i,{port:PORTS[wpick(A.portW)][0],shape:sh,stages:A.shapes[sh],title:pick(A.titles)+(rnd()<.5?"":" ("+(i%9+2)+")")}))}
+  } else if(A.layout==="floor"){
+    for(const l of A.lanes){const n=l.k==="prep"?18:22;for(let i=0;i<n;i++){
+      const pi=Math.min(A.periods.length-1,Math.max(0,Math.round(A.nowIdx+(rnd()-.4)*3)));
+      rooms.push(mk(i,{lane:l.k,slot:pi,shape:l.label,stages:l.stages,title:pick(l.titles),p50:l.k==="prep"?2:.6}))}}
+    if(A.cater) for(let i=0;i<20;i++) rooms.push(mk(i,{lane:"cater",slot:Math.min(7,Math.floor(rnd()*rnd()*9)),shape:"Catering and events",stages:A.caterLane.stages,title:pick(A.caterLane.titles),p50:30}));
+  } else if(A.layout==="territory"){
+    const N=130;
+    for(let i=0;i<N;i++){
+      const isCom=A.com&&(!A.res||rnd()<.45);
+      const shapes=isCom?A.shapesCom:A.shapesRes, sh=pick(Object.keys(shapes));
+      const zone=isCom?["d","a","d","e","o"][Math.floor(rnd()*5)]:["n","e","v","n","v","d","o"][Math.floor(rnd()*7)];
+      const tech=A.techs[Math.floor(rnd()*A.techs.length)];
+      const win=isCom&&rnd()<.15?5:Math.min(4,Math.max(0,Math.round(A.nowIdx+(rnd()-.3)*3)));
+      rooms.push(mk(i,{zone,tech:sh==="Planned maintenance"?"Planned maintenance":tech,slot:win,shape:sh,stages:shapes[sh],com:isCom,title:pick(isCom?A.comTitles:A.resTitles),p50:isCom?3:5}));
+    }
+  } else {
+    if(A.clinic) for(const v of A.vets) for(let i=0;i<9;i++){const sh=v==="Nurse clinic"||rnd()<.75?"Consult":"Surgery";
+      rooms.push(mk(i,{lane:v,area:"clinic",slot:Math.floor(rnd()*A.hours.length),shape:sh,stages:A.shapesClinic[sh],title:pick(A.clinicT),p50:A.focus==="exotic"?1.2:.6}))}
+    if(A.road) for(const v of A.vets.filter(v=>v!=="Nurse clinic").slice(0,A.clinic?2:3)) for(let i=0;i<5;i++)
+      rooms.push(mk(i,{lane:v,area:"road",slot:i,shape:"Farm visit",stages:A.shapesRoad["Farm visit"],title:pick(A.roadT),p50:2.5}));
+    if(A.ward) for(let b=0;b<A.ward.n;b++){ if(rnd()<.25) continue;
+      rooms.push(mk(b,{area:"ward",bed:b+1,shape:"Inpatient",stages:["Admit","Monitor","Discharge"],title:pick(A.ward.titles),p50:12}))}
   }
   standing=A.standing.map(n=>({n,t:Array.from({length:14},()=>{const x=rnd();return x<.08?"miss":x<.2?"late":"ok"}),nx:Math.floor(rnd()*11)+1+"h"}));
   feed=[];
@@ -281,100 +434,130 @@ function build(key){
 let lens="map", filter=null, selected=null, open=new Set(), paused=matchMedia("(prefers-reduced-motion: reduce)").matches;
 const TRI=[["need","Needs a person","need"],["stuck","Stuck or held","stuck"],["live","Working now","live"],["wait","Waiting its turn",""],["stale","No recent signal","stale"]];
 const $=id=>document.getElementById(id);
-
-function renderQuestion(){
-  const need=rooms.filter(r=>r.state==="need").sort((a,b)=>b.age-a.age);
-  const o=need[0];
-  $("question").innerHTML=`<span class="eyebrow">Today's question</span><span class="q">${A.q}</span>
-   <span class="a"><b>${need.length} ${A.unit}</b> are waiting on a person. The oldest, “${o.title}”, has waited ${hrs(o.age)} at ${o.stage} (usually ${hrs(o.p50)}).</span>`;
-}
-function renderTriage(){
-  $("triage").innerHTML=TRI.map(([k,l,c])=>{
-    const n=rooms.filter(r=>r.state===k).length;
-    return `<button class="tri" data-k="${k}" aria-pressed="${filter===k}"><span class="n">${c?`<i class="cell ${c}" aria-hidden="true"></i>`:`<i class="cell" aria-hidden="true"></i>`}${n}</span><span class="l">${l}</span></button>`}).join("");
-  $("triage").querySelectorAll(".tri").forEach(b=>b.onclick=()=>{filter=filter===b.dataset.k?null:b.dataset.k;renderAll()});
-}
+const label=r=>({live:"working now",need:"needs a person",stuck:"stuck",stale:"no recent signal",done:"finished today",wait:"waiting its turn"})[r.state];
 const cls=r=>"cell "+(r.state==="wait"?"":r.state)+(selected===r.id?" sel":"")+(filter&&r.state!==filter?" dim":"");
 const order={stuck:0,need:1,stale:2,live:3,wait:4,done:5};
+const sortR=rs=>rs.slice().sort((a,b)=>order[a.state]-order[b.state]||b.age-a.age);
+const cellsHTML=rs=>`<div class="cells">${sortR(rs).map(r=>`<button class="${cls(r)}" data-id="${r.id}" aria-label="${r.title}, ${r.stage}, ${label(r)}"></button>`).join("")}</div>`;
 
-function renderMap(){
-  $("lensTitle").textContent="Projects by portfolio and shape";
+function renderRefine(){
+  const ui=REFUI[KEY]; const el=$("refine");
+  if(!ui){el.innerHTML=`<span class="rl">Refinements</span><span class="meta">None needed: the software platform archetype is the whole story here.</span>`;return}
+  el.innerHTML=ui.map(g=>`<div class="rg" role="group" aria-label="${g.label}"><span class="rl">${g.label}</span>${g.opts.map(([v,l])=>{
+    const on=g.multi?REF[KEY][g.k].has(v):REF[KEY][g.k]===v;return `<button class="chip" data-g="${g.k}" data-v="${v}" aria-pressed="${on}">${l}</button>`}).join("")}</div>`).join("")+`<span class="tag gap">not recorded yet in DPF</span>`;
+  el.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const g=ui.find(x=>x.k===b.dataset.g);
+    if(g.multi){const s=REF[KEY][g.k];s.has(b.dataset.v)?(s.size>1&&s.delete(b.dataset.v)):s.add(b.dataset.v)} else REF[KEY][g.k]=b.dataset.v;
+    reset()});
+}
+function renderShaped(){
+  const tag=s=>`<span class="tag ${s===DEF?"def":s===GAP?"gap":"part"}">${s}</span>`;
+  $("shaped").innerHTML=A.shaped.map(([k,v,s])=>`<div class="sr"><div><div class="sk">${k}</div>${v}</div>${tag(s)}</div>`).join("");
+}
+function renderQuestion(){
+  const need=rooms.filter(r=>r.state==="need").sort((a,b)=>b.age-a.age); const o=need[0];
+  $("question").innerHTML=`<span class="eyebrow">Today's question</span><span class="q">${A.q}</span>
+   <span class="a"><b>${need.length} ${A.unit}</b> are waiting on a person.${o?` The oldest, “${o.title}”, has waited ${hrs(o.age)} at ${o.stage} (usually ${hrs(o.p50)}).`:""}</span>`;
+}
+function renderTriage(){
+  $("triage").innerHTML=TRI.map(([k,l,c])=>{const n=rooms.filter(r=>r.state===k).length;
+    return `<button class="tri" data-k="${k}" aria-pressed="${filter===k}"><span class="n"><i class="cell ${c}" aria-hidden="true"></i>${n}</span><span class="l">${l}</span></button>`}).join("");
+  $("triage").querySelectorAll(".tri").forEach(b=>b.onclick=()=>{filter=filter===b.dataset.k?null:b.dataset.k;renderAll()});
+}
+
+// lanes × columns grid, shared by FLOOR, the technician board and the appointment book
+function grid(lanes,cols,nowIdx,get){
+  let h=`<div class="scroll"><div class="lgrid" style="grid-template-columns:minmax(110px,150px) repeat(${cols.length},minmax(0,1fr))"><span></span>`;
+  h+=cols.map((c,i)=>`<span class="ch${i===nowIdx?" now":""}">${c}${i===nowIdx?" · now":""}</span>`).join("");
+  for(const l of lanes){h+=`<div class="lh">${l.label}${l.sub?`<small>${l.sub}</small>`:""}</div>`;
+    h+=cols.map((c,i)=>`<div class="slot${i===nowIdx?" now":""}">${cellsHTML(get(l,i))}</div>`).join("")}
+  return h+`</div></div>`;
+}
+function renderPortfolio(){
   let h="";
-  for(const [pk,pl] of PORTS){
-    const rs=rooms.filter(r=>r.port===pk); if(!rs.length) continue;
-    const nN=rs.filter(r=>r.state==="need").length, nS=rs.filter(r=>r.state==="stuck").length;
-    h+=`<div class="group"><div class="ghead"><button class="gtitle" data-p="${pk}" aria-expanded="${open.has(pk)}"><span class="chev">▸</span>${pl}</button>
-      <span class="gstat">${rs.length} rooms · <span class="k">${nN} need you</span> · <span class="s">${nS} stuck</span></span></div><div class="shapes">`;
-    for(const sh of Object.keys(A.shapes)){
-      const ss=rs.filter(r=>r.shape===sh).sort((a,b)=>order[a.state]-order[b.state]||b.age-a.age); if(!ss.length) continue;
-      h+=`<div class="shape"><div class="sl">${sh} · ${ss.length}</div><div class="cells">${ss.map(r=>`<button class="${cls(r)}" data-id="${r.id}" aria-label="${r.title}, ${r.stage}, ${label(r)}"></button>`).join("")}</div></div>`;
-    }
-    h+=`</div>${open.has(pk)?rowsFor(rs):""}</div>`;
-  }
-  $("lensBody").innerHTML=h;
-  $("lensBody").querySelectorAll(".gtitle").forEach(b=>b.onclick=()=>{const p=b.dataset.p;open.has(p)?open.delete(p):open.add(p);renderMap()});
+  for(const [pk,pl] of PORTS){const rs=rooms.filter(r=>r.port===pk); if(!rs.length) continue;
+    h+=`<div class="group"><div class="ghead"><span class="gtitle">${pl}</span><span class="gstat">${rs.length} rooms · <span class="k">${rs.filter(r=>r.state==="need").length} need you</span> · <span class="s">${rs.filter(r=>r.state==="stuck").length} stuck</span></span></div><div class="shapes">`;
+    for(const sh of Object.keys(A.shapes)){const ss=rs.filter(r=>r.shape===sh); if(ss.length) h+=`<div class="shape"><div class="sl">${sh} · ${ss.length}</div>${cellsHTML(ss)}</div>`}
+    h+=`</div></div>`}
+  return h;
 }
-function label(r){return {live:"working now",need:"needs a person",stuck:"stuck",stale:"no recent signal",done:"finished today",wait:"waiting its turn"}[r.state]}
-function spark(v){const w=64,h=16,m=Math.max(1,...v);const pts=v.map((y,i)=>`${(i/(v.length-1)*w).toFixed(1)},${(h-1-y/m*(h-3)).toFixed(1)}`).join(" ");
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--cell-live)" stroke-width="1.3"/></svg>`}
-function pips(r){return `<span class="pips">${r.stages.map((s,i)=>`<i class="pip ${i<r.si?"d":i===r.si?"c "+r.state:""}" title="${s}"></i>`).join("")}</span>`}
-function rowsFor(rs){
-  const sorted=rs.filter(r=>r.state!=="done"&&(!filter||r.state===filter)).sort((a,b)=>order[a.state]-order[b.state]||b.age-a.age);
-  const shown=sorted.slice(0,8);
-  return `<div class="rows">${shown.map(r=>`<button class="row" data-id="${r.id}"><span class="t">${r.title}</span>${pips(r)}<span class="now">${r.state==="need"?"Waiting for "+r.who:r.state==="stuck"?"Held at "+r.stage+" · "+hrs(r.age):r.state==="stale"?"No signal for "+hrs(r.age):r.now}</span>${spark(r.spark)}</button>`).join("")}
-   ${sorted.length>8?`<div class="more">${sorted.length-8} more, in the order above. Search or filter to narrow.</div>`:""}</div>`;
+function renderFloor(){
+  let h=grid(A.lanes,A.periods,A.nowIdx,(l,i)=>rooms.filter(r=>r.lane===l.k&&r.slot===i));
+  if(A.cater){const rs=rooms.filter(r=>r.lane==="cater");
+    h+=`<div class="sub-h">Booked ahead<span class="meta">${rs.length} events · days to the event, not the clock</span></div>`;
+    h+=grid([{label:A.caterLane.label,sub:"prep plan vs date"}],A.ahead,-1,(l,i)=>rs.filter(r=>r.slot===i))}
+  return h;
 }
-
+function renderTerritory(){
+  let h=`<div class="zones">`;
+  for(const [k,n] of A.zones){const rs=rooms.filter(r=>r.zone===k);
+    h+=`<div class="zone${k==="o"?" out":""}" style="grid-area:${k}"><h4>${n}<span>${rs.length} · ${rs.filter(r=>r.state==="need"||r.state==="stuck").length} look</span></h4>${cellsHTML(rs)}</div>`}
+  h+=`</div><div class="sub-h">Technician board<span class="meta">${A.com?"contract calls are timed against their response terms":"arrival windows promised to households"}</span></div>`;
+  const lanes=A.techs.map(t=>({label:t})).concat(A.com?[{label:"Planned maintenance",sub:"by site"}]:[]);
+  h+=grid(lanes,A.windows,A.nowIdx,(l,i)=>rooms.filter(r=>r.tech===l.label&&r.slot===i));
+  return h;
+}
+function renderVet(){
+  let h="";
+  if(A.clinic){h+=`<div class="sub-h" style="margin-top:0">Appointment book<span class="meta">${A.focus==="exotic"?"longer slots for exotics":"vets and nurse clinics by hour"}</span></div>`;
+    h+=grid(A.vets.map(v=>({label:v})),A.hours,A.nowIdx,(l,i)=>rooms.filter(r=>r.area==="clinic"&&r.lane===l.label&&r.slot===i))}
+  if(A.road){const rv=[...new Set(rooms.filter(r=>r.area==="road").map(r=>r.lane))];
+    h+=`<div class="sub-h"${A.clinic?"":` style="margin-top:0"`}>The round<span class="meta">${A.focus==="large"?"one square is one farm visit; head count in the title":"yards and farms in driving order"}</span></div>`;
+    h+=grid(rv.map(v=>({label:v,sub:"on the road"})),["Stop 1","Stop 2","Stop 3","Stop 4","Stop 5"],1,(l,i)=>rooms.filter(r=>r.area==="road"&&r.lane===l.label&&r.slot===i))}
+  if(A.ward){const w=A.ward;
+    h+=`<div class="sub-h">${w.label}<span class="meta">${rooms.filter(r=>r.area==="ward").length} of ${w.n} occupied</span></div><div class="ward">`;
+    for(let b=1;b<=w.n;b++){const r=rooms.find(x=>x.area==="ward"&&x.bed===b);
+      h+=r?`<button class="bed" data-id="${r.id}"><span class="bn">${w.unit} ${b}<i class="${cls(r)}" aria-hidden="true"></i></span><span class="bt">${r.title}</span><span class="bc">${r.state==="need"?"needs "+r.who:r.state==="stuck"?"held "+hrs(r.age):w.check}</span></button>`
+       :`<div class="bed empty"><span class="bn">${w.unit} ${b}</span><span class="bc">free</span></div>`}
+    h+=`</div>`}
+  if(A.focus==="large"){h+=`<div class="sub-h">Testing campaign<span class="meta">TB tests this quarter: one square per farm</span></div>`+cellsHTML(rooms.filter(r=>r.area==="road").slice(0,14))}
+  return h;
+}
 function renderStage(){
-  $("lensTitle").textContent="Where work is, and how long it has been there";
-  const cols=A.cols, W=150,H=230, maxR=7;
+  const cols=A.cols, W=150,H=230,maxR=7;
+  const yOf=ratio=>{const t=Math.log(1+ratio)/Math.log(1+maxR);return H-6-(H-14)*t};
   let h=`<div class="stagewrap"><div class="stagelens" style="grid-template-columns:repeat(${cols.length},minmax(0,1fr))">`;
-  for(const c of cols){
-    const rs=rooms.filter(r=>r.fam===c&&r.state!=="done");
-    const late=rs.filter(r=>r.age/r.p50>1.9).length;
+  for(const c of cols){const rs=rooms.filter(r=>r.fam===c&&r.state!=="done"), late=rs.filter(r=>r.age/r.p50>1.9).length;
     h+=`<div class="col"><h3>${c}</h3><div class="cm">${rs.length} here · ${late} past usual</div>
-      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${c}: ${rs.length} rooms">
-      <rect x="0" y="0" width="${W}" height="${yOf(4)}" fill="var(--band95)"/>
-      <rect x="0" y="${yOf(4)}" width="${W}" height="${yOf(1.9)-yOf(4)}" fill="var(--band85)"/>
-      <rect x="0" y="${yOf(1.9)}" width="${W}" height="${H-yOf(1.9)}" fill="var(--band50)"/>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${c}: ${rs.length}">
+      <rect x="0" y="0" width="${W}" height="${yOf(4)}" fill="var(--band95)"/><rect x="0" y="${yOf(4)}" width="${W}" height="${yOf(1.9)-yOf(4)}" fill="var(--band85)"/><rect x="0" y="${yOf(1.9)}" width="${W}" height="${H-yOf(1.9)}" fill="var(--band50)"/>
       <text x="3" y="${yOf(1)-3}">usual</text><line x1="0" x2="${W}" y1="${yOf(1)}" y2="${yOf(1)}" stroke="var(--line)" stroke-dasharray="3 3"/>
-      ${rs.map(r=>{const x=10+([...r.id].reduce((a,ch)=>(a*31+ch.charCodeAt(0))%997,7)/997)*(W-20),y=yOf(Math.min(r.age/r.p50,maxR));const col=r.state==="need"?"var(--need)":r.state==="stuck"?"var(--stuck)":r.state==="live"?"var(--cell-live)":r.state==="stale"?"none":"var(--cell)";
-        const op=filter&&r.state!==filter?.15:1;
-        return r.state==="need"?`<rect class="dot" data-id="${r.id}" x="${x-4}" y="${y-4}" width="8" height="8" transform="rotate(45 ${x} ${y})" fill="${col}" opacity="${op}" style="cursor:pointer"/>`
-        :`<circle class="dot" data-id="${r.id}" cx="${x}" cy="${y}" r="${selected===r.id?6:4}" fill="${col}" stroke="${r.state==="stale"?"var(--muted)":selected===r.id?"var(--accent)":"none"}" stroke-width="1.5" opacity="${op}" style="cursor:pointer"/>`}).join("")}
-      </svg></div>`;
-    function yOf(ratio){const t=Math.log(1+ratio)/Math.log(1+maxR);return H-6-(H-14)*t}
-  }
-  h+=`</div></div><p class="meta" style="margin:8px 0 0">Higher means older than usual for that step. Bands: usual, past the 85th percentile, far past it.</p>`;
-  $("lensBody").innerHTML=h;
+      ${rs.map(r=>{const x=10+([...r.id].reduce((a,ch)=>(a*31+ch.charCodeAt(0))%997,7)/997)*(W-20),y=yOf(Math.min(r.age/r.p50,maxR));
+        const col=r.state==="need"?"var(--need)":r.state==="stuck"?"var(--stuck)":r.state==="live"?"var(--cell-live)":r.state==="stale"?"none":"var(--cell)", op=filter&&r.state!==filter?.15:1;
+        return r.state==="need"?`<rect data-id="${r.id}" x="${x-4}" y="${y-4}" width="8" height="8" transform="rotate(45 ${x} ${y})" fill="${col}" opacity="${op}" style="cursor:pointer"/>`
+        :`<circle data-id="${r.id}" cx="${x}" cy="${y}" r="${selected===r.id?6:4}" fill="${col}" stroke="${r.state==="stale"?"var(--muted)":selected===r.id?"var(--accent)":"none"}" stroke-width="1.5" opacity="${op}" style="cursor:pointer"/>`}).join("")}
+      </svg></div>`}
+  return h+`</div></div><p class="meta" style="margin:8px 0 0">The same stage lens for every business. Higher means older than usual for that step.</p>`;
 }
-
 function renderRhythm(){
   $("rhythm").innerHTML=standing.map(s=>`<div class="rh"><span class="nm">${s.n}</span><span class="ticks" aria-label="${s.t.filter(t=>t!=="ok").length} late or missed of 14">${s.t.map(t=>`<i class="tick ${t==="ok"?"":t}"></i>`).join("")}</span><span class="nx">next in ${s.nx}</span></div>`).join("");
 }
-
+const EMPTY=`<h2>Room</h2><p class="empty">Select a square to see its steps, what it is doing now and who is accountable.</p>`;
 function renderInsp(){
-  const r=rooms.find(x=>x.id===selected); if(!r) return;
+  const r=rooms.find(x=>x.id===selected); if(!r){$("insp").innerHTML=EMPTY;return}
   const items=r.stages.map((s,i)=>{const k=i<r.si?"done":i===r.si?"cur":"todo";
     return `<li class="${k}"><i class="ic ${k}${k==="cur"&&(r.state==="need"||r.state==="stuck")?" "+r.state:""}" aria-hidden="true">${k==="done"?"✓":""}</i><span>${s}</span></li>`}).join("");
   const now=r.state==="done"?"Finished today":r.state==="need"?`Waiting for ${r.who} to decide`:r.state==="stuck"?`Held at ${r.stage}`:r.state==="stale"?`No signal for ${hrs(r.age)}`:r.now;
+  const yard=r.com?"contract response":r.lane==="take"||r.lane==="deliv"?"promised time":"usual";
+  const where=r.port?PORTS.find(p=>p[0]===r.port)[1]:r.zone?A.zones.find(z=>z[0]===r.zone)[1]+" · "+r.tech:r.lane==="cater"?"Catering, "+A.ahead[r.slot]:r.area==="ward"?A.ward.unit+" "+r.bed:r.lane+(A.periods?" · "+A.periods[r.slot]:"");
   $("insp").innerHTML=`<div class="eyebrow">${r.id} · ${r.shape}</div><h2 style="margin-top:4px;font-size:18px">${r.title}</h2>
    <ul class="steps">${items}</ul>
    <div class="nowline">${r.state==="live"?`<span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`:""}<span>${now}</span><span class="meta" id="since">${r.state==="live"?r.since+"s":""}</span></div>
-   ${r.state==="need"?`<div class="callout need">Needs ${r.who}: approve ${r.stage.toLowerCase()} so the room can continue. Waiting ${hrs(r.age)}, usually ${hrs(r.p50)}.</div>`:""}
-   ${r.state==="stuck"?`<div class="callout stuck">Held ${hrs(r.age)} at ${r.stage}. Cause recorded by the drive: no AI coordinator assigned. Recovery: appoint one.</div>`:""}
-   <dl><dt>Accountable</dt><dd>${r.who}</dd><dt>Portfolio</dt><dd>${PORTS.find(p=>p[0]===r.port)[1]}</dd><dt>At this step</dt><dd>${hrs(r.age)} (usual ${hrs(r.p50)})</dd></dl>
-   <div class="btns"><button class="btn">Open room</button><button class="ghost">Show in flow map</button></div>`;
+   ${r.state==="need"?`<div class="callout need">Needs ${r.who} at ${r.stage}. Waiting ${hrs(r.age)}, ${yard} ${hrs(r.p50)}.</div>`:""}
+   ${r.state==="stuck"?`<div class="callout stuck">Held ${hrs(r.age)} at ${r.stage}. The recorded cause and recovery appear here.</div>`:""}
+   <dl><dt>Accountable</dt><dd>${r.who}</dd><dt>Where</dt><dd>${where}</dd><dt>At this step</dt><dd>${hrs(r.age)} (${yard} ${hrs(r.p50)})</dd></dl>
+   <div class="btns"><button class="btn">Open room</button></div>`;
 }
-let sinceTimer;
 function select(id){selected=id;renderLens();renderInsp();if(innerWidth<980)$("insp").scrollIntoView({behavior:"smooth",block:"start"})}
-
 function renderFeed(){$("feed").innerHTML=feed.slice(0,6).map(f=>`<li><span class="tm">${f.t}</span><span><b>${f.title}</b> ${f.msg}</span></li>`).join("")||`<li><span class="tm">—</span><span>Live changes appear here.</span></li>`}
-function renderLens(){lens==="map"?renderMap():renderStage();$("count").textContent=`${rooms.length} rooms · updated just now`;wire()}
-function renderAll(){renderQuestion();renderTriage();renderLens();renderRhythm();renderInsp();renderFeed()}
-
+function renderLens(){
+  $("lensTitle").textContent=lens==="map"?A.lensTitle:"Where work is, and how long it has been there";
+  $("lensBody").innerHTML=lens==="stage"?renderStage():A.layout==="portfolio"?renderPortfolio():A.layout==="floor"?renderFloor():A.layout==="territory"?renderTerritory():renderVet();
+  $("count").textContent=`${rooms.length} ${A.unit} · updated just now`; wire();
+}
+function renderAll(){renderRefine();renderShaped();renderQuestion();renderTriage();renderLens();renderRhythm();renderInsp();renderFeed()}
+function reset(){build(KEY);selected=null;filter=null;renderAll()}
 function wire(){
-  document.querySelectorAll("[data-id]").forEach(el=>{
+  document.querySelectorAll("#lensBody [data-id]").forEach(el=>{
     el.onclick=()=>select(el.dataset.id);
     el.onmouseenter=e=>{const r=rooms.find(x=>x.id===el.dataset.id);const t=$("tip");t.innerHTML=`<b>${r.title}</b><br>${r.stage} · ${label(r)} · ${hrs(r.age)}`;t.style.display="block";move(e)};
     el.onmousemove=move; el.onmouseleave=()=>$("tip").style.display="none";
@@ -386,33 +569,25 @@ function move(e){const t=$("tip");t.style.left=Math.min(e.clientX+12,innerWidth-
 function tick(){
   if(paused) return;
   const cands=rooms.filter(r=>r.state==="live"||r.state==="wait");
-  for(let k=0;k<2;k++){
-    const r=cands[Math.floor(Math.random()*cands.length)]; if(!r) continue;
+  for(let k=0;k<2;k++){const r=cands[Math.floor(Math.random()*cands.length)]; if(!r) continue;
     const x=Math.random(); let msg;
     if(r.state==="wait"){r.state="live";msg="started "+r.stage}
-    else if(x<.55&&r.si<r.stages.length-1){r.si++;r.stage=r.stages[r.si];r.fam=A.fam[r.stage];r.age=.1;r.now=pick(A.verbs[r.fam]||["Working"]);msg="moved to "+r.stage}
+    else if(x<.55&&r.si<r.stages.length-1){r.si++;r.stage=r.stages[r.si];r.fam=A.fam[r.stage]||r.fam;r.age=.1;r.now=pick(A.verbs[r.fam]||["Working"]);msg="moved to "+r.stage}
     else if(x<.75){r.state="need";msg="is waiting for "+r.who}
     else if(r.si>=r.stages.length-1){r.state="done";r.si=r.stages.length;msg="finished"}
     else {r.now=pick(A.verbs[r.fam]||["Working"]);msg="· "+r.now.toLowerCase()}
-    const d=new Date();feed.unshift({t:d.toTimeString().slice(0,5),title:r.title,msg});
-    r.pulse=true;
-  }
+    feed.unshift({t:new Date().toTimeString().slice(0,5),title:r.title,msg}); r.pulse=true;}
   renderQuestion();renderTriage();renderLens();renderFeed();if(selected)renderInsp();
-  rooms.filter(r=>r.pulse).forEach(r=>{const el=document.querySelector(`.cell[data-id="${r.id}"]`);if(el)el.classList.add("pulse");r.pulse=false});
+  rooms.filter(r=>r.pulse).forEach(r=>{const el=document.querySelector(`#lensBody .cell[data-id="${r.id}"]`);if(el)el.classList.add("pulse");r.pulse=false});
 }
 setInterval(tick,2600);
-setInterval(()=>{const s=$("since");if(s&&s.textContent){s.textContent=(parseInt(s.textContent)+1)+"s"}$("clock").textContent=new Date().toTimeString().slice(0,8)},1000);
+setInterval(()=>{const s=$("since");if(s&&s.textContent)s.textContent=(parseInt(s.textContent)+1)+"s";$("clock").textContent=new Date().toTimeString().slice(0,8)},1000);
 
-$("arch").onchange=e=>{build(e.target.value);selected=null;open.clear();filter=null;$("insp").innerHTML=`<h2>Room</h2><p class="empty">Select a square to see its steps, what it is doing now and who is accountable.</p>`;renderAll()};
+$("arch").onchange=e=>{KEY=e.target.value;reset()};
 $("lensMap").onclick=()=>{lens="map";$("lensMap").setAttribute("aria-pressed","true");$("lensStage").setAttribute("aria-pressed","false");renderLens()};
 $("lensStage").onclick=()=>{lens="stage";$("lensStage").setAttribute("aria-pressed","true");$("lensMap").setAttribute("aria-pressed","false");renderLens()};
 $("pause").onclick=()=>{paused=!paused;$("pause").setAttribute("aria-pressed",paused);$("pause").textContent=paused?"Resume live":"Pause live"};
 if(paused){$("pause").setAttribute("aria-pressed","true");$("pause").textContent="Resume live"}
-
-build("software");
-// open on a realistic state: one group expanded, the oldest "needs you" room selected
-open.add("manufactureAndDeliver");
-selected=rooms.filter(r=>r.state==="need").sort((a,b)=>b.age-a.age)[0].id;
-renderAll();
+reset();
 })();
 </script>

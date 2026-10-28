@@ -123,7 +123,7 @@ Nothing new is declared. The Atlas reads fields that already exist:
 | Default lens and leading group | `ActivationProfile.portfolios` primary scope. A software platform leads with Manufacturing and Delivery; a restaurant or HVAC contractor leads with its service stream |
 | Standing operations | `standing-rooms.ts` for the archetype |
 
-The prototype's archetype switch shows the same layout answering "Are we ready for the next service period?" for a restaurant and "What has to be dispatched or rescued today?" for an HVAC contractor.
+The layout is tailored per business. A restaurant sees its service day by channel, an HVAC firm sees its service area and technician board, and a vet practice sees its book, farm round or ward. Practice focus, service channels, customer segment and location refine these layouts further. The state glyphs never change between businesses. The full design is in [Work Atlas: tailoring the picture to the business](2026-10-27-work-atlas-archetype-tailoring-design.md), and the prototype's business switch and refinement chips demonstrate it.
 
 ## 4. Data: one bounded projection built from what exists
 
@@ -230,7 +230,9 @@ Anti-patterns avoided:
 3. **A3 Room inspector checklist.** Restyle the PWA-03 inspector with the stage list and the live line.
 4. **A4 Rhythm strip for standing rooms.**
 5. **A5 Stage lens.** Depends on the workroom queue emitter. Falls back to absolute age until it exists.
-6. **A6 Archetype bindings and the Just now feed.**
+6. **A6 Business layouts and the Just now feed.** Split in the [tailoring spec](2026-10-27-work-atlas-archetype-tailoring-design.md) §8:
+   - **A6a:** layouts from the twin template, which need no new data.
+   - **A6b:** refinements. Waits on the facet decision (BI-7EE5681A).
 
 Each item is filed under BI-B3D87B06 once the design is approved. Every item that replaces something in §6 retires or redirects it in the same PR and updates the user guide; an item is not done while the old view still draws its own copy. The UX-fit, accessibility and `principle_decide` (`human_cognitive_load`) gates apply to A2 and A3, and the critic's findings on the served page are recorded against the calibrated corpus.
 
