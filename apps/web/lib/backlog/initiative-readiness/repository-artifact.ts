@@ -297,9 +297,20 @@ function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | 
   return `${capsule.capsuleId} (${branch}) has ${capsule.headSha ? `head ${capsule.headSha}` : "no recorded head"}`;
 }
 
+/**
+ * BI-CE661173: the receipt writer's own proof, resolved from the trunk outside
+ * any transaction, that a post-implementation review's locator is the merged
+ * squash commit that delivered the item, anchored to its delivery room. It lets
+ * that room be retired (a merged repair's room normally is) and replaces the
+ * "a later branch head still carries this blob" check, because the trunk commit
+ * itself is the delivered source. Never accepted from a caller.
+ */
+export type MergedRepairProof = { workroomId: string; commitSha: string };
+
 export async function resolveRepositoryArtifact(args: {
   locator: RepositoryLocator;
   subject: InitiativeSubject;
+  mergedRepairProof?: MergedRepairProof;
   /** Internal context from the accepted TaskRun; never a caller-selected head. */
   workroomRef?: InitiativeReviewBinding["workroomRef"];
   /** Current baseline/coverage proof resolved internally by the receipt writer. */
@@ -338,12 +349,18 @@ export async function resolveRepositoryArtifact(args: {
   // so a head mismatch can name the stale capsule and its remedy instead of
   // failing as an undifferentiated "missing or ambiguous" (BI-B9403248). Bounded:
   // a subject carries a handful of capsules, and the limit keeps it that way.
+  const liveCapsule = { archivedAt: null, status: { notIn: ["abandoned", "cancelled"] } };
+  const mergedRepair = args.mergedRepairProof && args.workroomRef
+    && args.mergedRepairProof.workroomId === args.workroomRef.workroomId
+    && args.mergedRepairProof.commitSha.toLowerCase() === args.locator.commitSha.toLowerCase()
+    ? args.mergedRepairProof : null;
   const candidates = await db.workroom.findMany({
     where: {
       ...subjectWhere,
       repositoryFullName: args.locator.repositoryFullName,
-      archivedAt: null,
-      status: { notIn: ["abandoned", "cancelled"] },
+      ...(mergedRepair
+        ? { OR: [liveCapsule, { capsuleId: mergedRepair.workroomId, status: { notIn: ["abandoned", "cancelled", "superseded"] } }] }
+        : liveCapsule),
     },
     take: CAPSULE_CANDIDATE_LIMIT,
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -421,7 +438,7 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
-    if (boundRoom && !planProof && boundRoom.headSha.toLowerCase() !== args.locator.commitSha.toLowerCase()) {
+    if (boundRoom && !planProof && !mergedRepair && boundRoom.headSha.toLowerCase() !== args.locator.commitSha.toLowerCase()) {
       // The review retains the immutable original locator. A later branch head
       // may own it only when the provider proves the same path/blob is present.
       const currentBlob = await fetchRepositoryProviderBlob({

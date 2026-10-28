@@ -11,6 +11,7 @@
  * provenance. It is pure and dependency-injected: no Prisma, no fetch.
  */
 
+import { outcomeUnlessStated } from "@/lib/backlog/intake-outcome";
 import { createHash } from "crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
@@ -140,9 +141,16 @@ function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin
 /** Map one inbound item onto the backlog front door's input contract. */
 export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestInput {
   const scope = parseArchetypeRefs(item.archetypeRefs);
+  const body = composeInboundBody(item);
+  // BI-458CCA8D: keep the requester's own outcome; derive one only when they stated none.
+  const outcome = outcomeUnlessStated(
+    body,
+    `${item.submitter ? `The requesting install \`${item.submitter}\`` : "The requester"} gets "${item.title.trim()}", or a clear answer (${item.sourceKind} ${item.sourceId}).`,
+  );
   return {
     title: item.title.slice(0, 500),
-    body: composeInboundBody(item),
+    body,
+    ...(outcome ? { outcome } : {}),
     // The origin really is a person at another install asking for something;
     // it merely ARRIVES by automation. Recording it as automated-detection
     // would erase the submitter the arbitration model depends on.

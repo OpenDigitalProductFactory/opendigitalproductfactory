@@ -16,6 +16,7 @@ import {
   classifyIssueReportStream,
   isResponderStream,
 } from "@/lib/quality/issue-report-stream";
+import { composeIntakeBody, issueReportOutcome } from "@/lib/backlog/intake-outcome";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -442,6 +443,10 @@ export async function triageIssueReports(deps: {
       }
     }
     if (deps.claimReport && !(await deps.claimReport(report.id))) continue;
+    // BI-458CCA8D: the item states the outcome that defines done — the reported
+    // problem stops happening. Composed last so it leads the body whichever
+    // path (crash-honest, model-enhanced, basic) built it.
+    data.body = composeIntakeBody({ body: data.body, outcome: issueReportOutcome(report) });
     try {
       await deps.createBacklogItem(data);
     } catch (err) {
@@ -496,7 +501,11 @@ export async function checkForSpike(deps: {
   await deps.createBacklogItem({
     itemId: `BI-PIR-SPIKE-${crypto.randomUUID().slice(0, 8)}`,
     title: spikeTitle,
-    body: `Automated spike detection triggered. ${lastHourCount} issue reports filed in the last hour, compared to a 7-day average of ${avgHourly.toFixed(1)} per hour. Review Admin > Issue Reports for details.`,
+    body: composeIntakeBody({
+      // BI-458CCA8D: a spike is done when the rate is back to normal.
+      outcome: `Issue reports fall back to their usual rate (about ${avgHourly.toFixed(1)} per hour) once the cause of this spike is fixed.`,
+      body: `Automated spike detection triggered. ${lastHourCount} issue reports filed in the last hour, compared to a 7-day average of ${avgHourly.toFixed(1)} per hour. Review Admin > Issue Reports for details.`,
+    }),
     status: "open",
     type: "product",
     priority: 1,

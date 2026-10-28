@@ -16,7 +16,8 @@ it does not infer immutable identity from arbitrary caller names or timestamps.
 Other sources retain their existing persistence contract. In particular, the
 daily Workroom flow review and skill curator still increment a persistent
 signal and file it through `ingestBacklogItem` at the existing threshold of
-three. The signal's stable origin binds the backlog intake and backlink. A
+three. The signal's stable origin binds the backlog intake and backlink. The
+filed item states its outcome: the signal stops recurring (BI-458CCA8D). A
 failed intake leaves the signal available for later projection. Critical
 MCP/A2A findings keep their direct source-specific intake paths.
 

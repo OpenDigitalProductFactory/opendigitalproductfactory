@@ -106,6 +106,8 @@ export function sustainedBottleneckIntake(
   const routing = flowBottleneckRouting(pile.shapeRef, pile.stageKey);
   return {
     title: `Work keeps piling up at "${names.stageTitle}" in ${names.shapeTitle} (${why(pile.cause)})`,
+    // BI-458CCA8D: done when the next review stops naming this step.
+    outcome: `Work stops piling up at "${names.stageTitle}" in ${names.shapeTitle}: the next flow review no longer names it as the bottleneck.`,
     body: [
       `Two consecutive flow reviews of ${pile.shapeRef} named the same bottleneck: step "${names.stageTitle}" (${pile.stageKey}), ${why(pile.cause)}.`,
       `Reviews: ${pile.reviews.join(", ")}. At the latest, ${pile.roomsHeld} rooms were held there${pile.waitMs != null ? `, typically waiting ${Math.round(pile.waitMs / 3_600_000)}h` : ""}.`,

@@ -129,6 +129,34 @@ describe("resolveRepositoryArtifact", () => {
     }) }));
     if (["missing", "branch", "head", "repository", "duplicate"].includes(drift)) expect(fetchImpl).not.toHaveBeenCalled();
   });
+  it("reads a merged repair's squash commit through its retired delivery room only with the server's merged-repair proof (BI-CE661173)", async () => {
+    const headSha = "c".repeat(40);
+    const workroomRef = { kind: "workroom-head" as const, workroomId: "WC-TEST0001",
+      repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha };
+    const store = db({ capsules: [capsule({ headSha })] });
+    const fetchImpl = providerFetch();
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef, mergedRepairProof: { workroomId: "WC-TEST0001", commitSha: locator.commitSha },
+      db: store as never, fetchImpl: fetchImpl as typeof fetch });
+    expect(result).toMatchObject({ ok: true, artifact: { bytes, authorPrincipalId: "principal-author" } });
+    // The retired anchor room is admitted by capsule id; live capsules keep their filter.
+    expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      OR: [{ archivedAt: null, status: { notIn: ["abandoned", "cancelled"] } },
+        { capsuleId: "WC-TEST0001", status: { notIn: ["abandoned", "cancelled", "superseded"] } }],
+    }) }));
+    // The trunk commit is the delivered source: the branch head is not asked to carry the blob.
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${locator.commitSha}`), expect.anything());
+
+    // A proof for another room or another commit is ignored: the live-capsule rules apply.
+    for (const proof of [{ workroomId: "WC-OTHER", commitSha: locator.commitSha }, { workroomId: "WC-TEST0001", commitSha: "e".repeat(40) }]) {
+      const other = db({ capsules: [capsule({ headSha })] });
+      await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" }, workroomRef,
+        mergedRepairProof: proof, db: other as never, fetchImpl: providerFetch() as typeof fetch });
+      expect(other.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+        archivedAt: null, status: { notIn: ["abandoned", "cancelled"] } }) }));
+    }
+  });
   it("resolves the unchanged historical plan through its exact current server-bound workroom", async () => {
     const headSha = "45eb029a53ffd593f08be48eb4a061488aaa735f";
     const original = { ...locator, commitSha: "99986af2a1fb1ff8d041ca7d9080ea6d02a4f963" };

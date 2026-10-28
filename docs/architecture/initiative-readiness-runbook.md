@@ -69,7 +69,8 @@ This retains source authorship; it grants no execution lease or room admission.
 The reviewer TaskRun, OAuth authority, content access and author separation must
 remain current. Missing merge proof calls for source/observation reconciliation,
 not repeated reopening of a room the reaper correctly considers delivered.
-Spec and post-implementation review retain their existing live-room requirement.
+Spec review retains its live-room requirement. Post-implementation review after
+merge does not; see the break-fix paragraph in §1.
 
 Changed criteria, source identity, organization or eligible evidence reject old
 requests. Refresh recovery for a current successor; unchanged retries reuse the
@@ -108,6 +109,35 @@ and explanatory docs do not change that identity. Multiple implementation
 files without a canonical design remain an explicit scope ambiguity. Use the
 returned reviewer packet unchanged; deployment evidence and an independent
 receipt are still required. This does not relax design-approval gates.
+
+After merge the delivering room is usually archived or idle, so no live room
+exists (BI-CE661173). The review then reads the merged squash commit on
+`origin/main`, comparing its parent with the commit. The commit is the one
+that delivered the item under the PR-submit rule, or the squash commit of the
+PR the room recorded. It must be committed after the latest reopen and must not
+be reverted. The item's newest delivery room is the request's anchor: its
+recorded branch and head are what admission, the PIR evidence context and the
+receipt writer match. A room whose recorded base equals its head reads the same
+merged commit. No live room is reopened.
+
+Every delivery actor is excluded from reviewing a merged repair, not just the
+caller. That set is everyone who created, held or worked in any of the item's
+rooms, plus its claimant (`delivery-actors.ts`). The receipt writer re-reads the
+trunk before it publishes. If the reviewed commit is no longer the item's
+merged delivery from that room, or the reviewer is a delivery actor, the write
+is refused.
+
+Escalations: `merged-delivery-not-found` means no standing delivering commit
+exists. `merged-delivery-ambiguous` means several PRs delivered the item.
+`delivery-actors-unbounded` means the item has too many rooms to bound the
+actor set.
+
+Every two minutes the platform reviewer dispatch
+([`server-reviewer-dispatch.ts`](../../apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts))
+checks awaiting-acceptance break-fix items whose rooms are all retired. It sends
+the issued packet on the author's own live connection, so no person is involved.
+A multi-file repair still escalates `ambiguous-repair-artifact` until a
+whole-range review artifact exists.
 
 The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
 

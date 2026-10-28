@@ -69,3 +69,50 @@ export function customerInquiryOutcome(args: {
     ? `${customer} gets what they asked about ${item}, or a clear answer (${args.inquiryRef}).`
     : `${customer} gets what they asked for, or a clear answer (${args.inquiryRef}).`;
 }
+
+// ─── Derived outcomes (BI-458CCA8D) ──────────────────────────────────────────
+// Routes that file work without a person typing an outcome (detectors, triage
+// projections, decomposition) derive one from what they observed. The text is
+// deterministic — no model call — so the same detection always states the same
+// outcome, and it names the thing that will stop happening or start working.
+
+/**
+ * The derived outcome, unless the body already states one. Routes that carry
+ * someone else's request (a peer install, an upstream issue) keep the outcome
+ * that person wrote and derive one only when they wrote none.
+ */
+export function outcomeUnlessStated(body: string | null | undefined, derived: string): string | null {
+  return statesOutcome(body) ? null : derived;
+}
+
+/** A reported platform problem (issue-report triage, admin "send to Build Studio"). */
+export function issueReportOutcome(report: {
+  title: string;
+  routeContext?: string | null;
+  reportId: string;
+}): string {
+  const route = text(report.routeContext);
+  return `"${report.title.trim()}" no longer happens${route ? ` on ${route}` : ""} (${report.reportId}).`;
+}
+
+/** Technical debt logged through register_tech_debt when the filer states no outcome. */
+export function techDebtOutcome(title: string): string {
+  return `The shortcut "${title.trim()}" is replaced by the intended design, so nothing has to work around it.`;
+}
+
+/** A recurring failure the platform captured (build, self-upgrade, functional test). */
+export function recurringFailureOutcome(what: string): string {
+  return `${what.trim()} stops recurring: the next run that used to fail succeeds.`;
+}
+
+/** An improvement proposal filed as work: the friction it names stops, or the proposal is in place. */
+export function improvementProposalOutcome(proposal: {
+  title: string;
+  proposalId: string;
+  observedFriction?: string | null;
+}): string {
+  const friction = text(proposal.observedFriction);
+  return friction
+    ? `The friction this proposal names no longer happens: ${friction}`
+    : `"${proposal.title.trim()}" is in place, as proposed in ${proposal.proposalId}.`;
+}

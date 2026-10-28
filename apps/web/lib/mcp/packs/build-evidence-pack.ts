@@ -1,3 +1,4 @@
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import {redactDiagnosticEvidenceText as redactFunctionalFailureText} from "@/lib/shared/diagnostic-evidence-redaction";
 // Build-evidence tool pack — scoped ToolPack extraction.
 //
@@ -366,15 +367,19 @@ async function recordFunctionalFailureEvidenceHandler(
         submittedById: userId,
         agentId: context?.agentId ?? agentId ?? null,
         lastSeenAt: new Date(createdAt),
-        body: [
-          `failureFingerprint: ${failureFingerprint}`,
-          `ownerArea: ${likelyOwnerArea}`,
-          `route: ${route}`,
-          `suite: ${suite}`,
-          `expected: ${expected}`,
-          `actual: ${actual}`,
-          `repro: ${reproCommand}`,
-        ].join("\n"),
+        // BI-458CCA8D: done when the smoke passes again with the expected result.
+        body: composeIntakeBody({
+          outcome: `${testId} passes on ${route}: ${expected}`,
+          body: [
+            `failureFingerprint: ${failureFingerprint}`,
+            `ownerArea: ${likelyOwnerArea}`,
+            `route: ${route}`,
+            `suite: ${suite}`,
+            `expected: ${expected}`,
+            `actual: ${actual}`,
+            `repro: ${reproCommand}`,
+          ].join("\n"),
+        }),
       },
       select: { id: true, itemId: true, occurrenceCount: true },
     });
