@@ -142,7 +142,7 @@ export async function recordInitiativeGateReceipt(args: {
     && args.artifactRef.commitSha.toLowerCase() !== args.workroomRef.headSha.toLowerCase();
   let mergedRepairProof: { workroomId: string; commitSha: string } | undefined;
   if (mergedRepairReview) {
-    const { defaultLoadMergedRepairSource } = await import("./terminal-recovery");
+    const { defaultLoadMergedRepairSource } = await import("./merged-repair-source");
     const source = await defaultLoadMergedRepairSource({ itemId: item.itemId, refusedWorkroomId: args.workroomRef!.workroomId });
     const ref = args.workroomRef!;
     if (source.kind !== "found" || args.artifactRef.kind !== "repo-blob-at-commit"

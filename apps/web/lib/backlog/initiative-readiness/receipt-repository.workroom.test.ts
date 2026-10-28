@@ -7,7 +7,7 @@ vi.mock("./canonical-plan-source", async (importOriginal) => ({
 }));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: io.artifact }));
 const merged = vi.hoisted(() => ({ source: vi.fn() }));
-vi.mock("./terminal-recovery", () => ({ defaultLoadMergedRepairSource: merged.source }));
+vi.mock("./merged-repair-source", () => ({ defaultLoadMergedRepairSource: merged.source }));
 vi.mock("./reviewer-identity", async (importOriginal) => ({
   ...await importOriginal<typeof import("./reviewer-identity")>(),
   resolveReviewerIdentity: async () => ({ principalId: "principal-reviewer", kind: "coworker" }),
