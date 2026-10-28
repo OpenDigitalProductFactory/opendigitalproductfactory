@@ -7,9 +7,9 @@ status: draft
 **Backlog:** BI-81AB897A. **Workroom:** WC-6D8C9787.
 **Status:** proposed integration scope; independent approval pending.
 
-The confirmed task scope is investigation and an improvement plan. The October
-28 request asks to complete this thread's outcomes; clarification of whether it
-also extends to implementation is pending. This commit changes documents only.
+The operator reconfirmed investigation and an improvement plan after the October
+28 completion request. Implementation and deployment are outside this task.
+This commit changes documents only.
 Future execution needs operator scope authorization and current shape, coverage
 and independent admission. Within an authorized scope, a phase change alone
 does not require another confirmation.

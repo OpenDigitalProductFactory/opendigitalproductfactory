@@ -1,12 +1,27 @@
 # Portal outcome assessment
 
 **Backlog:** BI-81AB897A. **Workroom:** WC-6D8C9787. **Date:** 2026-10-28.
-**Status:** assessment in progress; implementation and whole-journey acceptance outstanding.
+**Scope:** investigation and improvement plan, confirmed by the operator.
+Runtime repairs and exhaustive journey verification are follow-on work.
+
+## What the incident establishes
+
+The screenshot does not establish that all clients use an incorrect connection.
+Its rows are credential observations, and identical version numbers can still
+refer to different loaded files. Authentication, installed copies, loaded session
+files and the published release need distinct evidence.
+
+The coworker failure crosses three seams: the selected specialist, missing page
+facts in its context, and a failed request with no established executable
+continuation. Workrooms already provide much of the intended architecture;
+the proposal completes and verifies those connections instead of replacing it.
+The historical queue cause and effective historical grants remain unproven.
 
 ## Evidence boundary
 
 Source inspected: `a6137100ce4aa783cfcc5896773d2d0bb284ba19`.
-The canonical install serves `3a09e1b200b1a4e8eb871dc85290c371af8d6446`.
+The canonical install served `3a09e1b200b1a4e8eb871dc85290c371af8d6446`
+when the observations were collected.
 The checked-in preflight returned CAN-TEST for that served revision. These are
 different revisions; source observations do not establish deployment.
 Browser observations below used the existing signed-in operator fixture at
@@ -25,8 +40,8 @@ This export is evidence derived from the existing registries, not a new registry
 
 The CSV's static persona key `ops-coordinator` is the source identity whose
 display name is Scrum Master. Display labels and keys are not distinct owners.
-The confirmed scope is investigation and an improvement plan; extension to
-implementation is being clarified. Each proposed slice still owes scope
+The confirmed scope is investigation and an improvement plan. Implementation
+and deployment are outside this task. Each proposed slice still owes scope
 authorization and current independent admission, coverage and verification.
 This document commit changes no executable code and earns no runtime acceptance.
 
@@ -85,14 +100,36 @@ independent review/evidence recovery. BI-7906C73E owns the historical initiative
 proof lane; BI-8ECEC429 is a distinct semantic-review lane. An uncertain old
 execution must not be declared settled to enable a new review.
 
-The October 28 request is to complete this thread's desired outcomes. The earlier
-explicit scope is investigation and an improvement plan. A clarification is
-pending on whether implementation is also requested; no executable repair has
-been made. No instruction widens grants or settles historical reviews. The Workroom
+The operator reconfirmed investigation and improvement planning in response to
+the October 28 scope question. No executable repair is part of this task.
+No instruction widens grants or settles historical reviews. The Workroom
 reports unresolved funding attribution. No funding principal is inferred from
 the install, coordinator or executor, and no paid provider is added.
 
-## Completion oracle
+## Prioritized improvement decisions
+
+| Priority | Findings | Proposed change and accountable delivery home |
+| --- | --- | --- |
+| 1 — preserve work and prevent misleading outcomes | F2, F3, F5 | Share authorized client facts (BI-7CE02DE9, coworker-runtime maintainer); retain executable requests (BI-B7E2DD4B, inference/workflow maintainer); reconcile completion evidence (BI-69B29AEC, Build Studio maintainer). These role labels are proposed responsibilities, not new assignments or acknowledged handoffs. |
+| 2 — give recovery a current owner and next action | F1, F4, F6, F7 | Reuse toolchain/upgrade owners and Windows COO items; qualify stale monitoring/evidence obligations through BI-3EF5D3B2 with the compliance/operations owner. Preserve prior delivered fixes and unresolved proof. |
+| 3 — expand verified coverage by shared consumer | F8 | Extend BI-0DFE48B4's existing authorized-surface and purpose contracts from the client-help pilot, using the route export to expose unmeasured work. Promote a consumer to priority 1 whenever a shared defect blocks its critical job. |
+
+This supports coordinated changes across the portal, delivered in independently
+reviewable slices. Facts and completion projections can proceed independently
+after admission; COO-dependent dispatch waits on the existing COO gates. The
+plan defines test states, rollout, retained-record rollback and acceptance for
+each slice. A single sweeping release would obscure those boundaries.
+
+## Investigation completion and handoff
+
+This investigation's deliverables are the dated evidence/uncertainty register,
+exact source inventory with explicit unmeasured cells, existing-work and
+de-duplication map, prioritized repair decisions, COO dependency map, and proposed
+delivery/regression plan. Publication and final review receipts preserve the
+handoff. Investigation completion does not mean that runtime defects are repaired
+or that every portal route/state has been tested.
+
+## Repair-program acceptance
 
 The umbrella remains incomplete until the critical client-help journey has
 current shared facts, an authorized owner/handoff, retained executable intent,

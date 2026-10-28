@@ -7,8 +7,8 @@ status: draft
 **Parent:** BI-81AB897A. **Workroom:** WC-6D8C9787.
 **Status:** proposed decomposition; independent scope/plan approval and coverage receipt pending.
 
-The confirmed operator scope is investigation and an improvement plan. Whether
-the October 28 completion request also includes implementation is being clarified.
+The operator reconfirmed investigation and an improvement plan. Implementation
+and deployment are outside this task.
 This documentation commit authorizes no executable edit. Future slices need
 operator scope authorization plus current admission/coverage; within authorized
 scope, a phase change alone needs no further confirmation.
@@ -43,15 +43,15 @@ are acceptance IDs; V-* below names the additional test procedure.
 
 | Key / live item | Requirement references | Contract references | Flow references | Verification references | Dependencies |
 | --- | --- | --- | --- | --- | --- |
-| facts / BI-7CE02DE9 | OBJ-FACTS, AC-FACTS | shared-client-projection | client-help | V-FACTS | none |
-| continuity / BI-B7E2DD4B | OBJ-CONTINUITY, AC-CONTINUITY | durable-request-authority | accepted-turn-recovery | V-CONTINUITY | none for local adapter; COO follow-through integrates with BI-C43FD3E5 |
-| build-truth / BI-69B29AEC | OBJ-TRUTH, AC-TRUTH | canonical-build-progress | artifact-to-release | V-BUILD | none for projection |
-| freshness / BI-3EF5D3B2 | OBJ-TRUTH, OBJ-OWNERSHIP, AC-OWNERSHIP | background-observation | evidence-renewal-recovery | V-FRESHNESS | COO integration BI-C43FD3E5 |
-| coo-recovery / BI-C43FD3E5 | OBJ-OWNERSHIP, AC-OWNERSHIP | coordinated-workrooms | owner-acknowledgement-result | V-COO | historical proof BI-7906C73E; preserve distinct semantic-review and hydration-fence lanes |
-| coo-progress / BI-756C899D | OBJ-TRUTH, AC-TRUTH | effective-progress-clock | stall-to-owner | V-COO | existing Windows delivery plan |
-| coo-front-door / BI-80ADD3A8 | OBJ-OWNERSHIP, AC-OWNERSHIP | coordinator-authority | correct-specialist-handoff | V-COO | recorded employee clearance-policy decision |
-| perception-coverage / BI-0DFE48B4 | OBJ-COVERAGE, AC-COVERAGE | authorized-surface-contract | route-to-authorized-context | V-COVERAGE | facts pilot; expand by shared consumer |
-| upgrade-journey / BI-705CA714 | OBJ-FACTS, AC-FACTS | progressive-update-projection | condition-to-supported-repair | V-CLIENT | existing update-page delivery scope |
+| facts / BI-7CE02DE9 | OBJ-FACTS | shared-client-projection | client-help | AC-FACTS; V-FACTS | none |
+| continuity / BI-B7E2DD4B | OBJ-CONTINUITY | durable-request-authority | accepted-turn-recovery | AC-CONTINUITY, AC-REGRESSION; V-CONTINUITY | none for local adapter; COO follow-through integrates with BI-C43FD3E5 |
+| build-truth / BI-69B29AEC | OBJ-TRUTH | canonical-build-progress | artifact-to-release | AC-TRUTH; V-BUILD | none for projection |
+| freshness / BI-3EF5D3B2 | OBJ-TRUTH, OBJ-OWNERSHIP | background-observation | evidence-renewal-recovery | AC-OWNERSHIP; V-FRESHNESS | COO integration BI-C43FD3E5 |
+| coo-recovery / BI-C43FD3E5 | OBJ-OWNERSHIP | coordinated-workrooms | owner-acknowledgement-result | AC-OWNERSHIP; V-COO | historical proof BI-7906C73E; preserve distinct semantic-review and hydration-fence lanes |
+| coo-progress / BI-756C899D | OBJ-TRUTH | effective-progress-clock | stall-to-owner | AC-TRUTH; V-COO | existing Windows delivery plan |
+| coo-front-door / BI-80ADD3A8 | OBJ-OWNERSHIP | coordinator-authority | correct-specialist-handoff | AC-OWNERSHIP; V-COO | recorded employee clearance-policy decision |
+| perception-coverage / BI-0DFE48B4 | OBJ-COVERAGE | authorized-surface-contract | route-to-authorized-context | AC-COVERAGE, AC-REGRESSION; V-COVERAGE | facts pilot; expand by shared consumer |
+| upgrade-journey / BI-705CA714 | OBJ-FACTS | progressive-update-projection | condition-to-supported-repair | AC-FACTS; V-CLIENT | existing update-page delivery scope |
 
 Toolchain BI-63672FBE and reason-projection BI-3E66F76F are delivered
 predecessors. Their next-release/unattended and loaded-session acceptance remains
