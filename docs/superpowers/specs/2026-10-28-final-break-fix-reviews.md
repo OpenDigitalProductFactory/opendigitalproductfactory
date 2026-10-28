@@ -91,3 +91,9 @@ bound to this ordered design at `5a081d38986ca8aed17de484696116ecb4aa918e`.
 Research receipt: `initiative-48d6d442-3585-4747-94fa-d7b84874831e`.
 Implementation admission: `IRD-6C54B08185E0`, WC-9C19B12A.
 The PIR-RECOVERY deliverable maps to BI-AA8EE6CE with no independent children.
+
+The follow-up uses WC-3DB16894 and implementation admission IRD-841F333BBFF9.
+Its pre-code atomic coverage receipt is cmvsoc1w10apu01msubtmz1xr, bound to
+1d287f75d27f0599743e03e502ba2de72db4b8a8. The full scheduled-review grant
+invariant failed first (one failure, two passes), then passed after adding the
+workroom evidence writer to the existing reviewer profile.
