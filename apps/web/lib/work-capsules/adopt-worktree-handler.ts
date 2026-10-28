@@ -16,8 +16,8 @@ import { adoptWorktreeCapsule } from "./work-capsule-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { describeRoomOwnership, establishRoomOwnership, resolveRoomOwnershipPrincipals } from "./room-ownership";
 import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
-import { invalidSourceCommitField } from "./work-capsule-branch-identity";
 import { refuseUnlessAdoptionProvisions } from "./worktree-provision-gate";
+import { lazyResolverDeps, resolveSourceCommitShas, sourceCommitRefusal, type SourceCommitResolverDeps } from "./source-commit-resolution";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
 
@@ -44,6 +44,8 @@ export async function adoptWorktree(args: {
   resolveActor: (userId: string, context: ToolContext) => Promise<WorkCapsuleActor>;
   /** Principal.id of a user; used when an agent adopts without OAuth. */
   resolveUserPrincipalId?: (userId: string) => Promise<string | null>;
+  /** Test seam; production asks the repository provider and the recorded Workrooms. */
+  resolveCommitDeps?: (repositoryFullName: string) => Promise<SourceCommitResolverDeps>;
 }): Promise<ToolResult> {
   const { params } = args;
   const title = stringParam(params, "title");
@@ -60,10 +62,9 @@ export async function adoptWorktree(args: {
       message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
     };
   }
-  const invalidCommitField = invalidSourceCommitField(params);
-  if (invalidCommitField) {
-    return { success: false, error: "invalid_input", message: `${invalidCommitField} must be a full 40-character commit SHA. Omit it only for source-less design or planning; capture the actual local Git identity before implementation.` };
-  }
+  // BI-DF34D948: a short SHA is expanded against the repository, not refused.
+  const shas = await resolveSourceCommitShas(params, lazyResolverDeps(args.resolveCommitDeps, repositoryFullName));
+  if (!shas.ok) return sourceCommitRefusal(shas, { tool: "adopt_worktree", args: params });
   if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
     return {
       success: false,
@@ -106,8 +107,8 @@ export async function adoptWorktree(args: {
         headBranch,
         worktreePath,
         baseBranch: stringParam(params, "baseBranch") ?? null,
-        baseSha: stringParam(params, "baseSha") ?? null,
-        headSha: stringParam(params, "headSha") ?? null,
+        baseSha: shas.baseSha,
+        headSha: shas.headSha,
         executorKind: validatedExecutorKind,
         executorRef: stringParam(params, "sessionRef") ?? null, // session identity; see the tool schema
         backlogItemId: boundBacklogItemId,

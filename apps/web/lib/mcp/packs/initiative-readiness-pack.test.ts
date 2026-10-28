@@ -34,6 +34,16 @@ vi.mock("@/lib/backlog/initiative-readiness", async (importOriginal) => ({
   recordInitiativeObjectiveMappingProposal: (...args: unknown[]) => mocks.recordObjectiveMapping(...args),
 }));
 
+const artifactDeps = vi.hoisted(() => ({ readBlobId: vi.fn(), lookupProviderCommit: vi.fn() }));
+vi.mock("./initiative-readiness-worked-example", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./initiative-readiness-worked-example")>(),
+  defaultArtifactRefInputDeps: async () => ({
+    canonicalRepositoryFullName: async () => "owner/repo",
+    commitDeps: () => ({ lookupProviderCommit: artifactDeps.lookupProviderCommit, recordedCandidates: async () => [] }),
+    readBlobId: artifactDeps.readBlobId,
+  }),
+}));
+
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 import { createQualificationExperimentAdmission, qualificationBindingDigest,
   type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
@@ -223,6 +233,39 @@ describe("initiative readiness reviewer tools", () => {
       params: expect.objectContaining({ itemId: "BI-ACCEPTED", gate: "research", artifactRef }) }));
     expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
   });
+
+  it("BI-DF34D948 records research from {path, headSha} with a server-derived blob id and full commit", async () => {
+    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "IRR-1" });
+    artifactDeps.lookupProviderCommit.mockResolvedValue({ kind: "found", sha: "a".repeat(40) });
+    artifactDeps.readBlobId.mockResolvedValue({ ok: true, blobId: "b".repeat(40) });
+    const result = await initiativeReadinessPack.handlers.record_initiative_evidence!({ itemId: "BI-TEST", gate: "research",
+      decision: "pass", artifactRef: { path: "docs/a.md", headSha: "aaaaaaa" }, reason: "Reproduced.", findings: [], resolvedFindingRefs: [] },
+    "user", {} as never);
+    expect(result).toMatchObject({ success: true, entityId: "IRR-1" });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ artifactRef: {
+      kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), path: "docs/a.md", providerBlobId: "b".repeat(40) } }));
+  });
+
+  it("BI-DF34D948 ends every malformed-receipt refusal with the caller's corrected call", async () => {
+    mocks.findTaskRun.mockResolvedValue(null);
+    const handler = initiativeReadinessPack.handlers.record_initiative_evidence!;
+    const missing = await handler({ itemId: "BI-TEST", gate: "research", decision: "pass", reason: "r", findings: [], resolvedFindingRefs: [] }, "user", {} as never);
+    expect(missing.message).toContain(`Retry: record_initiative_evidence({"itemId":"BI-TEST","gate":"research","decision":"pass"`);
+    expect(missing.message).toContain(`"artifactRef":{"path":"docs/superpowers/specs/<file>.md"`);
+    const ref = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), path: "a.md", providerBlobId: "b".repeat(40) };
+    const badFindings = await handler({ itemId: "BI-TEST", gate: "research", decision: "pass", artifactRef: ref, reason: "r", findings: "none" }, "user", {} as never);
+    expect(badFindings).toMatchObject({ success: false, error: "malformed-receipt" });
+    expect(badFindings.message).toContain(`"findings":[],"resolvedFindingRefs":[]`);
+  });
+
+  it("BI-DF34D948 shows one complete worked call in every writer's description", () => {
+    for (const definition of initiativeReadinessPack.definitions) {
+      expect(definition.description).toContain(`Worked example: ${definition.name}({"itemId":"BI-`);
+      expect(definition.description).toContain(`"artifactRef":{"path":`);
+    }
+  });
+
   it("refuses malformed trusted workroom context and never accepts a caller-selected replacement", async () => {
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
       providerBlobId: "b".repeat(40), path: "plan.md" };

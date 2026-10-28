@@ -13,7 +13,8 @@ import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsu
 import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import { branchOccupiedResult } from "./mcp-result-errors";
-import { defaultPlatformRepositoryFullName, invalidSourceCommitField } from "./work-capsule-branch-identity";
+import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
+import { lazyResolverDeps, resolveSourceCommitShas, sourceCommitRefusal, type SourceCommitResolverDeps } from "./source-commit-resolution";
 import { BacklogItemAlreadyClaimedError } from "./backlog-workroom-ownership";
 import { evaluateTwinClaimGate, type TwinGateOutcome } from "./twin-claim-gate";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
@@ -121,6 +122,8 @@ export async function claimBacklogItemForWork(args: {
   context: ToolContext;
   db: CapsuleDb;
   resolveActor: (userId: string, context: ToolContext) => Promise<WorkCapsuleActor>;
+  /** Test seam; production asks the repository provider and the recorded Workrooms. */
+  resolveCommitDeps?: (repositoryFullName: string) => Promise<SourceCommitResolverDeps>;
 }): Promise<ToolResult> {
   const { params } = args;
   const itemId = stringParam(params, "itemId");
@@ -132,17 +135,15 @@ export async function claimBacklogItemForWork(args: {
   if (!itemId || !worktreePath || !branchName || !provider || !sessionRef) {
     return { success: false, error: "invalid_input", message: "itemId, worktreePath, branchName, provider, and sessionRef are required." };
   }
-  const baseSha = stringParam(params, "baseSha");
-  const headSha = stringParam(params, "headSha");
-  const badSha = invalidSourceCommitField(params);
-  if (badSha) {
-    return { success: false, error: "invalid_input", message: `${badSha} must be a full 40-character commit SHA.` };
-  }
   if (requestedIntent && !WORK_INTENTS.includes(requestedIntent as WorkIntent)) {
     return { success: false, error: "invalid_work_intent", message: `workIntent must be one of: ${WORK_INTENTS.join(", ")}.` };
   }
   const repositoryFullName = stringParam(params, "repositoryFullName")
     ?? defaultPlatformRepositoryFullName();
+  // BI-DF34D948: a short SHA is expanded against the repository, not refused.
+  const shas = await resolveSourceCommitShas(params, lazyResolverDeps(args.resolveCommitDeps, repositoryFullName));
+  if (!shas.ok) return sourceCommitRefusal(shas, { tool: "claim_backlog_item_for_work", args: params });
+  const { baseSha, headSha } = shas;
   const executorKind = providerToExecutorKind(provider);
   const shape = await resolveClaimShape({
     db: args.db,
