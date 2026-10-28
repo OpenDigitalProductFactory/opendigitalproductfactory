@@ -288,7 +288,8 @@ describe("S2 — detectScheduledRunFailure for a diverted required write (charac
   it("a failed divert is not counted as the write having run", () => {
     const executedTools = [{ name: "record_workroom_evidence", result: { success: false } }];
     expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools, content: "Could not." }))
-      .toBe("required governed tool record_workroom_evidence executed zero times");
+      // BI-CAP-B5F50D1F: still a failure, but named as the refusal it was.
+      .toBe("required governed tool record_workroom_evidence was called 1 time and refused every time (no error code)");
   });
 });
 

@@ -143,6 +143,22 @@ export async function getScheduledAgentTasks(): Promise<ScheduledAgentTaskView[]
 
 // ─── Execution (called by Inngest dispatcher) ───────────────────────────────
 
+/** A run with nothing left to do: healthy, no error, the retry cycle closed. */
+async function recordUnchangedScheduledRun(task: { taskId: string; schedule: string }, now: Date): Promise<void> {
+  const oneShot = isOneShotCron(task.schedule);
+  const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
+  await prisma.scheduledAgentTask.update({
+    where: { taskId: task.taskId },
+    data: { lastRunAt: now, lastStatus: "unchanged", lastError: null, nextRunAt, attempts: 0, ...(oneShot ? { isActive: false } : {}) },
+  });
+  await prisma.scheduledJob
+    .update({
+      where: { jobId: task.taskId },
+      data: { lastRunAt: now, lastStatus: "unchanged", lastError: null, nextRunAt, ...(oneShot ? { schedule: "disabled" } : {}) },
+    })
+    .catch(() => {});
+}
+
 export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   const task = await prisma.scheduledAgentTask.findUnique({
     where: { taskId },
@@ -358,35 +374,16 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   try {
     if (task.taskKind === PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND) {
       preparedPlaybook = await prepareProductManagementPlaybookRun(task);
-      if (preparedPlaybook.unchanged) {
-        const oneShot = isOneShotCron(task.schedule);
-        const nextRunAt = oneShot
-          ? null
-          : computeNextCronRun(task.schedule, now);
-        await prisma.scheduledAgentTask.update({
-          where: { taskId },
-          data: {
-            lastRunAt: now,
-            lastStatus: "unchanged",
-            lastError: null,
-            nextRunAt,
-            attempts: 0,
-            ...(oneShot ? { isActive: false } : {}),
-          },
-        });
-        await prisma.scheduledJob
-          .update({
-            where: { jobId: taskId },
-            data: {
-              lastRunAt: now,
-              lastStatus: "unchanged",
-              lastError: null,
-              nextRunAt,
-              ...(oneShot ? { schedule: "disabled" } : {}),
-            },
-          })
-          .catch(() => {});
-        return;
+      if (preparedPlaybook.unchanged) return await recordUnchangedScheduledRun(task, now);
+    }
+    // BI-CAP-B5F50D1F: the stage task shares the drive's tick, so it can start
+    // before the drive reads the evidence that already answered this dispatch.
+    if (task.taskId.startsWith("workroom-")) {
+      const { loadStageDispatchAnswered } = await import("@/lib/work-management/stage-dispatch-answered");
+      const answer = await loadStageDispatchAnswered(task);
+      if (answer.answered) {
+        console.info(`[agent-task-scheduler] ${taskId}: stage ${answer.stageKey} already has completing evidence for this dispatch (${answer.evidenceRecordedAt.toISOString()}); not running it again.`);
+        return await recordUnchangedScheduledRun(task, now);
       }
     }
     const executionPrompt = preparedPlaybook?.prompt ?? task.prompt;

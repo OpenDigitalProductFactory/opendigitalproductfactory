@@ -1632,6 +1632,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/workspace/finite-delivery-agreements.md"
     ],
+    "apps/web/lib/work-management/stage-dispatch-answered.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
@@ -3628,6 +3631,7 @@
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/stage-dispatch-answered.ts",
       "apps/web/lib/work-management/work-shapes.ts",
       "scripts/measure-capability-completeness.mjs"
     ],
