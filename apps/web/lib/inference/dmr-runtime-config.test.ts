@@ -26,9 +26,16 @@ describe("selected runtime thinking budget evidence", () => {
     expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe({ config: { "context-size": 131072, keep_alive: "-1" } })))
       .toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
   });
+  it("keeps the evidence under qualified n-gram speculation (drafts are target-verified, BI-0D208EBB)", async () => {
+    const config = { "context-size": 131072, keep_alive: "-1", "runtime-flags": ["--spec-type", "ngram-mod"] };
+    expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe({ config })))
+      .toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
+  });
   it.each([
     { template: "ordinary answer template" }, { config: { "context-size": 131072, "raw-runtime-flags": "--chat-template custom" } },
     { config: { "context-size": 131072, keep_alive: -1 } },
+    { config: { "context-size": 131072, "runtime-flags": ["--spec-type", "ngram-mod", "--chat-template", "custom"] } },
+    { config: { "context-size": 131072, "runtime-flags": ["--chat-template", "custom"] } },
     { engine: "Running: llama.cpp b7000-metal" }, { digest: `sha256:${"b".repeat(64)}` }, { duplicate: true },
   ])("leaves unsupported, overridden or ambiguous evidence unknown: %j", async overrides => {
     expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe(overrides))).toBeUndefined();
