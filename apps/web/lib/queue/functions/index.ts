@@ -43,6 +43,7 @@ import { capacityDrainScheduled } from "./capacity-drain";
 import { assuranceRemediationTeeUpScheduled } from "./assurance-remediation-teeup";
 import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import { subscriptionOAuthRenewal } from "./subscription-oauth-renewal";
 import { legacyProposalExpirySweep } from "./legacy-proposal-expiry-sweep";
 import {
   contributorInventorySyncCron,
@@ -191,6 +192,7 @@ export const scheduledFunctions = [
   assuranceRemediationTeeUpScheduled, // BI-7C121CCF: off-hours, budget-capped assurance remediation lane
   assuranceMergeGateScheduled, // BI-204EE70B P2.2: WWMD merge gate (dark — escalate-only until actuation enabled)
   tokenExpiryMonitor,
+  subscriptionOAuthRenewal, // BI-A53C594E: renew subscription OAuth sign-ins ahead of expiry, retry with backoff
   legacyProposalExpirySweep, // BI-753D69A9: expire undecided legacy proposals under the approval lifetime
   contributorInventorySyncCron,
   wikiLint,

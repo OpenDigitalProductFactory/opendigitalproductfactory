@@ -113,6 +113,7 @@ The ChatGPT/Codex integration has several non-obvious requirements:
 - "Model missing from diagnostics" -- compare the connected account and sandbox catalog with the other client. Automatic discovery cannot add access that the serving channel does not report.
 - "Refresh failed" -- DPF keeps the last good catalog. Resolve the reported connection or service error and retry; there is no need to rebuild model profiles by hand.
 - "Provider shows Expired, or disables itself with Re-authentication required" -- the token ran out and there was no renewal token to replace it. Sign in again from the Codex or ChatGPT provider page; both providers pick up the new token.
+- Background renewal -- the platform renews the shared sign-in about two hours before it expires and retries a failed renewal with a growing wait (10 minutes up to two hours). It asks you to sign in again, through the Needs-you inbox, only when OpenAI says the sign-in is no longer valid.
 - "Organization and project prompt" -- you must select these during OAuth sign-in. Skipping causes the flow to fail.
 - "Port 1455 unreachable" -- ensure the platform's Docker container has port 1455 mapped (this is configured in docker-compose.yml).
 - "Store must be set to false" -- internal error if `store: false` is missing from the Responses API request body.
