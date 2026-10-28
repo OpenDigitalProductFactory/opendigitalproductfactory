@@ -56,7 +56,13 @@ export type TerminalRecoveryEscalationReason =
   | "objective-mapping-identity-conflict"
   | "objective-mapping-prior-authority-active"
   | "objective-mapping-authoritative-output-exists"
-  | "canonical-artifact-unavailable";
+  | "canonical-artifact-unavailable"
+  /** BI-CE661173: no live room, and the trunk shows no standing commit that delivered the item. */
+  | "merged-delivery-not-found"
+  /** BI-CE661173: more than one standing delivering commit; no single range to review. */
+  | "merged-delivery-ambiguous"
+  /** BI-CE661173: the item's delivery actors could not be bounded, so independence cannot be proven. */
+  | "delivery-actors-unbounded";
 
 type TerminalEscalation = {
   // design-author owns RESEARCH_REQUIRED on every shape that carries it
@@ -79,6 +85,24 @@ export type BaselinePayload = Record<string, unknown> & {
   artifactRef?: InitiativeReviewArtifactRef;
 };
 
+/**
+ * BI-CE661173: the source a post-implementation review reads once the work has
+ * merged and its Workroom is no longer live. The room is the delivery's own
+ * newest attempt and anchors the request (its recorded identity is what review
+ * admission and the PIR evidence context match); the reviewed bytes are the
+ * merged squash commit's range on the trunk, `parentSha..mergedCommitSha`.
+ */
+export type MergedRepairSource =
+  | {
+    kind: "found";
+    room: TerminalRecoveryRoom;
+    mergedCommitSha: string;
+    parentSha: string;
+    /** Every agent that delivered the item (delivery-actors.ts); none may review it. */
+    deliveryActorIds: string[];
+  }
+  | { kind: "unavailable"; reason: TerminalRecoveryEscalationReason; nextAction: string };
+
 export type TerminalRecoveryPorts = {
   /** Live scope declaration, shared with claim-time canonical artifact discovery. */
   loadBacklogBody?(itemId: string): Promise<string | null>;
@@ -86,6 +110,8 @@ export type TerminalRecoveryPorts = {
   validateBodyBaselineCurrent?(args: { baseline: BaselinePayload; room: TerminalRecoveryRoom; itemId: string }): Promise<boolean>;
   loadLiveRooms(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom[]>;
   loadDeliveredBodyAuthor?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom | null>;
+  /** BI-CE661173: a merged repair's review source when no Workroom is live. */
+  loadMergedRepairSource?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<MergedRepairSource>;
   loadBaselinePayloads(itemId: string): Promise<unknown[]>;
   loadEligibleEvidenceActivityIds(args: {
     itemId: string;
@@ -198,6 +224,73 @@ async function defaultLoadDeliveredBodyAuthor(args: { itemId: string; refusedWor
   const room = await resolveBodyBaselineAuthorRoom(prisma, item);
   if (!room || !isArchivedBodyAuthorRoom(room) || (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId)) return null;
   return { ...room, isLive: false };
+}
+
+const FULL_SHA = /^[a-f0-9]{40}$/i;
+
+/**
+ * BI-CE661173. The newest delivery attempt for the item, when the trunk proves
+ * it merged. Like the body-acceptance author (body-baseline-author-room.ts) it
+ * never searches backward past a newer attempt, and an abandoned or superseded
+ * newest attempt is not a delivery. Resolves source and independence only; it
+ * grants no room access and no execution lease.
+ */
+export async function defaultLoadMergedRepairSource(args: {
+  itemId: string;
+  refusedWorkroomId: string | null;
+}, options: { roots?: readonly string[] } = {}): Promise<MergedRepairSource> {
+  const notFound = (nextAction: string): MergedRepairSource => ({ kind: "unavailable", reason: "workroom-not-found", nextAction });
+  const item = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, itemId: true, workType: true } });
+  if (!item) return notFound(`Backlog item ${args.itemId} was not found.`);
+  const attempts = await prisma.workroom.findMany({
+    where: { backlogItemId: { in: [item.id, item.itemId] } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 2,
+    select: { capsuleId: true, backlogItemId: true, repositoryFullName: true, baseSha: true, headBranch: true,
+      headSha: true, pullRequestNumber: true, status: true, createdAt: true },
+  });
+  const room = attempts[0];
+  if (!room || (attempts[1] && attempts[1].createdAt.getTime() === room.createdAt.getTime())
+    || ["abandoned", "superseded"].includes(room.status)) {
+    return notFound("No Workroom is live and the item's newest delivery attempt cannot be identified. Reconcile its Workrooms through governed procedures, then retry.");
+  }
+  if (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId) {
+    return notFound("The requested Workroom is not the item's newest delivery attempt. Read get_backlog_item with recoveryGate \"post-implementation-review\" for the current request.");
+  }
+  if (!room.repositoryFullName || !room.headBranch || !room.headSha || !FULL_SHA.test(room.headSha)
+    || !room.baseSha || !FULL_SHA.test(room.baseSha)) {
+    return { kind: "unavailable", reason: "workroom-identity-incomplete",
+      nextAction: "The item's newest Workroom lacks repository, branch, immutable base, or immutable head, so a post-merge review cannot be anchored to it. Re-sync it with adopt_worktree, then retry." };
+  }
+  const { resolveMergedDeliveryCommitFromDb } = await import("./merge-delivery-signal");
+  const merged = await resolveMergedDeliveryCommitFromDb(prisma as never, {
+    itemRowId: item.id, itemId: item.itemId, workType: item.workType ?? null,
+    roomPullRequests: room.pullRequestNumber ? [room.pullRequestNumber] : [],
+  }, options);
+  if (merged.kind === "ambiguous") {
+    return { kind: "unavailable", reason: "merged-delivery-ambiguous",
+      nextAction: `More than one standing commit on the trunk delivered ${item.itemId} (${merged.commits.map((c) => c.sha.slice(0, 12)).join(", ")}), so no single merged range can be reviewed. No commit was selected arbitrarily.` };
+  }
+  if (merged.kind !== "found") {
+    return { kind: "unavailable", reason: "merged-delivery-not-found",
+      nextAction: merged.kind === "not-found"
+        ? `No Workroom is live and the trunk carries no standing commit that delivered ${item.itemId}. A post-implementation review reviews merged work; merge the repair first.`
+        : "No Workroom is live and the merge-through-gates signal could not read the trunk here, so the merged repair cannot be identified. Point DPF_HOST_SOURCE_ROOT at a source checkout, then retry." };
+  }
+  const { loadItemDeliveryActorIds } = await import("@/lib/backlog/acceptance-sweep/delivery-actors");
+  const actors = await loadItemDeliveryActorIds(prisma as never, item.itemId);
+  if (!actors.ok) {
+    return { kind: "unavailable", reason: "delivery-actors-unbounded",
+      nextAction: `${actors.error} A post-merge review is routed only when every delivery actor can be excluded from reviewing it.` };
+  }
+  return {
+    kind: "found",
+    room: { capsuleId: room.capsuleId, backlogItemId: room.backlogItemId, repositoryFullName: room.repositoryFullName,
+      baseSha: room.baseSha, headBranch: room.headBranch, headSha: room.headSha, isLive: false },
+    mergedCommitSha: merged.commit.sha,
+    parentSha: merged.commit.parentSha,
+    deliveryActorIds: actors.data,
+  };
 }
 
 async function defaultLoadEligibleEvidenceActivityIds(args: {
@@ -422,6 +515,7 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   },
   loadLiveRooms: defaultLoadLiveRooms,
   loadDeliveredBodyAuthor: defaultLoadDeliveredBodyAuthor,
+  loadMergedRepairSource: (args) => defaultLoadMergedRepairSource(args),
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
   loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
@@ -467,8 +561,50 @@ export async function resolveTerminalInitiativeRecovery(args: {
     refusedWorkroomId: args.refusedWorkroomId,
   };
   const rooms = await ports.loadLiveRooms(roomArgs);
-  // Only retained body acceptance can read a retired author anchor. PIR and
-  // design/spec review still require their normal live Workroom.
+  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
+  const pirOnly = {
+    ...args.decision,
+    blockers: args.decision.blockers.filter(isPostImplementationReview),
+    unmet: args.decision.unmet.filter(isPostImplementationReview),
+  };
+  // BI-CE661173: a merged repair's Workroom is normally archived or idle by
+  // the time its post-implementation review is owed. The review then reads the
+  // merged squash commit on the trunk, anchored to the delivery's own newest
+  // room, and every delivery actor is excluded from reviewing it.
+  const owesPir = pirOnly.blockers.length + pirOnly.unmet.length > 0;
+  const routeMergedRepairReview = async (source: MergedRepairSource): Promise<TerminalInitiativeRecovery> => {
+    if (source.kind === "unavailable") return escalation(source.reason, source.nextAction);
+    const room = source.room;
+    const discovered = await ports.discoverArtifact({
+      repositoryFullName: room.repositoryFullName!,
+      baseSha: source.parentSha,
+      headSha: source.mergedCommitSha,
+      purpose: "post-implementation-review",
+    });
+    const excluded = new Set(source.deliveryActorIds);
+    return ports.resolveRecovery({
+      decision: pirOnly,
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext: {
+        workroomId: room.capsuleId,
+        repositoryFullName: room.repositoryFullName!,
+        branchName: room.headBranch!,
+        headSha: room.headSha!,
+      },
+      canonicalArtifact: discovered.resolved
+        ? { resolved: true, ...discovered.artifact, commitSha: source.mergedCommitSha }
+        : { resolved: false, nextAction: discovered.nextAction },
+      expectedCurrentBaselineId: null,
+      isReviewerEligible: async (agentId) => !excluded.has(agentId),
+    });
+  };
+  if (rooms.length === 0 && owesPir && ports.loadMergedRepairSource) {
+    return routeMergedRepairReview(await ports.loadMergedRepairSource(roomArgs));
+  }
+  // Only retained body acceptance and a merged repair's review (above) can
+  // read a retired anchor. Design/spec review still requires a live Workroom.
   let bodyPayloads: unknown[] | undefined;
   if (rooms.length === 0 && args.decision.shapeDecision?.effective === "medium"
     && !designPhaseReviewDecision(args.decision)
@@ -502,9 +638,16 @@ export async function resolveTerminalInitiativeRecovery(args: {
   // A break-fix review assesses the repair the Workroom authored. It does not
   // create or reconcile an objective baseline. Resolve its exact source before
   // entering the baseline-owned acceptance path below (BI-594CF003).
-  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
-    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
-  if ([...args.decision.blockers, ...args.decision.unmet].some(isPostImplementationReview)) {
+  if (owesPir) {
+    // BI-CE661173 (BI-17238133): a room whose recorded base equals its head
+    // compares an empty range, though its repair merged. Review the merged
+    // squash commit instead, when the trunk proves this room's delivery.
+    if (room.baseSha.toLowerCase() === room.headSha.toLowerCase() && ports.loadMergedRepairSource) {
+      const source = await ports.loadMergedRepairSource({ itemId: args.decision.subject.id, refusedWorkroomId: room.capsuleId });
+      return routeMergedRepairReview(source.kind === "found" && source.room.capsuleId !== room.capsuleId
+        ? { kind: "unavailable", reason: "workroom-ambiguous", nextAction: "The live Workroom is not the item's newest delivery attempt. Reconcile ownership before dispatching a post-implementation reviewer." }
+        : source);
+    }
     const discovered = await ports.discoverArtifact({
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
@@ -512,11 +655,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
       purpose: "post-implementation-review",
     });
     return ports.resolveRecovery({
-      decision: {
-        ...args.decision,
-        blockers: args.decision.blockers.filter(isPostImplementationReview),
-        unmet: args.decision.unmet.filter(isPostImplementationReview),
-      },
+      decision: pirOnly,
       currentAgentId: args.currentAgentId,
       db: prisma as never,
       dispatchContext,

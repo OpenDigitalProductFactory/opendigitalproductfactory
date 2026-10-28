@@ -6,7 +6,7 @@ import { renderBuildDesignText } from "./render-build-design-text";
 import { renderBuildPlanText } from "./render-build-plan-text";
 
 import { readDocumentBlob } from "@/lib/documents/blob-storage";
-import { resolveRepositoryArtifact } from "./repository-artifact";
+import { resolveRepositoryArtifact, type MergedRepairProof } from "./repository-artifact";
 import type { InitiativeArtifactRef, ResolvedInitiativeArtifact } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -122,6 +122,8 @@ export async function resolveInitiativeArtifact(args: {
   subject: InitiativeSubject;
   workroomRef?: InitiativeReviewBinding["workroomRef"];
   canonicalPlanProof?: CanonicalPlanSourceProof;
+  /** BI-CE661173: server-resolved proof that the locator is the item's merged repair commit. */
+  mergedRepairProof?: MergedRepairProof;
   db?: InitiativeArtifactResolverDb;
   resolveDocumentAuthorAgent?: (versionId: string, principalId: string) => Promise<string | null>;
   documentBelongsToSubject?: (versionId: string, subject: InitiativeSubject) => Promise<boolean>;
@@ -283,7 +285,8 @@ export async function resolveInitiativeArtifact(args: {
       providerBlob = await args.resolveRepositoryBlob(args.locator);
     } else {
       const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject,
-        workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof, db: db as never });
+        workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof,
+        ...(args.mergedRepairProof ? { mergedRepairProof: args.mergedRepairProof } : {}), db: db as never });
       if (!resolved.ok) return resolved;
       providerBlob = resolved.artifact;
     }

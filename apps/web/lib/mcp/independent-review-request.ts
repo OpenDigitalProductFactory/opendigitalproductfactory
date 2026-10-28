@@ -126,6 +126,16 @@ export async function authorizeCoworkerRequest(
         select: roomSelect });
     }
   }
+  // BI-CE661173: a merged repair's review is anchored to its delivery room,
+  // which is normally archived by then. Reading it here authorizes nothing: the
+  // request proceeds only if the readiness issuer below re-issues this exact
+  // packet, and it issues a retired anchor only for a repair the trunk proves
+  // merged, to a reviewer outside every delivery actor.
+  if (!room && binding.gate === "post-implementation-review"
+    && binding.writerToolName === "record_initiative_post_implementation_review") {
+    room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId,
+      status: { notIn: ["abandoned", "superseded"] } }, select: roomSelect });
+  }
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
   const buildStudioRoom = roomOwnsItem && room!.executorKind === "build-studio";

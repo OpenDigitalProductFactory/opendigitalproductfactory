@@ -134,10 +134,34 @@ export async function recordInitiativeGateReceipt(args: {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "The accepted plan review no longer matches the current canonical baseline and coverage. Reconcile the server-issued packet; do not substitute a different artifact under the original request key." };
   }
+  // BI-CE661173: a post-implementation review bound to a merged squash commit
+  // (not its room's recorded head) is accepted only when the trunk, read now,
+  // still names that commit as the item's delivery from that room.
+  const mergedRepairReview = args.gate === "post-implementation-review" && args.workroomRef
+    && args.artifactRef.kind === "repo-blob-at-commit"
+    && args.artifactRef.commitSha.toLowerCase() !== args.workroomRef.headSha.toLowerCase();
+  let mergedRepairProof: { workroomId: string; commitSha: string } | undefined;
+  if (mergedRepairReview) {
+    const { defaultLoadMergedRepairSource } = await import("./terminal-recovery");
+    const source = await defaultLoadMergedRepairSource({ itemId: item.itemId, refusedWorkroomId: args.workroomRef!.workroomId });
+    const ref = args.workroomRef!;
+    if (source.kind !== "found" || args.artifactRef.kind !== "repo-blob-at-commit"
+      || source.mergedCommitSha.toLowerCase() !== args.artifactRef.commitSha.toLowerCase()
+      || source.room.capsuleId !== ref.workroomId || source.room.headBranch !== ref.branchName
+      || source.room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+        error: "The reviewed commit is no longer the item's merged repair from this Workroom on the trunk. Read get_backlog_item with recoveryGate \"post-implementation-review\" for the current request; do not substitute a commit." };
+    }
+    if (source.deliveryActorIds.includes(args.reviewerAgentId)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "A delivery actor cannot record the post-implementation review of its own repair." };
+    }
+    mergedRepairProof = { workroomId: ref.workroomId, commitSha: source.mergedCommitSha };
+  }
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
     workroomRef: args.workroomRef,
     canonicalPlanProof: canonicalPlanProof ?? undefined,
+    ...(mergedRepairProof ? { mergedRepairProof } : {}),
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
@@ -204,7 +228,7 @@ export async function recordInitiativeGateReceipt(args: {
         backlogItemId: true, repositoryFullName: true, headBranch: true, headSha: true,
         archivedAt: true, status: true, createdByPrincipalId: true,
       } });
-      if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
+      if (!room || (room.archivedAt && !mergedRepairProof) || ["abandoned", "cancelled"].includes(room.status)
         || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
         || room.headBranch !== ref.branchName || room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()
         || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {

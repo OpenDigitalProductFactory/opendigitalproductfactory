@@ -6,6 +6,8 @@ vi.mock("./canonical-plan-source", async (importOriginal) => ({
   ...await importOriginal<typeof import("./canonical-plan-source")>(), loadCanonicalPlanSource: io.canonicalPlan,
 }));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: io.artifact }));
+const merged = vi.hoisted(() => ({ source: vi.fn() }));
+vi.mock("./terminal-recovery", () => ({ defaultLoadMergedRepairSource: merged.source }));
 vi.mock("./reviewer-identity", async (importOriginal) => ({
   ...await importOriginal<typeof import("./reviewer-identity")>(),
   resolveReviewerIdentity: async () => ({ principalId: "principal-reviewer", kind: "coworker" }),
@@ -292,6 +294,60 @@ describe("one terminal verdict for an authenticated bound review", () => {
     (state.activities[0]!.payload.authoritySnapshot as Record<string, unknown>).policyVersion = "forged-policy";
     io.append.mockClear();
     expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+});
+
+// BI-CE661173: a merged repair's post-implementation review reads the squash
+// commit on the trunk through the delivery's retired room.
+describe("merged repair PIR receipt publication (BI-CE661173)", () => {
+  const mergedSha = "c".repeat(40);
+  const pirArgs = { ...args, allowedGates: ["post-implementation-review"] as const, gate: "post-implementation-review" as const,
+    actionKey: "record_initiative_post_implementation_review", expectedCurrentBaselineId: null,
+    artifactRef: { ...artifactRef, commitSha: mergedSha, path: "apps/web/lib/fix.ts" } };
+  const found = (overrides: Record<string, unknown> = {}) => ({ kind: "found", mergedCommitSha: mergedSha, parentSha: "d".repeat(40),
+    deliveryActorIds: ["AGT-AUTHOR"], room: { capsuleId: workroomRef.workroomId, backlogItemId: args.itemId,
+      repositoryFullName: workroomRef.repositoryFullName, baseSha: "e".repeat(40), headBranch: workroomRef.branchName,
+      headSha: workroomRef.headSha, isLive: false }, ...overrides });
+
+  beforeEach(() => {
+    io.decision.mockResolvedValue({ decisionId: "AUTH-1", decision: "allow", actionKey: pirArgs.actionKey,
+      policyVersion: "PV-1", organizationId: null, rationale: {} });
+    room = { ...room, archivedAt: new Date("2026-10-20T00:00:00Z"), status: "archived" };
+    merged.source.mockResolvedValue(found());
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: pirArgs.artifactRef, digest: `sha256:${"a".repeat(64)}`,
+      authorPrincipalId: "principal-author", authorAgentId: null, bytes: Buffer.from("repair") } });
+  });
+
+  it("publishes through the archived room with the server's merged-repair proof", async () => {
+    expect(await recordInitiativeGateReceipt(pirArgs)).toMatchObject({ ok: true });
+    expect(merged.source).toHaveBeenCalledWith({ itemId: args.itemId, refusedWorkroomId: workroomRef.workroomId });
+    expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({
+      mergedRepairProof: { workroomId: workroomRef.workroomId, commitSha: mergedSha } }));
+    expect(io.append).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["the trunk no longer names that commit", () => found({ mergedCommitSha: "f".repeat(40) })],
+    ["no merged repair is found", () => ({ kind: "unavailable", reason: "merged-delivery-not-found", nextAction: "none" })],
+    ["the anchor room moved", () => found({ room: { ...found().room, headSha: "f".repeat(40) } })],
+  ])("refuses when %s", async (_label, source) => {
+    merged.source.mockResolvedValue(source());
+    expect(await recordInitiativeGateReceipt(pirArgs)).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(io.artifact).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("refuses a delivery actor recording the review of its own repair", async () => {
+    merged.source.mockResolvedValue(found({ deliveryActorIds: [args.reviewerAgentId] }));
+    expect(await recordInitiativeGateReceipt(pirArgs)).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("keeps refusing an archived room for a review bound to the room's own head", async () => {
+    expect(await recordInitiativeGateReceipt({ ...pirArgs, artifactRef: { ...pirArgs.artifactRef, commitSha: workroomRef.headSha } }))
+      .toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(merged.source).not.toHaveBeenCalled();
     expect(io.append).not.toHaveBeenCalled();
   });
 });

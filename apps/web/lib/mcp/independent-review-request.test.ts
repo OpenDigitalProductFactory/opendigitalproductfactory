@@ -379,6 +379,23 @@ describe("consent-bound independent review request", () => {
       ...context, tokenGrantScopes: ["thread_write"],
     })).refusal).toBeDefined();
   });
+  it("admits a merged repair's retired room for the issuer's exact PIR packet only (BI-CE661173)", async () => {
+    const retired = { ...await mocks.room(), status: "archived" };
+    mocks.room.mockImplementation(async ({ where }) => where.archivedAt === null ? null : retired);
+    expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
+    expect(mocks.room).toHaveBeenLastCalledWith(expect.objectContaining({ where: {
+      capsuleId: "WC-TEST", status: { notIn: ["abandoned", "superseded"] } } }));
+    expect(mocks.recovery).toHaveBeenCalledWith(expect.objectContaining({ refusedWorkroomId: "WC-TEST" }));
+    // The retired room grants nothing by itself: the issuer must re-issue the exact packet.
+    mocks.recovery.mockResolvedValue({ reviewerRoutes: [] });
+    expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.success).toBe(false);
+    // And it is read only for the PIR writer: another lane on a retired room is refused before readiness.
+    mocks.item.mockClear();
+    const design = { ...packet, initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec" },
+      requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };
+    expect((await authorizeCoworkerRequest(design, "human", context)).refusal?.success).toBe(false);
+    expect(mocks.item).not.toHaveBeenCalled();
+  });
   it("accepts only a regenerated packet after current human, consent, grants and exact room checks", async () => {
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
     expect(mocks.access).toHaveBeenCalledWith({ userId: "human", agentId: "AGT-AUTHOR", workroomId: "room-row", requested: "action" });

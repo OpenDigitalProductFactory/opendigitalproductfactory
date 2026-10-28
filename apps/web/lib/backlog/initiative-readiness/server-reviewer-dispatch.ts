@@ -99,9 +99,16 @@ const principalAliases = (aliasType: string) => ({
  * assistant. Newest room first. The acceptance sweep reads the author the same
  * way, so it never routes acceptance back to them (BI-DF255666).
  */
-export async function loadRoomAuthors(where: { capsuleId?: string; backlogItemId?: { not: null } | { in: string[] } }): Promise<Array<RoomAuthor & { itemId: string | null }>> {
+export async function loadRoomAuthors(
+  where: { capsuleId?: string | { in: string[] }; backlogItemId?: { not: null } | { in: string[] } },
+  options: { includeRetired?: boolean } = {},
+): Promise<Array<RoomAuthor & { itemId: string | null }>> {
   const rooms = await prisma.workroom.findMany({
-    where: { ...where, archivedAt: null, status: { notIn: ["abandoned", "archived"] } },
+    // BI-CE661173: a merged repair's room is retired by the time its
+    // post-implementation review is owed; its author still carries the request.
+    where: options.includeRetired
+      ? { ...where, status: { notIn: ["abandoned", "superseded"] } }
+      : { ...where, archivedAt: null, status: { notIn: ["abandoned", "archived"] } },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -141,7 +148,7 @@ export async function loadRoomAuthors(where: { capsuleId?: string; backlogItemId
 async function loadAwaitingCandidates(): Promise<Candidate[]> {
   const rooms = await loadRoomAuthors({ backlogItemId: { not: null } });
   const itemIds = [...new Set(rooms.flatMap((room) => (room.itemId ? [room.itemId] : [])))];
-  if (itemIds.length === 0) return [];
+  if (itemIds.length === 0) return loadMergedBreakFixCandidates(new Set());
   const targetByItem = new Map((await prisma.backlogItem.findMany({
     where: { itemId: { in: itemIds }, status: { in: ["awaiting-acceptance", "open", "in-progress"] } },
     select: { itemId: true, status: true },
@@ -151,7 +158,53 @@ async function loadAwaitingCandidates(): Promise<Candidate[]> {
     if (!room.itemId || !targetByItem.has(room.itemId) || !room.userId || !room.agentId) continue;
     if (!newestByItem.has(room.itemId)) newestByItem.set(room.itemId, room);
   }
-  return [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: targetByItem.get(itemId)! }));
+  const candidates = [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: targetByItem.get(itemId)! }));
+  return [...candidates, ...await loadMergedBreakFixCandidates(new Set(newestByItem.keys()))];
+}
+
+/**
+ * BI-CE661173: awaiting-acceptance break-fix items whose every room is retired.
+ * A break-fix owes an independent post-implementation review after merge, and
+ * by then its room is archived or idle, so the live-room candidates above never
+ * include it: the review waited for a person. Each such item is a candidate on
+ * its newest break-fix room; readiness then routes the review against the
+ * merged commit on the trunk (terminal-recovery.ts), never to a delivery actor.
+ * The room scan reads only identity columns; authors are loaded for the chosen
+ * rooms alone.
+ */
+async function loadMergedBreakFixCandidates(covered: ReadonlySet<string>): Promise<Candidate[]> {
+  const items = await prisma.backlogItem.findMany({
+    where: { status: "awaiting-acceptance" },
+    select: { id: true, itemId: true },
+  });
+  const itemIdByRef = new Map<string, string>();
+  for (const item of items) {
+    if (covered.has(item.itemId)) continue;
+    itemIdByRef.set(item.id, item.itemId);
+    itemIdByRef.set(item.itemId, item.itemId);
+  }
+  if (itemIdByRef.size === 0) return [];
+  const rooms = await prisma.workroom.findMany({
+    where: { backlogItemId: { in: [...itemIdByRef.keys()] }, status: { notIn: ["abandoned", "superseded"] } },
+    orderBy: { updatedAt: "desc" },
+    select: { capsuleId: true, backlogItemId: true, scopeClaims: true },
+  });
+  const { readWorkShapeClaim } = await import("@/lib/work-management/workroom-shape-claim");
+  const roomByItem = new Map<string, string>();
+  for (const room of rooms) {
+    const itemId = room.backlogItemId ? itemIdByRef.get(room.backlogItemId) : undefined;
+    if (!itemId || roomByItem.has(itemId) || readWorkShapeClaim(room.scopeClaims)?.key !== "delivery-break-fix") continue;
+    roomByItem.set(itemId, room.capsuleId);
+  }
+  if (roomByItem.size === 0) return [];
+  const authors = new Map((await loadRoomAuthors({ capsuleId: { in: [...roomByItem.values()] } }, { includeRetired: true }))
+    .map((room) => [room.capsuleId, room]));
+  return [...roomByItem.entries()].flatMap(([itemId, capsuleId]) => {
+    const room = authors.get(capsuleId);
+    return room?.userId && room.agentId
+      ? [{ itemId, room: { roomId: room.roomId, capsuleId, userId: room.userId, agentId: room.agentId }, target: "completion" as const }]
+      : [];
+  });
 }
 
 /**
@@ -428,7 +481,7 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
       // The author is whoever authored the room the review is about.
       const room = route.workroomId === candidate.room.capsuleId
         ? candidate.room
-        : (await loadRoomAuthors({ capsuleId: route.workroomId }))[0] ?? null;
+        : (await loadRoomAuthors({ capsuleId: route.workroomId }, { includeRetired: true }))[0] ?? null;
       const at = { itemId: candidate.itemId, capsuleId: route.workroomId, requestKey };
       if (!room?.userId || !room.agentId) { outcomes.push({ ...at, outcome: "no-author" }); continue; }
       outcomes.push(await dispatchReviewerRequest({
