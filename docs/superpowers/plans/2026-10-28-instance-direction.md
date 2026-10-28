@@ -4,7 +4,7 @@ status: draft
 
 # Plan: the instance's direction (mission, vision, outcomes)
 
-**Spec:** [instance direction design](../specs/2026-10-28-instance-direction-design.md). **Backlog:** BI-916216E7 (phases 1 to 3), BI-8AB6B4F7 (phase 4). **Epic:** EP-OUTCOME-HIERARCHY.
+**Spec:** [instance direction design](../specs/2026-10-28-instance-direction-design.md). **Backlog item:** BI-916216E7 (phases 1 to 3; BI-8AB6B4F7 covers phase 4). **Epic:** EP-OUTCOME-HIERARCHY.
 
 Each phase is test-first: write the failing test, make it pass, then run the package typecheck.
 
@@ -58,3 +58,7 @@ BI-8AB6B4F7 acceptance, quoted from the item:
 - AC-1 The org context bundle and prompt block carry the vision and instance outcomes.
 - AC-2 evaluate_org_business_decision (WWWD) and evaluate_profession_decision (WSID) read them as context. So does principle_decide (WWMD) when the decision is scoped to an organization. Each records on its ledger which outcomes it read.
 - AC-3 When none are recorded, the decision says so. Nothing is invented.
+
+- Decision: decomposed
+- Receipt: `cmvsnpupc04c901msp9me6df4`
+- Dependencies: BI-8AB6B4F7 depends on BI-916216E7.

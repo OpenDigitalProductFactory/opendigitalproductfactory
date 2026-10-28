@@ -32,8 +32,8 @@ What exists at commit 4f00cb5:
 ### 3.1 Data
 
 - `BusinessContext.vision String?`.
-- `InstanceOutcome`: `id`, `organizationId` (FK, indexed), `statement`, `howWeKnow?`, `sortOrder`, `retiredAt?`, `createdAt`, `updatedAt`. Rows are retired, never deleted, so the epic level (BI-7CD178F8) can point at a stable id.
-- `InstanceDirectionRevision`: append-only. `organizationId` (FK), `version` (unique per organization), `mission`, `vision`, `outcomes` (JSON snapshot of the active outcomes), `changedByUserId` (FK to User, nullable), `source`, `createdAt`. One row per save. This is the same pattern as `WikiPageRevision` and `PromptRevision`.
+- `InstanceOutcome`: `id` (the stable semantic id `IO-XXXXXXXX`, minted in app code), `organizationId` (FK), `statement`, `measure?` (shown as "How we'll know"), `ordinal`, `lifecycle` (`RecordLifecycle`: `active`, or `retired` when the owner removes it) and `lifecycleAt`, following the record lifecycle convention, plus `createdAt` and `updatedAt`, indexed on `(organizationId, lifecycle)`. The parent design's `status` maps to `lifecycle`. Rows are retired, never deleted. This matches the boundary contract in the parent design: `Epic.servesInstanceOutcomeId` (BI-7CD178F8, a later migration owned by the epic stream) references this `id`, with `ON DELETE SET NULL`.
+- `InstanceDirectionRevision`: append-only. `organizationId` (FK), `version` (unique per organization), `mission`, `vision`, `outcomes` (JSON snapshot of the active outcomes: `id`, `statement`, `measure`), `changedByUserId` (FK to User, nullable), `source`, `createdAt`. One row per save. This is the same pattern as `WikiPageRevision` and `PromptRevision`.
 - An instance has at most 5 active outcomes. Setup asks for 1 to 3.
 
 ### 3.2 Owner entry
@@ -50,10 +50,10 @@ What exists at commit 4f00cb5:
 
 ### 3.4 Decision layers read it
 
-- `buildOrgContextBundle` loads vision and active outcomes. `formatOrgContextInstructions` adds `Vision:` and `Outcomes:` lines, each bounded in length. Up to 5 outcomes, 120 characters each.
+- `buildOrgContextBundle` gains `vision` and `instanceOutcomes: [{ id, statement, measure }]` (active rows, `ordinal` order), per the parent design's read contract. `formatOrgContextInstructions` adds `Vision:` and `Outcomes:` lines, each bounded in length. Up to 5 outcomes, 120 characters each.
 - Block 0 lists mission, vision and outcomes.
 - The WWWD alignment corpus (`loadOrgAlignmentCorpora`) gains the direction as evidence (`direction:mission@vN`, `direction:vision@vN`, `direction:outcome:<id>@vN`). The ledger's amendment lineage then names which direction revision a decision read.
-- The WSID gate records the same direction refs on its ledger payload. When nothing is recorded, the payload says `direction: none recorded`. Nothing is invented.
+- The WSID gate, and `principle_decide` when its governing profile is the organization, record `instanceDirection: { recorded, version, refs, missing }` on the ledger payload. The WWWD gate records `instanceDirection: { recorded, refs }`. When nothing is recorded, `recorded` is false and `refs` is empty. Nothing is invented.
 
 ## 4. Objectives and acceptance
 

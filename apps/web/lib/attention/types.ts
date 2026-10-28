@@ -37,6 +37,7 @@ export type AttentionSource =
   | "workroom-stall" // a Workroom whose drive has refused consecutive wakes — stalled, or unowned (BI-03E94B5B)
   | "workroom-rebind" // a Workroom pinned to a superseded work-shape version (BI-CB5C0DCE)
   | "orphaned-approval" // coworker approvals going to a delegate who is not using the portal (BI-61DE8177)
+  | "organization-direction" // the instance's mission, vision or top-level outcomes are not recorded yet (BI-916216E7)
   | "contribution-setup" // contribution with the DPF project is undecided, or chosen with no GitHub account connected (BI-D3342020)
   | "mailroom-item" // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
   | "agent-toolchain"; // a computer's DPF tools have failed to update, or waited on the operator, for over a day (BI-3E66F76F)

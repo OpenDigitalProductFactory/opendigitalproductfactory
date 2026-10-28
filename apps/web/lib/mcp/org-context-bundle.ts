@@ -39,10 +39,15 @@ export interface OrgContextClient extends OrgLocaleClient {
   businessContext: {
     findUnique: (args: unknown) => Promise<{
       mission?: string | null;
+      vision?: string | null;
       description?: string | null;
       targetMarket?: string | null;
       industry?: string | null;
     } | null>;
+  };
+  /** The owner's top-level outcomes (BI-916216E7). Optional for older fakes. */
+  instanceOutcome?: {
+    findMany: (args: unknown) => Promise<Array<{ id: string; statement: string; measure: string | null }>>;
   };
   storefrontConfig: {
     findFirst: (args: unknown) => Promise<{
@@ -55,6 +60,10 @@ export interface OrgContextClient extends OrgLocaleClient {
 export interface OrgContextBundle {
   organizationName: string | null;
   mission: string | null;
+  /** The owner's vision, or null when not recorded. Never derived. */
+  vision: string | null;
+  /** The owner's active top-level outcomes (IO-… ids), in ordinal order. Empty when none. */
+  instanceOutcomes: Array<{ id: string; statement: string; measure: string | null }>;
   archetypeId: string | null;
   archetypeName: string | null;
   industry: string | null;
@@ -88,11 +97,11 @@ export async function buildOrgContextBundle(
   }
   if (!org) return null;
 
-  const [bc, sf, locale] = await Promise.all([
+  const [bc, sf, locale, instanceOutcomes] = await Promise.all([
     db.businessContext
       .findUnique({
         where: { organizationId: org.id },
-        select: { mission: true, description: true, targetMarket: true, industry: true },
+        select: { mission: true, vision: true, description: true, targetMarket: true, industry: true },
       })
       .catch((error: unknown) => {
         opts?.onReadFailure?.(error);
@@ -107,6 +116,15 @@ export async function buildOrgContextBundle(
         return null;
       }),
     resolveOrgLocale(db, opts),
+    (db.instanceOutcome?.findMany({
+      where: { organizationId: org.id, lifecycle: "active" },
+      orderBy: [{ ordinal: "asc" }, { createdAt: "asc" }],
+      take: 5,
+      select: { id: true, statement: true, measure: true },
+    }) ?? Promise.resolve([])).catch((error: unknown) => {
+      opts?.onReadFailure?.(error);
+      return [];
+    }),
   ]);
 
   const archetypeId = sf?.archetypeId ?? null;
@@ -117,6 +135,8 @@ export async function buildOrgContextBundle(
   return {
     organizationName: org.name ?? null,
     mission: bc?.mission ?? null,
+    vision: bc?.vision?.trim() || null,
+    instanceOutcomes: instanceOutcomes ?? [],
     archetypeId,
     archetypeName: sf?.archetype?.name ?? null,
     industry,
@@ -124,6 +144,29 @@ export async function buildOrgContextBundle(
     businessProfile: resolveBusinessProfile({ archetypeId, industry }),
     stanceVectors: resolveStanceVectors({ archetypeId, industry }),
   };
+}
+
+/** Up to five outcome statements joined, within 90 characters overall. */
+function outcomesBrief(
+  outcomes: OrgContextBundle["instanceOutcomes"],
+  brief: (value: string | null | undefined, max: number) => string,
+): string {
+  if (outcomes.length === 0) return "not recorded yet";
+  const parts: string[] = [];
+  let used = 0;
+  for (const [index, o] of outcomes.entries()) {
+    const part = brief(o.statement, 45);
+    if (!part) continue;
+    const remaining = outcomes.length - index - 1;
+    const tail = remaining > 0 ? ` (+${remaining} more)` : "";
+    if (used + part.length + 2 + tail.length > 90) {
+      parts.push(`+${outcomes.length - index} more`);
+      break;
+    }
+    parts.push(part);
+    used += part.length + 2;
+  }
+  return parts.join("; ");
 }
 
 /** Compact connection orientation. Decision tools resolve detailed live doctrine on demand. */
@@ -137,7 +180,11 @@ export function formatOrgContextInstructions(
     (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
   const block = [
     `ORGANIZATION CONTEXT: ${brief(bundle.organizationName, 80) || "this organization"}.`,
-    `Mission: ${brief(bundle.mission || bundle.businessProfile.missionTheme, 180)}`,
+    `Mission: ${brief(bundle.mission || bundle.businessProfile.missionTheme, 140)}`,
+    // The owner's direction (BI-8AB6B4F7). Bounded so the routes below always
+    // fit; "not recorded yet" rather than a stand-in, so nothing is invented.
+    `Vision: ${brief(bundle.vision, 80) || "not recorded yet"}`,
+    `Outcomes: ${outcomesBrief(bundle.instanceOutcomes ?? [], brief)}`,
     `Archetype: ${brief(bundle.archetypeName, 60)}; industry: ${brief(bundle.industry, 60)}.`,
     `Locale: ${brief(bundle.locale.locale, 20)}; currency: ${brief(bundle.locale.currency, 10)}; country: ${brief(bundle.locale.countryCode, 10)}.`,
     'DECISION ROUTING: organization business → evaluate_org_business_decision (decisionScope "wwwd"); practitioner judgment → evaluate_profession_decision; DPF platform → principle_decide. These tools resolve the owning scope’s recorded doctrine. Cross-scope doctrine is advisory. If ownership is unclear, ask the owner. Do not substitute generic defaults for recorded business policy.',

@@ -23,7 +23,42 @@ describe("renderMissionPromptContent", () => {
   });
 });
 
+describe("renderMissionPromptContent with the direction (BI-8AB6B4F7 AC-1)", () => {
+  it("lists the vision and the outcomes beside the mission", () => {
+    const content = renderMissionPromptContent("Help families breathe easier.", {
+      vision: "Every home has clean air.",
+      outcomes: [
+        { statement: "Fewer asthma visits", measure: "ER visits drop 20%" },
+        { statement: "Trusted by landlords", measure: null },
+      ],
+    });
+    expect(content).toContain("Vision: Every home has clean air.");
+    expect(content).toContain("- Fewer asthma visits (how we'll know: ER visits drop 20%)");
+    expect(content).toContain("- Trusted by landlords");
+  });
+
+  it("says outcomes are not recorded rather than inventing any", () => {
+    const content = renderMissionPromptContent("M", { vision: null, outcomes: [] });
+    expect(content).not.toContain("Vision:");
+    expect(content).toContain("Top-level outcomes: not recorded yet");
+  });
+});
+
 describe("applyMissionPrompt", () => {
+  it("passes the direction through to Block 0 and marks who wrote it", async () => {
+    const { db, upsert } = makeDb();
+    await applyMissionPrompt({
+      mission: "M",
+      direction: { vision: "V", outcomes: [{ statement: "O", measure: null }] },
+      updatedBy: "owner",
+      db,
+      invalidate: false,
+    });
+    const args = upsert.mock.calls[0][0] as any;
+    expect(args.update.content).toContain("Vision: V");
+    expect(args.update.updatedBy).toBe("owner");
+  });
+
   it("upserts the global company-mission template with the mission", async () => {
     const { db, upsert } = makeDb();
 
