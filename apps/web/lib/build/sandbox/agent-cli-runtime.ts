@@ -294,6 +294,17 @@ export async function ensureSandboxNodeUser(containerId: string): Promise<void> 
   );
 }
 
+/**
+ * Most stdout an agent CLI run may hand back. Every byte is held in the portal
+ * process, so a runaway writer in the sandbox (DSec, arXiv 2609.22978, saw
+ * `yes` fill tens of gigabytes) would otherwise grow the portal's memory until
+ * it is killed. A run that passes this is stopped and rejected.
+ */
+export const MAX_AGENT_CLI_STDOUT_CHARS = 32 * 1024 * 1024;
+
+/** Stderr is progress chatter; only its tail is kept, for error reports. */
+export const MAX_AGENT_CLI_STDERR_TAIL_CHARS = 1024 * 1024;
+
 export type SandboxCliRunResult = {
   stdout: string;
   stderr: string;
@@ -331,6 +342,8 @@ export function runSandboxAgentCli(params: {
   resolveOnlyOnZeroExit?: boolean;
   onStderrLine?: (line: string) => void;
   onStdoutChunk?: (chunk: string) => void;
+  /** Override MAX_AGENT_CLI_STDOUT_CHARS (tests). */
+  maxStdoutChars?: number;
 }): Promise<SandboxCliRunResult> {
   const {
     containerId,
@@ -352,16 +365,24 @@ export function runSandboxAgentCli(params: {
   return new Promise<SandboxCliRunResult>((resolve, reject) => {
     const proc = spawnCb("docker", execArgs);
 
+    const maxStdoutChars = params.maxStdoutChars ?? MAX_AGENT_CLI_STDOUT_CHARS;
     let stdout = "";
     let stderrBuf = "";
     let timedOut = false;
+    let outputExceeded = false;
     const timer = setTimeout(() => {
       timedOut = true;
       proc.kill("SIGTERM");
     }, timeoutMs);
 
     proc.stdout.on("data", (data: Buffer) => {
+      if (outputExceeded) return;
       const chunk = data.toString();
+      if (stdout.length + chunk.length > maxStdoutChars) {
+        outputExceeded = true;
+        proc.kill("SIGKILL");
+        return;
+      }
       stdout += chunk;
       onStdoutChunk?.(chunk);
     });
@@ -369,6 +390,9 @@ export function runSandboxAgentCli(params: {
     proc.stderr.on("data", (data: Buffer) => {
       const chunk = data.toString();
       stderrBuf += chunk;
+      if (stderrBuf.length > MAX_AGENT_CLI_STDERR_TAIL_CHARS) {
+        stderrBuf = stderrBuf.slice(-MAX_AGENT_CLI_STDERR_TAIL_CHARS);
+      }
       if (onStderrLine) {
         for (const line of chunk.split("\n")) {
           if (line) onStderrLine(line);
@@ -379,6 +403,15 @@ export function runSandboxAgentCli(params: {
     proc.on("close", (code: number | null) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startMs;
+      if (outputExceeded) {
+        // Not a timeout (callers read `killed` as one) and never a success,
+        // whatever was collected before the cap.
+        reject(Object.assign(
+          new Error(`Agent CLI output passed ${Math.round(maxStdoutChars / (1024 * 1024))} MiB; the run was stopped`),
+          { stdout: "", stderr: stderrBuf, code, outputLimitExceeded: true },
+        ));
+        return;
+      }
       if (timedOut) {
         reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, stderr: stderrBuf, killed: true }));
         return;
