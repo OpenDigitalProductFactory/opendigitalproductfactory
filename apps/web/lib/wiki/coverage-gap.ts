@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 const MAX_TOPIC_LEN = 160;
 
@@ -125,6 +126,11 @@ export async function recordCoverageGap(
       changeSummary: "coverage-gap detected",
     });
   }
+  await syncWikiPageLinks(db as unknown as Parameters<typeof syncWikiPageLinks>[0], {
+    pageId: saved.id,
+    organizationId: input.organizationId,
+    body,
+  });
 
   return { recorded: true, slug, isNew: !existing };
 }

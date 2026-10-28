@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSlug,
+  extractWikilinks,
   kernelWikiPageSlug,
   parseFrontmatter,
   professionCorpusPageSlug,
@@ -84,5 +85,40 @@ describe("wiki page slug rules", () => {
 
   it("deriveSlug keeps its contract", () => {
     expect(deriveSlug("/repo/wiki/index.md", "/repo/wiki")).toBe("index");
+  });
+});
+
+describe("extractWikilinks — the one link extractor (BI-23900D0A)", () => {
+  it("stores the slug of a labelled link", () => {
+    expect(extractWikilinks("Prefer [[principles/no-assumptions|never assume]] here.")).toEqual([
+      "principles/no-assumptions",
+    ]);
+  });
+
+  it("dedupes a slug written both plain and labelled", () => {
+    expect(extractWikilinks("[[a]] and [[a|the a page]] and [[b|bee]]").sort()).toEqual(["a", "b"]);
+  });
+
+  it("skips links inside fenced code and inline code", () => {
+    const body = [
+      "Real [[kept]] link.",
+      "```md",
+      "Example: [[fenced-example]]",
+      "```",
+      "~~~",
+      "[[tilde-fenced]]",
+      "~~~",
+      "Inline `see [[inline-example]]` is syntax, not a link.",
+    ].join("\n");
+    expect(extractWikilinks(body)).toEqual(["kept"]);
+  });
+
+  it("keeps a code span that is exactly one link: the kernel's Relationships convention", () => {
+    const body = "- Describes: `[[entities/digital-product]]`, `[[entities/portfolio|portfolios]]`.\n- Example syntax: `see [[not-a-link]]`.";
+    expect(extractWikilinks(body)).toEqual(["entities/digital-product", "entities/portfolio"]);
+  });
+
+  it("still ignores malformed brackets and slugs with spaces", () => {
+    expect(extractWikilinks("[[ spaced slug ]] [[ok|label]] [[|no-slug]]")).toEqual(["ok"]);
   });
 });
