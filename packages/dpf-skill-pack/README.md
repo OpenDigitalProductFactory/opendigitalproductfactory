@@ -244,6 +244,11 @@ macOS / Linux:
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
 ```
 
+`--codex-only` selects Codex configuration, hooks and routine permissions.
+It does not configure Grok, Claude or Antigravity, so unrelated client settings
+cannot block a Codex repair. Omit the client selector to update all supported
+clients. Shared pack files and client discovery remain common maintenance.
+
 Start a new Codex thread after the updater finishes; skills and MCP tools are
 loaded at session start.
 
