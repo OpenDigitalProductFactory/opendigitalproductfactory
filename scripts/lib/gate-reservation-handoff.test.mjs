@@ -77,6 +77,13 @@ test("mixed quiescence and queue handoff remains ambiguous", async () => {
   assert.equal(r.seen.length, 1);
 });
 
+test("quiescence cannot hide a malformed queue packet", async () => {
+  const r = await exercise([JSON.stringify(quiescing()) + "\n"
+    + JSON.stringify(queued(B, { status: "waiting" }))]);
+  assert.equal(r.code, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE);
+  assert.equal(r.seen.length, 1);
+});
+
 for (const [name, packet] of [
   ["missing", "not a handoff"], ["foreign owner", JSON.stringify(queued(B, { claimKey: `local-ci:someone-else:${SHA}` }))],
   ["foreign source", JSON.stringify(queued(B, { claimKey: `local-ci:${OWNER}:${"b".repeat(40)}` }))],

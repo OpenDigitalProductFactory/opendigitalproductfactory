@@ -39,8 +39,8 @@ export function advanceGateReservationPin(argv, outputTail) {
       quiescence = true;
       continue;
     }
-    if (packet?.status !== "queued" || packet?.code !== "local_ci_durable_wait") continue;
-    if (packet.resumeMode !== "durable-task" || typeof packet.claimKey !== "string" ||
+    if (packet?.code !== "local_ci_durable_wait") continue;
+    if (packet.status !== "queued" || packet.resumeMode !== "durable-task" || typeof packet.claimKey !== "string" ||
         !(packet.claimKey === expected || packet.claimKey.startsWith(`${expected}:`)) ||
         typeof packet.leaseId !== "string" || !/^NPEL-[A-Z0-9-]{1,80}$/.test(packet.leaseId) ||
         typeof packet.taskRunId !== "string" || !/^TR-NONPROD-[A-Z0-9-]{1,100}$/.test(packet.taskRunId)) {
