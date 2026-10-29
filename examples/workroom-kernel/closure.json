@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "entry": "kernel/workroom/index.ts",
+  "runtimeDependencies": [],
+  "sources": [
+    "packages/validators/src/action-result.ts",
+    "packages/validators/src/workroom/flow-graph.ts",
+    "packages/validators/src/workroom/marking.ts",
+    "packages/validators/src/workroom/receipts.ts",
+    "packages/validators/src/workroom/index.ts",
+    "packages/validators/src/gpp/element-ids.ts",
+    "packages/validators/src/gpp/diagnostics.ts",
+    "packages/validators/src/gpp/executable-constructs.ts",
+    "packages/validators/src/gpp/constructs-used-by.ts"
+  ],
+  "toolchain": { "node": "24.16.0", "typescript": "6.0.3" },
+  "license": "Apache-2.0",
+  "sourceBaseline": "e22a9996c58a21e6af868baa0f48ee2195573bc2",
+  "qualification": "Synthetic protocol fixture only; no execution, authentication, enforcement or business qualification."
+}

@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { readScheduledWorkTrigger, withScheduledWorkTrigger } from "./scheduled-work-trigger";
+import { readScheduledWorkTrigger, withScheduledWorkTrigger } from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 import {
   WORKROOM_STAGE_TASK_CONFIG_KEY,
   readWorkroomStageTaskConfig,

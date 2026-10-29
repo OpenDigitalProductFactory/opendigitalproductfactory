@@ -25,7 +25,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules/liveness";
 
 import { deliveryShapeSize, isDeliveryShapeKey } from "./delivery-shapes";
-import type { WorkroomDriveHold } from "./workroom-drive-hold";
+import type { WorkroomDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 
 export const WORKROOM_OVERSEER_ACTIVITY_KIND = "workroom-overseer";
 

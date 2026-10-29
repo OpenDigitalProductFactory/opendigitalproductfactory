@@ -19,11 +19,11 @@ import { describe, expect, it } from "vitest";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { getWorkShape, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import { lowerToDefinition } from "./emit";
+import { compileShapeDocument, decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { lowerToDefinition } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { gppShapeDocumentSchema, type GppGate } from "./gpp-shape-schema";
-import { legacyProjection } from "./legacy";
+import { gppShapeDocumentSchema, type GppGate } from "@dpf/validators/gpp/gpp-shape-schema";
+import { legacyProjection } from "@dpf/validators/gpp/legacy";
 
 type JsonObject = Record<string, unknown>;
 
@@ -127,12 +127,17 @@ describe("declared stage review criticality", () => {
     expect(roundTrip.stages[0]).toHaveProperty("requiredProfessions", ["ux-design", "finance"]);
     expect(canonicalJson(roundTrip)).toBe(canonicalJson(document));
   });
-  it("rejects unknown or duplicate specialist professions", () => {
-    for (const requiredProfessions of [["unknown-craft"], ["ux-design", "ux-design"]]) {
-      const input = workedExampleWithoutGate();
-      (input.stages as JsonObject[])[0].requiredProfessions = requiredProfessions;
-      expect(gppShapeDocumentSchema.safeParse(input).success).toBe(false);
-    }
+  it("rejects duplicate professions structurally and unknown professions at the DPF host boundary", async () => {
+    const duplicate = workedExampleWithoutGate();
+    (duplicate.stages as JsonObject[])[0].requiredProfessions = ["ux-design", "ux-design"];
+    expect(gppShapeDocumentSchema.safeParse(duplicate).success).toBe(false);
+    const unknown = workedExampleWithoutGate();
+    (unknown.stages as JsonObject[])[0].requiredProfessions = ["unknown-craft"];
+    // The portable schema cannot own the host's profession registry. The host
+    // must refuse the document before resolution or emission, even without sources.
+    const result = await compileShapeDocument(JSON.stringify(unknown), {} as never, { sourcePath: "test.gpp.json" });
+    expect(result).toMatchObject({ accepted: false, diagnostics: [{ code: "SCHEMA/custom", path: "/stages/0/requiredProfessions" }] });
+    expect(result).not.toHaveProperty("module");
   });
   it.each(["routine", "consequential", "critical"])("preserves %s through validation, lowering and decompilation", (criticality) => {
     const input = workedExampleWithoutGate();

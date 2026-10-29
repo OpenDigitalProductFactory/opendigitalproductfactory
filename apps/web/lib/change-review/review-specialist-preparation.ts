@@ -1,7 +1,7 @@
 import { splitUnifiedDiffByFile } from "@/lib/build/private-paths";
 import { reviewWorkroomIsOpen, resolveLiveReviewSpecialists, type LiveReviewSpecialistSelection } from "./live-specialist-selection";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { markedStageKeys, readStoredDriveMarking } from "@/lib/work-management/drive-marking";
+import { markedStageKeys, readStoredDriveMarking } from "@dpf/validators/workroom/marking";
 
 type Principal = { aliases: Array<{ aliasValue: string }> } | null;
 type Room = { id: string; capsuleId: string; status: string; archivedAt: Date | null; scopeClaims: unknown; workspaceState: unknown; featureBuildId: string | null;

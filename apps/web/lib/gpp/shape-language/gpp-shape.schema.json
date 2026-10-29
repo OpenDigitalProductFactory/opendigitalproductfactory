@@ -198,36 +198,7 @@
         "requiredProfessions": {
           "type": "array",
           "items": {
-            "type": "string",
-            "enum": [
-              "data-architect",
-              "software-engineer",
-              "frontend-engineer",
-              "qa-engineer",
-              "product-manager",
-              "scrum-master",
-              "finance",
-              "portfolio-management",
-              "marketing",
-              "hr-people-ops",
-              "legal-compliance",
-              "security",
-              "devops-platform",
-              "operations",
-              "agricultural-operations",
-              "enterprise-architecture",
-              "customer-success",
-              "strategy-executive",
-              "release-service-management",
-              "ux-design",
-              "documentation-content",
-              "build-studio",
-              "admin-operations",
-              "external-intelligence",
-              "market-research",
-              "manufacturing-operations",
-              "mcp-integration"
-            ]
+            "$ref": "#/$defs/slug"
           },
           "description": "Required registered specialist professions for this stage. Participation does not grant tools or review authority; deliverable requirements may add professions.",
           "uniqueItems": true

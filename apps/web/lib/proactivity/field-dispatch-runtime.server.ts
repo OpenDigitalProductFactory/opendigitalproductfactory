@@ -7,7 +7,7 @@ import type { DispatcherAction } from "@dpf/validators";
 
 import { buildFieldDispatchNotificationProposal } from "./field-dispatch-runtime";
 import { resolveUserAwareProactivityPlan } from "./proactivity-resolver.server";
-import type { ProactivityPlan, ProactivityResolverInput } from "./proactivity-types";
+import type { ProactivityPlan, ProactivityResolverInput } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export type BuildUserAwareFieldDispatchNotificationProposalsInput = {
   userId: string;

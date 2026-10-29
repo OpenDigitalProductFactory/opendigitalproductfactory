@@ -6,9 +6,9 @@ import {
   PROACTIVITY_FACT_CATEGORY,
   PROACTIVITY_OVERRIDE_FACT_PREFIX,
 } from "./proactivity-override-preferences";
-import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "./proactivity-resolver";
-import type { ProactivityLevel, ProactivityPlan, ProactivityResolverInput } from "./proactivity-types";
-import { isProactivityLevel } from "./proactivity-types";
+import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityLevel, ProactivityPlan, ProactivityResolverInput } from "@dpf/validators/workroom-policy/proactivity-types";
+import { isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export async function resolveUserAwareProactivityPlan(input: {
   userId: string;

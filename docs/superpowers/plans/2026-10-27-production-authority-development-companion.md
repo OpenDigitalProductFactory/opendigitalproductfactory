@@ -6,13 +6,13 @@ status: draft
 
 **Date:** 2026-10-27
 
-**Umbrella:** `BI-CCE04F19` (xlarge, decomposed) under `EP-E1F1DB58`
+**Umbrella:** `BI-CCE04F19` (xlarge, decomposed) under initiative epic `EP-8E34EB8A`, which carries the approved hypothesis, measures, appetite and decomposition
 
 **Design:** [Production Authority and Development Companion Installations](../specs/2026-10-27-production-authority-development-companion-design.md)
 
 **Extends:** [Federated demand network](../specs/2026-07-19-federated-demand-network-design.md). Every phase extends existing substrate; none adds a second store of work state.
 
-**Status:** Draft. Plan coverage is recorded after the design's independent spec approval mints the `BI-CCE04F19` scope baseline. No implementation starts before then, or before plan review.
+**Status:** Draft. The design passed independent design-spec, spec-approval and architecture review on 2026-10-28. The portfolio owner approved the hypothesis, appetite and decomposition on 2026-10-28 (recorded on `EP-8E34EB8A`). Plan coverage and plan review are next; no implementation starts before plan review.
 
 ## 1. Outcome
 
@@ -49,7 +49,9 @@ the operator PROD install is the authority for its estate. The Windows install b
 
 **Parallel lanes.** These can run at the same time: P0a–P0d; P5; P6; P7.
 
-**Thinnest path to the operator's first working loop:** P0c, then P1, then P2, then P3, then P5. At that point the companion follows production guidance and the two installs no longer double-work an item. P4, P7 and P8 follow.
+**First loop (approved by the portfolio owner, 2026-10-28):** P0c, then P1, then P2, then P3, then P4, then P5. At that point the companion follows production guidance and budget, and the two installs no longer double-work an item. **Appetite:** these six children; if the loop is not working on both machines after them, the initiative stops and is re-planned rather than growing.
+
+**Held until the first loop works:** P7, P8, P9 and P10. P0a, P0b, P0d and P6 are separate repairs that ship on their own.
 
 Related live items to reconcile, not duplicate:
 - `BI-2641F34A`, claim integrity;

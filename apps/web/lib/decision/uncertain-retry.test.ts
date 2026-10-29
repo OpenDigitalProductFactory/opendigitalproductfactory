@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { decideWithBoundedRetry } from "./uncertain-retry";
-import type { DecisionResult } from "./option-scoring";
+import { decideWithBoundedRetry } from "@dpf/validators/judgment/uncertain-retry";
+import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 
 const result = (over: {
   verdict?: "proceed" | "uncertain" | "decline";

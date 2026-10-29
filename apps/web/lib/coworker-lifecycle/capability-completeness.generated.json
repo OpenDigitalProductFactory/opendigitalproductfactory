@@ -2076,7 +2076,7 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 16,
+          "reachableSideEffectingTools": 17,
           "reachableGatedTools": 1,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to HR-200",
@@ -2102,7 +2102,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 94,
+          "reachableTools": 96,
           "heldGrants": [
             "file_read",
             "initiative_design_review",
@@ -2111,11 +2111,12 @@
             "release_gate_create",
             "acceptance_package_write",
             "decision_record_create",
-            "spec_plan_read"
+            "spec_plan_read",
+            "workroom_evidence_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 94 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 96 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -2151,7 +2152,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 94 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 96 reachable tool(s)"
         },
         {
           "plane": "evidence",

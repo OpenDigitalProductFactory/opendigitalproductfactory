@@ -26,7 +26,7 @@
  *
  * Pure. The registry shape is never mutated; the drive receives a rebound copy.
  */
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 import type { WorkShapeDefinitionContract, WorkShapeStage } from "./work-shapes";

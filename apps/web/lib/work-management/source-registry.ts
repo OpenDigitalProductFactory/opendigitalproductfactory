@@ -34,7 +34,8 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
 export type WorkCaseWorkItemSourceType =
   (typeof WORK_CASE_WORK_ITEM_SOURCE_TYPES)[number];
 
-export type WorkCaseDecisionScope = "wwmd" | "wwwd" | "wsid";
+export type { DecisionScope as WorkCaseDecisionScope } from "@dpf/validators/decision-scopes";
+import type { DecisionScope as WorkCaseDecisionScope } from "@dpf/validators/decision-scopes";
 
 export type WorkCaseReceiptKind =
   | "governed-action"

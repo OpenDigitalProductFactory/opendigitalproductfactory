@@ -25,7 +25,7 @@ import {
   isCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceiptAt,
   receiptInRun,
-} from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 export type RecordedEvidence = {
   /** Stage the evidence was recorded against. Evidence with no stage cannot

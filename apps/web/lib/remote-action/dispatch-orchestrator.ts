@@ -13,7 +13,7 @@
 // Nothing here runs until the route layer's DPF_REMOTE_ACTION_DISPATCH_ENABLED flag
 // AND the node's action.execute capability are both on. No mutation: P2 is read-only.
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 
 import {
   canTransitionDispatch,
@@ -21,6 +21,8 @@ import {
   claimTimeoutMsForActionType,
   DEFAULT_CLAIM_TIMEOUT_MS,
   DOCKER_VM_RESTART_ACTION_TYPE,
+  MANAGED_INFERENCE_ACTION_TYPE,
+  parseManagedInferenceTransitionParameters,
   isPrivilegedDispatchActionType,
   type ClaimingNodeView,
   type DispatchableActionView,
@@ -28,6 +30,7 @@ import {
 } from "@dpf/db/remote-action-dispatch";
 import {
   EDGE_ACTION_ENVELOPE_VERSION,
+  canonicalizeEdgeActionEnvelope,
   type EdgeActionEnvelope,
   type SignedEdgeActionEnvelope,
 } from "@dpf/db/edge-action-envelope";
@@ -62,6 +65,7 @@ export interface ClaimableActionRow {
   edgeNodeId: string | null;
   changeRequestId: string | null;
   parameters: unknown;
+  evidence?: unknown;
 }
 
 export interface DispatchOrchestratorDb {
@@ -74,6 +78,7 @@ export interface DispatchOrchestratorDb {
       status: string;
       edgeNodeId: string | null;
       parameters: unknown;
+      evidence?: unknown;
     } | null>;
     update(args: unknown): Promise<unknown>;
   };
@@ -156,10 +161,11 @@ export async function claimActionsForNode(
   const eligible = claimableActionsForNode(node, views);
 
   const now = opts.now ?? new Date();
-  const expiresAt = new Date(now.getTime() + Math.min(opts.envelopeLifetimeMs ?? 2 * 60 * 1000, 5 * 60 * 1000));
   const nonceFactory = opts.nonceFactory ?? (() => randomBytes(24).toString("base64url"));
   const claimed: ClaimedAction[] = [];
   for (const e of eligible) {
+    const defaultLifetimeMs = e.actionType === MANAGED_INFERENCE_ACTION_TYPE ? 5 * 60 * 1000 : 2 * 60 * 1000;
+    const expiresAt = new Date(now.getTime() + Math.min(opts.envelopeLifetimeMs ?? defaultLifetimeMs, 5 * 60 * 1000));
     const row = candidates.find((c) => c.actionKey === e.actionKey);
     let dispatchParameters = row?.parameters ?? {};
     if (isOrganizationJoinActionType(e.actionType)) {
@@ -190,6 +196,14 @@ export async function claimActionsForNode(
       }
       dispatchParameters = { issueKey: DOCKER_VM_WEDGED_ISSUE_KEY };
     }
+    if (e.actionType === MANAGED_INFERENCE_ACTION_TYPE) {
+      const parsed = parseManagedInferenceTransitionParameters(dispatchParameters);
+      if (!parsed) {
+        await failUndispatchableAction(db, e.actionKey, now, "managed-inference-parameters-invalid");
+        continue;
+      }
+      dispatchParameters = parsed;
+    }
     const envelope: EdgeActionEnvelope = {
       version: EDGE_ACTION_ENVELOPE_VERSION,
       signingKeyId: opts.signer.signingKeyId,
@@ -215,6 +229,12 @@ export async function claimActionsForNode(
         dispatchExpiresAt: expiresAt,
         dispatchSigningKeyId: signed.signingKeyId,
         dispatchSignature: signed.signature,
+        ...(e.actionType === MANAGED_INFERENCE_ACTION_TYPE ? { evidence: {
+          ...(isRecord(row?.evidence) ? row.evidence : {}),
+          nativeDispatch: { requestDigest: createHash("sha256").update(canonicalizeEdgeActionEnvelope(signed)).digest("hex"),
+            sourceSha: (dispatchParameters as { sourceSha: string }).sourceSha,
+            operation: (dispatchParameters as { operation: string }).operation },
+        } } : {}),
       },
     });
     if (res.count === 1) {
@@ -255,6 +275,32 @@ export async function recordActionResult(
 
   const from = row.status as RemoteActionDispatchState;
   const to = input.outcome as RemoteActionDispatchState;
+  if (row.actionType === MANAGED_INFERENCE_ACTION_TYPE && to !== "running") {
+    const parameters = parseManagedInferenceTransitionParameters(row.parameters);
+    const dispatch = isRecord(row.evidence) && isRecord(row.evidence.nativeDispatch) ? row.evidence.nativeDispatch : null;
+    const evidence = input.evidence;
+    if (!parameters || !dispatch || !evidence || !/^[a-f0-9]{64}$/.test(String(dispatch.requestDigest))
+      || dispatch.sourceSha !== parameters.sourceSha || dispatch.operation !== parameters.operation
+      || evidence.actionKey !== row.actionKey || evidence.requestDigest !== dispatch.requestDigest || evidence.sourceSha !== parameters.sourceSha) {
+      return { ok: false, reason: "native-report-unbound" };
+    }
+    if (to === "succeeded" && (evidence.settlement !== "confirmed"
+      || evidence.nativeStatus !== (parameters.operation === "activate" ? "active" : "rolled-back"))) {
+      return { ok: false, reason: "native-success-unconfirmed" };
+    }
+    if (to === "succeeded" && parameters.operation === "activate") {
+      const identity = evidence.activeIdentity;
+      if (!isRecord(identity) || identity.runtimeManifestSha256 !== parameters.runtimeManifestSha256
+        || !/^[a-f0-9]{64}$/.test(String(identity.executableSha256)) || !/^[a-f0-9]{64}$/.test(String(identity.engineManifestSha256))
+        || !Number.isSafeInteger(identity.daemonPid) || Number(identity.daemonPid) <= 0
+        || !Array.isArray(identity.enginePids) || !identity.enginePids.length || identity.enginePids.some(pid => !Number.isSafeInteger(pid) || Number(pid) <= 0)) {
+        return { ok: false, reason: "native-active-identity-missing" };
+      }
+    }
+    // Only receipt delivery is idempotent. Keep the original evidence and
+    // unknown outcome; this neither re-executes nor upgrades its settlement.
+    if (from === to && isRecord(row.evidence) && row.evidence.requestDigest === evidence.requestDigest) return { ok: true, status: from };
+  }
   if (!canTransitionDispatch(from, to)) {
     return { ok: false, reason: `illegal-transition ${from}->${to}` };
   }
@@ -281,6 +327,9 @@ export async function recordActionResult(
             result: storedResult as never,
             evidence: {
               ...sanitizeActionEvidence(input.evidence),
+              ...(row.actionType === MANAGED_INFERENCE_ACTION_TYPE && isRecord(row.evidence)
+                ? { nativeAdmission: row.evidence.nativeAdmission, nativeDispatch: row.evidence.nativeDispatch,
+                  governance: row.evidence.governance } : {}),
               reportedByNode: input.edgeNodeRowId,
               reportedAt: now.toISOString(),
             } as never,

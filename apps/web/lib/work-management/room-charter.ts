@@ -15,6 +15,7 @@
  * Design: docs/superpowers/specs/2026-10-27-agent-dialog-broker-design.md §4.2
  */
 import { GAID_AUTHORIZATION_CLASS_ORDER, type GaidAuthorizationClass } from "@/lib/identity/authorization-classes";
+import { clearanceCovers } from "./room-participation";
 
 export const ROOM_CHARTER_PARTICIPANT_KINDS = [
   "org-coworker",
@@ -103,7 +104,7 @@ export function evaluateCharterAdmission(input: {
   if (!invitee.kind) return outside("invitee-kind-unknown");
   if (!invitee.active) return outside("invitee-inactive");
   if (!charter.admits.includes(invitee.kind)) return outside("kind-not-admitted");
-  if (!invitee.sensitivityClearance.includes(input.roomSensitivityCeiling)) return outside("clearance-below-ceiling");
+  if (!clearanceCovers(invitee.sensitivityClearance, input.roomSensitivityCeiling)) return outside("clearance-below-ceiling");
   if (!classWithinCeiling(input.requestedClass, charter.classCeiling)) return outside("class-above-ceiling");
   return { inCharter: true, reason: `in-charter:${charter.source}:${invitee.kind}:${input.requestedClass}` };
 }

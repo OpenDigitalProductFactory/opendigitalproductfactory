@@ -16,7 +16,7 @@
 // Companion: situational-weighting.backtest.test.ts (frozen-ledger controlled
 // A/B — proves the mechanism; this file tracks corpus drift).
 
-import { decide, type DecisionOption, type DecisionPrinciple, type DecisionResult } from "./option-scoring";
+import { decide, type DecisionOption, type DecisionPrinciple, type DecisionResult } from "@dpf/validators/judgment/option-scoring";
 
 // ─── Parsed-page shape (subset of WikiPage frontmatter we score against) ─────
 export type ParsedPrinciplePage = {
