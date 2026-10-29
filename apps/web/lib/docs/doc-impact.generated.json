@@ -938,6 +938,9 @@
     "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts": [
       "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
     ],
+    "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -1088,6 +1091,9 @@
     "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
+    "apps/web/lib/mcp/improvement-draft.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1120,6 +1126,9 @@
     ],
     "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/scheduled-agent-task-pack.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/lib/mcp/packs/surface-pack.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1194,6 +1203,12 @@
     ],
     "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
+    ],
+    "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-authority.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-run.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
@@ -4241,6 +4256,11 @@
     "docs/user-guide/ai-workforce/coworker-proactivity.md": [
       "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx",
       "apps/web/components/proactivity/ProactivityRosterList.tsx",
+      "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts",
+      "apps/web/lib/mcp/improvement-draft.ts",
+      "apps/web/lib/mcp/packs/scheduled-agent-task-pack.ts",
+      "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-authority.ts",
+      "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-run.ts",
       "apps/web/lib/proactivity/proactivity-roster.ts"
     ],
     "docs/user-guide/ai-workforce/decision-perspective.md": [

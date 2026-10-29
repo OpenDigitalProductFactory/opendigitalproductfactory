@@ -11969,12 +11969,14 @@
         "the-levels",
         "the-two-hard-floors",
         "what-you-can-do",
+        "internal-learning-recommendations",
         "what-the-dial-actually-changes",
         "what-it-does",
         "coo-supervision-and-current-delivery-status",
         "which-installation-the-coo-coordinates",
         "when-it-runs",
         "how-it-stays-current",
+        "routine-observation-watches",
         "what-it-will-not-do",
         "what-you-must-do"
       ]
@@ -13527,6 +13529,8 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "before-you-decide",
+        "connecting-business-mail",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
