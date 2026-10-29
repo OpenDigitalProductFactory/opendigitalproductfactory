@@ -1,3 +1,4 @@
+import { BUILD_DELIVERY_ACTUATOR } from "@/lib/build/build-acceptance-entry";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
 import type { OwedAcceptance } from "./owed-acceptance";
@@ -174,6 +175,13 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
   ].join("; ").slice(0, 500);
 }
 
+function deliveredBuildEntry(item: { activities?: Array<{ kind: string; payload: unknown }> }): boolean {
+  const payload = item.activities?.find((row) => row.kind === "status_change")?.payload;
+  return Boolean(payload && typeof payload === "object" && !Array.isArray(payload)
+    && (payload as Record<string, unknown>).actuator === BUILD_DELIVERY_ACTUATOR
+    && (payload as Record<string, unknown>).to === "awaiting-acceptance");
+}
+
 export async function runAcceptanceSweep(
   ports: AcceptanceSweepPorts,
   config: AcceptanceSweepConfig,
@@ -271,7 +279,9 @@ export async function runAcceptanceSweep(
       listed.closable.push(item.itemId);
       await closeIfAuthorised(item, projection, authorisation, closing, ports);
     }
-    if (isRoutingCandidate(itemAge?.ageDays, config.agedDays, projection)) {
+    // BI-729D9B27: a build-originated item whose change is proven live routes at
+    // once; the aged-item wait is for acceptance nobody owns, and this one has none.
+    if (isRoutingCandidate(itemAge?.ageDays, deliveredBuildEntry(item) ? 0 : config.agedDays, projection)) {
       agedCandidates.push({ item, ageDays: itemAge!.ageDays, projection });
     }
     if (projection.owner) page.owned += 1;
