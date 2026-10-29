@@ -54,7 +54,7 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
     const table = `"${schema}"."TelemetryCost"`;
     const destinationName = fixtureName("telemetry_cost");
     const destination = publicFixture(destinationName);
-    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionAttempts: 0, transactionMs: 0, transactionWorkMs: 0 };
     const write = createSanitizedCloneInsertWriter(destinationClient);
     const count = 50_001;
     try {
@@ -75,6 +75,8 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       expect(metrics.batches).toBe(1001);
       expect(metrics.fetches).toBe(1002);
       expect(metrics.transactionAttempts).toBe(1001);
+      expect(metrics.transactionWorkMs).toBeGreaterThan(0);
+      expect(metrics.transactionWorkMs).toBeLessThanOrEqual(metrics.transactionMs);
       const persisted = await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND payload->>'value' = id::text`);
       expect(persisted.rows[0].count).toBe(count);
       const untouched = await client.query(`SELECT count(*)::int AS count FROM ${table} WHERE name = 'Source person'`);

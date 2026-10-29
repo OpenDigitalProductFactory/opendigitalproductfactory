@@ -234,6 +234,17 @@ describe("destination cleanup", () => {
 });
 
 describe("bounded confidential inserts", () => {
+  it("separates transaction callback work from acquisition and commit elapsed time", async () => {
+    const metrics = { transactionAttempts: 0, transactionMs: 0, transactionWorkMs: 0 };
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async () => 1,
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => write(transaction) };
+    await createSanitizedCloneInsertWriter(client as never)("First", [{ id: "1" }], metrics);
+    expect(metrics.transactionWorkMs).toBeGreaterThan(0);
+    expect(metrics.transactionWorkMs).toBeLessThanOrEqual(metrics.transactionMs);
+  });
   it("measures transaction attempts without retaining rows or swallowing failures", async () => {
     const metrics = { transactionAttempts: 0, transactionMs: 0 };
     const client = { $transaction: async () => { throw new Error("destination unavailable"); } };

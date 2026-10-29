@@ -322,7 +322,7 @@ export async function runSanitizedClone(): Promise<void> {
           finally { metrics.writeMs += performance.now() - writeStarted; }
         };
         const copySanitizedTable = async (tableName: string, limit?: number) => {
-          const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionMs: 0, transactionAttempts: 0 };
+          const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionMs: 0, transactionAttempts: 0, transactionWorkMs: 0 };
           const started = performance.now();
           let completed = false;
           try {
@@ -598,7 +598,7 @@ export const SANITIZED_CLONE_INSERT_TRANSACTION_POLICY: Readonly<SanitizedCloneI
 export function createSanitizedCloneInsertWriter(
   client: PrismaClient,
   policy: Readonly<SanitizedCloneInsertTransactionPolicy> = SANITIZED_CLONE_INSERT_TRANSACTION_POLICY,
-): (tableName: string, rows: Array<Record<string, unknown>>, metrics?: { transactionAttempts: number; transactionMs: number }) => Promise<void> {
+): (tableName: string, rows: Array<Record<string, unknown>>, metrics?: { transactionAttempts: number; transactionMs: number; transactionWorkMs?: number }) => Promise<void> {
   const typesByTable = new Map<string, Map<string, ColumnTypeInfo>>();
   return async (tableName, rows, metrics) => {
     const batchSize = Math.max(1, Math.trunc(policy.batchSize));
@@ -607,6 +607,8 @@ export function createSanitizedCloneInsertWriter(
       const started = performance.now();
       if (metrics) metrics.transactionAttempts++;
       try { await client.$transaction(async transaction => {
+        const workStarted = performance.now();
+        try {
         // Pin trigger suppression to the connection used by these bounded writes.
         // Existing destination-wide cleanup still owns clone publication safety.
         await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
@@ -616,6 +618,9 @@ export function createSanitizedCloneInsertWriter(
           typesByTable.set(tableName, columnTypes);
         }
         await insertRows(transaction, tableName, batch, columnTypes);
+        } finally {
+          if (metrics) metrics.transactionWorkMs = (metrics.transactionWorkMs ?? 0) + performance.now() - workStarted;
+        }
       }, { maxWait: policy.maxWaitMs, timeout: policy.timeoutMs }); }
       finally { if (metrics) metrics.transactionMs += performance.now() - started; }
     }
