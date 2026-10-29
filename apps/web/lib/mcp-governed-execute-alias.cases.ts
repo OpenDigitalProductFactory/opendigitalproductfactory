@@ -21,7 +21,7 @@ export function registerWorkroomAliasCases(evidence: {
   setInvitationPreflightResult(result: RoomParticipantInvitationPreflight): void;
   invitationPreflightCalls(): unknown[][];
 }): void {
-  it.each([true, false])("expired=%s exact exceptions reject impossible calls but retain human approval for valid ones", async expired => {
+  it.each([true, false])("expired=%s exact exceptions reject impossible parameters or retain human approval after admission", async expired => {
     const authority = vi.fn(async () => evidence.authorityInput({ authContext: {
       ...evidence.authorityInput().authContext,
       grantedCapabilities: [...evidence.authorityInput().authContext.grantedCapabilities, "manage_platform"],
@@ -29,7 +29,9 @@ export function registerWorkroomAliasCases(evidence: {
       ...evidence.authorityInput().action, toolName: "record_semantic_review_exemption", sideEffect: true,
       approvalPolicy: "all", consequence: "authority", requiredCapability: "manage_platform",
     } }));
-    evidence.applyOverrides({ toolPreflight: null, resolveCoworkerAuthorityInput: authority });
+    // This generic harness has no evidence store. The real eligible-reader to
+    // governor bridge is covered by semantic-review-policy-exemption.test.ts.
+    evidence.applyOverrides({ toolPreflight: expired ? null : async () => null, resolveCoworkerAuthorityInput: authority });
     const result = await governedExecuteTool({ toolName: "record_semantic_review_exemption", userId: "user-1",
       userContext: evidence.normalUser, source: "external-jsonrpc", context: { agentId: "AGT-100" },
       rawParams: { capsuleId: "WC-FIXTURE", sourceHeadSha: "a".repeat(40), baseTreeHash: "b".repeat(40),
