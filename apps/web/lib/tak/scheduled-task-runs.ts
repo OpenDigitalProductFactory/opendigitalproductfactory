@@ -1,3 +1,5 @@
+import { promptNamesTool, scheduledMandatoryToolNames } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
+export { scheduledMandatoryToolNames, WORKROOM_STAGE_EVIDENCE_TOOL } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
 import { isRecord } from "@/lib/shared/coerce";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
@@ -127,19 +129,6 @@ export function scheduledRequiredToolNames(input: {
  * A tool name is a token, so it must match on token boundaries. Underscores
  * are part of the name, which is why \b is not enough on its own.
  */
-function promptNamesTool(lowerPrompt: string, toolName: string): boolean {
-  const name = toolName.toLowerCase();
-  let from = 0;
-  for (;;) {
-    const at = lowerPrompt.indexOf(name, from);
-    if (at < 0) return false;
-    const before = at === 0 ? "" : lowerPrompt[at - 1]!;
-    const after = lowerPrompt[at + name.length] ?? "";
-    const boundary = (ch: string) => ch === "" || !/[a-z0-9_]/.test(ch);
-    if (boundary(before) && boundary(after)) return true;
-    from = at + 1;
-  }
-}
 
 /**
  * The tools this run must reach that are authorized but NOT attached.
@@ -292,26 +281,6 @@ function refusedCalls(executed: ScheduledRunToolExecution[], toolName: string): 
   return executed.filter((call) => call.name === toolName && call.result?.success === false && call.result.error !== "approval_required");
 }
 
-/** The writer every Workroom stage run records its stage evidence through. */
-export const WORKROOM_STAGE_EVIDENCE_TOOL = "record_workroom_evidence";
-
-/**
- * The governed writers a run must be OFFERED, whatever its grants say
- * (BI-62DB6C03).
- *
- * scheduledRequiredToolNames and the verdict derive "required" from the
- * AUTHORIZED set, so a run that is not offered the writer — an advise boundary
- * strips every side-effecting tool, or the grant or owner capability is
- * missing — has nothing required, is recorded ok, and the drive dispatches the
- * stage again. A Workroom stage run (taskConfig.workroomStage, or a brief naming
- * the writer) cannot do its job without the writer, so that requirement is
- * stated here independently of authority.
- */
-export function scheduledMandatoryToolNames(input: { prompt: string; taskConfig?: unknown }): string[] {
-  const isStageRun = readWorkroomStageTaskConfig(input.taskConfig) !== null
-    || promptNamesTool(input.prompt.toLowerCase(), WORKROOM_STAGE_EVIDENCE_TOOL);
-  return isStageRun ? [WORKROOM_STAGE_EVIDENCE_TOOL] : [];
-}
 
 /**
  * Why this run must not be dispatched, or null when every mandatory writer is
@@ -388,6 +357,7 @@ export async function createTaskRunForScheduledTask(input: {
   /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
   delegatedPosture?: ResolvedDelegatedPosture;
   taskConfig?: unknown;
+  scheduledReporting?: { mode: "read-only-history"; scopeDigest: string; nextRunAt: string | null };
 }): Promise<ScheduledTaskRunRef> {
   const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
   const stage = readWorkroomStageTaskConfig(input.taskConfig);
@@ -404,9 +374,10 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
-    ...((checkpoint || stage?.qualificationExperiment) ? { metadata: {
+    ...(checkpoint || stage?.qualificationExperiment || input.scheduledReporting ? { metadata: {
       ...(checkpoint ? { workroomDispatchCheckpoint: checkpoint } : {}),
       ...(stage?.qualificationExperiment ? { qualificationExperiment: stage.qualificationExperiment } : {}),
+      ...(input.scheduledReporting ? { scheduledReporting: input.scheduledReporting } : {}),
     } } : {}),
     proactivity: input.proactivity,
     delegatedPosture: input.delegatedPosture,
