@@ -1,7 +1,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
-import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { assertScheduledReportingEligible, isScheduledReportingRead, readScheduledReportingMode, scheduledReportingScopeDigest } from "./scheduled-reporting-contract";
 
 const reportingRunSelect = { taskRunId: true, userId: true, threadId: true, currentAgentId: true, initiatingAgentId: true,
@@ -59,13 +59,11 @@ export async function resolveScheduledReportingContext(userId: string, context?:
   return null;
 }
 
-export async function scheduledReportingToolRefusal(toolName: string, userId: string, context?: ToolExecutionContext): Promise<ToolResult | null> {
+export async function scheduledReportingToolRefusal(toolName: string, userId: string, context?: ToolExecutionContext, definition?: ToolDefinition): Promise<ToolResult | null> {
   try {
     const reporting = await resolveScheduledReportingContext(userId, context);
     if (!reporting) return null;
-    const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
-    const definition = PLATFORM_TOOLS.find(tool => tool.name === toolName);
-    if (!definition || !isScheduledReportingRead(definition)) return { success: false, error: "scheduled_reporting_write_refused",
+    if (!definition || definition.name !== toolName || !isScheduledReportingRead(definition)) return { success: false, error: "scheduled_reporting_write_refused",
       message: "This scheduled commission permits observation and reporting only. Operational actions require their own current authority." };
     return null;
   } catch {

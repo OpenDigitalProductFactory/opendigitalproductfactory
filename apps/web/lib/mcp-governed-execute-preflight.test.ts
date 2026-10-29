@@ -10,12 +10,16 @@ import * as exceptions from "./change-review/semantic-review-policy-exemption";
 const event = { toolName: "record_initiative_evidence", rawParams: {}, userId: "human", userContext: { platformRole: "developer", isSuperuser: false },
   source: "agentic-loop" as const, context: { taskRunId: "TR-ORIGINAL", apiTokenId: "current-token" } };
 beforeEach(() => { vi.resetAllMocks(); guard.mockResolvedValue(null); evidencePreflight.mockResolvedValue(null); reportingGuard.mockResolvedValue(null); });
-it("checks the current reporting boundary even for a previously approved scheduled write", async () => {
+it("checks the current reporting boundary before offering another scheduled write approval", async () => {
   const refusal = { success: false, error: "scheduled_reporting_write_refused", message: "This commission permits observation and reporting only." };
   reportingGuard.mockResolvedValue(refusal);
-  const approved = { ...event, toolName: "record_execution_evidence", context: { ...event.context, callerClient: "approval-completion" } };
-  expect(await defaultGovernedToolPreflight(approved, vi.fn())).toEqual(refusal);
-  expect(reportingGuard).toHaveBeenCalledWith(approved.toolName, approved.userId, approved.context);
+  const scheduled = { ...event, toolName: "record_execution_evidence" };
+  expect(await defaultGovernedToolPreflight(scheduled, vi.fn())).toEqual(refusal);
+  expect(reportingGuard).toHaveBeenCalledWith(scheduled.toolName, scheduled.userId, scheduled.context, undefined);
+});
+it("defers an old approved reporting call to execution so its refusal finalizes the existing approval", async () => {
+  expect(await defaultGovernedToolPreflight({ ...event, context: { ...event.context, callerClient: "approval-completion" } }, vi.fn())).toBeNull();
+  expect(reportingGuard).not.toHaveBeenCalled();
 });
 it("rejects missing artifact provenance before the owner can be asked to approve", async () => {
   const refusal = { success: false, error: "ARTIFACT_AUTHOR_REQUIRED", message: "Artifact author provenance is unavailable." };

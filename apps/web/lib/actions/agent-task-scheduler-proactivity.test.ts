@@ -1,4 +1,4 @@
-import { installScheduledTaskTransactionFixture } from "./scheduled-task-transaction-fixture";
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // BI-754C9E82 — proactivity plan ENFORCEMENT on scheduled runs. Split from
 // agent-task-scheduler.test.ts (module-size ratchet): same mock harness, only
 // the enforcement describe block lives here.

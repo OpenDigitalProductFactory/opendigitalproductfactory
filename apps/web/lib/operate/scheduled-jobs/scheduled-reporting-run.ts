@@ -87,7 +87,7 @@ async function persistOutcome(tx: Prisma.TransactionClient, input: RunInput,
   reportDigest: string, evidence: Array<{ toolExecutionId: string; resultDigest: string }>, now: Date, decisionBrief?: string) {
   const parked = status === "input-required" || status === "auth-required";
   const nextRunAt = parked || isOneShotCron(task.schedule) ? null : computeNextCronRun(task.schedule, now);
-  const runChanged = await tx.taskRun.updateMany({ where: { taskRunId: input.taskRunId, userId: input.userId, status: "working" },
+  const runChanged = await tx.taskRun.updateMany({ where: { taskRunId: input.taskRunId, userId: input.userId, status: { equals: "working" } },
     data: { status, completedAt: parked ? null : now, progressPayload: { summary, ...(decisionBrief ? { decisionBrief } : {}), scheduledReporting: { status, summary, evidence,
       conditionId: state.condition?.conditionId ?? null, reportDigest } } } });
   if (runChanged.count !== 1) throw new Error("Scheduled reporting run already settled or changed.");

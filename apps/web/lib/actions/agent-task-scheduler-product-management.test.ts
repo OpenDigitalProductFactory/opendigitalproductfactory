@@ -1,4 +1,4 @@
-import { installScheduledTaskTransactionFixture } from "./scheduled-task-transaction-fixture";
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({

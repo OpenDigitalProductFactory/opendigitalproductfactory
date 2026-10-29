@@ -1,6 +1,6 @@
 import { vi, type Mock } from "vitest";
 
-/** Existing scheduler suites use scalar Prisma stubs. Give their transactions
+/** Test support: existing scheduler suites use scalar Prisma stubs. Give their transactions
  * a persisted row snapshot so a binding write is visible to later settlement.
  * PostgreSQL suites independently verify real locking and rollback. */
 export function installScheduledTaskTransactionFixture(db: {

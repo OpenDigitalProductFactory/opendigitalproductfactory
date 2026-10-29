@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ taskRun: { findUnique: vi.fn() }, scheduledAgentTask: { findUnique: vi.fn() } }));
 vi.mock("@dpf/db", () => ({ prisma: db, DATA_MODEL_MIRROR_TASK_ID: "data-mirror", SYSML_PROJECTION_TASK_ID: "sysml", SELF_OPTIMIZATION_SWEEP_TASK_ID: "optimization" }));
-vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [
-  { name: "observe_health", sideEffect: false, executionMode: "immediate" },
-  { name: "record_execution_evidence", sideEffect: true, executionMode: "immediate" },
-  { name: "unknown_metadata", executionMode: "immediate" },
-] }));
 import { scheduledReportingScopeDigest } from "./scheduled-reporting-contract";
-import { scheduledReportingToolRefusal } from "./scheduled-reporting-authority";
+import { scheduledReportingToolRefusal as currentReportingRefusal } from "./scheduled-reporting-authority";
+
+const definitions = [
+  { name: "observe_health", description: "Read", inputSchema: {}, requiredCapability: null, sideEffect: false, executionMode: "immediate" as const },
+  { name: "record_execution_evidence", description: "Write", inputSchema: {}, requiredCapability: null, sideEffect: true, executionMode: "immediate" as const },
+  { name: "unknown_metadata", description: "Unknown", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const },
+];
+const scheduledReportingToolRefusal = (name: string, user: string, context: Parameters<typeof currentReportingRefusal>[2]) =>
+  currentReportingRefusal(name, user, context, definitions.find(tool => tool.name === name));
 
 let task: Record<string, unknown>;
 let run: Record<string, unknown>;
@@ -30,7 +33,7 @@ describe("current scheduled reporting authority", () => {
   });
   it.each([
     { ownerUserId: "foreign" }, { taskRunId: "TR-NEWER" }, { isActive: false },
-    { prompt: "Changed commission" }, { agentId: "another-agent" }, { nextRunAt: new Date("2026-10-29T07:00:00Z") },
+    { prompt: "Changed commission" }, { agentId: "another-agent" }, { nextRunAt: new Date(Date.now() + 60000) },
   ])("refuses stale or foreign current task state %j", async change => {
     Object.assign(task, change);
     expect(await scheduledReportingToolRefusal("observe_health", "owner", context)).toMatchObject({ success: false });

@@ -1,4 +1,4 @@
-import { installScheduledTaskTransactionFixture } from "./scheduled-task-transaction-fixture";
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // Approval convergence A1 characterisation (BI-C8EC05C9), creation site S2 in
 // the scheduler. Pins how a scheduled run treats a call that propose-
 // interception diverted, TODAY (spec D2 S2, named delta (a)):

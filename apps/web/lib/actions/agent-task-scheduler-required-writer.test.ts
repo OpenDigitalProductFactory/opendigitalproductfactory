@@ -1,4 +1,4 @@
-import { installScheduledTaskTransactionFixture } from "./scheduled-task-transaction-fixture";
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // BI-62DB6C03 — the scheduler wiring for a Workroom stage's evidence writer:
 // not dispatched without it, corrected once when it was offered and not called.
 // Same mock harness as agent-task-scheduler-proactivity.test.ts (vitest mock
