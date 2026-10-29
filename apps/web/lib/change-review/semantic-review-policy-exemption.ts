@@ -95,7 +95,16 @@ function validIdentity(value: Record<string, unknown>) {
   const expiry = typeof value.expiresAt === "string" ? Date.parse(value.expiresAt) : NaN;
   return value.reviewBasis === "operator-accepted-client-assessment" && nonempty(value.capsuleId) && hash(value.sourceHeadSha, 40) && hash(value.baseTreeHash, 40)
     && hash(value.headTreeHash, 40) && hash(value.diffDigest, 64) && nonempty(value.reason) && value.reason.trim().length >= 20
+    && nonempty(value.verificationEvidenceId) && nonempty(value.clientAssessmentActivityId)
     && expiry > Date.now() && expiry <= Date.now() + 24 * 60 * 60 * 1000;
+}
+
+/** Parameter admission only; this does not read evidence or authorize a waiver. */
+export function preflightSemanticReviewExemption(params: Record<string, unknown>): ToolResult | null {
+  return validIdentity(params) ? null : {
+    success: false, error: "review_exemption_refused",
+    message: "This exact exception request is malformed, expired, or exceeds the 24-hour limit. Submit a fresh exact request with current source identity and bounded expiry; it still requires the operator's approval.",
+  };
 }
 
 export async function recordSemanticReviewExemption(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
