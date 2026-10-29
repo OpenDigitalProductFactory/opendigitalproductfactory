@@ -15,6 +15,16 @@ const RESEARCH = {
 };
 
 describe("primary decision disclosure", () => {
+  it("formats the handover summary using the viewer locale", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "reassign_workroom_executor", recommenderAgentId: "AGT-EXT-CODEX",
+      proposedParameters: { capsuleId: "WC-1", toExecutorKind: "codex-desktop" } });
+    const normal = envelopePrimaryDecision(decision);
+    const pseudo = envelopePrimaryDecision(decision, "en-XA");
+    expect(pseudo.title).not.toBe(normal.title);
+    expect(pseudo.description).not.toBe(normal.description);
+    expect(pseudo.recommendation).not.toBe(normal.recommendation);
+  });
+
   it.each(["grant", "revoke"])("keeps the full permission-change intent visible: %s", action => {
     const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "manage_coworker_tool_grant", consequence: "authority",
       proposedParameters: { coworker: "Build Lead", grantKey: "admin_write", action } });

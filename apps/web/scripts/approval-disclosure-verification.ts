@@ -9,8 +9,26 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, type BrowserContext, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { isDeepStrictEqual } from "node:util";
+import { RATCHET_AXES, verdictForRoute, type RouteMeasurement } from "../lib/ux-budget/ratchet";
+import frozenBudget from "../lib/ux-budget/route-budget-baseline.json";
 import { measureUxBudget } from "../lib/ux-budget/measure";
 import { waitForRouteDomToSettle, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
+
+export function assertApprovalScenarioBudget(measurement: RouteMeasurement, cardAxeViolations: number) {
+  const baseline = frozenBudget.routes["/workspace/inbox"];
+  check(frozenBudget.bootstrapped && baseline, "Inbox has no frozen scenario budget");
+  for (const axis of RATCHET_AXES) {
+    const value = axis === "axeViolations" ? measurement.axeViolations : measurement.metrics[axis];
+    check(Number.isFinite(value) && value >= 0, "Unavailable scenario measurement: " + axis);
+  }
+  check(cardAxeViolations === 0, "Approval card has serious or critical accessibility violations");
+  const verdict = verdictForRoute(measurement, baseline);
+  // Scenario content deliberately changes the hierarchy. The preceding ordinary
+  // route sweep enforces its frozen structure; scenarios enforce every numeric
+  // ratchet through the same evaluator, without fabricating a matching snapshot.
+  check(verdict.regressions.length === 0, "Approval scenario exceeds the frozen Inbox budget: " + verdict.regressions.join("; "));
+  return verdict;
+}
 
 export function assertApprovalVerificationRuntime(env: Readonly<Record<string, string | undefined>>) {
   const sourceSha = env.GITHUB_SHA ?? "";
@@ -181,14 +199,24 @@ export async function verifyApprovalDisclosure() {
         check(geometry.documentWidth <= geometry.width && geometry.dark === (theme === "dark")
           && geometry.visibility === "visible", "Viewport, theme or visibility does not match the declared capture");
         const axe = await new AxeBuilder({ page }).options(uxSweepAxeOptions()).analyze();
+        const cardAxe = await new AxeBuilder({ page }).include('[id="owner-decision-coworker-envelope-' + id + '"]')
+          .options(uxSweepAxeOptions()).analyze();
+        const cardAxeViolations = cardAxe.violations.filter(v => v.impact === "critical" || v.impact === "serious").length;
+        const ariaSnapshot = await page.locator("body").ariaSnapshot();
         const slug = value.key + "-" + layout + "-" + theme;
         await card.screenshot({ path: resolve(OUT, slug + ".png") });
         const result = { case: value.key, layout, theme, sourceSha: runtime.sourceSha,
           metrics: { ...measureUxBudget(html), axeViolations: axe.violations.filter(v => v.impact === "critical" || v.impact === "serious").length },
+          cardAxeViolations, ariaSnapshot,
           geometry, checks: { completeOriginalInput: true, materialFactsVisible: true, technicalInitiallyClosed: true },
           domSha256: createHash("sha256").update(html).digest("hex") };
-        captures.push(result);
-        writeFileSync(resolve(OUT, slug + ".json"), JSON.stringify(result, null, 2));
+        writeFileSync(resolve(OUT, slug + ".json"), JSON.stringify({ ...result, status: "measured" }, null, 2));
+        const verdict = assertApprovalScenarioBudget({ routePath: "/workspace/inbox", shell: "detail", audience: "worker",
+          exemptChecks: ["next-action-marker", "lead-band"], metrics: result.metrics,
+          axeViolations: result.metrics.axeViolations, ariaSnapshot }, cardAxeViolations);
+        const accepted = { ...result, status: "passed", numericBudgetVerdict: verdict };
+        captures.push(accepted);
+        writeFileSync(resolve(OUT, slug + ".json"), JSON.stringify(accepted, null, 2));
         if (layout === "mobile" && theme === "dark" && ["report", "unknown"].includes(value.key)) {
           const summary = card.getByText("Technical evidence", { exact: true });
           await summary.focus(); await page.keyboard.press("Enter");

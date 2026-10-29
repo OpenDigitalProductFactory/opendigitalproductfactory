@@ -1,4 +1,4 @@
-import { SOURCE_CATALOG, formatSource } from "@dpf/i18n";
+import { SOURCE_CATALOG, DEFAULT_LOCALE, formatSource } from "@dpf/i18n";
 
 // Decision-first owner copy for a proposed CoworkerActionEnvelope (BI-F95B0795).
 //
@@ -435,7 +435,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
 }
 
 /** Human presentation only. The original proposal remains the execution binding. */
-export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary) {
+export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, locale: string = DEFAULT_LOCALE) {
   let params: Record<string, unknown> = {};
   try { params = objectRecord(JSON.parse(decision.completeProposedContent ?? "null")) ?? {}; } catch { /* Older unresolved projection. */ }
   const copy = SOURCE_CATALOG.approvals.card.primary;
@@ -451,10 +451,10 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary) {
   let recommendation = copy.unresolvedRecommendation;
   if (handover) {
     const args = { assistant: handover.name };
-    title = formatSource("en-US", copy.handoverTitle, args);
-    description = formatSource("en-US", copy.handoverDescription, args);
+    title = formatSource(locale, copy.handoverTitle, args);
+    description = formatSource(locale, copy.handoverDescription, args);
     consequence = copy.handoverConsequence;
-    recommendation = formatSource("en-US", copy.handoverRecommendation, args);
+    recommendation = formatSource(locale, copy.handoverRecommendation, args);
   } else if (recordsResult) {
     title = copy.recordTitle;
     description = params.outcome === "blocked" ? copy.blockedDescription : copy.recordDescription;

@@ -22,6 +22,7 @@ import { OnBehalfDecision, decidedOnBehalfText } from "./OnBehalfDecision";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 import { envelopeInboxRoute, envelopeResultRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
 import { SOURCE_CATALOG } from "@dpf/i18n";
+import { useMessagesContext } from "@/lib/i18n/messages-context";
 import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
 
 const COPY = SOURCE_CATALOG.approvals.card;
@@ -58,7 +59,8 @@ export function CoworkerEnvelopeApproval({
   // BI-7BCC87BB: who decided for whom, when an admin decided on the owner's behalf.
   const [onBehalfNote, setOnBehalfNote] = useState<string | null>(null);
   const decision = approval.decision;
-  const primary = envelopePrimaryDecision(decision);
+  const { locale } = useMessagesContext();
+  const primary = envelopePrimaryDecision(decision, locale);
 
   // BI-F4EB23C1: a decision that never answered is reconciled against what the
   // server recorded. The card never sends the decision again on its own.
