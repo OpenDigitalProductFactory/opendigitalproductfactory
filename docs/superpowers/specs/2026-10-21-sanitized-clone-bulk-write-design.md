@@ -345,7 +345,7 @@ not be summed. Qualification compares identical source/order/value/cohort under
 50 and 500 transaction ceilings in both execution orders, with actual persisted
 duplicate winners and omitted vectors. Original cold/warm/retained-payload
 controls stay ordered; an additional fresh-client streamed wide-payload case
-keeps the same 16 MiB bound, measured after every awaited insert inside the
+keeps the same 16 MiB bound, measured after each awaited 50-row window of inserts inside the
 real destination transaction as well as after COMMIT. A paired positive
 control deliberately retains more than that bound during the callback and
 clears it before COMMIT: the inner probe must detect it while the old

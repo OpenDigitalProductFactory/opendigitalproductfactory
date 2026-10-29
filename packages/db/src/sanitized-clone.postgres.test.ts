@@ -694,6 +694,9 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
     let peak = 0;
     let afterCommitPeak = 0;
     let insertSamples = 0;
+    let transactionOpen = false;
+    let innerSamples = 0;
+    let sampleInside: (() => void) | null = null;
     try {
       await streamClient.$connect();
       await client.query(`CREATE TABLE ${source} (id bigint PRIMARY KEY, name text, payload jsonb, embedding vector(3072))`);
@@ -705,6 +708,8 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
           // The positive control holds >16MiB only until the callback returns.
           // Post-COMMIT sampling must miss it; the in-transaction probe must not.
           let retainedParameters: unknown[] | null = null;
+          transactionOpen = true;
+          sampleInside = () => { innerSamples++; peak = Math.max(peak, retainedHeap() - baseline); };
           const observedTx = new Proxy(tx, { get(target, key) {
             if (key === "$executeRawUnsafe") return async (sql: string, ...values: unknown[]) => {
               const result = await target.$executeRawUnsafe(sql, ...values);
@@ -713,31 +718,42 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
                   retainedParameters = new Array(3 * 1024 ** 2).fill(values[0]);
                 }
                 insertSamples++;
-                // Observe the real driver after its awaited insert while the
-                // transaction and SQL parameter scope are still alive.
-                peak = Math.max(peak, retainedHeap() - baseline);
+
               }
               return result;
             };
             const value = Reflect.get(target, key);
             return typeof value === "function" ? value.bind(target) : value;
           } });
-          try { await write(observedTx); }
-          finally { retainedParameters = null; }
+          try {
+            await write(observedTx);
+            sampleInside();
+          } finally {
+            retainedParameters = null;
+            transactionOpen = false;
+            sampleInside = null;
+          }
         }, options as never);
         afterCommitPeak = Math.max(afterCommitPeak, retainedHeap() - baseline);
       } };
       const writer = createSanitizedCloneWriter(observedClient as never);
       const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
       await withSanitizedCursorBatches(client, `SELECT id,name,payload,NULL::text AS embedding FROM ${source} ORDER BY id`,
-        next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics);
+        next => writer.copyBatches(name, async () => {
+          // Each source window is 50 rows (the final window is smaller).
+          // This runs after the preceding window's real awaited SQL inserts
+          // and before the next fetch, while its transaction is still open.
+          if (transactionOpen) sampleInside!();
+          return next();
+        }, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics);
       expect(metrics.rows).toBe(2001);
-      expect(insertSamples).toBe(41);
+      expect(insertSamples).toBeGreaterThanOrEqual(41);
+      expect(innerSamples).toBeGreaterThanOrEqual(41);
       expect(afterCommitPeak).toBeLessThan(16 * 1024 ** 2);
       if (retainUntilCommit) expect(peak).toBeGreaterThan(16 * 1024 ** 2);
       else expect(peak).toBeLessThan(16 * 1024 ** 2);
       expect((await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND embedding IS NULL AND length(payload->>'text')=32768`)).rows[0].count).toBe(2001);
-      console.info(`[sanitized-clone-stream-memory] ${JSON.stringify({ sourceRows: 2001, retainUntilCommit, insertSamples, retainedPeakGrowth: peak, afterCommitPeakGrowth: afterCommitPeak, ...metrics })}`);
+      console.info(`[sanitized-clone-stream-memory] ${JSON.stringify({ sourceRows: 2001, retainUntilCommit, insertSamples, innerSamples, retainedPeakGrowth: peak, afterCommitPeakGrowth: afterCommitPeak, ...metrics })}`);
     } finally {
       await streamClient.$disconnect();
       await client.query("ROLLBACK");
