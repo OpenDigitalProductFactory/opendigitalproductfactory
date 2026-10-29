@@ -296,7 +296,7 @@ describe("S1 — chat ends a proposal-mode call on the approval request it raise
     const messageWrite = mockPrisma.agentMessage.create.mock.calls[1][0].data;
     expect(messageWrite).toMatchObject({
       threadId: "thread-1", role: "assistant", taskRunId: "run-123",
-      content: "I'd like to share this finding.", agentId: "admin-assistant", routeContext: "/admin",
+      content: "contribute_to_hive is waiting for a person to approve it.", agentId: "admin-assistant", routeContext: "/admin",
     });
     expect(governedExecuteTool).toHaveBeenCalledWith(expect.objectContaining({
       toolName: "contribute_to_hive",
@@ -306,6 +306,7 @@ describe("S1 — chat ends a proposal-mode call on the approval request it raise
     expect("agentMessage" in result && result.agentMessage).toMatchObject({
       id: messageWrite.id,
       role: "assistant",
+      content: "contribute_to_hive is waiting for a person to approve it.",
       approvalRequests: [{
         envelopeId: "env-1", toolName: "contribute_to_hive", status: "proposed",
         expiresAt: "2026-10-07T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.", // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
