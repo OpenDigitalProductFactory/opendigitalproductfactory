@@ -62,3 +62,33 @@ Rollback uses a reviewed revert of this increment through normal delivery; no sc
 Decision proposed: atomic. Sole deliverable occurrence-source-facts maps to BI-D02868D7 and requirements I1, I2, I3, I4, I5. Contract occurrence-source-facts-authority; flow selected-room-admit-resolve-disclose; verification occurrence-authority-boundaries, occurrence-details-keyboard-theme, occurrence-installed-acceptance.
 The phases cannot independently deliver an authorized, attributable rendered fact: loader without admission is unsafe, disclosure without bounded facts misleads, and source-only checks do not establish installed behavior. Separate diagnostics/policy repairs remain with existing owners.
 Native coverage receipt is pending; this paragraph is not a receipt. Record it against this immutable plan before implementation.
+
+## Recorded coverage and test-impact resolution
+
+Native coverage receipt cmvu6r1ic4ht001me4yyg31z9 accepted the atomic mapping above against commit ae250b1a4877a7f5cb2587a26155b116860ea122, plan blob b799da54e764547ef5217f40c8dae2bbea8559ec. This supersedes the pending status above; it does not admit a held fixture or satisfy installed acceptance.
+
+All seven requested native graph queries returned available/ready. Empty graph links for the disclosure and new subject modules are not proof of no tests: include the colocated disclosure and new subject tests and expand from actual imports. The graph-linked union to include is:
+- apps/web/components/workspace/workroom/WorkroomShapeSection.test.tsx
+- apps/web/lib/work-management/room-read-model.test.ts
+- apps/web/components/workspace/WorkCaseDetailView.test.tsx
+- apps/web/components/workspace/workroom/WorkroomCycles.test.tsx
+- apps/web/components/workspace/workroom/WorkroomPosture.test.tsx
+- apps/web/components/workspace/workroom/WorkroomProcessOverseer.test.tsx
+- apps/web/lib/work-management/drive-author-stage.test.ts
+- apps/web/lib/work-management/drive-resolution.test.ts
+- apps/web/lib/work-management/readiness-review-stages.test.ts
+- apps/web/lib/work-management/room-coordinator.test.ts
+- apps/web/lib/work-management/room-participant-assignment.test.ts
+- apps/web/lib/work-management/shape-projection.test.ts
+- apps/web/lib/work-management/standing-operations-shapes.test.ts
+- apps/web/lib/work-management/workroom-shape-conformance.test.ts
+- apps/web/lib/work-management/workroom-stage-decision.test.ts
+- apps/web/lib/work-management/work-shape-prior-versions.test.ts
+- apps/web/lib/work-management/workspace-case-detail.server.test.ts
+- apps/web/components/workspace/WorkCaseAttentionLens.test.tsx
+- apps/web/lib/work-management/customer-domain-adoption.test.ts
+- apps/web/lib/work-management/workspace-case-loader.review-profile.test.ts
+- apps/web/lib/work-management/workspace-case-loader.review.test.ts
+- apps/web/lib/work-management/workspace-case-loader.test.ts
+
+Add the four explicitly scoped test files, the current loader colocated suite and boundary cases described above. Resolve newly exposed consumers before Red. No test has been run on this child tree yet.
