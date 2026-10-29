@@ -57,6 +57,7 @@ export async function recordWorkCapsuleEvidence(args: {
   capsuleId: string;
   evidence: CapsuleEvidenceInput;
   actor: WorkCapsuleActor;
+  taskRunId?: string | null;
   deferPublication?: boolean;
 }) {
   if (!isWorkCapsuleEvidenceKind(args.evidence.kind)) {
@@ -86,6 +87,9 @@ export async function recordWorkCapsuleEvidence(args: {
       || qualificationState.bindingDigest !== qualificationDigest)) {
       throw new Error("Qualification evidence is stale, duplicated, or bound to another experiment.");
     }
+    if (qualificationState && !args.taskRunId) {
+      throw new Error("Qualification evidence requires its exact scheduled TaskRun context.");
+    }
     const activity = await recordWorkCapsuleActivity(tx, {
       workCapsuleId: capsule.id, kind: "evidence-recorded", summary: evidence.summary,
       payload: { ...evidence, sourceBinding }, actor: args.actor,
@@ -93,7 +97,8 @@ export async function recordWorkCapsuleEvidence(args: {
     if (qualificationState) {
       await tx.workroom.update({ where: { id: capsule.id }, data: { workspaceState: {
         ...workspace,
-        qualificationExperimentAdmission: { ...qualificationState, status: "settled", evidenceId: activity.id },
+        qualificationExperimentAdmission: { ...qualificationState, status: "settled", evidenceId: activity.id,
+          taskRunId: args.taskRunId },
       } } });
     }
     return activity;

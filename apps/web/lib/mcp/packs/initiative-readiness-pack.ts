@@ -20,7 +20,7 @@ import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-con
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
-import { parseQualificationExperimentState, parseQualificationVerificationEvidence, qualificationBindingDigest,
+import { parseQualificationExperimentBinding, parseQualificationExperimentState, parseQualificationVerificationEvidence, qualificationBindingDigest,
   verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const artifactRefSchema = {
@@ -244,7 +244,7 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
   const state = parseQualificationExperimentState(
     (room.workspaceState as Record<string, unknown>).qualificationExperimentAdmission,
   );
-  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId) return false;
+  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId || !state.taskRunId) return false;
   const admission = verifyQualificationExperimentAdmission(state.token, { allowExpired: true });
   if (!admission.ok || admission.data.binding.phase !== "verify"
     || admission.data.bindingDigest !== state.bindingDigest) return false;
@@ -254,7 +254,15 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
     ? payload.result as Record<string, unknown> : null;
   const proof = parseQualificationVerificationEvidence(result);
   if (result?.qualificationOutcome !== "positive" || !proof || proof.command !== "run_sandbox_tests"
+    || proof.taskRunId !== state.taskRunId
     || result.qualificationBindingDigest !== qualificationBindingDigest(admission.data.binding)) return false;
+  const run = await prisma.taskRun.findUnique({ where: { taskRunId: state.taskRunId },
+    select: { a2aMetadata: true } });
+  const runMetadata = run?.a2aMetadata && typeof run.a2aMetadata === "object" && !Array.isArray(run.a2aMetadata)
+    ? run.a2aMetadata as Record<string, unknown> : null;
+  const runBinding = parseQualificationExperimentBinding(runMetadata?.qualificationExperiment);
+  if (!runBinding.ok || qualificationBindingDigest(runBinding.data)
+    !== qualificationBindingDigest(admission.data.binding)) return false;
   const receipts = await prisma.toolExecutionReceipt.findMany({
     where: { id: { in: proof.toolExecutionReceiptIds } },
     select: { id: true, receiptKind: true, receiptStatus: true, executionStatus: true, expiresAt: true,
@@ -265,6 +273,10 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
   const expectedIds = new Set(proof.toolExecutionReceiptIds);
   const startedAt = Date.parse(proof.startedAt);
   const completedAt = Date.parse(proof.completedAt);
+  const admittedAt = Date.parse(state.startedAt ?? "");
+  const admittedUntil = Math.min(admittedAt + admission.data.binding.maxDurationMs,
+    Date.parse(admission.data.binding.expiresAt));
+  if (!Number.isFinite(admittedAt) || startedAt < admittedAt || completedAt > admittedUntil) return false;
   return receipts.every((receipt) => {
     const execution = receipt.toolExecution;
     const output = receipt.outputDigest && typeof receipt.outputDigest === "object" && !Array.isArray(receipt.outputDigest)

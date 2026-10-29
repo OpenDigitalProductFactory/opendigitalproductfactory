@@ -75,7 +75,7 @@ describe("initiative readiness reviewer tools", () => {
       artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: headSha,
         path: "docs/protocol.md", providerBlobId: binding.protocol.providerBlobId },
       findings: [], resolvedFindingRefs: ["IF-91E987DA433B0C82"], qualificationEvidenceId: "evidence-verify" };
-    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { qualificationExperiment: binding } });
     const outputDigest = `sha256:${"2".repeat(64)}`;
     mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
       qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
@@ -99,6 +99,37 @@ describe("initiative readiness reviewer tools", () => {
     expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
       .toMatchObject({ success: true, data: { receiptId: "research-receipt" } });
     expect(mocks.findReceipts).toHaveBeenCalledTimes(1);
+    mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+      command: "run_sandbox_tests", outputDigest, taskRunId: "TR-FOREIGN",
+      toolExecutionReceiptIds: ["receipt-verify"], startedAt: "2025-06-18T11:05:00.000Z",
+      completedAt: "2025-06-18T11:06:00.000Z",
+    } } });
+    mocks.findReceipts.mockResolvedValue([{ id: "receipt-verify", receiptKind: "sandbox-test-run",
+      receiptStatus: "valid", executionStatus: "succeeded", expiresAt: new Date("2025-07-18T11:06:00.000Z"),
+      outputDigest: { sha256: "2".repeat(64) }, toolExecution: { taskRunId: "TR-FOREIGN",
+        toolName: "run_sandbox_tests", success: true, parameters: { auto_fix: false },
+        result: { success: true, data: { testsFailed: 0, typecheckPassed: true, autoFixEnabled: false } },
+        createdAt: new Date("2025-06-18T11:05:30.000Z") } }]);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+      command: "run_sandbox_tests", outputDigest, taskRunId: "TR-SCHED-QUAL",
+      toolExecutionReceiptIds: ["receipt-verify"], startedAt: "2025-06-18T11:05:00.000Z",
+      completedAt: "2025-06-18T11:06:00.000Z",
+    } } });
+    mocks.findReceipts.mockResolvedValue([{ id: "receipt-verify", receiptKind: "sandbox-test-run",
+      receiptStatus: "valid", executionStatus: "succeeded", expiresAt: new Date("2025-07-18T11:06:00.000Z"),
+      outputDigest: { sha256: "2".repeat(64) }, toolExecution: { taskRunId: "TR-SCHED-QUAL",
+        toolName: "run_sandbox_tests", success: true, parameters: { auto_fix: false },
+        result: { success: true, data: { testsFailed: 0, typecheckPassed: true, autoFixEnabled: false } },
+        createdAt: new Date("2025-06-18T11:05:30.000Z") } }]);
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { qualificationExperiment: {
+      ...binding, repositoryFullName: "foreign/repo",
+    } } });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
     mocks.findReceipts.mockResolvedValue([]);
     expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
       .toMatchObject({ success: false, error: "qualification-evidence-required" });

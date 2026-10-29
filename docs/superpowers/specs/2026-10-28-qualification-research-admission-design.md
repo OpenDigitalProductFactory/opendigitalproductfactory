@@ -65,7 +65,7 @@ The verification stage exposes only the bound verification tools. `run_sandbox_t
 - `inconclusive`: the run completed but cannot answer the protocol;
 - `blocked`: the run never began or could not complete under the binding.
 
-The result includes the binding digest, TaskRun/tool-execution receipts, command/test identity, bounded output digest and timings. It does not set `research=pass`, change BacklogItem status, close a finding or authorize implementation. Missing terminal evidence remains unknown. Duplicate or late acknowledgements reconcile to the existing binding rather than creating another start.
+The result includes the binding digest, TaskRun/tool-execution receipts, command/test identity, bounded output digest and timings. Settlement persists the server-supplied scheduled TaskRun id; a later research writer accepts receipts only from that same run, only while its immutable TaskRun metadata matches the complete verification binding (including repository, candidate head and test blobs), and only inside the admitted execution window. A caller-selected or foreign receipt is non-evidence. The result does not set `research=pass`, change BacklogItem status, close a finding or authorize implementation. Missing terminal evidence remains unknown. Duplicate or late acknowledgements reconcile to the existing binding rather than creating another start.
 
 After a terminal result, normal `record_initiative_evidence(gate: "research")` remains the only research writer. A passing receipt that resolves `IF-91E987DA433B0C82` must cite the exact qualification evidence and include that finding in `resolvedFindingRefs`. A negative or inconclusive experiment can support a changed design or a failing research receipt; it cannot be relabelled PASS.
 

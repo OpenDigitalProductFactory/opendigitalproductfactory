@@ -71,15 +71,18 @@ describe("transactional Workroom activity", () => {
     const evidence = { kind: "test" as const, stageKey: "reproduce", outcome: "completed" as const,
       summary: "Bound result", result: { qualificationBindingDigest: digest, qualificationOutcome: "candidate" } };
     await recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
-      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" }, deferPublication: true });
+      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
+      taskRunId: "TR-QUAL", deferPublication: true });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { workspaceState: {
-      qualificationExperimentAdmission: expect.objectContaining({ status: "settled", evidenceId: "evidence-1" }),
+      qualificationExperimentAdmission: expect.objectContaining({ status: "settled", evidenceId: "evidence-1",
+        taskRunId: "TR-QUAL" }),
     } } }));
     findUnique.mockResolvedValueOnce({ id: "room-1", capsuleId: "WC-ONE", workspaceState: {
       qualificationExperimentAdmission: { ...started, status: "settled", evidenceId: "evidence-1" },
     } });
     await expect(recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
-      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" }, deferPublication: true }))
+      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
+      taskRunId: "TR-QUAL", deferPublication: true }))
       .rejects.toThrow(/stale, duplicated/i);
   });
 });
