@@ -5,6 +5,7 @@
 import { prisma } from "@dpf/db";
 import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
 import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import { getOllamaBaseUrl } from "./ollama-url";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
@@ -164,6 +165,7 @@ async function resolveExecutionBaseUrl(
   providerId: string,
   provider: { authMethod: string | null; baseUrl: string | null; endpoint: string | null },
 ): Promise<string | null> {
+  if (providerId === "local") return getOllamaBaseUrl({ ...provider, providerId });
   // Route codex through the ChatGPT backend (flat-rate subscription billing).
   // The Responses API SSE parser now handles function call events.
   if (providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {

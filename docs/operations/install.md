@@ -36,6 +36,39 @@ certificate clients use the host user's UID/GID when writing private host files.
 Rerun the updated bootstrap under the operating procedure to converge an
 existing install; a source merge alone does not change its host state.
 
+## Qualified Mac inference opt-in
+
+The existing native Edge installer owns managed inference provisioning. It is an
+explicit opt-in for the physically qualified Apple M5 Max profile. Other Macs,
+Windows and Linux keep their existing engine and host-upkeep paths.
+
+For an approved existing-install convergence, the operator sets
+`DPF_MANAGED_INFERENCE_ENABLED=1` and an exact published
+`DPF_MANAGED_INFERENCE_SOURCE_SHA`. The existing native Edge install function
+receives the qualified package directory and report in
+`DPF_MANAGED_INFERENCE_RUNTIME_PACKAGE` and `DPF_MANAGED_INFERENCE_REPORT`, with
+their pinned `DPF_MANAGED_INFERENCE_RUNTIME_SHA256` manifest digest and
+`DPF_MANAGED_INFERENCE_REPORT_SHA256`. Node and Go, the enrolled host identity
+and the complete existing machine trust bundle must already be present. The
+source must be on the published main history; worktree helpers cannot substitute
+for a released installer procedure.
+
+The installer stages and verifies the immutable controller and host-bound model
+qualification before stopping the old Edge service. An exact retry verifies the
+Git closure and Node identity before reusing a bundle. A failed host upgrade
+retains its prior binary and environment for restoration. Ordinary later host
+upgrades retain the explicit opt-in.
+
+Provisioning starts no model engine, changes no provider selection and grants no
+action permission. Activation and rollback use the concrete control on the Local
+provider page, an approved change, the exact enabled host procedure and a current
+owned inference reservation and drain. The optional `managedInference` state
+record is validated by the current install-state schema and its canonical
+mirror; an uncertain transition fences local requests. A portal upgrade alone
+cannot establish native host installation or faster inference. See the
+[engine qualification record](mac-inference-engine.md) and
+[provider controls](../user-guide/ai-workforce/connecting-providers.md#managed-engine-on-a-qualified-mac).
+
 ## Capability-resolved runtime profiles
 
 Every install, restart, autostart, setup, and governed promotion resolves its

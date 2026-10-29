@@ -10,6 +10,8 @@ import { verifyPackage, hashFile, sha256 } from './package.mjs';
 import { readMcpConnection } from '../../scripts/host-resource-runner.mjs';
 import { mcpCall } from '../../scripts/lib/mcp-client.mjs';
 import { superviseLeaseRun,admittedLeaseTtlMs } from '../../scripts/lib/lease-supervisor.mjs';
+import { validatedModelDigest, runnerActivity } from './runtime-model-store.mjs';
+export { validatedModelDigest, runnerActivity } from './runtime-model-store.mjs';
 
 const exec = promisify(execFile);
 let a = {};
@@ -32,12 +34,6 @@ function fail(message) { throw new Error(message); }
 export function validLeaseExpiry(value, now=Date.now()) {
   const expiry=typeof value==='string'?Date.parse(value):NaN;
   return Number.isFinite(expiry) && expiry>now+15000;
-}
-export function validatedModelDigest(expected,observed) {
-  if(typeof expected!=='string'||!/^sha256:[a-f0-9]{64}$/.test(expected)
-    ||observed!==expected) fail('Selected model digest changed or invalid');
-  // Persist the validated local expectation, never the response's payload.
-  return expected;
 }
 export function modelLayerBinding(raw, digest, ggufHash, bytes, projector) {
   if(!/^sha256:[a-f0-9]{64}$/.test(digest) || 'sha256:'+sha256(raw)!==digest) fail('OCI manifest digest mismatch');
@@ -160,15 +156,6 @@ async function runnersIdle(root) {
 }
 // Docker Model Runner v1.2.8 scheduling/api.go:82-84 declares both activity
 // booleans with omitempty. Omitted means false only on an identified status row.
-export function runnerActivity(rows) {
-  const identified=x=>typeof x.backend_name==='string'&&x.backend_name.length>0
-    &&typeof x.model_name==='string'&&x.model_name.length>0&&typeof x.mode==='string'&&x.mode.length>0;
-  if (!Array.isArray(rows) || rows.some(x=>!x
-    || (x.in_use===undefined?!identified(x):typeof x.in_use!=='boolean')
-    || (x.loading!==undefined && typeof x.loading!=='boolean'))) fail('Runner activity capture unavailable');
-  return {idle:rows.every(x=>!x.in_use && x.loading!==true),
-    loadingFieldObserved:rows.every(x=>typeof x.loading==='boolean')};
-}
 export async function restoreAfterQualification({unloaded, restored, stop, restore}) {
   await stop();
   if (unloaded && !restored) await restore();

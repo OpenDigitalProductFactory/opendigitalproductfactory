@@ -302,6 +302,8 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
 
     const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
       userContext,
+      taskRunId: context.taskRunId,
+      threadId: context.threadId,
       agentId: resolvedAgentId,
       mode: runtimeMode,
       // BI-CAP-F2D39F8F: budget the attachment to the serving model; the child

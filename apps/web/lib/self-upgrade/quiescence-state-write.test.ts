@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), configUpdateMany: vi.fn(), configUpsert: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { quiescenceRun: db, platformConfig: { updateMany: db.configUpdateMany, upsert: db.configUpsert } } }));
+vi.mock("@dpf/db", () => {
+  const prisma = { quiescenceRun: db, $executeRaw: vi.fn().mockResolvedValue(1), platformConfig: { updateMany: db.configUpdateMany, upsert: db.configUpsert } };
+  return { prisma: { ...prisma, $transaction: async (body: (tx: typeof prisma) => Promise<unknown>) => body(prisma) } };
+});
 import { heartbeatQuiescenceRun, transitionState, setQuiescenceLevel } from "./quiescence";
 
 beforeEach(() => vi.resetAllMocks());

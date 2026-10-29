@@ -241,11 +241,11 @@ function clearRule(room: OverseerRoom, now: Date): OverseerAction | null {
     facts: { clearedKey: raised.key } };
 }
 
-/** Count live, non-standing rooms per item, over every loaded room (siblings included). */
+/** Count eligible delivery rooms per item, over every loaded room (siblings included). */
 function liveRoomsPerItem(rooms: readonly OverseerRoom[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const room of rooms) {
-    if (!room.itemKey || TERMINAL_ROOM_STATUSES.has(room.status) || isStandingRoom(room)) continue;
+    if (!room.itemKey || !overseenRoom(room)) continue;
     counts.set(room.itemKey, (counts.get(room.itemKey) ?? 0) + 1);
   }
   return counts;

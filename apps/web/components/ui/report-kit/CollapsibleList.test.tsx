@@ -101,4 +101,17 @@ describe("CollapsibleList", () => {
     expect(html).toMatch(/var\(--dpf-accent\)/);
     expect(html).not.toMatch(/#[0-9a-f]{3,6}/i);
   });
+
+  it("can retain mounted decision rows without counting hidden content as visible", () => {
+    const html = renderToStaticMarkup(
+      <CollapsibleList as="div" preserveMountedRows previewCount={1}>
+        <article key="first">Visible decision</article>
+        <article key="second">Hidden decision</article>
+      </CollapsibleList>,
+    );
+    expect(html).toContain("Hidden decision");
+    expect(defaultVisibleHtml(html)).toContain("Visible decision");
+    expect(defaultVisibleHtml(html)).not.toContain("Hidden decision");
+    expect(countDisclosureRegions(html)).toBe(1);
+  });
 });

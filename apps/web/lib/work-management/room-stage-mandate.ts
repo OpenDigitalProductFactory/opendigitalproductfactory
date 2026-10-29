@@ -6,6 +6,12 @@ import type { Prisma } from "@dpf/db";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import {
+  parseQualificationExperimentState,
+  qualificationToolEffectAllowed,
+  qualificationBindingDigest,
+  verifyQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { isRecord } from "@/lib/shared/coerce";
 import { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveTaskId, workroomDriveBranchTaskId } from "./drive-resolution";
 import { isDeliveryShapeKey, DELIVERY_XLARGE_SHAPE_KEY, DELIVERY_AUTHOR_ROLE, DELIVERY_AUTHOR_EVIDENCE_TOOL as EVIDENCE_WRITER } from "./delivery-shapes";
@@ -31,6 +37,8 @@ export const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 export type MandateRoom = {
   capsuleId: string; status: string; archivedAt: Date | null; scopeClaims: unknown;
   id?: string; backlogItemId?: string | null; workspaceState?: unknown;
+  repositoryFullName?: string | null; baseSha?: string | null; headSha?: string | null;
+  leaseHolderPrincipalId?: string | null; leaseExpiresAt?: Date | null;
 };
 
 // BI-17238133: each select is checked against the generated Prisma types, so a
@@ -42,6 +50,7 @@ const RUN_SELECT = {
 } as const satisfies Prisma.TaskRunSelect;
 const ROOM_SELECT = {
   id: true, capsuleId: true, status: true, archivedAt: true, scopeClaims: true, backlogItemId: true, workspaceState: true,
+  repositoryFullName: true, baseSha: true, headSha: true, leaseHolderPrincipalId: true, leaseExpiresAt: true,
   requestedByPrincipal: ROOM_OWNER_USER_INCLUDE.requestedByPrincipal,
   createdByPrincipal: ROOM_OWNER_USER_INCLUDE.createdByPrincipal,
 } as const satisfies Prisma.WorkroomSelect;
@@ -172,6 +181,49 @@ export async function loadScheduledRoomAuthority(
     const assignedStageKey = assignment?.shapeKey === shape.key && assignment?.shapeVersion === shape.version ? assignment.stageKey : null;
     const declared = roomStageMandatedTools({ ...input, scheduledTaskId: taskId, room, assignedStageKey });
     const declaration = readWorkroomPostureClaim(room.scopeClaims);
+    if (assignment?.qualificationExperiment) {
+      if (room.archivedAt !== null || room.status !== "working" || TERMINAL_WORKROOM_STATUSES.has(room.status)) {
+        return withheld("The qualification Workroom is no longer active.");
+      }
+      run ??= await db.taskRun.findUnique({ where: { taskRunId: input.taskRunId }, select: RUN_SELECT });
+      const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
+      const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+      const runState = isRecord(run?.a2aMetadata) ? run.a2aMetadata : {};
+      const runBinding = isRecord(runState.qualificationExperiment) ? runState.qualificationExperiment : null;
+      const qualificationNow = (deps.now ?? (() => new Date()))();
+      const verified = state ? verifyQualificationExperimentAdmission(state.token, { now: qualificationNow }) : null;
+      const binding = assignment.qualificationExperiment;
+      const digest = qualificationBindingDigest(binding);
+      const exactRoom = room.backlogItemId === binding.itemId && room.capsuleId === binding.workroomId
+        && room.repositoryFullName === binding.repositoryFullName
+        && room.baseSha?.toLowerCase() === binding.baseSha.toLowerCase()
+        && room.headSha?.toLowerCase() === binding.headSha.toLowerCase()
+        && room.leaseHolderPrincipalId === binding.accountablePrincipalRef
+        && room.leaseExpiresAt != null && room.leaseExpiresAt.getTime() > qualificationNow.getTime();
+      if (!run || run.status !== "working" || run.archivedAt != null || !run.currentAgentId
+        || !sameActor(run.currentAgentId, task?.agentId ?? "") || !task?.isActive
+        || !state || state.status !== "started" || state.startCount !== 1 || state.taskId !== taskId
+        || !verified?.ok || verified.data.bindingDigest !== digest || state.bindingDigest !== digest
+        || qualificationBindingDigest(runBinding as typeof binding) !== digest || !exactRoom) {
+        return withheld("The qualification admission is missing, expired, superseded, or not bound to this run.");
+      }
+      // Qualification tools are a signed, one-shot exception to the standing
+      // shape's ordinary read/write list. The current shape+stage identity is
+      // revalidated above; the token and task assignment must both name each
+      // exceptional tool, so neither source can widen the other.
+      const grants = await (deps.loadAgentGrants
+        ?? (await import("@/lib/tak/agent-grants")).getAgentToolGrantsAsync)(coworkerAuthorityAgentId(task.agentId));
+      const tools = assignment.tools.filter((tool) => binding.permittedTools.includes(tool)
+        && isToolAllowedByGrants(tool, grants));
+      if (tools.length === 0) return withheld("The qualification task no longer declares an admitted tool.");
+      if (!input.toolName) return { ...EMPTY, mandatedTools: tools };
+      if (!tools.includes(input.toolName)) return withheld("The tool is outside the qualification admission.");
+      if (!qualificationToolEffectAllowed({ binding: assignment.qualificationExperiment, state,
+        toolName: input.toolName, params: input.params, now: qualificationNow })) {
+        return withheld("The qualification tool effect is outside the exact path, duration, or terminal-evidence binding.");
+      }
+      return { ...EMPTY, mandatedTools: [input.toolName] };
+    }
     // BI-E458A9CB: an exact blocked report survives lost completion authority.
     if (!isDeliveryShapeKey(shape.key) || (input.params?.outcome === "blocked" && declared.includes(EVIDENCE_WRITER)
       && declaration?.actionBoundary !== "advise" && declaration?.actionBoundary !== "propose")) {
