@@ -73,6 +73,13 @@ var nearbyDiscoveryHealth atomic.Int32
 var nearbyDiscoveryAccepted atomic.Bool
 var actionDispatchHealth atomic.Int32
 
+// Set only after the fixed controller package has been verified and its
+// original-envelope handler has been registered on the authenticated channel.
+var nativeInferenceController atomic.Pointer[action.NativeControllerDescription]
+var nativeInferenceViewConfig atomic.Pointer[nativeViewConfig]
+
+type nativeViewConfig struct{ stateDirectory, nodeID string }
+
 func main() {
 	printFixtureMode := flag.Bool("print-enroll-fixture", false,
 		"Print a sample EnrollRequest as JSON to stdout and exit. Used to "+
@@ -215,6 +222,28 @@ func run() error {
 		}
 		if cfg.DockerVmRestartEnabled() {
 			executor.DockerVmRestart = newDockerVmRestartHandler(cfg)
+		}
+		if cfg.ManagedInferenceConfigured() {
+			nativeConfig := action.NativeInferenceConfig{
+				StateDirectory: cfg.ManagedInferenceState, EdgeStateDirectory: cfg.StateDir,
+				ControllerRoot: cfg.ManagedInferenceRoot, ControllerManifestSHA256: cfg.ManagedInferenceManifest,
+				ControllerSourceSHA: cfg.ManagedInferenceSource, PublicKeyFile: cfg.EdgeActionSigningPublicKeyFile,
+				BaselineEngine: cfg.ManagedInferenceBaseline,
+			}
+			description, err := action.VerifyNativeControllerPackage(nativeConfig)
+			if err != nil {
+				return fmt.Errorf("verify managed inference controller: %w", err)
+			}
+			executor.ManagedInference = &action.NativeManagedInferenceHandler{
+				Config: nativeConfig, NodeID: st.NodeID, PublicKey: publicKey,
+				Admission: func(admissionContext context.Context, original action.SignedEnvelope) (action.SignedEnvelope, error) {
+					return actionClient.ReadManagedInferenceAdmission(admissionContext, st.NodeToken, original)
+				},
+			}
+			nativeInferenceController.Store(&description)
+			defer nativeInferenceController.Store(nil)
+			nativeInferenceViewConfig.Store(&nativeViewConfig{stateDirectory: cfg.ManagedInferenceState, nodeID: st.NodeID})
+			defer nativeInferenceViewConfig.Store(nil)
 		}
 		runner := &actionrunner.Runner{
 			Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1,
@@ -361,9 +390,29 @@ func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizat
 		"organizationTrustRole": organizationTrustRole,
 	}
 	if hostUpkeep.dockerVmRestart {
-		evidence["actionTypes"] = append(actionTypes, action.DockerVmRestartActionType)
+		actionTypes = append(actionTypes, action.DockerVmRestartActionType)
 		evidence["dockerRuntime"] = hostUpkeep.dockerRuntime
 	}
+	if controller := nativeInferenceController.Load(); controller != nil {
+		actionTypes = append(actionTypes, action.ManagedInferenceActionType)
+		evidence["managedInference"] = map[string]any{
+			"schemaVersion": 1, "controllerVersion": "1", "sourceSha": controller.SourceSHA,
+			"controllerManifestSha256": controller.ManifestSHA256,
+			"platform":                 "darwin", "architecture": "arm64",
+		}
+		if cfg := nativeInferenceViewConfig.Load(); cfg != nil {
+			metadata := evidence["managedInference"].(map[string]any)
+			view, err := action.NativeInferenceStagedView(cfg.stateDirectory, cfg.nodeID)
+			if err != nil {
+				metadata["stagingStatus"] = "unavailable"
+			} else {
+				metadata["stagingStatus"] = "observed"
+				metadata["stagedProfiles"] = view.Profiles
+				metadata["selection"] = view.Selection
+			}
+		}
+	}
+	evidence["actionTypes"] = actionTypes
 	return append(reports, api.CapabilityReport{
 		Capability: "action.execute",
 		Status:     status,

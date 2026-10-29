@@ -16,6 +16,8 @@ import { admittedLeaseTtlMs, superviseLeaseRun } from '../../scripts/lib/lease-s
 import { sha256, hashFile } from './package.mjs';
 import { verifyRuntimePackage, stageVerifiedRuntime, verifyEngineQualification } from './runtime-profile.mjs';
 import { createRuntimeLaunchAgent, renderRuntimeLaunchAgent } from './runtime-launchagent.mjs';
+import { transferRuntimeModel, configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot } from './runtime-model-store.mjs';
+export { configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot };
 import { validateOwnedLease, validatedModelDigest, runnerActivity, metric, testEndpoint, makeContext,
   coldMessages, authorityAwareSignal, recordAuthorityFence } from './qualify-engine.mjs';
 
@@ -23,41 +25,10 @@ const execute = promisify(execFile), pause = ms => new Promise(r => setTimeout(r
 const BRANCH = 'codex/mac-inference-runtime';
 const check = (value, message) => { if (!value) throw new Error(message); };
 const modelPath = ref => '/models/' + ref.split('/').map(encodeURIComponent).join('/');
-export function loopbackManagementRoot(value) {
-  const url = new URL(value);
-  check(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) && !url.username && !url.password
-    && ['http:', 'https:'].includes(url.protocol) && url.pathname === '/' && !url.search && !url.hash,
-  'Qualification requires a loopback management root');
-  return url.href.replace(/\/$/, '');
-}
-export function configurationSnapshot(rows, model, digest) {
-  check(Array.isArray(rows), 'Configuration capture unavailable');
-  const modes = new Set();
-  return rows.map(row => {
-    check(row && row.Backend === 'llama.cpp' && row.Model === model && row.ModelID === digest
-      && typeof row.Mode === 'string' && row.Mode.length > 0 && !modes.has(row.Mode)
-      && row.Config && typeof row.Config === 'object' && !Array.isArray(row.Config), 'Configuration model identity changed');
-    modes.add(row.Mode);
-    return { ...structuredClone(row.Config), model, mode: row.Mode };
-  }).sort((a, b) => a.mode.localeCompare(b.mode));
-}
 export function runtimeLeaseProjection(lease, expected) {
   validateOwnedLease(lease, { ...expected, branch: BRANCH });
   const { leaseId, ownerSessionId, branchName, status, phase, expiresAt } = lease;
   return { schemaVersion: 1, leaseId, ownerSessionId, branchName, status, phase, expiresAt };
-}
-export async function configureDrainedCandidate(entries, { readBaselineRunners, writeConfiguration, readConfiguration }) {
-  for (const entry of entries) {
-    for (const config of entry.original) {
-      const rows = await readBaselineRunners();
-      check(runnerActivity(rows).idle && rows.length === 0,
-        'Docker model resident before configure-triggered candidate preload');
-      await writeConfiguration(config);
-    }
-    const observed = configurationSnapshot(await readConfiguration(entry.model), entry.model, entry.digest);
-    check(JSON.stringify(entry.original) === JSON.stringify(observed), 'Candidate model configuration changed');
-    entry.candidate = observed;
-  }
 }
 export async function awaitRuntimeAdmission({ claim, bind, assertSource, observe = async () => {},
   delay = pause, now = Date.now, waitDeadline, signal }) {
@@ -200,18 +171,10 @@ async function run(a) {
   const transfer = async (candidate, model, digest) => {
     validate();
     console.log(JSON.stringify({ phase: 'export-load', model }));
-    const response = await request(original + modelPath(model) + '/export', { timeout: 120000 });
-    const signal = authorityAwareSignal(cancel.signal, authority.signal, Math.min(120000, deadline - Date.now()));
-    const loaded = await fetch(candidate + '/models/load', { method: 'POST', body: response.body,
-      duplex: 'half', headers: { 'content-type': 'application/x-tar' }, signal });
-    check(loaded.ok, 'Candidate stock model load failed: ' + loaded.status); await loaded.arrayBuffer();
-    const split = model.lastIndexOf(':'); check(split > model.lastIndexOf('/'), 'Explicit model tag required');
-    // Stock export does not promise preservation of tag aliases. Bind the known digest explicitly.
-    await request(candidate + modelPath(digest) + '/tag?repo=' + encodeURIComponent(model.slice(0, split))
-      + '&tag=' + encodeURIComponent(model.slice(split + 1)), { method: 'POST', timeout: 30000 });
-    const card = await json(candidate, modelPath(model), { timeout: 3000 });
-    validatedModelDigest(digest, card.id);
-    return { model, digest, modelMetadataSha256: sha256(JSON.stringify(card.config)), transfer: 'stock-export-load-tag' };
+    return transferRuntimeModel({ original, candidate, model, digest, request, json,
+      loadArchive: body => fetch(candidate + '/models/load', { method: 'POST', body, duplex: 'half',
+        headers: { 'content-type': 'application/x-tar' },
+        signal: authorityAwareSignal(cancel.signal, authority.signal, Math.min(120000, deadline - Date.now())) }) });
   };
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => cancel.abort());
   try {

@@ -1783,6 +1783,9 @@
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "e2e/managed-inference-control.spec.ts": [
+      "docs/testing/ci-evidence.md"
+    ],
     "monitoring/prometheus/prometheus.yml": [
       "docs/architecture/platform-overview.md",
       "docs/operations/observability-coverage.md"
@@ -2509,6 +2512,12 @@
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/native-edge-host.ps1": [
+      "docs/operations/mac-inference-engine.md"
+    ],
+    "scripts/installer/native-edge-host.sh": [
+      "docs/operations/mac-inference-engine.md"
     ],
     "scripts/issue-authority-tls-cert.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -3908,6 +3917,10 @@
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],
+    "docs/operations/mac-inference-engine.md": [
+      "scripts/installer/native-edge-host.ps1",
+      "scripts/installer/native-edge-host.sh"
+    ],
     "docs/operations/mobile-store-launch-runbook.md": [
       "apps/mobile/eas.json"
     ],
@@ -4122,6 +4135,7 @@
       "apps/web/lib/runtime/measurement-runtime.ts",
       "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
+      "e2e/managed-inference-control.spec.ts",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"
     ],
