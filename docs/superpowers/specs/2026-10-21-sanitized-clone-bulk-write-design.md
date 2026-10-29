@@ -236,3 +236,81 @@ source repair does not claim sampling policy, scale timing or served acceptance.
 PostgreSQL documents explicit multi-key ordering and planner startup costs at
 https://www.postgresql.org/docs/current/queries-order.html and
 https://www.postgresql.org/docs/current/using-explain.html.
+
+## October 28 continuation: measure the remaining copy cost
+
+The operator explicitly authorized the bounded test-environment repair in the
+paired approval chat, followed by one repaired full-size screen-verification
+attempt. The direct human reply was independently retrieved before resuming.
+This does not authorize a third unchanged preview, sampling, larger read windows,
+longer timeouts, more memory, new grants or an alternative deployment route.
+
+The ordering repair is installed. The next admitted full-cohort attempt,
+`NPEL-DD3E51BE41`, still stopped before serving after 20m33s. Its telemetry phase
+began with 14,523,204 source rows; read-only destination counts progressed from
+1,220,000 to 10,937,800. The reservation was released and no owned containers
+remained. Native activity `cmvst8r8h08ph01k0xctzucck` and skipped verification
+`RV-APPROVAL-PREVIEW-5EAA-20261029` retain this infrastructure-inconclusive result.
+Neither failure is evidence that the approval UI failed.
+
+The caller still supplies 50 rows to each writer invocation. The writer's
+500-row ceiling does not combine invocations. Database-wide observations over
+43.368 seconds counted 9,746 committed transactions and 485,706 inserted tuples.
+These observations support measuring transaction cost; they do not isolate it
+from source fetch, transformation, statements or other database work.
+
+**OBJ-COPY-COST:** Make the existing full-cohort clone usable within its unchanged
+startup budget without changing data, privacy, memory or publication semantics.
+The original six acceptance obligations above remain verbatim and unresolved
+where not evidenced. This preservation-only source slice does not introduce
+the separately owed data-owner sampling policy.
+
+`CLONE-PHASES` records aggregate row/batch counts and elapsed source-fetch,
+sanitization and destination-write phases, never row values, SQL arguments,
+credentials or per-row events. `CLONE-STREAM` retains one fetched 50-row array,
+awaited destination backpressure, the existing 128 KiB statement target and
+native omissions. `CLONE-TRANSACTION` retains the current 500-row transaction
+ceiling, 10-second acquisition and 30-second transaction timeout. Existing
+`CLONE-ROWS`, `CLONE-ATTEMPT` and `CLONE-PUBLISH` remain authoritative.
+
+Ordered internal phases, one atomic BI-B47BB1D7 delivery:
+
+1. `FLOW-MEASURE`: add bounded, aggregate phase measurements through the actual
+   confidential-copy caller. Extend the existing governed PostgreSQL fixture
+   with telemetry-shaped rows and the existing wide JSON/vector positive
+   controls. Record source fetch, transform, write and transaction counts plus
+   total elapsed time. No production benchmark or new full clone is needed to
+   choose a source change. A first-failing diagnostic-contract test precedes
+   implementation; measurements must not retain row payloads.
+2. Select a repair only from those measurements. If destination transaction
+   round trips dominate, compare the current per-50-row transaction path with
+   bounded streamed groups inside the existing 500-row ceiling. Fetch the first
+   batch before acquiring a destination transaction; do not put cold source
+   startup inside its timeout. Await every write and release its array before
+   fetching again. Never aggregate ten raw batches, increase the cursor window,
+   carry a transaction between tables or retain it after failure. Keep trigger
+   suppression on its transaction connection and metadata local to the attempt.
+   If measurements do not support this candidate, record the result and revise
+   the selected repair before changing behavior.
+3. `FLOW-STREAM-COST`: prove exact ordered persisted values and duplicate winners,
+   audit cohort, aliases, type/default/null behavior, statement limits and
+   bounded transaction size with the real caller. Keep existing memory and
+   deliberately retained-payload controls. Inject fetch/write/commit failures
+   and prove source read-only snapshot, rollback, destination cleanup and no
+   partial publication. The failure of any group aborts the whole clone.
+4. `VC-PHASES`, `VC-STREAM-PG` and `VC-COPY-FAILURE` cover the diagnostics and
+   behavior above. Run all clone, batching, SQL, cleanup, source-integrity and
+   memory suites and both DB typechecks, then the normal exact-tree integration
+   gate, independent review and protected DCO publication. Compare real elapsed
+   phases; fewer mocked transactions alone are not a performance result.
+5. Only after normal canonical release contains the verified repair, execute
+   `VC-FULL-STARTUP`: one full-cohort preview with unchanged limits and actual
+   counts, elapsed time, memory and readiness identity. A terminal failure is
+   inconclusive for UI, never permission for another unchanged attempt. If
+   ready, continue the separately owned approval-screen baseline, fixtures,
+   accessibility, narrow viewport, disclosures, live acceptance and delivery.
+
+The diagnostic and selected source change are internal sequencing: neither is
+accepted as a separately completed performance repair. Rollback is a normal
+source revert and governed release; no migration or source-data edit exists.
+The Workroom records the immutable coverage receipt and actual measurements.
