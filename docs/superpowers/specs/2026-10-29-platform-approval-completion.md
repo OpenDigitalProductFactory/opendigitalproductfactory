@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Complete ordinary platform coworker approvals through the existing runner
 
 Backlog: BI-0B70FA79. Workroom: WC-70D60814. Branch: codex/platform-approval-completion. Base: 8203c42911a8b64ae81e927d5d4a92916ae6cca1. This ordered fix extends D3 of the existing approval-convergence design after the separate precondition repair merged in PR6742 and PR6743.
