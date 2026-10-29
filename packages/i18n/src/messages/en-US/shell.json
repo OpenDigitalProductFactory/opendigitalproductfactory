@@ -7,6 +7,14 @@
     "reviewLive": "Review current work"
   },
   "finance": {
+    "ownExpensesDescription": "Enter your expenses, save drafts, and submit for approval.",
+    "ownExpensesLink": "My Expenses",
+    "expenseReviewDescription": "Review claims visible to you.",
+    "expenseEntrySummary": "Complete the required fields. Receipt links are optional.",
+    "expenseEntryHelp": "What to prepare",
+    "expenseEntryDetails": "Use a title and at least one expense with a date, category, description, and positive amount. Add a receipt URL if available. Save as Draft keeps it for later; Submit for Approval requests review without moving money.",
+    "expenseProfileRequired": "You need an employee profile linked to your sign-in. Ask your People administrator to check it.",
+    "openPeople": "Open People",
     "mileageTitle": "Mileage",
     "mileageDescription": "Log business trips so they can be claimed and reported."
   },

@@ -59,12 +59,12 @@ export default async function FinanceSpendPage() {
         />
         <FinanceSummaryCard
           title="Expenses"
-          description="Review employee claims and unblock approvals without leaving the spend workflow."
-          href="/finance/expense-claims"
+          description={t("finance.ownExpensesDescription")}
+          href="/finance/my-expenses"
+          ctaLabel={t("finance.ownExpensesLink")}
           accentColor="var(--dpf-info)"
           metrics={[
             { label: "Submitted claims", value: `${submittedExpenseClaims}` },
-            { label: "Personal expenses", value: "See my expenses" },
           ]}
         />
         {/* EP-2FB6C0CC (BI-DD763B93): Mileage had no link; it lives with the other spend records. */}
