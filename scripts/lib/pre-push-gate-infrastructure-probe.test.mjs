@@ -39,6 +39,12 @@ function baseProbeInput(overrides = {}) {
     portalUrl: "http://localhost:3001",
     ports: [3001, 5433],
     env: PAT_ENV,
+    // Exercise probe behavior without reading the operator's saved credentials.
+    // Credential discovery/precedence is covered by mcp-credential.test.mjs.
+    resolveCredential: ({ env }) => {
+      if (!env.DPF_MCP_BEARER_TOKEN) throw new Error("No fixture credential");
+      return { kind: "pat", source: "DPF_MCP_BEARER_TOKEN", bearer: env.DPF_MCP_BEARER_TOKEN };
+    },
     now: (() => { let t = 1_000; return () => (t += 5); })(),
     ...overrides,
   };

@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Provider pause integrity repair
 
 Backlog: BI-1FB1C9B5. Workroom: WC-E490546E. Corrective successor to BI-56F2AB99 and BI-E2BDE90B under EP-75B31C95.
