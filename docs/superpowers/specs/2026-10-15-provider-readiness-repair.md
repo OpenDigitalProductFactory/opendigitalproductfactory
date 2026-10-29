@@ -96,3 +96,11 @@ Ordered atomic status repair:
 4. Run affected tests/typechecks and exact-tree gate, obtain original owed design critique, then publish through the protected queue and verify served UI on the containing runtime.
 
 These steps jointly deliver one status visibility contract. Hourly recovery, consultation settlement, durable accepted chat continuation and source sensitivity classification are independent existing scopes and remain open. The prior prototype and dense direction remain the design baseline; no new dashboard or permission change is introduced. Reuse the existing UX decision evidence and obtain actual fresh served measurements; requested critique is not a completed review.
+
+### Retained parent acceptance (coverage only, not all delivered by this slice)
+
+- AC-1: Consultation produces result, acknowledgement or explicit actionable failure, including resolved success:false; retry can run again.
+- AC-2: Configured account status prominently distinguishes green enabled/working, yellow paused/temporary wait, red hard credential/billing failure, neutral uncertainty. Allowed work stays separate.
+- AC-3: Active install-owned ChatGPT/Codex quota holds get bounded hourly inference rechecks before distant reset; completed inference clears only unchanged proven quota ownership.
+- AC-4: Manual pause/disable/disconnect and hard auth/billing holds survive quota revalidation; concurrent changes prevent stale success writes.
+- AC-5: Affected tests/typecheck and governed served UI evidence cover failure, recovery, themes, mobile and keyboard before done.
