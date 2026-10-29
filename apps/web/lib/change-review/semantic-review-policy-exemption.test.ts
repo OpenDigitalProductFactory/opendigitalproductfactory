@@ -220,6 +220,31 @@ describe("audited DEV review exceptions", () => {
     m.envelope.mockResolvedValue({ status: "cancelled" });
     expect(await resolveWorkroomReviewExemption("WC-room", "room", head)).toBeNull();
   });
+  it.each([
+    ["room", false], ["reviewer-room", false], ["room", true], ["reviewer-room", true],
+  ] as const)("rechecks the recorded actor's revoked %s access on consumption (on behalf: %s)", async (revokedRoom, onBehalf) => {
+    const originalRoom = await m.room(), originalReview = await m.review();
+    m.room.mockImplementation(async ({ where }) => where.id === "reviewer-room"
+      ? { id: "reviewer-room", executorRef: "reviewer-thread" } : originalRoom);
+    m.review.mockResolvedValue({ ...originalReview, workCapsuleId: "reviewer-room" });
+    if (onBehalf) {
+      m.approval.mockResolvedValue({ envelopeId: "approved", userId: "operator", approverUserId: "admin", onBehalfOf: "operator" });
+      const originalEnvelope = await m.envelope();
+      m.envelope.mockResolvedValue({ ...originalEnvelope, argsJson: { humanApproval: {
+        userId: "admin", by: "admin", onBehalfOf: "operator", reason: "Owner authorized this exact exception.", approvedAt: new Date(Date.now() - 60_000).toISOString(),
+      } } });
+    }
+    expect((await recordSemanticReviewExemption(params, "operator", context)).success).toBe(true);
+    m.rows.mockResolvedValue([{ id: "exception", details: m.create.mock.calls[0][0].details }]);
+    expect(await resolveWorkroomReviewExemption("WC-room", "room", head)).toMatchObject({ evidenceId: "exception" });
+    m.access.mockClear(); m.review.mockClear(); m.ci.mockClear();
+    m.access.mockImplementation(async ({ workroomId }) => ({ decision: { level: workroomId === revokedRoom ? "none" : "content" } }));
+    expect(await resolveWorkroomReviewExemption("WC-room", "room", head)).toBeNull();
+    expect(m.access).toHaveBeenCalledWith({ userId: "operator", agentId: "author", workroomId: revokedRoom, requested: "content" }, expect.anything());
+    expect(m.access.mock.calls.every(([actor]) => actor.userId === "operator" && actor.agentId === "author")).toBe(true);
+    expect(m.ci).not.toHaveBeenCalled();
+    expect(m.review.mock.calls.every(([args]) => args.select?.workCapsuleId === true)).toBe(true);
+  });
   it("rejects a copied approval fingerprint when the approved expiry was changed", async () => {
     await recordSemanticReviewExemption(params, "operator", context);
     m.rows.mockResolvedValue([{ id: "forged", details: { ...m.create.mock.calls[0][0].details, expiresAt: new Date(Date.now() + 120_000).toISOString() } }]);
