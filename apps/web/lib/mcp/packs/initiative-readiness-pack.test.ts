@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   recordGateReceipt: vi.fn(),
   recordSpecApproval: vi.fn(),
   recordObjectiveMapping: vi.fn(),
+  preflightArtifact: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -26,7 +27,8 @@ vi.mock("@/lib/backlog/initiative-readiness", async (importOriginal) => ({
 }));
 
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
-import { initiativeReadinessPack } from "./initiative-readiness-pack";
+vi.mock("@/lib/backlog/initiative-readiness/evidence-preflight", () => ({ preflightEvidenceArtifact: mocks.preflightArtifact }));
+import { initiativeReadinessPack, preflightInitiativeEvidence } from "./initiative-readiness-pack";
 
 const expected = {
   record_initiative_evidence: ["manage_backlog", "initiative_evidence_write"],
@@ -42,6 +44,19 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
+  it("preflights the accepted item and artifact rather than caller replacements", async () => {
+    const artifactRef = { kind: "document-version", versionId: "accepted-version" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_evidence", itemId: "BI-ACCEPTED", gate: "research", artifactRef,
+    } } });
+    mocks.preflightArtifact.mockResolvedValue(null);
+    const context = { taskRunId: "TR-ACCEPTED", agentId: "AGT-OWN", tokenScope: "write" as const };
+    expect(await preflightInitiativeEvidence({ itemId: "BI-FORGED", gate: "classification",
+      artifactRef: { kind: "document-version", versionId: "forged" }, reason: "Verified." }, "user", context)).toBeNull();
+    expect(mocks.preflightArtifact).toHaveBeenCalledWith(expect.objectContaining({ userId: "user", context,
+      params: expect.objectContaining({ itemId: "BI-ACCEPTED", gate: "research", artifactRef }) }));
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+  });
   it("refuses malformed trusted workroom context and never accepts a caller-selected replacement", async () => {
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
       providerBlobId: "b".repeat(40), path: "plan.md" };

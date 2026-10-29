@@ -109,6 +109,8 @@ A merged pull request does not make the build complete. Completion waits for the
 governed release and live-version evidence. Build Studio does not directly
 merge, force-push, or silently edit a true conflict.
 
+Once the release is live, the backlog item behind the build moves to **Awaiting acceptance**. A coworker who did not work on the build is routed to it straight away to check its acceptance criteria on the live system; it does not wait for the usual 14-day aged-item review. Once that check is recorded, the build is marked complete.
+
 ### Configuration
 
 Pull request creation requires a GitHub token. This is configured differently depending on whether your install is **Contributing** or **Private** (the two contribution states — see Improve & deliver › Setup › Contributing & GitHub):

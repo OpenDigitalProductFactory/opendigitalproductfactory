@@ -91,6 +91,23 @@ The word *shape* is overloaded across the platform. Two distinct machines:
 
 They meet at one edge: a readiness **review gate** is *routed into* a Workroom, to the reviewer coworker, via the recovery packet (§3).
 
+Ordinary `record_initiative_evidence` artifact receipts check deterministic
+prerequisites before asking a person for approval. The preflight uses the
+handler's trusted TaskRun binding and canonical artifact/reviewer readers;
+missing provenance or authenticated writer context must be repaired by the
+source owner, rather than approved. A successful preflight grants no authority.
+The final receipt writer still checks current authorization and provenance.
+Objective-mapping proposals and independent review writers retain their own
+issued-packet contracts. Already approved calls keep their normal settlement
+path, so a later execution refusal remains a recorded failure.
+
+Exact semantic-review exception requests also reuse their existing parameter
+validator before approval. An expired, malformed or overlong request needs a
+fresh exact request; a click cannot repair its immutable arguments. Valid
+parameters still require the existing operator approval, DEV scope and evidence
+checks. The final writer rechecks expiry after approval; historic envelopes are
+not rewritten or replayed by admission.
+
 ## 1. The lifecycle sequence
 
 An xlarge initiative does not enter implementation itself. After decomposition,
