@@ -1,0 +1,64 @@
+# Complete ordinary platform coworker approvals through the existing runner
+
+Backlog: BI-0B70FA79. Workroom: WC-70D60814. Branch: codex/platform-approval-completion. Base: 8203c42911a8b64ae81e927d5d4a92916ae6cca1. This ordered fix extends D3 of the existing approval-convergence design after the separate precondition repair merged in PR6742 and PR6743.
+
+For agentic workers: execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use dpf-tdd for red-green implementation, dpf-local-merge-ci-before-push plus the completion gate before any success claim, and dpf-pr-with-dco for handoff.
+
+## Existing design and observed gap
+
+Extend D3 in docs/superpowers/specs/2026-10-07-approval-convergence-on-envelope-design.md and the existing runApprovedPlatformRequest. Keep the current approval object, its compare-and-set reservation, exact input binding, expiry, current authority resolution and outcome storage. No general replay service, synthesized token scope, historical-row marker or new grant.
+
+On main6858 and root51d, ordinary immediate calls at apps/web/lib/tak/agentic-loop.ts:2321-2326 carry approvalCompletion=platform only when declaredProposalInChat. writeGovernedToolAudit creates the existing marker only with that server context; runApprovedPlatformRequest deliberately ignores unmarked rows. Read-only loop reproductions failed for ordinary chat and autonomous writes and passed for external-token control. The separate fresh production report approval returned authorized-but-did-not-run; its private originating task was not read, so this diagnosis does not claim that specific envelope's internal cause.
+
+The same loop only ends on a pending envelope for declared proposals. An ordinary pending request can therefore reach later calls or model inference. Its pending output must not retain a model claim that the requested write already completed.
+
+## Objectives and unchanged acceptance
+
+**OBJ-COMPLETE:** A new platform-origin request with provable arguments completes through the existing governed runner after exact human approval, once.
+
+**OBJ-TRUTH:** Waiting, refusal, execution and terminal outcome are accurately distinguished in caller output and owner readback.
+
+**OBJ-AUTHORITY:** Delayed execution never gains authority, invents a credential or reuses stale task ownership.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-APPROVED-RUNS | OBJ-COMPLETE, OBJ-AUTHORITY | an approved in-portal envelope executes once via governedExecuteTool, and its outcome is recorded. |
+| AC-MESSAGE-TRUE | OBJ-TRUTH | the pending message matches actual behaviour on every path. |
+
+The current item-body acceptance criteria are preserved verbatim:
+
+- AC-APPROVED-RUNS: an approved in-portal envelope executes once via governedExecuteTool, and its outcome is recorded.
+- AC-MESSAGE-TRUE: the pending message matches actual behaviour on every path.
+- Coordinate with BI-C8EC05C9 so this is fixed once.
+
+CT-COMPLETION is the existing server-authored marker and runner contract. FLOW-PLATFORM is loop → real governed park audit → exact owner decision → real platform runner → real governor reservation/finalization → owner outcome. Historical unmarked rows remain inert (AC-INERT). Legacy proposal/status-only endpoints are assessed separately against AC-MESSAGE-TRUE, never reported fixed by a producer-only change.
+
+## Atomic implementation sequence
+
+1. Claim this existing medium item for design on the current source state after the precondition concern lands. Record current research, claim exact paths, resolve graph tests, and publish this plan with live atomic coverage before code edits. Preserve parent/spec authority and use the issued amendment route if current readiness requires it.
+2. Write tracked failing tests for ordinary chat/autonomous immediate side effects, absent versus present/blank/whitespace server token identity, reads, captured task fence, exact user/agent/room/build identity and forged argument claims. Use existing loop characterization and context helpers. Do not change the separate autonomous declared-proposal behavior without a reproduced need.
+3. Set existing platform completion context for eligible platform-origin calls using actual server origin and tool consequence, not model params. Preserve the external credential-bound lane. End the ordinary pending turn with its envelope IDs and deterministic waiting text, without executing later batch writes or allowing another inference to invent completion. Select that text from the exact pending envelope/call, never merely by tool name; a prior successful call can have the same name. Retain prior completed-tool evidence. Executed in-memory proof: original19characterization controls plus3new cases pass only in the candidate; immutable source fails both ordinary chat/autonomous cases and the earlier-success/same-name case. Canonical research activities cmvswv1161fym01k0ctlgwdgn and cmvsx4gxy1io001k038pkkgwd retain scope and limitations.
+4. Prove replay viability before creating a new human envelope when a platform-completed action would otherwise require approval. Reuse the canonical audit-parameter retention/redaction/bounding pipeline and input fingerprint. Do not reject an otherwise authorized immediate call merely because no delayed replay is possible. Existing secret-input refusal and fail-closed bounded/dropped-parameter semantics remain; no plaintext secret is persisted for replay. Extract a shared preparation helper if needed rather than duplicating audit semantics. This tightens D3/W5's known late unprovable-argument refusal to avoid asking for a click which cannot fix the bytes. Preserve the existing settled-outcome lookup before introducing a new refusal, and make the recorded authorization decision match the actual returned verdict. The existing approval-binding-mismatch reason can express inability to preserve the exact binding; no new permission, replay payload store or global tool list is justified. Independent review must confirm this integration order before implementation is called complete.
+5. Add an actual producer/audit/runner/governor bridge fixture: mock only persistence, current authority snapshots and the final effect. Assert server marker comes from real production context, exact approval executes one effect, outcome is terminal, and repeated completion observes the recorded outcome without a second effect. Assert revoked user/grants/room admission, expired approval, tampered arguments and unavailable current authority produce no effect. Capture and retain the original fence where supplied; missing/stale fence refusals remain tested for bound-review calls whose existing contract requires them. The generic scheduler currently supplies no review execution fence, so do not invent an existing generic fence guarantee or waive a real review fence to make it pass. Retain existing external and historical unmarked controls. Route-owned outcome storage remains route-owned; the runner must not duplicate it.
+6. Update operator/contributor documentation for the actual behavior. Run all impacted tests, both TS, applicable guards and shared integration. Freeze exact DCO source, obtain independent source review, satisfy native publication policy, open a ready regular PR, and merge through the protected queue.
+7. After governed deployment, exercise one isolated nonproduction action end to end and observe a repeat completion. Record source, deployment and behavior separately. Do not generate production test approval noise or replay the old failed envelope. Resume the same paused agent-task-56e05d88 only after report/completion repair and its authority contract are verified; observe its first legitimate report outcome.
+
+## Verification and remaining ownership
+
+VERIFY-BRIDGE covers FLOW-PLATFORM and CT-COMPLETION with positive and negative seam tests, real database integration where the existing fixture supports it, and the bounded served happy path. The shared test impact contract determines the complete test set before implementation. Infrastructure failure is inconclusive, never passed.
+
+Generic scheduler pending priority and unchanged-refusal parking remain with BI-E458A9CB and their current owners. The generic job is temporarily paused, not repaired by hiding its notices. BI-C5E51A15 owns consequence/consent calibration for routine reports; no static tool-name exception or blanket write approval is added here. BI-038AA4BC owns progressive disclosure and its repaired full-size screen attempt. Parent acceptance cannot be claimed complete while any path still falsely promises execution.
+
+Risks: marking an external call as platform-origin; replaying unprovable parameters; false success after a pending call; stale task authority; duplicated side effects or owner outcome; new static import cycles. Existing identity, replay fingerprint, current governor and captured fence are controls, not assumptions. Rollback is this one producer/admission integration change; historical rows remain untouched and the existing runner substrate remains available.
+
+## Backlog coverage
+
+This document is the canonical ordered fix plan for BI-0B70FA79, with medium delivery shape. Coverage will bind its immutable repository blob before tracked implementation begins; the receipt is recorded in the Workroom and added here after recording. One atomic deliverable: producer completion, replay viability, truthful pending return and the bridge proving them. A marker-only change cannot independently satisfy the existing acceptance safely. No coverage receipt is claimed in this draft.
+
+## Exact edit and verification impact
+
+Claimed production surfaces are apps/web/lib/tak/agentic-loop.ts, apps/web/lib/governed-tool-audit.ts, and apps/web/lib/govern/authority/coworker-tool-authority-gate.ts. Existing colocated loop/audit/platform-runner tests plus a real platform-approval-completion.integration.test.ts cover the bridge. No model, migration, tool, grant or runtime setting is introduced. Any changed scope requires refreshed live coverage before that edit.
+
+The resolved Workroom impact contract requires all graph-linked tests before handoff. Current graph returned: connection-delegation-steering, coworker-tool-authority-gate.propose-boundary, resolve-coworker-tool-authority, mcp-governed-execute.execution-fence, mcp-governed-execute.reassessment; governed-tool-audit, mcp-governed-execute-audit-identity, mcp/packs/surface-readiness-pack; routing/agentic-local-continuation, skills/skill-telemetry, tak/agentic-loop-authority-refusals, agentic-loop-canonical-design-refusal, agentic-loop-native-mcp-tools, agentic-loop.proposal-mode.characterization, agentic-loop.read-evidence, agentic-loop.reassessment, agentic-loop-streaming, agentic-loop-terminal-truncation, agentic-loop, agentic-loop-thread-attribution, agentic-loop-untrusted-label, hard-completion-claim, local-tool-call-diagnostic, reassessment-loop, supplied-source-completion and terminal-tool-policy (all .test.ts). Add direct runner/context/marker/approval-pending-result and reservation/expiry controls required by the bridge. Execute these source tests and both web typechecks; invoke node scripts/check-style-drift.mjs and applicable guards. agentic-loop.ts is shrink-only against its 2581-line module baseline: extract focused helpers only if needed and claim them before editing. Generate/check the doc index. Run pregate:preflight, the canonical shared pregate integration and protected PR checks. Source-local tests cannot establish deployed behavior.
+
+The ordinary pending-turn candidate is an isolated experiment: 22 characterization cases passed only with an in-memory transform; unchanged source deliberately failed three new cases. This is research, not a merged or served repair. The original marker-only 26-case experiment did not prove exact-once completion. Legacy v1 proposal status readback must be checked without borrowing envelope-runner completion credit.
