@@ -6,7 +6,7 @@ vi.mock("@/lib/observability/external-evidence-store", () => ({ recordExternalEv
 vi.mock("@/lib/install/environment-class", () => ({ loadEnvironmentClassResolution: m.environment }));
 vi.mock("@/lib/installation-journey/operating-intent", () => ({ loadInstallationOperatingIntent: m.intent }));
 vi.mock("@/lib/coworker/human-approved-execution", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/coworker/human-approved-execution")>(), humanApprovalForExecution: m.approval }));
-import { recordSemanticReviewExemption, resolveWorkroomReviewExemption } from "./semantic-review-policy-exemption";
+import { preflightSemanticReviewExemption, recordSemanticReviewExemption, resolveWorkroomReviewExemption } from "./semantic-review-policy-exemption";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 const head = "a".repeat(40), tree = "b".repeat(40), digest = "c".repeat(64);
 const params = { capsuleId: "WC-room", sourceHeadSha: head, baseTreeHash: "d".repeat(40), headTreeHash: tree, diffDigest: digest, reviewBasis: "operator-accepted-client-assessment",
@@ -30,6 +30,42 @@ beforeEach(() => {
     argsJson: { humanApproval: { userId: "operator", approvedAt: new Date(Date.now() - 60_000).toISOString() } } }));
 });
 describe("audited DEV review exceptions", () => {
+  it("leaves valid exact requests to the existing human authorization and writer", () => {
+    expect(preflightSemanticReviewExemption(params)).toBeNull();
+    expect(m.approval).not.toHaveBeenCalled(); expect(m.room).not.toHaveBeenCalled();
+    expect(m.ci).not.toHaveBeenCalled(); expect(m.review).not.toHaveBeenCalled();
+    expect(m.create).not.toHaveBeenCalled();
+  });
+  it.each(["expired", "at-expiry", "overlong", "invalid-date", "invalid-source", "missing-basis", "missing-verification", "missing-assessment"])(
+    "rejects %s parameters without private reads or a human approval probe", kind => {
+      const now = Date.now();
+      const patch = kind === "expired" ? { expiresAt: new Date(now - 1000).toISOString() }
+        : kind === "at-expiry" ? { expiresAt: new Date(now).toISOString() }
+        : kind === "overlong" ? { expiresAt: new Date(now + 25 * 60 * 60 * 1000).toISOString() }
+        : kind === "invalid-date" ? { expiresAt: "invalid" }
+        : kind === "invalid-source" ? { headTreeHash: "invalid" }
+        : kind === "missing-verification" ? { verificationEvidenceId: " " }
+        : kind === "missing-assessment" ? { clientAssessmentActivityId: " " } : { reviewBasis: undefined };
+      expect(preflightSemanticReviewExemption({ ...params, ...patch })).toMatchObject({ success: false, error: "review_exemption_refused" });
+      expect(m.approval).not.toHaveBeenCalled(); expect(m.room).not.toHaveBeenCalled();
+      expect(m.ci).not.toHaveBeenCalled(); expect(m.review).not.toHaveBeenCalled();
+      expect(m.create).not.toHaveBeenCalled();
+    },
+  );
+  it("admits the existing maximum expiry bound without granting an exception", () => {
+    const now = Date.now(); const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try { expect(preflightSemanticReviewExemption({ ...params, expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString() })).toBeNull(); }
+    finally { clock.mockRestore(); }
+  });
+  it("rechecks expiry after human approval even when parameter admission previously passed", async () => {
+    expect(preflightSemanticReviewExemption(params)).toBeNull();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse(params.expiresAt));
+    try {
+      expect((await recordSemanticReviewExemption(params, "operator", context)).success).toBe(false);
+      expect(m.approval).toHaveBeenCalledOnce(); expect(m.room).not.toHaveBeenCalled();
+      expect(m.create).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
   it("holds the room fence through evidence insertion", async () => {
     expect((await recordSemanticReviewExemption(params, "operator", context)).success).toBe(true);
     expect(m.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "ReadCommitted" });
