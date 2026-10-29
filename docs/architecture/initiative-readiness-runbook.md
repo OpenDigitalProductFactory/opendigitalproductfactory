@@ -91,6 +91,23 @@ The word *shape* is overloaded across the platform. Two distinct machines:
 
 They meet at one edge: a readiness **review gate** is *routed into* a Workroom, to the reviewer coworker, via the recovery packet (§3).
 
+Ordinary `record_initiative_evidence` artifact receipts check deterministic
+prerequisites before asking a person for approval. The preflight uses the
+handler's trusted TaskRun binding and canonical artifact/reviewer readers;
+missing provenance or authenticated writer context must be repaired by the
+source owner, rather than approved. A successful preflight grants no authority.
+The final receipt writer still checks current authorization and provenance.
+Objective-mapping proposals and independent review writers retain their own
+issued-packet contracts. Already approved calls keep their normal settlement
+path, so a later execution refusal remains a recorded failure.
+
+Exact semantic-review exception requests also reuse their existing parameter
+validator before approval. An expired, malformed or overlong request needs a
+fresh exact request; a click cannot repair its immutable arguments. Valid
+parameters still require the existing operator approval, DEV scope and evidence
+checks. The final writer rechecks expiry after approval; historic envelopes are
+not rewritten or replayed by admission.
+
 ## 1. The lifecycle sequence
 
 An xlarge initiative does not enter implementation itself. After decomposition,
@@ -394,6 +411,16 @@ The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-a
 describes the current-authority checks, generation reservation and approval
 continuation. Completion still requires the original task's genuine governed
 writer receipt and the readiness finding it actually records.
+
+### Bounded qualification research admission
+
+`RESEARCH_REQUIRED` can expose a `qualificationAdmission` recovery route when the refused Workroom has one exact immutable qualification protocol. The route carries an opaque, signed token for `claim_workroom_scope`; replaying it admits one bounded test-only experiment and does not satisfy research or authorize ordinary implementation.
+
+The protocol is deliberately two-phase. **Prepare** is pinned to the item, Workroom, repository, base/head, protocol path/commit/blob, installation, accountable principal, authority decision, shape/stage, production blob set, exact test/helper paths, allowed tools, expiry, duration, and one start. It may produce only a test-only candidate and cannot run tests. A separate independent semantic review must accept that exact candidate head, diff digest, test blobs, and unchanged production blobs before terminal recovery can issue **Verify**. Verify receives a fresh signed one-start binding for the reviewed candidate; it may run the exact qualification test, cannot edit, and rejects `auto_fix`.
+
+The scheduled task, stage mandate, Workroom state, tool effects, and recorded evidence all recheck the same binding digest. A token cannot be rearmed after start or settlement, and pages from another identity, path, phase, attempt, or outcome never combine into evidence. Only complete positive terminal Verify evidence can be selected for the governed research writer. Negative, inconclusive, blocked, stale, conflicting, or failed-only evidence remains audit history and readiness stays closed. The design author must still persist the normal `record_initiative_evidence(gate:"research")` receipt; qualification evidence never writes that receipt directly.
+
+The source contract is [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts); routing and progression live in [terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts). The design is [qualification research admission](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
 
 ### A present assessment authorized by an approved policy
 

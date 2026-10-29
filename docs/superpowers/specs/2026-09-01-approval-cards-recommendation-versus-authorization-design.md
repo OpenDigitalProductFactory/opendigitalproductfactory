@@ -107,7 +107,7 @@ Live rows were read with a read-only SQL transaction, a stated direct-DB fallbac
 3. **A failed approval settles its replay.** Replay finds `executed` and `failed` envelopes for the same binding within the existing 15-minute window. A failed one returns `approval_outcome_failed` with the recorded error, and no new card. After the window, the coworker may ask again, which is a new, deliberate request. The pending-result copy says this.
    - *Amended by BI-5B34D277.* An approval the gate reserved is settled even when the call is refused before its tool runs. That covers a pre-tool hook, the alignment and precondition gates, permit enforcement, receipt reservation, an approved-task resume failure, and any exception. The refusal's disposition in `governed-rejection-disposition.ts` decides the outcome. A settled no (`refused`) closes the envelope as `failed`, and that refusal is the recorded outcome. Replay reports it as "refused before it ran", not "already ran". Every other disposition (`inconclusive`, `awaiting-input`, `awaiting-person`) releases the reservation with a compare-and-set on the run's own `resolvedAt`. Nothing ran, so the approval stands, and a retry spends it once. A run that loses the reservation returns the winner's recorded outcome, if the winner has one, before it reports "already used". Code: `lib/govern/authority/approval-reservation.ts`.
 4. **Bounded pending state on the card.** The decision POST is aborted after 30 seconds. The card then reads the envelope's recorded state from a new owner-only GET `/api/agent/envelope/:id`, which uses the same `loadApprovalOutcomes` projection as the Inbox. If the state is still `waiting`, nothing was saved and the buttons return, with that explained. Any other state is shown with its next step. If the state cannot be read, the card says the result is unknown, says not to approve again, and links to the Inbox result. Nothing is ever resubmitted automatically.
-5. **Plain handover card.** A known handover reads as follows. Who takes over which room, and for which work. What the assistant can then do: act in that one room, on its branch, worktree and evidence. What it cannot do: other rooms, or widening its permissions. What Decline leaves unchanged. Authorize and Decline effects are separate lines. Tool name, IDs, the reason, the full arguments and the handoff manifest move into a collapsed Technical details block. Exact-content cards for other tools keep their content visible. Unknown shapes still fail closed.
+5. **Plain handover card.** A known handover reads as follows. Who takes over which room, and for which work. What the assistant can then do: act in that one room, on its branch, worktree and evidence. What it cannot do: other rooms, or widening its permissions. What Decline leaves unchanged. Authorize and Decline effects are separate lines. Tool name, IDs, the reason, the full arguments and the handoff manifest move into a collapsed Technical details block. The original exact-content visibility rule is superseded by the progressive-disclosure amendment below. Unknown effects remain explicit.
 
 ### Ordered fix sequence
 
@@ -144,3 +144,149 @@ rendered card and preserves result-panel links for every non-waiting state.
 
 Approval convergence PR-B (spec `2026-10-07-approval-convergence-on-envelope-design.md`, D2 S1) moved the chat card from the AgentActionProposal to the CoworkerActionEnvelope. A coworker's proposal-mode call in chat now goes to the governed executor, which raises an approval request bound to the exact call; the assistant message lists the requests it raised, each with the shared Authorize / Decline (`EnvelopeDecisionButtons`, extracted from the Needs-you card). The same request is the Needs-you card. Authorize runs the call once through the monitor and the chat sends the "Result: <id>" follow-up. The recommendation/authorization split this spec set stays: the card names what the coworker recommends and what the person authorizes. An admin who is not the person asked can decide on their behalf with a recorded reason (plan B8, AC-OVERRIDE).
 
+
+## Progressive disclosure amendment — BI-038AA4BC, 2026-10-25
+
+The operator reported that approvals were too verbose and exposed internal IDs.
+Live reproduction on served lineage `64e03a9f` found 258–298 default-visible words
+on representative routine cards despite collapsed Technical detail. The action
+renderer lived outside that disclosure and repeated the policy, identity grid
+and report. Immutable source `74bebe9d`,
+`CoworkerEnvelopeApproval.tsx:175–246`, establishes the same defect. Live baseline
+activity: `cmvojwd5g5lm901qf8qk3yybo`. Three new behavior tests failed against the
+unchanged renderer; name-access tests separately failed before enrichment.
+
+The [working prototype](2026-10-25-approval-progressive-disclosure-prototype.html)
+preceded implementation. Its buttons send no approval. It covers a blocked
+report, a review result, a handover and an unresolved effect. The recorded item
+body supplies the medium delivery shape's problem, options, choice, ordered work
+and acceptance baseline; this amendment reconciles the earlier expanded-content
+rule with that baseline.
+
+### Presentation contract
+
+- One decision block shows the specific question, affected work name, actual
+  change, consequence, attributed recommendation and Authorize/Decline controls.
+  Known report and research operations use their existing handler semantics;
+  recorded claims remain claims, rather than proof the work succeeded.
+- Reuse Surface, StatusBadge, the existing decision projection and shared
+  EnvelopeDecisionButtons. Other attention sources keep their current shell.
+  One deliberate Technical evidence disclosure contains the original identity,
+  policy, proposed values and lineage. Why am I being asked? supplies brief help.
+- Focus and deep links locate the decision without opening technical evidence.
+  Native disclosure retains keyboard semantics. The controls remain outside
+  disclosure, and decision, execution and completion remain separate states.
+- Known report contents are evidence, not new payment or access instructions.
+  Unsupported operations stay visibly unresolved and recommend holding. Their
+  recorded recipients, amounts, currencies, recurrence, destinations, access
+  changes, irreversible effects and deadlines remain visible without truncation,
+  including nested and empty values. Full parameters remain available and bound
+  to execution. No model-generated summary substitutes for exact consequences.
+- Readable names are presentation enrichment. Canonical human Workroom content
+  access is checked for the actual viewer, including an admin deciding on
+  another person's behalf. Only then may the related backlog title be read for
+  display. Missing access or enrichment yields an explicit unavailable name;
+  no ID or fabricated label substitutes for it. Historical mixed backlog keys
+  resolve through the existing id/itemId identities. No schema changes.
+- No approval eligibility, grants, endpoint, stored binding, timeout, replay or
+  scheduler rule changes. BI-E458A9CB owns the approval producer repair.
+
+### Research and fit
+
+The original GitHub, Linear and Slack comparisons still apply. This amendment
+also follows [GOV.UK Details](https://design-system.service.gov.uk/components/details/)
+for optional supporting information and the
+[WAI-ARIA disclosure pattern](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/)
+for operable expansion. Essential consequences stay outside disclosure, following
+[progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/).
+
+The design fits Workspace's existing inbox and operator persona, with contextual
+controls only. It removes the duplicated default summary/grid and the forced
+technical expansion on focused envelope cards. It adds no navigation home or
+approval mechanism. The operator explicitly selected progressive disclosure.
+Kernel comparison `DI-9C8C9D3CE3E2` ranked selective disclosure above shortening
+the grid or hiding the action block, but returned low confidence and
+`all-options-opposed` because the submitted feature coverage was incomplete.
+That advisory is not an approval or a substitute for independent UX review.
+Existing UX Design Critic engagement `CE-82A72FB4` remains requested; an advisory
+handoff was refused for lack of an initiative-review packet. No completed
+specialist critique is claimed.
+
+### Required delivery evidence
+
+Exercise representative cards against the served canonical shared preview at
+320px and desktop, in light/dark themes and with keyboard/accessibility checks.
+Measure real DOM budgets and commit the measured UX-fit manifest. Verify full
+critical values, hidden technical reading order, focus, unchanged exact endpoints,
+on-behalf identity, lost acknowledgements and failed execution. Canonical gate,
+independent assessment, protected merge and live verification remain required.
+A prototype or source-local pass alone is not runtime acceptance.
+
+### Long inbox disclosure — observed 2026-10-29
+
+The canonical full-size preview at d79d7c7 completed startup after the copier
+repair. Its empty-approval baseline contained 18 real notices and measured 1,617
+default-visible words against the frozen 428-word route baseline. This is a
+regression, not qualifying UX evidence. Approval-case checks were incomplete
+when the preview lease ended.
+
+Extend the working prototype and reuse report-kit's CollapsibleList: show the
+first three decisions in existing priority order, with a counted Show more
+control at the foot and Show fewer after expansion. Preserve all data, actions,
+material facts and existing explicit limit behavior. A deep link must reveal,
+open and scroll to its target even beyond the initial three. Header counts name
+items available in the view, rather than falsely saying every item is shown.
+This applies to the shared decision list, including the weekly digest; the
+cockpit's existing explicit preview limit remains authoritative.
+
+Workspace remains the owning area, operator the persona, local disclosure the
+only interaction change. No coworker request or approval is sent by expanding
+the list. Existing specialist engagement remains requested, not completed. MCP
+authentication is currently unavailable; source work follows the checked-in
+recovery route and must be reconciled when connection access returns.
+
+Add list expansion/collapse, explicit-limit and beyond-preview deep-link tests.
+Repeat the real served DOM measurement and approval cases before publication;
+no baseline relaxation or notice deletion is permitted. Source-local tests do
+not establish that the 428-word runtime budget passes.
+
+Independent review found that unmounting a collapsed approval could erase its
+in-flight, settled or unknown-result lock and restore stale authorization
+controls. The shared list must offer a state-preserving non-list mode: keep
+rows mounted under hidden wrappers while collapsed, preserving stable row keys.
+Use this mode for decisions; retain existing unmounting behavior for other
+callers. Hidden rows must be excluded from the visible and accessible surface.
+Regression tests must exercise a real fourth envelope through failed status
+reconciliation and pending-to-completed submission, not only informational cards.
+No request may be resubmitted or unknown-result lock reset by disclosure.
+
+### Verification lane reconciliation — 2026-10-29
+
+The e3c4 full-size copy completed twice, including the explicitly authorized
+30-minute-startup attempt. The shared preview still yielded after twenty minutes
+when unrelated pre-PR gates queued. Its local startup allowance does not change
+that fair-share rule. No screen capture or UI pass came from those attempts.
+Do not bypass the hold, change claim-key classification, cancel foreign jobs or
+repeat a full clone without authorization.
+
+Use the existing protected GitHub UX Route Sweep Runtime for pre-merge functional
+verification: it serves the actual exact-tree production build with its declared
+CI-only database and existing authenticated test session. Add nine presentation
+cases after the normal frozen-budget sweep, across desktop/mobile and light/dark,
+with keyboard access to full input and a fault-injected pending/unknown collapse
+regression. Only this run's synthetic envelopes/room/run may be created or removed;
+no server authorization is submitted. Guard the fixture before loading database
+access with the explicit workflow opt-in, GitHub run/source identity, exact local
+CI database and loopback target. Keep every failure diagnostic and normal gate.
+
+DI-09A133C4952C compared purpose-first compact disclosure, label-only shortening
+and whole-card collapse. It recommended the first with high confidence, strong
+signal and no commandment conflict. The agent recorded that choice under the
+operator's existing direction; it is a design decision, not human approval or
+runtime evidence. The UX-fit manifest carries that real recorded choice through
+the supported propose-n-pick evidence contract. It makes no measured-word claim.
+The committed route baseline remains frozen, the normal real-DOM CI sweep still
+blocks regressions, and scenario screenshots/results must pass before merge.
+After protected release, use normal self-upgrade and CAN-TEST preflight, then
+verify the canonical live Inbox and coworker happy path. Full-copy performance,
+CI fixture presentation and live acceptance are separate claims.

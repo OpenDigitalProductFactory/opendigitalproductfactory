@@ -26,6 +26,27 @@ Process pauses appear in the room's attention summary. Observed execution
 separates activity events from receipts, and the header shows the same recorded
 or inherited human accountability as the workforce panel.
 
+## Before you decide
+
+A coworker request shows what would change, the affected work and its consequence.
+Amounts, recipients, permission changes and deadlines stay visible when they
+matter. An unresolved effect is labelled so you can hold the request until it is
+clear. A reported result is the coworker's claim, not proof that the work passed.
+
+Choose **Authorize** or **Decline** on the card. Open **Why am I being asked?**
+for context or **Technical evidence** for the full proposal and supporting
+records. Opening a request's link keeps those details collapsed. Authorizing
+one request covers that exact change once.
+
+## Connecting business mail
+
+Mailroom tests the mailbox connection before saving it, then attempts a first
+read. A successful connection test alone does not finish setup. If the first
+read fails, setup stays incomplete; the saved connection remains available for
+recovery. Use **Check now** after the provider recovers. A successful read then
+completes setup, including when the selected folder is empty. An empty folder
+does not prove a real business message has been processed or a reply delivered.
+
 ## Checking an approval result
 
 After you approve or decline a coworker's request, the Inbox keeps its result.
@@ -33,8 +54,10 @@ The request's link opens that result directly, including after a refresh. Open
 **Recent approval results** to review recent decisions separately from work that
 still needs you. Completed decisions do not increase the attention count.
 
-The Inbox displays a bounded list. Its approval summary shows how many requests
-are waiting in total and how many are shown. Use **Older requests** to continue
+The Inbox starts with three decisions. Choose **Show more** to reveal the rest,
+or **Show fewer** to shorten the list again. A request's direct link reveals its
+card automatically. Its approval summary shows how many requests
+are waiting in total and how many are available in this view. Use **Older requests** to continue
 through the queue and **Latest requests** to return to the newest requests.
 After a decision, another request may fill the cleared place; the pending total
 shows your progress. The displayed-item count also includes other notices and

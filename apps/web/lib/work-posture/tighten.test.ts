@@ -7,11 +7,11 @@ import {
   tightenProactivityLevel,
   tightenVerificationDepth,
   TIGHTEN_RANKS,
-} from "./tighten";
+} from "@dpf/validators/workroom-policy/tighten";
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
-} from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy/proactivity-types";
 import type { QualityTier } from "@/lib/routing/quality-tiers";
 import type { VerificationDepth } from "@/lib/golden-triangle";
 

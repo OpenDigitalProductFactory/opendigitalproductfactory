@@ -409,3 +409,10 @@ The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns relea
 and acceptance caveats. Confirm the selected release contains the changes;
 customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
 Historical root-owned directories are preserved and refused for scoped recovery.
+
+## Managed Mac inference qualification
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Qualified Apple M5 Max | A merged portal update is mistaken for a changed native engine; a package/report copied from another Mac is treated as local qualification. | Explicit native installer opt-in stages immutable source and a qualification bound to this enrolled host. A current signed action, owned drain and host inference reservation select it; verify actual mapped engine bytes and useful DPF results. Preserve Docker vendor files and the prior selection for owned rollback. |
+| Other macOS hardware, Windows and Linux | An unqualified acceleration package or native action is adopted automatically. | Native managed inference stays unregistered outside the qualified Apple Silicon procedure. Existing Windows, macOS and Linux native installer/host-upkeep behavior continues; no inference action is added to automatic host-upkeep policy. Qualify each additional hardware/runtime/model profile before offering activation. |

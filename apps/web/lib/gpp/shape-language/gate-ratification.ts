@@ -56,11 +56,10 @@
 
 import { DECISION_ID_PATTERN } from "@/lib/gpp/binding-enforcement";
 
-import type { GppGate } from "./gpp-shape-schema";
+import type { GppGate } from "@dpf/validators/gpp/gpp-shape-schema";
 
-export type GateRatificationEntry =
-  | { status: "proposed"; proposed: GppGate; basis: string }
-  | { status: "ratified"; proposed: GppGate; basis: string; decisionId: string; ratifiedAt: string };
+export type { GateRatificationEntry } from "@dpf/validators/gpp/ratification";
+import { ratifiedGateFor as lookupRatifiedGate, type GateRatificationEntry } from "@dpf/validators/gpp/ratification";
 
 type GateAuthority = GppGate["authority"];
 
@@ -253,6 +252,5 @@ export function ratifiedGateFor(
   decisionScope: string,
   table: Readonly<Record<string, GateRatificationEntry>> = GATE_RATIFICATION,
 ): GppGate | null {
-  const entry = Object.hasOwn(table, decisionScope) ? table[decisionScope] : undefined;
-  return entry?.status === "ratified" ? entry.proposed : null;
+  return lookupRatifiedGate(decisionScope, table);
 }

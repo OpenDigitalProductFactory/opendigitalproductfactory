@@ -143,6 +143,15 @@ A person invitee, an unknown room or agent, or any lookup error keeps `authority
 
 Until organization posture lands, one platform default applies. Rooms whose sensitivity ceiling is public or internal admit `org-coworker` and `operator-assistant` up to `create`. Confidential and restricted rooms have no default.
 
+**Room ceiling and coworker clearance (BI-ED5561BB).** A room reached by `caseKey` resolves its ceiling as a Workroom does (`resolveWorkItemRoomSensitivityCeiling`):
+1. an explicit room-policy ceiling;
+2. otherwise the effective sensitivity of the room's backlog item, so platform work reads as public (DI-5E19848444FC);
+3. otherwise `internal`.
+
+Clearance compares by rank (`clearanceCovers`), for room access and the charter alike.
+
+Coworker clearance itself stays owner-granted. Decision DI-637281808D33 rejected deriving it from `Agent.sensitivity`, and chose an owner-confirmed raise when an invite or access is refused for clearance (BI-6AE64074).
+
 Still open:
 - the batched card and "allow in rooms like this" (`BI-49379534`), which change the exact-call approval binding;
 - posture by archetype (`BI-434756B6`);

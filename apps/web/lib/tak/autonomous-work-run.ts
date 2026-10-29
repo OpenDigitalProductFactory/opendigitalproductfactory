@@ -8,8 +8,8 @@ import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-rev
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
-import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import type { ResolvedDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
@@ -267,6 +267,10 @@ export async function resolveAutonomousWorkTools(input: {
   requiredToolNames?: readonly string[];
   /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
   restrictedReviewBinding?: InitiativeReviewBinding;
+  /** Current server-resolved scheduled commission; never copied from model arguments. */
+  scheduledReportingMode?: "read-only-history";
+  taskRunId?: string;
+  threadId?: string;
   roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
@@ -279,7 +283,7 @@ export async function resolveAutonomousWorkTools(input: {
   const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import(
     "@/lib/coworker/authorized-surface-coworker-contract"
   );
-  const authorized = await getAvailableTools(input.userContext, {
+  const normallyAuthorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
@@ -287,6 +291,17 @@ export async function resolveAutonomousWorkTools(input: {
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
     ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
+
+  const { isScheduledReportingRead } = await import("@/lib/operate/scheduled-jobs/scheduled-reporting-contract");
+  const reportingUserId = input.userContext.userId;
+  if (input.taskRunId && !reportingUserId) throw new Error("Scheduled reporting requires its authenticated owner.");
+  const reporting = input.taskRunId && reportingUserId ? await (await import("@/lib/operate/scheduled-jobs/scheduled-reporting-authority"))
+    .resolveScheduledReportingContext(reportingUserId, { taskRunId: input.taskRunId, threadId: input.threadId, agentId: input.agentId }) : null;
+  if (input.taskRunId && input.scheduledReportingMode && reporting?.mode !== input.scheduledReportingMode) {
+    throw new Error("Scheduled reporting requires its current persisted commission.");
+  }
+  const authorized = (reporting?.mode ?? input.scheduledReportingMode) === "read-only-history"
+    ? normallyAuthorized.filter(isScheduledReportingRead) : normallyAuthorized;
 
   if (input.restrictedReviewBinding) {
     const binding = input.restrictedReviewBinding;
@@ -395,6 +410,8 @@ export async function resolveAutonomousWorkTools(input: {
 }
 
 export async function executeAutonomousAgenticLoop(input: {
+  /** Server-owned commission narrowing; its report must not emit optional proposal writers. */
+  scheduledReportingMode?: "read-only-history";
   canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
@@ -631,6 +648,10 @@ export async function executeAutonomousAgenticLoop(input: {
       },
     );
   }
+
+  // Report settlement owns the output/history. Optional draft revision and
+  // background learning writers are outside this observation-only commission.
+  if (input.scheduledReportingMode === "read-only-history") return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
 
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on
