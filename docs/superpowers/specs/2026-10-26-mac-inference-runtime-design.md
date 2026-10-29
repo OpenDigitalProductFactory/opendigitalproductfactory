@@ -117,3 +117,73 @@ The first physical pilot remains this M5 Max. Preserve the actual current Qwen a
 The permanent daemon's lifecycle is distinct from the finite experimental lease fence. Do not turn an expired experiment into a permanent service by omitting its fence. Persistent ownership begins only with the accepted managed active selection and required host/change authority. Failure before that point restores the prior service; client disappearance must not leave an unowned model process.
 
 Physical older Mac and older macOS qualification remains unrun. Existing Docker installations stay the default unless their own matching host/package/model qualification and authorized selection exist. Record actual pilot and rollback results in the existing AI Ops learning; BI-IMP-AE7792A0 retains its monitor ownership, failure history and separate scheduled-writer requirements.
+
+
+## Qualification profile preservation repair — October 29, 2026
+
+**Owning repair:** BI-C632CC8E / WC-CAC08C96. Reuse
+CONTRACT-MRI-PROVIDER, CONTRACT-MRI-ADMISSION and CONTRACT-MRI-ROLLBACK and
+AC-MRI2, AC-MRI4 and AC-MRI6. This source repair does not reopen BI-CD4EB130,
+replace its operational owner or change any original uncertain request.
+
+**OBJ-QPR1:** Preserve the exact captured model profile before qualification
+measurements and after cleanup, with restoration evidence based on actual readback.
+
+At source `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`, cleanup chat-reloads
+Docker and marks `baselineRestored` from completion success without restoring or
+reading captured configuration. Baseline controls also begin after unload without
+re-establishing the captured profile. Pure source-fragment fixtures reproduced
+both missing invariants without a model or host operation. The October 29 report
+`36b8a235ea539ebbc9d57a5f4efb88c01ee621519c1f2dfa925535c78ae9fccf`
+retains its completed API controls and the owner's superseding failed profile
+verification; do not reuse the earlier false post-verifier PASS. This does not
+prove historical baseline drift or configuration equivalence for its timing ratio.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-QPR1 | OBJ-QPR1 | Preserve the captured per-model/mode configuration across qualification unloads. Restore and read back the exact captured settings before baseline controls; do not silently benchmark a changed default. |
+| AC-QPR2 | OBJ-QPR1 | After owned candidate shutdown, restore and verify the captured Docker profile through existing supported configuration APIs before reporting restoration success. Preserve model identity, settings and current unaffected embedding modes; do not manufacture settings from defaults. |
+| AC-QPR3 | OBJ-QPR1 | Meaningful deterministic RED tests reproduce lost completion configuration. GREEN tests cover restoration/readback ordering, baseline-before-control ordering, multiple modes, configuration mismatch, API/cleanup failure and truthful report outcomes. Use source fixtures, not duplicate model inference. |
+| AC-QPR4 | OBJ-QPR1 | A failed or unverified readback must remain failed/incomplete; a successful chat response alone is not configuration restoration. Preserve the original qualification failure and evidence; do not overwrite historical hashes or infer lease release. |
+| AC-QPR5 | OBJ-QPR1 | Deliver affected source checks, independent complete source assessment, actual canonical integration gate, DCO PR and protected merge. No new paid/provider review without actual funding authority. |
+
+### Ordered fix: FLOW-QPR-RESTORE
+
+1. Bind this exact design, edit scope and research to BI-C632CC8E and its actual
+   source Workroom. Obtain current atomic coverage and implementation admission.
+2. Add production-helper fixture regressions for AC-QPR1 through AC-QPR4. Observe
+   RED when unload drops the completion profile even though owned shutdown and
+   chat completion succeed. No actual model or host API is needed.
+3. Extend the existing `runtime-model-store.mjs` snapshot/configuration helpers
+   with captured-profile restoration and exact readback. Read current model and
+   mode identity first, preserve matching configurations and empty defaults, and
+   write only captured rows through the existing guarded request callbacks.
+   Conflicting or unverified readback fails; never invent settings or delete an
+   unowned configuration to make comparison pass.
+4. Establish/read back that profile before baseline controls and restore it after
+   confirmed candidate shutdown during cleanup. Read it again after the baseline
+   reload, then mark and checkpoint restoration success. A successful chat reply
+   alone remains insufficient. Preserve lease, deadline, source and authority
+   fencing; failed restoration remains failed or unknown.
+5. Verify `VERIFY-QPR-UNIT`: colocated profile/model-store fixtures, related engine
+   and native-adapter suites and the current impact contract. Cover multiple
+   modes, unchanged embedding settings, empty defaults, failed shutdown, API
+   errors and final readback drift.
+6. Verify `VERIFY-QPR-INTEGRATION`: guard/doc-index obligations, independent full
+   immutable-source assessment, canonical shared gate, DCO PR and protected merge.
+   Production build keeps its ordinary protected CI lane.
+
+**Backlog coverage:** atomic BI-C632CC8E. Configuration preservation, readback and
+truthful report orchestration are not independently useful repair phases.
+Map AC-QPR1–AC-QPR5, the three reused CONTRACT-MRI references,
+FLOW-QPR-RESTORE, VERIFY-QPR-UNIT and VERIFY-QPR-INTEGRATION to this one deliverable.
+Coverage and implementation admission are pending at this design checkpoint.
+
+No schema migration or new runtime/activation carrier is required. The existing
+BI-CD4EB130 owner alone handles live profile recovery, staging, activation and
+rollback under actual host authority and shared runtime admission. This repair
+does not change models, provider settings, permissions or the disabled global
+action flag, run duplicate inference, repeat reviews, overwrite historical report
+hashes or settle UNKNOWN effects. Keep the immutable qualification verifier strict.
+Source rollback restores code only; runtime recovery remains the existing owner's
+recorded-profile obligation.
