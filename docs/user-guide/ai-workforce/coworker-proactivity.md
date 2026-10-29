@@ -6,6 +6,8 @@ relatedCode:
   - apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx
   - apps/web/components/proactivity/ProactivityRosterList.tsx
   - apps/web/lib/proactivity/proactivity-roster.ts
+  - apps/web/lib/mcp/improvement-draft.ts
+  - apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts
 ---
 
 ## What This Covers
@@ -62,6 +64,19 @@ No proactivity setting can bypass them:
 - **Confirm** the derived levels if they look right.
 - **Adjust** any coworker in place — the change saves immediately and takes effect on its next scheduled work.
 - A coworker may also **propose** its own adjustment after a repeated pattern; you accept, keep, or narrow it from the ["Needs you" inbox](../workspace/attention-inbox.md).
+
+## Internal Learning Recommendations
+
+Under its current permissions and your recorded delegation, a coworker can save an
+internal improvement recommendation for review. Repeating the same pending draft
+from the same coworker and context reuses it, including its existing backlog entry.
+The draft uses the finding and evidence explicitly submitted; it does not copy
+unrelated conversation messages.
+
+Saving a recommendation does not apply a change, publish it, or alter a skill or
+anyone's permissions. Those actions keep their own controls. If you explicitly
+require approval for every change, that saved restriction still applies to the
+draft. An unavailable or cancelled conversation context stops the write.
 
 ## What the Dial Actually Changes
 
