@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process';
 import { promisify, parseArgs } from 'node:util';
-import { lstat, readFile } from 'node:fs/promises';
 import { join, isAbsolute } from 'node:path';
 import { protectedDirectory, protectedRead } from '../../scripts/installer/recovery-filesystem.mjs';
 import { isEntryModule } from '../../scripts/lib/entry-module.mjs';
@@ -23,9 +22,7 @@ export async function stageQualifiedNativeRuntime({ stateDirectory, sourcePackag
   const state = await protectedDirectory(stateDirectory);
   const node = JSON.parse((await protectedRead(join(state, 'edge-node', 'state.json'))).toString());
   check(node.trustState === 'trusted' && typeof node.nodeId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(node.nodeId), 'Trusted enrolled host identity required');
-  const info = await lstat(reportFile);
-  check(info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.size > 0 && info.size <= 65536, 'Invalid qualification report file');
-  const reportBytes = await readFile(reportFile);
+  const reportBytes = await protectedRead(reportFile);
   check(sha256(reportBytes) === expectedReportSha256, 'Qualification report identity changed');
   const report = JSON.parse(reportBytes.toString());
   const runtime = await verifyRuntimePackage(sourcePackage);

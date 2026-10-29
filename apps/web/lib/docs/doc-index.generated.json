@@ -13474,7 +13474,8 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "workroom-reports-and-approval-waits"
+        "workroom-reports-and-approval-waits",
+        "ordinary-coworker-requests"
       ]
     },
     "docs/user-guide/workspace/attention-inbox.md": {

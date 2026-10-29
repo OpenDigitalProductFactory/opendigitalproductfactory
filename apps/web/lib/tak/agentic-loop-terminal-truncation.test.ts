@@ -105,10 +105,14 @@ describe("terminal writer output truncation", () => {
     vi.mocked(routeAndCall).mockResolvedValueOnce(reply(false, [{ id: "write-1", name: writer, arguments: {} }]) as never)
       .mockResolvedValue(reply(true) as never);
     const outcome = await runAgenticLoop(params);
-    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    expect(routeAndCall).toHaveBeenCalledTimes(boundary === "approval" ? 1 : 2);
     expect(governedExecuteTool).toHaveBeenCalledTimes(1);
     expect(outcome.failure).toBeUndefined();
     expect(outcome.executedTools[0].result.success).toBe(boundary === "receipt");
+    if (boundary === "approval") {
+      expect(outcome.pendingApproval).toEqual({ envelopeIds: ["ENV-1"] });
+      expect(outcome.content).toBe("Approval pending.");
+    }
   });
 
   it("keeps a failed writer unverified when subsequent prose is truncated", async () => {
