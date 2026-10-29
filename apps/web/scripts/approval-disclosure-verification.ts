@@ -14,9 +14,8 @@ import frozenBudget from "../lib/ux-budget/route-budget-baseline.json";
 import { measureUxBudget } from "../lib/ux-budget/measure";
 import { waitForRouteDomToSettle, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
 
-import type { WorkCapsuleSource } from "../lib/work-capsules";
-
-export const APPROVAL_FIXTURE_WORKROOM_SOURCE: WorkCapsuleSource = "external-adoption";
+import { approvalFixtureScope, prepareApprovalFixtures, cleanupApprovalFixtures, createApprovalFixtureEnvelope } from "./approval-disclosure-fixtures";
+export { APPROVAL_FIXTURE_WORKROOM_SOURCE } from "./approval-disclosure-fixtures";
 
 export function assertApprovalScenarioBudget(measurement: RouteMeasurement, cardAxeViolations: number) {
   const baseline = frozenBudget.routes["/workspace/inbox"];
@@ -69,7 +68,6 @@ export async function verifyApprovalDisclosure() {
   const contexts: Array<{ context: BrowserContext; page: Page; layout: "desktop" | "mobile"; theme: "light" | "dark" }> = [];
   let unexpectedDecisionPosts = 0;
   const roomId = "WC-" + runtime.runKey.toUpperCase();
-  const taskRunId = "TR-" + runtime.runKey.toUpperCase();
   const threadId = runtime.runKey + "-presentation-only";
   const prefix = runtime.runKey + "-";
   let userId = "";
@@ -110,22 +108,9 @@ export async function verifyApprovalDisclosure() {
       where: { aliasType: "user", aliasValue: userId, issuer: "" }, select: { principalId: true },
     });
     principalId = alias.principalId;
-    check(await prisma.coworkerActionEnvelope.count({ where: { id: { startsWith: prefix } } }) === 0,
-      "This run's fixture identity is already in use");
-    check(await prisma.workroom.count({ where: { capsuleId: roomId } }) === 0
-      && await prisma.taskRun.count({ where: { taskRunId } }) === 0, "Fixture room/run identity collision");
-    await prisma.workroom.create({ data: { capsuleId: roomId, title: "Review supplier commitments",
-      objective: "CI presentation only; no execution or scheduling.", status: "draft", source: APPROVAL_FIXTURE_WORKROOM_SOURCE,
-      createdByPrincipalId: principalId } });
+    const scope = approvalFixtureScope(runtime.runKey, userId, principalId);
+    await prepareApprovalFixtures(prisma, scope);
     fixturesOwned = true;
-    await prisma.taskRun.create({ data: { taskRunId, userId, title: "Approval presentation fixture",
-      objective: "Display only; never execute.", status: "completed", source: "coworker",
-      a2aMetadata: { initiativeReviewBinding: { gate: "research", itemId: "BI-038AA4BC",
-        writerToolName: "record_initiative_evidence", artifactRef: { kind: "repo-blob-at-commit",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          commitSha: "89e875eb49be0604ee8fa4156d0903b6a0932e62",
-          path: "docs/superpowers/specs/2026-08-15-resilient-concurrent-development-process.md",
-          providerBlobId: "bddca7c5a0b109f9460f84b2b0d886f5d794cbb6" } } } } });
     const long = "The release candidate was not supplied. " + "Internal verification detail. ".repeat(40);
     const cases: Case[] = [
       { key: "report", tool: "record_workroom_evidence", args: { capsuleId: roomId, kind: "assurance-finding",
@@ -148,14 +133,7 @@ export async function verifyApprovalDisclosure() {
         args: { capsuleId: roomId, kind: "assurance-finding", outcome: "blocked", summary: long, stageKey: "report" } },
     ];
     async function addEnvelope(value: Case, suffix = value.key) {
-      const id = prefix + suffix;
-      await prisma.coworkerActionEnvelope.create({ data: { id, delegatingUserId: userId,
-        coworkerAgentId: value.key === "handover" ? "AGT-EXT-CODEX" : "AGT-WS-PORTFOLIO",
-        threadId, manifestActionId: value.tool, argsJson: JSON.parse(JSON.stringify(value.args)),
-        rationale: "CI presentation only; no action is authorized or executed.", status: "proposed",
-        taskRunId: value.key === "research" ? taskRunId : null,
-        expiresAt: new Date(Date.now() + (value.expired ? -1 : 60) * 60_000) } });
-      return id;
+      return createApprovalFixtureEnvelope(prisma, scope, value, suffix);
     }
 
     for (const value of cases) {
@@ -279,8 +257,7 @@ export async function verifyApprovalDisclosure() {
     try {
       await removeEnvelopes();
       if (fixturesOwned) {
-        await prisma.taskRun.deleteMany({ where: { taskRunId, userId, source: "coworker" } });
-        await prisma.workroom.deleteMany({ where: { capsuleId: roomId, source: APPROVAL_FIXTURE_WORKROOM_SOURCE, createdByPrincipalId: principalId } });
+        await cleanupApprovalFixtures(prisma, approvalFixtureScope(runtime.runKey, userId, principalId));
       }
     } finally {
       try { await browser.close(); } finally { await prisma.$disconnect(); }
