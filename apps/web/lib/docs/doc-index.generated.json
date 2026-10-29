@@ -13527,6 +13527,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "connecting-business-mail",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",

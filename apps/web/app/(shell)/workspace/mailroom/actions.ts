@@ -39,6 +39,11 @@ function newMailboxId(): string {
   return `MBX-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
+async function completeMailroomSetup(organizationId: string): Promise<void> {
+  const { completeSetupStepFromEvidence } = await import("@/lib/onboarding/setup-progress-service.server");
+  await completeSetupStepFromEvidence(organizationId, "mailroom").catch(() => null);
+}
+
 type ConnectMailboxResult = MailboxFormTypes["ConnectMailboxResult"];
 
 /** Parse the connect form into provider settings + secrets. Exported for tests. */
@@ -90,11 +95,12 @@ export async function connectMailbox(_prev: ConnectMailboxResult | null, formDat
   });
   const saved = await prisma.mailboxAccount.findUniqueOrThrow({ where: { organizationId_address: { organizationId: ctx.organizationId, address: parsed.address } }, select: { mailboxRef: true } });
 
-  // Evidence-driven setup completion: a mailbox exists, so the step is done.
-  const { completeSetupStepFromEvidence } = await import("@/lib/onboarding/setup-progress-service.server");
-  await completeSetupStepFromEvidence(ctx.organizationId, "mailroom").catch(() => null);
-
   const first = await pollMailboxNow(saved.mailboxRef);
+  // Credential acceptance alone does not prove intake works. Keep setup open
+  // on a failed or missing read so the owner is not told onboarding finished.
+  if (first?.ok) {
+    await completeMailroomSetup(ctx.organizationId);
+  }
   const firstRead = !first ? "Nothing to read yet." : first.ok ? `First read: ${first.data.ingested} new message${first.data.ingested === 1 ? "" : "s"}.` : `First read failed: ${first.error}`;
   revalidatePath(MAILROOM_PATH);
   return ok({ mailboxRef: saved.mailboxRef, mailboxLabel: probe.data.mailboxLabel, firstRead });
@@ -131,6 +137,7 @@ export async function checkMailboxNow(mailboxRef: string): Promise<ActionResult<
   const row = await ownedMailbox(mailboxRef, ctx.organizationId);
   if (!row) return err("Mailbox not found.");
   const outcome = await pollMailboxNow(mailboxRef);
+  if (outcome?.ok) await completeMailroomSetup(ctx.organizationId);
   revalidatePath(MAILROOM_PATH);
   if (!outcome) return err("This mailbox is paused.");
   return outcome.ok ? ok({ summary: `${outcome.data.ingested} new, ${outcome.data.skipped} already seen.` }) : err(outcome.error);
