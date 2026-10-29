@@ -4,6 +4,19 @@ import { describe, expect, it } from "vitest";
 import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
 
 describe("bounded sanitized cursor copy", () => {
+  it("reports aggregate fetch counts without retaining confidential payloads", async () => {
+    let remaining = 51;
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0 };
+    const source = { async query(sql: string) {
+      if (!sql.startsWith("FETCH")) return { rows: [] };
+      const count = Math.min(remaining, 50); remaining -= count;
+      return { rows: Array.from({ length: count }, () => ({ payload: "PRIVATE-ROW-VALUE" })) };
+    } };
+    await copySanitizedCursorBatches(source, "SELECT payload FROM fixture", async () => {}, 50, true, metrics);
+    expect(metrics).toMatchObject({ fetches: 3, batches: 2, rows: 51 });
+    expect(metrics.fetchMs).toBeGreaterThan(0);
+    expect(JSON.stringify(metrics)).not.toContain("PRIVATE-ROW-VALUE");
+  });
   it("finishes each JSON/vector batch before reading another and releases its source snapshot", async () => {
     const events: string[] = [];
     let remaining = 1001;

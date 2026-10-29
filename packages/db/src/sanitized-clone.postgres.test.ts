@@ -50,6 +50,41 @@ const sourceClient = {
 };
 
 describeDatabase("sanitized clone publication with PostgreSQL", () => {
+  it("measures real narrow-row fetch, sanitization and destination phases without changing the cohort", async () => {
+    const table = `"${schema}"."TelemetryCost"`;
+    const destinationName = fixtureName("telemetry_cost");
+    const destination = publicFixture(destinationName);
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    const write = createSanitizedCloneInsertWriter(destinationClient);
+    const count = 50_001;
+    try {
+      await client.query(`CREATE TABLE ${table} (id bigint PRIMARY KEY, name text, payload jsonb)`);
+      await client.query(`CREATE TABLE ${destination} (id bigint PRIMARY KEY, name text, payload jsonb)`);
+      await client.query(`INSERT INTO ${table} SELECT i, 'Source person', jsonb_build_object('value', i, 'text', repeat('x', 128)) FROM generate_series(1, ${count}) i`);
+      const started = performance.now();
+      await copySanitizedCursorBatches(client, `SELECT id, name, payload FROM ${table} ORDER BY id`, async rows => {
+        const transformStarted = performance.now();
+        for (let i = 0; i < rows.length; i++) rows[i] = sanitizeConfidentialRow(rows[i]!, Number(rows[i]!.id));
+        metrics.sanitizeMs += performance.now() - transformStarted;
+        const writeStarted = performance.now();
+        try { await write(destinationName, rows, metrics); }
+        finally { metrics.writeMs += performance.now() - writeStarted; }
+      }, 50, true, metrics);
+      const elapsedMs = performance.now() - started;
+      expect(metrics.rows).toBe(count);
+      expect(metrics.batches).toBe(1001);
+      expect(metrics.fetches).toBe(1002);
+      expect(metrics.transactionAttempts).toBe(1001);
+      const persisted = await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND payload->>'value' = id::text`);
+      expect(persisted.rows[0].count).toBe(count);
+      const untouched = await client.query(`SELECT count(*)::int AS count FROM ${table} WHERE name = 'Source person'`);
+      expect(untouched.rows[0].count).toBe(count);
+      console.info(`[sanitized-clone-cost] ${JSON.stringify({ cohort: "narrow-telemetry-fixture", elapsedMs, ...metrics })}`);
+    } finally {
+      await client.query(`DROP TABLE IF EXISTS ${table}`);
+      await client.query(`DROP TABLE IF EXISTS ${destination}`);
+    }
+  }, 30_000);
   beforeAll(async () => {
     client = new Client({ connectionString: databaseUrl });
     await client.connect();

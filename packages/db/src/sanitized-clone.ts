@@ -9,7 +9,7 @@ import { getTableSensitivity } from "./table-classification";
 import { spawn, type ChildProcess } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import { Client } from "pg";
-import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
+import { copySanitizedCursorBatches, type CloneFetchMetrics } from "./sanitized-clone-batches";
 import { buildSanitizedInsertStatements, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
 export { prepareInsertParameter, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
 import { provisionContributorPreviewAdmin, requireContributorPreviewPassword } from "./contributor-preview-auth";
@@ -308,14 +308,31 @@ export async function runSanitizedClone(): Promise<void> {
         const userCount = (await sanitizedSource.query('SELECT count(*) AS count FROM "User"')).rows;
         let autoIndex = Number(userCount[0]?.count ?? 0);
         const insertSanitizedRows = createSanitizedCloneInsertWriter(dev);
-        const writeSanitizedBatch = async (tableName: string, rows: Array<Record<string, unknown>>) => {
+        const writeSanitizedBatch = async (tableName: string, rows: Array<Record<string, unknown>>, metrics: CloneFetchMetrics & { sanitizeMs: number; writeMs: number; transactionMs: number; transactionAttempts: number }) => {
+          const transformStarted = performance.now();
           for (let i = 0; i < rows.length; i++) {
             const row = rows[i]!;
             const userIndex = row.__dpfCloneUserIndex;
             delete row.__dpfCloneUserIndex;
             rows[i] = sanitizeConfidentialRow(row, userIndex == null ? ++autoIndex : Number(userIndex));
           }
-          await insertSanitizedRows(tableName, rows);
+          metrics.sanitizeMs += performance.now() - transformStarted;
+          const writeStarted = performance.now();
+          try { await insertSanitizedRows(tableName, rows, metrics); }
+          finally { metrics.writeMs += performance.now() - writeStarted; }
+        };
+        const copySanitizedTable = async (tableName: string, limit?: number) => {
+          const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionMs: 0, transactionAttempts: 0 };
+          const started = performance.now();
+          let completed = false;
+          try {
+            await copyRowsForSanitization(sanitizedSource, prod, dev, tableName,
+              rows => writeSanitizedBatch(tableName, rows, metrics), limit, metrics);
+            completed = true;
+          } finally {
+            // transactionMs is a subset of writeMs, not an additive phase.
+            console.log(`[sanitized-clone-phase] ${JSON.stringify({ table: tableName, completed, elapsedMs: performance.now() - started, ...metrics })}`);
+          }
         };
 
         for (const { tablename } of tables) {
@@ -344,8 +361,7 @@ export async function runSanitizedClone(): Promise<void> {
           if (AUDIT_TABLES.has(tablename)) {
             const copyCount = Math.min(rowCount, AUDIT_RECORD_LIMIT);
             console.log(`  AUDIT (last ${copyCount} of ${rowCount}): ${tablename}`);
-            await copyRowsForSanitization(sanitizedSource, prod, dev, tablename,
-              rows => writeSanitizedBatch(tablename, rows), copyCount);
+            await copySanitizedTable(tablename, copyCount);
             continue;
           }
 
@@ -354,8 +370,7 @@ export async function runSanitizedClone(): Promise<void> {
             await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
-            await copyRowsForSanitization(sanitizedSource, prod, dev, tablename,
-              rows => writeSanitizedBatch(tablename, rows));
+            await copySanitizedTable(tablename);
           }
         }
 
@@ -417,6 +432,7 @@ async function copyRowsForSanitization(
   tableName: string,
   write: (rows: Array<Record<string, unknown>>) => Promise<void>,
   limit?: number,
+  metrics?: CloneFetchMetrics,
 ): Promise<void> {
   const [sourceColumns, destinationColumns] = await Promise.all([
     getCloneColumns(sourceClient, tableName),
@@ -435,7 +451,7 @@ async function copyRowsForSanitization(
   await copySanitizedCursorBatches(source, selectSql, async rows => {
     for (const row of rows) delete row.__dpfCloneRowOrder;
     await write(rows);
-  }, 50, false);
+  }, 50, false, metrics);
 
 }
 
@@ -582,13 +598,15 @@ export const SANITIZED_CLONE_INSERT_TRANSACTION_POLICY: Readonly<SanitizedCloneI
 export function createSanitizedCloneInsertWriter(
   client: PrismaClient,
   policy: Readonly<SanitizedCloneInsertTransactionPolicy> = SANITIZED_CLONE_INSERT_TRANSACTION_POLICY,
-): (tableName: string, rows: Array<Record<string, unknown>>) => Promise<void> {
+): (tableName: string, rows: Array<Record<string, unknown>>, metrics?: { transactionAttempts: number; transactionMs: number }) => Promise<void> {
   const typesByTable = new Map<string, Map<string, ColumnTypeInfo>>();
-  return async (tableName, rows) => {
+  return async (tableName, rows, metrics) => {
     const batchSize = Math.max(1, Math.trunc(policy.batchSize));
     for (let offset = 0; offset < rows.length; offset += batchSize) {
       const batch = rows.slice(offset, offset + batchSize);
-      await client.$transaction(async transaction => {
+      const started = performance.now();
+      if (metrics) metrics.transactionAttempts++;
+      try { await client.$transaction(async transaction => {
         // Pin trigger suppression to the connection used by these bounded writes.
         // Existing destination-wide cleanup still owns clone publication safety.
         await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
@@ -598,7 +616,8 @@ export function createSanitizedCloneInsertWriter(
           typesByTable.set(tableName, columnTypes);
         }
         await insertRows(transaction, tableName, batch, columnTypes);
-      }, { maxWait: policy.maxWaitMs, timeout: policy.timeoutMs });
+      }, { maxWait: policy.maxWaitMs, timeout: policy.timeoutMs }); }
+      finally { if (metrics) metrics.transactionMs += performance.now() - started; }
     }
   };
 }

@@ -234,6 +234,15 @@ describe("destination cleanup", () => {
 });
 
 describe("bounded confidential inserts", () => {
+  it("measures transaction attempts without retaining rows or swallowing failures", async () => {
+    const metrics = { transactionAttempts: 0, transactionMs: 0 };
+    const client = { $transaction: async () => { throw new Error("destination unavailable"); } };
+    const write = createSanitizedCloneInsertWriter(client as never);
+    await expect(write("First", [{ id: "PRIVATE-ROW-VALUE" }], metrics)).rejects.toThrow("destination unavailable");
+    expect(metrics.transactionAttempts).toBe(1);
+    expect(metrics.transactionMs).toBeGreaterThan(0);
+    expect(JSON.stringify(metrics)).not.toContain("PRIVATE-ROW-VALUE");
+  });
   it("reuses metadata only within one clone attempt and refreshes each new attempt", async () => {
     const queried: string[] = [];
     const transaction = {
