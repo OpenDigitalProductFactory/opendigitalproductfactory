@@ -390,6 +390,7 @@ export async function createTaskRunForScheduledTask(input: {
   taskConfig?: unknown;
 }): Promise<ScheduledTaskRunRef> {
   const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
+  const stage = readWorkroomStageTaskConfig(input.taskConfig);
   return createAutonomousWorkRun({
     trigger: "scheduled",
     userId: input.ownerUserId,
@@ -403,7 +404,10 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
-    ...(checkpoint ? { metadata: { workroomDispatchCheckpoint: checkpoint } } : {}),
+    ...((checkpoint || stage?.qualificationExperiment) ? { metadata: {
+      ...(checkpoint ? { workroomDispatchCheckpoint: checkpoint } : {}),
+      ...(stage?.qualificationExperiment ? { qualificationExperiment: stage.qualificationExperiment } : {}),
+    } } : {}),
     proactivity: input.proactivity,
     delegatedPosture: input.delegatedPosture,
   });

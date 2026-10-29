@@ -38,6 +38,15 @@ for context or **Technical evidence** for the full proposal and supporting
 records. Opening a request's link keeps those details collapsed. Authorizing
 one request covers that exact change once.
 
+## Connecting business mail
+
+Mailroom tests the mailbox connection before saving it, then attempts a first
+read. A successful connection test alone does not finish setup. If the first
+read fails, setup stays incomplete; the saved connection remains available for
+recovery. Use **Check now** after the provider recovers. A successful read then
+completes setup, including when the selected folder is empty. An empty folder
+does not prove a real business message has been processed or a reply delivered.
+
 ## Checking an approval result
 
 After you approve or decline a coworker's request, the Inbox keeps its result.
