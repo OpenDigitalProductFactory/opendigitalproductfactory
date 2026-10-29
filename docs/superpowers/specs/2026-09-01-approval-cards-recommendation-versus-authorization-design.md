@@ -259,3 +259,34 @@ callers. Hidden rows must be excluded from the visible and accessible surface.
 Regression tests must exercise a real fourth envelope through failed status
 reconciliation and pending-to-completed submission, not only informational cards.
 No request may be resubmitted or unknown-result lock reset by disclosure.
+
+### Verification lane reconciliation — 2026-10-29
+
+The e3c4 full-size copy completed twice, including the explicitly authorized
+30-minute-startup attempt. The shared preview still yielded after twenty minutes
+when unrelated pre-PR gates queued. Its local startup allowance does not change
+that fair-share rule. No screen capture or UI pass came from those attempts.
+Do not bypass the hold, change claim-key classification, cancel foreign jobs or
+repeat a full clone without authorization.
+
+Use the existing protected GitHub UX Route Sweep Runtime for pre-merge functional
+verification: it serves the actual exact-tree production build with its declared
+CI-only database and existing authenticated test session. Add nine presentation
+cases after the normal frozen-budget sweep, across desktop/mobile and light/dark,
+with keyboard access to full input and a fault-injected pending/unknown collapse
+regression. Only this run's synthetic envelopes/room/run may be created or removed;
+no server authorization is submitted. Guard the fixture before loading database
+access with the explicit workflow opt-in, GitHub run/source identity, exact local
+CI database and loopback target. Keep every failure diagnostic and normal gate.
+
+DI-09A133C4952C compared purpose-first compact disclosure, label-only shortening
+and whole-card collapse. It recommended the first with high confidence, strong
+signal and no commandment conflict. The agent recorded that choice under the
+operator's existing direction; it is a design decision, not human approval or
+runtime evidence. The UX-fit manifest carries that real recorded choice through
+the supported propose-n-pick evidence contract. It makes no measured-word claim.
+The committed route baseline remains frozen, the normal real-DOM CI sweep still
+blocks regressions, and scenario screenshots/results must pass before merge.
+After protected release, use normal self-upgrade and CAN-TEST preflight, then
+verify the canonical live Inbox and coworker happy path. Full-copy performance,
+CI fixture presentation and live acceptance are separate claims.
