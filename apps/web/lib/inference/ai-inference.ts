@@ -178,8 +178,6 @@ async function resolveExecutionBaseUrl(
   return provider.baseUrl ?? provider.endpoint;
 }
 
-
-
 // ─── Tool Call Extraction & Message Formatting ──────────────────────────────
 // Pure helpers, defined in the leaf routing/provider-message-format.
 
