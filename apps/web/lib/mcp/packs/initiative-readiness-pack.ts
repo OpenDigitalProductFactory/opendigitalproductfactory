@@ -20,8 +20,8 @@ import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-con
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
-import { parseQualificationExperimentBinding, parseQualificationExperimentState,
-  parseQualificationVerificationEvidence, qualificationBindingDigest, qualificationExecutionActivitiesMatch,
+import { parseQualificationExperimentState,
+  parseQualificationVerificationEvidence, qualificationBindingDigest,
   verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const artifactRefSchema = {
@@ -261,58 +261,14 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
     || canonicalJson(proof.testBlobIds) !== canonicalJson(admission.data.binding.candidate?.testBlobIds)
     || result.qualificationBindingDigest !== qualificationBindingDigest(admission.data.binding)) return false;
   if (admission.data.binding.executorMode === "workroom-host") {
-    if (state.taskRunId || !proof.executionEvidenceActivityIds) return false;
-    const rows = await prisma.backlogItemActivity.findMany({
-      where: { id: { in: proof.executionEvidenceActivityIds } },
-      select: { id: true, backlogItem: { select: { itemId: true } }, payload: true, recordedAt: true },
-    });
-    return qualificationExecutionActivitiesMatch({ binding: admission.data.binding, state, itemId,
-      activityIds: proof.executionEvidenceActivityIds, rows,
-      accountablePrincipalRef: admission.data.binding.accountablePrincipalRef, proof });
+    // The current Workroom writer authenticates the submitter but does not
+    // independently observe a host process. Caller metadata cannot satisfy
+    // research, even when every field matches the signed binding.
+    return false;
   }
-  if (!state.taskRunId || !proof.taskRunId || !proof.toolExecutionReceiptIds
-    || proof.command !== "run_sandbox_tests" || proof.taskRunId !== state.taskRunId) return false;
-  const run = await prisma.taskRun.findUnique({ where: { taskRunId: state.taskRunId },
-    select: { a2aMetadata: true } });
-  const runMetadata = run?.a2aMetadata && typeof run.a2aMetadata === "object" && !Array.isArray(run.a2aMetadata)
-    ? run.a2aMetadata as Record<string, unknown> : null;
-  const runBinding = parseQualificationExperimentBinding(runMetadata?.qualificationExperiment);
-  if (!runBinding.ok || qualificationBindingDigest(runBinding.data)
-    !== qualificationBindingDigest(admission.data.binding)) return false;
-  const receipts = await prisma.toolExecutionReceipt.findMany({
-    where: { id: { in: proof.toolExecutionReceiptIds } },
-    select: { id: true, receiptKind: true, receiptStatus: true, executionStatus: true, expiresAt: true,
-      outputDigest: true, toolExecution: { select: { taskRunId: true, toolName: true, success: true,
-        parameters: true, result: true, createdAt: true } } },
-  });
-  if (receipts.length !== proof.toolExecutionReceiptIds.length) return false;
-  const expectedIds = new Set(proof.toolExecutionReceiptIds);
-  const startedAt = Date.parse(proof.startedAt);
-  const completedAt = Date.parse(proof.completedAt);
-  const admittedAt = Date.parse(state.startedAt ?? "");
-  const admittedUntil = Math.min(admittedAt + admission.data.binding.maxDurationMs,
-    Date.parse(admission.data.binding.expiresAt));
-  if (!Number.isFinite(admittedAt) || startedAt < admittedAt || completedAt > admittedUntil) return false;
-  return receipts.every((receipt) => {
-    const execution = receipt.toolExecution;
-    const output = receipt.outputDigest && typeof receipt.outputDigest === "object" && !Array.isArray(receipt.outputDigest)
-      ? receipt.outputDigest as Record<string, unknown> : null;
-    const params = execution.parameters && typeof execution.parameters === "object" && !Array.isArray(execution.parameters)
-      ? execution.parameters as Record<string, unknown> : null;
-    const toolResult = execution.result && typeof execution.result === "object" && !Array.isArray(execution.result)
-      ? execution.result as Record<string, unknown> : null;
-    const data = toolResult?.data && typeof toolResult.data === "object" && !Array.isArray(toolResult.data)
-      ? toolResult.data as Record<string, unknown> : null;
-    const executedAt = execution.createdAt.getTime();
-    return expectedIds.delete(receipt.id) && receipt.receiptKind === "sandbox-test-run"
-      && receipt.receiptStatus === "valid" && receipt.executionStatus === "succeeded"
-      && receipt.expiresAt.getTime() >= completedAt && execution.taskRunId === proof.taskRunId
-      && execution.toolName === "run_sandbox_tests" && execution.success === true
-      && params?.auto_fix !== true && toolResult?.success === true && data?.testsFailed === 0
-      && data.typecheckPassed === true && data.autoFixEnabled === false
-      && executedAt >= startedAt && executedAt <= completedAt
-      && `sha256:${String(output?.sha256 ?? "")}`.toLowerCase() === proof.outputDigest.toLowerCase();
-  }) && expectedIds.size === 0;
+  // Historical sandbox receipts are auditable but not sufficient evidence:
+  // they do not prove which sandbox, source tree, or test cases actually ran.
+  return false;
 }
 
 function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; evidenceRefs: string[] }> | null {

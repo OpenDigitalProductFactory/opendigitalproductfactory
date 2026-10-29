@@ -181,7 +181,7 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
         loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).withheldBecause).toMatch(/outside/i);
     expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
       { now: () => new Date("2026-06-18T11:06:00.000Z"),
-        loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).mandatedTools).toEqual(["run_sandbox_tests"]);
+        loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).mandatedTools).toEqual([]);
     expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
       { now: () => new Date("2026-06-18T11:06:00.000Z"), loadAgentGrants: async () => [] })).mandatedTools).toEqual([]);
     for (const changed of [

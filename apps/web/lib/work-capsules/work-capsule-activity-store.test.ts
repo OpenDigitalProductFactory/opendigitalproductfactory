@@ -107,7 +107,7 @@ describe("transactional Workroom activity", () => {
       .rejects.toThrow(/stale, duplicated/i);
     vi.unstubAllEnvs();
   });
-  it("settles host qualification only after its cited typed execution activity exists", async () => {
+  it("does not settle caller-authenticated host metadata without executor attestation", async () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "activity-store-test-secret");
     const now = Date.now();
     const issuedAt = new Date(now - 60_000).toISOString();
@@ -148,18 +148,10 @@ describe("transactional Workroom activity", () => {
         command: execution.command, outputDigest: execution.outputDigest,
         executionEvidenceActivityIds: ["activity-host"], startedAt, completedAt } };
 
-    await recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
-      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
-      deferPublication: true });
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { workspaceState: {
-      qualificationExperimentAdmission: expect.not.objectContaining({ taskRunId: expect.anything() }),
-    } } }));
-    findMany.mockResolvedValueOnce([{ id: "activity-host", backlogItem: { itemId: binding.itemId },
-      payload: { evidenceKind: "test_pass", qualification: { ...execution, command: "forged command" } },
-      recordedAt: new Date(completedAt) }]);
     await expect(recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
       actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
       deferPublication: true })).rejects.toThrow(/activities do not match/i);
+    expect(update).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
 });

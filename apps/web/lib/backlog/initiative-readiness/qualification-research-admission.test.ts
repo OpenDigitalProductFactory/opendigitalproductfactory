@@ -168,7 +168,7 @@ describe("qualification research admission", () => {
       now: NOW })).toBe(false);
   });
 
-  it("refuses verification auto-fix and accepts only the reviewed one-shot test", () => {
+  it("refuses sandbox verification until the executor proves exact build and test identity", () => {
     const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
       permittedTools: ["read_source_at_version", "run_sandbox_tests", "record_workroom_evidence"],
       candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
@@ -180,7 +180,7 @@ describe("qualification research admission", () => {
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "run_sandbox_tests",
       params: { auto_fix: true }, now: NOW })).toBe(false);
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "run_sandbox_tests",
-      params: { auto_fix: false }, now: NOW })).toBe(true);
+      params: { auto_fix: false }, now: NOW })).toBe(false);
     const evidence = { capsuleId: binding.workroomId, stageKey: binding.stageKey, outcome: "completed",
       summary: "Observed the bounded result", result: { qualificationBindingDigest: qualificationBindingDigest(parsed.data),
         qualificationOutcome: "positive", command: "run_sandbox_tests", outputDigest: `sha256:${"2".repeat(64)}`,
@@ -189,12 +189,12 @@ describe("qualification research admission", () => {
         taskRunId: "TR-QUAL", toolExecutionReceiptIds: ["receipt-1"],
         startedAt: NOW.toISOString(), completedAt: new Date(NOW.getTime() + 1_000).toISOString() } };
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
-      params: evidence, now: NOW })).toBe(true);
+      params: evidence, now: NOW })).toBe(false);
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
       params: { ...evidence, result: { ...evidence.result, outputDigest: undefined } }, now: NOW })).toBe(false);
   });
 
-  it("accepts only exact accountable Windows host evidence for a host-bound verification", () => {
+  it("rejects perfectly matching host metadata when no executor-attested run exists", () => {
     const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
       executorMode: "workroom-host", requiredPlatform: "win32",
       permittedTools: ["read_source_at_version", "record_execution_evidence", "record_workroom_evidence"],
@@ -215,7 +215,7 @@ describe("qualification research admission", () => {
         evidence: { ...evidence, ...change }, accountablePrincipalRef: principal,
         now: new Date(NOW.getTime() + 2_000) });
 
-    expect(allowed()).toBe(true);
+    expect(allowed()).toBe(false);
     expect(allowed({ platform: "linux" })).toBe(false);
     expect(allowed({ skipped: true })).toBe(false);
     expect(allowed({ headSha: "9".repeat(40) })).toBe(false);

@@ -32,7 +32,7 @@ function fixture() {
     workroomActivity: { findUnique: vi.fn() },
     externalEvidenceRecord: { findMany: vi.fn().mockResolvedValue([semanticReview("review-protocol-1")]) },
   };
-  const protocol = Buffer.from(`# BI-QUAL qualification-only protocol\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`);
+  const protocol = Buffer.from(`# BI-QUAL qualification-only Windows protocol\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`);
   const ports = {
     db: db as never, now: () => NOW,
     readBlob: vi.fn().mockResolvedValue({ ok: true, data: protocol }),
@@ -159,6 +159,15 @@ describe("resolveQualificationAdmission", () => {
   it("refuses unreadable or scope-incomplete immutable protocol bytes", async () => {
     const f = fixture();
     f.ports.readBlob.mockResolvedValue({ ok: true, data: Buffer.from("BI-QUAL qualification-only") });
+    await expect(resolveQualificationAdmission({ itemId: "BI-QUAL", refusedWorkroomId: "WC-QUAL",
+      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
+  });
+
+  it("refuses a sandbox protocol until execution is bound to the exact source and test case", async () => {
+    const f = fixture();
+    f.ports.readBlob.mockResolvedValue({ ok: true, data: Buffer.from(
+      `# BI-QUAL qualification-only protocol\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`,
+    ) });
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL", refusedWorkroomId: "WC-QUAL",
       currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
   });

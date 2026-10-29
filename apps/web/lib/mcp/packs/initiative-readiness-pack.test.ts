@@ -54,7 +54,7 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
-  it("requires the exact positive terminal verification evidence to resolve the qualification finding", async () => {
+  it("does not accept legacy sandbox receipts without exact executor provenance", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-06-18T12:00:00.000Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-research-writer-secret");
@@ -102,8 +102,8 @@ describe("initiative readiness reviewer tools", () => {
         createdAt: new Date("2025-06-18T11:05:30.000Z") } }]);
     mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "research-receipt" });
     expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
-      .toMatchObject({ success: true, data: { receiptId: "research-receipt" } });
-    expect(mocks.findReceipts).toHaveBeenCalledTimes(1);
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    expect(mocks.findReceipts).not.toHaveBeenCalled();
     mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
       qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
       command: "run_sandbox_tests", outputDigest, taskRunId: "TR-FOREIGN",
@@ -149,7 +149,7 @@ describe("initiative readiness reviewer tools", () => {
     vi.useRealTimers();
   });
 
-  it("accepts a settled host verification only from exact typed execution activities", async () => {
+  it("rejects caller-authenticated host activities without executor attestation", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-06-18T12:00:00.000Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-research-writer-secret");
@@ -200,7 +200,8 @@ describe("initiative readiness reviewer tools", () => {
     mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "research-host-receipt" });
 
     expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
-      .toMatchObject({ success: true, data: { receiptId: "research-host-receipt" } });
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
     mocks.findBacklogActivities.mockResolvedValue([{ id: "activity-host",
       backlogItem: { itemId: binding.itemId }, payload: { evidenceKind: "test_pass",
         qualification: { ...execution, platform: "linux" } }, recordedAt: new Date(execution.completedAt) }]);

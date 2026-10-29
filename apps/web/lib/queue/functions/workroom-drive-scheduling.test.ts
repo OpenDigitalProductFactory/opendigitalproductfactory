@@ -98,7 +98,7 @@ describe("dispatch identity across sequential stages", () => {
     expect(h.tx.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
   });
 
-  it("consumes an issued preparation exactly once at the scheduler transaction boundary", async () => {
+  it("refuses an issued sandbox qualification until exact executor provenance exists", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-09-01T00:05:00.000Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-scheduler-secret");
@@ -117,11 +117,9 @@ describe("dispatch identity across sequential stages", () => {
     const token = createQualificationExperimentAdmission(binding);
     h.setWorkspaceState({ qualificationExperimentAdmission: { schemaVersion: 1, status: "issued", token,
       bindingDigest: qualificationBindingDigest(binding), startCount: 0, issuedAt: binding.issuedAt } });
-    await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).resolves.toBe(true);
-    expect(h.readWorkspaceState()).toMatchObject({ qualificationExperimentAdmission: {
-      status: "started", startCount: 1, taskId: h.input.taskId,
-    } });
-    await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).rejects.toThrow(/already started/i);
+    await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } }))
+      .rejects.toThrow(/sandbox qualification execution is unavailable/i);
+    expect(h.tx.scheduledAgentTask.upsert).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
     vi.useRealTimers();
   });

@@ -207,10 +207,8 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
 
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Windows qualification passed", qualification }, "u1", { agentId: "agent-x" }))
-      .resolves.toMatchObject({ success: true, entityId: "act-qual" });
-    expect(db.activityCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
-      payload: expect.objectContaining({ qualification }),
-    }) });
+      .resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });
+    expect(db.activityCreate).not.toHaveBeenCalled();
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Wrong platform", qualification: { ...qualification, platform: "linux" } }, "u1",
       { agentId: "agent-x" })).resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });

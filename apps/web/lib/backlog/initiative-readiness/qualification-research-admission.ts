@@ -351,6 +351,10 @@ export function qualificationToolEffectAllowed(input: {
   if (input.state.status !== "started" || input.state.startCount !== 1 || !input.state.startedAt
     || input.now.getTime() - Date.parse(input.state.startedAt) > input.binding.maxDurationMs
     || !input.binding.permittedTools.includes(input.toolName)) return false;
+  // The current sandbox receipt does not bind the actual executor, source tree,
+  // or test cases. Retain historical bindings for audit, but never let them
+  // authorize a verification effect.
+  if (input.binding.phase === "verify" && input.binding.executorMode === "sandbox-build") return false;
   if (input.toolName === "write_sandbox_file" || input.toolName === "edit_sandbox_file") {
     if (input.binding.phase !== "prepare") return false;
     const path = typeof input.params?.path === "string" ? input.params.path.replaceAll("\\", "/") : null;
@@ -417,21 +421,11 @@ export function qualificationExecutionEvidenceAllowed(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   evidence: unknown; accountablePrincipalRef: string | null; now: Date;
 }): boolean {
-  const evidence = parseQualificationExecutionEvidence(input.evidence);
-  if (!evidence || input.binding.phase !== "verify" || input.binding.executorMode !== "workroom-host"
-    || !input.binding.candidate || input.accountablePrincipalRef !== input.binding.accountablePrincipalRef
-    || (input.state.status !== "started" && input.state.status !== "settled")
-    || input.state.startCount !== 1 || !input.state.startedAt
-    || evidence.workroomId !== input.binding.workroomId
-    || evidence.qualificationBindingDigest !== qualificationBindingDigest(input.binding)
-    || evidence.platform !== input.binding.requiredPlatform
-    || evidence.headSha.toLowerCase() !== input.binding.candidate.headSha.toLowerCase()
-    || canonicalJson(evidence.testBlobIds) !== canonicalJson(input.binding.candidate.testBlobIds)) return false;
-  const admittedAt = Date.parse(input.state.startedAt);
-  const startedAt = Date.parse(evidence.startedAt);
-  const completedAt = Date.parse(evidence.completedAt);
-  const admittedUntil = Math.min(admittedAt + input.binding.maxDurationMs, Date.parse(input.binding.expiresAt));
-  return startedAt >= admittedAt && completedAt <= admittedUntil && input.now.getTime() <= admittedUntil;
+  // Authentication proves who submitted these fields, not that a process ran.
+  // Until the host runner emits its own exact source/test/platform receipt,
+  // even perfectly matching caller metadata is non-evidence.
+  void input;
+  return false;
 }
 
 export function qualificationExecutionActivitiesMatch(input: {

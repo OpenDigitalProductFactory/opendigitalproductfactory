@@ -137,6 +137,10 @@ export async function resolveQualificationAdmission(args: {
   const shape = (ports.resolveShape ?? resolveWorkShapeClaim)(room.scopeClaims);
   const stage = shape?.stages.find((candidate) => candidate.key === "reproduce") ?? shape?.stages[0];
   if (!protocol || !shape || !stage) return null;
+  // A sandbox label is not execution provenance. Until Build Studio can bind
+  // the actual sandbox, source tree, and test cases into a verifiable receipt,
+  // only the accountable Workroom host may execute a qualification protocol.
+  if (protocol.executorMode !== "workroom-host") return null;
 
   const receipts = await db.externalEvidenceRecord.findMany({ where: {
     workCapsuleId: room.id, operationType: "semantic-change-review.receipt",
