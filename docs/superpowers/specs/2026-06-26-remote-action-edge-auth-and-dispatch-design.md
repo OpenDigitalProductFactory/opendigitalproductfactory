@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # RemoteAction Edge dispatch — authentication & channel design (EP-REMOTE-ACTION P2)
 
 - **Date:** 2026-06-26

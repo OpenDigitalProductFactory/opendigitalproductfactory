@@ -384,3 +384,23 @@ test("portal-tls publishes its ports through the install bind address (BI-6DC1CD
     );
   }
 });
+
+test('authority client recovery shares public identity policy and ships its helper to existing installs', async () => {
+  const shell = await read('scripts/bootstrap-organization-pki.sh');
+  const ps = await read('scripts/bootstrap-organization-pki.ps1');
+  const image = await read('Dockerfile');
+  for (const source of [shell, ps]) {
+    assert.match(source, /edge-client-certificate\.mjs/);
+    assert.match(source, /allow-expired/);
+    assert.match(source, /certificate[\s\S]*verify[\s\S]*--roots/);
+    assert.match(source, /previous\.crt/);
+    assert.match(source, /previous\.key/);
+    assert.match(source, /edge-client-recovery\.lock/);
+    assert.doesNotMatch(source, /allow-renewal-after-expiry|--mtls=false/);
+  }
+  assert.match(shell, /repair_authority_edge_client "\$edge_subject"/);
+  assert.match(ps, /Repair-DpfAuthorityEdgeClient -Subject \$edgeSubject/);
+  assert.match(image, /COPY scripts\/installer\/edge-client-certificate\.mjs/);
+  assert.match(image, /cp scripts\/installer\/edge-client-certificate\.mjs \/dpf-release-assets\/scripts\/installer\//);
+  assert.match(image, /cp scripts\/bootstrap-organization-pki\.ps1 scripts\/bootstrap-organization-pki\.sh/);
+});

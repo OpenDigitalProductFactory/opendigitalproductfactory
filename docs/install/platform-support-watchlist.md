@@ -1,5 +1,22 @@
 # Platform Support Watch-List (living document)
 
+**Expired authority-host Edge action client (BI-AFDB58C8).**
+
+On October 29 an enrolled Mac still heartbeated while its separate mTLS action
+client had expired on October 18. Existing certificate files and a live native
+service did not prove that the protected action channel worked. The root CA
+remained valid. Check actual certificate validity and registration separately.
+
+The existing authority PKI owner now distinguishes renewal from expired-client
+reissuance, validates the expected public identity and root, stages the pair
+privately, and retains prior credentials on a failed replacement. Bash and
+PowerShell consume one public-certificate validator; the normal release assets
+carry it and both bootstrap adapters. This does not enable an explicit disabled
+channel, alter node grants or permit expired authentication. Unknown interrupted
+repair checkpoints require reconciliation before another attempt. Native Windows
+execution, live certificate repair and inference activation remain separate
+evidence; passing source fixtures cannot establish them.
+
 **Windows foreground gate cancellation.**
 
 BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows
