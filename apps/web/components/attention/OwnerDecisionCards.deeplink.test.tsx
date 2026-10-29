@@ -64,6 +64,26 @@ function entry(id: string, headline: string): OwnerAttentionEntry {
 }
 
 describe("AC-DEEPLINK: the approval link targets the specific card", () => {
+  it.each(["fragment", "focus"])("reveals and scrolls to a target beyond the preview via %s", (kind) => {
+    const id = "coworker-envelope:env-7";
+    const domId = "owner-decision-coworker-envelope-env-7";
+    if (kind === "fragment") window.location.hash = domId;
+    const scroll = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      render(<OwnerDecisionCards
+        entries={Array.from({ length: 7 }, (_, i) => entry(`coworker-envelope:env-${i + 1}`, `Decision ${i + 1}`))}
+        focusItemId={kind === "focus" ? id : undefined}
+      />);
+      const target = document.getElementById(domId);
+      expect(target?.getAttribute("data-open")).toBe("true");
+      expect(scroll.mock.instances).toContain(target);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previous;
+    }
+  });
+
   it.each(["request", "waiting status"])("resolves the %s link to the requested card, open, among other cards", (source) => {
     const target = "cmupffie10cdu01t491xmoiby";
     const now = new Date("2026-10-24T12:00:00Z");

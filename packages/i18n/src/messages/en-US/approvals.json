@@ -1,7 +1,7 @@
 {
   "queue": {
-    "displayedCount": ".input {$count :number}\n.match $count\none {{{$count} item shown for your attention}}\n* {{{$count} items shown for your attention}}",
-    "summary": ".input {$count :number}\n.match $count\none {{{$count} pending approval; {$shown} shown.}}\n* {{{$count} pending approvals; {$shown} shown.}}",
+    "displayedCount": ".input {$count :number}\n.match $count\none {{{$count} item needs your attention}}\n* {{{$count} items need your attention}}",
+    "summary": ".input {$count :number}\n.match $count\none {{{$count} pending approval; {$shown} available in this view.}}\n* {{{$count} pending approvals; {$shown} available in this view.}}",
     "explanation": "Older requests replace completed ones. Other notices: {$count}.",
     "latest": "Latest requests",
     "older": "Older requests",

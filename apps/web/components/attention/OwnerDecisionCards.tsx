@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ownerDecisionCardDomId } from "@/lib/attention/owner-decision-dom-id";
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
-import { ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
+import { CollapsibleList, ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
 import { Surface } from "@/components/ui/Surface";
 import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
 import { SOURCE_CATALOG } from "@dpf/i18n";
@@ -33,6 +33,9 @@ export function OwnerDecisionCards({
   const [openId, setOpenId] = useState<string | null>(
     focusItemId && shown.some((entry) => entry.item.id === focusItemId) ? focusItemId : null,
   );
+  const [arrivalTarget, setArrivalTarget] = useState(openId);
+  // Preserve priority order while making a linked decision reachable on arrival.
+  const previewCount = Math.max(3, shown.findIndex((entry) => entry.item.id === arrivalTarget) + 1);
 
   useEffect(() => {
     const fragment = typeof window === "undefined" ? "" : decodeURIComponent(window.location.hash.slice(1));
@@ -40,13 +43,19 @@ export function OwnerDecisionCards({
       ?? shown.find((entry) => ownerDecisionCardDomId(entry.item.id) === fragment)?.item.id;
     if (!target || !shown.some((entry) => entry.item.id === target)) return;
     setOpenId(target);
-    document.getElementById(ownerDecisionCardDomId(target))?.scrollIntoView?.({ block: "start" });
+    setArrivalTarget(target);
     // Focus once, on arrival; later re-renders must not yank the reader back.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusItemId]);
 
+  useEffect(() => {
+    if (arrivalTarget) {
+      document.getElementById(ownerDecisionCardDomId(arrivalTarget))?.scrollIntoView?.({ block: "start" });
+    }
+  }, [arrivalTarget]);
+
   return (
-    <div className="space-y-3">
+    <CollapsibleList as="div" previewCount={previewCount} listClassName="space-y-3">
       {shown.map((entry) => {
         const disclosureId = ownerDecisionCardDomId(entry.item.id);
         const open = openId === entry.item.id;
@@ -81,7 +90,7 @@ export function OwnerDecisionCards({
           </ExpandableCard>
         );
       })}
-    </div>
+    </CollapsibleList>
   );
 }
 

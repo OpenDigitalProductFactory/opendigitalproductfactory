@@ -221,3 +221,31 @@ critical values, hidden technical reading order, focus, unchanged exact endpoint
 on-behalf identity, lost acknowledgements and failed execution. Canonical gate,
 independent assessment, protected merge and live verification remain required.
 A prototype or source-local pass alone is not runtime acceptance.
+
+### Long inbox disclosure — observed 2026-10-29
+
+The canonical full-size preview at d79d7c7 completed startup after the copier
+repair. Its empty-approval baseline contained 18 real notices and measured 1,617
+default-visible words against the frozen 428-word route baseline. This is a
+regression, not qualifying UX evidence. Approval-case checks were incomplete
+when the preview lease ended.
+
+Extend the working prototype and reuse report-kit's CollapsibleList: show the
+first three decisions in existing priority order, with a counted Show more
+control at the foot and Show fewer after expansion. Preserve all data, actions,
+material facts and existing explicit limit behavior. A deep link must reveal,
+open and scroll to its target even beyond the initial three. Header counts name
+items available in the view, rather than falsely saying every item is shown.
+This applies to the shared decision list, including the weekly digest; the
+cockpit's existing explicit preview limit remains authoritative.
+
+Workspace remains the owning area, operator the persona, local disclosure the
+only interaction change. No coworker request or approval is sent by expanding
+the list. Existing specialist engagement remains requested, not completed. MCP
+authentication is currently unavailable; source work follows the checked-in
+recovery route and must be reconciled when connection access returns.
+
+Add list expansion/collapse, explicit-limit and beyond-preview deep-link tests.
+Repeat the real served DOM measurement and approval cases before publication;
+no baseline relaxation or notice deletion is permitted. Source-local tests do
+not establish that the 428-word runtime budget passes.

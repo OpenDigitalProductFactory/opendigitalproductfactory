@@ -69,6 +69,34 @@ const entry: OwnerAttentionEntry = {
 };
 
 describe("OwnerDecisionCards", () => {
+  it("previews three decisions and reveals the rest without changing their order", () => {
+    const entries = Array.from({ length: 7 }, (_, i) => ({
+      ...entry,
+      item: { ...entry.item, id: `bill-${i}` },
+      card: { ...entry.card, id: `bill-${i}`, headline: `Review bill ${i + 1}?` },
+    }));
+    render(<OwnerDecisionCards entries={entries} />);
+    expect(screen.getAllByText(/^Review bill \d\?$/).map((node) => node.textContent)).toEqual([
+      "Review bill 1?", "Review bill 2?", "Review bill 3?",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 4 more" }));
+    expect(screen.getAllByText(/^Review bill \d\?$/)).toHaveLength(7);
+    fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    expect(screen.queryByText("Review bill 7?")).toBeNull();
+    expect(screen.getAllByText("Costs money")).toHaveLength(3);
+  });
+
+  it("retains an explicit caller limit", () => {
+    const entries = Array.from({ length: 7 }, (_, i) => ({
+      ...entry,
+      item: { ...entry.item, id: `bill-${i}` },
+      card: { ...entry.card, id: `bill-${i}`, headline: `Review bill ${i + 1}?` },
+    }));
+    render(<OwnerDecisionCards entries={entries} limit={2} />);
+    expect(screen.getAllByText(/^Review bill \d\?$/)).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Show .* more/ })).toBeNull();
+  });
+
   it("shows the owner decision hierarchy and plain choices before technical detail", () => {
     const { container } = render(<OwnerDecisionCards entries={[entry]} />);
 

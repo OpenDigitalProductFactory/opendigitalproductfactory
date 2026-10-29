@@ -78,3 +78,29 @@
   });bind();
 })();
 </script>
+
+<section style="max-width:620px;margin:24px auto;font-family:inherit;padding:16px" aria-label="Long inbox preview">
+<h2>18 items need your attention</h2>
+<p>Review the first three, or show the rest.</p>
+<div id="inbox-preview-list"></div>
+<button type="button" id="inbox-preview-more" aria-expanded="false" aria-controls="inbox-preview-list">Show 15 more</button>
+</section>
+<script>
+(() => {
+ const list=document.getElementById('inbox-preview-list');
+ const toggle=document.getElementById('inbox-preview-more');
+ const titles=['Choose who answers AI approvals','Review the repair result','Renew compliance evidence'];
+ function draw(expanded) {
+  list.replaceChildren(...Array.from({length:expanded?18:3},(_,i)=>{
+   const card=document.createElement('article'); card.style.padding='12px 0';
+   const title=document.createElement('h3'); title.textContent=titles[i%3];
+   const text=document.createElement('p'); text.textContent='Review the request and its consequences before deciding.';
+   card.append(title,text); return card;
+  }));
+  toggle.setAttribute('aria-expanded',String(expanded));
+  toggle.textContent=expanded?'Show fewer':'Show 15 more';
+ }
+ toggle.addEventListener('click',()=>draw(toggle.getAttribute('aria-expanded')!=='true'));
+ draw(false);
+})();
+</script>
