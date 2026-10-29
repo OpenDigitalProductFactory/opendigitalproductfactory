@@ -127,7 +127,7 @@ export function providerDetailHref(providerId: string): string {
  * runtime circuit. Pure; deterministic for a given `now`.
  *
  * Precedence (most actionable first):
- *   1. unconfigured/inactive lifecycle      → unconfigured
+ *   1. unconfigured lifecycle      → unconfigured
  *   2. runtime circuit open (auth/billing)  → needs_reauth / billing
  *   3. disabled lifecycle                   → needs_reauth / billing / degraded
  *   4. runtime circuit open (rate/overload) → rate_limited / cooling_down
@@ -141,10 +141,9 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     (o) => input.now - o.createdAt.getTime() <= windowMs,
   );
 
-  // 1. Lifecycle not set up.
+  // Only unconfigured means missing setup. Inactive can be an operator pause.
   if (
-    input.lifecycleStatus === "unconfigured" ||
-    input.lifecycleStatus === "inactive"
+    input.lifecycleStatus === "unconfigured"
   ) {
     return {
       status: "unconfigured",
@@ -191,9 +190,11 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     if (lastClass === "billing") {
       return billingHealth(input.providerId);
     }
-    // Default a disabled provider to a re-auth ask — that is the dominant cause
-    // (an expired OAuth credential) and the action the operator must take.
-    return reauthHealth(input.providerId, input.authMethod, lastClass ?? "auth");
+    if (lastClass === "auth") return reauthHealth(input.providerId, input.authMethod, lastClass);
+    if (lastClass) return mapReasonToHealth(lastClass, input.providerId, recent);
+    // A lifecycle hold alone does not establish a credential or network failure.
+    return { status: "unknown", remediationKind: "none",
+      safeSummary: "Routing is disabled. Connection health has not been verified." };
   }
 
   // 5. Recent telemetry is error-dominated.
@@ -208,7 +209,7 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
       return {
         status: "healthy",
         remediationKind: "none",
-        safeSummary: "Reachable — recent requests are completing.",
+        safeSummary: "Recent inference requests succeeded.",
       };
     }
   }
@@ -217,7 +218,7 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
   return {
     status: "unknown",
     remediationKind: "none",
-    safeSummary: "No recent activity. Health will update after the next request.",
+    safeSummary: "No recent inference result. Connection health has not been verified.",
   };
 }
 

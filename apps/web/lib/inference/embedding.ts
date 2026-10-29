@@ -4,6 +4,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // barrier, so a local copy would leave js/log-injection unbroken.
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
+import { readEnabledRoutingProvider, ProviderRoutingDeferredError } from "./provider-routing-admission";
 import { providerInferenceFetch } from "./provider-inference-transport";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
@@ -130,6 +131,8 @@ export async function generateEmbeddingDetailed(
       const limit = lengths[attempt]!;
       const truncated = text.slice(0, limit);
 
+      // Each retry is a new dispatch: re-read operator intent immediately.
+      await readEnabledRoutingProvider("local");
       const res = await providerInferenceFetch(`${baseUrl}/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,6 +182,9 @@ export async function generateEmbeddingDetailed(
   } catch (e) {
     // A capacity deferral is NOT a failure — reporting it as one is what made
     // a busy host look like a broken embedding model.
+    if (e instanceof ProviderRoutingDeferredError) {
+      return { status: "deferred", reason: e.reason };
+    }
     if (e instanceof LocalProviderCapacityDeferredError) {
       console.warn(`[embedding] deferred — ${e.reason}`);
       return { status: "deferred", reason: e.reason };
