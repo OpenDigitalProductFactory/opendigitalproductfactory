@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Deciding a card has to move the header count, not only the card
@@ -76,14 +76,14 @@ describe("OwnerDecisionCards", () => {
       card: { ...entry.card, id: `bill-${i}`, headline: `Review bill ${i + 1}?` },
     }));
     render(<OwnerDecisionCards entries={entries} />);
-    expect(screen.getAllByText(/^Review bill \d\?$/).map((node) => node.textContent)).toEqual([
+    expect(screen.getAllByRole("article").map((node) => within(node).getByText(/^Review bill \d\?$/).textContent)).toEqual([
       "Review bill 1?", "Review bill 2?", "Review bill 3?",
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Show 4 more" }));
-    expect(screen.getAllByText(/^Review bill \d\?$/)).toHaveLength(7);
+    expect(screen.getAllByRole("article")).toHaveLength(7);
     fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
-    expect(screen.queryByText("Review bill 7?")).toBeNull();
-    expect(screen.getAllByText("Costs money")).toHaveLength(3);
+    expect(screen.getAllByRole("article")).toHaveLength(3);
+    expect(screen.getByText("Review bill 7?").closest("[hidden]")).not.toBeNull();
   });
 
   it("retains an explicit caller limit", () => {

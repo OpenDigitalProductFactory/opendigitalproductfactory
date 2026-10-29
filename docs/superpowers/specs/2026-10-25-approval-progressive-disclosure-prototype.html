@@ -91,12 +91,13 @@
  const toggle=document.getElementById('inbox-preview-more');
  const titles=['Choose who answers AI approvals','Review the repair result','Renew compliance evidence'];
  function draw(expanded) {
-  list.replaceChildren(...Array.from({length:expanded?18:3},(_,i)=>{
+  if (!list.children.length) list.append(...Array.from({length:18},(_,i)=>{
    const card=document.createElement('article'); card.style.padding='12px 0';
    const title=document.createElement('h3'); title.textContent=titles[i%3];
    const text=document.createElement('p'); text.textContent='Review the request and its consequences before deciding.';
    card.append(title,text); return card;
   }));
+  Array.from(list.children).forEach((card,i)=>{card.hidden=!expanded&&i>=3;});
   toggle.setAttribute('aria-expanded',String(expanded));
   toggle.textContent=expanded?'Show fewer':'Show 15 more';
  }

@@ -55,7 +55,7 @@ export function OwnerDecisionCards({
   }, [arrivalTarget]);
 
   return (
-    <CollapsibleList as="div" previewCount={previewCount} listClassName="space-y-3">
+    <CollapsibleList as="div" preserveMountedRows previewCount={previewCount} listClassName="space-y-3">
       {shown.map((entry) => {
         const disclosureId = ownerDecisionCardDomId(entry.item.id);
         const open = openId === entry.item.id;

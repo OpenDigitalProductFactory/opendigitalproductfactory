@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { refresh, replace, approveProposal, rejectProposal } = vi.hoisted(() => ({
@@ -319,6 +319,64 @@ describe("OwnerDecisionCards routing", () => {
     );
     return buildOwnerAttentionProjection([item], { nowMs: NOW }).needsYouNow[0]!;
   }
+
+  function fourthCard(override: Partial<AttentionEnvelopeApproval> = {}) {
+    const target = entryFor();
+    target.item.envelope = { ...target.item.envelope!, ...override };
+    const entries = [entryFor({ id: "first" }), entryFor({ id: "second" }), entryFor({ id: "third" }), target];
+    render(<OwnerDecisionCards entries={entries} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
+    return () => within(document.getElementById("owner-decision-coworker-envelope-cmt932fn301el01p7vfb2gas7")!);
+  }
+
+  function collapseAndReopen() {
+    fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
+  }
+
+  it("keeps an uncertain fourth decision locked after collapsing and reopening the list", async () => {
+    fetchMock.mockRejectedValue(new TypeError("network"));
+    const card = fourthCard();
+    fireEvent.click(card().getByRole("button", { name: "Authorize" }));
+    await waitFor(() => expect(card().getByRole("alert").textContent).toMatch(/Do not approve again/));
+    collapseAndReopen();
+    expect(card().getByRole("alert").textContent).toMatch(/Do not approve again/);
+    expect(card().queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST")).toHaveLength(1);
+  });
+
+  it("retains an in-flight fourth decision across list collapse without a second submission", async () => {
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    const card = fourthCard();
+    fireEvent.click(card().getByRole("button", { name: "Authorize" }));
+    collapseAndReopen();
+    expect(card().getByRole("status").textContent).toMatch(/Saving your decision/);
+    expect((card().getByRole("button", { name: /Authoriz/ }) as HTMLButtonElement).disabled).toBe(true);
+    finish(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    await waitFor(() => expect(card().getByRole("status").textContent).toMatch(/Authorized/));
+    collapseAndReopen();
+    expect(card().queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the fourth card's on-behalf reason and recorded attribution across collapse", async () => {
+    const card = fourthCard({ onBehalf: { ownerLabel: "owner@example.test" } });
+    fireEvent.click(card().getByRole("button", { name: "Decide on their behalf" }));
+    fireEvent.change(card().getByLabelText("Reason (recorded with the decision)"), { target: { value: "Owner is away." } });
+    collapseAndReopen();
+    expect((card().getByLabelText("Reason (recorded with the decision)") as HTMLTextAreaElement).value).toBe("Owner is away.");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true,
+      onBehalf: { by: "admin@example.test", onBehalfOf: "owner@example.test", reason: "Owner is away." },
+    }), { status: 200 }));
+    fireEvent.click(card().getByRole("button", { name: "Authorize" }));
+    await waitFor(() => expect(card().getByText(/Decided by admin@example.test/)).toBeTruthy());
+    collapseAndReopen();
+    expect(card().getByText(/Decided by admin@example.test.*Owner is away/)).toBeTruthy();
+    expect(card().queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ onBehalf: true, reason: "Owner is away." }));
+  });
 
   it("renders the envelope approval card, not the proposal controls", async () => {
     const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);

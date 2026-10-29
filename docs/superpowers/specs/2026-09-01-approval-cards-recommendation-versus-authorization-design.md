@@ -249,3 +249,13 @@ Add list expansion/collapse, explicit-limit and beyond-preview deep-link tests.
 Repeat the real served DOM measurement and approval cases before publication;
 no baseline relaxation or notice deletion is permitted. Source-local tests do
 not establish that the 428-word runtime budget passes.
+
+Independent review found that unmounting a collapsed approval could erase its
+in-flight, settled or unknown-result lock and restore stale authorization
+controls. The shared list must offer a state-preserving non-list mode: keep
+rows mounted under hidden wrappers while collapsed, preserving stable row keys.
+Use this mode for decisions; retain existing unmounting behavior for other
+callers. Hidden rows must be excluded from the visible and accessible surface.
+Regression tests must exercise a real fourth envelope through failed status
+reconciliation and pending-to-completed submission, not only informational cards.
+No request may be resubmitted or unknown-result lock reset by disclosure.
