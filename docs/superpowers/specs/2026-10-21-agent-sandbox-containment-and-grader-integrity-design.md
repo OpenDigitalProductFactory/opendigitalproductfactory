@@ -23,8 +23,10 @@ DSec is the sandbox platform DeepSeek uses to train and evaluate coding and
 tool-use agents. One unit of about 160 nodes serves about 3 million sandboxes a
 day, peaks near 380,000 at once and sustains over 5,000 creations per second.
 Most of the paper is about density at that scale: memory sharing, on-demand
-image loading from the 3FS filesystem, CPU priority classes. DPF runs three
-sandbox slots on one host, so those mechanisms are not where the value is.
+image loading from the 3FS filesystem, CPU priority classes. DPF runs one
+sandbox slot on one host by default (`sandboxPoolSize()` in
+`apps/web/lib/build/wip-cap.ts` returns `DPF_SANDBOX_POOL_SIZE`, else 1), so
+those mechanisms are not where the value is.
 
 The value is first-hand evidence of **what capable agents do when the thing
 that grades them is within reach**. DPF runs Claude Code, Codex, Grok and
@@ -166,13 +168,25 @@ Small, independent fixes that need no new substrate:
 - **Credential file.** Write the OAuth token `0600`, owned by the `node` user,
   under the build's own directory, and remove it in `finally`. Better, pass it
   only through the exec environment of the single `claude` process.
-- **Use the leased container.** Thread the `SandboxHandle` into
-  `dispatchClaudeTask`, `codex-dispatch` and the other runners. The pool
-  already provisions one container per slot.
+- **Use the leased container (AC-4).** Moved out of this phase; see
+  *AC-4 needs its own design* below.
 - **Per-build tmp.** Set `TMPDIR` to a per-build directory and stop writing
   prompts and runner scripts to shared `/tmp`.
 - **Output cap.** Cap captured stdout and stderr at the exec layer, not only in
   `truncateOutput` after the fact.
+
+### AC-4 needs its own design
+
+Threading the `SandboxHandle` into the runners alone does not deliver AC-4. A
+build touches its container from three places: the build branch setup, the
+sandbox MCP tools (`apps/web/lib/mcp/packs/sandbox-pack.ts`) and the guard
+gauntlet. All three resolve `SANDBOX_CONTAINER` today. Changing only the
+runners would leave one build split across containers, with its agent writing
+in one and its gauntlet grading in another. The slot's container has to be
+carried through all three together, so AC-4 gets its own design
+(BI-06296ADA) before any code. With the default pool of one slot, the payoff
+grows only as pool size does; until then, worktree directories and AC-5 are
+the per-build boundary.
 
 ### Phase 2 — a real containment profile (OBJ-1)
 
@@ -221,6 +235,8 @@ judges it**:
 - Turn `DPF_BUILD_DURABLE_EXECUTION_ENABLED` on by default once its soak is
   clean, so build state does not depend on the sandbox or portal process. This
   is the separation DSec made between rollout state and preemptible training.
+  Not yet: WWMD (DI-442B30F49FEB) keeps it off until lease reclamation is
+  proven from its observe-only logs (BI-BD13E7BA).
 
 ### Phase 5 — measure the isolation options (OBJ-5)
 
@@ -239,7 +255,8 @@ different storage design. For DPF:
 
 - **On-demand image loading (3FS, EROFS, OverlayBD) and memory sharing
   (virtio-pmem, DAMON).** These pay off at thousands of sandboxes per node; DPF
-  runs three. Revisit only if pool size grows by an order of magnitude.
+  runs one slot by default. Revisit only if pool size grows by orders of
+  magnitude.
 - **Fully layered environment images.** Splitting `Dockerfile.sandbox` into a
   base layer and a toolkit layer (the agent CLIs, which change most often) is
   cheap and fits the image-identity rule, but it is a build-time optimisation
@@ -249,23 +266,48 @@ different storage design. For DPF:
 
 ## Delivery and backlog
 
-Each phase ships independently. Proposed items, to be filed under the Build
-Studio sandbox epic after an epic-overlap check:
+Each phase ships independently. The phases as designed (filed items are in
+*Delivery state* below):
 
 | Phase | Proposed item | Shape | Covers |
 | --- | --- | --- | --- |
 | 1 | Remove world-readable provider credential from shared sandbox `/tmp` | break-fix | AC-5 |
-| 1 | Agent runners use the leased sandbox container; per-build `TMPDIR`; exec-layer output cap | medium | AC-3, AC-4 |
+| 1 | Per-build `TMPDIR`; exec-layer output cap | medium | AC-3 |
+| 1b | Design: slot container threaded through build-branch, sandbox MCP tools and gauntlet | large | AC-4 |
 | 2 | Sandbox containment profile: seccomp, AppArmor, cap-drop, read-only root, egress allowlist proxy | large | AC-1, AC-2 |
 | 3 | Grader integrity: run guards and test harness from the base commit; flag grader-touching diffs | large | AC-6, AC-7 |
 | 4 | Idle sandbox lease reclamation; durable build execution on by default | medium | AC-8 |
 | 5 | Benchmark runc vs gVisor vs Kata/Firecracker on build workloads | small | AC-9 |
 
-These items were **not** filed when this design was written. The session that
-wrote it had neither the `dpf` MCP endpoint nor a reachable database, so the
-next session with backlog access owes the filing and the Workroom
-reconciliation (`node scripts/reconcile-workroom-bindings.mjs`). This design
-stays `draft` until an independent reviewer passes its spec-approval gate.
+### Delivery state (2026-10-28)
+
+Filed under EP-E8E8E6D1 after an epic-overlap check: no live epic covered
+sandbox containment (`EP-BUILD-STUDIO` is named in older specs but is not in
+the live backlog).
+
+| Item | State | Covers |
+| --- | --- | --- |
+| BI-07645ED7 | Merged #6669; owes break-fix post-implementation review | AC-5 |
+| BI-BEC224AA | Merged #6674 (output cap only) | AC-3 part |
+| BI-BD13E7BA | Merged #6671, observe-only until `DPF_SANDBOX_LEASE_RECLAIM_ENABLED=1` | AC-8 |
+| BI-08B48B7D | Merged #6672 (base-commit guards, flagging) | AC-6, AC-7 part |
+| BI-4BD69AF1 | Open: base-commit test config, guards importing `packages/`, blocking review gate | AC-6, AC-7 |
+| BI-709F018E | Held on `feat/sandbox-containment-profile`, not a PR | AC-1, AC-3 caps |
+| BI-685E77B6 | Open: egress proxy, preview relay, network changes | AC-2 |
+| BI-06296ADA | Open: own design | AC-4 |
+| BI-88E85F49 | Open | AC-9 |
+| BI-955BDA06 | Open: Grok API-key file unreadable by the `node` runner | AC-5 gap |
+
+The four merged changes shipped before this design was approved, outside a
+Workroom (`DPF_ALLOW_UNCLAIMED_WORK=1`), from a session with no DPF access.
+WWMD rejected both of those choices on review (DI-EBB7F91AA817,
+DI-F8DE54E35B46), and endorsed the observe-only default, deferring AC-4,
+keeping durable execution off, and the held branch's read-only root with
+engines under `/opt/dpf-engines` (DI-65C34E6E9A4F). The held branch does not
+become a PR until this design is approved and `config/sandbox/seccomp.json`
+is shown to reach existing installs on both the install and
+`request_self_upgrade` paths. This design stays `draft` until an independent
+reviewer passes its spec-approval gate (BI-49FC54E4).
 
 ## Design grounding
 
