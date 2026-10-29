@@ -4969,6 +4969,20 @@
         "origin"
       ]
     },
+    "docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md": {
+      "publicHref": "/founder-kernel/wiki/principles/relations-are-typed-never-generic/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md": {
       "publicHref": "/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities/",
       "portalHref": null,

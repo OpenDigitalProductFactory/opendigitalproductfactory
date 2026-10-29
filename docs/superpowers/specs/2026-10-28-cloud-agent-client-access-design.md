@@ -6,13 +6,13 @@ status: draft
 
 **Date:** 2026-10-28
 
-**Status:** Draft; awaiting independent spec approval and operator ratification of `DI-072237D5D7BD`
+**Status:** Draft; awaiting independent spec approval. The operator ratified `DI-072237D5D7BD` on 2026-10-28.
 
 **Backlog:** `BI-F59EF313` (umbrella, xlarge) under `EP-58240092`; children in §10
 
 **Workroom:** `WC-9A4586CF`
 
-**Decision:** `DI-072237D5D7BD`, which is advisory and needs ratification:
+**Decision:** `DI-072237D5D7BD`. The operator ratified the segmented machine plane on 2026-10-28, and the outcome is recorded as followed with a human resolver. The scores were:
 
 | Option | Score |
 | --- | --- |
@@ -190,7 +190,7 @@ The caller surface is resolved per connection: local plugin, hosted connector (v
 | Anyone | any time | Revoke a connection, a person's consent, or turn the switch off. Turning it off removes the public plane at once. |
 
 **Open operator decisions:**
-- **D1. Ratify `DI-072237D5D7BD`:** segmented machine plane, opt-in.
+- **D1. Ratify `DI-072237D5D7BD`:** segmented machine plane, opt-in. **Decided 2026-10-28: ratified by the operator.**
 - **D2. Where consent happens.** The recommendation is public sign-in and consent, behind the §7 rate limits. The alternative is consent only from home (split metadata), which is unconfirmed for non-Claude vendors.
 - **D3. Tunnel provider and account.** The recommendation is the operator's own Cloudflare account. Its credentials are operator-only, never handled by an agent.
 - **D4. Archetype defaults.** Installs with `restricted` data, such as healthcare, ship with cloud access off. Turning it on there shows which data classes cloud assistants could reach.

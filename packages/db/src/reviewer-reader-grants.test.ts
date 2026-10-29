@@ -51,11 +51,13 @@ describe("reviewer agents can read what they review", () => {
 
 // BI-AA8EE6CE: the primary reviewer can itself be a delivery actor.
 describe("independent post-implementation reviewer coverage", () => {
-  it("retains another eligible reviewer when Change Reviewer delivered the repair", () => {
+  it("retains a reviewer able to complete the scheduled PIR when Change Reviewer delivered the repair", () => {
     const eligible = AGENTS.filter(agent => {
       const grants = effectiveGrants(agent);
       return agent.agent_id !== "AGT-WS-REVIEW"
-        && grants.has("initiative_design_review") && grants.has("file_read");
+        && grants.has("initiative_design_review") && grants.has("file_read")
+        // The scheduled stage must also record its completion evidence.
+        && grants.has("workroom_evidence_write");
     });
     expect(eligible.map(agent => agent.agent_id)).toContain("AGT-132");
   });
