@@ -97,6 +97,31 @@ describe("summarizeCoworkerEnvelopeDecision", () => {
     expect(summary.consequence).toMatch(/not established/i);
   });
 
+  it.each([
+    { proposedParameters: {}, argsJson: undefined },
+    { proposedParameters: undefined, argsJson: {} },
+    { proposedParameters: { approvalBinding: { toolName: "record_workroom_evidence" }, _surface: "mcp" }, argsJson: {} },
+  ])("retains an explicitly empty original request while its effects remain unresolved: %j", input => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", ...input });
+    expect(decision.completeProposedContent).toBe("{}");
+    expect(decision.kind).toBe("unknown");
+    expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
+  });
+
+  it("prefers available proposal content over an empty execution projection", () => {
+    const params = { summary: "The release candidate was not supplied.", outcome: "blocked" };
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence",
+      proposedParameters: {}, argsJson: params });
+    expect(JSON.parse(decision.completeProposedContent!)).toEqual(params);
+  });
+
+  it("does not present audit-only metadata as an empty original request", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence",
+      proposedParameters: { approvalBinding: {}, _surface: "mcp" } });
+    expect(decision.completeProposedContent).toBeNull();
+    expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
+  });
+
   it("provides complete content for known receipts and leaves missing content unresolved", () => {
     const params = { decision: "pass", reason: "x".repeat(700) };
     const known = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, proposedParameters: params });

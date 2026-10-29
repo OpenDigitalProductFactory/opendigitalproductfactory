@@ -242,6 +242,8 @@ const SCOPE_TEXT =
 
 type SummaryContext = {
   toolName: string;
+  /** Empty recorded content remains inspectable without becoming a classified action. */
+  hasEmptyOriginal?: boolean;
   params: Record<string, unknown> | null;
   consequence?: string | null;
   rationale?: string | null;
@@ -255,7 +257,7 @@ function sharedFacts(input: SummaryContext) {
       ? envelopeTarget(input.toolName, input.params)
       : "Unknown: the proposal could not be loaded",
     proposed: input.params ? proposedFields(input.params) : [],
-    completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : null,
+    completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : input.hasEmptyOriginal ? "{}" : null,
     consequence: consequenceText(input.consequence),
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,
@@ -368,11 +370,17 @@ export function summarizeCoworkerEnvelopeDecision(input: {
 }): EnvelopeDecisionSummary {
   const fromExecution = originalToolParameters(input.proposedParameters);
   const fromEnvelope = originalToolParameters(input.argsJson);
+  // An explicitly empty request is still original content. Prefer available
+  // substantive content first; audit-only execution metadata is not a proposal.
+  const rawEnvelope = objectRecord(input.argsJson);
+  const rawExecution = objectRecord(input.proposedParameters);
+  const emptyOriginal = [rawEnvelope, rawExecution].find(record => record && Object.keys(record).length === 0);
   const resolvedParams = fromExecution ?? fromEnvelope;
   const params = resolvedParams ?? {};
   const context: SummaryContext = {
     toolName: input.toolName.trim(),
     params: resolvedParams,
+    hasEmptyOriginal: !!emptyOriginal,
     consequence: input.consequence ?? null,
     rationale: input.rationale ?? null,
     targetLabel: input.targetLabel,

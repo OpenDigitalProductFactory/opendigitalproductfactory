@@ -161,6 +161,8 @@ export async function verifyApprovalDisclosure() {
         }
         if (value.key === "grant" || value.key === "revoke") check(text.includes("admin_write")
           && text.includes("Build Lead") && text.includes(value.key), "Permission scope or direction hidden");
+        if (value.key === "missing") check(text.includes("Keep this on hold until its effect is clear."),
+          "An empty request lost its unresolved-effect warning");
         if (value.key === "irreversible") check(text.includes("/reports/closing.csv") && text.includes("delete"), "Deletion target hidden");
         if (value.expired) check(await card.getByRole("button", { name: "Ask again", exact: true }).count() === 1
           && await card.getByRole("button", { name: "Authorize", exact: true }).count() === 0, "Expired request offers authorization");

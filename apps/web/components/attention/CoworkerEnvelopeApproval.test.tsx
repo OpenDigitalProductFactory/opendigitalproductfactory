@@ -77,6 +77,16 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
+  it("retains an empty original behind disclosure while recommending that its unknown effect stay on hold", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ toolName: "record_workroom_evidence",
+      proposedParameters: undefined, argsJson: {}, recommenderAgentId: "AGT-WS-PORTFOLIO", authorizerUserId: "user-1" });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ manifestActionId: "record_workroom_evidence", decision })} />);
+    const complete = container.querySelector("pre");
+    expect(complete?.textContent?.trim()).toBe("{}");
+    expect(complete?.closest("details")?.hasAttribute("open")).toBe(false);
+    expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).toContain("Keep this on hold until its effect is clear.");
+  });
+
   it("defers research identities and policy text while keeping the decision controls visible", () => {
     const { container } = render(<CoworkerEnvelopeApproval approval={approval()} />);
     const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
