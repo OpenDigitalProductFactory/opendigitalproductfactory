@@ -45,8 +45,10 @@ The request's link opens that result directly, including after a refresh. Open
 **Recent approval results** to review recent decisions separately from work that
 still needs you. Completed decisions do not increase the attention count.
 
-The Inbox displays a bounded list. Its approval summary shows how many requests
-are waiting in total and how many are shown. Use **Older requests** to continue
+The Inbox starts with three decisions. Choose **Show more** to reveal the rest,
+or **Show fewer** to shorten the list again. A request's direct link reveals its
+card automatically. Its approval summary shows how many requests
+are waiting in total and how many are available in this view. Use **Older requests** to continue
 through the queue and **Latest requests** to return to the newest requests.
 After a decision, another request may fill the cleared place; the pending total
 shows your progress. The displayed-item count also includes other notices and
