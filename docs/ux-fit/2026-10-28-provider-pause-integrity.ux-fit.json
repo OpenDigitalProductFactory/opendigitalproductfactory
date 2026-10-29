@@ -4,9 +4,7 @@
   "decisionInteractionId": "DI-95546DE16E78",
   "scope": {
     "files": [
-      "apps/web/components/platform/ProviderRoutingControlPanel.tsx",
-      "apps/web/components/platform/ProviderPauseControl.tsx",
-      "apps/web/components/platform/ProviderStatusToggle.tsx"
+      "apps/web/components/platform/ProviderRoutingControlPanel.tsx"
     ]
   },
   "evidence": {
