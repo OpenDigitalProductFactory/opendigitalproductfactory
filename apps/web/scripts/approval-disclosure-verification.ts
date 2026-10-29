@@ -189,7 +189,11 @@ export async function verifyApprovalDisclosure() {
         await card.screenshot({ path: resolve(OUT, slug + ".png") });
         const result = { case: value.key, layout, theme, sourceSha: runtime.sourceSha,
           metrics: { ...measureUxBudget(html), axeViolations: axe.violations.filter(v => v.impact === "critical" || v.impact === "serious").length },
-          cardAxeViolations, ariaSnapshot,
+          cardAxeViolations,
+          cardAxeFindings: cardAxe.violations.map(finding => ({ id: finding.id, impact: finding.impact,
+            description: finding.description, helpUrl: finding.helpUrl,
+            nodes: finding.nodes.map(node => ({ target: node.target, html: node.html, failureSummary: node.failureSummary })) })),
+          ariaSnapshot,
           geometry, checks: { completeOriginalInput: true, materialFactsVisible: true, technicalInitiallyClosed: true },
           domSha256: createHash("sha256").update(html).digest("hex") };
         writeFileSync(resolve(OUT, slug + ".json"), JSON.stringify({ ...result, status: "measured" }, null, 2));

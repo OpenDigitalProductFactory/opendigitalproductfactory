@@ -378,6 +378,15 @@ describe("OwnerDecisionCards routing", () => {
     expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ onBehalf: true, reason: "Owner is away." }));
   });
 
+  it("makes the small deadline label readable while retaining its warning meaning", () => {
+    const value = entryFor();
+    value.card.tags = [{ kind: "deadline", label: "Due in 60 minutes" }];
+    render(<OwnerDecisionCards entries={[value]} />);
+    const badge = screen.getByText("Due in 60 minutes").closest("[data-intent]") as HTMLElement;
+    expect(badge.dataset.intent).toBe("warning");
+    expect(badge.style.color).toBe("var(--dpf-text)");
+  });
+
   it("renders the envelope approval card, not the proposal controls", async () => {
     const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
 
