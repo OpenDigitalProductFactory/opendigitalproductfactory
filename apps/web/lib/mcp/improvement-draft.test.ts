@@ -17,6 +17,7 @@ function database() {
   const matches = (row: Record<string, unknown>, where: Record<string, unknown>) => Object.entries(where).every(([key, value]) => row[key] === value);
   const tx = {
     $executeRaw: vi.fn().mockResolvedValue(1),
+    backlogItem: { findMany: vi.fn().mockResolvedValue([]) },
     agentThread: { findFirst: vi.fn().mockResolvedValue({ id: "thread-a" }) },
     improvementProposal: {
       findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => [...rows.values()].find(row => matches(row, where)) ?? null),
@@ -108,6 +109,29 @@ describe("internal learning draft persistence", () => {
     expect(state.rows.size).toBe(1);
     expect(state.tx.improvementProposal.create).toHaveBeenCalledTimes(1);
     expect(effects.intake.mock.calls[1][0].origin).toEqual({ kind: "improvement", id: first.entityId });
+  });
+
+  it("relinks a legacy completed intake origin without filing or counting the same work again", async () => {
+    const state = database();
+    effects.intake.mockRejectedValueOnce(new Error("old link interruption"));
+    const first = await submitImprovementDraft(input, "owner-a", context, state.db);
+    state.tx.backlogItem.findMany.mockResolvedValue([{ itemId: "IMP-ALREADY-DONE", submittedById: "owner-a", agentId: "agent-a" }]);
+    expect(await submitImprovementDraft(input, "owner-a", context, state.db)).toMatchObject({ entityId: first.entityId, data: { reused: true, backlogItemId: "IMP-ALREADY-DONE", projectionPending: false } });
+    expect(effects.intake).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{ itemId: "IMP-FOREIGN", submittedById: "other-owner", agentId: "agent-a" }],
+    [{ itemId: "IMP-FOREIGN", submittedById: "owner-a", agentId: "other-agent" }],
+    [{ itemId: "IMP-A", submittedById: "owner-a", agentId: "agent-a" }, { itemId: "IMP-B", submittedById: "owner-a", agentId: "agent-a" }],
+  ])("parks mismatched or ambiguous legacy origins without another intake: %j", async (...origins) => {
+    const state = database();
+    effects.intake.mockRejectedValueOnce(new Error("old link interruption"));
+    await submitImprovementDraft(input, "owner-a", context, state.db);
+    state.tx.backlogItem.findMany.mockResolvedValue(origins);
+    expect(await submitImprovementDraft(input, "owner-a", context, state.db)).toMatchObject({ data: { backlogItemId: null, projectionPending: true } });
+    expect(effects.intake).toHaveBeenCalledTimes(1);
+    expect(state.tx.improvementProposal.update).not.toHaveBeenCalled();
   });
 
   it("retries only a database-confirmed rollback with a bounded attempt count", async () => {

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   employeeProfile: { findUnique: vi.fn() },
   agentThread: { findFirst: vi.fn() },
+  backlogItem: { findMany: vi.fn() },
   feedbackNote: { create: vi.fn() },
   improvementProposal: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
   agentMessage: { findMany: vi.fn() },
@@ -48,6 +49,7 @@ const EXPECTED_TOOLS = [
 beforeEach(() => {
   vi.clearAllMocks();
   db.agentThread.findFirst.mockResolvedValue({ id: "THR-1" });
+  db.backlogItem.findMany.mockResolvedValue([]);
   db.improvementProposal.findFirst.mockResolvedValue(null);
   db.improvementProposal.findUnique.mockImplementation(async () => {
     const value = await db.improvementProposal.create.mock.results.at(-1)?.value;

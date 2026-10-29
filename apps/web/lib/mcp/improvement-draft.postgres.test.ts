@@ -131,4 +131,24 @@ describe.skipIf(!url)("learning draft transactions on PostgreSQL", () => {
     expect(next.entityId).not.toBe(first.entityId);
     expect((await db.improvementProposal.findUniqueOrThrow({ where: { proposalId: first.entityId } })).status).toBe("reviewed");
   });
+
+  it.each(["done", "deferred", "retired"])("relinks a legacy %s intake without a duplicate, recurrence bump or new origin", async status => {
+    const first = await submit();
+    const itemId = String(first.data?.backlogItemId);
+    const original = await db.backlogItem.update({ where: { itemId }, data: { status } });
+    await db.improvementProposal.update({ where: { proposalId: first.entityId }, data: { backlogItemId: null } });
+    expect(await submit()).toMatchObject({ entityId: first.entityId, data: { reused: true, backlogItemId: itemId, projectionPending: false } });
+    expect(await db.backlogItem.count()).toBe(1);
+    expect((await db.backlogItem.findUniqueOrThrow({ where: { itemId } })).occurrenceCount).toBe(original.occurrenceCount);
+    expect(await db.backlogItemActivity.count({ where: { kind: "intake_origin" } })).toBe(1);
+    expect(deps.indexKnowledge).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not adopt a mismatched owner's origin or create another intake", async () => {
+    const first = await submit();
+    await db.backlogItem.update({ where: { itemId: String(first.data?.backlogItemId) }, data: { submittedById: "other-owner" } });
+    await db.improvementProposal.update({ where: { proposalId: first.entityId }, data: { backlogItemId: null } });
+    expect(await submit()).toMatchObject({ entityId: first.entityId, data: { backlogItemId: null, projectionPending: true } });
+    expect(await db.backlogItem.count()).toBe(1);
+  });
 });

@@ -5,6 +5,8 @@ import { isLowSeverityReferenceDocProposal } from "@/lib/process-spine/reference
 import { isRolledBackPostgresConflict } from "@/lib/shared/postgres-transaction-conflict";
 import type { BacklogIngestDeps } from "@/lib/operate/backlog-ingest";
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { backlogOriginMarker } from "@/lib/operate/backlog-origin-reconciliation";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 
 type Context = { routeContext?: string; threadId?: string; agentId?: string };
 export type ImprovementDraftDatabase = {
@@ -106,6 +108,20 @@ export async function submitImprovementDraft(
         });
         if (!current) return { backlogItemId: null, pending: false, indexes: [] };
         if (current.backlogItemId) return { backlogItemId: current.backlogItemId, pending: false, indexes: [] };
+        // Older writers could commit intake before linking the proposal. Reuse
+        // its canonical local origin across terminal states without recurrence
+        // counts, another origin event or reopening already completed work.
+        const origins = await tx.backlogItem.findMany({
+          where: { body: { contains: backlogOriginMarker("improvement", current.proposalId) }, AND: [ownedRowBodyWhere()] },
+          select: { itemId: true, submittedById: true, agentId: true }, take: 2,
+        });
+        if (origins.length) {
+          if (origins.length !== 1 || origins[0].submittedById !== userId || origins[0].agentId !== (context?.agentId ?? null)) {
+            throw new Error("The learning intake origin needs reconciliation.");
+          }
+          await tx.improvementProposal.update({ where: { proposalId: current.proposalId }, data: { backlogItemId: origins[0].itemId } });
+          return { backlogItemId: origins[0].itemId, pending: false, indexes: [] };
+        }
         const indexes: Array<{ entityId: string; title: string; content: string }> = [];
         const { ingestBacklogItem, improvementCategoryToWorkType } = await import("@/lib/operate/backlog-ingest");
         const intake = await ingestBacklogItem({
