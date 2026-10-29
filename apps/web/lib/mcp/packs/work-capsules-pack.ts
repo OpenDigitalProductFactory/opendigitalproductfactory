@@ -253,6 +253,7 @@ const definitions: ToolDefinition[] = [
           description: "Scope claims to add or refresh.",
         },
         force: { type: "boolean", description: "Deliberately co-claim scope despite an active overlap on another Workroom (default false). The override is recorded on the workroom activity log." },
+        qualificationAdmissionToken: { type: "string", description: "Opaque server-issued qualification admission. When present, the exact binding is verified and stored atomically with the claims." },
       },
       required: ["capsuleId", "claims"],
     },

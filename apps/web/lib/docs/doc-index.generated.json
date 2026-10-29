@@ -2002,6 +2002,7 @@
         "1243-dpf-status",
         "13-hazards",
         "14-security-and-privacy-considerations",
+        "qualification-research-narrows-a-stage-binding",
         "annex-a-informative-dpf-realization-status",
         "annex-b-informative-proposed-assertions",
         "annex-c-informative-build-studio-as-a-gpp-model",
@@ -2045,6 +2046,7 @@
         "approval-outcome-readback",
         "anti-patterns-observed",
         "original-review-recovery-across-connection-changes",
+        "bounded-qualification-research-admission",
         "a-present-assessment-authorized-by-an-approved-policy"
       ]
     },
@@ -13476,6 +13478,7 @@
       "publishedPortal": true,
       "anchors": [
         "workroom-reports-and-approval-waits",
+        "qualification-research-when-implementation-is-not-yet-admitted",
         "ordinary-coworker-requests"
       ]
     },
@@ -13525,6 +13528,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "connecting-business-mail",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",

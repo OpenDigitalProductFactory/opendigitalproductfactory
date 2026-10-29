@@ -2,7 +2,7 @@ import { promptNamesTool, scheduledMandatoryToolNames } from "@/lib/operate/sche
 export { scheduledMandatoryToolNames, WORKROOM_STAGE_EVIDENCE_TOOL } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
 import { isRecord } from "@/lib/shared/coerce";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
-import { workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
@@ -360,6 +360,7 @@ export async function createTaskRunForScheduledTask(input: {
   scheduledReporting?: { mode: "read-only-history"; scopeDigest: string; nextRunAt: string | null };
 }): Promise<ScheduledTaskRunRef> {
   const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
+  const stage = readWorkroomStageTaskConfig(input.taskConfig);
   return createAutonomousWorkRun({
     trigger: "scheduled",
     userId: input.ownerUserId,
@@ -373,8 +374,9 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
-    ...(checkpoint || input.scheduledReporting ? { metadata: {
+    ...(checkpoint || stage?.qualificationExperiment || input.scheduledReporting ? { metadata: {
       ...(checkpoint ? { workroomDispatchCheckpoint: checkpoint } : {}),
+      ...(stage?.qualificationExperiment ? { qualificationExperiment: stage.qualificationExperiment } : {}),
       ...(input.scheduledReporting ? { scheduledReporting: input.scheduledReporting } : {}),
     } } : {}),
     proactivity: input.proactivity,
