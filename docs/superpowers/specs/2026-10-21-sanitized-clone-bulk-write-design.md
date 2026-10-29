@@ -345,6 +345,10 @@ not be summed. Qualification compares identical source/order/value/cohort under
 50 and 500 transaction ceilings in both execution orders, with actual persisted
 duplicate winners and omitted vectors. Original cold/warm/retained-payload
 controls stay ordered; an additional fresh-client streamed wide-payload case
-keeps the same 16 MiB bound. Source-only counters do not declare this repair
+keeps the same 16 MiB bound, measured after every awaited insert inside the
+real destination transaction as well as after COMMIT. A paired positive
+control deliberately retains more than that bound during the callback and
+clears it before COMMIT: the inner probe must detect it while the old
+post-transaction probe misses it. Source-only counters do not declare this repair
 qualified. Its PostgreSQL, gate, review, canonical release and one full-size
 startup outcomes remain to be recorded.

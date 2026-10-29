@@ -688,10 +688,12 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
 
     expect(await destinationCount()).toBe(1);
   });
-  it("keeps streamed real-writer retained heap below the existing16MiB bound for wide JSON and omitted vectors", async () => {
+  it.each([false, true])("observes streamed real-writer heap inside transactions, including commit-cleared retention=%s", async retainUntilCommit => {
     const source = `"${schema}"."StreamWide"`, name = fixtureName("stream_wide"), destination = publicFixture(name);
     const streamClient = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl!, max: 1, options: "-c search_path=public" }) });
     let peak = 0;
+    let afterCommitPeak = 0;
+    let insertSamples = 0;
     try {
       await streamClient.$connect();
       await client.query(`CREATE TABLE ${source} (id bigint PRIMARY KEY, name text, payload jsonb, embedding vector(3072))`);
@@ -699,16 +701,43 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       await client.query(`INSERT INTO ${source} SELECT i, 'Source person', jsonb_build_object('text',repeat('x',32768)), array_fill(0.5::real,ARRAY[3072])::vector FROM generate_series(1,2001) i`);
       const baseline = retainedHeap();
       const observedClient = { $transaction: async (write: (tx: unknown) => Promise<void>, options: unknown) => {
-        await streamClient.$transaction(write as never, options as never);
-        peak = Math.max(peak, retainedHeap() - baseline);
+        await streamClient.$transaction(async tx => {
+          // The positive control holds >16MiB only until the callback returns.
+          // Post-COMMIT sampling must miss it; the in-transaction probe must not.
+          let retainedParameters: unknown[] | null = null;
+          const observedTx = new Proxy(tx, { get(target, key) {
+            if (key === "$executeRawUnsafe") return async (sql: string, ...values: unknown[]) => {
+              const result = await target.$executeRawUnsafe(sql, ...values);
+              if (sql.startsWith("INSERT")) {
+                if (retainUntilCommit && retainedParameters === null) {
+                  retainedParameters = new Array(3 * 1024 ** 2).fill(values[0]);
+                }
+                insertSamples++;
+                // Observe the real driver after its awaited insert while the
+                // transaction and SQL parameter scope are still alive.
+                peak = Math.max(peak, retainedHeap() - baseline);
+              }
+              return result;
+            };
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          } });
+          try { await write(observedTx); }
+          finally { retainedParameters = null; }
+        }, options as never);
+        afterCommitPeak = Math.max(afterCommitPeak, retainedHeap() - baseline);
       } };
       const writer = createSanitizedCloneWriter(observedClient as never);
       const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
       await withSanitizedCursorBatches(client, `SELECT id,name,payload,NULL::text AS embedding FROM ${source} ORDER BY id`,
         next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics);
-      expect(metrics.rows).toBe(2001); expect(peak).toBeLessThan(16 * 1024 ** 2);
+      expect(metrics.rows).toBe(2001);
+      expect(insertSamples).toBe(41);
+      expect(afterCommitPeak).toBeLessThan(16 * 1024 ** 2);
+      if (retainUntilCommit) expect(peak).toBeGreaterThan(16 * 1024 ** 2);
+      else expect(peak).toBeLessThan(16 * 1024 ** 2);
       expect((await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND embedding IS NULL AND length(payload->>'text')=32768`)).rows[0].count).toBe(2001);
-      console.info(`[sanitized-clone-stream-memory] ${JSON.stringify({ sourceRows: 2001, retainedPeakGrowth: peak, ...metrics })}`);
+      console.info(`[sanitized-clone-stream-memory] ${JSON.stringify({ sourceRows: 2001, retainUntilCommit, insertSamples, retainedPeakGrowth: peak, afterCommitPeakGrowth: afterCommitPeak, ...metrics })}`);
     } finally {
       await streamClient.$disconnect();
       await client.query("ROLLBACK");
