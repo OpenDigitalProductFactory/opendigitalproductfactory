@@ -509,6 +509,17 @@ Every coworker that writes customer-facing copy (marketing-specialist and peers)
 - keep architecture and standards copy precise even when it reads higher;
 - check the Flesch–Kincaid grade before publishing.
 
+### Provider account readiness
+
+Provider lists show current readiness prominently using the shared
+`providerAccountReadiness` status domain. Working requires recent successful
+inference from that account; Enabled describes configuration without that proof.
+Temporary waits and operator pauses use warning, connection or billing failures
+use danger, and unavailable observations remain neutral. Keep the reason visible
+beside the badge and show account-owned check times and the next action. Allowed
+work describes data permission separately and cannot imply that capacity is ready.
+See [routing with provider accounts](user-guide/ai-workforce/provider-account-routing.md).
+
 ### Name the role, not the species (BI-F2EC4699)
 
 User-facing copy names the **role** a person holds in the business. It never renders

@@ -6668,6 +6668,7 @@
         "prose-is-not-a-user-interface-bi-0ed0f6b3",
         "enforcement-points",
         "coworker-rule",
+        "provider-account-readiness",
         "name-the-role-not-the-species-bi-f2ec4699",
         "common-shell-action-result-contract",
         "archetype-scoped-marketing-content-bi-cc580161",
@@ -12127,6 +12128,7 @@
       "publishedPortal": true,
       "anchors": [
         "choose-accounts-for-the-work",
+        "read-the-account-list",
         "capacity-and-recovery",
         "usage-records"
       ]
