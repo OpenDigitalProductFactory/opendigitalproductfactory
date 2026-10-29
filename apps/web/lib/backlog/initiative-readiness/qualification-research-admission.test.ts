@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  advanceQualificationExperimentState,
   parseQualificationExperimentBinding,
   createQualificationExperimentAdmission,
   qualificationBindingDigest,
@@ -30,7 +31,7 @@ const binding = {
   },
   installationId: "install-dev",
   accountablePrincipalRef: "principal:owner",
-  authorityDecisionId: "AUTH-1",
+  protocolReviewReceiptId: "review-protocol-1",
   shapeKey: "delivery-small-fix",
   shapeVersion: "1.0.0",
   stageKey: "qualification-research",
@@ -53,7 +54,7 @@ const context = {
   protocol: binding.protocol,
   installationId: binding.installationId,
   accountablePrincipalRef: binding.accountablePrincipalRef,
-  authorityDecisionId: binding.authorityDecisionId,
+  protocolReviewReceiptId: binding.protocolReviewReceiptId,
   startCount: 0,
   now: NOW,
 };
@@ -83,7 +84,7 @@ describe("qualification research admission", () => {
     ["protocol blob", { protocol: { ...binding.protocol, providerBlobId: "d".repeat(40) } }],
     ["installation", { installationId: "install-prod" }],
     ["owner", { accountablePrincipalRef: "principal:other" }],
-    ["authority", { authorityDecisionId: "AUTH-2" }],
+    ["protocol review", { protocolReviewReceiptId: "review-protocol-2" }],
     ["duplicate start", { startCount: 1 }],
     ["expiry", { now: new Date("2026-01-28T20:25:00.001Z") }],
   ])("fails closed when %s changes", (_name, change) => {
@@ -201,5 +202,24 @@ describe("qualification research admission", () => {
       ok: false,
       error: expect.stringMatching(/cannot be rearmed/i),
     });
+  });
+
+  it("advances only when immutable protocol review and scope constraints are unchanged", () => {
+    const prepare = parseQualificationExperimentBinding(binding);
+    const verify = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
+      permittedTools: ["read_source_at_version", "run_sandbox_tests", "record_workroom_evidence"],
+      candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
+        testBlobIds: ["f".repeat(40)], productionBytesUnchanged: true, reviewReceiptId: "review-1" } });
+    if (!prepare.ok || !verify.ok) throw new Error("fixture must parse");
+    const existing = { schemaVersion: 1 as const, status: "settled" as const, token: "prepare-token",
+      bindingDigest: qualificationBindingDigest(prepare.data), startCount: 1 as const,
+      issuedAt: prepare.data.issuedAt, startedAt: NOW.toISOString(), taskId: "task-1", evidenceId: "evidence-1" };
+
+    expect(advanceQualificationExperimentState({ existing, existingBinding: prepare.data,
+      token: "verify-token", binding: verify.data })).toMatchObject({ ok: true });
+    expect(advanceQualificationExperimentState({ existing, existingBinding: prepare.data, token: "verify-token",
+      binding: { ...verify.data, protocolReviewReceiptId: "review-protocol-2" } })).toMatchObject({ ok: false });
+    expect(advanceQualificationExperimentState({ existing, existingBinding: prepare.data, token: "verify-token",
+      binding: { ...verify.data, allowedPaths: ["apps/web/lib/other.test.ts"] } })).toMatchObject({ ok: false });
   });
 });

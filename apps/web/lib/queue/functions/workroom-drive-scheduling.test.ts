@@ -7,7 +7,7 @@ import { createQualificationExperimentAdmission, qualificationBindingDigest,
 
 describe("dispatch identity across sequential stages", () => {
   function harness() {
-    const now = new Date("2026-09-01T00:00:00Z");
+    const now = new Date("2025-09-01T00:00:00Z");
     let workspaceState: unknown = {};
     const tasks = new Map<string, Record<string, unknown>>();
     const tx = {
@@ -32,7 +32,7 @@ describe("dispatch identity across sequential stages", () => {
       taskId: "workroom-WC-TEST-shape", agentId: "agent", ownerUserId: "owner",
       title: "First stage", prompt: "Review", now,
       stage: { shapeKey: "shape", shapeVersion: "1.0.0", stageKey: "first", tools: [] },
-      dispatchScope: { runKey: "shape@1:2026-09-01", cycleKey: "shape@1:2026-09-01", iteration: 0 },
+      dispatchScope: { runKey: "shape@1:2025-09-01", cycleKey: "shape@1:2025-09-01", iteration: 0 },
       lease: { roomId: "room", holderPrincipalId: "principal", expiresAt: new Date(now.getTime() + 60_000) },
     };
     return { tx, input, tasks, setWorkspaceState: (value: unknown) => { workspaceState = value; },
@@ -99,17 +99,19 @@ describe("dispatch identity across sequential stages", () => {
   });
 
   it("consumes an issued preparation exactly once at the scheduler transaction boundary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-09-01T00:05:00.000Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-scheduler-secret");
     const h = harness();
     const binding: QualificationExperimentBinding = {
       schemaVersion: 1, phase: "prepare", itemId: "BI-TEST", workroomId: "WC-TEST",
       repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40),
       protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
-      installationId: "install-dev", accountablePrincipalRef: "principal", authorityDecisionId: "AUTH-1",
+      installationId: "install-dev", accountablePrincipalRef: "principal", protocolReviewReceiptId: "review-protocol-1",
       shapeKey: "shape", shapeVersion: "1.0.0", stageKey: "first", policyVersion: 1,
       targetProductionBlobIds: ["d".repeat(40)], permittedTools: ["write_sandbox_file", "record_workroom_evidence"],
-      allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2026-09-01T00:00:00.000Z",
-      expiresAt: "2026-09-01T00:30:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
+      allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2025-09-01T00:00:00.000Z",
+      expiresAt: "2025-09-01T00:30:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
     };
     const token = createQualificationExperimentAdmission(binding);
     h.setWorkspaceState({ qualificationExperimentAdmission: { schemaVersion: 1, status: "issued", token,
@@ -120,5 +122,6 @@ describe("dispatch identity across sequential stages", () => {
     } });
     await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).rejects.toThrow(/already started/i);
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 });

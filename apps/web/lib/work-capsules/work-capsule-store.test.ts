@@ -18,8 +18,6 @@ import {
   type CapsuleDb,
 } from "./work-capsule-store";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { createQualificationExperimentAdmission, qualificationBindingDigest,
-  type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const db = {
   workroom: {
@@ -894,56 +892,6 @@ describe("work capsule store", () => {
 
   describe("claimWorkCapsuleScope scope-overlap rejection", () => {
     const actor = { userId: "user-1", agentId: "agent-1", principalId: "PRN-1" };
-
-    function qualificationBinding(phase: "prepare" | "verify"): QualificationExperimentBinding {
-      const protocolHead = "b".repeat(40);
-      const candidateHead = "d".repeat(40);
-      return {
-        schemaVersion: 1, phase, itemId: "BI-QUAL", workroomId: "WC-MINE001",
-        repositoryFullName: "owner/repo", baseSha: "a".repeat(40),
-        headSha: phase === "prepare" ? protocolHead : candidateHead,
-        protocol: { path: "docs/protocol.md", commitSha: protocolHead, providerBlobId: "c".repeat(40) },
-        installationId: "install-dev", accountablePrincipalRef: actor.principalId, authorityDecisionId: "AUTH-1",
-        shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
-        targetProductionBlobIds: ["e".repeat(40)],
-        permittedTools: phase === "prepare"
-          ? ["write_sandbox_file", "record_workroom_evidence"]
-          : ["run_sandbox_tests", "record_workroom_evidence"],
-        allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2026-06-18T11:00:00.000Z",
-        expiresAt: "2026-06-18T13:00:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
-        ...(phase === "verify" ? { candidate: { headSha: candidateHead,
-          diffDigest: `sha256:${"f".repeat(64)}`, testBlobIds: ["1".repeat(40)],
-          productionBytesUnchanged: true, reviewReceiptId: "review-1" } } : {}),
-      };
-    }
-
-    it("advances one settled preparation to a distinct one-start verification binding", async () => {
-      vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
-      const prepare = qualificationBinding("prepare");
-      const prepareToken = createQualificationExperimentAdmission(prepare);
-      const verify = qualificationBinding("verify");
-      const verifyToken = createQualificationExperimentAdmission(verify);
-      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001",
-        backlogItemId: "BI-QUAL", repositoryFullName: "owner/repo", baseSha: prepare.baseSha,
-        headSha: verify.headSha, status: "working", archivedAt: null, scopeClaims: [], workspaceState: {
-          qualificationExperimentAdmission: { schemaVersion: 1, status: "settled", token: prepareToken,
-            bindingDigest: qualificationBindingDigest(prepare), startCount: 1, issuedAt: prepare.issuedAt,
-            startedAt: "2026-06-18T11:05:00.000Z", taskId: "task-prepare", evidenceId: "evidence-prepare" },
-        } });
-      db.workroom.findMany.mockResolvedValueOnce([]);
-      db.workroom.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
-      db.workroomActivity.create.mockResolvedValueOnce({ id: "activity-1" });
-
-      await claimWorkCapsuleScope({ db: capsuleDb(), capsuleId: "WC-MINE001", claims: [], actor,
-        now: new Date("2026-06-18T12:00:00.000Z"), qualificationAdmissionToken: verifyToken });
-
-      expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-        workspaceState: expect.objectContaining({ qualificationExperimentAdmission: expect.objectContaining({
-          status: "issued", token: verifyToken, startCount: 0, bindingDigest: qualificationBindingDigest(verify),
-        }) }),
-      }) }));
-      vi.unstubAllEnvs();
-    });
 
     function otherCapsule(overrides: Record<string, unknown>) {
       return {

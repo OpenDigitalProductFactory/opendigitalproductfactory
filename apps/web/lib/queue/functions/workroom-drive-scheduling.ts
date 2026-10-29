@@ -54,7 +54,7 @@ export async function scheduleWorkroomAgentTask(
         protocol: verified.data.binding.protocol,
         installationId: verified.data.binding.installationId,
         accountablePrincipalRef: room.leaseHolderPrincipalId ?? "",
-        authorityDecisionId: verified.data.binding.authorityDecisionId,
+        protocolReviewReceiptId: verified.data.binding.protocolReviewReceiptId,
         startCount: qualificationState.startCount, now: clock(),
       });
       if (!admitted.ok || verified.data.binding.shapeKey !== input.stage.shapeKey

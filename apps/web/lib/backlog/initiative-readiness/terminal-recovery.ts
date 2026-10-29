@@ -1,4 +1,4 @@
-import { immutableArtifactIdentity, parseInitiativeReviewArtifactRef, type InitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
+import { immutableArtifactIdentity, parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
@@ -13,8 +13,8 @@ import {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
-import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
+import { currentBaseline, parseBaselinePayloads, type BaselinePayload } from "./baseline-head";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
 import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
@@ -29,12 +29,7 @@ import { resolveReviewerIdentity } from "./reviewer-identity";
 import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
 import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
-import { createQualificationExperimentAdmission, parseQualificationCandidateEvidence,
-  parseQualificationExperimentState, qualificationBindingDigest, verifyQualificationExperimentAdmission,
-  type QualificationExperimentBinding } from "./qualification-research-admission";
-import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
-import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { isSemanticReviewReceipt } from "@/lib/change-review/semantic-change-review";
+import { resolveQualificationAdmission, type QualificationAdmissionRoute } from "./qualification-terminal-admission";
 
 export type { MergedRepairSource } from "./merged-repair-source";
 export { defaultLoadMergedRepairSource } from "./merged-repair-source";
@@ -86,24 +81,15 @@ type TerminalEscalation = {
   nextAction: string;
 };
 
-export type QualificationAdmissionRoute = {
-  toolName: "claim_workroom_scope";
-  workroomId: string;
-  qualificationAdmissionToken: string;
-  bindingDigest: string;
-  binding: QualificationExperimentBinding;
-};
+export type { QualificationAdmissionRoute } from "./qualification-terminal-admission";
 
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
   qualificationAdmission?: QualificationAdmissionRoute;
 };
 
-export type BaselinePayload = Record<string, unknown> & {
-  baselineId: string;
-  supersedesBaselineId: string | null;
-  artifactRef?: InitiativeReviewArtifactRef;
-};
+export { currentBaseline, parseBaselinePayloads } from "./baseline-head";
+export type { BaselinePayload } from "./baseline-head";
 
 export type TerminalRecoveryPorts = {
   /** Live scope declaration, shared with claim-time canonical artifact discovery. */
@@ -168,33 +154,6 @@ function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string
       nextAction,
     }],
   };
-}
-
-export function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
-  const rows: BaselinePayload[] = [];
-  for (const payload of payloads) {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-    const row = payload as Record<string, unknown>;
-    if (typeof row.baselineId !== "string"
-      || (row.supersedesBaselineId !== null && typeof row.supersedesBaselineId !== "string")) return null;
-    const artifactRef = parseInitiativeReviewArtifactRef(row.artifactRef) ?? undefined;
-    rows.push({
-      ...row,
-      baselineId: row.baselineId,
-      supersedesBaselineId: row.supersedesBaselineId as string | null,
-      ...(artifactRef ? { artifactRef } : {}),
-    });
-  }
-  return rows;
-}
-
-export function currentBaseline(rows: BaselinePayload[]): BaselinePayload | null {
-  const superseded = new Set(rows.map((row) => row.supersedesBaselineId).filter((id): id is string => Boolean(id)));
-  const heads = rows.filter((row) => !superseded.has(row.baselineId));
-  if (heads.length !== 1) return null;
-  const expected = heads[0]!.baselineId;
-  const validation = validateInitiativeBaselineChainHead(rows, expected);
-  return validation.ok ? heads[0]! : null;
 }
 
 async function defaultLoadLiveRooms(args: {
@@ -435,90 +394,6 @@ async function defaultLoadObjectiveMappingHistory(args: {
   return loadObjectiveMappingHistoryFromDb(prisma, args);
 }
 
-/** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
-function bodyMatch(body: string, expression: RegExp): string | null {
-  return expression.exec(body)?.[1]?.trim() ?? null;
-}
-
-async function defaultResolveQualificationAdmission(args: {
-  itemId: string; refusedWorkroomId: string | null; currentAgentId: string | null;
-}): Promise<QualificationAdmissionRoute | null> {
-  if (!args.refusedWorkroomId || !args.currentAgentId) return null;
-  const [item, room, identity] = await Promise.all([
-    prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, body: true } }),
-    prisma.workroom.findUnique({ where: { capsuleId: args.refusedWorkroomId }, select: {
-      id: true, capsuleId: true, backlogItemId: true, repositoryFullName: true, baseSha: true, headSha: true,
-      scopeClaims: true, leaseHolderPrincipalId: true, workspaceState: true,
-    } }),
-    resolveFederationIdentity(prisma),
-  ]);
-  if (!item?.body || !room || room.backlogItemId !== args.itemId || !room.repositoryFullName || !room.baseSha || !room.headSha
-    || room.leaseHolderPrincipalId !== args.currentAgentId) return null;
-  const path = bodyMatch(item.body, /Canonical design is now published at\s+([^\s]+\.md)/i);
-  const commitSha = bodyMatch(item.body, /signed commit\s+([a-f0-9]{40})/i);
-  const providerBlobId = bodyMatch(item.body, /blob\s+([a-f0-9]{40})/i);
-  const productionBlob = bodyMatch(item.body, /writer blob is\s+([a-f0-9]{40})/i);
-  const allowedPath = bodyMatch(item.body, /(scripts\/[A-Za-z0-9._/-]+\.test\.[A-Za-z0-9]+)/i);
-  const receipt = await prisma.backlogItemActivity.findFirst({
-    where: { backlogItemId: item.id, kind: "initiative_gate_receipt" }, orderBy: { recordedAt: "desc" }, select: { payload: true },
-  });
-  const payload = receipt?.payload && typeof receipt.payload === "object" && !Array.isArray(receipt.payload)
-    ? receipt.payload as Record<string, unknown> : null;
-  const authorityDecisionId = typeof payload?.authorityDecisionId === "string" ? payload.authorityDecisionId : null;
-  const shape = resolveWorkShapeClaim(room.scopeClaims);
-  if (!path || !commitSha || !providerBlobId || !productionBlob || !allowedPath || !authorityDecisionId || !shape) return null;
-  const stage = shape.stages.find((candidate) => candidate.key === "reproduce") ?? shape.stages[0];
-  if (!stage) return null;
-  const issuedAt = new Date();
-  const workspace = room.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
-    ? room.workspaceState as Record<string, unknown> : {};
-  const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
-  if (workspace.qualificationExperimentAdmission !== undefined && !state) return null;
-  if (state) {
-    if (state.status !== "settled" || !state.evidenceId) return null;
-    const prior = verifyQualificationExperimentAdmission(state.token, { now: issuedAt, allowExpired: true });
-    if (!prior.ok || prior.data.binding.phase !== "prepare") return null;
-    const evidence = await prisma.workroomActivity.findUnique({ where: { id: state.evidenceId }, select: { payload: true } });
-    const evidencePayload = evidence?.payload && typeof evidence.payload === "object" && !Array.isArray(evidence.payload)
-      ? evidence.payload as Record<string, unknown> : null;
-    const candidate = parseQualificationCandidateEvidence(evidencePayload?.result, prior.data.binding);
-    if (!candidate.ok || candidate.data.headSha.toLowerCase() !== room.headSha.toLowerCase()) return null;
-    const receipts = await prisma.externalEvidenceRecord.findMany({ where: {
-      workCapsuleId: room.id, operationType: "semantic-change-review.receipt",
-    }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, details: true } });
-    const review = receipts.find((row) => isSemanticReviewReceipt(row.details)
-      && row.details.result.decision === "pass"
-      && row.details.sourceHeadSha?.toLowerCase() === candidate.data.headSha.toLowerCase()
-      && row.details.diffDigest === candidate.data.diffDigest);
-    if (!review) return null;
-    const binding: QualificationExperimentBinding = {
-      ...prior.data.binding, phase: "verify", headSha: candidate.data.headSha,
-      authorityDecisionId, stageKey: stage.key,
-      permittedTools: ["read_source_at_version", "read_codebase_manifest", "run_sandbox_tests", "record_workroom_evidence"],
-      issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(),
-      candidate: { ...candidate.data, reviewReceiptId: review.id },
-    };
-    return { toolName: "claim_workroom_scope", workroomId: room.capsuleId,
-      qualificationAdmissionToken: createQualificationExperimentAdmission(binding),
-      bindingDigest: qualificationBindingDigest(binding), binding };
-  }
-  if (commitSha.toLowerCase() !== room.headSha.toLowerCase()) return null;
-  const binding: QualificationExperimentBinding = {
-    schemaVersion: 1, phase: "prepare", itemId: args.itemId, workroomId: room.capsuleId,
-    repositoryFullName: room.repositoryFullName, baseSha: room.baseSha, headSha: room.headSha,
-    protocol: { path, commitSha, providerBlobId }, installationId: identity.installationId,
-    accountablePrincipalRef: room.leaseHolderPrincipalId, authorityDecisionId,
-    shapeKey: shape.key, shapeVersion: shape.version, stageKey: stage.key, policyVersion: 1,
-    targetProductionBlobIds: [productionBlob],
-    permittedTools: ["read_source_at_version", "read_codebase_manifest", "write_sandbox_file", "edit_sandbox_file", "record_workroom_evidence"],
-    allowedPaths: [allowedPath], issuedAt: issuedAt.toISOString(),
-    expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(), maxStarts: 1, maxDurationMs: 15 * 60_000,
-  };
-  return { toolName: "claim_workroom_scope", workroomId: room.capsuleId,
-    qualificationAdmissionToken: createQualificationExperimentAdmission(binding),
-    bindingDigest: qualificationBindingDigest(binding), binding };
-}
-
 export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadBacklogBody: async (itemId) => (await prisma.backlogItem.findUnique({
     where: { itemId }, select: { body: true },
@@ -556,7 +431,7 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   discoverCommitRange: (args) => discoverCommitRangeArtifact(args),
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
   loadPlanArtifact: loadPlanReviewArtifact,
-  resolveQualificationAdmission: defaultResolveQualificationAdmission,
+  resolveQualificationAdmission: resolveQualificationAdmission,
 };
 
 import { classifyHistoricalObjectiveMappingArtifacts } from "./objective-mapping-history-artifacts";

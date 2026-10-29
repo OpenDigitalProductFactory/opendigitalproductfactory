@@ -148,7 +148,7 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
       schemaVersion: 1, phase: "verify", itemId: "BI-QUAL", workroomId: CAPSULE,
       repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha,
       protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
-      installationId: "install-dev", accountablePrincipalRef: "principal-1", authorityDecisionId: "AUTH-1",
+      installationId: "install-dev", accountablePrincipalRef: "principal-1", protocolReviewReceiptId: "review-protocol-1",
       shapeKey: "release-readiness-watch", shapeVersion: "1.0.0", stageKey: "report", policyVersion: 1,
       targetProductionBlobIds: ["e".repeat(40)], allowedPaths: ["apps/web/lib/example.test.ts"],
       permittedTools: ["run_sandbox_tests", "record_workroom_evidence"],
@@ -161,7 +161,10 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
     const metadata = { sourceRef: { kind: "scheduled-task", id: taskId }, qualificationExperiment: binding };
     const run = { a2aMetadata: metadata, status: "working", archivedAt: null, currentAgentId: "build-specialist",
       userId: "user-1" };
-    const qualificationRoom = room({ scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")],
+    const qualificationRoom = room({ backlogItemId: binding.itemId, repositoryFullName: binding.repositoryFullName,
+      baseSha: binding.baseSha, headSha: binding.headSha, leaseHolderPrincipalId: binding.accountablePrincipalRef,
+      leaseExpiresAt: new Date("2026-06-18T12:00:00.000Z"),
+      scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")],
       workspaceState: { qualificationExperimentAdmission: { schemaVersion: 1, status: "started", token,
         bindingDigest: qualificationBindingDigest(binding), startCount: 1, issuedAt: binding.issuedAt,
         startedAt: "2026-06-18T11:05:00.000Z", taskId } } });
@@ -173,9 +176,29 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
     const base = { taskRunId: "TR-SCHED-QUAL", a2aMetadata: metadata, agentIds: ["build-specialist"],
       toolName: "run_sandbox_tests" };
     expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: true } },
-      { now: () => new Date("2026-06-18T11:06:00.000Z") })).withheldBecause).toMatch(/outside/i);
+      { now: () => new Date("2026-06-18T11:06:00.000Z"),
+        loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).withheldBecause).toMatch(/outside/i);
     expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
-      { now: () => new Date("2026-06-18T11:06:00.000Z") })).mandatedTools).toEqual(["run_sandbox_tests"]);
+      { now: () => new Date("2026-06-18T11:06:00.000Z"),
+        loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).mandatedTools).toEqual(["run_sandbox_tests"]);
+    expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
+      { now: () => new Date("2026-06-18T11:06:00.000Z"), loadAgentGrants: async () => [] })).mandatedTools).toEqual([]);
+    for (const changed of [
+      { archivedAt: new Date("2026-06-18T11:05:30.000Z") }, { status: "completed" },
+      { repositoryFullName: "other/repo" }, { baseSha: "2".repeat(40) }, { headSha: "3".repeat(40) },
+      { leaseHolderPrincipalId: "principal-other" }, { leaseExpiresAt: new Date("2026-06-18T11:05:59.000Z") },
+    ]) {
+      fake.workroom.findMany.mockResolvedValue([{ ...qualificationRoom, ...changed }]);
+      expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
+        { now: () => new Date("2026-06-18T11:06:00.000Z"),
+          loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).mandatedTools,
+      `changed room must withhold: ${JSON.stringify(changed)}`).toEqual([]);
+    }
+    fake.workroom.findMany.mockResolvedValue([qualificationRoom]);
+    fake.taskRun.findUnique.mockResolvedValue({ ...run, currentAgentId: "other-agent" });
+    expect((await loadScheduledRoomAuthority(fake, { ...base, params: { auto_fix: false } },
+      { now: () => new Date("2026-06-18T11:06:00.000Z"),
+        loadAgentGrants: async () => ["sandbox_execute", "workroom_evidence_write"] })).mandatedTools).toEqual([]);
     vi.unstubAllEnvs();
   });
 

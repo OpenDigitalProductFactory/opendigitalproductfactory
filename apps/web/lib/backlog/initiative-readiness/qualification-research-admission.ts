@@ -36,7 +36,7 @@ export type QualificationExperimentBinding = {
   protocol: ProtocolRef;
   installationId: string;
   accountablePrincipalRef: string;
-  authorityDecisionId: string;
+  protocolReviewReceiptId: string;
   shapeKey: string;
   shapeVersion: string;
   stageKey: string;
@@ -127,7 +127,11 @@ export function advanceQualificationExperimentState(input: {
     && prior.protocol.providerBlobId === next.protocol.providerBlobId
     && prior.installationId === next.installationId
     && prior.accountablePrincipalRef === next.accountablePrincipalRef
-    && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion;
+    && prior.protocolReviewReceiptId === next.protocolReviewReceiptId
+    && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion
+    && prior.stageKey === next.stageKey && prior.policyVersion === next.policyVersion
+    && JSON.stringify(prior.targetProductionBlobIds) === JSON.stringify(next.targetProductionBlobIds)
+    && JSON.stringify(prior.allowedPaths) === JSON.stringify(next.allowedPaths);
   if (input.existing.status !== "settled" || prior.phase !== "prepare" || next.phase !== "verify"
     || !next.candidate || next.headSha !== next.candidate.headSha || !sameProtocol) {
     return err("Only a settled preparation may advance to its exact independently reviewed verification binding.");
@@ -211,7 +215,7 @@ export function verifyQualificationExperimentAdmission(
 
 export type QualificationExperimentContext = Pick<QualificationExperimentBinding,
   "itemId" | "workroomId" | "repositoryFullName" | "baseSha" | "headSha" | "protocol"
-  | "installationId" | "accountablePrincipalRef" | "authorityDecisionId"> & {
+  | "installationId" | "accountablePrincipalRef" | "protocolReviewReceiptId"> & {
     startCount: number;
     now: Date;
   };
@@ -256,7 +260,7 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
   const scalar = {
     itemId: text(raw?.itemId), workroomId: text(raw?.workroomId), repositoryFullName: text(raw?.repositoryFullName),
     baseSha: text(raw?.baseSha), headSha: text(raw?.headSha), installationId: text(raw?.installationId),
-    accountablePrincipalRef: text(raw?.accountablePrincipalRef), authorityDecisionId: text(raw?.authorityDecisionId),
+    accountablePrincipalRef: text(raw?.accountablePrincipalRef), protocolReviewReceiptId: text(raw?.protocolReviewReceiptId),
     shapeKey: text(raw?.shapeKey), shapeVersion: text(raw?.shapeVersion), stageKey: text(raw?.stageKey),
     protocolPath: text(protocol?.path), protocolCommit: text(protocol?.commitSha), protocolBlob: text(protocol?.providerBlobId),
   };
@@ -285,7 +289,7 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     repositoryFullName: scalar.repositoryFullName!, baseSha: scalar.baseSha!, headSha: scalar.headSha!,
     protocol: { path: scalar.protocolPath!, commitSha: scalar.protocolCommit!, providerBlobId: scalar.protocolBlob! },
     installationId: scalar.installationId!, accountablePrincipalRef: scalar.accountablePrincipalRef!,
-    authorityDecisionId: scalar.authorityDecisionId!, permittedTools: tools, allowedPaths: paths,
+    protocolReviewReceiptId: scalar.protocolReviewReceiptId!, permittedTools: tools, allowedPaths: paths,
     shapeKey: scalar.shapeKey!, shapeVersion: scalar.shapeVersion!, stageKey: scalar.stageKey!, policyVersion: 1,
     targetProductionBlobIds: exactStrings(raw?.targetProductionBlobIds)!,
     issuedAt: issuedAt!, expiresAt: expiresAt!, maxStarts: 1, maxDurationMs: raw.maxDurationMs as number,
@@ -308,7 +312,7 @@ export function validateQualificationExperimentAdmission(
     && binding.headSha.toLowerCase() === context.headSha.toLowerCase()
     && protocolEqual(binding.protocol, context.protocol) && binding.installationId === context.installationId
     && binding.accountablePrincipalRef === context.accountablePrincipalRef
-    && binding.authorityDecisionId === context.authorityDecisionId;
+    && binding.protocolReviewReceiptId === context.protocolReviewReceiptId;
   if (!exact || context.startCount !== 0 || context.now.getTime() > Date.parse(binding.expiresAt)) {
     return err("Qualification identity changed, expired, or already started.");
   }
@@ -350,16 +354,29 @@ export function qualificationToolEffectAllowed(input: {
   return true;
 }
 
-function qualificationVerificationEvidenceMatches(result: Record<string, unknown>): boolean {
+export type QualificationVerificationEvidence = {
+  command: string; outputDigest: string; taskRunId: string; toolExecutionReceiptIds: string[];
+  startedAt: string; completedAt: string;
+};
+
+export function parseQualificationVerificationEvidence(value: unknown): QualificationVerificationEvidence | null {
+  const result = record(value);
+  if (!result) return null;
   const command = text(result.command);
   const outputDigest = text(result.outputDigest);
   const taskRunId = text(result.taskRunId);
   const receiptIds = exactStrings(result.toolExecutionReceiptIds);
   const startedAt = text(result.startedAt);
   const completedAt = text(result.completedAt);
-  return Boolean(command && outputDigest && SHA256.test(outputDigest) && taskRunId && receiptIds
+  return command && outputDigest && SHA256.test(outputDigest) && taskRunId && receiptIds
     && startedAt && completedAt && Number.isFinite(Date.parse(startedAt)) && Number.isFinite(Date.parse(completedAt))
-    && Date.parse(startedAt) <= Date.parse(completedAt));
+    && Date.parse(startedAt) <= Date.parse(completedAt)
+    ? { command, outputDigest, taskRunId, toolExecutionReceiptIds: receiptIds, startedAt, completedAt }
+    : null;
+}
+
+function qualificationVerificationEvidenceMatches(result: Record<string, unknown>): boolean {
+  return parseQualificationVerificationEvidence(result) !== null;
 }
 
 function qualificationCandidateEvidenceMatches(

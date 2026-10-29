@@ -20,7 +20,7 @@ import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-con
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
-import { parseQualificationExperimentState, qualificationBindingDigest,
+import { parseQualificationExperimentState, parseQualificationVerificationEvidence, qualificationBindingDigest,
   verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const artifactRefSchema = {
@@ -252,8 +252,39 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
     ? activity.payload as Record<string, unknown> : null;
   const result = payload?.result && typeof payload.result === "object" && !Array.isArray(payload.result)
     ? payload.result as Record<string, unknown> : null;
-  return result?.qualificationOutcome === "positive"
-    && result.qualificationBindingDigest === qualificationBindingDigest(admission.data.binding);
+  const proof = parseQualificationVerificationEvidence(result);
+  if (result?.qualificationOutcome !== "positive" || !proof || proof.command !== "run_sandbox_tests"
+    || result.qualificationBindingDigest !== qualificationBindingDigest(admission.data.binding)) return false;
+  const receipts = await prisma.toolExecutionReceipt.findMany({
+    where: { id: { in: proof.toolExecutionReceiptIds } },
+    select: { id: true, receiptKind: true, receiptStatus: true, executionStatus: true, expiresAt: true,
+      outputDigest: true, toolExecution: { select: { taskRunId: true, toolName: true, success: true,
+        parameters: true, result: true, createdAt: true } } },
+  });
+  if (receipts.length !== proof.toolExecutionReceiptIds.length) return false;
+  const expectedIds = new Set(proof.toolExecutionReceiptIds);
+  const startedAt = Date.parse(proof.startedAt);
+  const completedAt = Date.parse(proof.completedAt);
+  return receipts.every((receipt) => {
+    const execution = receipt.toolExecution;
+    const output = receipt.outputDigest && typeof receipt.outputDigest === "object" && !Array.isArray(receipt.outputDigest)
+      ? receipt.outputDigest as Record<string, unknown> : null;
+    const params = execution.parameters && typeof execution.parameters === "object" && !Array.isArray(execution.parameters)
+      ? execution.parameters as Record<string, unknown> : null;
+    const toolResult = execution.result && typeof execution.result === "object" && !Array.isArray(execution.result)
+      ? execution.result as Record<string, unknown> : null;
+    const data = toolResult?.data && typeof toolResult.data === "object" && !Array.isArray(toolResult.data)
+      ? toolResult.data as Record<string, unknown> : null;
+    const executedAt = execution.createdAt.getTime();
+    return expectedIds.delete(receipt.id) && receipt.receiptKind === "sandbox-test-run"
+      && receipt.receiptStatus === "valid" && receipt.executionStatus === "succeeded"
+      && receipt.expiresAt.getTime() >= completedAt && execution.taskRunId === proof.taskRunId
+      && execution.toolName === "run_sandbox_tests" && execution.success === true
+      && params?.auto_fix !== true && toolResult?.success === true && data?.testsFailed === 0
+      && data.typecheckPassed === true && data.autoFixEnabled === false
+      && executedAt >= startedAt && executedAt <= completedAt
+      && `sha256:${String(output?.sha256 ?? "")}`.toLowerCase() === proof.outputDigest.toLowerCase();
+  }) && expectedIds.size === 0;
 }
 
 function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; evidenceRefs: string[] }> | null {

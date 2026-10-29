@@ -29,6 +29,7 @@ import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
 import { assertScopeClaimLease } from "./scope-claim-lease";
+import { qualificationStateForScopeClaim } from "./qualification-scope-admission";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import {
@@ -709,39 +710,10 @@ export async function claimWorkCapsuleScope(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-  const existingWorkspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
-    ? capsule.workspaceState as Record<string, unknown> : {};
-
-  let qualificationState: import("@/lib/backlog/initiative-readiness/qualification-research-admission").QualificationExperimentState | null = null;
+  let qualificationAdmission: ReturnType<typeof qualificationStateForScopeClaim> | null = null;
   if (args.qualificationAdmissionToken) {
-    const { advanceQualificationExperimentState, issueQualificationExperimentState,
-      parseQualificationExperimentState, verifyQualificationExperimentAdmission } =
-      await import("@/lib/backlog/initiative-readiness/qualification-research-admission");
-    const verified = verifyQualificationExperimentAdmission(args.qualificationAdmissionToken, { now: args.now });
-    if (!verified.ok) throw new Error(verified.error);
-    if (verified.data.binding.workroomId !== args.capsuleId
-      || verified.data.binding.itemId !== capsule.backlogItemId
-      || verified.data.binding.repositoryFullName !== capsule.repositoryFullName
-      || verified.data.binding.baseSha.toLowerCase() !== capsule.baseSha?.toLowerCase()
-      || verified.data.binding.headSha.toLowerCase() !== capsule.headSha?.toLowerCase()
-      || verified.data.binding.accountablePrincipalRef !== args.actor.principalId) {
-      throw new Error("Qualification admission does not match the live Workroom identity.");
-    }
-    const existingRaw = existingWorkspaceState.qualificationExperimentAdmission;
-    const existing = parseQualificationExperimentState(existingRaw);
-    if (existingRaw !== undefined && !existing) {
-      throw new Error("Existing qualification admission state is unreadable and cannot be replaced.");
-    }
-    let issued = issueQualificationExperimentState({ existing, token: args.qualificationAdmissionToken,
-      binding: verified.data.binding });
-    if (!issued.ok && existing?.status === "settled" && verified.data.binding.phase === "verify") {
-      const prior = verifyQualificationExperimentAdmission(existing.token, { now: args.now, allowExpired: true });
-      if (!prior.ok) throw new Error(prior.error);
-      issued = advanceQualificationExperimentState({ existing, existingBinding: prior.data.binding,
-        token: args.qualificationAdmissionToken, binding: verified.data.binding });
-    }
-    if (!issued.ok) throw new Error(issued.error);
-    qualificationState = issued.data;
+    qualificationAdmission = qualificationStateForScopeClaim({ room: capsule,
+      token: args.qualificationAdmissionToken, accountablePrincipalRef: args.actor.principalId ?? null, now: args.now });
   }
 
   // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
@@ -800,8 +772,8 @@ export async function claimWorkCapsuleScope(args: {
       where: scopeWriteWhere(capsule),
       data: {
         scopeClaims,
-        ...(qualificationState ? { workspaceState: { ...existingWorkspaceState,
-          qualificationExperimentAdmission: qualificationState } } : {}),
+        ...(qualificationAdmission ? { workspaceState: { ...qualificationAdmission.workspaceState,
+          qualificationExperimentAdmission: qualificationAdmission.state } } : {}),
         ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
       },
     });
@@ -815,7 +787,7 @@ export async function claimWorkCapsuleScope(args: {
       payload: {
         added,
         refreshed,
-        ...(qualificationState ? { qualificationBindingDigest: qualificationState.bindingDigest } : {}),
+        ...(qualificationAdmission ? { qualificationBindingDigest: qualificationAdmission.state.bindingDigest } : {}),
         ...(conflicts.length > 0 ? { forcedOverConflicts: conflicts } : {}),
       },
       actor: args.actor,
