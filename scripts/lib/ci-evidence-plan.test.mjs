@@ -93,6 +93,14 @@ describe("createEvidencePlan", () => {
     );
   });
 
+  it("maps the policy-guard registry to its declared PR Health Logic test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["scripts/lib/ci-policy-guards.mjs"],
+      knownTests: ["scripts/ci-policy-guards.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/ci-policy-guards.test.mjs"]);
+  });
+
   it("does not claim a Python route, because .py files serve none", () => {
     const plan = createEvidencePlan(input({
       changedFiles: [

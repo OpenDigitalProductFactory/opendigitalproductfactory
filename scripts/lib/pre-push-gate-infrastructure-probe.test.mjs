@@ -29,6 +29,12 @@ function baseProbeInput(overrides = {}) {
     portalUrl: "http://localhost:3001",
     ports: [3001, 5433],
     env: PAT_ENV,
+    // Keep the fixture hermetic: callers that explicitly supply an environment
+    // exercise the real resolver, while the normal probe scenarios retain the
+    // synthetic PAT contract regardless of the host's credential file.
+    ...(Object.hasOwn(overrides, "env") ? {} : {
+      resolveCredential: () => ({ bearer: PAT_ENV.DPF_MCP_BEARER_TOKEN, kind: "pat", source: "fixture" }),
+    }),
     now: (() => { let t = 1_000; return () => (t += 5); })(),
     ...overrides,
   };
@@ -182,7 +188,9 @@ test("probe: a queued claim still means the pool answers — refused, nothing le
 test("probe: no configured credential is not infrastructure evidence", async () => {
   let called = false;
   const call = async () => { called = true; };
-  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {} }));
+  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {},
+    resolveCredential: () => { throw new Error("no fixture credential"); },
+  }));
   assert.equal(result.ok, false);
   assert.equal(result.outcome, "no-credential");
   assert.equal(called, false);

@@ -12,6 +12,7 @@ import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/d
 import { verifyPublishedCorrection, reducedTierClassification, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute, readFreshTestReport } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
+import { guardResultEnvironment } from "./lib/pregate-preflight-receipt.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
 
 const now = Date.parse("2026-10-16T05:30:00Z");
@@ -575,32 +576,49 @@ function mappedCorrectionFixture() {
   return { ...fixture, source, target, mapping: { [source]: [target] } };
 }
 
-test("a wrapper identity miss retains only validated mapping and executes real current checks", async () => {
+test("a correction proof survives a distinct publish-hook process but not a relevant guard input change", async () => {
   const fixture = mappedCorrectionFixture();
-  let environment = "direct", executions = 0;
-  const identify = () => ({ ...fixture.identify(), environment });
-  const run = (command, args, options) => {
+  let environment = { ...process.env, CODEX_SESSION_ID: "direct-shell", DPF_GATE_OWNER_SESSION_ID: "direct-owner" };
+  let executions = 0;
+  const identify = () => ({ ...fixture.identify(), environment: createHash("sha256").update(JSON.stringify(guardResultEnvironment(environment))).digest("hex") });
+  const run = () => {
     executions++;
-    return execute(command, args, { ...options, env: { ...process.env, DPF_CORRECTION_TEST_CONTEXT: environment } });
+    return { exitCode: 0, stdout: "# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# cancelled 0\n# todo 0\n" };
   };
   const options = { ...fixture.options, persist: true, identify, run };
   try {
     const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
     assert.equal(executions, 1);
-    environment = "git-hook";
-    const missed = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
-    assert.equal(missed.ok, false, "changed environment must not reuse PASS");
-    const next = await verifyPublishedCorrection(options);
-    assert.equal(executions, 2, "the mapped command must actually execute again");
-    assert.deepEqual(next.publicationCorrection.relatedTestsBySource, fixture.mapping);
-    assert.equal(next.publicationCorrection.identity.environment, "git-hook");
-    assert.deepEqual(next.publicationCorrection.commands, first.publicationCorrection.commands);
-    assert.equal(next.gatePassed, false);
-    environment = "fail";
-    await assert.rejects(verifyPublishedCorrection(options), /Affected check failed/);
-    assert.equal(executions, 3, "real current command failure cannot borrow prior PASS");
-    assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false);
-    assert.equal(JSON.parse(readFileSync(correctionReceiptPath(fixture.cwd), "utf8")).status, "inconclusive");
+    environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1" };
+    const inspection = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
+    assert.equal(inspection.ok, true, inspection.reason);
+    const reused = await verifyPublishedCorrection(options);
+    assert.equal(executions, 1, "a status read from the hook process must reuse the proof");
+    assert.equal(reused.sha, first.sha);
+    environment = { ...environment, CI: "changed-guard-input" };
+    assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false,
+      "a guard-relevant environment input must still invalidate the proof");
+  } finally { fixture.remove(); }
+});
+
+test("a second unpushed correction retains the published head's receipt as its anchor", async () => {
+  const fixture = mappedCorrectionFixture();
+  let publishedHead = fixture.originalSha;
+  const contextReader = () => {
+    const context = fixture.contextReader();
+    context.pullRequest.headRefOid = publishedHead;
+    return context;
+  };
+  const run = () => ({ exitCode: 0, stdout: "# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# cancelled 0\n# todo 0\n" });
+  const options = { ...fixture.options, persist: true, contextReader, relatedTestsBySource: fixture.mapping, run };
+  try {
+    const first = await verifyPublishedCorrection(options);
+    publishedHead = first.sha;
+    fixture.write(3); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "second local correction");
+    const second = await verifyPublishedCorrection(options);
+    assert.notEqual(correctionReceiptPath(fixture.cwd, first.sha), correctionReceiptPath(fixture.cwd, second.sha));
+    assert.equal(reducedTierClassification(fixture.cwd, { contextReader, recordsReader: () => [] }), "authored-correction",
+      "the pre-push eligibility read must find the published head's retained correction proof");
   } finally { fixture.remove(); }
 });
 

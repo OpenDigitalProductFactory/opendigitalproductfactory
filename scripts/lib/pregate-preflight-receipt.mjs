@@ -36,10 +36,17 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
   } finally { fs.closeSync(fd); }
 }
 
-// Include incidental changes conservatively, but not the pnpm wrapper's name:
-// standalone preflight and the identical preflight invoked by pregate must match.
-// Codex changes its tracing call id for each invocation; it is not a guard input.
-const WRAPPER_ENV = /^(?:npm_lifecycle_event|npm_lifecycle_script|npm_command|npm_execpath|npm_node_execpath|npm_config_user_agent|INIT_CWD|SHLVL|_|CODEX_TOOL_CALL_ID)$/i;
+// Receipt identity is the executed guard contract, not the host process.  A
+// publish hook necessarily has a different session, tracing and provider
+// environment from the shell that recorded a correction proof.  Keep only
+// inputs that select an executable or can change Node/CI guard behaviour.
+const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATH|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
+
+export function guardResultEnvironment(env = process.env) {
+  return Object.entries(env)
+    .filter(([key]) => GUARD_RESULT_ENV.test(key))
+    .sort(([left], [right]) => left.localeCompare(right));
+}
 
 export function identifyGuardExecution({ cwd = process.cwd(), plan, env = process.env, source = null } = {}) {
   try {
@@ -65,7 +72,7 @@ export function identifyGuardExecution({ cwd = process.cwd(), plan, env = proces
       plan: digest(plan),
       toolchain: { node: process.version, executable: process.execPath, pnpm: pnpm.stdout.trim(), git: git(["--version"]), platform: process.platform, arch: process.arch },
       dependencies: ["pnpm-lock.yaml", "node_modules/.modules.yaml", "node_modules/.pnpm/lock.yaml", "packages/db/generated/client/client.ts"].map(fileStamp),
-      environment: digest(Object.entries(env).filter(([key]) => !WRAPPER_ENV.test(key)).sort(([a], [b]) => a.localeCompare(b))),
+      environment: digest(guardResultEnvironment(env)),
     };
   } catch {
     // Missing identity is a cache miss, never permission to omit execution.
