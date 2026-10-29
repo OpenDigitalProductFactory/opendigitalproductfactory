@@ -35,7 +35,7 @@ function binding(phase: "prepare" | "verify"): QualificationExperimentBinding {
 describe("qualificationStateForScopeClaim", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("advances one settled preparation to a distinct one-start verification binding", () => {
+  it("does not advance a historical sandbox token while executor attestation is unavailable", () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
     const prepare = binding("prepare");
     const prepareToken = createQualificationExperimentAdmission(prepare);
@@ -51,11 +51,11 @@ describe("qualificationStateForScopeClaim", () => {
       } },
     };
 
-    const result = qualificationStateForScopeClaim({ room, token: verifyToken,
-      accountablePrincipalRef: "PRN-1", now: NOW });
-
-    expect(result.state).toMatchObject({ status: "issued", token: verifyToken, startCount: 0,
-      bindingDigest: qualificationBindingDigest(verify) });
+    expect(() => qualificationStateForScopeClaim({ room, token: verifyToken,
+      accountablePrincipalRef: "PRN-1", now: NOW })).toThrow(/execution is unavailable/i);
+    expect(room.workspaceState.qualificationExperimentAdmission).toMatchObject({
+      status: "settled", token: prepareToken, startCount: 1,
+    });
   });
 
   it("refuses a token whose owner or immutable room identity changed", () => {
@@ -70,7 +70,7 @@ describe("qualificationStateForScopeClaim", () => {
       accountablePrincipalRef: "PRN-FOREIGN", now: NOW })).toThrow("does not match");
   });
 
-  it("starts a host-bound admission at the accountable Workroom without a sandbox scheduler", () => {
+  it("does not consume a host-bound start from caller-authenticated metadata", () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
     const host = { ...binding("prepare"), executorMode: "workroom-host" as const,
       requiredPlatform: "win32" as const,
@@ -80,10 +80,8 @@ describe("qualificationStateForScopeClaim", () => {
       repositoryFullName: host.repositoryFullName, baseSha: host.baseSha,
       headSha: host.headSha, workspaceState: {} };
 
-    expect(qualificationStateForScopeClaim({ room, token,
-      accountablePrincipalRef: host.accountablePrincipalRef, now: NOW }).state).toMatchObject({
-        status: "started", startCount: 1, taskId: `workroom-host:${host.workroomId}`,
-        startedAt: NOW.toISOString(),
-      });
+    expect(() => qualificationStateForScopeClaim({ room, token,
+      accountablePrincipalRef: host.accountablePrincipalRef, now: NOW })).toThrow(/execution is unavailable/i);
+    expect(room.workspaceState).toEqual({});
   });
 });

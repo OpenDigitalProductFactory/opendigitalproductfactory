@@ -34,6 +34,12 @@ type QualificationProtocol = {
   requiredPlatform: "linux" | "win32";
 };
 
+function qualificationExecutorAttestationAvailable(_protocol: QualificationProtocol): boolean {
+  // No current sandbox or Workroom host runner emits an independently observed
+  // receipt bound to the exact source, tests, platform and output.
+  return false;
+}
+
 function bodyMatch(body: string, expression: RegExp): string | null {
   return expression.exec(body)?.[1]?.trim() ?? null;
 }
@@ -137,10 +143,9 @@ export async function resolveQualificationAdmission(args: {
   const shape = (ports.resolveShape ?? resolveWorkShapeClaim)(room.scopeClaims);
   const stage = shape?.stages.find((candidate) => candidate.key === "reproduce") ?? shape?.stages[0];
   if (!protocol || !shape || !stage) return null;
-  // A sandbox label is not execution provenance. Until Build Studio can bind
-  // the actual sandbox, source tree, and test cases into a verifiable receipt,
-  // only the accountable Workroom host may execute a qualification protocol.
-  if (protocol.executorMode !== "workroom-host") return null;
+  // Preserve protocol parsing for audit/recovery, but do not issue a new
+  // qualification until the responsible runner supplies exact provenance.
+  if (!qualificationExecutorAttestationAvailable(protocol)) return null;
 
   const receipts = await db.externalEvidenceRecord.findMany({ where: {
     workCapsuleId: room.id, operationType: "semantic-change-review.receipt",

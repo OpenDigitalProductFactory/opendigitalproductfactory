@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createQualificationExperimentAdmission, qualificationBindingDigest } from "./qualification-research-admission";
 import { resolveQualificationAdmission } from "./qualification-terminal-admission";
 
 const NOW = new Date("2025-06-18T12:00:00.000Z");
@@ -47,16 +46,15 @@ function fixture() {
 describe("resolveQualificationAdmission", () => {
   beforeEach(() => vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret"));
 
-  it("derives write scope from the independently approved immutable protocol, not mutable body claims", async () => {
+  it("refuses an otherwise approved immutable protocol while executor attestation is unavailable", async () => {
     const { ports } = fixture();
     const result = await resolveQualificationAdmission({ itemId: "BI-QUAL",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, ports);
 
-    expect(result?.binding).toMatchObject({ phase: "prepare", protocolReviewReceiptId: "review-protocol-1",
-      targetProductionBlobIds: [PROD], allowedPaths: [TEST_PATH], accountablePrincipalRef: "principal-row-1" });
+    expect(result).toBeNull();
   });
 
-  it("parses the canonical BI-B3 qualification protocol wording", async () => {
+  it("refuses the canonical BI-B3 Windows protocol before issuing a token", async () => {
     const f = fixture();
     f.ports.readBlob.mockResolvedValue({ ok: true, data: Buffer.from([
       "# BI-B3DEC077 qualification-only recovery protocol",
@@ -74,45 +72,17 @@ describe("resolveQualificationAdmission", () => {
     const result = await resolveQualificationAdmission({ itemId: "BI-B3DEC077",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports);
 
-    expect(result?.binding).toMatchObject({
-      targetProductionBlobIds: ["f74e1b0c1b41be4cdc8b6a1b25ec946cd7f45618"],
-      allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"],
-      executorMode: "workroom-host",
-      requiredPlatform: "win32",
-      permittedTools: ["read_source_at_version", "read_codebase_manifest", "record_workroom_evidence"],
-    });
+    expect(result).toBeNull();
+    expect(f.ports.readBlob).toHaveBeenCalledWith(expect.objectContaining({
+      expectedBlobId: BLOB,
+    }));
   });
 
-  it("keeps the approved protocol immutable while issuing verification at the reviewed candidate head", async () => {
+  it("does not mint preparation state that could later consume a verification start", async () => {
     const f = fixture();
-    const candidateHead = "7".repeat(40);
-    const diffDigest = `sha256:${"6".repeat(64)}`;
-    const prepare = (await resolveQualificationAdmission({ itemId: "BI-QUAL",
-      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports))!.binding;
-    const token = createQualificationExperimentAdmission(prepare);
-    f.db.workroom.findUnique.mockResolvedValue({ id: "row-room", capsuleId: "WC-QUAL", status: "working",
-      archivedAt: null, backlogItemId: "BI-QUAL", repositoryFullName: "owner/repo", headBranch: "fix/qual",
-      baseSha: "e".repeat(40), headSha: candidateHead, scopeClaims: {}, leaseHolderPrincipalId: "principal-row-1",
-      leaseExpiresAt: new Date("2025-06-18T13:00:00.000Z"), workspaceState: {
-        qualificationExperimentAdmission: { schemaVersion: 1, status: "settled", token,
-          bindingDigest: qualificationBindingDigest(prepare), startCount: 1, issuedAt: prepare.issuedAt,
-          startedAt: "2025-06-18T11:45:00.000Z", taskId: "task-prepare", evidenceId: "evidence-1" },
-      } });
-    f.db.workroomActivity.findUnique.mockResolvedValue({ payload: { result: {
-      qualificationOutcome: "candidate", candidate: { headSha: candidateHead, diffDigest,
-        testBlobIds: ["5".repeat(40)], productionBytesUnchanged: true,
-        targetProductionBlobIds: [PROD] },
-    } } });
-    f.db.externalEvidenceRecord.findMany.mockResolvedValue([
-      semanticReview("review-1", candidateHead, diffDigest), semanticReview("review-protocol-1"),
-    ]);
-
-    const result = await resolveQualificationAdmission({ itemId: "BI-QUAL",
-      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports);
-
-    expect(result?.binding).toMatchObject({ phase: "verify", headSha: candidateHead,
-      protocol: { commitSha: HEAD, providerBlobId: BLOB },
-      candidate: { headSha: candidateHead, diffDigest, reviewReceiptId: "review-1" } });
+    await expect(resolveQualificationAdmission({ itemId: "BI-QUAL",
+      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
+    expect(f.db.workroomActivity.findUnique).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -144,16 +114,14 @@ describe("resolveQualificationAdmission", () => {
       currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
   });
 
-  it("does not let a failed review for another head poison the exact protocol review", async () => {
+  it("still refuses when the exact protocol review is present beside an unrelated failure", async () => {
     const f = fixture();
     const failed = semanticReview("review-other-head", "9".repeat(40));
     failed.details.result.decision = "fail";
     f.db.externalEvidenceRecord.findMany.mockResolvedValue([failed, semanticReview("review-protocol-1")]);
 
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL", refusedWorkroomId: "WC-QUAL",
-      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toMatchObject({
-        binding: { protocolReviewReceiptId: "review-protocol-1" },
-      });
+      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
   });
 
   it("refuses unreadable or scope-incomplete immutable protocol bytes", async () => {
