@@ -10,6 +10,13 @@ import { fileURLToPath } from "node:url";
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const execFileAsync = promisify(execFile);
 
+test("managed inference provisioning is explicit and refuses unsupported hosts before any install effect", async () => {
+  const script = fileURLToPath(new URL("./native-edge-host.sh", import.meta.url));
+  const disabled = await execFileAsync("bash", ["-c", 'source "$1"; DPF_MANAGED_INFERENCE_ENABLED=0; _dpf_native_edge_prepare_managed_inference /missing/repo /missing/state', "fixture", script]);
+  assert.equal(disabled.stdout, "");
+  await assert.rejects(execFileAsync("bash", ["-c", 'source "$1"; DPF_MANAGED_INFERENCE_ENABLED=1; uname() { echo unsupported; }; _dpf_native_edge_prepare_managed_inference /missing/repo /missing/state', "fixture", script]), /unsupported|qualified/);
+});
+
 test("stable releases publish integrity-bound native Edge binaries", async () => {
   const workflow = await read(".github/workflows/publish-release.yml");
 

@@ -2321,7 +2321,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           userContext: await resolveUserContext(userId),
           context: loopToolContext(
             { ...contextInput, skillId: tracker.activeSkillId },
-            declaredProposalInChat ? { approvalCompletion: "platform", ...chatMessage } : {},
+            (declaredProposalInChat || (apiTokenId == null && toolDef.sideEffect === true)) ? { approvalCompletion: "platform", ...chatMessage } : {},
           ),
           source: "agentic-loop",
         });
@@ -2363,7 +2363,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
       const receipt = await restrictedReassessmentReceipt(restricted, params, tc.name, toolResult);
       if (receipt) { logTurnSummary(result.providerId, result.modelId); return completeResult(receipt.summary, result); }
-      const raisedId = declaredProposalInChat ? pendingApprovalEnvelopeId(toolResult) : null;
+      const raisedId = (declaredProposalInChat || (apiTokenId == null && toolDef.sideEffect === true)) ? pendingApprovalEnvelopeId(toolResult) : null;
       // The turn ends on the raised request; later calls in this batch are not run.
       if (raisedId) { chatApprovalIds.push(raisedId); break; }
       // Also bound a batch from one inference; varying arguments evade the
@@ -2371,12 +2371,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       { const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools); if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); } if (refusalStreak >= 3) return stopRefusedTurn(); }
     }
 
-    // BI-7BCC87BB (spec D2 S1): a declared proposal in chat ends the turn on the request(s) it raised.
+    // End on the exact pending request; ordinary calls must not claim completion.
     if (chatApprovalIds.length > 0) {
-      const firstName = iterationResults.find((r) => pendingApprovalEnvelopeId(r.toolResult) === chatApprovalIds[0])?.tc.name ?? "act";
+      const pending = iterationResults.find((r) => pendingApprovalEnvelopeId(r.toolResult) === chatApprovalIds[0])!;
       logTurnSummary(result.providerId, result.modelId);
       return {
-        content: result.content || `I'd like to ${firstName.replace(/_/g, " ")} with the following details.`,
+        content: pending.toolResult.message || "This request is waiting for owner approval; it has not run.",
         providerId: result.providerId, modelId: result.modelId,
         downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
         totalInputTokens, totalOutputTokens, executedTools, proposal: null,

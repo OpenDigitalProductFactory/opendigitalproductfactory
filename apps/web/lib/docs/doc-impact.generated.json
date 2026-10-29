@@ -760,6 +760,9 @@
     "apps/web/lib/coworker/approved-request-run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/coworker/approved-request-run.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/coworker/authorized-surface-registry.ts": [
       "docs/architecture/orientation.md"
     ],
@@ -1456,7 +1459,8 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/agentic-loop.ts": [
-      "docs/design/golden-triangle-design.md"
+      "docs/design/golden-triangle-design.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/autonomous-work-run.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1782,6 +1786,9 @@
     ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "e2e/managed-inference-control.spec.ts": [
+      "docs/testing/ci-evidence.md"
     ],
     "monitoring/prometheus/prometheus.yml": [
       "docs/architecture/platform-overview.md",
@@ -2509,6 +2516,12 @@
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/native-edge-host.ps1": [
+      "docs/operations/mac-inference-engine.md"
+    ],
+    "scripts/installer/native-edge-host.sh": [
+      "docs/operations/mac-inference-engine.md"
     ],
     "scripts/issue-authority-tls-cert.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -3908,6 +3921,10 @@
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],
+    "docs/operations/mac-inference-engine.md": [
+      "scripts/installer/native-edge-host.ps1",
+      "scripts/installer/native-edge-host.sh"
+    ],
     "docs/operations/mobile-store-launch-runbook.md": [
       "apps/mobile/eas.json"
     ],
@@ -4122,6 +4139,7 @@
       "apps/web/lib/runtime/measurement-runtime.ts",
       "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
+      "e2e/managed-inference-control.spec.ts",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"
     ],
@@ -4280,7 +4298,9 @@
     ],
     "docs/user-guide/workroom-approval-recovery.md": [
       "apps/web/lib/actions/agent-task-scheduler.ts",
+      "apps/web/lib/coworker/approved-request-run.ts",
       "apps/web/lib/queue/functions/workroom-drive-stage-run.ts",
+      "apps/web/lib/tak/agentic-loop.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/room-stage-mandate.ts",
       "apps/web/lib/work-management/writeback-latch.ts"

@@ -65,6 +65,42 @@ describe("delivery task hub projection", () => {
     expect(row.capsuleId).toBe("WC-123");
   });
 
+  it.each([
+    ["ready", null, "waiting"],
+    ["working", "working", "working"],
+    ["ready-for-review", "input-required", "waiting"],
+    ["blocked", "working", "stuck"],
+    ["complete", "completed", "finished"],
+    ["ready-for-promotion", null, "needs-person"],
+  ] as const)("derives Workroom=%s TaskRun=%s from the shared atlas health %s", (workroomStatus, taskStatus, health) => {
+    const row = projectDeliveryTaskHubRow(
+      source({
+        status: workroomStatus,
+        taskRun: taskStatus
+          ? {
+              taskRunId: "TR-1",
+              title: "Long review",
+              status: taskStatus,
+              routeContext: "/build",
+              progressPayload: null,
+              startedAt: new Date("2026-09-04T11:45:00.000Z"),
+              completedAt: taskStatus === "completed" ? new Date("2026-09-04T11:58:00.000Z") : null,
+              updatedAt: new Date("2026-09-04T11:58:00.000Z"),
+              actionEnvelopes: [],
+            }
+          : null,
+      }),
+      now,
+    );
+
+    expect(row.health).toBe(health);
+  });
+
+  it("puts a closeout that waits on a person with the rooms that need attention, as the Work in progress page does", () => {
+    const row = projectDeliveryTaskHubRow(source({ status: "ready-for-promotion", taskRun: null }), now);
+    expect(row).toMatchObject({ health: "needs-person", group: "needs-attention" });
+  });
+
   it("lets approval, failure, expiry, and source conflicts outrank optimistic state", () => {
     const approval = projectDeliveryTaskHubRow(
       source({

@@ -41,11 +41,41 @@ export function isReadonlyDispatchActionType(actionType: string): boolean {
  * approved ChangeRequest, machine bound, and never dispatched automatically.
  */
 export const DOCKER_VM_RESTART_ACTION_TYPE = "substrate.docker-vm.restart";
+/** A bounded managed runtime transition; permission is explicit per host.
+ * This is deliberately absent from automatic host-upkeep convergence. */
+export const MANAGED_INFERENCE_ACTION_TYPE = "inference.runtime.transition";
+
+export interface ManagedInferenceTransitionParameters {
+  version: 1;
+  operation: "activate" | "rollback";
+  sourceSha: string;
+  profileSha256: string;
+  runtimeManifestSha256: string;
+  qualificationReportSha256: string;
+  baselineEngineSha256: string;
+  leaseId: string;
+}
+
+/** Same closed wire contract on the signer and the native controller. No
+ * command, URL, executable, directory, listener or provider is caller-chosen. */
+export function parseManagedInferenceTransitionParameters(value: unknown): ManagedInferenceTransitionParameters | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const p = value as Record<string, unknown>;
+  if (Object.keys(p).sort().join(",") !== ["version", "operation", "sourceSha", "profileSha256", "runtimeManifestSha256",
+    "qualificationReportSha256", "baselineEngineSha256", "leaseId"].sort().join(",")
+    || p.version !== 1 || !["activate", "rollback"].includes(String(p.operation))
+    || typeof p.sourceSha !== "string" || !/^[a-f0-9]{40}$/.test(p.sourceSha)
+    || typeof p.leaseId !== "string" || !/^NPEL-[A-Za-z0-9_-]{1,90}$/.test(p.leaseId)
+    || ![p.profileSha256, p.runtimeManifestSha256, p.qualificationReportSha256, p.baselineEngineSha256]
+      .every(digest => typeof digest === "string" && /^[a-f0-9]{64}$/.test(digest))) return null;
+  return value as ManagedInferenceTransitionParameters;
+}
 
 export const PRIVILEGED_DISPATCH_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
   DOCKER_VM_RESTART_ACTION_TYPE,
+  MANAGED_INFERENCE_ACTION_TYPE,
 ] as const;
 
 export function isPrivilegedDispatchActionType(actionType: string): boolean {
@@ -180,7 +210,12 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
     if (action.riskClass !== "high") return { claimable: false, reason: "privileged-action-risk-class-invalid" };
     if (!action.edgeNodeId) return { claimable: false, reason: "privileged-action-must-be-machine-bound" };
     if (!action.changeRequestApproved) return { claimable: false, reason: "approved-change-request-required" };
-    if (action.actionType !== DOCKER_VM_RESTART_ACTION_TYPE) {
+    if (action.actionType === MANAGED_INFERENCE_ACTION_TYPE
+      && (node.customerAccountId != null || node.customerSiteId != null
+        || action.customerAccountId != null || action.customerSiteId != null)) {
+      return { claimable: false, reason: "managed-inference-internal-host-required" };
+    }
+    if (action.actionType !== DOCKER_VM_RESTART_ACTION_TYPE && action.actionType !== MANAGED_INFERENCE_ACTION_TYPE) {
       const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
       if (node.organizationTrustRole !== requiredRole) {
         return { claimable: false, reason: "wrong-organization-trust-role" };
