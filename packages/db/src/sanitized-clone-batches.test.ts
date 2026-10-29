@@ -1,9 +1,22 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
+import { copySanitizedCursorBatches, withSanitizedCursorBatches } from "./sanitized-clone-batches";
 
 describe("bounded sanitized cursor copy", () => {
+  it.each(["unreleased", "early-exit"])("refuses %s consumption and clears the last source array", async mode => {
+    const rows = [{ secret: "PRIVATE" }];
+    const events: string[] = [];
+    const source = { async query(sql: string) { events.push(sql); return { rows: sql.startsWith("FETCH") ? rows : [] }; } };
+    await expect(withSanitizedCursorBatches(source, "SELECT secret FROM fixture", async next => {
+      await next();
+      if (mode === "unreleased") await next();
+    })).rejects.toThrow(mode === "unreleased" ? /Release the previous/ : /not fully consumed/);
+    expect(events.filter(sql => sql.startsWith("FETCH"))).toHaveLength(1);
+    expect(events.at(-1)).toBe("ROLLBACK");
+    expect(events).not.toContain("COMMIT");
+    expect(rows).toHaveLength(0);
+  });
   it("reports aggregate fetch counts without retaining confidential payloads", async () => {
     let remaining = 51;
     const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0 };
@@ -59,11 +72,13 @@ describe("bounded sanitized cursor copy", () => {
   });
 });
 
-it("processes more than 4 GiB JSON/vector-shaped input under a 384 MiB heap", () => {
-  const child = spawnSync(process.execPath, ["--max-old-space-size=384", "--import", "tsx", fileURLToPath(new URL("./sanitized-clone.memory-fixture.ts", import.meta.url))],
+it.each(["direct", "streamed"])("processes more than 4 GiB JSON/vector-shaped input under a 384 MiB heap (%s)", mode => {
+  const child = spawnSync(process.execPath, ["--max-old-space-size=384", "--import", "tsx", fileURLToPath(new URL("./sanitized-clone.memory-fixture.ts", import.meta.url)), ...(mode === "streamed" ? ["--streamed"] : [])],
     { encoding: "utf8", timeout: 120000 });
   expect(child.status, child.stderr).toBe(0);
   const result = JSON.parse(child.stdout.trim().split("\n").at(-1)!);
+  expect(result.mode).toBe(mode);
+  if (mode === "streamed") { expect(result.maxTransactionRows).toBeGreaterThan(0); expect(result.maxTransactionRows).toBeLessThanOrEqual(500); }
   expect(result.totalBytes).toBeGreaterThan(4 * 1024 ** 3);
   expect(result.totalRows).toBe(9000);
   expect(result.peakHeap).toBeLessThan(384 * 1024 ** 2);

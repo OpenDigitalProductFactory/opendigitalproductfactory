@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { withSanitizedCursorBatches } from "./sanitized-clone-batches";
 import {
+  createSanitizedCloneWriter,
   buildDestinationResetSql,
   buildSanitizedCursorQuery,
   buildSourceCopyArgs,
@@ -234,6 +236,92 @@ describe("destination cleanup", () => {
 });
 
 describe("bounded confidential inserts", () => {
+  it.each(["source", "write", "commit"])("aborts streaming on a %s failure without committing the source snapshot", async failure => {
+    const events: string[] = [];
+    let fetches = 0;
+    const source = { async query(sql: string) {
+      events.push(sql);
+      if (!sql.startsWith("FETCH")) return { rows: [] };
+      if (++fetches === 2) {
+        if (failure === "source") throw new Error("source failed");
+        return { rows: [] };
+      }
+      return { rows: [{ id: "1" }] };
+    } };
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async (sql: string) => {
+        if (sql.startsWith("INSERT") && failure === "write") throw new Error("write failed");
+        return 1;
+      },
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => {
+      await write(transaction); if (failure === "commit") throw new Error("commit failed");
+    } };
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    const writer = createSanitizedCloneWriter(client as never);
+    await expect(withSanitizedCursorBatches(source, "SELECT id FROM fixture", next => writer.copyBatches("First", next, () => {}, metrics), 50, true, metrics)).rejects.toThrow(`${failure} failed`);
+    expect(events.at(-1)).toBe("ROLLBACK"); expect(events).not.toContain("COMMIT");
+    expect(metrics.transactionAttempts).toBe(1);
+  });
+  it("commits a short group after a slow fetch and carries only that unwritten batch forward", async () => {
+    let clock = 0, fetches = 0;
+    const measuredClock = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const transactionRows: number[] = [];
+    const source = { async query(sql: string) {
+      if (!sql.startsWith("FETCH")) return { rows: [] };
+      fetches++;
+      if (fetches === 2) clock = 1001;
+      return { rows: fetches <= 2 ? Array.from({ length: 50 }, (_, i) => ({ id: `${fetches}-${i}` })) : [] };
+    } };
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async (sql: string, ...values: unknown[]) => { if (sql.startsWith("INSERT")) transactionRows[transactionRows.length - 1]! += values.length; return 1; },
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => { transactionRows.push(0); await write(transaction); } };
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    try {
+      const writer = createSanitizedCloneWriter(client as never);
+      await withSanitizedCursorBatches(source, "SELECT id FROM fixture", next => writer.copyBatches("First", next, () => {}, metrics), 50, true, metrics);
+      expect(transactionRows).toEqual([50, 50]); expect(fetches).toBe(3);
+    } finally { measuredClock.mockRestore(); }
+  });
+  it("opens no destination transaction for an empty source", async () => {
+    const client = { $transaction: vi.fn() };
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    const writer = createSanitizedCloneWriter(client as never);
+    await withSanitizedCursorBatches({ query: async () => ({ rows: [] }) }, "SELECT id FROM fixture", next => writer.copyBatches("First", next, () => {}, metrics), 50, true, metrics);
+    expect(client.$transaction).not.toHaveBeenCalled(); expect(metrics.rows).toBe(0);
+  });
+  it("streams successive50-row windows into transactions of at most500rows", async () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    const transactionRows: number[] = [];
+    let remaining = 1001;
+    let inTransaction = false;
+    const source = { async query(sql: string) {
+      if (!sql.startsWith("FETCH")) return { rows: [] };
+      if ((1001 - remaining) % 500 === 0) expect(inTransaction).toBe(false);
+      const size = Math.min(remaining, 50); remaining -= size;
+      return { rows: Array.from({ length: size }, (_, index) => ({ id: String(remaining + index) })) };
+    } };
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async (sql: string, ...values: unknown[]) => {
+        if (sql.startsWith("INSERT")) transactionRows[transactionRows.length - 1]! += values.length;
+        return 1;
+      },
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => {
+      transactionRows.push(0); inTransaction = true;
+      try { await write(transaction); } finally { inTransaction = false; }
+    } };
+    const writer = createSanitizedCloneWriter(client as never);
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    try {
+      await withSanitizedCursorBatches(source, "SELECT id FROM fixture", next => writer.copyBatches("First", next, () => {}, metrics), 50, true, metrics);
+      expect(transactionRows).toEqual([500, 500, 1]);
+    } finally { clock.mockRestore(); }
+  });
   it("separates transaction callback work from acquisition and commit elapsed time", async () => {
     const metrics = { transactionAttempts: 0, transactionMs: 0, transactionWorkMs: 0 };
     const transaction = {

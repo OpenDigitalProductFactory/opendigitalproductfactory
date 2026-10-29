@@ -314,3 +314,37 @@ The diagnostic and selected source change are internal sequencing: neither is
 accepted as a separately completed performance repair. Rollback is a normal
 source revert and governed release; no migration or source-data edit exists.
 The Workroom records the immutable coverage receipt and actual measurements.
+
+The continuation's immutable coverage is `cmvswfuh91d7j01k0zzhnfz4n`, bound to
+`ea28f3a4c91b53b4db03d171ef591d9937a0c16c`. Governed PostgreSQL measurement on
+diagnostic source `d0cc35d6baf71c7e3779e7f59999687d153469f5` copied 50,001
+narrow fixture rows in 4,763.97 ms: 678.61 ms fetching, 23.90 ms sanitizing,
+4,048.30 ms across 1,001 destination transactions, and 2,048.58 ms inside their
+callbacks. About 1,999.72 ms (42% of total elapsed) lay outside the callbacks.
+This includes acquisition, framing and commit; it is not isolated server WAL
+latency or a full-cohort performance result. An earlier unmatched sample has
+different timing and is not a speedup comparison. Evidence:
+`cmvswyrgx1h1g01k0itoukm9x`.
+
+These measurements select the planned streamed-transaction candidate. The
+existing direct writer keeps its original behavior. The actual confidential
+caller uses a shared attempt-local writer and scoped cursor reader; a reader
+cannot fetch ahead of an unreleased array or finish before EOF. Consecutive
+50-row writes share at most a 500-row destination transaction. A one-second
+group-age check includes source fetch, transformation and inserts and ends
+groups only between batches. An already fetched but unwritten window can carry
+across that commit; no second window is retained. A blocked in-flight operation
+is still subject to the existing transaction/runtime fences: the age check is
+not a promise to interrupt PostgreSQL mid-query. Cold first fetches happen
+before transaction acquisition. Errors abort the attempt and retain whole-clone
+cleanup and publication isolation, including after earlier groups committed.
+
+Diagnostics now name nested transaction/callback and insert time explicitly;
+these axes overlap fetch and transformation inside a streamed group and must
+not be summed. Qualification compares identical source/order/value/cohort under
+50 and 500 transaction ceilings in both execution orders, with actual persisted
+duplicate winners and omitted vectors. Original cold/warm/retained-payload
+controls stay ordered; an additional fresh-client streamed wide-payload case
+keeps the same 16 MiB bound. Source-only counters do not declare this repair
+qualified. Its PostgreSQL, gate, review, canonical release and one full-size
+startup outcomes remain to be recorded.
