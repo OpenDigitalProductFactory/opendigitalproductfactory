@@ -1,3 +1,4 @@
+import type { AccountReadiness } from "./provider-account-readiness";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 
 /** Presentation identity consumes the canonical masked account read model. */
@@ -14,6 +15,7 @@ export type ProviderAccountIdentity = {
 
 export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
   label: string; providerName: string; statusLabel: string;
+  readiness?: AccountReadiness;
   allowedWork: string; allowedWorkSummary: string;
   modelSummary: string; capacitySummary: string; resetSummary: string | null;
   capabilitySummary?: string;

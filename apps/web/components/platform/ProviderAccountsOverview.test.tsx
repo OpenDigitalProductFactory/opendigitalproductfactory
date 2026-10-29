@@ -103,3 +103,24 @@ describe("compact provider account overview", () => {
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Retry creation");
   });
 });
+
+
+describe("provider readiness is visible before opening an account", () => {
+  it.each([
+    ["working", "success"], ["enabled", "success"], ["waiting", "warning"],
+    ["paused", "warning"], ["blocked", "danger"], ["unverified", "neutral"],
+  ] as const)("shows %s using its shared semantic status", (state, intent) => {
+    const account = { ...row, readiness: { state, label: `Account ${state}`, summary: "Current observation" } };
+    render(<ProviderAccountsOverview rows={[account]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, status: "Status" }} />);
+    expect(screen.getByText(`Account ${state}`).closest("[data-intent]")?.getAttribute("data-intent")).toBe(intent);
+  });
+  it("shows a usage wait as the account status while keeping data permission separate", () => {
+    const waitingAccount = { ...row, allowedWork: "Company work", allowedWorkSummary: "Approved for company work",
+      readiness: { state: "waiting" as const, label: "Waiting for usage reset", summary: "Usage limit reached" } };
+    render(<ProviderAccountsOverview rows={[waitingAccount]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, status: "Status" }} />);
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeTruthy();
+    expect(screen.getByText("Waiting for usage reset")).toBeTruthy();
+    expect(screen.getByText("Usage limit reached")).toBeTruthy();
+    expect(screen.getByText("Company work")).toBeTruthy();
+  });
+});

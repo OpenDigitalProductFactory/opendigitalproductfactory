@@ -50,7 +50,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     if (trigger) (trigger.isConnected ? trigger : addProviderRef.current)?.focus();
   }, [newProvider]);
   const normalized = search.trim().toLocaleLowerCase();
-  const visibleRows = rows.filter(row => `${row.label} ${row.providerName} ${row.allowedWork} ${row.statusLabel}`.toLocaleLowerCase().includes(normalized));
+  const visibleRows = rows.filter(row => `${row.label} ${row.providerName} ${row.allowedWork} ${row.readiness?.label ?? row.statusLabel} ${row.readiness?.summary ?? ""}`.toLocaleLowerCase().includes(normalized));
   const catalogById = new Map(catalog.map(provider => [provider.providerId, provider]));
   const firstAccountByProvider = new Map<string, string>();
   for (const account of visibleRows) {
@@ -59,9 +59,14 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const columns: Column<ProviderAccountOverviewRow>[] = [
     { key: "account", header: copy.accountName, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div>
       <Link href={providerAccountHref(row)} className="font-medium text-[var(--dpf-accent)]">{row.label}</Link>
-      <div className="text-xs text-[var(--dpf-muted)]">{row.providerName} · {row.statusLabel}</div>
+      <div className="text-xs text-[var(--dpf-muted)]">{row.providerName}</div>
       {row.resolvesPhases.length > 0 && <div className="text-xs text-[var(--dpf-muted)]">{copy.resolvesPhases} {row.resolvesPhases.join(", ")}</div>}
     </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
+    { key: "status", header: copy.status, cell: row => <div className="space-y-1">
+      <StatusBadge domain="providerAccountReadiness" status={row.readiness?.state ?? "unverified"}
+        label={row.readiness?.label ?? row.statusLabel} variant="solid" size="md" uppercase={false} />
+      {row.readiness?.summary && <p className="m-0 text-xs">{row.readiness.summary}</p>}
+    </div> },
     { key: "allowed", header: copy.allowedWork, cell: row => <div>
       <StatusBadge intent="neutral" label={row.allowedWork} />
       <div className="mt-1 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</div>

@@ -76,3 +76,22 @@ describe("provider account presentation truth", () => {
     expect(rows[0].statusLabel).toBe("Paused");
   });
 });
+
+
+describe("readiness keeps account proof separate from provider aggregates", () => {
+  it("uses account-owned success and keeps an additional account independent of default authentication", async () => {
+    mocks.accounts.mockResolvedValue([{ ...account, authMethod: "api_key", credential: { hasUsableMaterial: true } }]);
+    const now = new Date("2026-10-28T20:00:00Z");
+    mocks.capacity.mockResolvedValue(new Map([[`codex:account:${account.connectionId}`, { state: "available", lastSuccessAtMs: now.getTime()-1000 }]]));
+    const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy, now });
+    expect(row.readiness?.state).toBe("working");
+  });
+  it("does not borrow provider aggregate success as proof for the default account", async () => {
+    const now = new Date("2026-10-28T20:00:00Z");
+    mocks.accounts.mockResolvedValue([{ ...account, isDefault: true, credential: { hasUsableMaterial: true } }]);
+    mocks.capacity.mockResolvedValue(new Map([["codex", { state: "available", lastSuccessAtMs: now.getTime()-1000 }]]));
+    const controls = new Map([["codex", { eligibility: { eligible: true, state: "routable" }, restrictions: [], healthSummary: "No hold" }]]) as never;
+    const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy, now });
+    expect(row.readiness?.state).toBe("enabled");
+  });
+});

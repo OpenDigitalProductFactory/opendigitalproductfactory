@@ -1,4 +1,6 @@
 import "server-only";
+import { projectAccountReadiness } from "./provider-account-readiness";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { prisma } from "@dpf/db";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 import { getT } from "@/lib/i18n/t.server";
@@ -77,7 +79,15 @@ export async function loadProviderAccountOverview(input: {
     const catalogCount = summary?.totalModels;
     const modelSummary = account.modelsVerifiedAt ? `${accessible.length} ${input.copy.verifiedModels}`
       : catalogCount ? `${catalogCount} ${input.copy.catalogModels} · ${input.copy.notVerified}` : input.copy.notVerified;
+    const readiness = projectAccountReadiness({ status: account.status,
+      requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
+      hasCredential: Boolean(account.credential?.hasUsableMaterial || (account.isDefault && pw.credential?.hasUsableMaterial)),
+      verifiedModelCount: account.modelsVerifiedAt ? accessible.length : undefined,
+      credentialNeedsRenewal, healthAvailable: capacity !== null && (!account.isDefault || Boolean(control)),
+      capacity: ownedHealth, sharedCapacity: account.isDefault ? providerLimit : sharedLimit ?? undefined,
+      control, sharedRestrictions, now: now.getTime(), copy: input.copy });
     return [{
+      readiness,
       connectionId: account.connectionId, providerId: account.providerId, isDefault: account.isDefault,
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,
       modelsVerifiedAt: account.modelsVerifiedAt, lastReviewedAt: account.lastReviewedAt, supplierContractId: account.supplierContractId,
@@ -91,7 +101,7 @@ export async function loadProviderAccountOverview(input: {
       capabilitySummary: account.isDefault && summary?.routingScores && (!account.modelsVerifiedAt || accessible.includes(summary.representativeModelId ?? ""))
         ? `${input.copy.catalogCapability} ${input.copy.reasoning} ${summary.routingScores.reasoning} · ${input.copy.coding} ${summary.routingScores.codegen} · ${input.copy.tools} ${summary.routingScores.toolFidelity}`
         : input.copy.capabilityUnmeasured,
-      capacitySummary: ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
+      capacitySummary: ownedRestriction && ownedHealth?.safeSummary ? ownedHealth.safeSummary : control?.weeklyHint ?? input.copy.capacityUnknown,
       resetSummary: [...new Set(resetParts)].join(" ") || (account.isDefault && !control ? input.copy.routingCheckUnavailable : null),
       resolvesPhases: account.isDefault ? input.resolvesPhases.get(account.providerId) ?? [] : [],
     }];

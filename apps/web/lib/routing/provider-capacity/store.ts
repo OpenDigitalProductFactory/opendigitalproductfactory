@@ -36,7 +36,7 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 /** One projection feeds routing; account-local observations never become global. */
 export async function loadProviderCapacitySnapshots(options: { includeInactiveAccountHealth?: boolean } = {}): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
-    select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
+    select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true, lastSuccessAt: true,
       safeSummary: true, action: true, isHumanActionRequired: true,
       ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
@@ -57,10 +57,10 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
 }
 
 /** Explicit safe fields only: raw snippets and credential storage stay server-side. */
-function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt: Date | null;
+function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt: Date | null; lastSuccessAt?: Date | null;
   safeSummary: string | null; action: string; isHumanActionRequired: boolean }): CapacitySnapshot {
   return { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null,
-    observedAtMs: row.lastObservedAt?.getTime() ?? null, safeSummary: row.safeSummary,
+    observedAtMs: row.lastObservedAt?.getTime() ?? null, lastSuccessAtMs: row.lastSuccessAt?.getTime() ?? null, safeSummary: row.safeSummary,
     action: row.action, isHumanActionRequired: row.isHumanActionRequired };
 }
 
