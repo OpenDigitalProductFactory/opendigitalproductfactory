@@ -8,6 +8,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { prisma } from "@dpf/db";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { getT } from "@/lib/i18n/t.server";
+import { Surface } from "@/components/ui/Surface";
 
 export default async function NewExpensePage() {
   const t = await getT("shell");
@@ -48,14 +49,14 @@ export default async function NewExpensePage() {
       {employeeProfile ? (
         <CreateExpenseForm currencySymbol={sym} />
       ) : (
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <Surface className="p-4">
           <p className="text-sm text-[var(--dpf-text)]">
             {t("finance.expenseProfileRequired")}
           </p>
           <Link href="/employee" className="mt-3 inline-block text-sm text-[var(--dpf-accent)] hover:underline">
             {t("finance.openPeople")}
           </Link>
-        </div>
+        </Surface>
       )}
     </div>
   );

@@ -22,7 +22,7 @@ recorded as paid, and where the supporting bank evidence lives.
 
 - For your own expense, choose **Expenses → My Expenses** from Spend, then
   **New Expense Claim**. Use the separate claims-review queue for approvals.
-  See [Expense Workflows](./expense-workflows) for entry requirements and receipt guidance.
+  See [Expense Workflows](./expense-workflows.md) for entry requirements and receipt guidance.
 - Confirm the supplier, payment terms, currency, invoice reference, dates, and
   line-item amounts against the source document.
 - Link the purchase order when one exists. A bill can be created without a PO,
