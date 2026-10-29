@@ -27,7 +27,7 @@ export async function defaultGovernedToolPreflight(event: ToolLifecycleEvent,
     }
     if (event.toolName === "record_semantic_review_exemption") {
       const { preflightSemanticReviewExemption } = await import("./change-review/semantic-review-policy-exemption");
-      return preflightSemanticReviewExemption(event.rawParams);
+      return preflightSemanticReviewExemption(event.rawParams, event.userId, { ...event.context, userContext: event.userContext });
     }
   }
   if (event.toolName === "invite_room_participant") {

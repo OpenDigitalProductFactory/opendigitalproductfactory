@@ -4,6 +4,7 @@ const evidencePreflight = vi.hoisted(() => vi.fn());
 vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: guard }));
 vi.mock("./mcp/packs/initiative-readiness-pack", () => ({ preflightInitiativeEvidence: evidencePreflight }));
 import { defaultGovernedToolPreflight } from "./mcp-governed-execute-preflight";
+import * as exceptions from "./change-review/semantic-review-policy-exemption";
 const event = { toolName: "record_initiative_evidence", rawParams: {}, userId: "human", userContext: { platformRole: "developer", isSuperuser: false },
   source: "agentic-loop" as const, context: { taskRunId: "TR-ORIGINAL", apiTokenId: "current-token" } };
 beforeEach(() => { vi.resetAllMocks(); guard.mockResolvedValue(null); evidencePreflight.mockResolvedValue(null); });
@@ -44,4 +45,20 @@ it("rejects an already-expired exact exception before requesting human approval"
   const result = await defaultGovernedToolPreflight({ ...event, toolName: "record_semantic_review_exemption", rawParams }, vi.fn().mockResolvedValue(null));
   expect(result).toMatchObject({ success: false, error: "review_exemption_refused" });
   expect(result?.message).toMatch(/fresh exact request/i);
+});
+it("forwards the real authenticated context rather than a nested caller claim", async () => {
+  const spy = vi.spyOn(exceptions, "preflightSemanticReviewExemption").mockResolvedValue(null);
+  const acting = { ...event.context, agentId: "actual-coworker", userContext: { platformRole: "HR-000", isSuperuser: true } };
+  try {
+    await defaultGovernedToolPreflight({ ...event, toolName: "record_semantic_review_exemption", context: acting }, vi.fn().mockResolvedValue(null));
+    expect(spy).toHaveBeenCalledWith(event.rawParams, "human", { ...acting, userContext: event.userContext });
+  } finally { spy.mockRestore(); }
+});
+it("does not enter exception eligibility reads after exact-room admission refuses", async () => {
+  const spy = vi.spyOn(exceptions, "preflightSemanticReviewExemption");
+  const refusal = { success: false, error: "workroom_access_denied", message: "Access is unavailable." };
+  try {
+    expect(await defaultGovernedToolPreflight({ ...event, toolName: "record_semantic_review_exemption" }, vi.fn().mockResolvedValue(refusal))).toEqual(refusal);
+    expect(spy).not.toHaveBeenCalled();
+  } finally { spy.mockRestore(); }
 });
