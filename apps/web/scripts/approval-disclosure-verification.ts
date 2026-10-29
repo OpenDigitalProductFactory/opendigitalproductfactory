@@ -14,6 +14,10 @@ import frozenBudget from "../lib/ux-budget/route-budget-baseline.json";
 import { measureUxBudget } from "../lib/ux-budget/measure";
 import { waitForRouteDomToSettle, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
 
+import type { WorkCapsuleSource } from "../lib/work-capsules";
+
+export const APPROVAL_FIXTURE_WORKROOM_SOURCE: WorkCapsuleSource = "external-adoption";
+
 export function assertApprovalScenarioBudget(measurement: RouteMeasurement, cardAxeViolations: number) {
   const baseline = frozenBudget.routes["/workspace/inbox"];
   check(frozenBudget.bootstrapped && baseline, "Inbox has no frozen scenario budget");
@@ -111,11 +115,11 @@ export async function verifyApprovalDisclosure() {
     check(await prisma.workroom.count({ where: { capsuleId: roomId } }) === 0
       && await prisma.taskRun.count({ where: { taskRunId } }) === 0, "Fixture room/run identity collision");
     await prisma.workroom.create({ data: { capsuleId: roomId, title: "Review supplier commitments",
-      objective: "CI presentation only; no execution or scheduling.", status: "draft", source: "ux-verification",
+      objective: "CI presentation only; no execution or scheduling.", status: "draft", source: APPROVAL_FIXTURE_WORKROOM_SOURCE,
       createdByPrincipalId: principalId } });
     fixturesOwned = true;
     await prisma.taskRun.create({ data: { taskRunId, userId, title: "Approval presentation fixture",
-      objective: "Display only; never execute.", status: "completed", source: "ux-verification",
+      objective: "Display only; never execute.", status: "completed", source: "coworker",
       a2aMetadata: { initiativeReviewBinding: { gate: "research", itemId: "BI-038AA4BC",
         writerToolName: "record_initiative_evidence", artifactRef: { kind: "repo-blob-at-commit",
           repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -275,8 +279,8 @@ export async function verifyApprovalDisclosure() {
     try {
       await removeEnvelopes();
       if (fixturesOwned) {
-        await prisma.taskRun.deleteMany({ where: { taskRunId, userId, source: "ux-verification" } });
-        await prisma.workroom.deleteMany({ where: { capsuleId: roomId, source: "ux-verification", createdByPrincipalId: principalId } });
+        await prisma.taskRun.deleteMany({ where: { taskRunId, userId, source: "coworker" } });
+        await prisma.workroom.deleteMany({ where: { capsuleId: roomId, source: APPROVAL_FIXTURE_WORKROOM_SOURCE, createdByPrincipalId: principalId } });
       }
     } finally {
       try { await browser.close(); } finally { await prisma.$disconnect(); }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { assertApprovalVerificationRuntime, assertApprovalScenarioBudget } from "../../scripts/approval-disclosure-verification";
+import { APPROVAL_FIXTURE_WORKROOM_SOURCE, assertApprovalVerificationRuntime, assertApprovalScenarioBudget } from "../../scripts/approval-disclosure-verification";
+
+import { isWorkCapsuleSource } from "../work-capsules";
 
 const ci = {
   CI: "true", GITHUB_ACTIONS: "true", GITHUB_RUN_ID: "12345", GITHUB_RUN_ATTEMPT: "1",
@@ -9,6 +11,9 @@ const ci = {
 };
 
 describe("approval scenario fixture boundary", () => {
+  it("uses a Workroom source admitted by the canonical database closed set", () => {
+    expect(isWorkCapsuleSource(APPROVAL_FIXTURE_WORKROOM_SOURCE)).toBe(true);
+  });
   it("accepts the existing explicit GitHub UX measurement runtime", () => {
     expect(assertApprovalVerificationRuntime(ci).origin).toBe("http://localhost:3000");
   });
