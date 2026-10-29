@@ -95,3 +95,14 @@ describe("readiness keeps account proof separate from provider aggregates", () =
     expect(row.readiness?.state).toBe("enabled");
   });
 });
+
+
+describe("legacy default account activation", () => {
+  it("shows existing provider activation without borrowing it for an additional account", async () => {
+    const configured = { provider: { providerId: "codex", name: "Codex", status: "active" }, credential: { hasUsableMaterial: true } } as ProviderWithCredential;
+    mocks.accounts.mockResolvedValue([{ ...account, isDefault: true, status: "unconfigured" }, { ...account, status: "unconfigured" }]);
+    const controls = new Map([["codex", { eligibility: { eligible: true, state: "routable" }, restrictions: [], healthSummary: "No hold" }]]) as never;
+    const rows = await loadProviderAccountOverview({ providers: [configured], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy });
+    expect(rows.map(row => row.readiness?.state)).toEqual(["enabled", "blocked"]);
+  });
+});

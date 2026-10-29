@@ -11,6 +11,7 @@ import type { ProviderRoutingControlView } from "@/lib/routing/provider-routing-
 import { connectionPosture, loadBusinessSuitabilityContext, providerCatalogFacts } from "@/lib/routing/provider-suitability/provider-onboarding-data";
 import { PROVIDER_TRUST_CLAIM_KEYS, resolveProviderTrustEvidence } from "@/lib/routing/provider-suitability/evidence";
 import { resolveProviderTrustFacts } from "@/lib/routing/provider-suitability/provider-trust";
+import { resolveRuntimeConnectionStatus } from "@/lib/routing/provider-suitability/onboarding-recommendation";
 import { projectProviderConnectionReview } from "@/lib/routing/provider-suitability/provider-connection-review";
 import { loadProviderCapacitySnapshots } from "@/lib/routing/provider-capacity/store";
 import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-exclude";
@@ -79,7 +80,9 @@ export async function loadProviderAccountOverview(input: {
     const catalogCount = summary?.totalModels;
     const modelSummary = account.modelsVerifiedAt ? `${accessible.length} ${input.copy.verifiedModels}`
       : catalogCount ? `${catalogCount} ${input.copy.catalogModels} · ${input.copy.notVerified}` : input.copy.notVerified;
-    const readiness = projectAccountReadiness({ status: account.status,
+    const readinessStatus = account.isDefault && account.status === "unconfigured"
+      ? resolveRuntimeConnectionStatus(pw.provider.status, account.status) : account.status;
+    const readiness = projectAccountReadiness({ status: readinessStatus,
       requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
       hasCredential: Boolean(account.credential?.hasUsableMaterial || (account.isDefault && pw.credential?.hasUsableMaterial)),
       verifiedModelCount: account.modelsVerifiedAt ? accessible.length : undefined,
