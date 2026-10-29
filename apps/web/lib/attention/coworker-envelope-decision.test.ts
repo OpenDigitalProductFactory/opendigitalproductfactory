@@ -105,6 +105,9 @@ describe("summarizeCoworkerEnvelopeDecision", () => {
     const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", ...input });
     expect(decision.completeProposedContent).toBe("{}");
     expect(decision.kind).toBe("unknown");
+    expect(decision.target).toBe("Not provided");
+    expect(decision.recordedIfAuthorized).not.toMatch(/could not be loaded/);
+    expect(decision.recommendation).toBe("Keep this on hold until its effect is clear.");
     expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
   });
 

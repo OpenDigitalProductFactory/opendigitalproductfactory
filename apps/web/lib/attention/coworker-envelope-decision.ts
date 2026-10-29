@@ -255,7 +255,7 @@ function sharedFacts(input: SummaryContext) {
     action: actionLabel(input.toolName),
     target: input.params
       ? envelopeTarget(input.toolName, input.params)
-      : "Unknown: the proposal could not be loaded",
+      : input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.notProvided : "Unknown: the proposal could not be loaded",
     proposed: input.params ? proposedFields(input.params) : [],
     completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : input.hasEmptyOriginal ? "{}" : null,
     consequence: consequenceText(input.consequence),
@@ -286,11 +286,12 @@ function unknownSummary(input: SummaryContext): EnvelopeDecisionSummary {
   }
   return {
     kind: "unknown",
-    headline: "Effect unresolved: this request cannot be shown",
-    recommendation: "the proposed content could not be loaded",
+    headline: input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.unresolvedTitle : "Effect unresolved: this request cannot be shown",
+    recommendation: input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.unresolvedRecommendation : "the proposed content could not be loaded",
     authorization: "decline unless you already know what this request writes",
     recordedIfAuthorized:
-      "The proposed content could not be loaded, so this card cannot show what would be recorded.",
+      input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.unresolvedDescription
+        : "The proposed content could not be loaded, so this card cannot show what would be recorded.",
     authorizeDoes: "Lets your coworker run a change this card cannot show.",
     declineDoes: "Nothing is changed. Your coworker stops.",
     ifYouDoNothing: "the window closes and nothing is changed.",
