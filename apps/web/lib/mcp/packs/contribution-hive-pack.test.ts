@@ -172,7 +172,7 @@ describe("contribution-hive pack — handler behavior (delegation preserved)", (
     );
     expect(res.success).toBe(true);
     expect(res.entityId).toBe("IP-ABCDE");
-    expect(res.message).toContain("IMP-1");
+    expect(res.data?.backlogItemId).toBe("IMP-1");
     expect(backlogSvc.ingestBacklogItem).toHaveBeenCalledTimes(1);
   });
 
@@ -267,6 +267,6 @@ describe("contribution-hive pack — handler behavior (delegation preserved)", (
 
     expect(res.success).toBe(true);
     expect(backlogSvc.ingestBacklogItem).toHaveBeenCalledTimes(1);
-    expect(res.message).toContain("IMP-9");
+    expect(res.data?.backlogItemId).toBe("IMP-9");
   });
 });

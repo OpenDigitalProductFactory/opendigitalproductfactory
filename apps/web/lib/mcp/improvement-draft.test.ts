@@ -116,7 +116,9 @@ describe("internal learning draft persistence", () => {
     effects.intake.mockRejectedValueOnce(new Error("old link interruption"));
     const first = await submitImprovementDraft(input, "owner-a", context, state.db);
     state.tx.backlogItem.findMany.mockResolvedValue([{ itemId: "IMP-ALREADY-DONE", submittedById: "owner-a", agentId: "agent-a" }]);
-    expect(await submitImprovementDraft(input, "owner-a", context, state.db)).toMatchObject({ entityId: first.entityId, data: { reused: true, backlogItemId: "IMP-ALREADY-DONE", projectionPending: false } });
+    const recovered = await submitImprovementDraft(input, "owner-a", context, state.db);
+    expect(recovered).toMatchObject({ entityId: first.entityId, data: { reused: true, backlogItemId: "IMP-ALREADY-DONE", projectionPending: false } });
+    expect(recovered.message).not.toMatch(/filed|triage|IP-|IMP-/);
     expect(effects.intake).toHaveBeenCalledTimes(1);
   });
 

@@ -137,7 +137,9 @@ describe.skipIf(!url)("learning draft transactions on PostgreSQL", () => {
     const itemId = String(first.data?.backlogItemId);
     const original = await db.backlogItem.update({ where: { itemId }, data: { status } });
     await db.improvementProposal.update({ where: { proposalId: first.entityId }, data: { backlogItemId: null } });
-    expect(await submit()).toMatchObject({ entityId: first.entityId, data: { reused: true, backlogItemId: itemId, projectionPending: false } });
+    const recovered = await submit();
+    expect(recovered).toMatchObject({ entityId: first.entityId, data: { reused: true, backlogItemId: itemId, projectionPending: false } });
+    expect(recovered.message).not.toMatch(/filed|triage|IP-|IMP-/);
     expect(await db.backlogItem.count()).toBe(1);
     expect((await db.backlogItem.findUniqueOrThrow({ where: { itemId } })).occurrenceCount).toBe(original.occurrenceCount);
     expect(await db.backlogItemActivity.count({ where: { kind: "intake_origin" } })).toBe(1);

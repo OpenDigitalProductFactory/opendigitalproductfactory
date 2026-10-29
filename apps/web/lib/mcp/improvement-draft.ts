@@ -158,9 +158,9 @@ export async function submitImprovementDraft(
     success: true, entityId: proposal.proposalId,
     data: { proposalId: proposal.proposalId, backlogItemId, reused, projectionPending },
     message: backlogItemId
-      ? `Improvement proposal ${proposal.proposalId} ${reused ? "reused" : "created"} and filed to the backlog as ${backlogItemId} for triage.`
+      ? reused ? "Existing recommendation linked to its backlog work." : "Recommendation saved and linked to its backlog work."
       : suppressed
-        ? `Improvement proposal ${proposal.proposalId} ${reused ? "reused" : "created"}. Kept in the Improvements view for founder review; low-severity [reference-doc] suggestions are not auto-filed to the backlog.`
-        : `Improvement proposal ${proposal.proposalId} saved.${projectionPending ? " Backlog filing is pending recovery." : ""}`,
+        ? "Recommendation saved for review in the Improvements view."
+        : `Recommendation saved.${projectionPending ? " Its backlog link needs recovery." : ""}`,
   };
 }
