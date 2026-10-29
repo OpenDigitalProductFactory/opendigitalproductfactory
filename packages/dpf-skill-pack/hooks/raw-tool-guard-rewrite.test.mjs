@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { decide, planRewrite, rewriteEnvelope } from "./raw-tool-guard.mjs";
+import { decide, planRewrite, refusalHint, rewriteEnvelope } from "./raw-tool-guard.mjs";
 
 const WS = mkdtempSync(join(tmpdir(), "raw-tool-rewrite-")).replace(/\\/g, "/");
 after(() => rmSync(WS, { recursive: true, force: true }));
@@ -141,6 +141,15 @@ test("per client: Claude gets the rewrite; Codex and Grok keep the refusal", () 
   const grok = runGuard({ hookEventName: "PreToolUse", toolName: "run_terminal_command", toolInput: { command }, cwd: WEB, workspaceRoot: WEB });
   assert.equal(grok.decision, "deny");
   assert.equal(grok.hookSpecificOutput.updatedInput, undefined);
+});
+
+test("a refusal names the exact command for the package it was run in", () => {
+  assert.equal(refusalHint({ command: "tsc --noEmit --watch", cwd: WEB }), "pnpm --filter web typecheck");
+  assert.equal(refusalHint({ command: `${NPX} create-next-app x`, cwd: `${WEB}/lib` }), "pnpm --filter web exec create-next-app x");
+  assert.equal(refusalHint({ command: "pnpm vitest run", cwd: `${WEB}/lib` }), "pnpm --filter web exec vitest run <files>");
+  assert.equal(refusalHint({ command: "tsc --noEmit", cwd: WS }), null); // root: no package to name
+  const out = runGuard({ hook_event_name: "PreToolUse", permission_mode: "bypassPermissions", cwd: WEB, tool_name: "Bash", tool_input: { command: "tsc --noEmit --watch" } });
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /In this package:\s+pnpm --filter web typecheck/);
 });
 
 test("Claude still gets the refusal when the rewrite cannot be resolved", () => {

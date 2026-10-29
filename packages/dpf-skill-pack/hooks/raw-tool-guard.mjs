@@ -359,6 +359,27 @@ export function planRewrite({ command, cwd = "" }) {
 }
 
 /**
+ * The exact command for the package the refused command ran in, or null at the
+ * workspace root (no package to name). A refusal that names it costs one retype
+ * instead of a search. Exported for unit tests.
+ * @param {{ command: string, cwd?: string }} args
+ * @returns {string|null}
+ */
+export function refusalHint({ command, cwd = "" }) {
+  const start = posix(cwd).replace(/\/+$/, "");
+  const root = start && workspaceRootOf(start);
+  const pkg = root && packageOf(start, root);
+  if (!pkg) return null;
+  for (const seg of segments(command)) {
+    const tokens = tokenize(seg);
+    if (isRawTsc(tokens)) return `pnpm --filter ${pkg.name} ${/tsconfig\.test\.json/.test(seg) && pkg.scripts["typecheck:tests"] ? "typecheck:tests" : "typecheck"}`;
+    if (isRootVitest(tokens, start)) return `pnpm --filter ${pkg.name} exec vitest run <files>`;
+    if (isNpx(tokens)) return ["pnpm", "--filter", pkg.name, "exec", ...tokens.slice(1).filter((t, i) => i > 0 || !t.startsWith("-"))].join(" ");
+  }
+  return null;
+}
+
+/**
  * Claude PreToolUse output that runs the rewritten command. updatedInput
  * replaces the whole input, so every other field is carried. "allow" skips the
  * permission prompt, so it is used only where nothing would prompt anyway
@@ -394,7 +415,8 @@ function main() {
       process.exit(0);
     }
   }
-  emitDeny(verdict.reason);
+  const hint = refusalHint({ command, cwd: payload.cwd });
+  emitDeny(hint ? `${verdict.reason}\nIn this package:  ${hint}` : verdict.reason);
 }
 
 const invokedPath = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
