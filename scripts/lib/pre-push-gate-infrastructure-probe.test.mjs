@@ -29,6 +29,11 @@ function baseProbeInput(overrides = {}) {
     portalUrl: "http://localhost:3001",
     ports: [3001, 5433],
     env: PAT_ENV,
+    resolveCredential: ({ mcpUrl, env }) => {
+      assert.equal(mcpUrl, MCP_URL);
+      assert.equal(env, PAT_ENV, "the probe forwards its explicit environment");
+      return { kind: "pat", source: "test-fixture", bearer: PAT_ENV.DPF_MCP_BEARER_TOKEN };
+    },
     now: (() => { let t = 1_000; return () => (t += 5); })(),
     ...overrides,
   };
@@ -179,10 +184,15 @@ test("probe: a queued claim still means the pool answers — refused, nothing le
   assert.match(result.refusal, /release failed/, "an unreleased probe lease is surfaced, not hidden");
 });
 
-test("probe: no configured credential is not infrastructure evidence", async () => {
+test("probe: credential-resolution refusal is not infrastructure evidence", async () => {
   let called = false;
   const call = async () => { called = true; };
-  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {} }));
+  const resolveCredential = ({ mcpUrl, env }) => {
+    assert.equal(mcpUrl, MCP_URL);
+    assert.deepEqual(env, {});
+    throw new Error("no fixture credential");
+  };
+  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {}, resolveCredential }));
   assert.equal(result.ok, false);
   assert.equal(result.outcome, "no-credential");
   assert.equal(called, false);
