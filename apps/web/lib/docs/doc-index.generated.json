@@ -2002,6 +2002,7 @@
         "1243-dpf-status",
         "13-hazards",
         "14-security-and-privacy-considerations",
+        "qualification-research-narrows-a-stage-binding",
         "annex-a-informative-dpf-realization-status",
         "annex-b-informative-proposed-assertions",
         "annex-c-informative-build-studio-as-a-gpp-model",
@@ -2045,6 +2046,7 @@
         "approval-outcome-readback",
         "anti-patterns-observed",
         "original-review-recovery-across-connection-changes",
+        "bounded-qualification-research-admission",
         "a-present-assessment-authorized-by-an-approved-policy"
       ]
     },
@@ -11968,12 +11970,14 @@
         "the-levels",
         "the-two-hard-floors",
         "what-you-can-do",
+        "internal-learning-recommendations",
         "what-the-dial-actually-changes",
         "what-it-does",
         "coo-supervision-and-current-delivery-status",
         "which-installation-the-coo-coordinates",
         "when-it-runs",
         "how-it-stays-current",
+        "routine-observation-watches",
         "what-it-will-not-do",
         "what-you-must-do"
       ]
@@ -13475,7 +13479,9 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "workroom-reports-and-approval-waits"
+        "workroom-reports-and-approval-waits",
+        "qualification-research-when-implementation-is-not-yet-admitted",
+        "ordinary-coworker-requests"
       ]
     },
     "docs/user-guide/workspace/attention-inbox.md": {
@@ -13524,6 +13530,8 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "before-you-decide",
+        "connecting-business-mail",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
