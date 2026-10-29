@@ -634,8 +634,7 @@
     "apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts": [
       "docs/architecture/gated-permissions-process.md",
       "docs/architecture/initiative-readiness-runbook.md",
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -654,8 +653,7 @@
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts": [
-      "docs/architecture/initiative-readiness-runbook.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/types.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -765,6 +763,9 @@
     ],
     "apps/web/lib/coworker/approved-request-run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/coworker/approved-request-run.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/coworker/authorized-surface-registry.ts": [
       "docs/architecture/orientation.md"
@@ -1124,8 +1125,7 @@
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
       "docs/architecture/mcp-tool-packs.md",
@@ -1463,7 +1463,8 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/agentic-loop.ts": [
-      "docs/design/golden-triangle-design.md"
+      "docs/design/golden-triangle-design.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/autonomous-work-run.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1581,8 +1582,7 @@
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/work-capsules/work-capsule-store.ts": [
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
@@ -1629,7 +1629,6 @@
     "apps/web/lib/work-management/room-shapes.ts": [
       "docs/architecture/initiative-readiness-runbook.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md",
-      "docs/maintenance/staleness-report.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-stage-mandate.ts": [
@@ -1797,6 +1796,9 @@
     ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "e2e/managed-inference-control.spec.ts": [
+      "docs/testing/ci-evidence.md"
     ],
     "monitoring/prometheus/prometheus.yml": [
       "docs/architecture/platform-overview.md",
@@ -2524,6 +2526,12 @@
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/native-edge-host.ps1": [
+      "docs/operations/mac-inference-engine.md"
+    ],
+    "scripts/installer/native-edge-host.sh": [
+      "docs/operations/mac-inference-engine.md"
     ],
     "scripts/issue-authority-tls-cert.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -3877,18 +3885,13 @@
       ".github/workflows/security-inflow-gate.yml",
       "apps/web/components/shell/SectionNav.tsx",
       "apps/web/instrumentation.ts",
-      "apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts",
-      "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts",
       "apps/web/lib/build/claude-dispatch.ts",
       "apps/web/lib/inference/routed-inference.ts",
       "apps/web/lib/marketing/scheduler.ts",
-      "apps/web/lib/mcp/packs/work-capsules-pack.ts",
       "apps/web/lib/navigation/section-nav-model.ts",
       "apps/web/lib/routing/chat-adapter.ts",
       "apps/web/lib/shared/action-result.ts",
-      "apps/web/lib/work-capsules/work-capsule-store.ts",
       "apps/web/lib/work-management/human-accountability.ts",
-      "apps/web/lib/work-management/room-shapes.ts",
       "docker-compose.edge.macvlan.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "packages/db/prisma/schema/work-coordination.prisma",
@@ -3931,6 +3934,10 @@
       "scripts/host-resource-runner.mjs",
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
+    ],
+    "docs/operations/mac-inference-engine.md": [
+      "scripts/installer/native-edge-host.ps1",
+      "scripts/installer/native-edge-host.sh"
     ],
     "docs/operations/mobile-store-launch-runbook.md": [
       "apps/mobile/eas.json"
@@ -4146,6 +4153,7 @@
       "apps/web/lib/runtime/measurement-runtime.ts",
       "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
+      "e2e/managed-inference-control.spec.ts",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"
     ],
@@ -4304,7 +4312,9 @@
     ],
     "docs/user-guide/workroom-approval-recovery.md": [
       "apps/web/lib/actions/agent-task-scheduler.ts",
+      "apps/web/lib/coworker/approved-request-run.ts",
       "apps/web/lib/queue/functions/workroom-drive-stage-run.ts",
+      "apps/web/lib/tak/agentic-loop.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/room-stage-mandate.ts",
       "apps/web/lib/work-management/writeback-latch.ts"

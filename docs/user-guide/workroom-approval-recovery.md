@@ -7,6 +7,8 @@ relatedCode:
   - apps/web/lib/queue/functions/workroom-drive-stage-run.ts
   - apps/web/lib/actions/agent-task-scheduler.ts
   - apps/web/lib/tak/scheduled-task-runs.ts
+  - apps/web/lib/tak/agentic-loop.ts
+  - apps/web/lib/coworker/approved-request-run.ts
 ---
 
 # Workroom reports and approval waits
@@ -39,3 +41,11 @@ Each phase is bound to the item, Workroom, repository, base and head, protocol b
 Only settled positive Verify evidence for the exact binding can satisfy the research lane. Negative, inconclusive, blocked, expired, conflicting, or incomplete evidence remains visible and keeps readiness closed. The design author must still record the ordinary governed research receipt before implementation can proceed.
 
 This prevents repeated requests from scheduled Workroom stages. Broader handling of repeated permission denials and changes to the approval-card layout are separate work.
+
+## Ordinary coworker requests
+
+When an ordinary in-portal write needs your approval, the coworker ends that turn with the recorded waiting message. It does not run later calls from that batch or claim that the pending action completed. Earlier completed calls remain in its record.
+
+Authorizing a new platform request starts its exact saved call through the existing permission checks. The outcome distinguishes execution, refusal and a request that could not run. A repeated completion returns the recorded outcome rather than running the action twice. Approval alone still does not prove execution.
+
+If the platform cannot safely retain the exact arguments for a delayed call, it refuses before asking for approval. Existing unmarked historical requests keep their previous handling; they are not silently replayed. External connections retain their own credential checks. This repair does not grant new permissions or remove consequential approvals.

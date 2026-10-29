@@ -10,7 +10,7 @@ import {
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
   type InitiativeReadinessLane as Lane,
@@ -445,26 +445,28 @@ async function resolvePlatformReviewBinding(
   } };
 }
 
-function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
-  return async (params, userId, context): Promise<ToolResult> => {
+/** One trusted binding selection for admission and execution; caller fields never replace it. */
+async function prepareInitiativeWrite(actionKey: string, lane: Lane, params: Record<string, unknown>,
+  context?: ToolExecutionContext): Promise<{ params: Record<string, unknown>; binding: ExternalInitiativeReviewBinding | null;
+    platformReview: boolean } | { refusal: ToolResult }> {
     const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
     let binding = resolved.binding;
-    if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
-      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (binding?.workroomRef === null) return { refusal: { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." } };
     if (lane.independent && resolved.externalMcp && !resolved.validated) {
-      return { success: false, error: "initiative_review_binding_required",
-        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." };
+      return { refusal: { success: false, error: "initiative_review_binding_required",
+        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." } };
     }
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
-      if (steward && "refusal" in steward) return steward.refusal;
+      if (steward && "refusal" in steward) return steward;
       if (steward) binding = steward.binding;
     }
     // BI-AA47C672: the platform's own reviewer, dispatched with no client token.
     let platformReview = false;
     if (!binding) {
       const platform = await resolvePlatformReviewBinding(actionKey, context?.taskRunId);
-      if (platform && "refusal" in platform) return platform.refusal;
+      if (platform && "refusal" in platform) return platform;
       if (platform) { binding = platform.binding; platformReview = true; }
     }
     if (binding) {
@@ -478,6 +480,25 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
           : {}),
       };
     }
+    return { params, binding, platformReview };
+}
+
+/** Read-only admission for the ordinary evidence lane, before any owner escalation. */
+export async function preflightInitiativeEvidence(params: Record<string, unknown>, userId: string,
+  context?: ToolExecutionContext): Promise<ToolResult | null> {
+  const prepared = await prepareInitiativeWrite("record_initiative_evidence", LANES.record_initiative_evidence, params, context);
+  if ("refusal" in prepared) return prepared.refusal;
+  const { preflightEvidenceArtifact } = await import("@/lib/backlog/initiative-readiness/evidence-preflight");
+  return preflightEvidenceArtifact({ params: prepared.params, userId, context,
+    workroomRef: prepared.binding?.workroomRef ?? undefined });
+}
+
+function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
+  return async (params, userId, context): Promise<ToolResult> => {
+    const prepared = await prepareInitiativeWrite(actionKey, lane, params, context);
+    if ("refusal" in prepared) return prepared.refusal;
+    const { binding, platformReview } = prepared;
+    params = prepared.params;
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);

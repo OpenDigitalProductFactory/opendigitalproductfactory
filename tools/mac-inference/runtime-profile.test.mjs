@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { ENGINE_LOCK, sha256, enumerateFiles, fileRecord, unusedOutput, verifyPackage, vendorNoticePaths } from './package.mjs';
 import { RUNTIME_LOCK, verifyRuntimePackage, candidateEnvironment, verifyEngineQualification, stageVerifiedRuntime } from './runtime-profile.mjs';
+import * as runtimeProfile from './runtime-profile.mjs';
 import { parseRuntimeBuildOptions, findGoLicense } from './build-runtime.mjs';
 
 async function fixture(t) {
@@ -289,4 +290,81 @@ test('legacy qualified labels cannot override explicit authority-fence evidence 
   }
   f.report.leaseEvents = [{ type: 'heartbeat-lost', reason: 'lease_terminal' }];
   assert.throws(() => verifyEngineQualification(f.args()), /authority fence/);
+});
+
+function runtimeApiEvidence() {
+  const runtime = { version: RUNTIME_LOCK.packageVersion, manifestSha256: 'a'.repeat(64) };
+  const models = ['chat:v1', 'embedding:v1'].map((model, i) => ({ model,
+    digest: 'sha256:' + String(i + 1).repeat(64), modelMetadataSha256: String(i + 3).repeat(64),
+    configuration: i === 0 ? [{ model, mode: 'completion', 'context-size': 131072 }] : [] }));
+  const report = { schemaVersion: 1, status: 'runtime-api-qualified', activationAuthorized: false,
+    providerConfigurationChanged: false, runtimeFilesChanged: false, failures: [],
+    startedAt: '2026-10-26T15:00:00Z', admittedAt: '2026-10-26T15:01:00Z', finishedAt: '2026-10-26T15:05:00Z',
+    runtime: { ...runtime, device: RUNTIME_LOCK.initialQualifiedDevice }, runtimeVersion: runtime.version,
+    baselineRestored: true, candidateShutdown: { stopped: true },
+    models: models.map(({ configuration, ...row }) => row),
+    configurations: models.map(row => ({ model: row.model, digest: row.digest,
+      original: structuredClone(row.configuration), candidate: structuredClone(row.configuration) })),
+    embedding: { correct: true, dimensions: 768, modelDigest: models[1].digest },
+    results: ['docker-baseline', 'corrected-candidate'].flatMap(engine =>
+      ['arithmetic', 'tool-call-format', 'long-cold', 'long-warm'].map(kind => ({ engine, case: kind,
+        correct: true, finishReason: kind === 'tool-call-format' ? 'tool_calls' : 'stop' }))),
+  };
+  const args = () => { const reportBytes = Buffer.from(JSON.stringify(report)); return {
+    reportBytes, expectedReportSha256: sha256(reportBytes), runtime, models,
+    physicalDevice: RUNTIME_LOCK.initialQualifiedDevice, nowMs: Date.parse('2026-10-28T15:05:00Z') };
+  };
+  return { runtime, models, report, args, verify: () => runtimeProfile.verifyRuntimeQualification(args()) };
+}
+
+test('runtime API reuse binds current package, models and settings without granting activation', () => {
+  const f = runtimeApiEvidence(); const result = f.verify();
+  assert.equal(result.runtimeEvidenceReusable, true); assert.equal(result.activationAuthorized, false);
+  assert.equal(result.platformWorkflowIntegration, 'unrun'); assert.equal(result.releaseVerified, false);
+  const args = f.args(); args.expectedReportSha256 = '0'.repeat(64);
+  assert.throws(() => runtimeProfile.verifyRuntimeQualification(args), /report identity/);
+});
+test('runtime API reuse rejects changed device, runtime and model metadata or configuration', () => {
+  for (const mutate of [
+    f => { f.runtime.manifestSha256 = 'f'.repeat(64); },
+    f => { f.report.runtime.device = 'Apple M4 Max'; },
+    f => { f.report.runtime.version = 'other-runner'; },
+    f => { f.models[0].digest = 'sha256:' + '9'.repeat(64); },
+    f => { f.models[0].modelMetadataSha256 = '9'.repeat(64); },
+    f => { f.models[0].configuration[0]['context-size'] = 65536; },
+    f => { f.report.configurations[0].candidate[0]['context-size'] = 65536; },
+  ]) { const f = runtimeApiEvidence(); mutate(f); assert.throws(f.verify, /changed|qualified|binding/); }
+});
+test('runtime API reuse refuses fenced, incomplete and un-restored reports despite qualified labels', () => {
+  for (const mutate of [
+    f => { f.report.authorityFenced = true; },
+    f => { f.report.backendEffectSettlement = 'unknown'; },
+    f => { f.report.leaseEvents = [{ type: 'heartbeat-lost' }]; },
+    f => { f.report.failures.push('cleanup failed'); },
+    f => { f.report.obstacles = ['unsettled effect']; },
+    f => { f.report.candidateShutdown.stopped = false; },
+    f => { f.report.baselineRestored = false; },
+    f => { f.report.activationAuthorized = true; },
+  ]) { const f = runtimeApiEvidence(); mutate(f); assert.throws(f.verify, /fence|Incomplete|self-authorize/); }
+});
+test('runtime API reuse requires the exact completion, tool, prefix and embedding controls', () => {
+  for (const mutate of [
+    f => { f.report.results.pop(); },
+    f => { f.report.results[0] = f.report.results[1]; },
+    f => { f.report.results[0].finishReason = 'length'; },
+    f => { f.report.embedding.modelDigest = f.models[0].digest; },
+    f => { f.report.embedding.dimensions = 384; },
+    f => { f.report.models.push(f.report.models[0]); },
+    f => { f.report.configurations.pop(); },
+  ]) { const f = runtimeApiEvidence(); mutate(f); assert.throws(f.verify, /controls|binding/); }
+});
+test('runtime API reuse honors explicit freshness bounds without expiring unchanged evidence or inventing release', () => {
+  const f = runtimeApiEvidence(); f.report.leaseEvents = [{ type: 'released' }];
+  assert.equal(f.verify().releaseVerified, false);
+  f.report.finishedAt = '2026-10-29T15:05:00Z'; assert.throws(f.verify, /chronology|expired/);
+  f.report.finishedAt = '2026-10-26T15:05:00Z';
+  const args = f.args(); args.nowMs = Date.parse('2026-11-04T15:05:00Z');
+  assert.equal(runtimeProfile.verifyRuntimeQualification(args).runtimeEvidenceReusable, true);
+  args.qualifiedAfterMs = Date.parse('2026-10-27T15:05:00Z');
+  assert.throws(() => runtimeProfile.verifyRuntimeQualification(args), /predates/);
 });

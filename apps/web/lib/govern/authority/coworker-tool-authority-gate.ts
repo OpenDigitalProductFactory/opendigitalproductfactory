@@ -13,6 +13,7 @@ import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import {
   buildCoworkerApprovalBinding,
   evaluateCoworkerAuthority,
+  fingerprintCoworkerInput,
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
 } from "./coworker-authority-decision";
@@ -20,6 +21,9 @@ import { escalationReasonSentence } from "./escalation-gate";
 import type { ApprovalClassification } from "@/lib/coworker/approval-lifetime";
 import { isBoundReviewTask } from "@/lib/shared/task-execution-fence";
 import { reserveTaskRunGenerationWorking } from "@/lib/observability/heartbeat";
+import { deriveToolAuditClass, retainedGovernedToolParameters } from "@/lib/governed-tool-audit-parameters";
+import { originalToolParameters } from "@/lib/attention/coworker-envelope-decision";
+import { toolTakesSecretInput } from "@/lib/proactivity/propose-interception";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -512,6 +516,20 @@ export async function enforceCoworkerToolAuthority(
       };
     }
   }
+  if (decision.outcome === "require-approval") {
+    // An already settled exact call remains its recorded outcome. A new
+    // platform request must survive the same audit round trip as its runner.
+    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
+    if (settled) return { outcome: "settled", ...settled };
+    if (execution.context?.approvalCompletion === "platform") {
+      const retained = retainedGovernedToolParameters({ tool, rawParams: execution.rawParams }, deriveToolAuditClass(tool));
+      if (toolTakesSecretInput(tool) || retained === null
+        || fingerprintCoworkerInput(originalToolParameters(retained) ?? {}, input.authorResearchBinding) !== decision.approvalBinding.inputFingerprint) {
+        decision = { outcome: "deny", reasonCode: "approval-binding-mismatch", nextAction: "request-authority",
+          explanation: "This call cannot preserve its exact arguments for delayed approval. No approval request was created; the owner must use an authorized direct action." };
+      }
+    }
+  }
   const decisionId = projectedDecisionId ?? await writeAuthorizationDecision(
     input,
     decision,
@@ -535,9 +553,6 @@ export async function enforceCoworkerToolAuthority(
   }
 
   if (decision.outcome === "require-approval") {
-    // A lookup failure only loses the shortcut; it falls back to asking.
-    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
-    if (settled) return { outcome: "settled", ...settled };
     if (execution.context?.allowApprovalRequest === false) return {
       outcome: "reject", rejection: "authority_denied",
       message: "Scheduled stage authority was withheld. No new approval request was created; reconcile the dispatch or use its existing exact authorization.",

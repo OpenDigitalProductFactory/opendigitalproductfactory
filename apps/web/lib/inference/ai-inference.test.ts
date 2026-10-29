@@ -9,10 +9,12 @@ vi.mock("@/lib/routing/local-provider-capacity", () => ({
   assertProviderDispatchCapacity: vi.fn(),
 }));
 
-const { executeAdapter, withLocalInferenceLockMock } = vi.hoisted(() => ({
+const { executeAdapter, withLocalInferenceLockMock, managedSelection } = vi.hoisted(() => ({
   executeAdapter: vi.fn(),
   withLocalInferenceLockMock: vi.fn(),
+  managedSelection: { endpoint: null as string | null },
 }));
+vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: () => managedSelection.endpoint }));
 vi.mock("../routing/execution-adapter-registry", async (importOriginal) => ({
   ...await importOriginal<typeof import("../routing/execution-adapter-registry")>(),
   getExecutionAdapter: () => ({ execute: executeAdapter }),
@@ -37,6 +39,7 @@ import { prisma } from "@dpf/db";
 import { acquireInferenceSlot, withInferenceCancellation } from "./inference-admission";
 
 beforeEach(() => {
+  managedSelection.endpoint = null;
   vi.mocked(assertProviderDispatchCapacity).mockReset();
   vi.mocked(assertProviderDispatchCapacity).mockResolvedValue(undefined);
   vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active" } as any);
@@ -126,6 +129,12 @@ describe("InferenceError", () => {
 });
 
 describe("callProvider host-capacity boundary", () => {
+  it("dispatches actual local chat/tools through the same committed selection as embeddings and management", async () => {
+    managedSelection.endpoint = "http://host.docker.internal:12436/v1";
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://model-runner.docker.internal/v1", authMethod: "none" } as any);
+    await callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system");
+    expect(executeAdapter.mock.calls[0]?.[0].provider.baseUrl).toBe(managedSelection.endpoint);
+  });
   it.each(["active", "degraded"])("dispatches an eligible %s local provider through the shared local lane", async (status) => {
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "http://localhost:11434/v1", authMethod: "none" } as any);
     vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status } as any);
