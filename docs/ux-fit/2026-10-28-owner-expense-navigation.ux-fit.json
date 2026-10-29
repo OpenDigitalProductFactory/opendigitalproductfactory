@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/spend/page.tsx",
+      "apps/web/app/(shell)/finance/expense-claims/page.tsx",
+      "apps/web/app/(shell)/finance/my-expenses/new/page.tsx"
+    ]
+  },
+  "decidedOption": "reuse-own-entry",
+  "decisionInteractionId": "DI-B8111BEF6227",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["reuse-own-entry", "unified-review-entry"]
+  },
+  "authority": "The operator explicitly requested reusing the supported expense-entry workflow and preserving claimant/approver separation. MCDA ranks reuse but is low-confidence advisory, not approval. Source implementation was admitted by IRD-598199879943.",
+  "limitations": "Served original empty/form navigation verified; delivered UX and saved fixtures remain unrun. Advisory critique CE-EB8821DD was requested but its fulfillment was refused at grant intersection. No grant was widened."
+}
