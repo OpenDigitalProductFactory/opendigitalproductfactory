@@ -38,10 +38,9 @@ import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-r
 import { resolveDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
 import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
-import {
-  isCoworkerSelfTaskId,
-  coworkerSelfTaskRequiredTool,
-} from "@/lib/operate/scheduled-jobs/coworker-self-tasks";
+import { getRequiredProceduralToolForScheduledTask } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
+import { assertScheduledReportingEligible, readScheduledReportingMode, scheduledReportingScopeDigest, scheduledReportingPrompt } from "@/lib/operate/scheduled-jobs/scheduled-reporting-contract";
+import { settleScheduledReportingRun, failScheduledReportingRun, runScheduledReportingLoop, type ScheduledReportingRunInput } from "@/lib/operate/scheduled-jobs/scheduled-reporting-run";
 import {
   PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
 } from "@/lib/product-management/product-intelligence-watch-contract";
@@ -52,7 +51,7 @@ import {
 import { ACCEPTANCE_SWEEP_TASK_KIND, BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
 import { runDeterministicScheduledTaskKind } from "./agent-task-scheduler-deterministic";
-import { claimScheduledTaskCadence } from "./agent-task-claim";
+import { claimScheduledTaskCadence, withCurrentScheduledTask } from "./agent-task-claim";
 import { holdWorkroomQueueAfterFailure } from "@/lib/work-capsules/workroom-queue-hold";
 import {
   completeProductManagementPlaybookRun,
@@ -66,39 +65,6 @@ import {
 // fields, so the Calendar "Monthly"/"Once" presets fired daily. The extracted
 // module honors all five cron fields and is unit-tested outside this
 // "use server" file.
-
-type RequiredProceduralTool = {
-  name: string;
-  args: Record<string, unknown>;
-  /**
-   * Optional recency guard for artifact tools with no write-time dedup. When it
-   * resolves true, the forced fallback is skipped so a placeholder is not
-   * duplicated on every tick. See CoworkerSelfTaskProceduralTool.
-   */
-  hasRecentArtifact?: () => Promise<boolean>;
-};
-
-function getRequiredProceduralToolForScheduledTask(
-  taskId: string,
-  agentId: string,
-): RequiredProceduralTool | null {
-  if (taskId === "discovery-taxonomy-gap-triage-daily") {
-    return {
-      name: "run_discovery_triage",
-      args: { trigger: "cadence" },
-    };
-  }
-
-  // Coworker self-tasks (Proactivity → autonomous, BI-3F09BDD4) get their own
-  // required-tool guarantee, keyed by the coworker's agentId. Unlike the
-  // deterministic discovery-triage tool, the marketing artifact tool has no
-  // dedup, so the returned descriptor carries a recency guard the caller honors.
-  if (isCoworkerSelfTaskId(taskId)) {
-    return coworkerSelfTaskRequiredTool(agentId);
-  }
-
-  return null;
-}
 
 // ─── Public actions ─────────────────────────────────────────────────────────
 
@@ -164,6 +130,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     where: { taskId },
   });
   if (!task || !task.isActive) return;
+  const reportingMode = readScheduledReportingMode(task.taskConfig);
+  if (reportingMode) assertScheduledReportingEligible(task, task.ownerUserId, false);
+  const scheduledReporting = reportingMode ? { mode: reportingMode, scopeDigest: scheduledReportingScopeDigest(task), nextRunAt: null as string | null } : undefined;
 
   // Acceptance owns a task-row lease and preserves upgrade wakeups while it
   // runs. The generic cadence claim below must not consume its due time first.
@@ -172,7 +141,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     return;
   }
 
-  if (!await claimScheduledTaskCadence(prisma, task)) return;
+  const claimedTask = { ...task };
+  if (!await claimScheduledTaskCadence(prisma, claimedTask)) return;
+  if (scheduledReporting) scheduledReporting.nextRunAt = claimedTask.nextRunAt?.toISOString() ?? null;
 
   // Phase 7 product-intelligence watches are deterministic proposal producers.
   // A cadence tick creates (or deduplicates to) a PENDING ResearchProposal and
@@ -364,6 +335,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
   const now = new Date();
   let taskRunRef: ScheduledTaskRunRef | null = null;
+  let reportingRun: ScheduledReportingRunInput | null = null;
   let preparedPlaybook: Awaited<
     ReturnType<typeof prepareProductManagementPlaybookRun>
   > | null = null;
@@ -387,7 +359,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         return await recordUnchangedScheduledRun(task, now);
       }
     }
-    const executionPrompt = preparedPlaybook?.prompt ?? task.prompt;
+    const executionPrompt = reportingMode ? scheduledReportingPrompt(task.prompt, task.taskConfig) : preparedPlaybook?.prompt ?? task.prompt;
 
     // Get or create a dedicated thread for this scheduled task
     const contextKey = `scheduled:${taskId}`;
@@ -440,8 +412,15 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskConfig: task.taskConfig,
       proactivity,
       delegatedPosture,
+      scheduledReporting,
     });
-    await prisma.scheduledAgentTask.update({ where: { taskId }, data: { taskRunId: taskRunRef.taskRunId } });
+    const newRunId = taskRunRef.taskRunId;
+    if (!await withCurrentScheduledTask(prisma, claimedTask, task.taskRunId ?? null, async tx => {
+      await tx.scheduledAgentTask.update({ where: { taskId }, data: { taskRunId: newRunId } });
+      return true;
+    })) return;
+    if (scheduledReporting) reportingRun = { taskId, userId: task.ownerUserId, taskRunId: taskRunRef.taskRunId,
+      threadId: thread.id, agentId: task.agentId, scopeDigest: scheduledReporting.scopeDigest, content: "", admittedTools: [] };
 
     await createTaskMessage({
       taskRunId: taskRunRef.taskRunId,
@@ -492,6 +471,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // budget rather than left to runtime discovery (BI-4A394B21).
     const toolArgs = {
       userContext,
+      ...(reportingMode ? { scheduledReportingMode: reportingMode, taskRunId: taskRunRef.taskRunId, threadId: thread.id } : {}),
       mode: (boundary === "advise" || roomTurn?.actionBoundary === "advise" ? "advise" : "act") as "advise" | "act",
       agentId: task.agentId,
       externalAccessEnabled: externalAccess.enabled && (roomTurn?.externalAccess.enabled ?? true),
@@ -537,6 +517,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     );
 
     const loopInput = {
+      ...(reportingMode ? { scheduledReportingMode: reportingMode } : {}),
       systemPrompt: agentInfo.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       chatHistory,
@@ -553,7 +534,14 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       ...(roomTurn ? { roomTurn } : {}),
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
     };
-    let result = await executeAutonomousAgenticLoop(loopInput);
+    let result = reportingRun
+      ? await runScheduledReportingLoop([...tools, ...deferredTools], () => executeAutonomousAgenticLoop(loopInput))
+      : await executeAutonomousAgenticLoop(loopInput);
+    if (reportingRun) {
+      reportingRun = { ...reportingRun, content: result.content ?? "", admittedTools: [...tools, ...deferredTools], failure: result.failure };
+      await settleScheduledReportingRun(reportingRun);
+      return;
+    }
     // BI-62DB6C03: one correction turn when the writer was handed over and not called.
     const attachedToolNames = tools.map((tool) => tool.name);
     const correction = scheduledRequiredToolCorrection({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], attachedToolNames, executedTools: result.executedTools ?? [] });
@@ -634,7 +622,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         ? "partial"
         : "completed";
 
-    // Persist agent response
+    const completedRef = taskRunRef;
+    await withCurrentScheduledTask(prisma, claimedTask, completedRef.taskRunId, async prisma => {
+    // Persist agent response and all settlement projections under the current-run fence.
     await prisma.agentMessage.create({
       data: {
         threadId: thread.id,
@@ -646,9 +636,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     });
 
     await createTaskMessage({
-      taskRunId: taskRunRef.taskRunId,
-      taskRunRecordId: taskRunRef.id,
-      contextId: taskRunRef.contextId,
+      taskRunId: completedRef.taskRunId,
+      taskRunRecordId: completedRef.id,
+      contextId: completedRef.contextId,
       role: "agent",
       content: taskMessageContent,
       metadata: {
@@ -680,7 +670,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         lastThreadId: thread.id,
-        taskRunId: taskRunRef.taskRunId,
+        taskRunId: completedRef.taskRunId,
         nextRunAt,
         // BI-754C9E82: success closes the retry cycle.
         attempts: 0,
@@ -701,7 +691,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     });
 
     await prisma.taskRun.update({
-      where: { id: taskRunRef.id },
+      where: { id: completedRef.id },
       data: {
         status: "completed",
         completedAt: new Date(),
@@ -725,7 +715,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    await prisma.scheduledJob.update({
+    await prisma.scheduledJob.updateMany({
       where: { jobId: taskId },
       data: {
         lastRunAt: now,
@@ -733,16 +723,27 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         lastError: null,
         nextRunAt,
       },
-    }).catch(() => {});
-
+    });
+    }, true);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "unknown error";
+    if (reportingMode) {
+      if (reportingRun) await failScheduledReportingRun(reportingRun, errMsg).catch(() => undefined);
+      else await withCurrentScheduledTask(prisma, claimedTask, task.taskRunId ?? null, async tx => {
+        const nextRunAt = computeNextCronRun(task.schedule, now);
+        const summary = "The scheduled observation could not start. Review this run before continuing.";
+        await tx.scheduledAgentTask.update({ where: { taskId }, data: { lastRunAt: now, lastStatus: "error", lastError: summary, nextRunAt, attempts: 0 } });
+        await tx.scheduledJob.updateMany({ where: { jobId: taskId }, data: { lastRunAt: now, lastStatus: "error", lastError: summary, nextRunAt } });
+      }).catch(() => undefined);
+      return;
+    }
     // CodeQL #39 (js/tainted-format-string): taskId via format-arg.
     console.error("[agent-task-scheduler] Task %s failed: %s",
       JSON.stringify(taskId),
       JSON.stringify(errMsg));
 
     const ref = taskRunRef;
+    const failureSettled = await withCurrentScheduledTask(prisma, claimedTask, ref?.taskRunId ?? task.taskRunId ?? null, async prisma => {
     if (ref) {
       await prisma.taskRun.update({
         where: { id: ref.id },
@@ -797,11 +798,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    await prisma.scheduledJob.update({
+    await prisma.scheduledJob.updateMany({
       where: { jobId: taskId },
       data: { lastRunAt: now, lastStatus: "error", lastError: errMsg, nextRunAt },
-    }).catch(() => {});
+    });
+    return true;
+    }, Boolean(ref));
     // BI-2B6A8A74: a room's stage that no provider could answer holds the room's queue.
-    await holdWorkroomQueueAfterFailure({ taskId, ownerUserId: task.ownerUserId, taskConfig: task.taskConfig, error: errMsg, now }).catch(() => null);
+    if (failureSettled) await holdWorkroomQueueAfterFailure({ taskId, ownerUserId: task.ownerUserId, taskConfig: task.taskConfig, error: errMsg, now }).catch(() => null);
   }
 }

@@ -14,6 +14,7 @@ vi.mock("@dpf/db", () => ({
 
 import { createCommunicationDispatcher } from "./dispatcher";
 import { createInAppAdapter } from "./in-app-adapter";
+import { recordDeliveryAttempt } from "./delivery-evidence";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -22,6 +23,21 @@ beforeEach(() => {
 });
 
 describe("communication dispatcher", () => {
+  it("uses the supplied transaction for both the owner notification and linked delivery evidence", async () => {
+    const notification = { create: vi.fn().mockResolvedValue({ id: "transaction-notice" }) };
+    const communicationDeliveryAttempt = { create: vi.fn().mockResolvedValue({ attemptId: "transaction-delivery" }) };
+    const tx = { notification, communicationDeliveryAttempt };
+    const dispatcher = createCommunicationDispatcher([createInAppAdapter(tx)], {
+      recordDelivery: input => recordDeliveryAttempt(input, tx),
+    });
+    const result = await dispatcher.send({ channel: "in-app", target: { targetType: "agent-thread", targetId: "TR-WATCH", recipientUserId: "owner" },
+      title: "Observation needs attention", body: "A measured condition changed.", urgency: "routine" });
+    expect(result).toMatchObject({ status: "sent", providerMessageId: "transaction-notice" });
+    expect(notification.create).toHaveBeenCalledOnce();
+    expect(communicationDeliveryAttempt.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ providerMessageId: "transaction-notice", targetId: "TR-WATCH" }) }));
+    expect(mocks.notificationCreate).not.toHaveBeenCalled();
+    expect(mocks.deliveryAttemptCreate).not.toHaveBeenCalled();
+  });
   it("dispatches through the in-app adapter and returns a sent result", async () => {
     const dispatcher = createCommunicationDispatcher([createInAppAdapter()]);
 
