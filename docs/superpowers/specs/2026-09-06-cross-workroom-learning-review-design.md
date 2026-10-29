@@ -2,7 +2,7 @@
 status: draft
 date: 2026-09-06
 backlog_item: BI-IMP-9DA35549
-workroom: WC-4CF7C38C
+workroom: WC-C285A230
 decision_scope: wwmd
 ---
 
@@ -522,11 +522,193 @@ backlog items. Preserve their evidence and reconcile current activity before any
 
 ## 13. Readiness and next action
 
-This draft is submitted for independent scope review, not implementation. A declaration that
-scope review is pending describes the current gate; it cannot substitute for a reviewer finding
-about the artifact's content. The next executor should
-read this exact artifact and its linked baseline, confirm current backlog ownership, review the
-common/profile contract and persistence choices, then decompose delivery under BI-IMP-9DA35549.
-No operator decision is needed merely to repeat already-authorized read-only analysis.
-Schedule activation, principal appointment and consequential publication use their own existing
-authority contracts when the implementation is ready.
+This draft remains subject to independent scope review. Its four objectives and twelve
+acceptance statements in section 12 remain unchanged. The continuation below reconciles
+delivery evidence and the next work; it supplies no independent approval, replacement
+baseline, implementation admission or historical task settlement.
+
+**Continuation checkpoint, 2026-10-28.** The parent BI-IMP-9DA35549 is awaiting
+acceptance. AC-01 is the only full acceptance case established by the retained evidence;
+AC-02 through AC-12 and all four objectives remain incomplete. Backlog delivery closure
+and this initiative's operational proof are separate facts. Closing a non-contractual
+delivery item does not prove the observations required by section 12.
+
+The registered-definition traversal for AC-01 is recorded by
+RV-WORKROOM-CATALOGUE-AC01-RECOVERY135-20261025: 20 canonical definitions, four complete
+pages, a final null cursor and one alias deduplicated. Its population digest is
+`6a153d2fcb6defbff5ffdacfae0bf3ed7aeecf67e0641e1131f642141deff877`.
+This establishes definition coverage only; occurrence performance and organization
+applicability were not exercised. Preserve this proof without rerunning it to inflate
+coverage. Later source tests, deployments and bounded UX checks retain their own scope.
+
+**Delivery history and current authority.** BI-11458908 is done. Its earlier definition
+catalogue was delivered through PR 6579; the later occurrence-context work remains
+unpublished. The Workroom Overseer archived WC-D8C2180C and released its 14 scope items
+on 2026-10-28. Parent room WC-D3C188F5 and the earlier WC-4CF7C38C are also archived.
+Their source, receipts, failures and original review identities remain historical
+evidence. A later note or lease timestamp does not reopen a terminal room.
+
+The normal design claim for the existing parent created WC-C285A230 on
+`doc/workroom-acceptance-continuation`, from published main
+`1875e443e5ea2bdd3b35dcbe37c2a47d8be7883b`. Decision IRD-53073796159F allowed
+design with Large/low classification and no unmet requirements. Its single document
+scope is this spec. This binding replaces the editing location, not the prior baseline
+or another executor's authority. The new room's unresolved funding projection supplies
+no additional spending authority.
+
+**Retained occurrence-context increment.** The preserved source is
+`4333fad810440277626cec79913954b1c94d939c`, tree
+`d631d6b7d09cfd71158097f0c39d21d4f0c9e9b0`, on
+`fix/workroom-profile-integration`. Its published branch remains
+`eca480f7b87f7bf3ccc8202aca1d9c9e1c71c020`; no open PR contains the later work.
+The retained three-dot delta is 13 files, 638 additions and 5 deletions, from
+`dadeb04727b42114a2c043be36436530096cd90e`. It was not imported into the new
+design branch.
+
+That increment obtains booking organization, storefront, archetype and composition
+facts only after current canonical content admission for the exact selected Workroom.
+Private handoff recovery reuses the decision only for the same selected row. The
+existing workforce authority also applies. Missing, denied, thrown or absent-room
+admission withholds the lookup. Conflicting or incomplete source facts remain unknown;
+inactive and removed entries are excluded.
+
+These are inputs to profile resolution. They do not establish active declaration
+applicability or compose governed facet, category, leaf and organization obligations.
+Full AC-02 still requires the deterministic composition, explicit conflict/removal
+handling and historical profile provenance described in section 5, followed by admitted
+installed verification. The source authorization cases contribute to AC-11, and the
+existing localized Details disclosure contributes to AC-09; neither completes those
+cases. The disclosure must continue to distinguish unknown applicability and
+not-exercised assessment, without adding a passed-review label.
+
+The retained source has 454 affected tests across 28 files and both TypeScript checks
+passing. Its isolated Windows cancellation contract has 12 passing cases and one
+failure. The failure occurred while replacing the admitted state with RUNNING, before
+the child-ready marker and before cancellation was requested. No canonical gate
+evidence was acquired for this source. The underlying EPERM cause and any connection
+to the older readiness failure remain unproved.
+
+BI-B3DEC077 owns the proposed controlled destination-handle diagnostic with the existing
+Windows owner. Its design is published, but its experiment remains unrun: a truthful
+research failure leaves implementation denied. BI-2664971A owns the separately routed
+qualification-research admission repair, according to the coordinator's native binding
+readback. Neither policy work nor a controlled diagnostic result would by itself prove
+the original failure's cause or authorize a blind fixture retry.
+
+**Incremental coverage and integration.** The
+[existing delivery plan](../plans/2026-09-12-cross-workroom-learning-delivery-plan.md)
+retains the original child mappings. A bounded live coverage read found 15 open items,
+no in-progress items, six awaiting acceptance and seven triaging in EP-C00F61F4.
+All open work-type partitions were complete. Adjacent BI-80BECE1E covers definition
+identity and occurrence tracing; BI-4B208A34 covers selected target/preview verification.
+Neither inspected body covers this exact unpublished occurrence-context increment.
+This is a scoped overlap result, not proof that the entire backlog is empty.
+
+Reconcile an existing open delivery owner before filing any corrective increment. If
+no exact coverage exists, capture one narrow follow-up under the existing epic with
+its proportional canonical design and actual admission. Preserve the completed child's
+history; do not rebind its occupied branch, reopen its terminal room or borrow its old
+implementation claim. The parent remains the home of the full objectives and criteria.
+
+Integration must preserve current-main safeguards. The comparison against published
+main `a6137100ce4aa783cfcc5896773d2d0bb284ba19` found nine additions in three
+overlapping paths: the gateGoverned/executor projection and localized load-trend label.
+A whole-file replacement from the retained branch would lose those changes. Reconcile
+the current base again when actual delivery admission exists. Reuse canonical identity,
+admission, profile composition and disclosure, retaining section 12's refactoring share.
+
+**Captured source-facts increment: BI-D02868D7.** This Medium platform feature is
+triaging under EP-C00F61F4. It succeeds only the unpublished occurrence-context scope,
+not the completed definition catalogue. The parent keeps its four objectives and
+twelve full acceptance cases; no old baseline or implementation claim is inherited.
+
+The chosen design extends the existing selected-room loader and localized Details
+disclosure. A second registry or policy composer would duplicate authority and is
+rejected. Treating booking facts as applicable obligations is also rejected: source
+facts are inputs, while governed composition remains separate work. No schema
+migration is proposed. Actual source impact and compatibility must be rechecked
+under a fresh admitted delivery binding before implementation.
+
+The increment has five observable acceptance checks:
+
+- I1: Missing, denied, thrown or absent exact-room content admission performs no
+  subject lookup, including private recovery. A reused admission decision is valid
+  only for the same selected row; existing workforce source authority still applies.
+- I2: Admitted lookup resolves only the selected booking's organization, storefront,
+  archetype and composition facts. One relation read takes 33 to detect a 32-entry
+  ceiling; provenance is bounded to 128 KiB. Conflicts, incomplete, denied or
+  unavailable facts remain unknown; removed and inactive entries are excluded.
+- I3: Existing localized Details shows attributable source facts, applicability
+  unknown and assessment not-exercised. It adds no controls, passed-review label or
+  review-cycle write. Verify changed rendered behavior, keyboard access and themes
+  on the containing installed revision under actual admission.
+- I4: A fresh normally admitted delivery binding reconciles current main and
+  preserves its gateGoverned/executor projection and load-trend localization.
+  Retained source is evidence, not an import instruction or scope claim. Exact
+  changed-tree checks, protected publication and installed observations retain
+  separate attribution.
+- I5: Completed-child history and parent section 12 criteria remain unchanged.
+  Source-fact evidence contributes to AC-02, AC-09 and AC-11 without claiming their
+  full completion. Governed facet/category/leaf/organization obligations,
+  historical profile composition and the full forbidden-action matrix stay outside
+  this increment.
+
+BI-B3DEC077 and its supported failure disposition remain delivery prerequisites;
+BI-2664971A owns the separate qualification-admission repair. Neither a policy
+change nor a controlled sensitivity result proves the original EPERM cause.
+Current research, design, plan coverage, exact scope and implementation admission
+remain required. No new review may replace or settle an original held execution.
+Documentation readiness is a separate publication step and does not prevent
+admitted source/criteria/overlap planning.
+
+Creation suggestions BI-C020360A, BI-756C899D and BI-4A06271B were read: they concern
+stakeholder-coverage invalidation, effective progress clocks and execution
+continuation briefs respectively. Their existing owners retain those mechanisms;
+none of the inspected bodies supplies this exact occurrence source-facts outcome.
+
+
+### Research & Benchmarking for BI-D02868D7
+
+Primary sources inspected on 2026-10-29 UTC. These are architectural comparisons, not claims that external products have been installed or tested.
+
+| Comparator | Observed model | Adopt for this increment | Reject or leave outside scope |
+| --- | --- | --- | --- |
+| [Backstage entity descriptor](https://backstage.io/docs/features/software-catalog/descriptor-format/) — open source | Entity envelope separates metadata/spec from processor-produced relations. Relations use typed canonical target references. The documentation explicitly separates display ownership from runtime authorization. | Resolve the canonical source and relationships rather than treating a display label as authority. Keep displayed facts distinct from the selected-room permission decision. | A second catalog, importing descriptor ownership as access permission, or copying its entity schema into DPF. |
+| [OpenMetadata table JSON schema](https://github.com/open-metadata/OpenMetadata/blob/main/openmetadata-spec/src/main/resources/json/schema/entity/data/table.json) — open source | Structured fields include qualified entity names, typed references and explicit optional profiles; nested columns have a declared schema. | Use explicit identities and typed bounded facts, with absence represented rather than guessed. | Broad lineage ingestion, editable metadata catalogs and an extra profile store. A table schema is a comparison, not a complete DPF authorization design. |
+| [Atlassian Assets attributes](https://support.atlassian.com/assets/docs/what-are-attributes/) — commercial | Attributes distinguish system names and display names and support object references; object keys identify individual objects. | Keep readable labels alongside attributable source identity within Details. | Letting free-text labels substitute for exact booking identity, or expanding to schema/object editing controls. |
+| [ServiceNow Identification and Reconciliation API](https://www.servicenow.com/docs/r/api-reference/rest-apis/c_IdentifyReconcileAPI.html) — commercial | Central reconciliation identifies configuration items and restricts updates to authorized data sources; source-native keys identify contributed records. | Preserve source identity and treat conflicting source facts explicitly. Reuse the existing owning authority. | Building an ingestion/reconciliation engine or silently selecting precedence to manufacture applicability. This increment is read-only. |
+
+[W3C PROV-DM](https://www.w3.org/TR/prov-dm/) distinguishes entities, activities, agents and derivation. Its derivation discussion cautions that usage plus generation alone does not establish derivation. Apply that distinction to evidence: reading a booking establishes source attribution, not a reviewed outcome. This is conceptual alignment; no PROV serialization or conformance claim is made.
+
+This increment concerns authorized catalog facts and disclosure, not a new delivery lifecycle or agent process. BMAD is therefore not the nearest comparator for this narrow addition; the existing parent lifecycle design remains authoritative.
+
+This comparison supplies author research for the source-facts increment only. It
+does not approve the parent scope, satisfy independent review, settle the Windows
+failure, or attest installed acceptance. The actual child delivery binding must
+resolve its own shape, research receipt and plan coverage before implementation.
+
+**Increment delivery binding (2026-10-29).** BI-D02868D7 now has its own
+Workroom WC-C1C68EDD on feat/workroom-occurrence-source-facts, based on
+4718cd4f1c5418ab2eba819dd47d5cb839f8eca0. Native DESIGN admission
+IRD-DF457A39A3CD derives Medium/low. This supersedes the earlier unbound
+projection only. The parent retains its history and independent approval
+obligations; this child inherits no baseline. Its own item-body criteria I1-I5
+remain authoritative for proportional delivery. Research recording, plan
+coverage and actual implementation admission remain due. The parent released
+this document's edit scope after publishing its research; the child acquired
+the scope normally, with no forced overlap.
+
+**Next ordinary steps.** Preserve this source reconciliation, obtain the actual
+immutable design identity, and follow the current governed design/coverage obligations.
+Do not request a replacement for any unsettled original review or infer its settlement
+from a new Workroom. Resolve the diagnostic's admitted route through its existing
+owners. Only an admitted delivery increment may integrate source and run the justified
+verification sequence; protected publication and qualified installation then precede
+the remaining operational acceptance exercises.
+
+The owner-facing next-action view should show the responsible owner, the specific
+missing evidence and the next supported action. Keep definition coverage, source tests,
+deployment and full operational acceptance visibly distinct. Use the existing
+Overview/Details hierarchy, shared disclosure and keyboard/theme behavior; technical
+identities belong in Details. Unchanged waits remain quiet, while an actual failure,
+new required decision or verified outcome updates the existing view.
