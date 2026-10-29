@@ -104,3 +104,5 @@ These steps jointly deliver one status visibility contract. Hourly recovery, con
 - AC-3: Active install-owned ChatGPT/Codex quota holds get bounded hourly inference rechecks before distant reset; completed inference clears only unchanged proven quota ownership.
 - AC-4: Manual pause/disable/disconnect and hard auth/billing holds survive quota revalidation; concurrent changes prevent stale success writes.
 - AC-5: Affected tests/typecheck and governed served UI evidence cover failure, recovery, themes, mobile and keyboard before done.
+
+Current atomic status coverage receipt: cmvssicjk0l4001my9kaf4hel, bound to published b0bf19165486ec0a5f61e5d6c11e261eddb2300f / cbe4f708b6a808179a467099f7c6d188d06fb7bb. Author research: initiative-62e6ca23-f250-41e1-9bc3-1540028c5723. These receipts authorize the described implementation slice, not specialist approval, served verification or delivery of the other parent criteria.
