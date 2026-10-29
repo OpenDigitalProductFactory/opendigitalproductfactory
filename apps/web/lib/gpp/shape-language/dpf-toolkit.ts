@@ -52,6 +52,9 @@ export async function compileShapeDocument(text: string, sources: GppResolveSour
     && !/^apps\/web\/lib\/work-management\/declared-flows\/[a-z0-9-]+\.gpp\.json$/.test(options.sourcePath)) {
     throw new Error("Known findings and sandbox stages are restricted to declared-flows source documents.");
   }
+  const { knownFindings, ...portableOptions } = options;
+  // Validate the trusted sidecar even when parsing or required host facts later hold.
+  if (knownFindings !== undefined) applyKnownFindings([], knownFindings);
   // Profession membership belongs to DPF, while the portable schema owns
   // structural validation. Never emit a shape naming an unknown host craft.
   const parsed = parseShapeDocument(text);
@@ -63,9 +66,6 @@ export async function compileShapeDocument(text: string, sources: GppResolveSour
           path: `/stages/${index}/requiredProfessions`, message: "Use registered specialist professions." }]
       : []);
   if (professionDiagnostics.length > 0) return { accepted: false, diagnostics: professionDiagnostics };
-  const { knownFindings, ...portableOptions } = options;
-  // Validate the trusted sidecar even when parsing or required host facts later hold.
-  if (knownFindings !== undefined) applyKnownFindings([], knownFindings);
   let staleKnownFindings: KnownFinding[] = [];
   const result = await compilePortable(text, sources, { ...portableOptions, policy: DPF_DESIGN_RULE_POLICY,
     ratification: options.ratification ?? GATE_RATIFICATION, typeImport: GENERATED_SHAPE_TYPE_IMPORT, checkInstruction: CHECK_INSTRUCTION,

@@ -139,6 +139,12 @@ describe("declared stage review criticality", () => {
     expect(result).toMatchObject({ accepted: false, diagnostics: [{ code: "SCHEMA/custom", path: "/stages/0/requiredProfessions" }] });
     expect(result).not.toHaveProperty("module");
   });
+  it("validates trusted sidecars before returning a document parse refusal", async () => {
+    await expect(compileShapeDocument("{", {} as never, {
+      sourcePath: "apps/web/lib/work-management/declared-flows/test.gpp.json",
+      knownFindings: [{ rule: "S-1", code: "S-1", elementId: "stage:test", reason: "Invalid safety exemption", backlogItemId: "BI-TEST" }] as never,
+    })).rejects.toThrow(/eligible/);
+  });
   it.each(["routine", "consequential", "critical"])("preserves %s through validation, lowering and decompilation", (criticality) => {
     const input = workedExampleWithoutGate();
     (input.stages as JsonObject[])[0].criticality = criticality;
