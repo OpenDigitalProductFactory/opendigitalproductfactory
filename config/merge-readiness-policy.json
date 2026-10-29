@@ -10,12 +10,14 @@
   ],
   "workflows": {
     "ci": ".github/workflows/ci.yml",
-    "ux": ".github/workflows/ux-route-sweep.yml"
+    "ux": ".github/workflows/ux-route-sweep.yml",
+    "toolchain": ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
   },
   "aggregateJobId": "merge-readiness",
   "aggregateJobName": "Merge Readiness",
   "uxJobId": "ux-route-sweep",
   "uxJobName": "UX Route Budget Sweep",
   "uxRuntimeJobId": "sweep",
-  "uxRuntimeJobName": "UX Route Sweep Runtime"
+  "uxRuntimeJobName": "UX Route Sweep Runtime",
+  "toolchainJobId": "agent-toolchain-bootstrap"
 }
