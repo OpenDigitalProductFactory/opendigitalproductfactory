@@ -19,6 +19,7 @@ function binding(phase: "prepare" | "verify"): QualificationExperimentBinding {
     protocol: { path: "docs/protocol.md", commitSha: protocolHead, providerBlobId: "c".repeat(40) },
     installationId: "install-dev", accountablePrincipalRef: "PRN-1", protocolReviewReceiptId: "review-protocol-1",
     shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
+    executorMode: "sandbox-build", requiredPlatform: "linux",
     targetProductionBlobIds: ["e".repeat(40)],
     permittedTools: phase === "prepare"
       ? ["write_sandbox_file", "record_workroom_evidence"]
@@ -67,5 +68,22 @@ describe("qualificationStateForScopeClaim", () => {
 
     expect(() => qualificationStateForScopeClaim({ room, token,
       accountablePrincipalRef: "PRN-FOREIGN", now: NOW })).toThrow("does not match");
+  });
+
+  it("starts a host-bound admission at the accountable Workroom without a sandbox scheduler", () => {
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
+    const host = { ...binding("prepare"), executorMode: "workroom-host" as const,
+      requiredPlatform: "win32" as const,
+      permittedTools: ["read_source_at_version", "record_workroom_evidence"] };
+    const token = createQualificationExperimentAdmission(host);
+    const room = { capsuleId: host.workroomId, backlogItemId: host.itemId,
+      repositoryFullName: host.repositoryFullName, baseSha: host.baseSha,
+      headSha: host.headSha, workspaceState: {} };
+
+    expect(qualificationStateForScopeClaim({ room, token,
+      accountablePrincipalRef: host.accountablePrincipalRef, now: NOW }).state).toMatchObject({
+        status: "started", startCount: 1, taskId: `workroom-host:${host.workroomId}`,
+        startedAt: NOW.toISOString(),
+      });
   });
 });

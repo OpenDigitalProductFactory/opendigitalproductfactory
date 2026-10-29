@@ -109,6 +109,7 @@ describe("dispatch identity across sequential stages", () => {
       protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
       installationId: "install-dev", accountablePrincipalRef: "principal", protocolReviewReceiptId: "review-protocol-1",
       shapeKey: "shape", shapeVersion: "1.0.0", stageKey: "first", policyVersion: 1,
+      executorMode: "sandbox-build", requiredPlatform: "linux",
       targetProductionBlobIds: ["d".repeat(40)], permittedTools: ["write_sandbox_file", "record_workroom_evidence"],
       allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2025-09-01T00:00:00.000Z",
       expiresAt: "2025-09-01T00:30:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
@@ -123,5 +124,29 @@ describe("dispatch identity across sequential stages", () => {
     await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).rejects.toThrow(/already started/i);
     vi.unstubAllEnvs();
     vi.useRealTimers();
+  });
+
+  it("does not dispatch host-bound qualification into the Linux Build Studio sandbox", async () => {
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-scheduler-secret");
+    const h = harness();
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "prepare", itemId: "BI-TEST", workroomId: "WC-TEST",
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40),
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: "principal", protocolReviewReceiptId: "review-protocol-1",
+      shapeKey: "shape", shapeVersion: "1.0.0", stageKey: "first", policyVersion: 1,
+      targetProductionBlobIds: ["d".repeat(40)], executorMode: "workroom-host", requiredPlatform: "win32",
+      permittedTools: ["read_source_at_version", "record_workroom_evidence"],
+      allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"], issuedAt: "2025-09-01T00:00:00.000Z",
+      expiresAt: "2025-09-01T00:30:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    h.setWorkspaceState({ qualificationExperimentAdmission: { schemaVersion: 1, status: "started", token,
+      bindingDigest: qualificationBindingDigest(binding), startCount: 1, issuedAt: binding.issuedAt,
+      startedAt: "2025-09-01T00:00:00.000Z", taskId: "workroom-host:WC-TEST" } });
+
+    await expect(h.enqueue({ stage: { ...h.input.stage, tools: binding.permittedTools } })).resolves.toBe(false);
+    expect(h.tx.scheduledAgentTask.upsert).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 });

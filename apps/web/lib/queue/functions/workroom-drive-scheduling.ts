@@ -41,6 +41,10 @@ export async function scheduleWorkroomAgentTask(
     const qualificationState = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
     let qualificationBinding = null;
     if (qualificationState) {
+      const external = verifyQualificationExperimentAdmission(qualificationState.token, { now: clock(), allowExpired: true });
+      // Host-specific qualification is deliberately executed by the accountable
+      // Workroom runtime, not by Build Studio's unrelated Linux sandbox.
+      if (external.ok && external.data.binding.executorMode === "workroom-host") return false;
       if (qualificationState.status !== "issued" || qualificationState.startCount !== 0) {
         throw new Error("Qualification experiment was already started or settled.");
       }

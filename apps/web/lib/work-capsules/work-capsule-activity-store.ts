@@ -5,7 +5,13 @@ import { isWorkCapsuleEvidenceKind, type WorkCapsuleEvidenceKind, type WorkCapsu
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { buildStageEvidenceBinding } from "@/lib/work-management/workroom-stage-evidence-binding";
 import { isRecord } from "@/lib/shared/coerce";
-import { parseQualificationExperimentState } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import {
+  parseQualificationExperimentState,
+  parseQualificationVerificationEvidence,
+  qualificationExecutionActivitiesMatch,
+  qualificationToolEffectAllowed,
+  verifyQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 export async function recordWorkCapsuleActivity(
   db: CapsuleDb,
@@ -87,8 +93,35 @@ export async function recordWorkCapsuleEvidence(args: {
       || qualificationState.bindingDigest !== qualificationDigest)) {
       throw new Error("Qualification evidence is stale, duplicated, or bound to another experiment.");
     }
-    if (qualificationState && !args.taskRunId) {
-      throw new Error("Qualification evidence requires its exact scheduled TaskRun context.");
+    if (qualificationState) {
+      const admission = verifyQualificationExperimentAdmission(qualificationState.token, { allowExpired: true });
+      if (!admission.ok || (admission.data.binding.executorMode === "workroom-host"
+        && admission.data.binding.accountablePrincipalRef !== args.actor.principalId)
+        || !qualificationToolEffectAllowed({ binding: admission.data.binding, state: qualificationState,
+          toolName: "record_workroom_evidence", params: { ...evidence, capsuleId }, now: new Date() })) {
+        throw new Error("Qualification evidence does not match the live binding, accountable principal, or execution window.");
+      }
+      if (admission.data.binding.executorMode === "sandbox-build" && !args.taskRunId) {
+        throw new Error("Sandbox qualification evidence requires its exact scheduled TaskRun context.");
+      }
+      if (admission.data.binding.executorMode === "workroom-host" && args.taskRunId) {
+        throw new Error("Host qualification evidence cannot borrow a scheduled TaskRun identity.");
+      }
+      if (admission.data.binding.executorMode === "workroom-host") {
+        const proof = parseQualificationVerificationEvidence(qualificationResult);
+        if (!proof?.executionEvidenceActivityIds || !tx.backlogItemActivity) {
+          throw new Error("Host qualification evidence requires exact recorded execution activities.");
+        }
+        const rows = await tx.backlogItemActivity.findMany({
+          where: { id: { in: proof.executionEvidenceActivityIds } },
+          select: { id: true, backlogItem: { select: { itemId: true } }, payload: true, recordedAt: true },
+        });
+        if (!qualificationExecutionActivitiesMatch({ binding: admission.data.binding, state: qualificationState,
+          itemId: admission.data.binding.itemId, activityIds: proof.executionEvidenceActivityIds, rows,
+          accountablePrincipalRef: args.actor.principalId })) {
+          throw new Error("Host qualification evidence activities do not match the signed execution binding.");
+        }
+      }
     }
     const activity = await recordWorkCapsuleActivity(tx, {
       workCapsuleId: capsule.id, kind: "evidence-recorded", summary: evidence.summary,
@@ -98,7 +131,7 @@ export async function recordWorkCapsuleEvidence(args: {
       await tx.workroom.update({ where: { id: capsule.id }, data: { workspaceState: {
         ...workspace,
         qualificationExperimentAdmission: { ...qualificationState, status: "settled", evidenceId: activity.id,
-          taskRunId: args.taskRunId },
+          ...(args.taskRunId ? { taskRunId: args.taskRunId } : {}) },
       } } });
     }
     return activity;

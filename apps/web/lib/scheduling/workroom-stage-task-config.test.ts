@@ -23,6 +23,7 @@ const QUALIFICATION = { schemaVersion: 1 as const, phase: "prepare" as const, it
   installationId: "install-dev", accountablePrincipalRef: "principal:owner",
   protocolReviewReceiptId: "review-protocol-1",
   shapeKey: STAGE.shapeKey, shapeVersion: STAGE.shapeVersion, stageKey: STAGE.stageKey, policyVersion: 1 as const,
+  executorMode: "sandbox-build" as const, requiredPlatform: "linux" as const,
   targetProductionBlobIds: ["d".repeat(40)],
   permittedTools: ["read_codebase_manifest", "list_patch_posture", "write_sandbox_file", "record_workroom_evidence"],
   allowedPaths: ["apps/web/lib/qualification.test.ts"], issuedAt: "2026-01-28T19:00:00.000Z",

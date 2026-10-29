@@ -39,5 +39,9 @@ export function qualificationStateForScopeClaim(args: {
       token: args.token, binding });
   }
   if (!issued.ok) throw new Error(issued.error);
-  return { state: issued.data, workspaceState };
+  const state = binding.executorMode === "workroom-host"
+    ? { ...issued.data, status: "started" as const, startCount: 1 as const,
+      startedAt: (args.now ?? new Date()).toISOString(), taskId: `workroom-host:${args.room.capsuleId}` }
+    : issued.data;
+  return { state, workspaceState };
 }

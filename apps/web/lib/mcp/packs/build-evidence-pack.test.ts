@@ -7,6 +7,7 @@ const db = vi.hoisted(() => ({
   backlogItemUpdate: vi.fn(),
   activityCreate: vi.fn(),
   toolExecutionFindUnique: vi.fn(),
+  workroomFindUnique: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -22,6 +23,9 @@ vi.mock("@dpf/db", () => ({
     toolExecution: {
       findUnique: (...a: unknown[]) => db.toolExecutionFindUnique(...a),
     },
+    workroom: {
+      findUnique: (...a: unknown[]) => db.workroomFindUnique(...a),
+    },
   },
 }));
 
@@ -31,8 +35,15 @@ const localIntegration = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/nonprod/local-integration", () => localIntegration);
 
+const actor = vi.hoisted(() => ({ principalId: "principal:owner" }));
+vi.mock("@/lib/work-capsules/handler-actor", () => ({
+  workCapsuleActor: vi.fn(async () => actor),
+}));
+
 import { buildEvidencePack } from "./build-evidence-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { createQualificationExperimentAdmission, qualificationBindingDigest,
+  type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const EXPECTED_TOOLS = [
   "record_execution_evidence",
@@ -159,6 +170,52 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     const arg = db.activityCreate.mock.calls[0][0];
     expect(arg.data.recordedById).toBe("u1");
     expect(arg.data.recordedByAgentId).toBe("agent-x");
+  });
+
+  it("records exact host qualification evidence and refuses a foreign platform", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:02:00Z"));
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-evidence-secret");
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "verify", itemId: "BI-1", workroomId: "WC-QUAL",
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha: "d".repeat(40),
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: actor.principalId,
+      protocolReviewReceiptId: "review-protocol", shapeKey: "delivery-small-fix", shapeVersion: "1.0.0",
+      stageKey: "qualification-research", policyVersion: 1, targetProductionBlobIds: ["e".repeat(40)],
+      executorMode: "workroom-host", requiredPlatform: "win32",
+      permittedTools: ["read_source_at_version", "record_execution_evidence", "record_workroom_evidence"],
+      allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"], issuedAt: "2026-01-01T00:00:00Z",
+      expiresAt: "2026-01-01T00:15:00Z", maxStarts: 1, maxDurationMs: 600_000,
+      candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"f".repeat(64)}`,
+        testBlobIds: ["1".repeat(40)], productionBytesUnchanged: true, reviewReceiptId: "review-candidate" },
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
+    db.workroomFindUnique.mockResolvedValue({ workspaceState: { qualificationExperimentAdmission: {
+      schemaVersion: 1, status: "started", token, bindingDigest: qualificationBindingDigest(binding),
+      startCount: 1, issuedAt: binding.issuedAt, startedAt: "2026-01-01T00:01:00Z",
+      taskId: "workroom-host:WC-QUAL",
+    } } });
+    db.activityCreate.mockResolvedValue({ id: "act-qual", recordedAt: new Date("2026-01-01T00:02:00Z") });
+    const qualification = { workroomId: binding.workroomId,
+      qualificationBindingDigest: qualificationBindingDigest(binding), executorMode: "workroom-host",
+      platform: "win32", headSha: binding.headSha, testBlobIds: binding.candidate!.testBlobIds,
+      command: "pnpm exec vitest run scripts/lib/local-ci-gate-state.test.mjs",
+      outputDigest: `sha256:${"2".repeat(64)}`, startedAt: "2026-01-01T00:01:10Z",
+      completedAt: "2026-01-01T00:01:20Z", exitCode: 0, skipped: false };
+
+    await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
+      summary: "Windows qualification passed", qualification }, "u1", { agentId: "agent-x" }))
+      .resolves.toMatchObject({ success: true, entityId: "act-qual" });
+    expect(db.activityCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      payload: expect.objectContaining({ qualification }),
+    }) });
+    await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
+      summary: "Wrong platform", qualification: { ...qualification, platform: "linux" } }, "u1",
+      { agentId: "agent-x" })).resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   it("uses the canonical registry in the MCP enum", () => {

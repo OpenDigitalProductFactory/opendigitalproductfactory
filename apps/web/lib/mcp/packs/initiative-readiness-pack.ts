@@ -20,7 +20,8 @@ import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-con
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
-import { parseQualificationExperimentBinding, parseQualificationExperimentState, parseQualificationVerificationEvidence, qualificationBindingDigest,
+import { parseQualificationExperimentBinding, parseQualificationExperimentState,
+  parseQualificationVerificationEvidence, qualificationBindingDigest, qualificationExecutionActivitiesMatch,
   verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const artifactRefSchema = {
@@ -244,7 +245,7 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
   const state = parseQualificationExperimentState(
     (room.workspaceState as Record<string, unknown>).qualificationExperimentAdmission,
   );
-  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId || !state.taskRunId) return false;
+  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId) return false;
   const admission = verifyQualificationExperimentAdmission(state.token, { allowExpired: true });
   if (!admission.ok || admission.data.binding.phase !== "verify"
     || admission.data.bindingDigest !== state.bindingDigest) return false;
@@ -253,9 +254,33 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
   const result = payload?.result && typeof payload.result === "object" && !Array.isArray(payload.result)
     ? payload.result as Record<string, unknown> : null;
   const proof = parseQualificationVerificationEvidence(result);
-  if (result?.qualificationOutcome !== "positive" || !proof || proof.command !== "run_sandbox_tests"
-    || proof.taskRunId !== state.taskRunId
+  if (result?.qualificationOutcome !== "positive" || !proof
+    || proof.executorMode !== admission.data.binding.executorMode
+    || proof.requiredPlatform !== admission.data.binding.requiredPlatform
+    || proof.headSha.toLowerCase() !== admission.data.binding.candidate?.headSha.toLowerCase()
+    || canonicalJson(proof.testBlobIds) !== canonicalJson(admission.data.binding.candidate?.testBlobIds)
     || result.qualificationBindingDigest !== qualificationBindingDigest(admission.data.binding)) return false;
+  if (admission.data.binding.executorMode === "workroom-host") {
+    if (state.taskRunId || !proof.executionEvidenceActivityIds) return false;
+    const rows = await prisma.backlogItemActivity.findMany({
+      where: { id: { in: proof.executionEvidenceActivityIds } },
+      select: { id: true, backlogItem: { select: { itemId: true } }, payload: true, recordedAt: true },
+    });
+    return qualificationExecutionActivitiesMatch({ binding: admission.data.binding, state, itemId,
+      activityIds: proof.executionEvidenceActivityIds, rows,
+      accountablePrincipalRef: admission.data.binding.accountablePrincipalRef })
+      && rows.every((row) => {
+        const evidencePayload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+          ? row.payload as Record<string, unknown> : null;
+        const qualification = evidencePayload?.qualification && typeof evidencePayload.qualification === "object"
+          ? evidencePayload.qualification as Record<string, unknown> : null;
+        return qualification?.command === proof.command
+          && typeof qualification.outputDigest === "string"
+          && qualification.outputDigest.toLowerCase() === proof.outputDigest.toLowerCase();
+      });
+  }
+  if (!state.taskRunId || !proof.taskRunId || !proof.toolExecutionReceiptIds
+    || proof.command !== "run_sandbox_tests" || proof.taskRunId !== state.taskRunId) return false;
   const run = await prisma.taskRun.findUnique({ where: { taskRunId: state.taskRunId },
     select: { a2aMetadata: true } });
   const runMetadata = run?.a2aMetadata && typeof run.a2aMetadata === "object" && !Array.isArray(run.a2aMetadata)

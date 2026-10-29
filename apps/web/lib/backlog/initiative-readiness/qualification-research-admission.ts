@@ -13,8 +13,12 @@ const QUALIFICATION_TOOLS = new Set([
   "write_sandbox_file",
   "edit_sandbox_file",
   "run_sandbox_tests",
+  "record_execution_evidence",
   "record_workroom_evidence",
 ]);
+
+export type QualificationExecutorMode = "sandbox-build" | "workroom-host";
+export type QualificationPlatform = "linux" | "win32";
 
 type ProtocolRef = { path: string; commitSha: string; providerBlobId: string };
 export type QualificationCandidateRef = {
@@ -41,6 +45,8 @@ export type QualificationExperimentBinding = {
   shapeVersion: string;
   stageKey: string;
   policyVersion: 1;
+  executorMode: QualificationExecutorMode;
+  requiredPlatform: QualificationPlatform;
   targetProductionBlobIds: string[];
   permittedTools: string[];
   allowedPaths: string[];
@@ -130,6 +136,7 @@ export function advanceQualificationExperimentState(input: {
     && prior.protocolReviewReceiptId === next.protocolReviewReceiptId
     && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion
     && prior.stageKey === next.stageKey && prior.policyVersion === next.policyVersion
+    && prior.executorMode === next.executorMode && prior.requiredPlatform === next.requiredPlatform
     && JSON.stringify(prior.targetProductionBlobIds) === JSON.stringify(next.targetProductionBlobIds)
     && JSON.stringify(prior.allowedPaths) === JSON.stringify(next.allowedPaths);
   if (input.existing.status !== "settled" || prior.phase !== "prepare" || next.phase !== "verify"
@@ -163,7 +170,10 @@ function equalSignature(left: string, right: string): boolean {
 }
 
 export function qualificationBindingDigest(binding: QualificationExperimentBinding): string {
-  return `sha256:${createHmac("sha256", "qualification-binding-v1").update(canonicalJson(binding)).digest("hex")}`;
+  const normalized = { ...binding,
+    executorMode: binding.executorMode ?? "sandbox-build",
+    requiredPlatform: binding.requiredPlatform ?? "linux" };
+  return `sha256:${createHmac("sha256", "qualification-binding-v1").update(canonicalJson(normalized)).digest("hex")}`;
 }
 
 export function createQualificationExperimentAdmission(
@@ -250,6 +260,11 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
   const issuedAt = text(raw?.issuedAt);
   const expiresAt = text(raw?.expiresAt);
   const phase = raw?.phase;
+  // Existing issued v1 bindings predate executor-mode fields and were always
+  // Build Studio/Linux bindings. Preserve their exact interpretation while
+  // requiring every newly issued host-specific binding to be explicit.
+  const executorMode = raw?.executorMode ?? "sandbox-build";
+  const requiredPlatform = raw?.requiredPlatform ?? "linux";
   const candidateRaw = record(raw?.candidate);
   const candidateBlobs = candidateRaw ? exactStrings(candidateRaw.testBlobIds) : null;
   const candidate = candidateRaw && text(candidateRaw.headSha) && text(candidateRaw.diffDigest)
@@ -267,13 +282,19 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
   const datesValid = issuedAt && expiresAt && Number.isFinite(Date.parse(issuedAt)) && Number.isFinite(Date.parse(expiresAt))
     && Date.parse(issuedAt) < Date.parse(expiresAt);
   const phaseToolsValid = phase === "prepare"
-    ? tools?.includes("write_sandbox_file") && tools?.includes("record_workroom_evidence")
-      && !tools.includes("run_sandbox_tests")
+    ? tools?.includes("record_workroom_evidence") && !tools.includes("run_sandbox_tests")
+      && (executorMode === "sandbox-build" ? tools.includes("write_sandbox_file")
+        : executorMode === "workroom-host" && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file"))
     : phase === "verify"
-      ? tools?.includes("run_sandbox_tests") && tools?.includes("record_workroom_evidence")
+      ? tools?.includes("record_workroom_evidence")
+        && (executorMode === "sandbox-build" ? tools.includes("run_sandbox_tests") && !tools.includes("record_execution_evidence")
+          : executorMode === "workroom-host" && tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
         && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file")
       : false;
   const valid = raw?.schemaVersion === 1 && (phase === "prepare" || phase === "verify")
+    && (executorMode === "sandbox-build" || executorMode === "workroom-host")
+    && (requiredPlatform === "linux" || requiredPlatform === "win32")
+    && (executorMode !== "sandbox-build" || requiredPlatform === "linux")
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
     && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
@@ -291,6 +312,7 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     installationId: scalar.installationId!, accountablePrincipalRef: scalar.accountablePrincipalRef!,
     protocolReviewReceiptId: scalar.protocolReviewReceiptId!, permittedTools: tools, allowedPaths: paths,
     shapeKey: scalar.shapeKey!, shapeVersion: scalar.shapeVersion!, stageKey: scalar.stageKey!, policyVersion: 1,
+    executorMode, requiredPlatform,
     targetProductionBlobIds: exactStrings(raw?.targetProductionBlobIds)!,
     issuedAt: issuedAt!, expiresAt: expiresAt!, maxStarts: 1, maxDurationMs: raw.maxDurationMs as number,
     ...(candidate ? { candidate } : {}),
@@ -346,7 +368,8 @@ export function qualificationToolEffectAllowed(input: {
       && typeof input.params.summary === "string" && input.params.summary.trim().length > 0
       && (input.params.outcome === "completed" || input.params.outcome === "blocked")
       && (input.binding.phase !== "prepare" || disposition !== "candidate" || qualificationCandidateEvidenceMatches(result, input.binding))
-      && (input.binding.phase !== "verify" || disposition === "blocked" || qualificationVerificationEvidenceMatches(result));
+      && (input.binding.phase !== "verify" || disposition === "blocked"
+        || qualificationVerificationEvidenceMatches(result, input.binding));
   }
   if (input.toolName === "run_sandbox_tests") {
     return input.binding.phase === "verify" && input.params?.auto_fix !== true;
@@ -355,28 +378,121 @@ export function qualificationToolEffectAllowed(input: {
 }
 
 export type QualificationVerificationEvidence = {
-  command: string; outputDigest: string; taskRunId: string; toolExecutionReceiptIds: string[];
+  command: string; outputDigest: string; executorMode: QualificationExecutorMode;
+  requiredPlatform: QualificationPlatform; headSha: string; testBlobIds: string[];
   startedAt: string; completedAt: string;
+  taskRunId?: string; toolExecutionReceiptIds?: string[]; executionEvidenceActivityIds?: string[];
 };
+
+export type QualificationExecutionEvidence = {
+  workroomId: string; qualificationBindingDigest: string; executorMode: "workroom-host";
+  platform: QualificationPlatform; headSha: string; testBlobIds: string[]; command: string;
+  outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
+};
+
+export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
+  const raw = record(value);
+  const workroomId = text(raw?.workroomId);
+  const bindingDigest = text(raw?.qualificationBindingDigest);
+  const platform = raw?.platform;
+  const headSha = text(raw?.headSha);
+  const testBlobIds = exactStrings(raw?.testBlobIds);
+  const command = text(raw?.command);
+  const outputDigest = text(raw?.outputDigest);
+  const startedAt = text(raw?.startedAt);
+  const completedAt = text(raw?.completedAt);
+  if (!workroomId || !bindingDigest || !SHA256.test(bindingDigest)
+    || raw?.executorMode !== "workroom-host" || (platform !== "linux" && platform !== "win32")
+    || !headSha || !FULL_SHA.test(headSha) || !testBlobIds?.every((blob) => FULL_SHA.test(blob))
+    || !command || !outputDigest || !SHA256.test(outputDigest)
+    || !startedAt || !completedAt || !Number.isFinite(Date.parse(startedAt))
+    || !Number.isFinite(Date.parse(completedAt)) || Date.parse(startedAt) > Date.parse(completedAt)
+    || raw?.exitCode !== 0 || raw?.skipped !== false) return null;
+  return { workroomId, qualificationBindingDigest: bindingDigest, executorMode: "workroom-host",
+    platform, headSha, testBlobIds, command, outputDigest, startedAt, completedAt,
+    exitCode: 0, skipped: false };
+}
+
+export function qualificationExecutionEvidenceAllowed(input: {
+  binding: QualificationExperimentBinding; state: QualificationExperimentState;
+  evidence: unknown; accountablePrincipalRef: string | null; now: Date;
+}): boolean {
+  const evidence = parseQualificationExecutionEvidence(input.evidence);
+  if (!evidence || input.binding.phase !== "verify" || input.binding.executorMode !== "workroom-host"
+    || !input.binding.candidate || input.accountablePrincipalRef !== input.binding.accountablePrincipalRef
+    || (input.state.status !== "started" && input.state.status !== "settled")
+    || input.state.startCount !== 1 || !input.state.startedAt
+    || evidence.workroomId !== input.binding.workroomId
+    || evidence.qualificationBindingDigest !== qualificationBindingDigest(input.binding)
+    || evidence.platform !== input.binding.requiredPlatform
+    || evidence.headSha.toLowerCase() !== input.binding.candidate.headSha.toLowerCase()
+    || canonicalJson(evidence.testBlobIds) !== canonicalJson(input.binding.candidate.testBlobIds)) return false;
+  const admittedAt = Date.parse(input.state.startedAt);
+  const startedAt = Date.parse(evidence.startedAt);
+  const completedAt = Date.parse(evidence.completedAt);
+  const admittedUntil = Math.min(admittedAt + input.binding.maxDurationMs, Date.parse(input.binding.expiresAt));
+  return startedAt >= admittedAt && completedAt <= admittedUntil && input.now.getTime() <= admittedUntil;
+}
+
+export function qualificationExecutionActivitiesMatch(input: {
+  binding: QualificationExperimentBinding; state: QualificationExperimentState;
+  itemId: string; activityIds: string[]; rows: unknown[]; accountablePrincipalRef: string | null;
+}): boolean {
+  if (input.activityIds.length === 0 || input.rows.length !== input.activityIds.length) return false;
+  const expected = new Set(input.activityIds);
+  const matches = input.rows.every((value) => {
+    const row = record(value);
+    const payload = record(row?.payload);
+    const backlogItem = record(row?.backlogItem);
+    const qualification = parseQualificationExecutionEvidence(payload?.qualification);
+    return typeof row?.id === "string" && expected.delete(row.id)
+      && backlogItem?.itemId === input.itemId && payload?.evidenceKind === "test_pass"
+      && qualification !== null
+      && qualificationExecutionEvidenceAllowed({ binding: input.binding, state: input.state,
+        evidence: qualification, accountablePrincipalRef: input.accountablePrincipalRef,
+        now: new Date(qualification.completedAt) });
+  });
+  return matches && expected.size === 0;
+}
 
 export function parseQualificationVerificationEvidence(value: unknown): QualificationVerificationEvidence | null {
   const result = record(value);
   if (!result) return null;
   const command = text(result.command);
   const outputDigest = text(result.outputDigest);
-  const taskRunId = text(result.taskRunId);
-  const receiptIds = exactStrings(result.toolExecutionReceiptIds);
+  const executorMode = result.executorMode;
+  const requiredPlatform = result.requiredPlatform;
+  const headSha = text(result.headSha);
+  const testBlobIds = exactStrings(result.testBlobIds);
+  const taskRunId = text(result.taskRunId) ?? undefined;
+  const receiptIds = exactStrings(result.toolExecutionReceiptIds) ?? undefined;
+  const activityIds = exactStrings(result.executionEvidenceActivityIds) ?? undefined;
   const startedAt = text(result.startedAt);
   const completedAt = text(result.completedAt);
-  return command && outputDigest && SHA256.test(outputDigest) && taskRunId && receiptIds
-    && startedAt && completedAt && Number.isFinite(Date.parse(startedAt)) && Number.isFinite(Date.parse(completedAt))
-    && Date.parse(startedAt) <= Date.parse(completedAt)
-    ? { command, outputDigest, taskRunId, toolExecutionReceiptIds: receiptIds, startedAt, completedAt }
-    : null;
+  if ((executorMode !== "sandbox-build" && executorMode !== "workroom-host")
+    || (requiredPlatform !== "linux" && requiredPlatform !== "win32")) return null;
+  const executorProof = executorMode === "sandbox-build" ? Boolean(taskRunId && receiptIds && !activityIds)
+    : Boolean(activityIds && !taskRunId && !receiptIds);
+  if (!command || !outputDigest || !SHA256.test(outputDigest) || !executorProof
+    || !headSha || !FULL_SHA.test(headSha) || !testBlobIds?.every((blob) => FULL_SHA.test(blob))
+    || !startedAt || !completedAt || !Number.isFinite(Date.parse(startedAt))
+    || !Number.isFinite(Date.parse(completedAt)) || Date.parse(startedAt) > Date.parse(completedAt)) return null;
+  return { command, outputDigest, executorMode, requiredPlatform, headSha, testBlobIds,
+    startedAt, completedAt, ...(taskRunId ? { taskRunId } : {}),
+    ...(receiptIds ? { toolExecutionReceiptIds: receiptIds } : {}),
+    ...(activityIds ? { executionEvidenceActivityIds: activityIds } : {}) };
 }
 
-function qualificationVerificationEvidenceMatches(result: Record<string, unknown>): boolean {
-  return parseQualificationVerificationEvidence(result) !== null;
+function qualificationVerificationEvidenceMatches(
+  result: Record<string, unknown>,
+  binding: QualificationExperimentBinding,
+): boolean {
+  const proof = parseQualificationVerificationEvidence(result);
+  return proof !== null && binding.candidate !== undefined
+    && proof.executorMode === binding.executorMode
+    && proof.requiredPlatform === binding.requiredPlatform
+    && proof.headSha.toLowerCase() === binding.candidate.headSha.toLowerCase()
+    && canonicalJson(proof.testBlobIds) === canonicalJson(binding.candidate.testBlobIds);
 }
 
 function qualificationCandidateEvidenceMatches(

@@ -5,6 +5,7 @@ import {
   parseQualificationExperimentBinding,
   createQualificationExperimentAdmission,
   qualificationBindingDigest,
+  qualificationExecutionEvidenceAllowed,
   qualificationToolEffectAllowed,
   issueQualificationExperimentState,
   verifyQualificationExperimentAdmission,
@@ -183,12 +184,44 @@ describe("qualification research admission", () => {
     const evidence = { capsuleId: binding.workroomId, stageKey: binding.stageKey, outcome: "completed",
       summary: "Observed the bounded result", result: { qualificationBindingDigest: qualificationBindingDigest(parsed.data),
         qualificationOutcome: "positive", command: "run_sandbox_tests", outputDigest: `sha256:${"2".repeat(64)}`,
+        executorMode: "sandbox-build", requiredPlatform: "linux", headSha: "d".repeat(40),
+        testBlobIds: ["f".repeat(40)],
         taskRunId: "TR-QUAL", toolExecutionReceiptIds: ["receipt-1"],
         startedAt: NOW.toISOString(), completedAt: new Date(NOW.getTime() + 1_000).toISOString() } };
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
       params: evidence, now: NOW })).toBe(true);
     expect(qualificationToolEffectAllowed({ binding: parsed.data, state, toolName: "record_workroom_evidence",
       params: { ...evidence, result: { ...evidence.result, outputDigest: undefined } }, now: NOW })).toBe(false);
+  });
+
+  it("accepts only exact accountable Windows host evidence for a host-bound verification", () => {
+    const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
+      executorMode: "workroom-host", requiredPlatform: "win32",
+      permittedTools: ["read_source_at_version", "record_execution_evidence", "record_workroom_evidence"],
+      candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
+        testBlobIds: ["f".repeat(40)], productionBytesUnchanged: true, reviewReceiptId: "review-1" } });
+    if (!parsed.ok) throw new Error(parsed.error);
+    const state = { schemaVersion: 1 as const, status: "started" as const, token: "opaque.signed",
+      bindingDigest: qualificationBindingDigest(parsed.data), startCount: 1 as const,
+      issuedAt: binding.issuedAt, startedAt: NOW.toISOString(), taskId: `workroom-host:${binding.workroomId}` };
+    const evidence = { workroomId: binding.workroomId,
+      qualificationBindingDigest: qualificationBindingDigest(parsed.data), executorMode: "workroom-host",
+      platform: "win32", headSha: "d".repeat(40), testBlobIds: ["f".repeat(40)],
+      command: "pnpm exec vitest run scripts/lib/local-ci-gate-state.test.mjs",
+      outputDigest: `sha256:${"2".repeat(64)}`, startedAt: NOW.toISOString(),
+      completedAt: new Date(NOW.getTime() + 1_000).toISOString(), exitCode: 0, skipped: false };
+    const allowed = (change: Record<string, unknown> = {}, principal: string = binding.accountablePrincipalRef) =>
+      qualificationExecutionEvidenceAllowed({ binding: parsed.data, state,
+        evidence: { ...evidence, ...change }, accountablePrincipalRef: principal,
+        now: new Date(NOW.getTime() + 2_000) });
+
+    expect(allowed()).toBe(true);
+    expect(allowed({ platform: "linux" })).toBe(false);
+    expect(allowed({ skipped: true })).toBe(false);
+    expect(allowed({ headSha: "9".repeat(40) })).toBe(false);
+    expect(allowed({ testBlobIds: ["8".repeat(40)] })).toBe(false);
+    expect(allowed({}, "principal:other")).toBe(false);
+    expect(allowed({ completedAt: new Date(NOW.getTime() + parsed.data.maxDurationMs + 1).toISOString() })).toBe(false);
   });
 
   it.each(["started", "settled"] as const)("never rearms a %s admission from the same signed token", (status) => {

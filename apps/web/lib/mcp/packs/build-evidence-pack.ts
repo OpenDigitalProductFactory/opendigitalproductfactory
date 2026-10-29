@@ -18,6 +18,12 @@ import { prisma } from "@dpf/db";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
+  parseQualificationExperimentState,
+  qualificationExecutionEvidenceAllowed,
+  verifyQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
+import {
   EXECUTION_EVIDENCE_KINDS,
   evidenceKindMetadata,
   isExecutionEvidenceKind,
@@ -50,6 +56,7 @@ const definitions: ToolDefinition[] = [
         url: { type: "string", description: "Link to PR / CI run / screenshot" },
         body: { type: "string", description: "Longer notes (<= 8000 chars)" },
         toolExecutionId: { type: "string", description: "Audit row id when this evidence was produced by a prior tool call" },
+        qualification: { type: "object", description: "Server-bound host qualification evidence. Accepted only for the accountable Workroom principal and exact signed verification binding." },
       },
       required: ["itemId", "kind", "summary"],
     },
@@ -125,7 +132,7 @@ const definitions: ToolDefinition[] = [
 async function recordExecutionEvidenceHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { agentId?: string },
+  context?: { agentId?: string; authSource?: string; apiTokenId?: string },
 ): Promise<ToolResult> {
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   const kindRaw = String(params["kind"] ?? "");
@@ -134,6 +141,7 @@ async function recordExecutionEvidenceHandler(
   const body = typeof params["body"] === "string" ? params["body"].slice(0, 8000) : null;
   const toolExecutionId =
     typeof params["toolExecutionId"] === "string" ? params["toolExecutionId"] : null;
+  const qualification = params["qualification"];
   if (!itemIdRaw || !kindRaw || !summaryRaw)
     return {
       success: false,
@@ -167,6 +175,26 @@ async function recordExecutionEvidenceHandler(
       };
     }
   }
+  if (qualification !== undefined) {
+    if (kindRaw !== "test_pass") {
+      return { success: false, error: "invalid_qualification_evidence", message: "Qualification execution evidence must use kind=test_pass." };
+    }
+    const raw = qualification && typeof qualification === "object" && !Array.isArray(qualification)
+      ? qualification as Record<string, unknown> : null;
+    const capsuleId = typeof raw?.workroomId === "string" ? raw.workroomId.trim() : "";
+    const room = capsuleId ? await prisma.workroom.findUnique({ where: { capsuleId },
+      select: { workspaceState: true } }) : null;
+    const workspace = room?.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
+      ? room.workspaceState as Record<string, unknown> : null;
+    const state = parseQualificationExperimentState(workspace?.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token, { allowExpired: true }) : null;
+    const actor = await workCapsuleActor(userId, context);
+    if (!state || !admission?.ok || !qualificationExecutionEvidenceAllowed({ binding: admission.data.binding,
+      state, evidence: qualification, accountablePrincipalRef: actor.principalId, now: new Date() })) {
+      return { success: false, error: "invalid_qualification_evidence",
+        message: "Qualification evidence does not match the live signed binding, accountable Workroom principal, source, platform, or execution window." };
+    }
+  }
   const activity = await prisma.backlogItemActivity.create({
     data: {
       backlogItemId: item.id,
@@ -177,6 +205,7 @@ async function recordExecutionEvidenceHandler(
         url,
         body,
         toolExecutionId,
+        ...(qualification !== undefined ? { qualification } : {}),
       },
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,

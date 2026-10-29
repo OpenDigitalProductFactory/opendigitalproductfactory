@@ -150,6 +150,7 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
       protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
       installationId: "install-dev", accountablePrincipalRef: "principal-1", protocolReviewReceiptId: "review-protocol-1",
       shapeKey: "release-readiness-watch", shapeVersion: "1.0.0", stageKey: "report", policyVersion: 1,
+      executorMode: "sandbox-build", requiredPlatform: "linux",
       targetProductionBlobIds: ["e".repeat(40)], allowedPaths: ["apps/web/lib/example.test.ts"],
       permittedTools: ["run_sandbox_tests", "record_workroom_evidence"],
       issuedAt: "2026-06-18T11:00:00.000Z", expiresAt: "2026-06-18T13:00:00.000Z",

@@ -60,6 +60,7 @@ describe("resolveQualificationAdmission", () => {
     const f = fixture();
     f.ports.readBlob.mockResolvedValue({ ok: true, data: Buffer.from([
       "# BI-B3DEC077 qualification-only recovery protocol",
+      "Run the controlled FileShare handle test on Windows PowerShell.",
       "The [shared writer](../../../scripts/lib/local-ci-gate-state.mjs) at this worktree's base has the same blob, f74e1b0c1b41be4cdc8b6a1b25ec946cd7f45618.",
       "Exact edit scope is this document and scripts/lib/local-ci-gate-state.test.mjs.",
     ].join("\n")) });
@@ -76,6 +77,9 @@ describe("resolveQualificationAdmission", () => {
     expect(result?.binding).toMatchObject({
       targetProductionBlobIds: ["f74e1b0c1b41be4cdc8b6a1b25ec946cd7f45618"],
       allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"],
+      executorMode: "workroom-host",
+      requiredPlatform: "win32",
+      permittedTools: ["read_source_at_version", "read_codebase_manifest", "record_workroom_evidence"],
     });
   });
 
