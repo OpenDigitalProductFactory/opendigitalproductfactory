@@ -285,10 +285,10 @@ describe("createTaskRunForScheduledTask", () => {
     const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
     await createTaskRunForScheduledTask({ taskId: "agent-task-56e05d88", ownerUserId: "owner", agentId: "platform-engineer",
       threadId: "thread", routeContext: "/platform", title: "Observe", prompt: "Original commission",
-      scheduledReporting: { mode: "read-only-history", scopeDigest: "a".repeat(64) } });
+      scheduledReporting: { mode: "read-only-history", scopeDigest: "a".repeat(64), nextRunAt: null } });
     expect(vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0].data.a2aMetadata).toMatchObject({
       sourceRef: { kind: "scheduled-task", id: "agent-task-56e05d88" },
-      scheduledReporting: { mode: "read-only-history", scopeDigest: "a".repeat(64) },
+      scheduledReporting: { mode: "read-only-history", scopeDigest: "a".repeat(64), nextRunAt: null },
     });
   });
   beforeEach(async () => {

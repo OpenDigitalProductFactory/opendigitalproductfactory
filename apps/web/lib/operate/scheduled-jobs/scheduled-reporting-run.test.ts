@@ -24,7 +24,7 @@ describe("scheduled reporting settlement", () => {
     task = { taskId: "agent-task-56e05d88", ownerUserId: "owner", agentId: "platform-engineer", title: "Health watch", prompt: "Original bounded watch",
       taskRunId: "TR-WATCH", isActive: true, taskKind: null, schedule: "23 */6 * * *", taskConfig: { routineReporting: { version: 1, mode: "read-only-history" } } };
     run = { id: "run-row", taskRunId: "TR-WATCH", userId: "owner", threadId: "thread", contextId: "thread", status: "working", startedAt: new Date(now.getTime() - 5000),
-      a2aMetadata: { sourceRef: { kind: "scheduled-task", id: task.taskId }, scheduledReporting: { mode: "read-only-history", scopeDigest: scheduledReportingScopeDigest(task) } } };
+      a2aMetadata: { sourceRef: { kind: "scheduled-task", id: task.taskId }, scheduledReporting: { mode: "read-only-history", scopeDigest: scheduledReportingScopeDigest(task), nextRunAt: null } } };
     db.$transaction.mockImplementation(callback => callback(db));
     db.$queryRaw.mockResolvedValue([{ taskId: task.taskId }]);
     db.scheduledAgentTask.findUnique.mockImplementation(async () => task);

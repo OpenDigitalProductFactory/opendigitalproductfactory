@@ -31,7 +31,7 @@ beforeEach(() => {
   m.db.$transaction.mockImplementation(async f => f(m.db));
   m.db.$queryRaw.mockResolvedValue([{ taskId: task.taskId }]);
   m.db.scheduledAgentTask.findUnique.mockImplementation(async () => structuredClone(task));
-  m.db.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
+  m.db.scheduledAgentTask.updateMany.mockImplementation(async ({ data }) => { Object.assign(task, data); return { count: 1 }; });
   m.db.scheduledAgentTask.update.mockImplementation(async ({ data }) => { Object.assign(task, data); return structuredClone(task); });
   m.db.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
   m.db.scheduledJob.update.mockResolvedValue({});

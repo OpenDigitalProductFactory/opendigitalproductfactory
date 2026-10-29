@@ -132,7 +132,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   if (!task || !task.isActive) return;
   const reportingMode = readScheduledReportingMode(task.taskConfig);
   if (reportingMode) assertScheduledReportingEligible(task, task.ownerUserId, false);
-  const scheduledReporting = reportingMode ? { mode: reportingMode, scopeDigest: scheduledReportingScopeDigest(task) } : undefined;
+  const scheduledReporting = reportingMode ? { mode: reportingMode, scopeDigest: scheduledReportingScopeDigest(task), nextRunAt: null as string | null } : undefined;
 
   // Acceptance owns a task-row lease and preserves upgrade wakeups while it
   // runs. The generic cadence claim below must not consume its due time first.
@@ -141,7 +141,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     return;
   }
 
-  if (!await claimScheduledTaskCadence(prisma, task)) return;
+  const claimedTask = { ...task };
+  if (!await claimScheduledTaskCadence(prisma, claimedTask)) return;
+  if (scheduledReporting) scheduledReporting.nextRunAt = claimedTask.nextRunAt?.toISOString() ?? null;
 
   // Phase 7 product-intelligence watches are deterministic proposal producers.
   // A cadence tick creates (or deduplicates to) a PENDING ResearchProposal and
@@ -413,7 +415,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       scheduledReporting,
     });
     const newRunId = taskRunRef.taskRunId;
-    if (!await withCurrentScheduledTask(prisma, task, task.taskRunId ?? null, async tx => {
+    if (!await withCurrentScheduledTask(prisma, claimedTask, task.taskRunId ?? null, async tx => {
       await tx.scheduledAgentTask.update({ where: { taskId }, data: { taskRunId: newRunId } });
       return true;
     })) return;
@@ -620,7 +622,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         : "completed";
 
     const completedRef = taskRunRef;
-    await withCurrentScheduledTask(prisma, task, completedRef.taskRunId, async prisma => {
+    await withCurrentScheduledTask(prisma, claimedTask, completedRef.taskRunId, async prisma => {
     // Persist agent response and all settlement projections under the current-run fence.
     await prisma.agentMessage.create({
       data: {
@@ -726,7 +728,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     const errMsg = err instanceof Error ? err.message : "unknown error";
     if (reportingMode) {
       if (reportingRun) await failScheduledReportingRun(reportingRun, errMsg).catch(() => undefined);
-      else await withCurrentScheduledTask(prisma, task, task.taskRunId ?? null, async tx => {
+      else await withCurrentScheduledTask(prisma, claimedTask, task.taskRunId ?? null, async tx => {
         const nextRunAt = computeNextCronRun(task.schedule, now);
         const summary = "The scheduled observation could not start. Review this run before continuing.";
         await tx.scheduledAgentTask.update({ where: { taskId }, data: { lastRunAt: now, lastStatus: "error", lastError: summary, nextRunAt, attempts: 0 } });
@@ -740,7 +742,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       JSON.stringify(errMsg));
 
     const ref = taskRunRef;
-    const failureSettled = await withCurrentScheduledTask(prisma, task, ref?.taskRunId ?? task.taskRunId ?? null, async prisma => {
+    const failureSettled = await withCurrentScheduledTask(prisma, claimedTask, ref?.taskRunId ?? task.taskRunId ?? null, async prisma => {
     if (ref) {
       await prisma.taskRun.update({
         where: { id: ref.id },

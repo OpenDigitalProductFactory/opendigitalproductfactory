@@ -15,9 +15,9 @@ const context = { taskRunId: "TR-WATCH", agentId: "platform-engineer", threadId:
 describe("current scheduled reporting authority", () => {
   beforeEach(() => {
     task = { taskId: "agent-task-56e05d88", ownerUserId: "owner", agentId: "platform-engineer", prompt: "Original bounded watch", schedule: "23 */6 * * *", timezone: "UTC",
-      taskRunId: "TR-WATCH", isActive: true, taskKind: null, taskConfig: { routineReporting: { version: 1, mode: "read-only-history" } } };
+      taskRunId: "TR-WATCH", nextRunAt: null, isActive: true, taskKind: null, taskConfig: { routineReporting: { version: 1, mode: "read-only-history" } } };
     run = { taskRunId: "TR-WATCH", userId: "owner", threadId: "thread", currentAgentId: "platform-engineer", status: "working",
-      a2aMetadata: { sourceRef: { kind: "scheduled-task", id: task.taskId }, scheduledReporting: { mode: "read-only-history", scopeDigest: scheduledReportingScopeDigest(task) } } };
+      a2aMetadata: { sourceRef: { kind: "scheduled-task", id: task.taskId }, scheduledReporting: { mode: "read-only-history", scopeDigest: scheduledReportingScopeDigest(task), nextRunAt: null } } };
     db.taskRun.findUnique.mockReset().mockImplementation(async () => run);
     db.scheduledAgentTask.findUnique.mockReset().mockImplementation(async () => task);
   });
@@ -30,7 +30,7 @@ describe("current scheduled reporting authority", () => {
   });
   it.each([
     { ownerUserId: "foreign" }, { taskRunId: "TR-NEWER" }, { isActive: false },
-    { prompt: "Changed commission" }, { agentId: "another-agent" },
+    { prompt: "Changed commission" }, { agentId: "another-agent" }, { nextRunAt: new Date("2026-10-29T07:00:00Z") },
   ])("refuses stale or foreign current task state %j", async change => {
     Object.assign(task, change);
     expect(await scheduledReportingToolRefusal("observe_health", "owner", context)).toMatchObject({ success: false });

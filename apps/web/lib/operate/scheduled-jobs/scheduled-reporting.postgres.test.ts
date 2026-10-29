@@ -60,7 +60,7 @@ describe.skipIf(!url)("scheduled reporting transactions on PostgreSQL", () => {
     const scopeDigest = scheduledReportingScopeDigest(task);
     await db.taskRun.create({ data: { taskRunId, title: "Watch", objective: "Observe", userId: "owner", threadId: "thread", contextId: "thread",
       currentAgentId: "platform-engineer", status: "working", startedAt: new Date(now.getTime() - 5000),
-      a2aMetadata: { sourceRef: { kind: "scheduled-task", id: "watch" }, scheduledReporting: { mode: "read-only-history", scopeDigest } } } });
+      a2aMetadata: { sourceRef: { kind: "scheduled-task", id: "watch" }, scheduledReporting: { mode: "read-only-history", scopeDigest, nextRunAt: task.nextRunAt?.toISOString() ?? null } } } });
     await db.toolExecution.create({ data: { threadId: "thread", taskRunId, userId: "owner", agentId: "platform-engineer", toolName: reader.name,
       parameters: {}, result: { success: true, data: { value: 7 } }, success: true, executionMode: "immediate", createdAt: new Date(now.getTime() - 1000) } });
     return { taskId: "watch", userId: "owner", taskRunId, threadId: "thread", agentId: "platform-engineer", scopeDigest, content: report(), admittedTools: [reader], now };
@@ -154,6 +154,13 @@ describe.skipIf(!url)("scheduled reporting transactions on PostgreSQL", () => {
       return true;
     }, true)).toBeNull();
     expect(wrote).toBe(false);
+  });
+  it("does not overwrite an explicit rerun's new due time with an older report", async () => {
+    const nextRunAt = new Date(now.getTime() + 60000);
+    await db.scheduledAgentTask.update({ where: { taskId: "watch" }, data: { nextRunAt } });
+    await expect(settleScheduledReportingRun(input, { db })).rejects.toThrow();
+    expect(await db.taskMessage.count()).toBe(0);
+    expect(await db.scheduledAgentTask.findUniqueOrThrow({ where: { taskId: "watch" } })).toMatchObject({ nextRunAt });
   });
   it.each(["failed", "foreign", "stale"])("does not complete from %s observation evidence", async invalid => {
     await db.toolExecution.updateMany({ data: invalid === "failed" ? { success: false } : invalid === "foreign" ? { userId: "another-owner" }

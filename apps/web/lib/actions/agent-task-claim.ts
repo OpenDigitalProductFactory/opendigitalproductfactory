@@ -17,6 +17,7 @@ export async function withCurrentScheduledTask<T>(
     const current = await tx.scheduledAgentTask.findUnique({ where: { taskId } });
     const expected = !beforeCadence && isOneShotCron(String(original.schedule)) ? { ...original, isActive: false } : original;
     if (!current || current.ownerUserId !== owner || (current.taskRunId ?? null) !== expectedRunId
+      || (current.nextRunAt?.getTime() ?? null) !== (original.nextRunAt instanceof Date ? original.nextRunAt.getTime() : null)
       || scheduledReportingScopeDigest(current) !== scheduledReportingScopeDigest(expected)) return null;
     if (requireWorking) {
       if (!expectedRunId) return null;
@@ -39,7 +40,7 @@ export async function claimScheduledTaskCadence(
 ): Promise<boolean> {
   const oneShot = isOneShotCron(task.schedule);
   const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
-  return await withCurrentScheduledTask(db, task, task.taskRunId ?? null, async tx => {
+  const won = await withCurrentScheduledTask(db, task, task.taskRunId ?? null, async tx => {
   const claim = await tx.scheduledAgentTask.updateMany({
     where: { taskId: task.taskId, isActive: true, nextRunAt: { lte: now } },
     data: oneShot ? { nextRunAt: null, isActive: false } : { nextRunAt },
@@ -48,4 +49,8 @@ export async function claimScheduledTaskCadence(
   await tx.scheduledJob.updateMany({ where: { jobId: task.taskId }, data: { nextRunAt } });
   return true;
   }, false, true) ?? false;
+  // Keep this invocation's committed cadence token for binding and settlement;
+  // a later explicit rerun changes it and cannot be overwritten by this run.
+  if (won) task.nextRunAt = nextRunAt;
+  return won;
 }

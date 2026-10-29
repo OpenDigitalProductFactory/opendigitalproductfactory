@@ -24,13 +24,14 @@ describe("current scheduled settlement fence", () => {
     expect(write).toHaveBeenCalledWith(tx);
     expect(tx.$queryRaw).toHaveBeenCalledOnce();
   });
-  it.each(["mode", "prompt", "paused", "new-run", "parked"])("prevents a stale ordinary writer after %s changed", async change => {
+  it.each(["mode", "prompt", "paused", "new-run", "parked", "rerun"])("prevents a stale ordinary writer after %s changed", async change => {
     const original = structuredClone(task);
     if (change === "mode") task.taskConfig = { routineReporting: { version: 1, mode: "read-only-history" } };
     if (change === "prompt") task.prompt = "A different commission";
     if (change === "paused") task.isActive = false;
     if (change === "new-run") task.taskRunId = "TR-2";
     if (change === "parked") tx.taskRun.findUnique.mockResolvedValue({ status: "input-required", userId: "owner" });
+    if (change === "rerun") task.nextRunAt = new Date();
     const { result, write } = await settle(original);
     expect(result).toBeNull();
     expect(write).not.toHaveBeenCalled();

@@ -357,7 +357,7 @@ export async function createTaskRunForScheduledTask(input: {
   /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
   delegatedPosture?: ResolvedDelegatedPosture;
   taskConfig?: unknown;
-  scheduledReporting?: { mode: "read-only-history"; scopeDigest: string };
+  scheduledReporting?: { mode: "read-only-history"; scopeDigest: string; nextRunAt: string | null };
 }): Promise<ScheduledTaskRunRef> {
   const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
   return createAutonomousWorkRun({

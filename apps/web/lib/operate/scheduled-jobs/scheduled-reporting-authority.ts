@@ -19,7 +19,8 @@ export function assertCurrentScheduledReportingContext(task: Record<string, unkn
     || context.taskRunId !== run.taskRunId || context.threadId !== run.threadId
     || !allowSettled && run.status !== "working" || source?.kind !== "scheduled-task" || source.id !== task.taskId
     || !context.agentId || coworkerAuthorityAgentId(context.agentId) !== coworkerAuthorityAgentId(String(task.agentId))
-    || !binding || binding.mode !== mode || binding.scopeDigest !== scheduledReportingScopeDigest(task)) {
+    || !binding || binding.mode !== mode || binding.scopeDigest !== scheduledReportingScopeDigest(task)
+    || !Object.hasOwn(binding, "nextRunAt") || binding.nextRunAt !== (task.nextRunAt instanceof Date ? task.nextRunAt.toISOString() : null)) {
     throw new Error("Scheduled reporting requires the current admitted task, owner, actor, thread and commission.");
   }
   return { mode, scopeDigest: String(binding.scopeDigest) };
