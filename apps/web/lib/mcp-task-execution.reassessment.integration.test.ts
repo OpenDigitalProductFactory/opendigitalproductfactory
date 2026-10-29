@@ -154,7 +154,7 @@ function installStorage() {
   s.user = { userId, platformRole: "ceo", isSuperuser: true };
   s.agentInfo = { agentId, systemPrompt: "Independently inspect the synthetic research. Retain its evidence.", sensitivity: "internal" };
   s.run = { id: "run-row", taskRunId, userId, currentAgentId: agentId, threadId: "fixture-thread", contextId: "fixture-thread",
-    title: parsed.title, objective: parsed.objective, status: "working", updatedAt: new Date(), authorityScope: parsed.authorityScope,
+    title: parsed.title, objective: parsed.objective, status: "working", archivedAt: null, updatedAt: new Date(), authorityScope: parsed.authorityScope,
     progressPayload: { resumeReservedAt: fence.reservation, dispatch: { claimedAt: fence.dispatchClaim, count: 1, state: "claimed" } },
     a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: binding,
       sourceRef: { kind: "mcp-token", id: "fixture-token" }, authorityScope: parsed.authorityScope } };

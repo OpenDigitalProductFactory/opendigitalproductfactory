@@ -1,4 +1,4 @@
-import type { ProactivityLevel } from "./proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export const PROACTIVITY_LEVEL_COPY: Record<
   ProactivityLevel,

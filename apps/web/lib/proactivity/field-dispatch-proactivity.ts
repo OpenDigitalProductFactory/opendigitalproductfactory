@@ -1,7 +1,7 @@
 import type { DispatchNotificationIntent } from "@dpf/validators";
 
-import { resolveProactivityPlan } from "./proactivity-resolver";
-import type { ProactivityPlan, ProactivityResolverInput } from "./proactivity-types";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityPlan, ProactivityResolverInput } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export type FieldDispatchNotificationProactivityInput = {
   intent: DispatchNotificationIntent;

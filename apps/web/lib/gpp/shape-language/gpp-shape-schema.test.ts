@@ -22,7 +22,7 @@ import {
   gppShapeJsonSchema,
   gppShapeSchemaRegistry,
   isUniqueArraySchema,
-} from "./gpp-shape-schema";
+} from "@dpf/validators/gpp/gpp-shape-schema";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type JsonObject = { [key: string]: Json };

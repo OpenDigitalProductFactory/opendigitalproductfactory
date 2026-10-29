@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
-import { withScheduledWorkTrigger } from "./scheduled-work-trigger";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
+import { withScheduledWorkTrigger } from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 
 const mocks = vi.hoisted(() => ({
   prisma: { workroom: { findFirst: vi.fn() } },

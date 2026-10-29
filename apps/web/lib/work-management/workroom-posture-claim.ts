@@ -14,11 +14,11 @@
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
-} from "@/lib/proactivity/proactivity-types";
-import { PROACTIVITY_LEVELS } from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy/proactivity-types";
+import { PROACTIVITY_LEVELS } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import { isGoldenTrianglePreference } from "@/lib/golden-triangle/persistence";
-import type { RoomPostureDeclaration } from "@/lib/work-posture";
+import type { RoomPostureDeclaration } from "@dpf/validators/workroom-policy";
 
 export type WorkroomPostureClaimEntry = {
   workroomPosture: RoomPostureDeclaration;

@@ -7,7 +7,8 @@
  * Closed set: a new axis is a deliberate widening of what the gate governs,
  * not a string literal someone invents at a call site.
  */
-export type ToolConsequence = "outward" | "irreversible" | "authority";
+export type { ToolConsequence } from "@dpf/validators/gpp/tool-facts";
+import type { ToolConsequence } from "@dpf/validators/gpp/tool-facts";
 
 /**
  * The closed set, as a runtime value. `deriveConsequentialToolNames`
@@ -15,11 +16,7 @@ export type ToolConsequence = "outward" | "irreversible" | "authority";
  * set from `sideEffect && consequence != null` — TAK §8.4.1, classification is
  * derived from a declared property, never re-enumerated in a second allowlist.
  */
-export const TOOL_CONSEQUENCES: readonly ToolConsequence[] = [
-  "outward",
-  "irreversible",
-  "authority",
-] as const;
+export { TOOL_CONSEQUENCES } from "@dpf/validators/gpp/tool-facts";
 
 /** See `ToolDefinition.consequenceScope`. Closed set. */
 export type ToolConsequenceScope = "business" | "platform";
