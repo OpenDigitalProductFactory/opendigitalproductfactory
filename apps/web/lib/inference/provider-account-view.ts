@@ -16,6 +16,12 @@ export type ProviderAccountIdentity = {
 export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
   label: string; providerName: string; statusLabel: string;
   readiness?: AccountReadiness;
+  connectionSummary?: string;
+  eligibilitySummary?: string;
+  lastCheckedAt?: string | null;
+  lastSucceededAt?: string | null;
+  quotaRecheckAt?: string | null;
+  nextActionLabel?: string;
   allowedWork: string; allowedWorkSummary: string;
   modelSummary: string; capacitySummary: string; resetSummary: string | null;
   capabilitySummary?: string;

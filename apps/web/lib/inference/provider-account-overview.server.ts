@@ -86,8 +86,22 @@ export async function loadProviderAccountOverview(input: {
       credentialNeedsRenewal, healthAvailable: capacity !== null && (!account.isDefault || Boolean(control)),
       capacity: ownedHealth, sharedCapacity: account.isDefault ? providerLimit : sharedLimit ?? undefined,
       control, sharedRestrictions, now: now.getTime(), copy: input.copy });
+    const authLabel = isLocalProviderId(account.providerId) ? input.copy.localConnection
+      : account.authMethod === "api_key" ? input.copy.apiKeyMethod
+        : account.authMethod === "oauth2_client_credentials" ? input.copy.workloadMethod : input.copy.oauthMethod;
     return [{
       readiness,
+      connectionSummary: `${authLabel} · ${isLocalProviderId(account.providerId) ? input.copy.localConnection
+        : account.credential?.hasUsableMaterial || (account.isDefault && pw.credential?.hasUsableMaterial) ? input.copy.connectionSaved : input.copy.needsSetup}`,
+      lastCheckedAt: ownedHealth?.observedAtMs ? new Date(ownedHealth.observedAtMs).toISOString() : null,
+      lastSucceededAt: ownedHealth?.lastSuccessAtMs ? new Date(ownedHealth.lastSuccessAtMs).toISOString() : null,
+      quotaRecheckAt: control?.restrictions.find(restriction => restriction.key === "quota-recovery")?.until ?? null,
+      eligibilitySummary: control?.eligibility.reason ?? (["waiting", "paused", "blocked"].includes(readiness.state)
+        ? input.copy.notRouting : input.copy.accountEligibilityUnconfirmed),
+      nextActionLabel: recoveryAction ?? (control?.healthStatus === "billing" ? input.copy.reviewAccountBilling : readiness.state === "waiting" ? input.copy.reviewAvailability
+        : readiness.state === "paused" ? input.copy.reviewPause
+          : readiness.state === "blocked" ? input.copy.reviewConnectionSettings
+            : readiness.state === "unverified" || !account.modelsVerifiedAt ? input.copy.reviewAndVerify : input.copy.viewAccount),
       connectionId: account.connectionId, providerId: account.providerId, isDefault: account.isDefault,
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,
       modelsVerifiedAt: account.modelsVerifiedAt, lastReviewedAt: account.lastReviewedAt, supplierContractId: account.supplierContractId,
