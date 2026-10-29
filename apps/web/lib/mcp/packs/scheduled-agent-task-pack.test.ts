@@ -73,6 +73,7 @@ describe("scheduled-agent-task pack — registration", () => {
     expect(byName.pause_scheduled_agent_task.sideEffect).toBe(true);
     expect(byName.resume_scheduled_agent_task.sideEffect).toBe(true);
     expect(byName.rerun_scheduled_agent_task.sideEffect).toBe(true);
+    expect(byName.configure_scheduled_agent_task_reporting.consequence).toBe("authority");
   });
 
   it("grants mirror agent-grants for every tool", () => {

@@ -410,6 +410,8 @@ export async function resolveAutonomousWorkTools(input: {
 }
 
 export async function executeAutonomousAgenticLoop(input: {
+  /** Server-owned commission narrowing; its report must not emit optional proposal writers. */
+  scheduledReportingMode?: "read-only-history";
   canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
@@ -646,6 +648,10 @@ export async function executeAutonomousAgenticLoop(input: {
       },
     );
   }
+
+  // Report settlement owns the output/history. Optional draft revision and
+  // background learning writers are outside this observation-only commission.
+  if (input.scheduledReportingMode === "read-only-history") return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
 
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on

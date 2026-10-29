@@ -517,6 +517,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     );
 
     const loopInput = {
+      ...(reportingMode ? { scheduledReportingMode: reportingMode } : {}),
       systemPrompt: agentInfo.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       chatHistory,

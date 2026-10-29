@@ -137,7 +137,9 @@ export async function settleScheduledReportingRun(input: RunInput, dependencies:
     const status: ReportingStatus = input.failure ? input.failure.kind === "credentials" ? "auth-required" : "failed"
       : report!.state === "needs-decision" ? "input-required" : "completed";
     const summary = redactDiagnosticEvidenceText(input.failure?.message ?? report!.summary).trim().slice(0, 2000) || "The scheduled observation could not be verified.";
-    const history = [summary, report?.recommendation, report?.decisionBrief].filter(Boolean).join("\n\n");
+    const recommendation = report?.recommendation ? redactDiagnosticEvidenceText(report.recommendation).slice(0, 2000) : undefined;
+    const decisionBrief = report?.decisionBrief ? redactDiagnosticEvidenceText(report.decisionBrief).slice(0, 2000) : undefined;
+    const history = [summary, recommendation, decisionBrief].filter(Boolean).join("\n\n");
     if (report?.state === "resolved") {
       if (!state.condition || report.conditionId !== state.condition.conditionId) throw new Error("Resolution does not match the current observed condition.");
       await tx.notification.updateMany({ where: { id: state.condition.notificationId, userId: input.userId }, data: { read: true } });
@@ -156,7 +158,7 @@ export async function settleScheduledReportingRun(input: RunInput, dependencies:
       state.condition = { conditionId: randomUUID(), notificationId: notification.id, attemptId: attempts[0]!.attemptId, taskRunId: input.taskRunId };
     }
     await recordHistory(tx, input, run, history, { status, evidence, reportDigest, conditionId: state.condition?.conditionId ?? null });
-    await persistOutcome(tx, input, task, state, status, summary, reportDigest, evidence, now, report?.decisionBrief);
+    await persistOutcome(tx, input, task, state, status, summary, reportDigest, evidence, now, decisionBrief);
     return { status, reused: false };
   }, { maxWait: 5000, timeout: 20000 });
 }

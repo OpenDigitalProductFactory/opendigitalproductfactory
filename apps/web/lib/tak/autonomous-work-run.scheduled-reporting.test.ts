@@ -3,6 +3,10 @@ import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
+vi.mock("@/lib/tak/agentic-loop", () => ({ runAgenticLoop: vi.fn() }));
+vi.mock("@/lib/tak/pattern-observer-service", () => ({ observeWorkPatternsAfterRun: vi.fn() }));
+vi.mock("@/lib/tak/pattern-observer/observer", () => ({ observeCoworkerPatterns: vi.fn() }));
+vi.mock("@/lib/tak/reflection-triggers", () => ({ processRuntimeIssueReflection: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ getAvailableTools: vi.fn(), toolsToOpenAIFormat: vi.fn() }));
 vi.mock("@/lib/tak/agent-grants", async original => ({
   ...await original<Record<string, unknown>>(), getAgentToolGrantsAsync: async () => [],
@@ -30,6 +34,28 @@ describe("bounded scheduled reporting narrows the real autonomous surface", () =
     const tools = await import("@/lib/mcp-tools");
     vi.mocked(tools.getAvailableTools).mockReset();
     vi.mocked(tools.toolsToOpenAIFormat).mockImplementation(value => value as never);
+  });
+
+  it("keeps a history-reporting run free of optional post-run proposal writers", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    const observer = await import("@/lib/tak/pattern-observer-service");
+    const systemic = await import("@/lib/tak/pattern-observer/observer");
+    const reflection = await import("@/lib/tak/reflection-triggers");
+    vi.mocked(observer.observeWorkPatternsAfterRun).mockClear().mockResolvedValue({ processed: 0 } as never);
+    vi.mocked(systemic.observeCoworkerPatterns).mockClear().mockResolvedValue({ processed: 0 } as never);
+    vi.mocked(reflection.processRuntimeIssueReflection).mockClear();
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Bounded report", executedTools: [] } as never);
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+    const request: Parameters<typeof executeAutonomousAgenticLoop>[0] = {
+      systemPrompt: "Observe only", chatHistory: [{ role: "user", content: "Report observations" }], sensitivity: "internal",
+      tools: [], toolsForProvider: [], userId: "user-1", routeContext: "/ops", agentId: "observer", threadId: "thread-1",
+      taskRunId: "TR-REPORTING", scheduledReportingMode: "read-only-history",
+    };
+    expect(await executeAutonomousAgenticLoop(request)).toMatchObject({ content: "Bounded report" });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(observer.observeWorkPatternsAfterRun).not.toHaveBeenCalled();
+    expect(systemic.observeCoworkerPatterns).not.toHaveBeenCalled();
+    expect(reflection.processRuntimeIssueReflection).not.toHaveBeenCalled();
   });
 
   it("excludes writers and ambiguous definitions from both attached and deferred tools", async () => {

@@ -102,4 +102,12 @@ describe("scheduled reporting settlement", () => {
     await failScheduledReportingRun(input(), "A required fresh successful observation is missing.");
     expect(task.lastError).toBe("A required fresh successful observation is missing.");
   });
+  it("applies the diagnostic policy to every model text field before history, notice and decision projection", async () => {
+    await settleScheduledReportingRun(input(report("needs-decision", { summary: "Bearer fixture-summary-secret",
+      recommendation: "Bearer fixture-recommendation-secret", decisionBrief: "Bearer fixture-decision-secret" })));
+    const stored = JSON.stringify({ history: db.taskMessage.create.mock.calls, notice: db.notification.create.mock.calls, progress: run.progressPayload });
+    expect(stored).not.toContain("fixture-summary-secret");
+    expect(stored).not.toContain("fixture-recommendation-secret");
+    expect(stored).not.toContain("fixture-decision-secret");
+  });
 });

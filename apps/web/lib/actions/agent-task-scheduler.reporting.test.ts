@@ -59,6 +59,7 @@ describe("history reporting at the real scheduler boundary", () => {
     expect(m.db.scheduledJob.update).not.toHaveBeenCalled();
     expect(m.db.scheduledAgentTask.update.mock.calls.every(([a]) => !a.data.lastStatus)).toBe(true);
     expect(m.loop.mock.calls[0]![0].chatHistory[0].content).toContain("Original task context follows unchanged:\nObserve. File per-tick evidence.");
+    expect(m.loop.mock.calls[0]![0].scheduledReportingMode).toBe("read-only-history");
   });
   it("keeps a real credential outcome and avoids generic short-cadence retry", async () => {
     const failure = { kind: "credentials", message: "Provider sign-in expired." };

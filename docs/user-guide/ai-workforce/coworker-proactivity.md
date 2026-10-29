@@ -166,6 +166,11 @@ completed report. A provider that cannot enforce the limited access leaves the
 run unverified. Ask a coworker to configure the paused watch, then resume the
 same watch through its existing controls.
 
+Changing the watch's action boundary is a governed configuration choice. Its
+reports then go to history under that choice; existing data and action
+permissions still apply. Pausing stops future runs and keeps the history.
+Broader actions need their own current authorization.
+
 ### What it will not do
 
 - No level bypasses the two hard floors above. **Money leaving the business and

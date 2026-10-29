@@ -96,7 +96,7 @@ const definitions: ToolDefinition[] = [
       taskId: { type: "string" }, expectedRevision: { type: "string", description: "Exact current revision returned by the task list." },
       mode: { type: "string", enum: ["read-only-history"] }, reason: { type: "string" },
     }, required: ["taskId", "expectedRevision", "mode", "reason"], additionalProperties: false },
-    requiredCapability: "view_operations", executionMode: "immediate", sideEffect: true,
+    requiredCapability: "view_operations", executionMode: "immediate", sideEffect: true, consequence: "authority",
   },
   {
     name: "cancel_scheduled_agent_task",
