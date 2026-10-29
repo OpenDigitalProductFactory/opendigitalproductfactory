@@ -18,6 +18,16 @@ export async function defaultGovernedToolPreflight(event: ToolLifecycleEvent,
   if (event.context?.callerClient !== APPROVAL_COMPLETION) {
     const recoveryRefusal = await checkRecoveredReviewAuthority(event.userId, event.context);
     if (recoveryRefusal) return recoveryRefusal;
+  }
+  const { scheduledReportingToolRefusal } = await import("./operate/scheduled-jobs/scheduled-reporting-authority");
+  const reportingRefusal = await scheduledReportingToolRefusal(event.toolName, event.userId, event.context);
+  if (reportingRefusal) return reportingRefusal;
+  if (event.toolName === "configure_scheduled_agent_task_reporting") {
+    const { preflightConfigureScheduledReporting } = await import("./operate/scheduled-jobs/scheduled-reporting-config");
+    const refusal = await preflightConfigureScheduledReporting(event.rawParams, event.userId);
+    if (refusal) return refusal;
+  }
+  if (event.context?.callerClient !== APPROVAL_COMPLETION) {
     const refusal = await roomRefusal(event.toolName, event.rawParams, event.userId, event.context);
     if (refusal) return refusal;
     if (event.toolName === "record_initiative_evidence") {

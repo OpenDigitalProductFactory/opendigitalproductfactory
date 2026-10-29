@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "./scheduled-task-transaction-fixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -98,10 +99,9 @@ import {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [], toolGrantRevocations: [] });
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
-  // default to a WON claim so existing tests exercise the work. Per-test
-  // overrides simulate losing the claim.
+  // Default to a won claim; individual cases simulate losing it.
   mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
   mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
 });
@@ -950,7 +950,7 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
 describe("executeScheduledAgentTask — SysML projection reconcile branch", () => {
   it("runs the deterministic reconcile directly (no LLM loop) and records ok status", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "sysml-projection-nightly",
+      taskId: "sysml-projection-nightly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 4 * * *",
     });
@@ -982,7 +982,7 @@ describe("executeScheduledAgentTask — SysML projection reconcile branch", () =
 
   it("records error status when the reconcile throws", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "sysml-projection-nightly",
+      taskId: "sysml-projection-nightly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 4 * * *",
     });
@@ -1081,7 +1081,7 @@ describe("scheduleAgentTask UTC-only timezone", () => {
 describe("executeScheduledAgentTask — self-optimization sweep branch", () => {
   it("runs the deterministic sweep directly (no LLM loop) and records ok status", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "self-optimization-sweep-weekly",
+      taskId: "self-optimization-sweep-weekly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 5 * * 1",
     });
@@ -1111,7 +1111,7 @@ describe("executeScheduledAgentTask — self-optimization sweep branch", () => {
 
   it("records error status when the sweep throws", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "self-optimization-sweep-weekly",
+      taskId: "self-optimization-sweep-weekly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 5 * * 1",
     });

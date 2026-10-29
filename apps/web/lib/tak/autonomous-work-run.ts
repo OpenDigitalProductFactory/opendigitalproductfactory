@@ -267,6 +267,10 @@ export async function resolveAutonomousWorkTools(input: {
   requiredToolNames?: readonly string[];
   /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
   restrictedReviewBinding?: InitiativeReviewBinding;
+  /** Current server-resolved scheduled commission; never copied from model arguments. */
+  scheduledReportingMode?: "read-only-history";
+  taskRunId?: string;
+  threadId?: string;
   roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
@@ -279,7 +283,7 @@ export async function resolveAutonomousWorkTools(input: {
   const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import(
     "@/lib/coworker/authorized-surface-coworker-contract"
   );
-  const authorized = await getAvailableTools(input.userContext, {
+  const normallyAuthorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
@@ -287,6 +291,17 @@ export async function resolveAutonomousWorkTools(input: {
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
     ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
+
+  const { isScheduledReportingRead } = await import("@/lib/operate/scheduled-jobs/scheduled-reporting-contract");
+  const reportingUserId = input.userContext.userId;
+  if (input.taskRunId && !reportingUserId) throw new Error("Scheduled reporting requires its authenticated owner.");
+  const reporting = input.taskRunId && reportingUserId ? await (await import("@/lib/operate/scheduled-jobs/scheduled-reporting-authority"))
+    .resolveScheduledReportingContext(reportingUserId, { taskRunId: input.taskRunId, threadId: input.threadId, agentId: input.agentId }) : null;
+  if (input.taskRunId && input.scheduledReportingMode && reporting?.mode !== input.scheduledReportingMode) {
+    throw new Error("Scheduled reporting requires its current persisted commission.");
+  }
+  const authorized = (reporting?.mode ?? input.scheduledReportingMode) === "read-only-history"
+    ? normallyAuthorized.filter(isScheduledReportingRead) : normallyAuthorized;
 
   if (input.restrictedReviewBinding) {
     const binding = input.restrictedReviewBinding;

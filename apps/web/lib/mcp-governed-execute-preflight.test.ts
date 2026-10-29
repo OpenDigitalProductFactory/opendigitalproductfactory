@@ -1,13 +1,22 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const guard = vi.hoisted(() => vi.fn());
 const evidencePreflight = vi.hoisted(() => vi.fn());
+const reportingGuard = vi.hoisted(() => vi.fn());
+vi.mock("./operate/scheduled-jobs/scheduled-reporting-authority", () => ({ scheduledReportingToolRefusal: reportingGuard }));
 vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: guard }));
 vi.mock("./mcp/packs/initiative-readiness-pack", () => ({ preflightInitiativeEvidence: evidencePreflight }));
 import { defaultGovernedToolPreflight } from "./mcp-governed-execute-preflight";
 import * as exceptions from "./change-review/semantic-review-policy-exemption";
 const event = { toolName: "record_initiative_evidence", rawParams: {}, userId: "human", userContext: { platformRole: "developer", isSuperuser: false },
   source: "agentic-loop" as const, context: { taskRunId: "TR-ORIGINAL", apiTokenId: "current-token" } };
-beforeEach(() => { vi.resetAllMocks(); guard.mockResolvedValue(null); evidencePreflight.mockResolvedValue(null); });
+beforeEach(() => { vi.resetAllMocks(); guard.mockResolvedValue(null); evidencePreflight.mockResolvedValue(null); reportingGuard.mockResolvedValue(null); });
+it("checks the current reporting boundary even for a previously approved scheduled write", async () => {
+  const refusal = { success: false, error: "scheduled_reporting_write_refused", message: "This commission permits observation and reporting only." };
+  reportingGuard.mockResolvedValue(refusal);
+  const approved = { ...event, toolName: "record_execution_evidence", context: { ...event.context, callerClient: "approval-completion" } };
+  expect(await defaultGovernedToolPreflight(approved, vi.fn())).toEqual(refusal);
+  expect(reportingGuard).toHaveBeenCalledWith(approved.toolName, approved.userId, approved.context);
+});
 it("rejects missing artifact provenance before the owner can be asked to approve", async () => {
   const refusal = { success: false, error: "ARTIFACT_AUTHOR_REQUIRED", message: "Artifact author provenance is unavailable." };
   evidencePreflight.mockResolvedValue(refusal);

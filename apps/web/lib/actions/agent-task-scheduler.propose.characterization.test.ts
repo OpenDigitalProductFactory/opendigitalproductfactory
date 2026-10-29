@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "./scheduled-task-transaction-fixture";
 // Approval convergence A1 characterisation (BI-C8EC05C9), creation site S2 in
 // the scheduler. Pins how a scheduled run treats a call that propose-
 // interception diverted, TODAY (spec D2 S2, named delta (a)):
@@ -122,7 +123,7 @@ import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test
   // overrides simulate losing the claim.
@@ -234,7 +235,7 @@ describe("S2 in the scheduler — the playbook verdict for a diverted call (char
     expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ lastStatus: "proposed", nextRunAt: workroomStage ? null : expect.any(Date) }),
     }));
-    expect(mocks.prisma.scheduledJob.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.prisma.scheduledJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ nextRunAt: workroomStage ? null : expect.any(Date) }),
     }));
   });

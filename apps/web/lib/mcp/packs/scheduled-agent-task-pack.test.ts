@@ -19,6 +19,7 @@ const EXPECTED_TOOLS = [
   "pause_scheduled_agent_task",
   "resume_scheduled_agent_task",
   "rerun_scheduled_agent_task",
+  "configure_scheduled_agent_task_reporting",
 ];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
@@ -28,6 +29,7 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
   pause_scheduled_agent_task: ["work_capsule_write"],
   resume_scheduled_agent_task: ["work_capsule_write"],
   rerun_scheduled_agent_task: ["work_capsule_write"],
+  configure_scheduled_agent_task_reporting: ["work_capsule_write"],
 };
 
 beforeEach(() => {
@@ -44,6 +46,19 @@ describe("scheduled-agent-task pack — registration", () => {
     for (const d of scheduledAgentTaskPack.definitions) {
       expect(d.description).not.toMatch(/\bBI-|Phase \d|EP-|apps\/web\//);
     }
+  });
+
+  it("lists only an exact selected task through the owner-bound core while retaining the compact prompt", async () => {
+    core.getScheduledAgentTasksFor.mockResolvedValue([{ taskId: "selected", prompt: "private ".repeat(100), revision: "a".repeat(64) }]);
+    const result = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ taskId: "selected" }, "owner");
+    expect(core.getScheduledAgentTasksFor).toHaveBeenCalledWith("owner", undefined, "selected");
+    expect((result.data?.tasks as Array<{ prompt: string }>)[0]!.prompt.length).toBeLessThanOrEqual(201);
+    expect(result.data?.tasks).toEqual([expect.objectContaining({ revision: "a".repeat(64) })]);
+  });
+  it.each(["", "   ", 42, null])("does not broaden an invalid exact task selector %j into a bulk list", async taskId => {
+    const result = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ taskId }, "owner");
+    expect(result.success).toBe(false);
+    expect(core.getScheduledAgentTasksFor).not.toHaveBeenCalled();
   });
 
   it("preserves requiredCapability, executionMode, and sideEffect metadata verbatim", () => {
