@@ -667,6 +667,26 @@ continuation briefs respectively. Their existing owners retain those mechanisms;
 none of the inspected bodies supplies this exact occurrence source-facts outcome.
 
 
+### Research & Benchmarking for BI-D02868D7
+
+Primary sources inspected on 2026-10-29 UTC. These are architectural comparisons, not claims that external products have been installed or tested.
+
+| Comparator | Observed model | Adopt for this increment | Reject or leave outside scope |
+| --- | --- | --- | --- |
+| [Backstage entity descriptor](https://backstage.io/docs/features/software-catalog/descriptor-format/) — open source | Entity envelope separates metadata/spec from processor-produced relations. Relations use typed canonical target references. The documentation explicitly separates display ownership from runtime authorization. | Resolve the canonical source and relationships rather than treating a display label as authority. Keep displayed facts distinct from the selected-room permission decision. | A second catalog, importing descriptor ownership as access permission, or copying its entity schema into DPF. |
+| [OpenMetadata table JSON schema](https://github.com/open-metadata/OpenMetadata/blob/main/openmetadata-spec/src/main/resources/json/schema/entity/data/table.json) — open source | Structured fields include qualified entity names, typed references and explicit optional profiles; nested columns have a declared schema. | Use explicit identities and typed bounded facts, with absence represented rather than guessed. | Broad lineage ingestion, editable metadata catalogs and an extra profile store. A table schema is a comparison, not a complete DPF authorization design. |
+| [Atlassian Assets attributes](https://support.atlassian.com/assets/docs/what-are-attributes/) — commercial | Attributes distinguish system names and display names and support object references; object keys identify individual objects. | Keep readable labels alongside attributable source identity within Details. | Letting free-text labels substitute for exact booking identity, or expanding to schema/object editing controls. |
+| [ServiceNow Identification and Reconciliation API](https://www.servicenow.com/docs/r/api-reference/rest-apis/c_IdentifyReconcileAPI.html) — commercial | Central reconciliation identifies configuration items and restricts updates to authorized data sources; source-native keys identify contributed records. | Preserve source identity and treat conflicting source facts explicitly. Reuse the existing owning authority. | Building an ingestion/reconciliation engine or silently selecting precedence to manufacture applicability. This increment is read-only. |
+
+[W3C PROV-DM](https://www.w3.org/TR/prov-dm/) distinguishes entities, activities, agents and derivation. Its derivation discussion cautions that usage plus generation alone does not establish derivation. Apply that distinction to evidence: reading a booking establishes source attribution, not a reviewed outcome. This is conceptual alignment; no PROV serialization or conformance claim is made.
+
+This increment concerns authorized catalog facts and disclosure, not a new delivery lifecycle or agent process. BMAD is therefore not the nearest comparator for this narrow addition; the existing parent lifecycle design remains authoritative.
+
+This comparison supplies author research for the source-facts increment only. It
+does not approve the parent scope, satisfy independent review, settle the Windows
+failure, or attest installed acceptance. The actual child delivery binding must
+resolve its own shape, research receipt and plan coverage before implementation.
+
 **Next ordinary steps.** Preserve this source reconciliation, obtain the actual
 immutable design identity, and follow the current governed design/coverage obligations.
 Do not request a replacement for any unsettled original review or infer its settlement
