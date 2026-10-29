@@ -13529,6 +13529,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "before-you-decide",
         "connecting-business-mail",
         "checking-an-approval-result",
         "operations-and-performance",

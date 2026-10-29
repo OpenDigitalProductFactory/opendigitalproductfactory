@@ -36,6 +36,15 @@ describe("StatusBadge", () => {
     expect(html).not.toMatch(/#[0-9a-f]{3,6}/i);
   });
 
+  it("can keep semantic tint while using the readable body foreground for small labels", () => {
+    const html = renderToStaticMarkup(
+      <StatusBadge intent="warning" label="Due in 60 minutes" variant="soft" textTone="body" />,
+    );
+    expect(html).toContain("color:var(--dpf-text)");
+    expect(html).toContain("var(--dpf-warning) 12%");
+    expect(html).toContain('data-intent="warning"');
+  });
+
   it("honors uppercase=false", () => {
     const html = renderToStaticMarkup(
       <StatusBadge intent="info" label="Sent" uppercase={false} />,
