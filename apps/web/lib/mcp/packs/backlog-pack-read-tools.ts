@@ -448,21 +448,12 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
-  // BI-6F2872FC AC-6: an item with an active build is judged on the facts its
-  // build gate uses (plan paths raise sensitivity; the reviewed design is the
-  // proportional shapes' research). Without them this view, the owed-review
-  // router and the acceptance sweep saw a different, unraised item than the
-  // gate refusing it, so the reviews the gate owed were never dispatched.
-  const activeBuild = item.activeBuild;
-  const buildFacts = activeBuild
-    ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
-      kind: activeBuild.kind,
-      designDoc: activeBuild.designDoc,
-      designReview: activeBuild.designReview,
-      buildPlan: activeBuild.buildPlan,
-      originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
-    }).catch(() => null)
-    : null;
+  // BI-8ECF7B5C: judge an item with an active build on its build gate's facts, so the router sees the gate's verdict.
+  const ab = item.activeBuild;
+  const buildFacts = ab ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
+    kind: ab.kind, designDoc: ab.designDoc, designReview: ab.designReview, buildPlan: ab.buildPlan,
+    originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
+  }).catch(() => null) : null;
   const evaluatedAt = new Date().toISOString();
   // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
   // evaluation (merge signal included), so this view and the gate agree. Null
