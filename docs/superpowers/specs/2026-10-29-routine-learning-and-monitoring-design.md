@@ -5,6 +5,8 @@ author: Codex
 date: 2026-10-29
 backlog:
   - BI-C5E51A15
+  - BI-74C8FB95
+  - BI-819AD433
 ---
 
 # Routine learning drafts and bounded monitoring reports
@@ -102,3 +104,69 @@ These are working design references, not new accepted parent criteria. Before im
 New reporting configuration must pass target ownership, paused-state, workflow eligibility and exact revision preconditions BEFORE any new approval request. Reuse the canonical governed-tool preflight seam and revalidate inside the mutation transaction after any delayed approval; an impossible configuration must not consume another owner click. The current-side-effect denial for an already configured read-only job also precedes new envelope creation. Do not add an approval bypass by tool name.
 
 Source investigation and this draft may proceed under the authorized Medium repair. Implementation is stopped until independent design challenge is resolved, canonical plan/backlog coverage recorded and the actual implementation claim admitted. No draft states, tests, live job changes, new approvals or UX acceptance are represented as completed work.
+
+## Independent challenge and exact reporting contract
+
+Independent source review of c0e7c44c196366e72a1689a2d1bd83c5daf6f14c identified four unresolved implementation seams. The following requirements address that challenge; they still need independent recheck against the published amendment.
+
+### Report parsing and observation binding
+
+For this exact reporting mode, request one complete JSON object, at most 16,384 characters, with version=1, state (routine/actionable/unchanged/resolved/needs-decision), summary (1–2,000 characters), evidenceToolNames (1–20 distinct admitted tool names), and only these optional fields: recommendation (at most 2,000 characters), decisionBrief (at most 2,000 characters), conditionId (at most 128 characters). Reject unknown keys, extra text, malformed types and unsupported versions; do not silently extract a plausible object from unrelated prose. Actionable requires a recommendation; needs-decision requires a decision brief; resolved requires the exact currently open server condition ID. Routine and unchanged cannot clear a condition. No report field supplies a recipient, URL, permission, executable call or evidence row ID.
+
+Evidence tool names are selectors, not proof. The server resolves each name to actual ToolExecution rows for this current task run, owner, agent and thread, created during this run, with success=true and a non-failure result. Its definition must have belonged to the same narrowed admitted read surface; load_tools/discovery alone is not an observation. Persist the resolved execution IDs and result digests in server-generated reporting metadata. A named observation with no matching successful admitted row fails validation. Ignore model-invented URLs and row identifiers by rejecting those keys. Repeated calls to one named reader bind all qualifying rows from this run, rather than selecting a convenient historical result. Missing/failed/foreign/prior-run/inference-only evidence cannot produce successful completion or resolve a condition. A valid read result establishes that an observation happened; it does not certify the model's interpretation as a fact.
+
+Check existing typed loop/provider/authority failures before interpreting the report. Such a failure cannot be converted into a green report by a JSON-shaped apology. Credential/authority absence is parked as auth-required only when supported by the actual governed disposition; generic policy-or-capability text is insufficient to infer missing credentials. Other failures retain their existing failure handling and bounded recovery. The separate BI-A1C424DB owns general unchanged-authority refusal parking and relevant-change wakeup; this repair does not duplicate that mechanism or grant an automatic resume.
+
+### Transactional notification settlement
+
+The existing dispatcher catches adapter throws and returns failed results. Therefore the reporting transaction must explicitly require status=sent, a nonempty providerMessageId identifying the notification created for the exact owner, and the matching persisted delivery attempt. Inject the SAME transaction client into the existing in-app adapter and delivery writer. A failed/missing adapter result, invalid notification identity or audit failure throws from the reporting caller and aborts condition claim, notification, delivery evidence and reporting marker together. Never include email/push/network side effects in this database-only transaction. After an uncertain commit acknowledgement, reread the same run/condition lineage before any retry; do not assume rollback or issue a new notification identity.
+
+Persistence tests must exercise actual notification insertion, a failed adapter return, adapter throw, delivery-audit rejection, concurrent settlement, an acknowledgement lost after commit, and replay. The expected result is either the single linked owner notice with its marker or no committed notification/marker; a failed dispatch result is never proof of delivery.
+
+### Scheduler parking before common settlement
+
+The current scheduler sets nextRunAt=null for proposed only on Workroom-stage jobs and subsequently writes TaskRun.status=completed unconditionally. The reporting path must branch before those common writes. In one owner/task/run-bound transaction, verify this is still the current scheduled run and unchanged reporting revision, persist the bounded history/decision brief, park TaskRun as input-required or supported auth-required with completedAt=null, set the SAME job lastStatus=proposed and nextRunAt=null, and park its existing scheduled-job recurrence. Return before normal completion, retry reset, recurrence computation and mirror writes. Every later settlement and mirror must compare the same current run/revision so a stale continuation cannot overwrite a parked or newly configured task. Existing supported owner resumption revalidates current authority; it does not imply replay of a failed old write.
+
+Test the real scheduler boundary and mirror persistence for both parked dispositions, a racing old continuation and an intervening configuration change. Parser-only tests cannot establish this behavior. Valid routine/actionable FYI reports use the same current-run check and persist existing history before successful settlement.
+
+### Eligibility and existing history destination
+
+Resolve eligibility from the authoritative persisted generic task, existing task-kind/config parsers, Workroom/stage/dispatch records, and procedural required-tool resolver. Reject any typed/domain ownership, required writer, unrecognized workflow key or conflicting contract before offering mode configuration. The server may inspect its already-authorized task context for conflicts without disclosing prompt bytes; the compact list projection is never used to reconstruct that context. An explicit generic prompt instruction to file per-tick evidence is superseded only by this owner's scoped history-reporting choice; a mandatory workflow contract is not.
+
+Existing /api/internal/tasks/[taskId] is an authenticated request-history reader and includes TaskMessages; the UI already uses it as a Request history link. Link the first actionable notice to that exact existing run history, with the owner/run checked server-side. It is a technical history destination, so the notification itself must contain the short useful finding and recommendation. Do not invent an unsupported taskRunId filter on the audit ledger or claim that an operations-map link opens the exact report.
+
+## Delivery sequence and live coverage to record
+
+1. BI-74C8FB95 owns section A: routine internal learning draft classification, repeat safety, explicit-evidence persistence and current-authority controls. It is independently shippable and does not depend on the monitoring change.
+2. BI-819AD433 owns sections B–D and the reporting refinements: exact paused-job narrowing, read-only runtime enforcement, truthful history/parking and one unresolved owner notice. It is independently shippable after the approval-completion repair, now merged as PR6746 at5a5c3398782cd7d4201df3e9032b6c554361f2f2.
+3. BI-C5E51A15 reconciles the two original live operations and all five parent criteria. Each child uses its own implementation claim, branch and PR. This document is the fix design; live decomposed plan coverage and each child's verbatim criteria mapping must be recorded before source implementation.
+
+Overlap review found no existing independently owned draft/history repair. Suggested create_backlog_item and design-review proceduralization conventions concern different handlers. BI-A1C424DB retains general refusal-wakeup ownership. No new epic, permission store, runtime scheduler, notification table or status enum is introduced. Rollback disables the scoped reporting mode through governed configuration and pauses the same watch; source rollback restores the prior declarations without replaying settled drafts or old approvals. Existing draft and report history remain intact.
+
+## Verbatim child criteria and coverage references
+
+The following criteria were read from the two live child items. They retain the parent amendment/review boundary and are not an implementation approval.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-DRAFT-1 | OBJ-C5-AUTONOMY, OBJ-C5-AUTHORITY | Under current intersected grants and permitted policy, propose_improvement persists only an internal recommendation deliverable without a generic proposal approval; explicit always policy and authority/data refusals remain effective. |
+| AC-DRAFT-2 | OBJ-C5-AUTONOMY, OBJ-C5-AUTHORITY | Identical pending drafts for the same user, actor, route/thread and complete content reuse one proposal and one canonical intake origin under concurrent calls; reviewed drafts are not revived, and a missing projection can recover using that same proposal without uncertain-commit replay. |
+| AC-DRAFT-3 | OBJ-C5-AUTONOMY, OBJ-C5-AUTHORITY | The ordinary draft path records only explicit submitted evidence and does not copy or query conversation messages. Foreign or stale thread context produces no draft, intake or index. |
+| AC-DRAFT-4 | OBJ-C5-AUTONOMY, OBJ-C5-AUTHORITY | Actual handler/governor tests cover allowed policy, explicit always, missing grants, cross-tenant/stale context, concurrent repeats, interrupted projection and outward/harmful controls; both typechecks, canonical gate and independent review pass. |
+| AC-DRAFT-5 | OBJ-C5-AUTONOMY, OBJ-C5-AUTHORITY | Verify the original learning action on the canonical served runtime without an unnecessary envelope while a consequential-action control still gates. |
+| AC-HISTORY-1 | OBJ-C5-ATTENTION, OBJ-C5-AUTHORITY | Exact owner/revision-bound configuration narrows only an eligible paused generic agent-task to read-only-history, preserves all other bytes/settings/history and performs ownership/current-state/workflow checks before any approval and again in the transaction; ambiguous typed/domain/Workroom/dispatch or procedural writer conflicts refuse. |
+| AC-HISTORY-2 | OBJ-C5-ATTENTION, OBJ-C5-AUTHORITY | Current persisted mode filters normally authorized tools to explicit safe reads before all budgeting, deferred discovery, promotion and fallback; current server authority also denies stale scheduled write approvals. Existing grant/data/external/security controls remain. |
+| AC-HISTORY-3 | OBJ-C5-ATTENTION, OBJ-C5-AUTHORITY | Bounded validated reports bind successful fresh observation evidence to the same owner/task/run; inference-only, failed, missing, stale or foreign evidence cannot complete green or resolve an open condition. Routine results persist in existing history without backlog writes or approvals. |
+| AC-HISTORY-4 | OBJ-C5-ATTENTION, OBJ-C5-AUTHORITY | One server-owned unresolved condition yields one in-app owner notice. Paraphrased unchanged reports remain in history. Exact fresh resolution closes it. Transaction settlement requires a sent result, actual notification identity and linked delivery audit; failed/missing delivery aborts, concurrent/crash/uncertain-ack repeats cannot duplicate notices. |
+| AC-HISTORY-5 | OBJ-C5-ATTENTION, OBJ-C5-AUTHORITY | Genuine needs-decision and auth-required paths park the SAME task/run before normal completion/recurrence writes, preserve precise reasons and prevent stale continuations or mirrors from overwriting the parked state; no fake approval for an FYI or failed read. |
+| AC-HISTORY-6 | OBJ-C5-ATTENTION, OBJ-C5-AUTHORITY | Real scheduler/handler/governor and actual persistence tests, negative/tamper/cross-tenant/stale-consent/unsafe-frequency/harmful controls, both typechecks, canonical gate and independent source review pass. After canonical deployment, configure/resume the same watch once and observe its legitimate served run with history, no routine envelope and a consequential-action control. |
+
+Coverage uses CT-LEARNING-DRAFT / FLOW-DRAFT-INTAKE / VERIFY-DRAFT for BI-74C8FB95 and CT-ROUTINE-MONITOR / FLOW-HISTORY / VERIFY-HISTORY / VERIFY-LIVE for BI-819AD433. CT-ACTION-ESCALATION / FLOW-GOVERNOR / VERIFY-CONTROLS apply to both. These identifiers refer to the traceability table above.
+
+## Ordered implementation and verification
+
+- Draft deliverable: claim the existing contribution pack/handler tests and focused draft persistence helper; first reproduce the generic proposal boundary, repeated create and hidden-message read. Implement repeat-safe same-owner pending draft persistence with the existing transaction-conflict helper, then recover intake with the same canonical origin. Remove implicit transcript capture, validate current thread ownership and only then enable the existing artifact declaration. Run actual handler/governor controls and PostgreSQL concurrency/projection-recovery checks, both web typechecks, exact shared gate and independent source review. Other contribution and skill handlers remain covered by their existing tests.
+- Monitoring deliverable: claim the existing scheduled-task pack/core, canonical governed preflight/current authority seam, autonomous tool resolution, scheduler/settlement helpers and existing communication writers/tests. First reproduce routine writer exposure and false generic parked-run completion. Add exact revision-bound configuration, consistent read narrowing and stale-write refusal; then strict report binding and history/notification/parking settlement. Exercise real scheduler/communication persistence, failure/concurrency/uncertain-ack races and the required negative controls before both typechecks, exact shared gate and independent review.
+- Live reconciliation: use the canonical release containing each source repair. Reproduce the original learning draft and configure/resume the same watch once through existing supported operations. Capture actual observation, stored report/outcome and a consequential-action control. Do not borrow the peer UI preview as functional evidence for these new changes or launch a competing shared runtime during that preview.
+
+The source impact claims supply exact affected-test obligations before each implementation starts. This design-only publication runs documentation freshness, frontmatter, prose and whitespace checks; it does not earn product test/build/live credit. A regression rolls back the affected source declaration/configuration and pauses the same watch without deleting history or replaying old approvals. Parent completion follows the governing lifecycle and its still-current failure evidence; this document never marks either child delivered.
