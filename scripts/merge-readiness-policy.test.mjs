@@ -76,3 +76,48 @@ test("protection comparison de-duplicates legacy contexts and app-bound checks",
     ],
   }).ok, true);
 });
+import { readFileSync } from 'node:fs';
+import { DEFAULT_MANIFEST, parseAggregate } from './merge-readiness-policy.mjs';
+const repositoryManifest = JSON.parse(readFileSync(DEFAULT_MANIFEST, 'utf8'));
+const ciPath = repositoryManifest.workflows.ci;
+const toolchainPath = '.github/workflows/agent-toolchain-bootstrap-smoke.yml';
+const sources = () => ({ manifest: repositoryManifest,
+  ciSource: readFileSync(ciPath, 'utf8'),
+  uxSource: readFileSync(repositoryManifest.workflows.ux, 'utf8'),
+  toolchainSource: readFileSync(toolchainPath, 'utf8') });
+
+test('deployment-critical toolchain is bound to the required aggregate', () => {
+  const input = sources();
+  assert.equal(input.manifest.workflows.toolchain, toolchainPath);
+  assert.equal(input.manifest.toolchainJobId, 'agent-toolchain-bootstrap');
+  assert.ok(parseAggregate(input.ciSource, 'merge-readiness').needs.includes('agent-toolchain-bootstrap'));
+  assert.deepEqual(validateWorkflowConformance(input), []);
+});
+
+test('toolchain wiring cannot disappear, redirect, suppress failures or lose callable admission', () => {
+  const input = sources();
+  const mutations = [
+    { ...input, ciSource: input.ciSource.replace('      - agent-toolchain-bootstrap\n', '') },
+    { ...input, ciSource: input.ciSource.replace(`uses: ./${toolchainPath}`, 'uses: ./wrong.yml') },
+    { ...input, ciSource: input.ciSource.replace('  agent-toolchain-bootstrap:\n', '  agent-toolchain-bootstrap:\n    continue-on-error: true\n') },
+    { ...input, ciSource: input.ciSource.replaceAll("if: needs.changes.outputs.heavy == 'true'", 'if: false') },
+    { ...input, toolchainSource: input.toolchainSource.replace('  workflow_call:\n', '') },
+  ];
+  for (const [index, mutation] of mutations.entries()) assert.notEqual(validateWorkflowConformance(mutation).length, 0, `mutation ${index}`);
+});
+
+test('a failing or cancelled toolchain blocks aggregate readiness', () => {
+  for (const result of ['failure', 'cancelled', undefined]) {
+    assert.equal(evaluateDependencyResults({ 'agent-toolchain-bootstrap': { result } }).ok, false);
+  }
+  assert.equal(evaluateDependencyResults({ 'agent-toolchain-bootstrap': { result: 'success' } }).ok, true);
+  assert.equal(evaluateDependencyResults({ 'agent-toolchain-bootstrap': { result: 'skipped' } }).ok, true);
+});
+
+// Windows checkouts can use CRLF; the authority contract is line-ending independent.
+test('toolchain conformance accepts CRLF checkout bytes', () => {
+  const input = sources();
+  assert.deepEqual(validateWorkflowConformance({ ...input,
+    ciSource: input.ciSource.replaceAll('\n', '\r\n'),
+    toolchainSource: input.toolchainSource.replaceAll('\n', '\r\n') }), []);
+});

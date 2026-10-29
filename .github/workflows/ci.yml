@@ -1043,6 +1043,15 @@ jobs:
         if: always()
         run: node scripts/dpf-compose.mjs --profile integration-test down --volumes
 
+  # Deployment-critical bootstrap checks are part of the required aggregate.
+  # Docs-only PRs may skip; merge_group/push/manual runs are exhaustive.
+  # Deliberately do not skip on exact-tree evidence reuse.
+  agent-toolchain-bootstrap:
+    name: Agent toolchain bootstrap
+    needs: [changes]
+    if: needs.changes.outputs.heavy == 'true'
+    uses: ./.github/workflows/agent-toolchain-bootstrap-smoke.yml
+
   # Stable repository-wide merge authority. Branch protection requires this
   # aggregate instead of coupling itself to dozens of implementation-level
   # jobs whose names and sharding may evolve. Every CI job must appear here;
@@ -1073,6 +1082,7 @@ jobs:
       - compose-image-pins
       - edge-footprint-bom
       - adp-integration-tests
+      - agent-toolchain-bootstrap
     steps:
       - uses: actions/checkout@v7
       - name: Assert every CI dependency is merge-safe

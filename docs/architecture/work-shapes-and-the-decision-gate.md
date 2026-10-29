@@ -620,6 +620,13 @@ counts a run of non-advancing actions, not a run of pauses.
   "Appointing an owner will not change this", so it carries `decideEffort: "review"`.
   `owner-routing.ts` sends it to the custodian lane, not to "Needs you". Stalls that an
   appointment does clear stay `judgment` and still reach the owner.
+- **The room overseer follows the same split** (`BI-3A515481`). Its items (`workroom-overseer.ts`)
+  are recovery work, not owner decisions, in three cases: an R3 session to resume or hand over, an
+  R4 hold on an agent-side wait (`executor_writeback_unavailable`, `missing_task_owner`,
+  `awaiting_agent_capacity`, `agent_stage`, `provider_held`, `lease_held`), and an R4 whose
+  conclusion is a derived size. Those carry `review` and go to the custodian. An R4 hold on a person,
+  a role or a governed decision stays `judgment`. On 2026-10-28 every overseer item read `judgment`,
+  and "Needs you" went from 7 to 44.
 
 Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
 (`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name

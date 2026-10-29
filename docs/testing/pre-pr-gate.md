@@ -290,6 +290,8 @@ Wired up in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) as the
 CI fails the PR check if any test fails. Branch protection requires the check to
 pass before merge.
 
+Agent toolchain bootstrap checks also feed the required `Merge Readiness` aggregate through the reusable `agent-toolchain-bootstrap-smoke.yml` workflow. Applicable PRs run both POSIX adapter smoke and stock macOS Python checks; merge-group runs exercise them exhaustively. A failed or cancelled bootstrap job blocks the aggregate. The existing change classifier can intentionally skip this job for docs-only PRs. Manual dispatch remains available for diagnostics.
+
 ## Run locally before pushing
 
 In a `compile-ready` worktree, run the source-local slice that covers what you
