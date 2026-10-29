@@ -8,6 +8,9 @@ relatedCode:
   - apps/web/lib/proactivity/proactivity-roster.ts
   - apps/web/lib/mcp/improvement-draft.ts
   - apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts
+  - apps/web/lib/mcp/packs/scheduled-agent-task-pack.ts
+  - apps/web/lib/operate/scheduled-jobs/scheduled-reporting-authority.ts
+  - apps/web/lib/operate/scheduled-jobs/scheduled-reporting-run.ts
 ---
 
 ## What This Covers
@@ -146,6 +149,27 @@ problems get worse while nobody is looking.
 Each run reads live records rather than a cached summary, and each task is
 written to be idempotent: a coworker that already produced today's brief or
 report refreshes it instead of producing a second one.
+
+### Routine observation watches
+
+An existing paused observation watch can be narrowed to **history reporting**.
+It keeps its original instructions, schedule, privacy limits and history.
+Routine observations are saved in request history. The first actionable change
+produces one in-app notice with the finding and recommendation; later reports
+stay in history while that condition remains open. Fresh observations must
+confirm resolution before the condition can close.
+
+This mode permits observation and reporting only. Required operational workflows
+keep their existing process. A real decision or sign-in problem parks the watch
+with its reason, and failed or missing observations never count as a healthy
+completed report. A provider that cannot enforce the limited access leaves the
+run unverified. Ask a coworker to configure the paused watch, then resume the
+same watch through its existing controls.
+
+Changing the watch's action boundary is a governed configuration choice. Its
+reports then go to history under that choice; existing data and action
+permissions still apply. Pausing stops future runs and keeps the history.
+Broader actions need their own current authorization.
 
 ### What it will not do
 
