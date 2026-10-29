@@ -118,7 +118,7 @@ export async function recordWorkCapsuleEvidence(args: {
         });
         if (!qualificationExecutionActivitiesMatch({ binding: admission.data.binding, state: qualificationState,
           itemId: admission.data.binding.itemId, activityIds: proof.executionEvidenceActivityIds, rows,
-          accountablePrincipalRef: args.actor.principalId })) {
+          accountablePrincipalRef: args.actor.principalId, proof })) {
           throw new Error("Host qualification evidence activities do not match the signed execution binding.");
         }
       }

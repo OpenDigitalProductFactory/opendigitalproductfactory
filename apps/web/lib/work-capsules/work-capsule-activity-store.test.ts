@@ -154,7 +154,9 @@ describe("transactional Workroom activity", () => {
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { workspaceState: {
       qualificationExperimentAdmission: expect.not.objectContaining({ taskRunId: expect.anything() }),
     } } }));
-    findMany.mockResolvedValueOnce([]);
+    findMany.mockResolvedValueOnce([{ id: "activity-host", backlogItem: { itemId: binding.itemId },
+      payload: { evidenceKind: "test_pass", qualification: { ...execution, command: "forged command" } },
+      recordedAt: new Date(completedAt) }]);
     await expect(recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
       actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
       deferPublication: true })).rejects.toThrow(/activities do not match/i);

@@ -437,6 +437,7 @@ export function qualificationExecutionEvidenceAllowed(input: {
 export function qualificationExecutionActivitiesMatch(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   itemId: string; activityIds: string[]; rows: unknown[]; accountablePrincipalRef: string | null;
+  proof: QualificationVerificationEvidence;
 }): boolean {
   if (input.activityIds.length === 0 || input.rows.length !== input.activityIds.length) return false;
   const expected = new Set(input.activityIds);
@@ -450,7 +451,11 @@ export function qualificationExecutionActivitiesMatch(input: {
       && qualification !== null
       && qualificationExecutionEvidenceAllowed({ binding: input.binding, state: input.state,
         evidence: qualification, accountablePrincipalRef: input.accountablePrincipalRef,
-        now: new Date(qualification.completedAt) });
+        now: new Date(qualification.completedAt) })
+      && qualification.command === input.proof.command
+      && qualification.outputDigest.toLowerCase() === input.proof.outputDigest.toLowerCase()
+      && qualification.startedAt === input.proof.startedAt
+      && qualification.completedAt === input.proof.completedAt;
   });
   return matches && expected.size === 0;
 }

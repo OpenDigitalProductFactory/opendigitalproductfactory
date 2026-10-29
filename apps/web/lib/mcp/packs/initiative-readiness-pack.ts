@@ -268,16 +268,7 @@ async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId:
     });
     return qualificationExecutionActivitiesMatch({ binding: admission.data.binding, state, itemId,
       activityIds: proof.executionEvidenceActivityIds, rows,
-      accountablePrincipalRef: admission.data.binding.accountablePrincipalRef })
-      && rows.every((row) => {
-        const evidencePayload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
-          ? row.payload as Record<string, unknown> : null;
-        const qualification = evidencePayload?.qualification && typeof evidencePayload.qualification === "object"
-          ? evidencePayload.qualification as Record<string, unknown> : null;
-        return qualification?.command === proof.command
-          && typeof qualification.outputDigest === "string"
-          && qualification.outputDigest.toLowerCase() === proof.outputDigest.toLowerCase();
-      });
+      accountablePrincipalRef: admission.data.binding.accountablePrincipalRef, proof });
   }
   if (!state.taskRunId || !proof.taskRunId || !proof.toolExecutionReceiptIds
     || proof.command !== "run_sandbox_tests" || proof.taskRunId !== state.taskRunId) return false;
