@@ -2,7 +2,6 @@
   "version": "1",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/finance/spend/page.tsx",
       "apps/web/app/(shell)/finance/expense-claims/page.tsx",
       "apps/web/app/(shell)/finance/my-expenses/new/page.tsx"
     ]
