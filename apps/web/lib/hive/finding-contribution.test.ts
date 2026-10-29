@@ -5,7 +5,7 @@ import {
   planFindingContribution,
   readEscalationOutcome,
   type ContributableProposal,
-} from "./finding-contribution";
+} from "@dpf/validators/commons/finding-contribution";
 
 function proposal(overrides: Partial<ContributableProposal> = {}): ContributableProposal {
   return {

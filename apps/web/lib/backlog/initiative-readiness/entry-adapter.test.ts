@@ -763,6 +763,14 @@ describe("v3: the bound delivery shape keys the gates", () => {
     });
   });
 
+  it("hands the active build's reviewed design through the summary projection (BI-8ECF7B5C)", () => {
+    const base = { item: { ...item, workShape: "delivery-medium@1.0.0", deliverySensitivity: "low" as const, body: "just prose" },
+      activities: [], hasSpec: false, hasPlan: false, evaluatedAt: "2026-10-13T00:00:00.000Z" };
+    const withDesign = projectBacklogItemReadinessSummary({ ...base, buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 3 } });
+    expect(withDesign.decisions.implementation.verdict).toBe("allowed");
+    expect(projectBacklogItemReadinessSummary(base).decisions.implementation.unmet.map((e) => e.code)).toContain("RESEARCH_REQUIRED");
+  });
+
   it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {
     const raised = projectBacklogItemReadiness({
       item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "high" },

@@ -20,6 +20,15 @@ export async function defaultGovernedToolPreflight(event: ToolLifecycleEvent,
     if (recoveryRefusal) return recoveryRefusal;
     const refusal = await roomRefusal(event.toolName, event.rawParams, event.userId, event.context);
     if (refusal) return refusal;
+    if (event.toolName === "record_initiative_evidence") {
+      const { preflightInitiativeEvidence } = await import("./mcp/packs/initiative-readiness-pack");
+      const evidenceRefusal = await preflightInitiativeEvidence(event.rawParams, event.userId, event.context);
+      if (evidenceRefusal) return evidenceRefusal;
+    }
+    if (event.toolName === "record_semantic_review_exemption") {
+      const { preflightSemanticReviewExemption } = await import("./change-review/semantic-review-policy-exemption");
+      return preflightSemanticReviewExemption(event.rawParams, event.userId, { ...event.context, userContext: event.userContext });
+    }
   }
   if (event.toolName === "invite_room_participant") {
     const { preflightRoomParticipantInvitation } = await import("./work-management/room-participant-invitation-preflight.server");

@@ -12,7 +12,7 @@ import {
   SUB_SHAPE_FIXTURE,
 } from "./__fixtures__/graph-shape-fixtures";
 import { resolveDrivePlan, workroomDriveTaskId } from "./drive-resolution";
-import type { DriveMarking } from "./drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import { DEFER_ON_REFUSE_ROUTE, REFUSE_BOUND_NO_BUDGET_STOP, REFUSE_TO_STOP, REWORK_1 } from "./__fixtures__/graph-shapes/rework";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 

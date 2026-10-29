@@ -18,6 +18,20 @@ describe("buildGovernedMemoryContext", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  it("preserves the legacy advisory fallback when identity lookup is unavailable", async () => {
+    const { resolveAIDocForAgent } = await import("@/lib/identity/aidoc-resolver");
+    const { loadGovernedUserFacts } = await import("@/lib/tak/user-facts");
+    const { recallGovernedContext } = await import("@/lib/semantic-memory");
+    vi.mocked(resolveAIDocForAgent).mockRejectedValue(new Error("identity unavailable"));
+    vi.mocked(loadGovernedUserFacts).mockResolvedValue({ includedFacts: [] } as never);
+    vi.mocked(recallGovernedContext).mockResolvedValue({ context: "legacy advisory context", compressedContext: null } as never);
+    const { buildGovernedMemoryContext } = await import("./governed-memory");
+    const result = await buildGovernedMemoryContext({ userId: "user-1", agentId: "author", query: "context" });
+    expect(result).toMatchObject({ actionRisk: "advisory", authorizationClasses: [], operatingProfileFingerprint: null,
+      recalledContext: "legacy advisory context" });
+    expect(loadGovernedUserFacts).toHaveBeenCalledWith(expect.objectContaining({ currentOperatingProfileFingerprint: null, actionRisk: "advisory" }));
+    expect(recallGovernedContext).toHaveBeenCalledWith(expect.objectContaining({ currentOperatingProfileFingerprint: null, actionRisk: "advisory" }));
+  });
 
   it("derives consequential risk from portable authorization classes and threads the fingerprint into both memory sources", async () => {
     const { resolveAIDocForAgent } = await import("@/lib/identity/aidoc-resolver");

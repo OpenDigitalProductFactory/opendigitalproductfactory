@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import { expandGrants, getToolGrantMapping, persistedAgentToolGrants } from "@/lib/tak/agent-grants";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { computeMetadataHash } from "@/lib/routing/metadata-hash";
+import { deriveLegacyPromptClassRefs, legacyOperatingProfileMaterial } from "@dpf/validators/operating-composition/legacy-fingerprint";
 
 import {
   mapLocalPolicyToPortableClasses,
@@ -108,36 +109,12 @@ function deriveToolSurface(grantKeys: string[]): string[] {
     .sort();
 }
 
-function derivePromptClassRefs(
-  skills: Array<{ label: string; taskType: string | null }>,
-): string[] {
-  return skills
-    .map((skill) => `${skill.taskType ?? "conversation"}:${skill.label}`)
-    .sort();
-}
-
-function buildOperatingProfileFingerprint(input: {
-  modelBinding: InternalAIDoc["model_binding"];
-  grantKeys: string[];
-  promptClassRefs: string[];
-  hitlDefault: number;
-  sensitivity: string;
-}): string {
-  return computeMetadataHash({
-    hitl_default: input.hitlDefault,
-    model_binding: input.modelBinding,
-    prompt_class_refs: [...input.promptClassRefs].sort(),
-    sensitivity: input.sensitivity,
-    tool_grants_sorted: [...input.grantKeys].sort(),
-  });
-}
-
 export function projectInternalAIDoc(source: AIDocProjectionSource): InternalAIDoc {
   const grantKeys = [...new Set(source.authorityGrants ?? (
     coworkerAuthorityAgentId(source.agent.agentId) === source.agent.agentId
       ? persistedAgentToolGrants(source.agent) : []
   ))].sort();
-  const promptClassRefs = derivePromptClassRefs(source.agent.skills);
+  const promptClassRefs = deriveLegacyPromptClassRefs(source.agent.skills);
   const modelBinding: InternalAIDoc["model_binding"] = {
     default_model_id: source.agent.executionConfig?.defaultModelId ?? null,
     pinned_provider_id: source.modelConfig?.pinnedProviderId ?? null,
@@ -171,13 +148,13 @@ export function projectInternalAIDoc(source: AIDocProjectionSource): InternalAID
     prompt_class_refs: promptClassRefs,
     tool_surface: deriveToolSurface(grantKeys),
     authorization_classes: mapLocalPolicyToPortableClasses(grantKeys),
-    operating_profile_fingerprint: buildOperatingProfileFingerprint({
+    operating_profile_fingerprint: computeMetadataHash(legacyOperatingProfileMaterial({
       modelBinding,
       grantKeys,
       promptClassRefs,
       hitlDefault: source.agent.hitlTierDefault,
       sensitivity: source.agent.sensitivity,
-    }),
+    })),
   };
 }
 

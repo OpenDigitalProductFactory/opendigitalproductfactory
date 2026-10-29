@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
-import { resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import { resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
 import { buildEnrichmentOffer } from "./enrichment-offer";
 import { scoreAccountCompleteness, scoreContactCompleteness } from "./completeness";
 

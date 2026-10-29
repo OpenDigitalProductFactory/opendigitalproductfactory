@@ -251,6 +251,17 @@ jobs:
       - name: Establish an authenticated session
         run: pnpm exec tsx e2e/auth-only.ts
 
+      # Provider-detail routes require a dynamic fixture and are excluded from
+      # the broad route sweep. Exercise the local engine control explicitly in
+      # this same governed portal; an unqualified host must retain Docker.
+      - name: Verify local engine control on desktop and mobile
+        env:
+          DPF_MEASUREMENT_RUNTIME: "1"
+        run: >-
+          pnpm exec playwright test e2e/managed-inference-control.spec.ts
+          --project=chromium --reporter=list --run-agents=none
+          --output=apps/web/test-results/managed-inference-control
+
       - name: Run the sweep
         if: ${{ inputs.update_baseline != true }}
         run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS"
@@ -280,6 +291,7 @@ jobs:
             apps/web/lib/ux-budget/route-budget-report.json
             apps/web/test-results/ux-route-sweep/route-sweep-execution.json
             apps/web/test-results/ux-route-sweep/visible-text
+            apps/web/test-results/managed-inference-control
           if-no-files-found: warn
 
       # Screenshots exist only for failed eligible routes. Keeping them out of green

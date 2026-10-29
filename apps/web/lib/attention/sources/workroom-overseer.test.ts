@@ -59,3 +59,52 @@ describe("projectOverseerAttention", () => {
     expect(loaders.filter((loader) => loader.source === "workroom-stall")).toHaveLength(2);
   });
 });
+
+// BI-3A515481: on 2026-10-28 the overseer raised 38 cards and every one read
+// "judgment", so "Needs you" went from 7 to 44 with session resumes and
+// agent-capacity waits the owner cannot act on.
+describe("which overseer items ask the owner for judgment", () => {
+  function heldState(holdKey: string, outcome: "needs-owner" | "derived-size" = "needs-owner") {
+    return {
+      workroomOverseer: {
+        version: 1,
+        attention: { key: `R4:${holdKey}`, rule: "R4", title: "held", context: "held past budget", raisedAt: NOW.toISOString(), assigneePrincipalRef: "PRN-PO" },
+        needsResume: null,
+        holdConclusion: { holdKey, outcome, derivedSize: outcome === "derived-size" ? "medium" : null, ticks: 60, concludedAt: NOW.toISOString() },
+      },
+    };
+  }
+  const effort = (workspaceState: unknown) =>
+    projectOverseerAttention({ capsuleId: "WC-ROOM1", title: "t", updatedAt: NOW, workspaceState })?.triage.decideEffort;
+
+  it("a session to resume or hand over is recovery work, not a business choice", () => {
+    expect(effort(raisedState("PRN-PO"))).toBe("review");
+  });
+
+  it("a hold on an agent-side wait is recovery work", () => {
+    for (const key of [
+      "pause|executor_writeback_unavailable|design-note",
+      "pause|awaiting_agent_capacity|implement",
+      "pause|missing_task_owner|reproduce",
+      "dispatch_agent|provider_held|repair",
+    ]) expect(effort(heldState(key)), key).toBe("review");
+  });
+
+  it("a hold the drive already derived the fix for (a size) is recovery work", () => {
+    expect(effort(heldState("attention|governed_decision|spec-approval", "derived-size"))).toBe("review");
+  });
+
+  it("a hold on a person, role or governed decision still asks the owner", () => {
+    for (const key of ["attention|governed_decision|spec-approval", "attention|role_stage|accept", "attention|person_stage|review", "escalate|conformance_escalate|merge"]) {
+      expect(effort(heldState(key)), key).toBe("judgment");
+    }
+  });
+
+  it("routes recovery items to the custodian and decisions to Needs you", async () => {
+    const { classifyOwnerAttentionLane } = await import("../owner-routing");
+    const resume = projectOverseerAttention({ capsuleId: "WC-ROOM1", title: "t", updatedAt: NOW, workspaceState: raisedState("PRN-PO") })!;
+    const decision = projectOverseerAttention({ capsuleId: "WC-ROOM1", title: "t", updatedAt: NOW, workspaceState: heldState("attention|governed_decision|spec-approval") })!;
+    expect(classifyOwnerAttentionLane(resume).lane).toBe("custodian");
+    expect(classifyOwnerAttentionLane(decision).lane).toBe("needs-you-now");
+  });
+});

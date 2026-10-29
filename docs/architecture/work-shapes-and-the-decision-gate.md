@@ -58,11 +58,12 @@ each owned by a different part of the substrate. A room picks one value on each.
 | **Activity kind** — what the work *is* | `delivery`, `support`, `improvement`, `governance`, `launch-readiness`, `craft-judgment`, `lifecycle`, `remediation` | `WORK_CAPSULE_SCOPE_ACTIVITY_KINDS` in `apps/web/lib/work-capsules.ts` |
 | **Mode** — how long it lives | `finite` (one bounded decision or action), `standing` (ongoing activity) | `WorkroomMode` in `apps/web/lib/work-management/room-types.ts` |
 | **Participant roles** — who is in it, as what | `accountable`, `coordinator`, `contributor`, `specialist`, `approver`, `reviewer`, `observer` | `WorkroomParticipantRole`, same file |
-| **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `apps/web/lib/work-management/room-shapes.ts` |
+| **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `packages/validators/src/gpp/work-vocabulary.ts`; re-exported by `apps/web/lib/work-management/room-shapes.ts` |
 
 The first three are live code. The fourth **is now a registry with a write path**
-⟦runtime: 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
-`apps/web/lib/work-management/room-shapes.ts` is the enum, and a room is convened with a
+⟦runtime: 2026-08-23⟧. Its closed vocabulary lives in
+`packages/validators/src/gpp/work-vocabulary.ts`; `room-shapes.ts` retains the
+collaboration registry, presets and binding function. A room is convened with a
 shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
 `scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
 
@@ -545,8 +546,10 @@ Design: [Work Posture](https://github.com/OpenDigitalProductFactory/opendigitalp
 
 ## Encoding and visualization
 
-The activity definition is typed TypeScript in `WorkShapeDefinition`; the room
-stores a `key@version` reference in `scopeClaims`. The collaboration shape has its
+The activity definition is typed TypeScript in `WorkShapeDefinition`, whose
+structural contract lives in `packages/validators/src/gpp/work-shape-contracts.ts`.
+The application registry remains in `apps/web/lib/work-management/work-shapes.ts`;
+the room stores a `key@version` reference in `scopeClaims`. The collaboration shape has its
 own `workroomShape` entry. Occurrence state and receipts live in the existing
 Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text.
 
@@ -617,6 +620,13 @@ counts a run of non-advancing actions, not a run of pauses.
   "Appointing an owner will not change this", so it carries `decideEffort: "review"`.
   `owner-routing.ts` sends it to the custodian lane, not to "Needs you". Stalls that an
   appointment does clear stay `judgment` and still reach the owner.
+- **The room overseer follows the same split** (`BI-3A515481`). Its items (`workroom-overseer.ts`)
+  are recovery work, not owner decisions, in three cases: an R3 session to resume or hand over, an
+  R4 hold on an agent-side wait (`executor_writeback_unavailable`, `missing_task_owner`,
+  `awaiting_agent_capacity`, `agent_stage`, `provider_held`, `lease_held`), and an R4 whose
+  conclusion is a derived size. Those carry `review` and go to the custodian. An R4 hold on a person,
+  a role or a governed decision stays `judgment`. On 2026-10-28 every overseer item read `judgment`,
+  and "Needs you" went from 7 to 44.
 
 Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
 (`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name
