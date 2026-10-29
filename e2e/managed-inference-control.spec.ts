@@ -22,11 +22,14 @@ for (const viewport of [
 
       const [refreshed] = await Promise.all([
         page.waitForResponse(response => response.request().method() === "GET"
+          && response.request().headers()["rsc"] === "1"
           && new URL(response.url()).pathname === "/platform/ai/providers/local"),
         panel.getByRole("button", { name: copy.managedEngineRefresh, exact: true }).click(),
       ]);
       expect(refreshed.ok()).toBe(true);
-      await refreshed.finished();
+      expect(refreshed.headers()["content-type"]).toContain("text/x-component");
+      // The full route stream stayed open in the cloud fixture after the engine
+      // control rendered. Check this control without waiting for every segment.
       await expect(panel.getByRole("button", { name: copy.managedEngineRefresh, exact: true })).toBeEnabled();
       await expect(panel).toBeVisible();
       await expect(panel.getByRole("button", { name: copy.managedEngineUse, exact: true })).toHaveCount(0);
