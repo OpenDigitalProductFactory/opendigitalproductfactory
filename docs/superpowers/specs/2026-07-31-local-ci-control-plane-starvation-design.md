@@ -4,6 +4,62 @@ status: active
 
 # Local-CI Control-Plane Starvation Prevention
 
+## Owned-job observation diagnostics: BI-1A4CC847 (2026-10-30)
+
+This Medium/low successor extends the existing Windows cancellation fixture;
+`BI-BFDB98B6` remains delivered. Workroom `WC-5E3531E3` owns this scope.
+The item-body outcome is: Windows cancellation verification either observes
+natural closure of its owned job or reports the precise failing observation
+without losing cleanup provenance or fabricating a pass.
+
+On source `68d68ef805317a0e53da01ae842a294a901b27b2`, the existing
+`query-failure` and `identity-failure` probes both report only "The handle is
+invalid". Their source-local assertions pass because they require a failure,
+not its provenance. An additional assertion requiring the membership query's
+operation fails with `undefined`; no operation or native code is persisted.
+Retained fixtures are `dpf-job-drain-uJKF8g` and `dpf-job-drain-Mjntl7` in the
+host temporary directory. Both complete their owned cleanup. These observations
+prove lost diagnostics, not the cause of the historical g0XmMA cancellation
+failure ("The parameter is incorrect" after three member identities).
+
+### Ordered repair and acceptance
+
+1. Extend the existing query/identity failure probes to require the exact API,
+   native error and available member PID/creation identity in persisted snapshots.
+   Preserve the human-readable failure and distinguish a native API failure from
+   a fixture invariant. The new assertions must fail on the named baseline.
+2. Refactor only the existing observation boundary to capture native errors
+   immediately after the failing call. Preserve a primary observation failure
+   if handle cleanup also fails; retain cleanup failure separately. Allocate
+   approximately 20% of this repair to the shared diagnostic representation and
+   its propagation through the existing snapshot writer. No new runner or table.
+3. Exercise an owned member exiting between enumeration and identity acquisition
+   using the existing bounded probe. Record the actual operation and code. Do
+   not interpret a missing PID as natural job closure or change cleanup policy
+   without evidence. Genuine unreadable membership/identity remains inconclusive.
+4. Re-run the existing empty, short-lived, persistent, query-failure,
+   identity-failure, missing-job and driver-failure cases, plus the actual Windows
+   cancellation cases. Preserve the ten-second observation budget, owned Job
+   containment, unrelated sentinel and original failure outcomes. Complete
+   applicable protected verification and independent assessment before publication.
+
+Acceptance: exact diagnostic provenance is persisted, genuine observation
+failures never become a pass, natural closure still requires zero job accounting
+and members, and cleanup cannot replace an earlier observation error. Source
+fixture verification is distinct from a canonical gate or deployed verification.
+The original historical cause remains unknown unless a matching reproduction
+establishes it. A revert retains fail-closed observation and containment.
+
+This is one atomic diagnostic repair: tests, native capture and persisted fields
+must ship together. Plan coverage belongs to `BI-1A4CC847`; documentation does
+not deliver a separate implementation item. Hydration `BI-E96C5778`, identity
+`BI-CAP-437F7745` and role/room `BI-56E9CEC2` keep their existing ownership.
+
+Microsoft's [process handle contract](https://learn.microsoft.com/en-us/windows/win32/procthread/process-handles-and-identifiers)
+distinguishes PID lifetime from retained-handle lifetime. The
+[job process list](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+is a membership snapshot with explicit returned-count bounds. These justify a
+controlled disappearing-member probe, not a conclusion about the old failure.
 ## Supervisor-loss repair: BI-BFDB98B6 (2026-09-13)
 
 Implementation owner: `BI-BFDB98B6`, Workroom `WC-B78D15F5`, branch
