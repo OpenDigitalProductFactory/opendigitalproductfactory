@@ -16,11 +16,11 @@ when an installation is identified as DEV. The current connection can repair
 source but cannot hand work to the release owner: the canonical external role
 omits `thread_write`, and direct release/deployment grants are also absent.
 
-OBJ-DEV-1: A platform administrator can complete DEV access setup once, using
+**OBJ-DEV-1:** A platform administrator can complete DEV access setup once, using
 one visible profile choice, instead of discovering missing grants mid-delivery.
-OBJ-DEV-2: The configured role, approved credential scope and effective access
+**OBJ-DEV-2:** The configured role, approved credential scope and effective access
 are reported separately; a saved profile must not masquerade as a verified client.
-OBJ-DEV-3: Production and unresolved identity retain their existing defaults;
+**OBJ-DEV-3:** Production and unresolved identity retain their existing defaults;
 operator revocations, human capabilities, consent and action gates remain binding.
 
 ## Research and existing substrate
@@ -117,6 +117,12 @@ because role rows were written. Existing DEV installs see the same step on the
 workspace identity surface; no second repair command or credential editor.
 Skipping setup is explicit and does not claim access was provisioned.
 
+Windows and POSIX installers use this same service after identity confirmation.
+Interactive setup offers the profile; unattended setup requires an explicit
+development-access opt-in bound to the existing authorized installing human.
+Existing installs use the same preview/apply flow without rerunning installation.
+No installer prints credentials or accepts arbitrary grants.
+
 Changing or deconfirming identity previews the access consequence along with
 existing identity effects. A shadowed DEV declaration cannot enable the profile.
 Production, test and missing/invalid context do not receive this DEV profile.
@@ -127,7 +133,12 @@ A server action requires manage_platform and an administrator identity context.
 It binds preview to the current effective environment, confirmation, profile
 version, canonical target identities and current grant/revocation snapshot.
 Any change requires a fresh preview. A client cannot submit arbitrary grants,
-agent IDs or credential values. The action is human setup administration and is
+agent IDs or credential values. Require a server-verified interactive human
+administrator session or the existing installer authorization bound to that same
+human. A capability-bearing QA sign-in, delegated coworker session or
+assistant-bound client cannot approve its own profile, even if its effective
+capabilities include manage_platform. Keep actor provenance in the preview
+binding and recheck it at apply. The action is human setup administration and is
 not exposed as a self-granting MCP tool.
 
 Use existing AuthorityBinding records for approved installation-profile intent
@@ -160,21 +171,15 @@ DEV access must not make an old token a shortcut around the current role check.
 
 ## Acceptance
 
-AC-DEV-1 (OBJ-DEV-1): Confirmed effective DEV plus an authorized administrator
-can preview and apply the approved profile to the three canonical identities.
-AC-DEV-2 (OBJ-DEV-3): Production, test, unknown, unconfirmed, shadowed DEV,
-unauthorized callers and stale previews cannot enable it.
-AC-DEV-3 (OBJ-DEV-3): Explicit revocations, unresolved alias decisions and
-manual grants survive repeated setup; automatic grants have removable provenance.
-AC-DEV-4 (OBJ-DEV-2): Existing credentials are never silently widened or rotated;
-missing consent scopes yield a supported reconnect result.
-AC-DEV-5 (OBJ-DEV-3): Leaving DEV, disabling the profile or losing readable
-eligibility removes effective profile-owned authority before tools execute.
-AC-DEV-6 (OBJ-DEV-1): The first-run step and existing-install correction use the
-same service and show a clear accessible outcome with exact details disclosed.
-AC-DEV-7 (OBJ-DEV-2): Verification proves representative handoff, build, release
-and DEV-upgrade admission with an approved new connection, and proves denied
-controls for saved restrictive consent and the paired production installation.
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-DEV-1 | OBJ-DEV-1 | Confirmed effective DEV plus an authorized administrator can preview and apply the approved profile to the three canonical identities. |
+| AC-DEV-2 | OBJ-DEV-3 | Production, test, unknown, unconfirmed, shadowed DEV, unauthorized callers and stale previews cannot enable it. |
+| AC-DEV-3 | OBJ-DEV-3 | Explicit revocations, unresolved alias decisions and manual grants survive repeated setup; automatic grants have removable provenance. |
+| AC-DEV-4 | OBJ-DEV-2 | Existing credentials are never silently widened or rotated; missing consent scopes yield a supported reconnect result. |
+| AC-DEV-5 | OBJ-DEV-3 | Leaving DEV, disabling the profile or losing readable eligibility removes effective profile-owned authority before tools execute. |
+| AC-DEV-6 | OBJ-DEV-1 | The first-run step and existing-install correction use the same service and show a clear accessible outcome with exact details disclosed. |
+| AC-DEV-7 | OBJ-DEV-2 | Verification proves representative handoff, build, release and DEV-upgrade admission with an approved new connection, and proves denied controls for saved restrictive consent and the paired production installation. |
 
 ## Delivery sequence and verification
 
