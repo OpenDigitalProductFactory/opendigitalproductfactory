@@ -305,7 +305,12 @@ function qualificationNativeReportMatches(
       && Date.parse(evidence.startedAt) <= Date.parse(evidence.finishedAt),
     digest: typeof evidence.boundedOutputDigest === "string" && /^[a-f0-9]{64}$/.test(evidence.boundedOutputDigest),
     observations: observations !== null && typeof observations.firstReplacement === "string"
-      && typeof observations.secondReplacement === "string" && observations.cleanup === "removed",
+      && ((observations.firstReplacement as string).startsWith("refused:")
+        ? observations.firstTarget === "preserved" && observations.firstSourceCleanup === "removed"
+        : observations.firstReplacement === "replaced"
+          && observations.firstTarget === "updated" && observations.firstSourceCleanup === "not-present")
+      && observations.handleRelease === "closed" && observations.secondReplacement === "replaced"
+      && observations.secondTarget === "updated" && observations.cleanup === "removed",
   };
   return Object.values(checks).every(Boolean);
 }

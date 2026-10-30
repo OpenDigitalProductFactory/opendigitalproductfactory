@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -108,6 +109,8 @@ type QualificationWindowsHandler struct {
 	Platform       string
 	StateDirectory string
 	Now            func() time.Time
+	openHeldFile   func(string) (io.Closer, error)
+	replaceFile    func(string, string) error
 }
 
 func (h *QualificationWindowsHandler) Execute(ctx context.Context, raw json.RawMessage) (ExecutionOutput, error) {
@@ -131,25 +134,40 @@ func (h *QualificationWindowsHandler) Execute(ctx context.Context, raw json.RawM
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	target := filepath.Join(dir, "held.txt")
-	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+	original := []byte(`{"status":"before"}`)
+	replacement := []byte(`{"status":"after"}`)
+	if err := os.WriteFile(target, original, 0o600); err != nil {
 		return ExecutionOutput{}, err
 	}
-	held, err := os.Open(target)
+	openHeldFile := h.openHeldFile
+	if openHeldFile == nil {
+		openHeldFile = openQualificationHandle
+	}
+	replace := h.replaceFile
+	if replace == nil {
+		replace = os.Rename
+	}
+	held, err := openHeldFile(target)
 	if err != nil {
 		return ExecutionOutput{}, err
 	}
 	firstSource := filepath.Join(dir, "replacement-one.txt")
-	if err := os.WriteFile(firstSource, []byte("replacement-one"), 0o600); err != nil {
+	if err := os.WriteFile(firstSource, replacement, 0o600); err != nil {
 		_ = held.Close()
 		return ExecutionOutput{}, err
 	}
-	firstErr := replaceFile(firstSource, target)
-	_ = held.Close()
-	secondSource := filepath.Join(dir, "replacement-two.txt")
-	if err := os.WriteFile(secondSource, []byte("replacement-two"), 0o600); err != nil {
+	firstErr := replace(firstSource, target)
+	firstTarget := fileContentDisposition(target, original, replacement)
+	firstSourceCleanup := removeDisposition(firstSource)
+	if err := held.Close(); err != nil {
 		return ExecutionOutput{}, err
 	}
-	secondErr := replaceFile(secondSource, target)
+	secondSource := filepath.Join(dir, "replacement-two.txt")
+	if err := os.WriteFile(secondSource, replacement, 0o600); err != nil {
+		return ExecutionOutput{}, err
+	}
+	secondErr := replace(secondSource, target)
+	secondTarget := fileContentDisposition(target, nil, replacement)
 	select {
 	case <-bounded.Done():
 		return ExecutionOutput{}, bounded.Err()
@@ -159,7 +177,11 @@ func (h *QualificationWindowsHandler) Execute(ctx context.Context, raw json.RawM
 	if cleanupErr := os.RemoveAll(dir); cleanupErr != nil {
 		cleanup = fmt.Sprintf("refused:%T", cleanupErr)
 	}
-	observations := map[string]any{"firstReplacement": outcome(firstErr), "secondReplacement": outcome(secondErr), "cleanup": cleanup}
+	observations := map[string]any{
+		"firstReplacement": outcome(firstErr), "firstTarget": firstTarget,
+		"firstSourceCleanup": firstSourceCleanup, "handleRelease": "closed",
+		"secondReplacement": outcome(secondErr), "secondTarget": secondTarget, "cleanup": cleanup,
+	}
 	encoded, _ := json.Marshal(observations)
 	digest := sha256.Sum256(encoded)
 	return ExecutionOutput{Result: map[string]any{"schemaVersion": 1, "disposition": "observed"}, Evidence: map[string]any{
@@ -172,11 +194,29 @@ func (h *QualificationWindowsHandler) Execute(ctx context.Context, raw json.RawM
 	}}, nil
 }
 
-func replaceFile(source, target string) error {
-	if err := os.Remove(target); err != nil {
-		return err
+func fileContentDisposition(file string, preserved, updated []byte) string {
+	contents, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Sprintf("unreadable:%T", err)
 	}
-	return os.Rename(source, target)
+	if preserved != nil && bytes.Equal(contents, preserved) {
+		return "preserved"
+	}
+	if bytes.Equal(contents, updated) {
+		return "updated"
+	}
+	return "unexpected"
+}
+
+func removeDisposition(file string) string {
+	err := os.Remove(file)
+	if err == nil {
+		return "removed"
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return "not-present"
+	}
+	return fmt.Sprintf("refused:%T", err)
 }
 
 func outcome(err error) string {

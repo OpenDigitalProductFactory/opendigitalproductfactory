@@ -234,7 +234,9 @@ describe("recordActionResult", () => {
       baseSha: parameters.baseSha, headSha: parameters.headSha, protocolPath: parameters.protocolPath,
       protocolBlobSha: parameters.protocolBlobSha, productionBlobs: parameters.productionBlobs, testBlobs: parameters.testBlobs,
       startedAt: NOW.toISOString(), finishedAt: new Date(NOW.getTime() + 5).toISOString(),
-      observations: { firstReplacement: "refused:*PathError", secondReplacement: "replaced", cleanup: "removed" },
+      observations: { firstReplacement: "refused:*PathError", firstTarget: "preserved",
+        firstSourceCleanup: "removed", handleRelease: "closed", secondReplacement: "replaced",
+        secondTarget: "updated", cleanup: "removed" },
       boundedOutputDigest: "8".repeat(64),
     };
     const { db, update } = resultDb(base);
@@ -251,6 +253,14 @@ describe("recordActionResult", () => {
         ...err("qualification-native-report-unbound"), reason: "qualification-native-report-unbound",
       });
     expect(refused.update).not.toHaveBeenCalled();
+    const legacyDeleteFirst = resultDb(base);
+    expect(await recordActionResult(legacyDeleteFirst.db, { actionKey: "ra_1", edgeNodeRowId: "node_1",
+      outcome: "succeeded", evidence: { ...report, observations: {
+        firstReplacement: "refused:*PathError", secondReplacement: "replaced", cleanup: "removed",
+      } } })).toEqual({
+        ...err("qualification-native-report-unbound"), reason: "qualification-native-report-unbound",
+      });
+    expect(legacyDeleteFirst.update).not.toHaveBeenCalled();
     const retry = resultDb({ ...base, status: "succeeded", evidence: {
       ...report, qualificationAdmission: { workroomId: parameters.workroomId }, qualificationDispatch: dispatch,
     } });
