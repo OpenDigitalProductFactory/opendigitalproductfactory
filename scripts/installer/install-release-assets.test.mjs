@@ -357,6 +357,24 @@ test("an owned release rollback restores the latest prewrite canonical baseline"
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
+test("a rollback ownership-probe error preserves the writer and still restores install state", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+    await writeFile(envPath, original);
+    const previousState = await readFile(f.statePath);
+    const decision = resolveRemoteActionDispatch(original);
+    await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"), failAfter: "state",
+      remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      async onCheckpoint(phase) { if (phase === "env-committed") { await rm(envPath); await mkdir(envPath); } },
+    }), error => error.message === "release_env_rollback_unproven" && error.cause?.message === "injected_failure:state");
+    assert.equal((await stat(envPath)).isDirectory(), true);
+    assert.deepEqual(await readFile(f.statePath), previousState);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 async function dispatchFixture(text = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=old\n") {
   const root = await mkdtemp(join(tmpdir(), "dpf-dispatch-env-"));
   const envPath = join(root, ".env");

@@ -370,13 +370,13 @@ export async function installReleaseAssets(options) {
     let envRollbackUnproven = false;
     if (envWriteIdentity) {
       const expected = { bytes: envWritten, identity: envWriteIdentity };
-      if (!await sameFileSnapshot(envPath, expected)) envRollbackUnproven = true;
-      else {
-        try {
+      try {
+        if (!await sameFileSnapshot(envPath, expected)) envRollbackUnproven = true;
+        else {
           if (envBeforeWrite.bytes === null) await rm(envPath, { force: true });
           else await atomicWrite(envPath, envBeforeWrite.bytes, expected);
-        } catch { envRollbackUnproven = true; }
-      }
+        }
+      } catch { envRollbackUnproven = true; }
     }
     if ((await readFile(statePath)).compare(stateBytes) !== 0) await restoreInstallState(statePath, stateRecovery);
     if (envRollbackUnproven) throw new Error("release_env_rollback_unproven", { cause: error });
