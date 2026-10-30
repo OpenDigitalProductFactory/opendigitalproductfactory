@@ -31,3 +31,6 @@ Impact contract directory claims are unresolved; expand verification to all list
 
 ## Backlog coverage
 Atomic: the enforcement and UI explanation deliver one trustworthy pause contract and cannot be independently accepted under the stated outcome. All six acceptance criteria map to BI-1FB1C9B5. Immutable plan coverage receipt is recorded through the governed writer after commit; it is not supplied by this prose.
+
+## Caller accuracy discovered during blast-radius verification
+The author sweep found that searchPlatformKnowledge attributed every deferred embedding to local CI, and wiki lexical fallback prescribed a model download without cause evidence. The paused-provider hold exposes both inaccuracies. Preserve the reported deferral reason and existing lexical/nullable contracts; remove unsupported remediation. First-failing regressions observed in semantic-memory-availability.test.ts and wiki/embeddings.test.ts. These corrections remain under AC-DEFER/AC-HEALTH and add no new routing, credential or capacity policy. Document/vector callers may return reduced results while paused; automatic reindex-on-resume is outside this repair.
