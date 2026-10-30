@@ -75,6 +75,8 @@ Extend existing test registration, real-Postgres receipt tests and canonical non
 
 Only the external provider adapter is deterministic in the integration layer. A mocked database, auth service, dispatcher or final writer cannot earn that boundary's integration pass. Independently run one supported live-model task using existing approved capacity/data routing. Record absent capacity/authority/infrastructure as inconclusive or unrun. Every result records source/served SHA, install/preview identity, fixture role, request/attempt, policy, committed artifact revision, failure injection and observed disposition through existing evidence writers.
 
+BI-7DC3B91D also binds the registered journeys to existing test-inventory and diff-impact/evidence selection for changes to their actual entry/auth/dispatch/result/recovery paths. Assert the required cases executed; missing fixture infrastructure or skipped required cases cannot be reported as integration success. Verify selection with one changed-path case and one unrelated-path control. This is extension of existing CI selection, not another global approval ceremony.
+
 ## P5–P6: release and owner proof
 
 Proposed qualification: 20 consecutive complete controlled journeys spanning both entry adapters and the fault matrix; zero duplicate effects, false completion or routine owner technical rescue. Measure acknowledgment/completion p50/p95, recovery time, queue delay and actual cost. Then observe seven days of real authorized work with explicit reports of orphan/unknown/failed results. Targets are design proposals, not already measured production guarantees.
