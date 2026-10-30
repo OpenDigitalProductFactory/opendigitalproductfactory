@@ -21,13 +21,11 @@
 
 import { Children, useId, useState, type ReactNode } from "react";
 
-export interface CollapsibleListProps {
+interface CollapsibleListCommonProps {
   /** The list rows, already rendered. Only the count and slicing are managed here. */
   children: ReactNode;
   /** How many rows are always visible. Rows beyond this reveal on expand. Default 5. */
   previewCount?: number;
-  /** List element to render. Default "ul". Use "ol" for ordered, "div" for non-list rows. */
-  as?: "ul" | "ol" | "div";
   /** Classes for the wrapper element. */
   className?: string;
   /** Classes for the list element (defaults to a small vertical rhythm). */
@@ -40,6 +38,11 @@ export interface CollapsibleListProps {
   defaultExpanded?: boolean;
 }
 
+export type CollapsibleListProps = CollapsibleListCommonProps & (
+  | { as: "div"; /** Retain local action state while rows are hidden. */ preserveMountedRows?: boolean }
+  | { as?: "ul" | "ol"; preserveMountedRows?: false }
+);
+
 const DEFAULT_PREVIEW = 5;
 
 export function CollapsibleList({
@@ -51,6 +54,7 @@ export function CollapsibleList({
   moreLabel = (n) => `Show ${n} more`,
   fewerLabel = "Show fewer",
   defaultExpanded = false,
+  preserveMountedRows = false,
 }: CollapsibleListProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const listId = useId();
@@ -72,7 +76,13 @@ export function CollapsibleList({
     // visible on arrival.
     <div className={className} {...(hidden > 0 ? { "data-dpf-disclosure-trigger": "" } : {})}>
       <List id={listId} className={listClassName}>
-        {visible}
+        {preserveMountedRows
+          ? rows.map((row, index) => (
+            <div key={row && typeof row === "object" && "key" in row ? row.key : index} hidden={!expanded && index >= previewCount}>
+              {row}
+            </div>
+          ))
+          : visible}
       </List>
       {hidden > 0 && (
         <button

@@ -810,3 +810,54 @@ The item's acceptance criteria AC-1 to AC-4 bind. Unit tests cover each rule
 firing and not firing, standing-room exclusion, an idempotent second cycle, and
 Attention dedupe. Operational acceptance needs one served-runtime cycle that
 closes a merged room and routes an unmerged one; unit evidence does not close it.
+
+**R5 sibling qualification regression — BI-FD8ABEE0.** The existing R5 contract
+requires another delivery room, not merely another nonterminal record. At
+`4c290ad54d46c650f1fc954d175cb478dbab761d`, `liveRoomsPerItem` counts siblings
+without checking their declared delivery shape. A source-local synthetic
+reproduction on that unchanged ref closes the merged room for null, unsupported
+and non-delivery sibling shapes; a genuine delivery sibling also closes it.
+The existing 23 rule tests pass on that ref, so their coverage did not distinguish
+these invalid sibling cases. No live room was changed by the reproduction.
+
+The existing `overseenRoom` predicate is the qualification source of truth
+(`R5-C1`): nonterminal, non-standing and a recognized delivery shape. Reuse it
+when counting siblings; do not add a parallel shape rule. R1–R4, merge evidence,
+the resume grace and legitimate R5 closeout retain their existing meaning.
+This repair does not require an authoring room to remain open until every later
+runtime outcome is accepted, and it cannot create a handoff or widen room access.
+
+The following local plan references quote this regression item's criteria:
+
+- `R5-AC1`: A merged delivery room with only a null-shape or unsupported-shape sibling does not close under R5; deterministic regressions first demonstrate the current failure.
+- `R5-AC2`: A genuine qualifying delivery sibling still permits the existing R5 closeout; standing and terminal sibling exclusions remain intact.
+- `R5-AC3`: Affected source tests/typechecks and the actual immutable merged-source gate pass through normal admitted publication; no runtime or model experiment is needed for the predicate tests.
+- `R5-AC4`: After a legitimately deployed repair, the existing owner/coordinator reconciles BI-CD4EB130's remaining delivery through its actual admitted route. Filing, source tests and merge are not claimed as native activation or live performance acceptance.
+
+Ordered repair (`R5-F1`), one atomic deliverable:
+
+1. Bind this design and its research to BI-FD8ABEE0 and the exact source room;
+   obtain valid plan coverage and implementation admission before changing the
+   production predicate. No existing reader or native source room is reassigned.
+2. Add null, unsupported and non-delivery sibling regressions to
+   `workroom-overseer-duty.test.ts`; observe their wrong R5 closeout before the
+   fix. Keep positive delivery, standing and terminal sibling controls.
+3. Apply `R5-C1` to the sibling counter and make those behavior tests pass.
+   Preserve the counter decrement that leaves one of two merged rooms open.
+4. Verify `R5-V1`: the duty, queue runner and Attention-source tests identified
+   by `find_related_tests`, plus both affected web typecheck programs. Verify
+   `R5-V2`: Style Drift Guard, doc-index freshness and the exact-source shared
+   convergence gate; obtain independent source assessment before publication.
+   Production build and protected merge checks retain their ordinary CI lane.
+5. After actual canonical deployment and an exact-feature readiness pass, the
+   existing owner/coordinator reconciles the affected delivery through the
+   admitted route. Do not reopen/archive another room, change grants or replay
+   an upgrade to demonstrate this predicate. Native installation and measured
+   useful-work acceptance remain separate, unfinished outcomes.
+
+**Backlog coverage (BI-FD8ABEE0):** atomic; none of the test, predicate or design
+steps is independently shippable. The governed receipt must bind this exact
+ordered design, its immutable commit/blob, the declared edit paths and local
+references `R5-AC1`–`R5-AC4`, `R5-C1`, `R5-F1`, `R5-V1` and `R5-V2`.
+Coverage, implementation admission and post-fix verification are pending at
+this design-only checkpoint; this paragraph is not a receipt or a test pass.

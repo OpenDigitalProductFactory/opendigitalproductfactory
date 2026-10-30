@@ -38,6 +38,7 @@ import {
   productManagementPlaybookScopeKind,
 } from "@/lib/product-management/product-management-playbook";
 import { parseBusinessAnalysisWatchConfig } from "@/lib/performance/business-analysis-watch";
+import { scheduledReportingRevision } from "./scheduled-reporting-contract";
 
 export type ScheduleAgentTaskInput = {
   agentId: string;
@@ -61,6 +62,7 @@ export type ScheduleAgentTaskResult =
   | { success: false; error: string };
 
 export type ScheduledAgentTaskView = {
+  revision: string;
   taskId: string;
   agentId: string;
   title: string;
@@ -245,11 +247,13 @@ export async function scheduleAgentTaskFor(
 export async function getScheduledAgentTasksFor(
   userId: string,
   scope?: Omit<ProductIntelligenceScopeInput, "digitalProductId">,
+  taskId?: string,
 ): Promise<ScheduledAgentTaskView[]> {
   const normalizedScope = scope ? normalizeProductIntelligenceScope(scope) : null;
   const tasks = await prisma.scheduledAgentTask.findMany({
     where: {
       ownerUserId: userId,
+      ...(taskId ? { taskId } : {}),
       ...(normalizedScope
         ? {
             organizationId: normalizedScope.organizationId,
@@ -274,15 +278,20 @@ export async function getScheduledAgentTasksFor(
       businessProductId: true,
       taskKind: true,
       taskConfig: true,
+      ownerUserId: true,
+      routeContext: true,
+      timezone: true,
+      updatedAt: true,
     },
   });
 
-  return tasks.map((t) => ({
-    ...t,
-    taskKind: isScheduledAgentTaskKind(t.taskKind) ? t.taskKind : null,
-    nextRunAt: t.nextRunAt?.toISOString() ?? null,
-    lastRunAt: t.lastRunAt?.toISOString() ?? null,
-  }));
+  return tasks.map((t) => {
+    const { ownerUserId: _owner, routeContext: _route, timezone: _timezone, updatedAt: _updated, ...view } = t;
+    return { ...view, revision: scheduledReportingRevision(t),
+      taskKind: isScheduledAgentTaskKind(t.taskKind) ? t.taskKind : null,
+      nextRunAt: t.nextRunAt?.toISOString() ?? null,
+      lastRunAt: t.lastRunAt?.toISOString() ?? null };
+  });
 }
 
 /**
