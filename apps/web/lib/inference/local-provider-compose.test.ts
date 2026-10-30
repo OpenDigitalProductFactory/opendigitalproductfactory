@@ -12,6 +12,7 @@ vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: ()
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const native = "http://host.docker.internal:12436/v1";
 let composeAvailable = false;
+// ambient-host-guard: allow readonly Compose CLI probe to self-gate this integration suite; it never contacts a daemon.
 try { execFileSync("docker", ["compose", "version", "--short"], { stdio: "ignore", timeout: 10_000 }); composeAvailable = true; } catch { /* Explicitly unrun without the Compose CLI. No daemon is required. */ }
 
 function renderedEndpoints(overlays: string[], legacy?: string): Record<string, string> {
@@ -34,6 +35,7 @@ function renderedEndpoints(overlays: string[], legacy?: string): Record<string, 
     };
     const args = ["compose", "--project-directory", repo, "--project-name", "dpf-endpoint-contract", "--env-file", envFile];
     for (const file of ["docker-compose.yml", ...overlays]) args.push("-f", join(repo, file));
+    // ambient-host-guard: allow self-gated readonly Compose rendering with an empty env file and declared fixtures; no resources are created.
     const config = JSON.parse(execFileSync("docker", [...args, "config", "--format", "json"], {
       cwd: fixture, env, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"],
     }));
