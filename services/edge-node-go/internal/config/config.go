@@ -121,6 +121,14 @@ func (c *Config) ManagedInferenceConfigured() bool {
 		c.ManagedInferenceRoot == filepath.Join(c.ManagedInferenceState, "native-inference-controller", c.ManagedInferenceSource) && c.StateDir == filepath.Join(c.ManagedInferenceState, "edge-node")
 }
 
+// QualificationWindowsEnabled reports whether this process is the supported
+// native Windows Edge agent. The qualification procedure is compiled and owns
+// its fixture under StateDir; container installs and platform overrides cannot
+// advertise or execute it.
+func (c *Config) QualificationWindowsEnabled() bool {
+	return runtime.GOOS == "windows" && c.Platform == "win32" && c.InstallMode == "native" && filepath.IsAbs(c.StateDir)
+}
+
 // HostUpkeepOnly reports whether the node runs only host upkeep: heartbeat and
 // the action channel, with no network sweep and no federation discovery.
 func (c *Config) HostUpkeepOnly() bool {

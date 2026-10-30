@@ -17,7 +17,9 @@ const QUALIFICATION_TOOLS = new Set([
   "record_workroom_evidence",
 ]);
 
-export type QualificationExecutorMode = "sandbox-build" | "workroom-host";
+/** `native-edge` remains readable for historical bindings created before the
+ * workroom-host correction; new terminal admission never issues it. */
+export type QualificationExecutorMode = "sandbox-build" | "workroom-host" | "native-edge";
 export type QualificationPlatform = "linux" | "win32";
 
 type ProtocolRef = { path: string; commitSha: string; providerBlobId: string };
