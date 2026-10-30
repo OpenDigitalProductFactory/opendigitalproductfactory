@@ -39,4 +39,6 @@ Actor confusion is the primary risk: the public browser action must never gain a
 
 ## Backlog coverage
 
-Atomic receipt pending immutable committed artifact binding. Implementation and served proof have not started at this design checkpoint.
+Atomic receipt cmvuexz0m3z8401o2ymry1ws4 binds initial ordered design e96fa07ff8345ee092f41998c833936ed945364c / blob727ba8e40c2844701d45b18b545cebbc14e80083. Research receipt initiative-c3fe8c19-c21b-457f-9363-91af611ec6a9; implementation admission IRD-F17522C9480D allowed.
+
+Source checkpoint: the no-cookie integration regression failed twice before repair, including the exact capture_rejected/Unauthorized response. Shared server-only extraction plus native actor handoff made all64 tests in the five focused files pass; both web TypeScript programs passed. These use storage/framework fixtures while exercising the actual capture and overlay-save logic; they do not prove native transport, revoked live grants, deployed bytes or real persistence. Shared-runtime gate, independent review and served native saved-draft/readback remain unrun.
