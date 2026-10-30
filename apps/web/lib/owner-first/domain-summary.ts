@@ -68,7 +68,7 @@ export type CustomerSummaryInput = {
   overdueInvoices: number;
   renewalsDueSoon: number;
   /** Present only when the caller has loaded the permitted sales follow-up view. */
-  opportunityFollowups?: Array<{ id: string; title: string; stage: string; nextActivityAt: Date | null }>;
+  opportunityFollowups?: Array<{ id: string; title: string; stage: string; nextActivityAt: Date | null; account: { name: string } }>;
   now?: Date;
 };
 
@@ -131,7 +131,7 @@ export function buildCustomerOwnerSummary(
   for (const opportunity of salesFollowups) {
     actions.push({
       id: `opportunity-${opportunity.id}`,
-      title: opportunity.title,
+      title: `${opportunity.account.name} · ${opportunity.title}`,
       why: opportunity.nextActivityAt ? "Recorded sales next step is overdue." : "No next step is recorded for this sales opportunity.",
       nextAction: {
         label: "Set next step",

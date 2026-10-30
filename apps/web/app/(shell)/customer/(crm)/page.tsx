@@ -236,7 +236,7 @@ export default async function CustomerPage({
       { id: "asc" },
     ],
     take: 3,
-    select: { id: true, title: true, stage: true, nextActivityAt: true },
+    select: { id: true, title: true, stage: true, nextActivityAt: true, account: { select: { name: true } } },
   }) : undefined;
   const ownerSummary = buildCustomerOwnerSummary(
     {

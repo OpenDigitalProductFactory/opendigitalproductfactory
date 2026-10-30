@@ -42,7 +42,7 @@ describe("Customer primary follow-up", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.accounts.mockResolvedValue([]);
-    mocks.opportunities.mockResolvedValue([{ id: "deal-1", title: "Prospect review", stage: "qualification", nextActivityAt: null }]);
+    mocks.opportunities.mockResolvedValue([{ id: "deal-1", title: "Prospect review", stage: "qualification", nextActivityAt: null, account: { name: "Example business" } }]);
     mocks.count.mockResolvedValue(0);
     mocks.groupBy.mockResolvedValue([]);
     mocks.context.mockResolvedValue({ archetypeId: "software-platform", vocab: resolveOwnerVocabulary("software-platform") });
