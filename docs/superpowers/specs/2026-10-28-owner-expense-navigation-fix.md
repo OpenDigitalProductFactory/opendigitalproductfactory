@@ -1,0 +1,24 @@
+---
+status: active
+---
+
+# Owner expense navigation repair
+
+BI-46F5486E; WC-579E6A08; DOC-82684072.
+
+## Reproduction
+
+At base 4c290ad54d46c650f1fc954d175cb478dbab761d, Finance Spend promises personal expenses but links to the claims-review list. Served owner navigation directly to My Expenses showed its empty state; clicking New Expense Claim opened the existing form. No expense was submitted.
+
+## Atomic ordered repair
+
+1. Reuse My Expenses for personal entry and retain a distinct review route.
+   Keep the card metric personal too: count submitted claims through the authenticated user's employee relation (unique userId), with an explicit My submitted claims label. A missing profile produces zero personal claims, regardless of colleagues' submissions. Independent client review of58e78d9b found the previous organization-wide metric mismatched the new destination; focused scope/auth regressions failed before this correction.
+2. Explain title, line date, category, description and positive amount; receipt URL and notes are optional in the existing form. Explain draft versus approval submission. Expose missing employee-profile prerequisites without creating identities or widening access.
+   Keep preparation detail collapsed by default. A source-render guard for the linked-profile entry header reproduced 18 visible words against its existing14-word budget; shorten the optional-receipt summary to preserve14 while retaining all required-field/submission help inside the native disclosure. Keep review-page header copy plus personal-entry link within the prior combined word count. This source-render check does not substitute for served route measurement. Hold PR auto-merge until the corrected head has fresh evidence.
+3. Preserve existing claimant and manager authorization actions. Verify navigation, empty states, missing-profile and denied access, authorized fixture save/readback, desktop and narrow layouts.
+4. Obtain UX critique CE-EB8821DD, run affected tests, package typecheck and governed delivery checks, then protected DCO PR and canonical deployment before served acceptance.
+
+## Boundaries
+
+No new ledger, schema, recovery engine or production financial fixtures. Finance coworker recovery stays with BI-D0D2FF0D and the earlier repair queue; its Finance acceptance scenario was appended there. Performance and Workrooms remain separately governed by their existing BIs. All delivery and saved-result checks remain unrun.
