@@ -302,16 +302,20 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     : phase === "verify"
       ? tools?.includes("record_workroom_evidence")
         && (executorMode === "sandbox-build" ? tools.includes("run_sandbox_tests") && !tools.includes("record_execution_evidence")
-          : tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
+          : executorMode === "workroom-host" ? tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests")
+            : executorMode === "native-edge" && !tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
         && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file")
       : false;
   const valid = raw?.schemaVersion === 1 && (phase === "prepare" || phase === "verify")
-    && (executorMode === "sandbox-build" || executorMode === "workroom-host")
+    && (executorMode === "sandbox-build" || executorMode === "workroom-host" || executorMode === "native-edge")
     && (requiredPlatform === "linux" || requiredPlatform === "win32")
+    && (executorMode !== "native-edge" || (phase === "verify" && requiredPlatform === "win32"))
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
     && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
-    && (!productionPaths || productionPaths.every(validProductionPath))
+    && (executorMode !== "native-edge"
+      ? (!productionPaths || productionPaths.every(validProductionPath))
+      : Boolean(productionPaths?.length && productionPaths.every(validProductionPath)))
     && productionBlobIds?.every((blob) => FULL_SHA.test(blob))
     && (!productionPaths || productionPaths.length === productionBlobIds?.length)
     && paths && paths.every(validTestPath) && datesValid && raw?.maxStarts === 1
@@ -418,6 +422,19 @@ export function qualificationExecutorAttestationAvailable(
   return executorMode === "workroom-host";
 }
 
+function qualificationEvidenceCommandMatchesBinding(
+  command: string,
+  allowedPaths: string[],
+): boolean {
+  const parts = command.trim().split(/\s+/).map((part) => part.replaceAll("\\", "/"));
+  const executable = parts[0]?.split("/").at(-1)?.toLowerCase();
+  const expected = allowedPaths.map((path) => path.replaceAll("\\", "/"));
+  return (executable === "node" || executable === "node.exe")
+    && parts.length === expected.length + 2
+    && parts[1] === "--test"
+    && expected.every((path, index) => parts[index + 2] === path);
+}
+
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
   const raw = record(value);
   const workroomId = text(raw?.workroomId);
@@ -470,7 +487,7 @@ export function qualificationExecutionEvidenceAllowed(input: {
     || evidence.platform !== input.binding.requiredPlatform
     || evidence.headSha.toLowerCase() !== input.binding.headSha.toLowerCase()
     || canonicalJson(evidence.testBlobIds) !== canonicalJson(input.binding.candidate.testBlobIds)
-    || !input.binding.allowedPaths.every((path) => evidence.command.replaceAll("\\", "/").includes(path))
+    || !qualificationEvidenceCommandMatchesBinding(evidence.command, input.binding.allowedPaths)
     || lease.environmentKey !== "host-heavy-resource" || lease.status !== "active" || !lease.claimKey
     || lease.purpose !== `host-resource:qualification:${digest}`
     || lease.buildId?.toLowerCase() !== input.binding.headSha.toLowerCase()

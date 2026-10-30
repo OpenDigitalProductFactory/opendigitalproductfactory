@@ -211,7 +211,7 @@ describe("qualification research admission", () => {
     const evidence = { workroomId: binding.workroomId, leaseId,
       qualificationBindingDigest: qualificationBindingDigest(parsed.data), executorMode: "workroom-host",
       platform: "win32", headSha: "d".repeat(40), testBlobIds: ["f".repeat(40)],
-      command: "pnpm exec vitest run apps/web/lib/example.test.ts apps/web/lib/example.test-helper.ts",
+      command: "node --test apps/web/lib/example.test.ts apps/web/lib/example.test-helper.ts",
       outputDigest: `sha256:${"2".repeat(64)}`, startedAt: NOW.toISOString(),
       completedAt: new Date(NOW.getTime() + 1_000).toISOString(), exitCode: 0, skipped: false };
     const lease = { leaseId, environmentKey: "host-heavy-resource", status: "active",
