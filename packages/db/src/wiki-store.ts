@@ -270,10 +270,7 @@ export type AttachSourceInput = {
  * findFirst-then-update-or-create pattern works for both kernel and
  * overlay rows uniformly.
  */
-export async function upsertWikiPage(
-  db: WikiPageUpsertClient,
-  input: UpsertWikiPageInput,
-): Promise<unknown> {
+function prepareWikiPageWrite(input: UpsertWikiPageInput) {
   const principleData = principleDataFromInput(input);
   const data = {
     slug: input.slug,
@@ -290,7 +287,20 @@ export async function upsertWikiPage(
     ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
     ...principleData,
   };
+  return { data, principleData };
+}
 
+/** Create only: the database rejects an existing org/slug without updating it. */
+export async function createWikiOverlayPage(db: WikiPageUpsertClient, input: UpsertWikiPageInput): Promise<unknown> {
+  if (!input.organizationId || input.isKernel) throw new Error("Create-only writing requires an organization overlay.");
+  return db.wikiPage.create({ data: prepareWikiPageWrite(input).data });
+}
+
+export async function upsertWikiPage(
+  db: WikiPageUpsertClient,
+  input: UpsertWikiPageInput,
+): Promise<unknown> {
+  const { data, principleData } = prepareWikiPageWrite(input);
   const existing = (await db.wikiPage.findFirst({
     where: { organizationId: data.organizationId, slug: data.slug },
     select: { id: true },
