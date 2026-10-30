@@ -417,6 +417,9 @@
     "apps/web/components/build/WorkflowStageInspector.tsx": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
+    "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/finance/CreateBillForm.tsx": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
@@ -817,6 +820,9 @@
     ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "apps/web/lib/delivery-outcomes/read-model.ts": [
+      "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/demand/duplicate-merge-consequence.ts": [
       "docs/architecture/improvement-signal-intake.md"
@@ -4358,6 +4364,7 @@
     "docs/user-guide/workspace/work-rooms.md": [
       "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
+      "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx",
       "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
       "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
@@ -4366,6 +4373,7 @@
       "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
       "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
+      "apps/web/lib/delivery-outcomes/read-model.ts",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
       "apps/web/lib/work-management/room-ai-spend.ts",
       "apps/web/lib/work-management/room-channel-continuity.ts",

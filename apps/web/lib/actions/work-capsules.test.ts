@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const outcomeMocks=vi.hoisted(()=>({load:vi.fn(),access:vi.fn()}));
+vi.mock("@/lib/delivery-outcomes/read-model",()=>({loadDeliveryOutcomes:outcomeMocks.load}));
+vi.mock("@/lib/work-management/workroom-agent-access.server",()=>({resolveHumanWorkroomAccess:outcomeMocks.access}));
+
 const {
   mockAuth,
   mockCan,
@@ -79,6 +83,15 @@ describe("getWorkControlData", () => {
     const { getWorkControlData } = await import("./work-capsules");
 
     await expect(getWorkControlData()).rejects.toThrow(/unauthorized/i);
+  });
+
+  it("authorizes outcome access and passes actual-user exact-room visibility",async()=>{
+    outcomeMocks.load.mockImplementation(async args=>({visible:await args.canReadRoom("row-1")}));
+    outcomeMocks.access.mockResolvedValue({decision:{level:"content"}});
+    const {getDeliveryOutcomeData}=await import("./work-capsules");
+    expect(await getDeliveryOutcomeData({query:"repair",dimension:"campaign"})).toEqual({visible:true});
+    expect(outcomeMocks.access).toHaveBeenCalledWith({userId:"user-1",workroomId:"row-1",requested:"content"});
+    expect(outcomeMocks.load).toHaveBeenCalledWith(expect.objectContaining({userId:"user-1",filters:{query:"repair",dimension:"campaign"}}));
   });
 
   it("filters scanner output by already-adopted branches", async () => {

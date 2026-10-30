@@ -29,9 +29,10 @@ status: draft
 - **Rationale:** the pure projection, bounded source adapter, and operator screen are one
   observable contract. Projection-only code does not satisfy the operator outcome;
   presentation without the projection would create a second calculation authority.
-- **Coverage state:** blocked on the condition `no initiative scope baseline exists for
-  BI-69803ACC`; replace this line with the immutable coverage receipt after an independent
-  spec-approval mints that baseline.
+- **Coverage state:** medium-shape implementation admitted by `IRD-B1C2308E56A7`
+  on 2026-10-29, using the recorded inherited objective baseline. The older
+  large-shape draft's missing-baseline prerequisite is superseded for this
+  existing medium unit. This is admission, not delivery or acceptance evidence.
 - **Dependencies:** Phase 1 baseline from `BI-7C1F43E3`; no unfinished source change is
   required. The separate seven-day observation may populate later cohorts but does not
   block the scorecard contract.
@@ -46,7 +47,7 @@ The Workroom contract is resolved for 12 claimed paths. Before implementation:
 
 - resolve graph-linked/colocated tests for the Work page, Work Control panel/action,
   projection, read model, and scorecard component;
-- preserve `/build/work`'s ≤179-word arrival baseline and net visible-word delta ≤0;
+- preserve `/build/work`'s current ≤237-word arrival baseline and net visible-word delta ≤0;
 - keep every new module below 800 lines;
 - run `pnpm run check:prose-lint:test`, `pnpm run check:prose-lint`, and
   `node scripts/check-style-drift.mjs`;
@@ -123,3 +124,27 @@ theme tokens, no motion, no client polling, and no local calculation fork.
 
 Revert the single PR. The query adapter and UI disappear; existing source records are
 unchanged because there is no migration or scorecard writer.
+
+## Current implementation checkpoint — 2026-10-29
+
+The original branch and Workroom remain the delivery carrier. Source-local tests
+cover the pure projection, visibility-before-aggregation adapter, default-route
+shortcut and server-rendered query view. Those checks do not establish a
+protected gate, deployment or live acceptance.
+
+Refactoring consolidates nullable totals, sample accounting, source degradation,
+and ancestry deduplication in the projector. The renderer formats the resulting
+observations and does not own metric calculations. Existing queue math is reused.
+
+UX prototype: `D:/DPF-temp/delivery-scorecard-prototype.html`, illustrative data.
+Advisory UX engagement: `CE-9B25256C` (requested; no completed critique claimed).
+The existing route/report-kit composition is retained. `DI-F7D029136168` records
+the considered arrangements but returned low confidence and declined all options;
+it is not a UX approval. The agent's actual choice of the existing-design local
+view was recorded with `resolvedBy=agent`; the native ledger classifies matching
+the ranked option as `followed`, while the declined recommendation remains.
+Browser measurements, route sweep and independent
+acceptance remain separate required evidence.
+
+See the design's source reconciliation for every currently unavailable metric.
+Do not close the item or claim the full acceptance criteria from source tests.

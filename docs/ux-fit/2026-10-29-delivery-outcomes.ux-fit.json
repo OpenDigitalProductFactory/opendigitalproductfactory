@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "local-outcomes-disclosure",
+  "decisionInteractionId": "DI-F7D029136168",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/build/work/page.tsx",
+      "apps/web/components/build/work-control/WorkControlPanel.tsx",
+      "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "local-outcomes-disclosure",
+      "inline-scorecard-inventory",
+      "new-global-metrics-dashboard"
+    ]
+  },
+  "rationale": "Agent-selected continuation of the existing BI-69803ACC design: a compact shortcut within /build/work and a query view composed from report-kit. Three summary values precede cohort, time, usage and evidence disclosures. The default heading/landmark structure remains, explanatory copy shrinks, and the existing source-copy ratchet stays at 14 words. The kernel ranked this option first but returned low confidence and an all-options-opposed decline with sparse generic features; the agent's actual selection was separately recorded with resolvedBy=agent. This is neither human ratification nor a claimed kernel approval. The original scorecard mandate authorizes routine implementation choices, and the existing plan selects this same route family. Alternatives added default inventory density or another navigation home.",
+  "verification": "Focused projection, adapter, action, route and render tests; affected package typecheck and source guards are separate evidence. Prototype D:/DPF-temp/delivery-scorecard-prototype.html uses illustrative fixtures. Advisory Critic engagement CE-9B25256C remains undispatched because immutable rendered inputs are required. Governed served-route measurements, narrow/light/dark/keyboard checks and independent live acceptance remain owed before any delivered-outcome claim. This manifest records a real choice, not a fabricated sweep or completed critique."
+}

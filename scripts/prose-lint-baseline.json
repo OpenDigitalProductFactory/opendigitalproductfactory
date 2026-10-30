@@ -4831,6 +4831,14 @@
     "longSentences": 0,
     "textMass": 343
   },
+  "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 217
+  },
   "apps/web/components/build/work-control/AdoptableWorktreeTable.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

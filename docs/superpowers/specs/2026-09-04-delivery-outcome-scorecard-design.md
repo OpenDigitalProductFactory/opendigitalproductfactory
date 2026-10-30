@@ -62,7 +62,7 @@ quality, less waiting, less human attention, and complete attribution.
 |---|---|---|
 | Delivery identity | `Workroom` and semantic `capsuleId` | One observation per Workroom; branch is evidence, not identity. |
 | Lifecycle facts | `WorkroomActivity`, Workroom status/timestamps | Event names are mapped explicitly; absent milestones stay unavailable. |
-| Verified result | `RuntimeVerification` | Only a passed terminal verification marks verified. |
+| Verified result | `RuntimeVerification` | Only terminal final acceptance with a retained server-owned source/deployment binding marks verified. A target's current SHA cannot qualify an older check. |
 | Queue/capacity | `QueueTelemetryEvent`, `QueueMetricSnapshot` | Preserve lane/source; do not infer an install from a branch. |
 | PR/check/review | contributor GitHub snapshots plus recorded activities/evidence | Snapshot freshness is visible; stale or missing GitHub data is not success. |
 | Model/tool economy | `AdapterRunTelemetry`, `ToolExecution`, `TaskRun` hierarchy | Incremental rows only; inclusive totals are derived from unique descendant runs. |
@@ -148,4 +148,50 @@ report-kit remain unchanged.
 
 No causal model, employee leaderboard, private reasoning capture, billing system,
 campaign scheduler, new PR store, or real-time subscription is part of this BI.
+
+## Source contract reconciliation — 2026-10-29
+
+The existing medium delivery was admitted for implementation by
+`IRD-B1C2308E56A7` in `WC-FB38E81D` after the controlled owner transfer.
+Earlier blocked reviews in other Workrooms remain unresolved history; this
+admission does not settle or replay them.
+
+The fixed cohort contains visible Workrooms **created** in the last 30 days.
+Creation fixes membership; it is not a claim event. Claim durations start at
+`WorkItem.claimedAt` when recorded. Every source is queried only after the
+actual user's exact-room admission, with a 100-room and 1,000-row per-source
+ceiling. Explicit task ancestry has an eight-level ceiling. Reaching a ceiling
+or losing a source marks coverage incomplete rather than inventing totals.
+
+The projector reuses queue reconstruction, `computeFlowDurations`, and the
+nearest-rank percentile helper. Canonical wait already includes holds; it is
+not increased by adding held time again. Process describes execution state,
+not human touch time or value added.
+
+Current source limitations remain visible and do not become zero:
+
+- The PR snapshot stores an authenticated merge observation but no first-commit,
+  PR-open, review-ready or protected-check history. Those milestones and
+  first-pass quality stay unavailable. A snapshot's observation time is not an
+  event time.
+- Final acceptance currently qualifies through the existing reserved
+  `smallRuntimeAcceptance` binding parser. Other or legacy final checks without
+  an immutable source and deployment binding remain unqualified. A completed
+  room, generic passed test, preview or currently matching target is insufficient.
+- Retained Claude adapter rows distinguish uncached input from cache reads and
+  writes. Other ambiguous input semantics remain unavailable. Run identity is
+  deduplicated before direct/descendant totals; estimates, subscriptions and
+  invoices are separate concepts. No subscription allocation or invoice source
+  is synthesized.
+- Reopen/regression, post-open rework, blocking findings per kLOC, non-progress
+  classification, interventions, lease utilization, package breadth and risk
+  metadata lack a qualified source in this adapter. They remain unavailable.
+  The existing acceptance criteria are retained; these gaps must be assessed
+  explicitly during independent acceptance rather than described as measured.
+
+The view provides a bounded text filter by campaign, model, installation, work
+kind, repository or effort. Coverage and cohort definitions accompany the
+numbers. An investment comparison requires the same cohort definition, source
+coverage and observation horizon; this read model makes no benefit or causal
+claim from a correlation.
 

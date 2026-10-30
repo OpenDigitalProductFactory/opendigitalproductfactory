@@ -20,6 +20,8 @@ relatedCode:
   - apps/web/lib/work-management/room-participation.ts
   - apps/web/lib/work-management/workspace-case-loader.ts
   - apps/web/lib/work-management/workspace-room-access.ts
+  - apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx
+  - apps/web/lib/delivery-outcomes/read-model.ts
 ---
 
 ## Overview
@@ -37,6 +39,27 @@ A delivery room also shows its **Structure**: where its current step sits on the
 Coworker service engagements can also appear as Work Cases. When a requested coworker service needs approval, is accepted, or is in progress, the room opens around the engagement itself: the requested outcome is the room boundary, the provider coworker appears as a contributor, and approval context or audit references stay attached as evidence. These rooms do not show the WorkItem comment box until a WorkItem exists, because there is no task message thread to post into yet.
 
 ## What You See First
+
+### Delivery outcomes
+
+On **Development Workrooms**, choose **Delivery outcomes** to inspect a fixed
+30-day cohort of rooms you can read. The summary separates source-qualified
+verified outcomes from completed rooms and merged pull requests. Open **Where
+time goes** for process, wait and cycle percentiles, including the number of
+complete and missing observations.
+
+Open **Cohort and sources** before comparing periods. A partial or stale source,
+row limit or missing claim timestamp changes what the numbers can establish.
+Process means recorded execution time; it does not measure human touch time or
+value added. A low completed sample is not proof of low productivity.
+
+**Usage and cost** separates direct work from unique task descendants and keeps
+cache reads, cache writes, output, reasoning, estimated API price and actual
+spend distinct. Unavailable values stay explicit. **Workrooms and evidence**
+provides a bounded search by campaign, model, installation, work kind,
+repository or effort and links back to the underlying records. The view does
+not rank workers by lines changed or PR count, or infer an improvement from a
+correlation.
 
 For development work, a verified repository observation can update the room's
 pull request when it matches the room's current commit. The room journal retains
