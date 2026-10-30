@@ -28,6 +28,7 @@ import {
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
 import { syncWikiPageLinks } from "@/lib/wiki/page-links";
+import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -251,21 +252,34 @@ export async function saveWikiOverlayEditForActor(
         : null,
     };
 
-    const saved = (await (options?.createOnly ? createWikiOverlayPage : upsertWikiPage)(prisma, upsertInput)) as {
-      id: string;
-      slug: string;
-      status: WikiPageStatus;
+    const writePageAndRevision = async (db: Pick<typeof prisma, "agent" | "wikiPage" | "wikiPageRevision">) => {
+      // MCP context names the canonical public identity. Revision authorship
+      // references Agent.id instead; never persist the public code as that FK.
+      const agent = actor.agentId ? await db.agent.findFirst({
+        where: coworkerAuthorityWhere(actor.agentId), select: { id: true },
+      }) : null;
+      if (actor.agentId && !agent) throw new Error("Authenticated coworker record not found.");
+      const page = (await (options?.createOnly ? createWikiOverlayPage : upsertWikiPage)(db, upsertInput)) as {
+        id: string;
+        slug: string;
+        status: WikiPageStatus;
+      };
+      await appendRevision(db, {
+        pageId: page.id,
+        title: input.title.trim(),
+        body: input.body,
+        changeKind: "manual",
+        changeSummary: input.changeSummary ?? "Manual edit via /coworker-decisions/<slug>/edit",
+        createdById: actor.userId,
+        ...(agent ? { createdByAgentId: agent.id } : {}),
+      });
+      return page;
     };
-
-    await appendRevision(prisma, {
-      pageId: saved.id,
-      title: input.title.trim(),
-      body: input.body,
-      changeKind: "manual",
-      changeSummary: input.changeSummary ?? "Manual edit via /coworker-decisions/<slug>/edit",
-      createdById: actor.userId,
-      ...(actor.agentId ? { createdByAgentId: actor.agentId } : {}),
-    });
+    // Native create-only capture must not leave a draft when its initial
+    // author revision fails. Ordinary browser editing keeps its existing path.
+    const saved = options?.createOnly
+      ? await prisma.$transaction(writePageAndRevision)
+      : await writePageAndRevision(prisma);
 
     await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body: input.body });
 

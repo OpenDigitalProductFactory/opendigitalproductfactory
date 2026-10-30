@@ -6,6 +6,8 @@ import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 const fixture = vi.hoisted(() => ({
   pages: [] as Array<Record<string, unknown>>,
   revisions: [] as Array<Record<string, unknown>>,
+  agentPresent: true,
+  rejectRevision: false,
 }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(() => { throw new Error("No browser cache context"); }) }));
@@ -13,8 +15,11 @@ vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn().mockResolve
 vi.mock("@/lib/wiki/craft-override-promotion", () => ({ promoteCraftOverrideOnPublish: vi.fn() }));
 vi.mock("@/lib/wiki/embed-published-overlay", () => ({ embedPublishedOverlayPage: vi.fn() }));
 vi.mock("@/lib/media", () => ({ attachMedia: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: {
+vi.mock("@dpf/db", () => { const db = {
   organization: { findFirst: async () => ({ id: "fixture-org" }) },
+  agent: { findFirst: async ({ where }: { where: { agentId?: string } }) =>
+    fixture.agentPresent && where.agentId === "AGT-EXT-CODEX"
+      ? { id: "fixture-agent-row", agentId: "AGT-EXT-CODEX" } : null },
   wikiPage: {
     findFirst: async ({ where }: { where: Record<string, unknown> }) => fixture.pages.find(p =>
       Object.entries(where).every(([key, value]) => p[key] === value)) ?? null,
@@ -32,19 +37,33 @@ vi.mock("@dpf/db", () => ({ prisma: {
   },
   wikiPageRevision: {
     findFirst: async () => fixture.revisions.at(-1) ?? null,
-    create: async ({ data }: { data: Record<string, unknown> }) => { fixture.revisions.push(data); return data; },
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      if (fixture.rejectRevision || data.createdByAgentId !== "fixture-agent-row") {
+        throw Object.assign(new Error("Revision author foreign key rejected"), { code: "P2003" });
+      }
+      fixture.revisions.push(data); return data;
+    },
   },
-} }));
+}; return { prisma: { ...db, $transaction: async (write: (tx: typeof db) => Promise<unknown>) => {
+  const pages = structuredClone(fixture.pages);
+  const revisions = structuredClone(fixture.revisions);
+  try { return await write(db); } catch (error) {
+    fixture.pages.splice(0, fixture.pages.length, ...pages);
+    fixture.revisions.splice(0, fixture.revisions.length, ...revisions);
+    throw error;
+  }
+} } }; });
 
 import { uxCritiquePack } from "./ux-critique-pack";
 import { revalidatePath } from "next/cache";
 const params = { title: "Expense route fixture", route: "/finance/spend", lens: "hierarchy",
   finding: "The personal-expense card opens a review list without a claim entry action.", proposedVerdict: "change-needed" };
-const context: ToolExecutionContext = { agentId: "fixture-agent", governedSource: "external-jsonrpc",
+const context: ToolExecutionContext = { agentId: "AGT-EXT-CODEX", governedSource: "external-jsonrpc",
   userContext: { userId: "fixture-user", platformRole: "HR-000", isSuperuser: false } };
 const capture = (input: Record<string, unknown> = params, ctx: ToolExecutionContext | undefined = context) =>
   uxCritiquePack.handlers.capture_ux_critique(input, "fixture-user", ctx);
-beforeEach(() => { fixture.pages.length = 0; fixture.revisions.length = 0; vi.mocked(revalidatePath).mockClear(); });
+beforeEach(() => { fixture.pages.length = 0; fixture.revisions.length = 0; fixture.agentPresent = true;
+  fixture.rejectRevision = false; vi.mocked(revalidatePath).mockClear(); });
 
 describe("native no-cookie critique capture boundary", () => {
   it("saves and reads back the same scoped draft with authenticated authorship", async () => {
@@ -52,7 +71,7 @@ describe("native no-cookie critique capture boundary", () => {
     expect(result, JSON.stringify(result)).toMatchObject({ success: true });
     expect(fixture.pages).toHaveLength(1);
     expect(fixture.pages[0]).toMatchObject({ organizationId: "fixture-org", status: "draft", isKernel: false });
-    expect(fixture.revisions[0]).toMatchObject({ createdById: "fixture-user", createdByAgentId: "fixture-agent" });
+    expect(fixture.revisions[0]).toMatchObject({ createdById: "fixture-user", createdByAgentId: "fixture-agent-row" });
     expect(revalidatePath).not.toHaveBeenCalled();
     const read = await uxCritiquePack.handlers.search_ux_critique_corpus({ route: params.route }, "fixture-user", context);
     expect(JSON.stringify(read)).toContain(params.finding);
@@ -78,6 +97,22 @@ describe("native no-cookie critique capture boundary", () => {
   it("retains critique validation before persistence", async () => {
     expect(await capture({ ...params, finding: "feels cluttered" })).toMatchObject({ success: false });
     expect(fixture.pages).toHaveLength(0);
+  });
+  it("refuses an unresolved authenticated coworker before creating a page", async () => {
+    fixture.agentPresent = false;
+    expect(await capture()).toMatchObject({ success: false });
+    expect(fixture.pages).toHaveLength(0);
+    expect(fixture.revisions).toHaveLength(0);
+  });
+  it("rolls back the draft when its author revision cannot be saved", async () => {
+    fixture.rejectRevision = true;
+    expect(await capture()).toMatchObject({ success: false });
+    expect(fixture.pages).toHaveLength(0);
+    expect(fixture.revisions).toHaveLength(0);
+    fixture.rejectRevision = false;
+    expect(await capture()).toMatchObject({ success: true });
+    expect(fixture.pages).toHaveLength(1);
+    expect(fixture.revisions).toHaveLength(1);
   });
   it.each(["draft", "published"])("never replaces an existing %s finding with the same title", async (status) => {
     const existing = { id: "fixture-reviewed", organizationId: "fixture-org",
