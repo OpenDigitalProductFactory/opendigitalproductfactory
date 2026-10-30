@@ -43,6 +43,7 @@ import {
 } from "@dpf/db/organization-join-action";
 
 import { decryptSecret as decryptStoredSecret, encryptSecret as encryptStoredSecret } from "@/lib/govern/credential-crypto";
+import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 
 const MAX_CLAIM_BATCH = 25;
@@ -270,8 +271,12 @@ export interface ActionResultInput {
 }
 
 export type ActionResultResult =
-  | { ok: true; status: RemoteActionDispatchState }
-  | { ok: false; reason: string };
+  | (ActionSuccess & { status: RemoteActionDispatchState })
+  | (ActionFailure & { reason: string });
+
+function refuseActionResult(reason: string): ActionFailure & { reason: string } {
+  return { ...err(reason), reason };
+}
 
 function qualificationNativeReportMatches(
   row: { actionKey: string; parameters: unknown; evidence?: unknown },
@@ -318,18 +323,18 @@ export async function recordActionResult(
   opts: { now?: Date; encryptSecret?: (value: string) => string } = {},
 ): Promise<ActionResultResult> {
   const row = await db.remoteAction.findUnique({ where: { actionKey: input.actionKey } });
-  if (!row) return { ok: false, reason: "action-not-found" };
-  if (row.edgeNodeId !== input.edgeNodeRowId) return { ok: false, reason: "not-claimed-by-this-node" };
+  if (!row) return refuseActionResult("action-not-found");
+  if (row.edgeNodeId !== input.edgeNodeRowId) return refuseActionResult("not-claimed-by-this-node");
 
   const from = row.status as RemoteActionDispatchState;
   const to = input.outcome as RemoteActionDispatchState;
   if (row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && to !== "running"
     && !qualificationNativeReportMatches(row, input.evidence)) {
-    return { ok: false, reason: "qualification-native-report-unbound" };
+    return refuseActionResult("qualification-native-report-unbound");
   }
   if (row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && from === to && to !== "running"
     && isRecord(row.evidence) && row.evidence.requestDigest === input.evidence?.requestDigest) {
-    return { ok: true, status: from };
+    return { ...ok(), status: from };
   }
   if (row.actionType === MANAGED_INFERENCE_ACTION_TYPE && to !== "running") {
     const parameters = parseManagedInferenceTransitionParameters(row.parameters);
@@ -338,11 +343,11 @@ export async function recordActionResult(
     if (!parameters || !dispatch || !evidence || !/^[a-f0-9]{64}$/.test(String(dispatch.requestDigest))
       || dispatch.sourceSha !== parameters.sourceSha || dispatch.operation !== parameters.operation
       || evidence.actionKey !== row.actionKey || evidence.requestDigest !== dispatch.requestDigest || evidence.sourceSha !== parameters.sourceSha) {
-      return { ok: false, reason: "native-report-unbound" };
+      return refuseActionResult("native-report-unbound");
     }
     if (to === "succeeded" && (evidence.settlement !== "confirmed"
       || evidence.nativeStatus !== (parameters.operation === "activate" ? "active" : "rolled-back"))) {
-      return { ok: false, reason: "native-success-unconfirmed" };
+      return refuseActionResult("native-success-unconfirmed");
     }
     if (to === "succeeded" && parameters.operation === "activate") {
       const identity = evidence.activeIdentity;
@@ -350,15 +355,17 @@ export async function recordActionResult(
         || !/^[a-f0-9]{64}$/.test(String(identity.executableSha256)) || !/^[a-f0-9]{64}$/.test(String(identity.engineManifestSha256))
         || !Number.isSafeInteger(identity.daemonPid) || Number(identity.daemonPid) <= 0
         || !Array.isArray(identity.enginePids) || !identity.enginePids.length || identity.enginePids.some(pid => !Number.isSafeInteger(pid) || Number(pid) <= 0)) {
-        return { ok: false, reason: "native-active-identity-missing" };
+        return refuseActionResult("native-active-identity-missing");
       }
     }
     // Only receipt delivery is idempotent. Keep the original evidence and
     // unknown outcome; this neither re-executes nor upgrades its settlement.
-    if (from === to && isRecord(row.evidence) && row.evidence.requestDigest === evidence.requestDigest) return { ok: true, status: from };
+    if (from === to && isRecord(row.evidence) && row.evidence.requestDigest === evidence.requestDigest) {
+      return { ...ok(), status: from };
+    }
   }
   if (!canTransitionDispatch(from, to)) {
-    return { ok: false, reason: `illegal-transition ${from}->${to}` };
+    return refuseActionResult(`illegal-transition ${from}->${to}`);
   }
 
   const now = opts.now ?? new Date();
@@ -366,11 +373,11 @@ export async function recordActionResult(
   let storedResult: Record<string, unknown> = { outcome: to };
   if (terminal && row.actionType === "organization.join.issue" && to === "succeeded") {
     const joinPackage = input.result?.joinPackage;
-    if (typeof joinPackage !== "string") return { ok: false, reason: "issued-package-missing" };
+    if (typeof joinPackage !== "string") return refuseActionResult("issued-package-missing");
     const parsed = parseOrganizationJoinPackage(joinPackage, now);
-    if (!parsed.ok) return { ok: false, reason: parsed.reason };
+    if (!parsed.ok) return refuseActionResult(parsed.reason);
     const encrypted = (opts.encryptSecret ?? encryptStoredSecret)(joinPackage);
-    if (!encrypted.startsWith("enc:")) return { ok: false, reason: "credential-encryption-unavailable" };
+    if (!encrypted.startsWith("enc:")) return refuseActionResult("credential-encryption-unavailable");
     storedResult = { joinPackageEnc: encrypted, expiresAt: parsed.value.expiresAt.toISOString() };
   }
   await db.remoteAction.update({
@@ -401,7 +408,7 @@ export async function recordActionResult(
         : {}),
     },
   });
-  return { ok: true, status: to };
+  return { ...ok(), status: to };
 }
 
 async function failUndispatchableAction(

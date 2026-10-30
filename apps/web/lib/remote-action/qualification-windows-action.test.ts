@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createQualificationExperimentAdmission, qualificationBindingDigest } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { err, ok } from "@/lib/shared/action-result";
 
 import { planQualificationWindowsAction, type QualificationWindowsNode } from "./qualification-windows-action";
 
@@ -32,19 +33,23 @@ describe("planQualificationWindowsAction", () => {
   it("derives the closed action solely from the signed binding and one fresh trusted node", () => {
     const result = planQualificationWindowsAction({ capsuleId: "WC-QUAL",
       workspaceState: { qualificationExperimentAdmission: state }, nodes: [node], now: NOW });
-    expect(result).toMatchObject({ ok: true, plan: { edgeNodeRowId: "node-row", parameters: {
+    expect(result).toMatchObject({ ...ok(), plan: { edgeNodeRowId: "node-row", parameters: {
       backlogItemId: "BI-QUAL", productionBlobs: [{ path: "scripts/lib/local-ci-gate-state.mjs", blobSha: "d".repeat(40) }],
       testBlobs: [{ path: "scripts/lib/local-ci-gate-state.test.mjs", blobSha: "f".repeat(40) }], edgeNodeId: "edge_windows" } } });
   });
 
   it("fails closed when more than one node could execute the same admission", () => {
     expect(planQualificationWindowsAction({ capsuleId: "WC-QUAL", workspaceState: { qualificationExperimentAdmission: state },
-      nodes: [node, { ...node, id: "node-2", nodeId: "edge_windows_2" }], now: NOW })).toEqual({ ok: false, reason: "qualification-node-ambiguous" });
+      nodes: [node, { ...node, id: "node-2", nodeId: "edge_windows_2" }], now: NOW })).toEqual({
+        ...err("qualification-node-ambiguous"), reason: "qualification-node-ambiguous",
+      });
   });
 
   it("refuses stale capability evidence", () => {
     const stale = { ...node, capabilityRows: [{ ...node.capabilityRows[0]!, reportedAt: new Date(NOW.getTime() - 120_001) }] };
     expect(planQualificationWindowsAction({ capsuleId: "WC-QUAL", workspaceState: { qualificationExperimentAdmission: state },
-      nodes: [stale], now: NOW })).toEqual({ ok: false, reason: "qualification-node-unavailable" });
+      nodes: [stale], now: NOW })).toEqual({
+        ...err("qualification-node-unavailable"), reason: "qualification-node-unavailable",
+      });
   });
 });

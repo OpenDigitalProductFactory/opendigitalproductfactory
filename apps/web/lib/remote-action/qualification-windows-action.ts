@@ -7,6 +7,7 @@ import {
   verifyQualificationExperimentAdmission,
   type QualificationExperimentBinding,
 } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 
 export const QUALIFICATION_WINDOWS_PROCEDURE_ID = "windows-handle-replacement-v1";
@@ -24,6 +25,17 @@ export type QualificationWindowsActionPlan = {
   parameters: Record<string, unknown>;
   evidence: Record<string, unknown>;
 };
+
+type QualificationRefusal = ActionFailure & { reason: string };
+type QualificationPlanResult = (ActionSuccess & {
+  plan: QualificationWindowsActionPlan;
+  binding: QualificationExperimentBinding;
+}) | QualificationRefusal;
+type QualificationMaterializeResult = (ActionSuccess & { actionKey: string }) | QualificationRefusal;
+
+function refuse(reason: string): QualificationRefusal {
+  return { ...err(reason), reason };
+}
 
 export type QualificationActionDb = {
   workroom: { findUnique(args: unknown): Promise<any>; update(args: unknown): Promise<any> };
@@ -55,23 +67,22 @@ export function planQualificationWindowsAction(input: {
   workspaceState: unknown;
   nodes: QualificationWindowsNode[];
   now?: Date;
-}): { ok: true; plan: QualificationWindowsActionPlan; binding: QualificationExperimentBinding }
-  | { ok: false; reason: string } {
+}): QualificationPlanResult {
   const now = input.now ?? new Date();
   const workspace = isRecord(input.workspaceState) ? input.workspaceState : {};
   const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
-  if (!state || state.status !== "issued" || state.startCount !== 0) return { ok: false, reason: "qualification-not-issued" };
+  if (!state || state.status !== "issued" || state.startCount !== 0) return refuse("qualification-not-issued");
   const admission = verifyQualificationExperimentAdmission(state.token, { now });
-  if (!admission.ok) return { ok: false, reason: "qualification-admission-invalid" };
+  if (!admission.ok) return refuse("qualification-admission-invalid");
   const binding = admission.data.binding;
   if (binding.workroomId !== input.capsuleId || binding.phase !== "verify" || binding.executorMode !== "native-edge"
     || binding.requiredPlatform !== "win32" || !binding.candidate || !binding.targetProductionPaths
     || binding.targetProductionPaths.length !== binding.targetProductionBlobIds.length
     || binding.allowedPaths.length !== binding.candidate.testBlobIds.length) {
-    return { ok: false, reason: "qualification-binding-invalid" };
+    return refuse("qualification-binding-invalid");
   }
   const nodes = input.nodes.filter((node) => eligible(node, now));
-  if (nodes.length !== 1) return { ok: false, reason: nodes.length ? "qualification-node-ambiguous" : "qualification-node-unavailable" };
+  if (nodes.length !== 1) return refuse(nodes.length ? "qualification-node-ambiguous" : "qualification-node-unavailable");
   const node = nodes[0]!;
   const actionKey = `ra_qw_${createHash("sha256").update(`${state.bindingDigest}:${node.nodeId}`).digest("hex").slice(0, 24)}`;
   const parameters = {
@@ -83,7 +94,7 @@ export function planQualificationWindowsAction(input: {
     qualificationBindingDigest: state.bindingDigest, procedureId: QUALIFICATION_WINDOWS_PROCEDURE_ID,
     resultSchemaVersion: 1, maxDurationSeconds: Math.floor(binding.maxDurationMs / 1000), edgeNodeId: node.nodeId,
   };
-  return { ok: true, binding, plan: { actionKey, edgeNodeRowId: node.id, parameters,
+  return { ...ok(), binding, plan: { actionKey, edgeNodeRowId: node.id, parameters,
     evidence: { governance: "signed-qualification-admission", qualificationAdmission: admission.data,
       qualificationBindingDigest: state.bindingDigest } } };
 }
@@ -95,16 +106,16 @@ export async function materializeQualificationWindowsAction(input: {
   requestedByUserId: string;
   authorityDecisionId?: string;
   now?: Date;
-}): Promise<{ ok: true; actionKey: string } | { ok: false; reason: string }> {
+}): Promise<QualificationMaterializeResult> {
   const now = input.now ?? new Date();
   const room = await input.db.workroom.findUnique({ where: { capsuleId: input.capsuleId } });
-  if (!room) return { ok: false, reason: "qualification-workroom-missing" };
+  if (!room) return refuse("qualification-workroom-missing");
   const nodes = await input.db.edgeNode.findMany({ where: { platform: "win32", trustState: "trusted", status: "active" },
     include: { capabilityRows: true } });
   const planned = planQualificationWindowsAction({ capsuleId: input.capsuleId, workspaceState: room.workspaceState, nodes, now });
   if (!planned.ok) return planned;
   if (await input.db.remoteAction.findUnique({ where: { actionKey: planned.plan.actionKey } })) {
-    return { ok: false, reason: "qualification-action-already-exists" };
+    return refuse("qualification-action-already-exists");
   }
   const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
   const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission)!;
@@ -134,6 +145,6 @@ export async function materializeQualificationWindowsAction(input: {
     recordedByAgentId: input.requestedByPrincipalId, payload: { actionKey: planned.plan.actionKey,
       qualificationBindingDigest: state.bindingDigest, edgeNodeId: planned.plan.edgeNodeRowId,
       researchSatisfied: false, authorityDecisionId: input.authorityDecisionId ?? null } } });
-  return { ok: true, actionKey: planned.plan.actionKey };
+  return { ...ok(), actionKey: planned.plan.actionKey };
 }
 

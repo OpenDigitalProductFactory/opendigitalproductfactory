@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
+import { err, ok } from "@/lib/shared/action-result";
 
 // Relative source import keeps this source-local test runnable in an isolated
 // worktree before workspace dependency links are converged by the shared gate.
@@ -239,20 +240,22 @@ describe("recordActionResult", () => {
     const { db, update } = resultDb(base);
     expect(report).toMatchObject({ actionKey: "ra_1", nodeId: parameters.edgeNodeId,
       qualificationBindingDigest: parameters.qualificationBindingDigest, platform: "win32" });
-    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded", evidence: report })).toEqual({ ok: true, status: "succeeded" });
+    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded", evidence: report })).toEqual({ ...ok(), status: "succeeded" });
     expect(update.mock.calls[0][0].data.evidence).toMatchObject({
       qualificationAdmission: { workroomId: parameters.workroomId }, qualificationDispatch: dispatch,
       reportedByNode: "node_1",
     });
     const refused = resultDb(base);
     expect(await recordActionResult(refused.db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded",
-      evidence: { ...report, headSha: "0".repeat(40) } })).toEqual({ ok: false, reason: "qualification-native-report-unbound" });
+      evidence: { ...report, headSha: "0".repeat(40) } })).toEqual({
+        ...err("qualification-native-report-unbound"), reason: "qualification-native-report-unbound",
+      });
     expect(refused.update).not.toHaveBeenCalled();
     const retry = resultDb({ ...base, status: "succeeded", evidence: {
       ...report, qualificationAdmission: { workroomId: parameters.workroomId }, qualificationDispatch: dispatch,
     } });
     expect(await recordActionResult(retry.db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded",
-      evidence: report })).toEqual({ ok: true, status: "succeeded" });
+      evidence: report })).toEqual({ ...ok(), status: "succeeded" });
     expect(retry.update).not.toHaveBeenCalled();
   });
   it("settles a bound source-mismatch nonexecution receipt while rejecting the same refusal without its original binding", async () => {
@@ -260,7 +263,7 @@ describe("recordActionResult", () => {
       evidence: { nativeAdmission: { quiescenceRunId: "QR-original" }, nativeDispatch: { requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), operation: "activate" } } };
     const { db, update } = resultDb(base);
     const refusal = { schemaVersion: 1, actionKey: "ra_1", nativeStatus: "not-started", settlement: "confirmed" };
-    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: refusal })).toEqual({ ok: false, reason: "native-report-unbound" });
+    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: refusal })).toEqual({ ...err("native-report-unbound"), reason: "native-report-unbound" });
     expect(update).not.toHaveBeenCalled();
     expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed",
       evidence: { ...refusal, requestDigest: "a".repeat(64), sourceSha: "a".repeat(40) } })).toEqual({ ok: true, status: "failed" });
@@ -300,7 +303,7 @@ describe("recordActionResult", () => {
   it("rejects a report from a node that does not own the claim", async () => {
     const { db, update } = resultDb({ actionKey: "ra_1", status: "claimed", edgeNodeId: "node_1" });
     const res = await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_2", outcome: "succeeded" });
-    expect(res).toEqual({ ok: false, reason: "not-claimed-by-this-node" });
+    expect(res).toEqual({ ...err("not-claimed-by-this-node"), reason: "not-claimed-by-this-node" });
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -320,7 +323,7 @@ describe("recordActionResult", () => {
 
   it("not-found is reported", async () => {
     const { db } = resultDb(null);
-    expect(await recordActionResult(db, { actionKey: "nope", edgeNodeRowId: "node_1", outcome: "succeeded" })).toEqual({ ok: false, reason: "action-not-found" });
+    expect(await recordActionResult(db, { actionKey: "nope", edgeNodeRowId: "node_1", outcome: "succeeded" })).toEqual({ ...err("action-not-found"), reason: "action-not-found" });
   });
 
   it("encrypts an issued package immediately and never persists plaintext", async () => {
