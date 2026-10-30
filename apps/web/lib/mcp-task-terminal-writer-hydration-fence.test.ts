@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { db, autonomous, params, userContext, persistedReaderExecution, submit, persistedMetadata } from "./test-support/terminal-writer-fixture";
+import { db, autonomous, params, persistedReaderExecution, submit, persistedMetadata } from "./test-support/terminal-writer-fixture";
 import { readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
 
 afterEach(async () => {

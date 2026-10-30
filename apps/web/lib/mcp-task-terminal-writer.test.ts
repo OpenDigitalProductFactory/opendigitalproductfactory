@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { db, autonomous, params, userContext, persistedReaderExecution, submit, persistedMetadata } from "./test-support/terminal-writer-fixture";
+import { db, autonomous, params, persistedReaderExecution, submit, persistedMetadata } from "./test-support/terminal-writer-fixture";
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { readerBootstrapHistory, readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
 import { terminalTruncationMessage } from "./tak/terminal-response-truncation";
