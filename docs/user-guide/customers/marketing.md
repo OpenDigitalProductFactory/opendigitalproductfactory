@@ -71,6 +71,21 @@ counted as zero.
 
 ## Review Strategy, Assumptions, and Proof
 
+Customer success stories need checked source records, figures and the required
+customer permission. A saved instruction to write about wins does not establish
+that those wins happened. A proof-asset label or link alone does not verify them.
+
+Unsupported customer-proof tasks appear as **Collect evidence for customer proof**.
+The original request remains labeled as unverified. Drafting stops with an
+evidence-collection explanation; it does not invent the missing results.
+Clearly labeled internal dogfooding may describe internal work, but must not
+imply customer outcomes. Ordinary drafts still wait for human review and the
+existing publish or send approval.
+
+The current proof-asset fields do not provide a verified-outcome and customer
+permission workflow. Customer-proof drafting stays blocked until that evidence
+can be bound and verified; adding a label or URL does not clear the hold.
+
 Open **Strategy, assumptions & proof** when the recommendation needs scrutiny.
 Review:
 
