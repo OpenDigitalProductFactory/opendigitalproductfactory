@@ -282,9 +282,17 @@ after exact canonical target binding in the actual configured mode, positive
 old-effect exclusion, independent contract approval, accountable human
 authorization, and actual operation admission. The current case remains
 git-source/upstream: its exact protected source/merge target and normal binding
-are unbound; source head 36494302add2e21c5051b74f21aaaed222a49578 is not
-substituted for that canonical target. Release-artifact binding applies only to
-an already configured release-artifact installation; no mode switch is proposed.
+are unbound. The native owner's retained reassessment, SHA256
+8c3249dfd167a11f4a1110d10adfca30342f12cc0c2d90f84f39c78303e07026,
+records explicit canonical dispatch=1 after supported PKI bootstrap, a read-only
+Compose render of 1, and existing served/protected promoter source that consumes
+canonical `.env` without forwarding the old portal's 0. Root verified that
+artifact without repeating the physical render. PR #6757's missing-key
+initializer is therefore not a current-Mac source prerequisite; it remains an
+independent other-install fix. Actual running-process dispatch=1 and legitimate
+operation admission remain unverified by that audit. Release-artifact binding
+applies only to an already configured release-artifact installation; no mode
+switch is proposed.
 The served runtime has no approved exclusion/eligibility writer, and
 upgrading it to establish its own precondition would be circular. The owning
 design decision remains BI-3FD07259's spec-approval/architecture lane; the

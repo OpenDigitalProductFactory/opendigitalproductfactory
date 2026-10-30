@@ -594,17 +594,30 @@ never settles the historical click or fabricates BI-CE244260 acceptance.
 
 The candidate operation is **one new normal Upgrade now admission by the
 original logged-in operator on the same installation**, with emergency override
-off. Its purpose is to serve the protected repair/configuration needed for
+off. Its purpose is to serve the protected source/current configuration needed for
 native registration and local-inference acceptance. It is a distinct operation;
 the 2026-10-26 click remains UNKNOWN and is never submitted again, assigned the
 new locator, or marked superseded/failed/nonexecuted.
+
+The native owner's 2026-10-30 03:18 UTC retained reassessment
+`current-dispatch-config-convergence-reassessment-20261030.json`, SHA256
+`8c3249dfd167a11f4a1110d10adfca30342f12cc0c2d90f84f39c78303e07026`,
+records that supported PKI bootstrap already wrote canonical explicit dispatch=1.
+Its read-only Compose render returned 1. The eight audited promoter/Compose
+source paths were identical between served `4718cd4f` and protected `641248e9`:
+normal promotion consumes canonical `.env` without forwarding the old portal's
+dispatch=0. Root verified the retained artifact; it did not repeat the physical
+render. This establishes a current configuration path, not running-process
+convergence, upgrade authority, or original-request settlement. PR #6757's
+missing-key initializer remains useful for other installs and follows its own
+gates; it is not a current-Mac source prerequisite merely to initialize that key.
 
 | Bound fact | Required value before this candidate could be admitted |
 | --- | --- |
 | Historical subject | BI-CE244260 original 2026-10-26 click, old target f63d7fbc0bac50fb09320532e6e9831944ca1f1c, UNKNOWN retained unchanged. |
 | Actor | The original authenticated human operator, through root's existing logged-in portal control; the issuer resolves and records its actual Principal and installation. No delegation to this design agent, MCP fallback, or borrowed credential. |
-| New target | Preserve the installation's actual configured target kind and source mode. The current case is git-source/upstream: require one exact canonical protected source/merge SHA and its normal issuer-validated target/binding, containing the repair required by BI-EEFCB232/PR #6757 and certificate repair delivered through PR #6754. Only an installation already configured for release-artifact may instead bind the canonical publisher-verified immutable tag, protected source SHA and image digest. No install-mode switch or guessed future squash SHA/tag is authorized. |
-| Actual target at this freeze | **Unbound.** PR #6757 source head 36494302add2e21c5051b74f21aaaed222a49578 is review/gate evidence, not its protected canonical merge, an action-time git-source target/binding, or a release deployment identity. The actual target-kind-specific binding must be attached to the operation's reviewable issuer packet before admission; it cannot be silently substituted into this frozen proposal. |
+| New target | Preserve the installation's actual configured target kind and source mode. The current case is git-source/upstream: require one exact canonical protected source/merge SHA and its normal issuer-validated target/binding, with normal canonical configuration consumption. This Mac already has explicit canonical dispatch=1; consuming it does not require PR #6757's missing-key initialization. Only an installation already configured for release-artifact may instead bind the canonical publisher-verified immutable tag, protected source SHA and image digest. No install-mode switch or guessed future squash SHA/tag is authorized. |
+| Actual target at this freeze | **Unbound.** The retained configuration audit does not issue an action-time git-source target/binding or select a deployment identity. The actual target-kind-specific binding must be attached to the operation's reviewable issuer packet before admission; it cannot be silently substituted into this frozen proposal. PR #6757 proceeds independently and is not a prerequisite of this current-case option. |
 | Action and posture | Normal single Upgrade now action; requestedForce=false; no force/abort/restart/Compose/provider/model/issuer/grant changes. Existing target, quiescence, window/recovery, rollback and protected deployment checks all remain authoritative. |
 | Present effect exclusion | Positive issuer evidence that no prior request can later commit, dispatch or cause a conflicting physical effect, and no unresolved physical effect is already running. A new current fence alone says nothing about historical outcome. |
 | Recovery/rollback | The normal pipeline's pre-update recovery point and source-bound rollback contract. No extra manual swap or restore is authorized if it fails; retain its new exact identity and stop for its supported recovery disposition. |
