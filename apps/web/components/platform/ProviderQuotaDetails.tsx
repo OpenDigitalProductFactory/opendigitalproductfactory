@@ -26,7 +26,7 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy, o
     oauth: copy.capacitySourceCheck, manual: copy.capacitySourceManual };
   const instant = (value: string | null) => value ? <time dateTime={value}>{formatInstant(value, { timeZone: copy.viewerTimeZone ?? "UTC" })}</time> : copy.capacityUnknownTime;
   return <ExpandableCard id={`${id}-recovery`} open={open ?? localOpen} onOpenChange={onOpenChange ?? setLocalOpen}
-    summary={copy.limitDetails} headingLevel={2} className="mt-1 text-sm">
+    summary={copy.limitDetails} headingLevel={2} className="mt-1 text-sm" panelClassName="bg-[var(--dpf-surface-1)]">
     <div className="space-y-3">
       {recovery.unavailable && <p role="status">{copy.capacityUnavailable}</p>}
       {recovery.limits.length > 0 && <ul className="m-0 list-inside space-y-1 p-0">{recovery.limits.map((limit, index) => <li key={index}>
@@ -82,7 +82,7 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy, o
           });
         }}>{pending ? <InlineBusy label={copy.working} tone="current" /> : copy.capacityStop}</Button>
       </div>}
-      <FormStatus error={result && !result.ok ? result.message : null} success={result?.ok ? result.message : null} />
+      <FormStatus className="[&[role=status]]:text-[var(--dpf-text)]" error={result && !result.ok ? result.message : null} success={result?.ok ? result.message : null} />
       {canWrite && (!recovery.canCheck || recovery.unavailable) && <p>{copy.capacityNoCheck}</p>}
     </div>
   </ExpandableCard>;
