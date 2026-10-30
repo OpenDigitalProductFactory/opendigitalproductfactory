@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { formatInstant } from "@/lib/datetime";
 
 // ─── Event type → platform deep link + human label ──────────────────────────
 
@@ -81,13 +82,11 @@ type Props = {
 };
 
 function formatDate(iso: string, allDay: boolean): string {
-  const d = new Date(iso);
-  if (allDay) {
-    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  }
-  return d.toLocaleString(undefined, {
-    weekday: "short", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
+  return formatInstant(iso, {
+    mode: "date",
+    options: { weekday: "short", month: "short", day: "numeric" },
+    ...(allDay ? { timeZone: "UTC" } : {}),
+    withZone: false,
   });
 }
 
@@ -95,17 +94,19 @@ function formatTimeRange(start: string, end: string | null, allDay: boolean): st
   if (allDay) {
     const s = formatDate(start, true);
     if (!end) return s;
-    const e = formatDate(end, true);
+    const lastIncluded = new Date(end);
+    lastIncluded.setUTCDate(lastIncluded.getUTCDate() - 1);
+    const e = formatDate(lastIncluded.toISOString(), true);
     return s === e ? s : `${s} \u2013 ${e}`;
   }
   const s = new Date(start);
   const timeStart = s.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   if (!end) {
-    return `${formatDate(start, true)} at ${timeStart}`;
+    return `${formatDate(start, false)} at ${timeStart}`;
   }
   const e = new Date(end);
   const timeEnd = e.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  const dateStr = formatDate(start, true);
+  const dateStr = formatDate(start, false);
   return `${dateStr}, ${timeStart} \u2013 ${timeEnd}`;
 }
 

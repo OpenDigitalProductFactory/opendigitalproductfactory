@@ -13,6 +13,7 @@ import { CalendarDetailPopover } from "./CalendarDetailPopover";
 import { CalendarAgentScheduler } from "./CalendarAgentScheduler";
 import { CalendarSyncPanel } from "./CalendarSyncPanel";
 import { CalendarFeedSubscribePanel } from "./CalendarFeedSubscribePanel";
+import { dateToKey } from "@/components/workbooks/grid-calendar";
 
 // Must match CATEGORY_COLORS in calendar-data.ts — use concrete hex, not CSS vars
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
@@ -110,7 +111,7 @@ export function WorkspaceCalendar({
   function viewDateIso(): string {
     const api = calendarRef.current?.getApi();
     const date = api?.getDate() ?? new Date();
-    return date.toISOString().split("T")[0]!;
+    return dateToKey(date);
   }
 
   function toggleCategory(cat: string) {

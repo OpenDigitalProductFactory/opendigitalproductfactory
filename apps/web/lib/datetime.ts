@@ -11,6 +11,14 @@
 
 export type DateTimeMode = "datetime" | "date" | "time";
 
+/** Native all-day storage carries a UTC civil day, not a viewer-zone instant.
+ * FullCalendar accepts date-only wire values for that distinction. Timed and
+ * externally synchronized instants must keep their absolute timestamp. */
+export function calendarEventDate(value: Date, nativeAllDay: boolean): string {
+  const iso = value.toISOString();
+  return nativeAllDay ? iso.slice(0, 10) : iso;
+}
+
 const PRESETS: Record<DateTimeMode, Intl.DateTimeFormatOptions> = {
   datetime: {
     year: "numeric",

@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCalendarEvent } from "@/lib/actions/calendar";
+import { dateToKey } from "@/components/workbooks/grid-calendar";
+import { useT } from "@/lib/i18n/use-t";
 
 const EVENT_TYPES = [
   { value: "meeting", label: "Meeting" },
@@ -28,13 +30,14 @@ type Props = {
 };
 
 export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: Props) {
+  const t = useT("shell");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState({
     title: "",
     eventType: "meeting",
     category: "personal",
-    startAt: defaultDate ?? new Date().toISOString().split("T")[0]!,
+    startAt: defaultDate ?? dateToKey(new Date()),
     endAt: defaultEndDate ?? "",
     allDay: true,
     description: "",
@@ -126,6 +129,8 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
           </div>
 
           <div style={{ display: "flex", gap: 6 }}>
+            <label className="flex flex-1 flex-col gap-1 text-xs text-[var(--dpf-muted)]">
+              {t("calendar.startDate")}
             <input
               type="date"
               value={form.startAt}
@@ -135,16 +140,20 @@ export function CalendarEventPopover({ defaultDate, defaultEndDate, onClose }: P
                 border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
               }}
             />
+            </label>
+            <label className="flex flex-1 flex-col gap-1 text-xs text-[var(--dpf-muted)]">
+              {t("calendar.endExclusive")}
             <input
               type="date"
               value={form.endAt}
               onChange={(e) => setForm((p) => ({ ...p, endAt: e.target.value }))}
-              placeholder="End date"
+              placeholder={t("calendar.endExclusive")}
               style={{
                 flex: 1, padding: "6px 8px", fontSize: 12, borderRadius: 4,
                 border: "1px solid var(--dpf-border)", background: "var(--dpf-bg)", color: "var(--dpf-text)",
               }}
             />
+            </label>
           </div>
 
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dpf-muted)" }}>

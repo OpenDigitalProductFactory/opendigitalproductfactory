@@ -29,6 +29,10 @@
     "offLink": "See runtime services",
     "offAlertsNote": "Log alerts only — metric monitoring is off."
   },
+  "calendar": {
+    "startDate": "Start date",
+    "endExclusive": "End date (not included)"
+  },
   "calendarFeed": {
     "heading": "Subscribe from another calendar app",
     "create": "Create link",

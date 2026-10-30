@@ -12,6 +12,7 @@
 //     cannot express.
 
 import { prisma, type Prisma } from "@dpf/db";
+import { calendarEventDate } from "@/lib/datetime";
 
 import { can, type CapabilityKey, type UserContext } from "@/lib/govern/permissions";
 import type { CalendarEventView } from "./calendar-data";
@@ -64,13 +65,13 @@ export async function loadNativeFeedEvents(
       ],
     },
     orderBy: { startAt: "asc" },
-    select: { eventId: true, title: true, startAt: true, endAt: true, allDay: true, category: true, eventType: true },
+    select: { eventId: true, title: true, startAt: true, endAt: true, allDay: true, category: true, eventType: true, syncSource: true },
   });
   return rows.map((row) => ({
     id: row.eventId,
     title: row.title,
-    start: row.startAt.toISOString(),
-    end: row.endAt?.toISOString() ?? null,
+    start: calendarEventDate(row.startAt, row.allDay && !row.syncSource),
+    end: row.endAt ? calendarEventDate(row.endAt, row.allDay && !row.syncSource) : null,
     allDay: row.allDay,
     category: row.category,
     eventType: row.eventType,

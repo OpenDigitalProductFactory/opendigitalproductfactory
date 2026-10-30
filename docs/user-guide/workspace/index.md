@@ -361,6 +361,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Click a tile to jump directly into the relevant area
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
+- All-day native events keep the selected calendar date across time zones. The optional end date is not included; an event from October 29 to October 31 covers October 29 and 30. Timed events still display in the viewer's local time. A saved event alone does not prove a notification was delivered.
 - See your calendar in Google Calendar, Outlook or Apple Calendar: on the business calendar, under **Subscribe from another calendar app**, select **Create link** and copy the private link into your calendar app. The link is shown once. It carries only what your role can see, and **Replace link** or **Turn off** stops the old link at once. Links from before this change, which used your account id, no longer work; create a new one.
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Check [which file formats](supported-file-formats.md) coworker attachments, onboarding uploads, and Workbook imports can read

@@ -2,6 +2,7 @@
 // Merges native CalendarEvent records with projected platform events.
 
 import { cache } from "react";
+import { calendarEventDate } from "@/lib/datetime";
 import { prisma } from "@dpf/db";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
 import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
@@ -1084,12 +1085,11 @@ export const getCalendarEvents = cache(async (
     where: nativeWhere,
     orderBy: { startAt: "asc" },
   });
-
   const native: CalendarEventView[] = nativeEvents.map((e) => ({
     id: e.eventId,
     title: e.title,
-    start: e.startAt.toISOString(),
-    end: e.endAt?.toISOString() ?? null,
+    start: calendarEventDate(e.startAt, e.allDay && !e.syncSource),
+    end: e.endAt ? calendarEventDate(e.endAt, e.allDay && !e.syncSource) : null,
     allDay: e.allDay,
     category: e.category,
     eventType: e.eventType,

@@ -41,6 +41,8 @@ import { WorkspaceCalendar } from "./WorkspaceCalendar";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
   for (const key of Object.keys(calendarProps)) delete calendarProps[key];
 });
 
@@ -49,6 +51,14 @@ function dayRect() {
 }
 
 describe("WorkspaceCalendar", () => {
+  it("defaults new events to the viewer's civil day at UTC+14", () => {
+    vi.stubEnv("TZ", "Pacific/Kiritimati");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T11:30:00Z"));
+    render(<WorkspaceCalendar events={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "New event" }));
+    expect(screen.getByTestId("create-popover")).toHaveTextContent("2026-10-29");
+  });
   it("offers a create control on the page, not only a gesture", () => {
     render(<WorkspaceCalendar events={[]} />);
     expect(screen.getByRole("button", { name: "New event" })).toBeInTheDocument();
