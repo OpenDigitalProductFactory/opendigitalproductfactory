@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getCalendarEvents } from "@/lib/calendar-data";
+import { readNativeCalendarCivilRange } from "@/lib/workforce/native-calendar-range";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -24,12 +25,15 @@ export async function GET(request: NextRequest) {
 
   const rangeStart = new Date(startParam);
   const rangeEnd   = new Date(endParam);
+  const civilRange = readNativeCalendarCivilRange(
+    searchParams.get("civilStart"), searchParams.get("civilEnd"), rangeStart, rangeEnd,
+  );
 
-  if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
+  if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime()) || civilRange === null) {
     return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
   }
 
-  const events = await getCalendarEvents(rangeStart, rangeEnd);
+  const events = await getCalendarEvents(rangeStart, rangeEnd, undefined, civilRange);
 
   return NextResponse.json(events, {
     headers: { "Cache-Control": "private, max-age=30" },

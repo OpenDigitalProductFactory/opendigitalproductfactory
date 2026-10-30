@@ -3,6 +3,7 @@
 
 import { cache } from "react";
 import { calendarEventDate } from "@/lib/datetime";
+import { nativeCalendarRangeWhere, type NativeCalendarCivilRange } from "./native-calendar-range";
 import { prisma } from "@dpf/db";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
 import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
@@ -1071,15 +1072,10 @@ export const getCalendarEvents = cache(async (
   rangeStart: Date,
   rangeEnd: Date,
   employeeProfileId?: string,
+  civilRange?: NativeCalendarCivilRange,
 ): Promise<CalendarEventView[]> => {
   // Native events
-  const nativeWhere: Record<string, unknown> = {
-    startAt: { lte: rangeEnd },
-    OR: [
-      { endAt: { gte: rangeStart } },
-      { endAt: null, startAt: { gte: rangeStart } },
-    ],
-  };
+  const nativeWhere = nativeCalendarRangeWhere(rangeStart, rangeEnd, civilRange);
 
   const nativeEvents = await prisma.calendarEvent.findMany({
     where: nativeWhere,

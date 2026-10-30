@@ -43,6 +43,7 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   for (const key of Object.keys(calendarProps)) delete calendarProps[key];
 });
 
@@ -51,6 +52,21 @@ function dayRect() {
 }
 
 describe("WorkspaceCalendar", () => {
+  it("sends local day boundaries alongside instants at UTC+14", async () => {
+    vi.stubEnv("TZ", "Pacific/Kiritimati");
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    vi.stubGlobal("fetch", fetcher);
+    render(<WorkspaceCalendar events={[]} />);
+    await act(async () => {
+      await (calendarProps.datesSet as (range: unknown) => Promise<void>)({
+        start: new Date("2026-10-28T10:00:00Z"), end: new Date("2026-10-29T10:00:00Z"),
+      });
+    });
+    const query = new URL(fetcher.mock.calls[0][0], "https://fixture.example").searchParams;
+    expect(query.get("civilStart")).toBe("2026-10-29");
+    expect(query.get("civilEnd")).toBe("2026-10-30");
+    expect(query.get("start")).toBe("2026-10-28T10:00:00.000Z");
+  });
   it("defaults new events to the viewer's civil day at UTC+14", () => {
     vi.stubEnv("TZ", "Pacific/Kiritimati");
     vi.useFakeTimers();

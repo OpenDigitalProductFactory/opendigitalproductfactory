@@ -147,6 +147,8 @@ export function WorkspaceCalendar({
       const params = new URLSearchParams({
         start: arg.start.toISOString(),
         end:   arg.end.toISOString(),
+        civilStart: dateToKey(arg.start),
+        civilEnd: dateToKey(arg.end),
       });
       const res = await fetch(`/api/calendar/events?${params}`);
       if (res.ok) {
