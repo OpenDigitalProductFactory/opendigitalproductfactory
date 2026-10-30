@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
+import { err, ok } from "@/lib/shared/action-result";
 
 // Relative source import keeps this source-local test runnable in an isolated
 // worktree before workspace dependency links are converged by the shared gate.
@@ -54,6 +55,12 @@ const claimOptions = { now: NOW, signer, nonceFactory: () => NONCE };
 
 const nativeParameters = () => ({ version: 1, operation: "activate", sourceSha: "a".repeat(40), profileSha256: "b".repeat(64),
   runtimeManifestSha256: "c".repeat(64), qualificationReportSha256: "d".repeat(64), baselineEngineSha256: "e".repeat(64), leaseId: "NPEL-TEST" });
+const qualificationParameters = () => ({ version: 1, backlogItemId: "BI-B3DEC077", workroomId: "WC-A8C14CBE",
+  repository: "OpenDigitalProductFactory/opendigitalproductfactory", baseSha: "a".repeat(40), headSha: "b".repeat(40),
+  protocolPath: "docs/superpowers/specs/windows-handle-replacement.md", protocolBlobSha: "c".repeat(40),
+  productionBlobs: [{ path: "apps/web/lib/file.ts", blobSha: "d".repeat(40) }],
+  testBlobs: [{ path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40) }], qualificationBindingDigest: "f".repeat(64),
+  procedureId: "windows-handle-replacement-v1", resultSchemaVersion: 1, maxDurationSeconds: 300, edgeNodeId: "edge_external_1" });
 
 function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
   const findMany = vi.fn().mockResolvedValue(candidates);
@@ -69,6 +76,38 @@ function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
 }
 
 describe("claimActionsForNode", () => {
+  it("signs only the closed Windows qualification packet", async () => {
+    const type = "qualification.windows.verify-v1";
+    const { db } = claimDb([candidate({ actionType: type, riskClass: "high", edgeNodeId: "node_1",
+      changeRequestId: "change-1", parameters: qualificationParameters() })]);
+    vi.mocked(db.changeRequest.findMany).mockResolvedValue([{ id: "change-1", status: "approved", approvedAt: NOW, approvedById: "employee-1" }]);
+    const result = await claimActionsForNode(db, { ...trustedInternalNode, allowedActionTypes: [type] }, claimOptions);
+    expect(result.claimed[0]?.parameters).toEqual(qualificationParameters());
+  });
+
+  it("fails a widened Windows qualification before signing", async () => {
+    const type = "qualification.windows.verify-v1";
+    const { db, updateMany } = claimDb([candidate({ actionType: type, riskClass: "high", edgeNodeId: "node_1",
+      changeRequestId: "change-1", parameters: { ...qualificationParameters(), command: "pwsh" } })]);
+    vi.mocked(db.changeRequest.findMany).mockResolvedValue([{ id: "change-1", status: "approved", approvedAt: NOW, approvedById: "employee-1" }]);
+    const result = await claimActionsForNode(db, { ...trustedInternalNode, allowedActionTypes: [type] }, claimOptions);
+    expect(result.claimed).toHaveLength(0);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) }));
+  });
+
+  it("binds the qualification dispatch digest before the native node can report", async () => {
+    const type = "qualification.windows.verify-v1";
+    const { db, updateMany } = claimDb([candidate({ actionType: type, riskClass: "high", edgeNodeId: "node_1",
+      changeRequestId: "change-1", parameters: qualificationParameters(), evidence: { governance: "approved" } })]);
+    vi.mocked(db.changeRequest.findMany).mockResolvedValue([{ id: "change-1", status: "approved", approvedAt: NOW, approvedById: "employee-1" }]);
+    await claimActionsForNode(db, { ...trustedInternalNode, allowedActionTypes: [type] }, claimOptions);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ evidence: {
+      governance: "approved",
+      qualificationDispatch: expect.objectContaining({ qualificationBindingDigest: "f".repeat(64),
+        requestDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }),
+    } }) }));
+  });
+
   it("never signs arbitrary native commands even with the exact machine grant and approved change", async () => {
     const { db, updateMany } = claimDb([candidate({ actionType: "inference.runtime.transition", riskClass: "high",
       edgeNodeId: "node_1", changeRequestId: "change-1", parameters: { ...nativeParameters(), command: "arbitrary" } })]);
@@ -182,12 +221,49 @@ function resultDb(row: { actionKey: string; status: string; edgeNodeId: string |
 }
 
 describe("recordActionResult", () => {
+  it("accepts only a complete exact-bound Windows qualification report", async () => {
+    const parameters = qualificationParameters();
+    const dispatch = { requestDigest: "9".repeat(64), qualificationBindingDigest: parameters.qualificationBindingDigest };
+    const base = { actionKey: "ra_1", status: "claimed", edgeNodeId: "node_1",
+      actionType: "qualification.windows.verify-v1", parameters,
+      evidence: { governance: "approved", qualificationAdmission: { workroomId: parameters.workroomId }, qualificationDispatch: dispatch } };
+    const report = {
+      actionKey: "ra_1", nodeId: parameters.edgeNodeId, requestDigest: dispatch.requestDigest,
+      qualificationBindingDigest: parameters.qualificationBindingDigest,
+      procedureId: parameters.procedureId, procedureVersion: 1, platform: "win32", architecture: "amd64",
+      baseSha: parameters.baseSha, headSha: parameters.headSha, protocolPath: parameters.protocolPath,
+      protocolBlobSha: parameters.protocolBlobSha, productionBlobs: parameters.productionBlobs, testBlobs: parameters.testBlobs,
+      startedAt: NOW.toISOString(), finishedAt: new Date(NOW.getTime() + 5).toISOString(),
+      observations: { firstReplacement: "refused:*PathError", secondReplacement: "replaced", cleanup: "removed" },
+      boundedOutputDigest: "8".repeat(64),
+    };
+    const { db, update } = resultDb(base);
+    expect(report).toMatchObject({ actionKey: "ra_1", nodeId: parameters.edgeNodeId,
+      qualificationBindingDigest: parameters.qualificationBindingDigest, platform: "win32" });
+    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded", evidence: report })).toEqual({ ...ok(), status: "succeeded" });
+    expect(update.mock.calls[0][0].data.evidence).toMatchObject({
+      qualificationAdmission: { workroomId: parameters.workroomId }, qualificationDispatch: dispatch,
+      reportedByNode: "node_1",
+    });
+    const refused = resultDb(base);
+    expect(await recordActionResult(refused.db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded",
+      evidence: { ...report, headSha: "0".repeat(40) } })).toEqual({
+        ...err("qualification-native-report-unbound"), reason: "qualification-native-report-unbound",
+      });
+    expect(refused.update).not.toHaveBeenCalled();
+    const retry = resultDb({ ...base, status: "succeeded", evidence: {
+      ...report, qualificationAdmission: { workroomId: parameters.workroomId }, qualificationDispatch: dispatch,
+    } });
+    expect(await recordActionResult(retry.db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded",
+      evidence: report })).toEqual({ ...ok(), status: "succeeded" });
+    expect(retry.update).not.toHaveBeenCalled();
+  });
   it("settles a bound source-mismatch nonexecution receipt while rejecting the same refusal without its original binding", async () => {
     const base = { actionKey: "ra_1", status: "claimed", edgeNodeId: "node_1", actionType: "inference.runtime.transition", parameters: nativeParameters(),
       evidence: { nativeAdmission: { quiescenceRunId: "QR-original" }, nativeDispatch: { requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), operation: "activate" } } };
     const { db, update } = resultDb(base);
     const refusal = { schemaVersion: 1, actionKey: "ra_1", nativeStatus: "not-started", settlement: "confirmed" };
-    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: refusal })).toEqual({ ok: false, reason: "native-report-unbound" });
+    expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: refusal })).toEqual({ ...err("native-report-unbound"), reason: "native-report-unbound" });
     expect(update).not.toHaveBeenCalled();
     expect(await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed",
       evidence: { ...refusal, requestDigest: "a".repeat(64), sourceSha: "a".repeat(40) } })).toEqual({ ok: true, status: "failed" });
@@ -227,7 +303,7 @@ describe("recordActionResult", () => {
   it("rejects a report from a node that does not own the claim", async () => {
     const { db, update } = resultDb({ actionKey: "ra_1", status: "claimed", edgeNodeId: "node_1" });
     const res = await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_2", outcome: "succeeded" });
-    expect(res).toEqual({ ok: false, reason: "not-claimed-by-this-node" });
+    expect(res).toEqual({ ...err("not-claimed-by-this-node"), reason: "not-claimed-by-this-node" });
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -247,7 +323,7 @@ describe("recordActionResult", () => {
 
   it("not-found is reported", async () => {
     const { db } = resultDb(null);
-    expect(await recordActionResult(db, { actionKey: "nope", edgeNodeRowId: "node_1", outcome: "succeeded" })).toEqual({ ok: false, reason: "action-not-found" });
+    expect(await recordActionResult(db, { actionKey: "nope", edgeNodeRowId: "node_1", outcome: "succeeded" })).toEqual({ ...err("action-not-found"), reason: "action-not-found" });
   });
 
   it("encrypts an issued package immediately and never persists plaintext", async () => {
