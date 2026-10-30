@@ -89,7 +89,7 @@ describe("delivery outcome observations", () => {
             { queueKey: "wr:delivery-medium@1.0.0:implement", itemKind: "workroom-stage", itemId: "WC-1:run", transition: "started", outcome: null, occurredAt: at(11) },
             { queueKey: "wr:delivery-medium@1.0.0:implement", itemKind: "workroom-stage", itemId: "WC-1:run", transition: "finished", outcome: "success", occurredAt: at(13) },
         ];
-        const result = projectDeliveryOutcomes(input({ queue, sources: [{ key: "tools", state: "failed", count: 0, observedAt: now.toISOString(), note: "Read unavailable" }] }));
+        const result = projectDeliveryOutcomes(input({ queue, sources: [{ key: "tools", state: "failed", count: 0, observedAt: now.toISOString(), note: "readUnavailable" }] }));
         expect(result.stages.find(s => s.key === "process")).toMatchObject({ p50Ms: 2 * 86400000 });
         expect(result.stages.find(s => s.key === "wait")).toMatchObject({ p50Ms: 86400000 });
         expect(result.state).toBe("partial");

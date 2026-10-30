@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import type { MessageKey } from "@dpf/i18n";
 import { useT } from "@/lib/i18n/use-t";
 import { formatDuration } from "@/lib/datetime";
 import { formatMoney } from "@/lib/org-locale/org-locale";
@@ -67,7 +66,7 @@ export function DeliveryOutcomeScorecard({ data, query = "", dimension = "all", 
       <p className="mt-3 text-sm text-dpf-muted">{t("outcomes.cohortDescription")} {t("outcomes.confidence")}</p>
       <p className="mt-2 text-sm text-dpf-muted">{t("outcomes.limits")}</p>
       <DataTable ariaLabel={t("outcomes.tables.sources")} responsive rows={data.sources} getRowKey={r => r.key + ":" + r.state} columns={[
-            { key: "source", header: t("outcomes.columns.source"), cell: r => t(`outcomes.sources.${r.key}` as MessageKey<"workrooms">) }, { key: "state", header: t("outcomes.columns.coverage"), cell: r => t(`outcomes.state.${r.state}`) }, { key: "rows", header: t("outcomes.columns.rows"), cell: r => amount(r.count) }, { key: "observed", header: t("outcomes.columns.observed"), cell: r => <LocalTime value={r.observedAt}/> }, { key: "note", header: t("outcomes.columns.limits"), cell: r => t(`outcomes.notes.${r.note ?? "recorded"}` as MessageKey<"workrooms">) },
+            { key: "source", header: t("outcomes.columns.source"), cell: r => t(`outcomes.sources.${r.key}`) }, { key: "state", header: t("outcomes.columns.coverage"), cell: r => t(`outcomes.state.${r.state}`) }, { key: "rows", header: t("outcomes.columns.rows"), cell: r => amount(r.count) }, { key: "observed", header: t("outcomes.columns.observed"), cell: r => <LocalTime value={r.observedAt}/> }, { key: "note", header: t("outcomes.columns.limits"), cell: r => t(`outcomes.notes.${r.note ?? "recorded"}`) },
         ]}/>
     </details>
     <details className="rounded-dpf-md border border-dpf-border bg-dpf-surface-1 p-4"><summary className="cursor-pointer font-dpf-medium">{t("outcomes.time")}</summary>

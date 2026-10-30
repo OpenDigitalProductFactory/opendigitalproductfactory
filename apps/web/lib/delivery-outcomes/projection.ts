@@ -2,11 +2,11 @@ import { computeFlowDurations, percentile } from "@/lib/queue/flow-metrics";
 import { reconstructTimelines, type QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 export type SourceState = "ready" | "empty" | "partial" | "stale" | "failed";
 export type OutcomeSource = {
-    key: string;
+    key: "rooms" | "activities" | "verifications" | "queue" | "tasks" | "runs" | "tools" | "pullRequests";
     state: SourceState;
     count: number;
     observedAt: string;
-    note: string | null;
+    note: "rowsLimited" | "roomsLimited" | "readUnavailable" | "visibilityUnavailable" | "descendantUnavailable" | "descendantLimited" | "prMissing" | "prUnavailable" | "verificationUnbound" | null;
 };
 export type OutcomeRoom = {
     id: string;

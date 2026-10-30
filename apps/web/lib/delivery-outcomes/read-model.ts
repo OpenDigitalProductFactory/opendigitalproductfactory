@@ -22,7 +22,7 @@ export async function loadDeliveryOutcomes(args: {
 }) {
     const { db, userId } = args, now = args.now ?? new Date(), start = new Date(now.getTime() - 30 * DAY);
     const sources: OutcomeSource[] = [];
-    const source = (key: string, count: number, state?: OutcomeSource["state"], note: string | null = null, observedAt = now.toISOString()) => {
+    const source = (key: OutcomeSource["key"], count: number, state?: OutcomeSource["state"], note: OutcomeSource["note"] = null, observedAt = now.toISOString()) => {
         const row = { key, count, state: state ?? (count > FACT_LIMIT ? "partial" : count ? "ready" : "empty"), note: count > FACT_LIMIT ? "rowsLimited" : note, observedAt } satisfies OutcomeSource;
         const existing = sources.findIndex(s => s.key === key);
         if (existing < 0)
@@ -33,7 +33,7 @@ export async function loadDeliveryOutcomes(args: {
                 sources[existing] = row;
         }
     };
-    const bounded = async <T>(key: string, read: () => Promise<T[]>): Promise<T[]> => {
+    const bounded = async <T>(key: OutcomeSource["key"], read: () => Promise<T[]>): Promise<T[]> => {
         try {
             const rows = await read();
             source(key, Math.min(rows.length, FACT_LIMIT), rows.length > FACT_LIMIT ? "partial" : undefined, rows.length > FACT_LIMIT ? "rowsLimited" : null);
