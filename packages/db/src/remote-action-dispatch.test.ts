@@ -17,7 +17,7 @@ import {
 } from "./remote-action-dispatch";
 
 const qualificationParameters = {
-  version: 1,
+  version: 2,
   backlogItemId: "BI-B3DEC077",
   workroomId: "WC-A8C14CBE",
   repository: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -28,10 +28,15 @@ const qualificationParameters = {
   productionBlobs: [{ path: "apps/web/lib/file.ts", blobSha: "d".repeat(40) }],
   testBlobs: [{ path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40) }],
   qualificationBindingDigest: "f".repeat(64),
-  procedureId: "windows-handle-replacement-v1",
-  resultSchemaVersion: 1,
+  procedureId: "windows-bound-node-test-v2",
+  resultSchemaVersion: 2,
   maxDurationSeconds: 300,
   edgeNodeId: "edge_windows_1",
+  sourceFiles: [
+    { path: "apps/web/lib/file.ts", blobSha: "d".repeat(40), contentBase64: "ZXhwb3J0IHt9Ow==" },
+    { path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40), contentBase64: "dGVzdA==" },
+    { path: "scripts/lib/evidence-validity-policy.mjs", blobSha: "9".repeat(40), contentBase64: "ZXhwb3J0IHt9Ow==" },
+  ],
 } as const;
 
 function action(over: Partial<DispatchableActionView> = {}): DispatchableActionView {

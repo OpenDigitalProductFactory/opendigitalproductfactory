@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -224,7 +225,8 @@ func run() error {
 			executor.DockerVmRestart = newDockerVmRestartHandler(cfg)
 		}
 		if cfg.QualificationWindowsEnabled() {
-			executor.QualificationWindows = &action.QualificationWindowsHandler{Platform: cfg.Platform, StateDirectory: cfg.StateDir}
+			nodePath, _ := exec.LookPath("node")
+			executor.QualificationWindows = &action.QualificationWindowsHandler{Platform: cfg.Platform, StateDirectory: cfg.StateDir, NodePath: nodePath}
 		}
 		if cfg.ManagedInferenceConfigured() {
 			nativeConfig := action.NativeInferenceConfig{
@@ -398,7 +400,7 @@ func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizat
 	}
 	if qualificationWindows {
 		actionTypes = append(actionTypes, action.QualificationWindowsVerifyActionType)
-		evidence["qualificationWindows"] = map[string]any{"schemaVersion": 1, "procedureId": action.WindowsHandleReplacementProcedureID}
+		evidence["qualificationWindows"] = map[string]any{"schemaVersion": 2, "procedureId": action.WindowsHandleReplacementProcedureID}
 	}
 	if controller := nativeInferenceController.Load(); controller != nil {
 		actionTypes = append(actionTypes, action.ManagedInferenceActionType)

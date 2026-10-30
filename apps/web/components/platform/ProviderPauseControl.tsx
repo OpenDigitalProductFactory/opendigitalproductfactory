@@ -10,10 +10,11 @@ import { useT } from "@/lib/i18n/use-t";
 import { toggleProviderStatus } from "@/lib/actions/ai-providers";
 import { getProviderPause, pauseProvider, resumeProvider } from "@/lib/actions/provider-operator-pause";
 
-export function ProviderPauseControl({ providerId, initialStatus, initialPause, initialConnectionStatus }: {
+export function ProviderPauseControl({ providerId, initialStatus, initialPause, initialConnectionStatus, hideStatus = false }: {
   providerId: string; initialStatus: string;
   initialPause?: { resumeAt: string | null; pausedAt?: string } | null;
   initialConnectionStatus?: string | null;
+  hideStatus?: boolean;
 }) {
   const t = useT("setup");
   const [status, setStatus] = useState(initialStatus);
@@ -85,9 +86,9 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
   return (
     <div className="flex flex-col items-start gap-2 text-xs" aria-busy={isPending}>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge size="md" variant="soft" uppercase={false}
+        {!hideStatus && <StatusBadge size="md" variant="soft" uppercase={false}
           intent={stopped || unavailable || status === "degraded" ? "warning" : status === "unconfigured" ? "neutral" : "success"}
-          label={pause || connectionStatus === "paused" ? t("providerPause.paused") : stopped ? t("providerPause.disabled") : unavailable ? t("providerPause.unavailable") : status === "unconfigured" ? t("providerPause.notSetUp") : status === "degraded" ? t("providerPause.degraded") : t("providerPause.active")} />
+          label={pause || connectionStatus === "paused" ? t("providerPause.paused") : stopped ? t("providerPause.disabled") : unavailable ? t("providerPause.unavailable") : status === "unconfigured" ? t("providerPause.notSetUp") : status === "degraded" ? t("providerPause.degraded") : t("providerPause.active")} />}
         <Button size="sm" variant="secondary" disabled={isPending || (!stopped && status === "unconfigured")} onClick={stopped ? resumeNow : pauseNow}>
           {isPending ? t("providerPause.updating") : stopped ? t("providerPause.resumeNow") : t("providerPause.pauseNow")}
         </Button>
