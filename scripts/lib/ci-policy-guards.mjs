@@ -493,7 +493,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // build (SUR-8AB3353C, regression from #4321).
       // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
-      node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs", "scripts/check-docker-workspace-context.test.mjs"),
       // The service images (adp, edge-node, integration-test-harness) run
       // this after `pnpm deploy`: the legacy deploy skips the lockfile under
       // node-linker=hoisted, so each image asserts its deploy tree against
