@@ -134,14 +134,25 @@ export async function verifyProviderQuotaRecovery() {
           const panelId = await summary.getAttribute("aria-controls");
           check(panelId, "Recovery disclosure has no associated panel");
           const axe = await new AxeBuilder({ page }).include('[id="' + panelId + '"]').options(uxSweepAxeOptions()).analyze();
-          check(axe.violations.filter(value => value.impact === "serious" || value.impact === "critical").length === 0, "Recovery disclosure has serious accessibility findings");
+          const serious = axe.violations.filter(value => value.impact === "serious" || value.impact === "critical");
           const slug = `${scenario}-${layout}-${theme}`, path = resolve(OUT, slug + ".png");
+          const accessibility = { violationCount: axe.violations.length, seriousViolationCount: serious.length,
+            violations: axe.violations.slice(0, 20).map(value => ({ id: value.id, impact: value.impact, help: value.help, helpUrl: value.helpUrl,
+              nodes: value.nodes.slice(0, 20).map(node => ({ target: node.target, failureSummary: node.failureSummary?.slice(0, 2000) })) })) };
+          // Known axe findings must survive a later screenshot or aria-capture failure.
+          write(slug + ".json", { scenario, layout, theme, status: serious.length ? "failed" : "capture-pending",
+            sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun", geometry, accessibility });
           const bytes = await row.screenshot({ path });
-          const evidence = { scenario, layout, theme, sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun",
+          const evidence = { scenario, layout, theme, status: serious.length ? "failed" : "passed", sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun",
             path: slug + ".png", sha256: createHash("sha256").update(bytes).digest("hex"), geometry, ariaSnapshot: await details.ariaSnapshot(),
+            accessibility,
             checks: { initiallyClosed: true, keyboard: true, exactModel: true, resetGuidance: true, broadForecastPreserved: true, cliPreserved: true },
             requestCount: transport.counts().requests - countBefore };
-          captures.push(evidence); write(slug + ".json", evidence);
+          // Keep bounded fixture-only diagnostics even when accessibility fails.
+          // A failed capture never enters the completed-case manifest.
+          write(slug + ".json", evidence);
+          check(serious.length === 0, "Recovery disclosure has serious accessibility findings: " + serious.map(value => value.id).join(", "));
+          captures.push(evidence);
         }
       } finally { await context.close(); }
     }

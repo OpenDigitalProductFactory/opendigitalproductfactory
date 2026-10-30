@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SOURCE_CATALOG } from "@dpf/i18n";
+import axe from "axe-core";
 import type { ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
 const mocks = vi.hoisted(() => ({ recheck: vi.fn(), stop: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
@@ -17,6 +18,18 @@ const recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]> = {
 beforeEach(() => { vi.resetAllMocks(); mocks.recheck.mockResolvedValue({ ok: true, message: "Selected model check completed." }); });
 afterEach(cleanup);
 describe("provider capacity recovery disclosure", () => {
+  it("keeps expanded limited-account controls structurally accessible after a failed check", async () => {
+    mocks.recheck.mockResolvedValue({ ok: false, message: "The check did not confirm capacity.", nextCheckAt: "2026-10-30T06:00:00Z" });
+    const { container } = render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={{ ...recovery, hourly: true }} canWrite copy={copy} />);
+    fireEvent.click(screen.getByText(copy.limitDetails));
+    fireEvent.click(screen.getByRole("button", { name: copy.capacityCheck }));
+    await screen.findByRole("alert");
+    // JSDOM verifies these structural rules; served axe remains responsible for visual contrast.
+    const result = await axe.run(container, { runOnly: { type: "rule", values: [
+      "aria-valid-attr-value", "aria-required-attr", "aria-input-field-name", "nested-interactive", "definition-list", "label",
+    ] } });
+    expect(result.violations.map(value => ({ id: value.id, impact: value.impact, nodes: value.nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary })) }))).toEqual([]);
+  });
   it("viewing evidence and opening usage never performs a check or redeems a reset", () => {
     render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={recovery} canWrite copy={copy} />);
     expect(screen.getByRole("heading", { level: 2, name: copy.limitDetails })).toBeTruthy();
