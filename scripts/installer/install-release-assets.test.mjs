@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { link, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -385,6 +385,24 @@ test("a rollback ownership-probe error preserves the writer and still restores i
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
+test("release readback rejects a byte-identical replacement inode", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"),
+      async onCheckpoint(phase) {
+        if (phase === "env-written") {
+          const bytes = await readFile(envPath);
+          await rename(envPath, join(f.root, "previous-env-inode"));
+          await writeFile(envPath, bytes);
+        }
+      },
+    }), error => error.message === "release_env_rollback_unproven" && error.cause?.message === "release_env_readback_unproven");
+    assert.match(await readFile(envPath, "utf8"), /^DPF_IMAGE_TAG=v2\.0\.0$/m);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 async function dispatchFixture(text = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=old\n") {
   const root = await mkdtemp(join(tmpdir(), "dpf-dispatch-env-"));
   const envPath = join(root, ".env");
@@ -392,16 +410,45 @@ async function dispatchFixture(text = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKE
   return { root, envPath, recoveryDir: join(root, "recovery"), ...resolveRemoteActionDispatch(text) };
 }
 
+async function fixtureEnvSnapshot(path) {
+  const handle = await open(path, "r");
+  try {
+    const identity = await handle.stat({ bigint: true });
+    assert.equal(identity.isFile(), true);
+    return { ino: identity.ino, text: await handle.readFile("utf8") };
+  } finally { await handle.close(); }
+}
+
+for (const replacement of ["zero", "identical"]) {
+  test(`source readback preserves a ${replacement} replacement inode and reports uncertainty`, async () => {
+    const f = await dispatchFixture();
+    let replacementBytes;
+    try {
+      await assert.rejects(persistRemoteActionDispatch({ ...f, async onCheckpoint(phase) {
+        if (phase === "after-append") {
+          replacementBytes = replacement === "identical" ? await readFile(f.envPath)
+            : Buffer.from("DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=0\nKEEP=replacement\n");
+          await rename(f.envPath, join(f.root, "previous-env-inode"));
+          await writeFile(f.envPath, replacementBytes);
+        }
+      } }), /persistence_unproven/);
+      assert.deepEqual(await readFile(f.envPath), replacementBytes);
+      assert.equal(JSON.parse(await readFile(join(f.recoveryDir, "dispatch-env.json"), "utf8")).state, "unproven");
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  });
+}
+
 test("source persistence preserves a single-file bind inode and unrelated updates", async () => {
   const f = await dispatchFixture();
   try {
     const alias = join(f.root, "mounted.env");
     await link(f.envPath, alias);
-    const before = await stat(alias);
+    const before = await fixtureEnvSnapshot(alias);
     await writeFile(f.envPath, "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=new\n");
     assert.equal((await persistRemoteActionDispatch(f)).status, "persisted");
-    assert.equal((await stat(alias)).ino, before.ino);
-    assert.equal(await readFile(alias, "utf8"), "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=new\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n");
+    const after = await fixtureEnvSnapshot(alias);
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.text, "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=new\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n");
     if (process.platform !== "win32") assert.equal((await stat(join(f.recoveryDir, "env.before"))).mode & 0o777, 0o600);
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });

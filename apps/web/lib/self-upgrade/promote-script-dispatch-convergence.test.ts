@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, constants, copyFileSync, existsSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BASH_OK, GIT_OK, makeScratch, PROMOTE_TEST_TIMEOUT_MS, promoteDiagnostics, runPromote } from "./promote-script-functional.test-support";
@@ -7,6 +7,15 @@ import { BASH_OK, GIT_OK, makeScratch, PROMOTE_TEST_TIMEOUT_MS, promoteDiagnosti
 const KEY = "DPF_REMOTE_ACTION_DISPATCH_ENABLED";
 const CONFIGURED = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED";
 const FIXTURE_KEYS = ["INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY", "DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET", "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET"];
+
+function fixtureEnvSnapshot(path: string) {
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    const identity = fstatSync(fd, { bigint: true });
+    if (!identity.isFile()) throw new Error("fixture env must be a regular file");
+    return { ino: identity.ino, text: readFileSync(fd, "utf8") };
+  } finally { closeSync(fd); }
+}
 
 function setup(mode: "source" | "release", env = `${CONFIGURED}=1\n`) {
   const f = makeScratch();
@@ -122,13 +131,15 @@ describe.skipIf(!BASH_OK || !GIT_OK)("same-promotion configured Edge dispatch", 
     try {
       const alias = join(f.root, "selected.env");
       linkSync(f.envPath, alias);
-      const inode = statSync(alias).ino;
+      const inode = fixtureEnvSnapshot(alias).ino;
       const r = runPromote({ ...f, composeEnvFile: alias });
       expect(r.status, promoteDiagnostics(r)).toBe(0);
-      expect(statSync(alias).ino).toBe(inode);
-      expect(statSync(f.envPath).ino).not.toBe(inode);
-      expect(readFileSync(f.envPath, "utf8")).toMatch(new RegExp(`^${KEY}=1$`, "m"));
-      expect(readFileSync(alias, "utf8")).not.toMatch(new RegExp(`^${KEY}=`, "m"));
+      const selected = fixtureEnvSnapshot(alias);
+      const canonical = fixtureEnvSnapshot(f.envPath);
+      expect(selected.ino).toBe(inode);
+      expect(canonical.ino).not.toBe(inode);
+      expect(canonical.text).toMatch(new RegExp(`^${KEY}=1$`, "m"));
+      expect(selected.text).not.toMatch(new RegExp(`^${KEY}=`, "m"));
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
