@@ -430,6 +430,14 @@ When capacity is unavailable, the command records its queue position and exits w
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
 
+Server-authorized host qualification is currently unavailable. The normal host
+runner can supervise a command, but it reports with the same MCP credential as
+its caller, so the server cannot authenticate that the runner—not a direct
+caller—observed the claimed success. Do not manufacture or reuse a
+`DPF_QUALIFICATION_ADMISSION_TOKEN`; terminal recovery withholds it and the
+evidence writer refuses qualification payloads. Ordinary host-resource runs
+continue to provide capacity coordination only, not qualification evidence.
+
 #### Recover a review blocked by endpoint eligibility
 
 An endpoint eligibility refusal means no model met the review's requirements.
