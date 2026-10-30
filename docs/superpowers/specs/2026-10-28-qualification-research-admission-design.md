@@ -1,7 +1,8 @@
 ---
 status: draft
 backlog_item: BI-2664971A
-workroom: WC-A8C14CBE
+workroom: WC-417CEBF8
+prior_workroom: WC-A8C14CBE
 ---
 
 # Bounded qualification before a research verdict

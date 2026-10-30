@@ -22,7 +22,9 @@ import {
   DEFAULT_CLAIM_TIMEOUT_MS,
   DOCKER_VM_RESTART_ACTION_TYPE,
   MANAGED_INFERENCE_ACTION_TYPE,
+  QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
   parseManagedInferenceTransitionParameters,
+  parseQualificationWindowsVerifyParameters,
   isPrivilegedDispatchActionType,
   type ClaimingNodeView,
   type DispatchableActionView,
@@ -204,6 +206,14 @@ export async function claimActionsForNode(
       }
       dispatchParameters = parsed;
     }
+    if (e.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE) {
+      const parsed = parseQualificationWindowsVerifyParameters(dispatchParameters);
+      if (!parsed || parsed.edgeNodeId !== node.nodeId) {
+        await failUndispatchableAction(db, e.actionKey, now, "qualification-windows-parameters-invalid");
+        continue;
+      }
+      dispatchParameters = parsed;
+    }
     const envelope: EdgeActionEnvelope = {
       version: EDGE_ACTION_ENVELOPE_VERSION,
       signingKeyId: opts.signer.signingKeyId,
@@ -234,6 +244,12 @@ export async function claimActionsForNode(
           nativeDispatch: { requestDigest: createHash("sha256").update(canonicalizeEdgeActionEnvelope(signed)).digest("hex"),
             sourceSha: (dispatchParameters as { sourceSha: string }).sourceSha,
             operation: (dispatchParameters as { operation: string }).operation },
+        } } : e.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE ? { evidence: {
+          ...(isRecord(row?.evidence) ? row.evidence : {}),
+          qualificationDispatch: {
+            requestDigest: createHash("sha256").update(canonicalizeEdgeActionEnvelope(signed)).digest("hex"),
+            qualificationBindingDigest: (dispatchParameters as { qualificationBindingDigest: string }).qualificationBindingDigest,
+          },
         } } : {}),
       },
     });
@@ -257,6 +273,38 @@ export type ActionResultResult =
   | { ok: true; status: RemoteActionDispatchState }
   | { ok: false; reason: string };
 
+function qualificationNativeReportMatches(
+  row: { actionKey: string; parameters: unknown; evidence?: unknown },
+  evidence: Record<string, unknown> | undefined,
+): boolean {
+  const parameters = parseQualificationWindowsVerifyParameters(row.parameters);
+  const dispatch = isRecord(row.evidence) && isRecord(row.evidence.qualificationDispatch)
+    ? row.evidence.qualificationDispatch : null;
+  if (!parameters || !dispatch || !evidence) return false;
+  const sameBlobs = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+  const observations = isRecord(evidence.observations) ? evidence.observations : null;
+  const checks = {
+    action: evidence.actionKey === row.actionKey,
+    node: evidence.nodeId === parameters.edgeNodeId,
+    request: evidence.requestDigest === dispatch.requestDigest,
+    dispatchBinding: dispatch.qualificationBindingDigest === parameters.qualificationBindingDigest,
+    reportBinding: evidence.qualificationBindingDigest === parameters.qualificationBindingDigest,
+    procedure: evidence.procedureId === parameters.procedureId && evidence.procedureVersion === 1,
+    platform: evidence.platform === "win32",
+    source: evidence.baseSha === parameters.baseSha && evidence.headSha === parameters.headSha,
+    protocol: evidence.protocolPath === parameters.protocolPath && evidence.protocolBlobSha === parameters.protocolBlobSha,
+    production: sameBlobs(evidence.productionBlobs, parameters.productionBlobs),
+    tests: sameBlobs(evidence.testBlobs, parameters.testBlobs),
+    time: typeof evidence.startedAt === "string" && Number.isFinite(Date.parse(evidence.startedAt))
+      && typeof evidence.finishedAt === "string" && Number.isFinite(Date.parse(evidence.finishedAt))
+      && Date.parse(evidence.startedAt) <= Date.parse(evidence.finishedAt),
+    digest: typeof evidence.boundedOutputDigest === "string" && /^[a-f0-9]{64}$/.test(evidence.boundedOutputDigest),
+    observations: observations !== null && typeof observations.firstReplacement === "string"
+      && typeof observations.secondReplacement === "string" && observations.cleanup === "removed",
+  };
+  return Object.values(checks).every(Boolean);
+}
+
 /**
  * Record a node's report for an action it claimed. Verifies the action exists,
  * is bound to THIS node (claim ownership — a node cannot report another's
@@ -275,6 +323,14 @@ export async function recordActionResult(
 
   const from = row.status as RemoteActionDispatchState;
   const to = input.outcome as RemoteActionDispatchState;
+  if (row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && to !== "running"
+    && !qualificationNativeReportMatches(row, input.evidence)) {
+    return { ok: false, reason: "qualification-native-report-unbound" };
+  }
+  if (row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && from === to && to !== "running"
+    && isRecord(row.evidence) && row.evidence.requestDigest === input.evidence?.requestDigest) {
+    return { ok: true, status: from };
+  }
   if (row.actionType === MANAGED_INFERENCE_ACTION_TYPE && to !== "running") {
     const parameters = parseManagedInferenceTransitionParameters(row.parameters);
     const dispatch = isRecord(row.evidence) && isRecord(row.evidence.nativeDispatch) ? row.evidence.nativeDispatch : null;
@@ -329,7 +385,12 @@ export async function recordActionResult(
               ...sanitizeActionEvidence(input.evidence),
               ...(row.actionType === MANAGED_INFERENCE_ACTION_TYPE && isRecord(row.evidence)
                 ? { nativeAdmission: row.evidence.nativeAdmission, nativeDispatch: row.evidence.nativeDispatch,
-                  governance: row.evidence.governance } : {}),
+                  governance: row.evidence.governance }
+                : row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && isRecord(row.evidence)
+                  ? { qualificationAdmission: row.evidence.qualificationAdmission,
+                    qualificationDispatch: row.evidence.qualificationDispatch,
+                    governance: row.evidence.governance }
+                  : {}),
               reportedByNode: input.edgeNodeRowId,
               reportedAt: now.toISOString(),
             } as never,
