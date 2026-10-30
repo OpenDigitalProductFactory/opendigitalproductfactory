@@ -275,6 +275,13 @@ checklist approval on every retry.
 | Authority is revoked or the request/artifact is superseded | Resume refuses the stale authority or evidence and supplies the supported repair; it never invents approval. |
 | No eligible replacement or a nonrepeatable effect is uncertain | Work remains visible with an accountable owner and reconciliation/compensation path; it is not silently marked successful. |
 
+**Current convergence follow-up (BI-1FDAA62B, BI-7DC3B91D):** the
+[agent execution conformance design](../superpowers/specs/2026-10-29-agent-execution-conformance-design.md)
+and [mapped plan](../superpowers/plans/2026-10-29-agent-execution-conformance-plan.md)
+apply this existing contract to the observed portal, native-tool, reviewer and
+result-persistence boundaries. They are draft repair/qualification scope, not
+a second engine or a declaration that the following acceptance matrix passed.
+
 Coverage belongs to the owning adapter's tests and runtime evidence. Updating
 this architecture does not establish fleet-wide conformance. The September 2026
 review incident proved the difference: receipt validation and completion were
