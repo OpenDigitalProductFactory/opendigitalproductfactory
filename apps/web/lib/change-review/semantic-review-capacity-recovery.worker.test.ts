@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/inference/routed-inference", () => ({ routeAndCall: vi.fn() }));
+import { routeAndCall } from "@/lib/inference/routed-inference";
 const mocks = vi.hoisted(() => ({
   db: { taskRun: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
     runtimeVerification: { findUnique: vi.fn() }, taskArtifact: { findUnique: vi.fn() }, taskNode: { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -92,7 +94,7 @@ beforeEach(() => {
   mocks.send.mockResolvedValue(undefined);
 });
 
-async function persistedCapacityWait(sibling = false) {
+async function persistedCapacityWait(sibling = false, useRealAggregate = false) {
     packet = createSemanticReviewRequest({ ...packet.input, identity: {
       ...packet.input.identity, sourceHeadSha: "c".repeat(40), specialistIds: sibling ? ["AGT-903"] : [],
     } }, packet.actor);
@@ -116,10 +118,16 @@ async function persistedCapacityWait(sibling = false) {
       where.status.in.includes(row.status) ? [{ ...row }] : []);
     mocks.db.workroom.findUnique.mockResolvedValue({ id: "room-1", capsuleId: "WC-1",
       repositoryFullName: packet.repository, headSha: "c".repeat(40) });
-    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
-      if (sibling) await branch("AGT-903", async () => { providerCalls += 1; return result; });
-      return branch("change-reviewer", async () => { throw new LocalProviderCapacityDeferredError("local-runner-busy"); });
-    });
+    if (useRealAggregate) {
+      const actual = await vi.importActual<typeof import("./routed-semantic-review")>("./routed-semantic-review");
+      vi.mocked(routeAndCall).mockRejectedValue(new LocalProviderCapacityDeferredError("local-runner-busy"));
+      mocks.dispatch.mockImplementation(actual.dispatchRoutedSemanticReview);
+    } else {
+      mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+        if (sibling) await branch("AGT-903", async () => { providerCalls += 1; return result; });
+        return branch("change-reviewer", async () => { throw new LocalProviderCapacityDeferredError("local-runner-busy"); });
+      });
+    }
     await enqueueSemanticReview("TR-1");
     await executePersistedSemanticReview("TR-1");
     expect(row.status).toBe("input-required");
@@ -135,6 +143,25 @@ async function persistedCapacityWait(sibling = false) {
 }
 
 describe("automatic semantic-review capacity recovery", () => {
+  it("recovers both typed deferrals through the real aggregate and existing reconciler", async () => {
+    const nodes = await persistedCapacityWait(true, true);
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    expect(nodes.size).toBe(2);
+    expect(providerCalls).toBe(0);
+    await Promise.all([
+      reconcileSemanticReviews(new Date(Date.now() + 4 * 60_000)),
+      reconcileSemanticReviews(new Date(Date.now() + 4 * 60_000)),
+    ]);
+    expect(mocks.send).toHaveBeenCalledOnce();
+    expect(row.progressPayload).toMatchObject({ semanticReview: {
+      deadlineAt: packet.deadlineAt, recoveryAttempt: 1, dispatchAttempt: 2,
+    } });
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("completed");
+    expect(providerCalls).toBe(2);
+    expect(mocks.evidence).toHaveBeenCalledTimes(2);
+  });
+
   it("resumes a persisted typed capacity wait without a client and keeps its original budget", async () => {
     await persistedCapacityWait();
     await reconcileSemanticReviews(new Date(Date.now() + 4 * 60_000));
