@@ -176,9 +176,9 @@ export async function resolveQualificationAdmission(args: {
     const binding: QualificationExperimentBinding = {
       ...prior.data.binding, phase: "verify", headSha: candidate.data.headSha,
       protocolReviewReceiptId: protocolReview.id, stageKey: stage.key,
-      executorMode: protocol.requiredPlatform === "win32" ? "workroom-host" : "sandbox-build",
+      executorMode: protocol.requiredPlatform === "win32" ? "native-edge" : "sandbox-build",
       permittedTools: protocol.requiredPlatform === "win32"
-        ? ["read_source_at_version", "read_codebase_manifest", "record_execution_evidence", "record_workroom_evidence"]
+        ? ["read_source_at_version", "read_codebase_manifest", "record_workroom_evidence"]
         : ["read_source_at_version", "read_codebase_manifest", "run_sandbox_tests", "record_workroom_evidence"],
       issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(),
       candidate: { ...candidate.data, reviewReceiptId: review.id },

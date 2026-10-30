@@ -13,11 +13,8 @@ export function qualificationOutcome(outcome: "succeeded" | "failed", evidence: 
   "positive" | "negative" | "inconclusive" | "blocked" {
   if (outcome === "failed") return "blocked";
   const report = isRecord(evidence) ? evidence : {};
-  const observations = isRecord(report.observations) ? report.observations : {};
-  const first = typeof observations.firstReplacement === "string" ? observations.firstReplacement : "";
-  const second = typeof observations.secondReplacement === "string" ? observations.secondReplacement : "";
-  if (first.startsWith("refused:") && second === "replaced") return "positive";
-  if (first === "replaced" && second === "replaced") return "negative";
+  if (report.exitCode === 0 && report.outputTruncated === false) return "positive";
+  if (typeof report.exitCode === "number") return "negative";
   return "inconclusive";
 }
 
@@ -55,7 +52,9 @@ export async function settleQualificationWindowsResult(input: {
           ? action.parameters.testBlobs.map((entry: unknown) => isRecord(entry) ? entry.blobSha : null).filter(Boolean) : [],
         actionKey: input.actionKey, outputDigest: `sha256:${String(action.evidence.boundedOutputDigest ?? "")}`,
         startedAt: action.evidence.startedAt, completedAt: action.evidence.finishedAt,
-        observations: action.evidence.observations, researchSatisfied: false } } } });
+        command: action.evidence.command, exitCode: action.evidence.exitCode,
+        sourceFileCount: action.evidence.sourceFileCount,
+        outputTruncated: action.evidence.outputTruncated, researchSatisfied: false } } } });
   await input.db.workroom.update({ where: { id: room.id }, data: { workspaceState: { ...workspace,
     qualificationExperimentAdmission: { ...state, status: "settled", evidenceId: evidence.id } } } });
   return true;

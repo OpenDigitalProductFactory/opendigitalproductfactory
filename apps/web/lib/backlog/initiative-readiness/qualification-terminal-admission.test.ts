@@ -118,9 +118,9 @@ describe("resolveQualificationAdmission", () => {
     }));
     expect(result?.binding).toMatchObject({
       phase: "verify",
-      executorMode: "workroom-host",
+      executorMode: "native-edge",
       requiredPlatform: "win32",
-      permittedTools: expect.arrayContaining(["record_execution_evidence"]),
+      permittedTools: expect.not.arrayContaining(["record_execution_evidence"]),
     });
   });
 

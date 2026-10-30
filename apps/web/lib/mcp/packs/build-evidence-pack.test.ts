@@ -189,7 +189,7 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(arg.data.recordedByAgentId).toBe("agent-x");
   });
 
-  it("accepts only the exact bound host qualification command on its process lease", async () => {
+  it("rejects invented host qualification output even with an approved token and active process lease", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:02:00Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-evidence-secret");
@@ -232,9 +232,9 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
 
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Windows qualification passed", qualification }, "u1", { agentId: "agent-x" }))
-      .resolves.toMatchObject({ success: true, entityId: "act-qual" });
-    expect(db.leaseUpdateMany).toHaveBeenCalledTimes(1);
-    expect(db.activityCreate).toHaveBeenCalledTimes(1);
+      .resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });
+    expect(db.leaseUpdateMany).not.toHaveBeenCalled();
+    expect(db.activityCreate).not.toHaveBeenCalled();
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Wrong platform", qualification: { ...qualification, platform: "linux" } }, "u1",
       { agentId: "agent-x" })).resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });

@@ -414,12 +414,13 @@ export type QualificationExecutionEvidence = {
   outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
 };
 
-/** The governed host runner owns the admitted process, hashes its output and
- * atomically consumes the matching lease when it records execution evidence. */
+/** A lease proves admission, not child execution or output. Historical
+ * workroom-host receipts remain verifiable after their atomic write, but no
+ * caller-supplied host result is accepted as a new attestation. */
 export function qualificationExecutorAttestationAvailable(
-  executorMode: QualificationExperimentBinding["executorMode"],
+  _executorMode: QualificationExperimentBinding["executorMode"],
 ): boolean {
-  return executorMode === "workroom-host";
+  return false;
 }
 
 function qualificationEvidenceCommandMatchesBinding(
@@ -474,9 +475,9 @@ export function qualificationExecutionEvidenceAllowed(input: {
   const evidence = parseQualificationExecutionEvidence(input.evidence);
   const lease = input.lease;
   const digest = qualificationBindingDigest(input.binding);
-  // The host runner's process-bound lease is admission; the transaction that
-  // consumes that lease for one evidence record makes the successful result
-  // single-use. Every immutable identity still has to match below.
+  // A process-bound lease authorizes a child but cannot prove the caller ran it
+  // or reported its output. New Windows evidence arrives only through the
+  // machine-authenticated native Edge result path.
   if (!qualificationExecutorAttestationAvailable(input.binding.executorMode)
     || !evidence || !lease || input.binding.phase !== "verify"
     || input.binding.executorMode !== "workroom-host" || !input.binding.candidate
@@ -506,6 +507,7 @@ export function qualificationExecutionActivitiesMatch(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   itemId: string; activityIds: string[]; rows: unknown[]; accountablePrincipalRef: string | null;
   proof: QualificationVerificationEvidence;
+  leases: unknown[];
 }): boolean {
   if (input.activityIds.length === 0 || input.rows.length !== input.activityIds.length) return false;
   const expected = new Set(input.activityIds);
@@ -514,12 +516,35 @@ export function qualificationExecutionActivitiesMatch(input: {
     const payload = record(row?.payload);
     const backlogItem = record(row?.backlogItem);
     const qualification = parseQualificationExecutionEvidence(payload?.qualification);
+    const lease = qualification ? input.leases.map(record).find((candidate) =>
+      candidate?.leaseId === qualification.leaseId && candidate?.evidenceRecordId === row?.id) : null;
+    const admittedAt = lease?.admittedAt instanceof Date ? lease.admittedAt : new Date(String(lease?.admittedAt ?? ""));
+    const expiresAt = lease?.expiresAt instanceof Date ? lease.expiresAt : new Date(String(lease?.expiresAt ?? ""));
+    const recordedAt = row?.recordedAt instanceof Date ? row.recordedAt : new Date(String(row?.recordedAt ?? ""));
+    const startedAt = qualification ? new Date(qualification.startedAt) : new Date("");
+    const completedAt = qualification ? new Date(qualification.completedAt) : new Date("");
     return typeof row?.id === "string" && expected.delete(row.id)
       && backlogItem?.itemId === input.itemId && payload?.evidenceKind === "test_pass"
       && qualification !== null
-      && qualificationExecutionEvidenceAllowed({ binding: input.binding, state: input.state,
-        evidence: qualification, accountablePrincipalRef: input.accountablePrincipalRef,
-        now: new Date(qualification.completedAt) })
+      && input.binding.executorMode === "workroom-host" && input.binding.phase === "verify"
+      && input.state.status === "started" && input.state.startCount === 1
+      && input.accountablePrincipalRef === input.binding.accountablePrincipalRef
+      && qualification.workroomId === input.binding.workroomId
+      && qualification.qualificationBindingDigest === qualificationBindingDigest(input.binding)
+      && qualification.platform === input.binding.requiredPlatform
+      && qualification.headSha.toLowerCase() === input.binding.headSha.toLowerCase()
+      && canonicalJson(qualification.testBlobIds) === canonicalJson(input.binding.candidate?.testBlobIds)
+      && qualificationEvidenceCommandMatchesBinding(qualification.command, input.binding.allowedPaths)
+      && lease?.environmentKey === "host-heavy-resource"
+      && lease?.purpose === `host-resource:qualification:${qualificationBindingDigest(input.binding)}`
+      && typeof lease?.claimKey === "string" && lease.claimKey.length > 0
+      && String(lease?.buildId ?? "").toLowerCase() === input.binding.headSha.toLowerCase()
+      && lease?.taskRunId === input.binding.workroomId && Boolean(lease?.ownerPid)
+      && typeof lease?.ownerProcessIdentity === "string" && lease.ownerProcessIdentity.length > 0
+      && Number.isFinite(admittedAt.getTime()) && Number.isFinite(expiresAt.getTime())
+      && Number.isFinite(recordedAt.getTime()) && Number.isFinite(startedAt.getTime()) && Number.isFinite(completedAt.getTime())
+      && startedAt.getTime() >= admittedAt.getTime() && completedAt.getTime() <= expiresAt.getTime()
+      && recordedAt.getTime() >= completedAt.getTime()
       && qualification.command === input.proof.command
       && qualification.outputDigest.toLowerCase() === input.proof.outputDigest.toLowerCase()
       && qualification.startedAt === input.proof.startedAt
