@@ -16,7 +16,7 @@ import "server-only";
 // resolved to other pages in the same scope (overlay first, kernel
 // fallback) and upserted as `WikiPageLink` edges.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import {
   appendRevision,
   upsertWikiPage,
@@ -253,7 +253,21 @@ export async function saveOverlayEditForAuthenticatedUser(
         : null,
     };
 
-    const saved = (await upsertWikiPage(prisma, upsertInput)) as {
+    // Capture is insert-only. The non-null organization/slug unique constraint
+    // arbitrates concurrent titles; never fall back to the overlay update path.
+    const saved = (mode === "critique-draft-create"
+      ? await prisma.wikiPage.create({ data: {
+        organizationId: org.id,
+        slug: upsertInput.slug,
+        title: upsertInput.title,
+        body: upsertInput.body,
+        pageKind: "heuristic",
+        status: "draft",
+        isKernel: false,
+        abstract: upsertInput.abstract,
+        metadata: (input.metadata ?? undefined) as Prisma.InputJsonObject | undefined,
+      } })
+      : await upsertWikiPage(prisma, upsertInput)) as {
       id: string;
       slug: string;
       status: WikiPageStatus;
@@ -331,6 +345,10 @@ export async function saveOverlayEditForAuthenticatedUser(
       status: saved.status,
     };
   } catch (err) {
+    if (mode === "critique-draft-create" && err && typeof err === "object"
+      && "code" in err && err.code === "P2002") {
+      return { ok: false, error: "A critique with this title already exists. Choose a different title." };
+    }
     return {
       ok: false,
       error: (err as Error).message ?? "Unknown error saving page.",

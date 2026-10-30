@@ -505,11 +505,47 @@ describe("saveWikiOverlayEdit — craft-override promotion", () => {
 describe("narrow critique capture writer", () => {
   it("never overwrites an existing calibrated entry on a capture collision", async () => {
     const { saveOverlayEditForAuthenticatedUser } = await import("@/lib/wiki/save-overlay-edit.server");
-    (prisma.wikiPage.create as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Unique constraint failed"));
-    const result = await saveOverlayEditForAuthenticatedUser({ slug: "craft/ux-design/existing", pageKind: "heuristic", title: "Existing", body: "An agent proposal.", status: "draft", metadata: { verdictAuthority: "agent-proposed" } }, "mcp-user", "critique-draft-create");
-    expect(result.ok).toBe(false);
+    const published = { id: "calibrated", slug: "craft/ux-design/existing", organizationId: "org_test", title: "Existing", body: "Founder observation.", status: "published", metadata: { verdictAuthority: "founder" } };
+    const original = structuredClone(published);
+    (prisma.wikiPage.findFirst as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(published);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockReset().mockImplementation(async ({ data }) => Object.assign(published, data));
+    (prisma.wikiPage.create as ReturnType<typeof vi.fn>).mockReset().mockRejectedValue(Object.assign(new Error("Unique constraint failed"), { code: "P2002" }));
+    const result = await saveOverlayEditForAuthenticatedUser({ slug: published.slug, pageKind: "heuristic", title: "Existing", body: "An agent proposal.", status: "draft", metadata: { verdictAuthority: "agent-proposed" } }, "mcp-user", "critique-draft-create");
+    expect(published).toEqual(original);
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/title.*already|already.*title/i) });
     expect(prisma.wikiPage.update).not.toHaveBeenCalled();
     expect(prisma.wikiPageRevision.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps the first draft intact when another capture collides before its revision finishes", async () => {
+    const { saveOverlayEditForAuthenticatedUser } = await import("@/lib/wiki/save-overlay-edit.server");
+    const pages = new Map<string, Record<string, unknown>>();
+    let signalCreated!: () => void;
+    let releaseRevision!: () => void;
+    const created = new Promise<void>(resolve => { signalCreated = resolve; });
+    const revisionHeld = new Promise<void>(resolve => { releaseRevision = resolve; });
+    (prisma.wikiPage.findFirst as ReturnType<typeof vi.fn>).mockReset().mockImplementation(async ({ where }) => pages.get(where.slug) ?? null);
+    (prisma.wikiPage.create as ReturnType<typeof vi.fn>).mockReset().mockImplementation(async ({ data }) => {
+      if (pages.has(data.slug)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+      const page = { id: "first-draft", ...data };
+      pages.set(data.slug, page);
+      signalCreated();
+      return page;
+    });
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockReset().mockImplementation(async ({ data }) => Object.assign(pages.get(data.slug ?? "craft/ux-design/same-title")!, data));
+    (prisma.wikiPageRevision.findFirst as ReturnType<typeof vi.fn>).mockReset().mockImplementationOnce(async () => { await revisionHeld; return null; }).mockResolvedValue(null);
+    const input = { slug: "craft/ux-design/same-title", pageKind: "heuristic" as const, title: "Same title", body: "First observation.", status: "draft" as const, metadata: { verdictAuthority: "agent-proposed" } };
+    const first = saveOverlayEditForAuthenticatedUser(input, "first-author", "critique-draft-create");
+    await created;
+    try {
+      const second = await saveOverlayEditForAuthenticatedUser({ ...input, body: "Second observation." }, "second-author", "critique-draft-create");
+      expect(second.ok).toBe(false);
+      expect(pages.get(input.slug)?.body).toBe("First observation.");
+      expect(prisma.wikiPage.update).not.toHaveBeenCalled();
+    } finally { releaseRevision(); }
+    expect((await first).ok).toBe(true);
+    expect(prisma.wikiPageRevision.create).toHaveBeenCalledTimes(1);
+    expect(prisma.wikiPageRevision.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ body: input.body, createdById: "first-author" }) }));
   });
   it("refuses publication and arbitrary overlay targets in narrow capture mode", async () => {
     const { saveOverlayEditForAuthenticatedUser } = await import("@/lib/wiki/save-overlay-edit.server");
