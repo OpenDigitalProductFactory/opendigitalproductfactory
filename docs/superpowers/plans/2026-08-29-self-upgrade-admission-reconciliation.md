@@ -278,11 +278,14 @@ acceptance, peer evidence transfer, or earlier review/budget reuse is proposed.
 
 The specification also freezes a concrete, **unapproved** current-operation
 option: one distinct normal action by the original operator, force off, only
-after exact canonical target binding, positive old-effect exclusion, independent
-contract approval, accountable human authorization, and actual operation
-admission. Its release target is currently unbound; source head
-36494302add2e21c5051b74f21aaaed222a49578 is not substituted for a canonical
-release. The served runtime has no approved exclusion/eligibility writer, and
+after exact canonical target binding in the actual configured mode, positive
+old-effect exclusion, independent contract approval, accountable human
+authorization, and actual operation admission. The current case remains
+git-source/upstream: its exact protected source/merge target and normal binding
+are unbound; source head 36494302add2e21c5051b74f21aaaed222a49578 is not
+substituted for that canonical target. Release-artifact binding applies only to
+an already configured release-artifact installation; no mode switch is proposed.
+The served runtime has no approved exclusion/eligibility writer, and
 upgrading it to establish its own precondition would be circular. The owning
 design decision remains BI-3FD07259's spec-approval/architecture lane; the
 original operator retains the physical action. This names the missing capability
