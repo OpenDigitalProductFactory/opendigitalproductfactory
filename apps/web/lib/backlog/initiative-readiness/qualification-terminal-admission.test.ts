@@ -31,7 +31,7 @@ function fixture() {
     workroomActivity: { findUnique: vi.fn() },
     externalEvidenceRecord: { findMany: vi.fn().mockResolvedValue([semanticReview("review-protocol-1")]) },
   };
-  const protocol = Buffer.from(`# BI-QUAL qualification-only Windows protocol\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`);
+  const protocol = Buffer.from(`# BI-QUAL qualification-only Windows protocol\nProduction: [writer](../../../scripts/lib/local-ci-gate-state.mjs)\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`);
   const ports = {
     db: db as never, now: () => NOW,
     readBlob: vi.fn().mockResolvedValue({ ok: true, data: protocol }),
@@ -46,12 +46,13 @@ function fixture() {
 describe("resolveQualificationAdmission", () => {
   beforeEach(() => vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret"));
 
-  it("withholds host preparation while only caller-authenticated execution claims exist", async () => {
+  it("issues source-only preparation without treating it as host execution", async () => {
     const { ports } = fixture();
     const result = await resolveQualificationAdmission({ itemId: "BI-QUAL",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, ports);
 
-    expect(result).toBeNull();
+    expect(result?.binding).toMatchObject({ phase: "prepare", executorMode: "sandbox-build",
+      requiredPlatform: "win32", allowedPaths: [TEST_PATH] });
   });
 
   it("issues the canonical BI-B3 Windows preparation token", async () => {
@@ -72,7 +73,10 @@ describe("resolveQualificationAdmission", () => {
     const result = await resolveQualificationAdmission({ itemId: "BI-B3DEC077",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports);
 
-    expect(result).toBeNull();
+    expect(result?.binding).toMatchObject({ itemId: "BI-B3DEC077", phase: "prepare",
+      executorMode: "sandbox-build", requiredPlatform: "win32",
+      targetProductionPaths: ["scripts/lib/local-ci-gate-state.mjs"],
+      targetProductionBlobIds: ["f74e1b0c1b41be4cdc8b6a1b25ec946cd7f45618"] });
     expect(f.ports.readBlob).toHaveBeenCalledWith(expect.objectContaining({
       expectedBlobId: BLOB,
     }));
@@ -81,7 +85,9 @@ describe("resolveQualificationAdmission", () => {
   it("issues preparation without consuming the later verification start", async () => {
     const f = fixture();
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL",
-      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
+      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toMatchObject({
+        binding: { phase: "prepare", executorMode: "sandbox-build" },
+      });
     expect(f.db.workroomActivity.findUnique).not.toHaveBeenCalled();
   });
 
@@ -121,7 +127,7 @@ describe("resolveQualificationAdmission", () => {
     f.db.externalEvidenceRecord.findMany.mockResolvedValue([failed, semanticReview("review-protocol-1")]);
 
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL", refusedWorkroomId: "WC-QUAL",
-      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
+      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toMatchObject({ binding: { phase: "prepare" } });
   });
 
   it("refuses unreadable or scope-incomplete immutable protocol bytes", async () => {
@@ -131,12 +137,14 @@ describe("resolveQualificationAdmission", () => {
       currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
   });
 
-  it("refuses a sandbox protocol until execution is bound to the exact source and test case", async () => {
+  it("admits Linux preparation without claiming a verification result", async () => {
     const f = fixture();
     f.ports.readBlob.mockResolvedValue({ ok: true, data: Buffer.from(
-      `# BI-QUAL qualification-only protocol\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`,
+      `# BI-QUAL qualification-only protocol\nProduction: [writer](../../../scripts/lib/local-ci-gate-state.mjs)\nwriter blob is ${PROD}\nAllowed: ${TEST_PATH}\n`,
     ) });
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL", refusedWorkroomId: "WC-QUAL",
-      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
+      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toMatchObject({
+        binding: { phase: "prepare", executorMode: "sandbox-build", requiredPlatform: "linux" },
+      });
   });
 });

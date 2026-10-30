@@ -17,7 +17,7 @@ const QUALIFICATION_TOOLS = new Set([
   "record_workroom_evidence",
 ]);
 
-export type QualificationExecutorMode = "sandbox-build" | "workroom-host";
+export type QualificationExecutorMode = "sandbox-build" | "workroom-host" | "native-edge";
 export type QualificationPlatform = "linux" | "win32";
 
 type ProtocolRef = { path: string; commitSha: string; providerBlobId: string };
@@ -47,6 +47,8 @@ export type QualificationExperimentBinding = {
   policyVersion: 1;
   executorMode: QualificationExecutorMode;
   requiredPlatform: QualificationPlatform;
+  /** Added by native-edge qualification bindings; older sandbox bindings remain readable. */
+  targetProductionPaths?: string[];
   targetProductionBlobIds: string[];
   permittedTools: string[];
   allowedPaths: string[];
@@ -136,7 +138,10 @@ export function advanceQualificationExperimentState(input: {
     && prior.protocolReviewReceiptId === next.protocolReviewReceiptId
     && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion
     && prior.stageKey === next.stageKey && prior.policyVersion === next.policyVersion
-    && prior.executorMode === next.executorMode && prior.requiredPlatform === next.requiredPlatform
+    && ((prior.executorMode === next.executorMode)
+      || (prior.executorMode === "sandbox-build" && next.executorMode === "native-edge" && next.requiredPlatform === "win32"))
+    && prior.requiredPlatform === next.requiredPlatform
+    && JSON.stringify(prior.targetProductionPaths ?? []) === JSON.stringify(next.targetProductionPaths ?? [])
     && JSON.stringify(prior.targetProductionBlobIds) === JSON.stringify(next.targetProductionBlobIds)
     && JSON.stringify(prior.allowedPaths) === JSON.stringify(next.allowedPaths);
   if (input.existing.status !== "settled" || prior.phase !== "prepare" || next.phase !== "verify"
@@ -252,11 +257,19 @@ function validTestPath(path: string): boolean {
     && /(?:\.test\.|\.spec\.|test-helper\.)/.test(normalized);
 }
 
+function validProductionPath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  return !normalized.startsWith("/") && !normalized.includes("../")
+    && !/(?:\.test\.|\.spec\.|test-helper\.)/.test(normalized);
+}
+
 export function parseQualificationExperimentBinding(value: unknown): ActionResult<QualificationExperimentBinding> {
   const raw = record(value);
   const protocol = record(raw?.protocol);
   const tools = exactStrings(raw?.permittedTools);
   const paths = exactStrings(raw?.allowedPaths);
+  const productionPaths = exactStrings(raw?.targetProductionPaths);
+  const productionBlobIds = exactStrings(raw?.targetProductionBlobIds);
   const issuedAt = text(raw?.issuedAt);
   const expiresAt = text(raw?.expiresAt);
   const phase = raw?.phase;
@@ -282,23 +295,25 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
   const datesValid = issuedAt && expiresAt && Number.isFinite(Date.parse(issuedAt)) && Number.isFinite(Date.parse(expiresAt))
     && Date.parse(issuedAt) < Date.parse(expiresAt);
   const phaseToolsValid = phase === "prepare"
-    ? tools?.includes("record_workroom_evidence") && !tools.includes("run_sandbox_tests")
-      && (executorMode === "sandbox-build" ? tools.includes("write_sandbox_file")
-        : executorMode === "workroom-host" && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file"))
+    ? executorMode === "sandbox-build" && tools?.includes("record_workroom_evidence")
+      && !tools.includes("run_sandbox_tests") && tools.includes("write_sandbox_file")
     : phase === "verify"
       ? tools?.includes("record_workroom_evidence")
         && (executorMode === "sandbox-build" ? tools.includes("run_sandbox_tests") && !tools.includes("record_execution_evidence")
-          : executorMode === "workroom-host" && tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
+          : executorMode === "workroom-host" ? tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests")
+            : executorMode === "native-edge" && !tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
         && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file")
       : false;
   const valid = raw?.schemaVersion === 1 && (phase === "prepare" || phase === "verify")
-    && (executorMode === "sandbox-build" || executorMode === "workroom-host")
+    && (executorMode === "sandbox-build" || executorMode === "workroom-host" || executorMode === "native-edge")
     && (requiredPlatform === "linux" || requiredPlatform === "win32")
-    && (executorMode !== "sandbox-build" || requiredPlatform === "linux")
+    && (executorMode !== "native-edge" || (phase === "verify" && requiredPlatform === "win32"))
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
     && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
-    && exactStrings(raw?.targetProductionBlobIds)?.every((blob) => FULL_SHA.test(blob))
+    && (executorMode !== "native-edge" || (productionPaths && productionPaths.every(validProductionPath)))
+    && productionBlobIds?.every((blob) => FULL_SHA.test(blob))
+    && (!productionPaths || productionPaths.length === productionBlobIds?.length)
     && paths && paths.every(validTestPath) && datesValid && raw?.maxStarts === 1
     && typeof raw?.maxDurationMs === "number" && raw.maxDurationMs > 0 && raw.maxDurationMs <= 3_600_000
     && (phase === "prepare" ? !candidateRaw && scalar.protocolCommit === scalar.headSha
@@ -313,7 +328,8 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     protocolReviewReceiptId: scalar.protocolReviewReceiptId!, permittedTools: tools, allowedPaths: paths,
     shapeKey: scalar.shapeKey!, shapeVersion: scalar.shapeVersion!, stageKey: scalar.stageKey!, policyVersion: 1,
     executorMode, requiredPlatform,
-    targetProductionBlobIds: exactStrings(raw?.targetProductionBlobIds)!,
+    ...(productionPaths ? { targetProductionPaths: productionPaths } : {}),
+    targetProductionBlobIds: productionBlobIds!,
     issuedAt: issuedAt!, expiresAt: expiresAt!, maxStarts: 1, maxDurationMs: raw.maxDurationMs as number,
     ...(candidate ? { candidate } : {}),
   });
@@ -400,8 +416,7 @@ export type QualificationExecutionEvidence = {
 export function qualificationExecutorAttestationAvailable(
   executorMode: QualificationExperimentBinding["executorMode"],
 ): boolean {
-  void executorMode;
-  return false;
+  return executorMode === "native-edge";
 }
 
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {

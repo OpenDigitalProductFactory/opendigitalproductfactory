@@ -1,7 +1,8 @@
 ---
 status: draft
 backlog_item: BI-2664971A
-workroom: WC-A8C14CBE
+workroom: WC-417CEBF8
+prior_workroom: WC-A8C14CBE
 ---
 
 # Bounded qualification before a research verdict
@@ -22,12 +23,14 @@ This repair does not pass research, clear the finding, widen author grants, rein
 
 ## Existing substrate
 
-No new executor, queue, evidence store, grant class or generic diagnostic flag is required.
+No new execution controller, queue, evidence store, grant class or generic diagnostic flag is required. One typed handler extends the existing native Edge executor.
 
 - `apps/web/lib/work-management/action-registry.ts` already defines consequential `verify`, requires policy evaluation and a receipt, and sanctions only `run_sandbox_tests`, `run_ux_test` and `record_workroom_evidence`.
 - `apps/web/lib/scheduling/workroom-stage-task-config.ts` already carries an exact shape/version/stage and its declared tools into a `ScheduledAgentTask`. It explicitly narrows tools and never grants them.
 - `apps/web/lib/actions/agent-task-scheduler.ts` already creates a TaskRun for a Workroom stage, includes the stage's tools, requires the evidence writer and deduplicates completing evidence for the same dispatch.
 - `record_workroom_evidence` already records stage outcomes; `record_execution_evidence` remains the source for later delivery/acceptance evidence. Neither is a research receipt.
+- `RemoteAction`, `remote-action-dispatch.ts`, `dispatch-orchestrator.ts` and the native Edge action runner already provide the one server-owned execution controller this design needs: a machine-bound action row, approved ChangeRequest, per-node allow-list, signed expiring envelope, durable nonce consumption, single claim and terminal native report.
+- The native Edge agent already refuses unknown action types and unconfigured handlers. Qualification extends that closed registry with one typed Windows procedure; it does not add a command runner, caller-selected executable, path, URL, script, environment variable or argument vector.
 - The supervised Workroom/runtime and external-agent evidence lanes already own host-specific execution. A qualification must use that accountable Workroom executor when the protocol requires a host capability (for BI-B3DEC077, Windows handle sharing) that Build Studio's Linux sandbox cannot supply. It must never select an unrelated active FeatureBuild merely because one exists.
 - `apps/web/lib/backlog/initiative-readiness/entry-adapter.ts` and `shape-requirements.ts` remain the sole research projection. The existing small-fix `source_verified` plus latest `test_pass` path is unchanged.
 - `apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts` and `shape-lane-escalations.ts` already own the supported recovery answer for an unmet research lane. Extend that answer; do not add a parallel controller.
@@ -53,28 +56,40 @@ Preparation terminates with one candidate head and exact candidate diff/blob inv
 
 The final verification binding is newly derived from that reviewed candidate. It binds both the original protocol blob and review receipt and the final candidate head/test blobs and review receipt, plus installation, owner, exact `verify` action, declared verification tools, one start, maximum duration and issued/expiry time. Current human/token authority and coworker grants are re-evaluated at the same execution boundaries as preparation. Any preparation after review invalidates the candidate and requires a new review/binding; it never mutates the existing binding.
 
+For a Windows-only verification the executor mode is `native-edge`, not `workroom-host`. The server selects one current trusted internal Windows Edge node whose fresh `action.execute` capability advertises the exact qualification action. The node is part of the binding before a `RemoteAction` is created. The caller cannot nominate or replace it. A missing, stale, foreign, untrusted, disabled or differently scoped node makes the qualification unavailable rather than falling back to host metadata.
+
 For BI-B3DEC077 the protocol may name only the controlled Windows test-only reproduction. It must not authorize a product fix, production mutation, historical-envelope replay, a second executor or an unrelated source path.
 
 ## Execution and evidence
 
 The existing Workroom driver creates one bounded preparation task and, after candidate review, one one-shot verification task. The preparation stage exposes only existing source-authoring tools already sanctioned for the current Workroom and restricts their paths to the named test/helpers. Its terminal evidence records the candidate head/diff/blob inventory without claiming the experiment ran.
 
-The verification stage exposes only the bound verification tools. Current sandbox receipts do not bind the actual executor, source tree and test cases, so sandbox-mode qualification is retained only for historical parsing and is fail-closed for issuance, execution, settlement and research consumption. The Workroom `record_execution_evidence` writer likewise authenticates who submitted metadata but does not independently observe a host process, so host assertions are also non-evidence. Qualification may be enabled only after the responsible sandbox or host runner emits an exact server-verifiable executor/build/head/test-case/platform/output receipt. Until then the binding and parser remain auditable scaffolding, but neither mode may earn research PASS.
+The verification stage exposes only the bound verification tools. Current sandbox receipts do not bind the actual executor, source tree and test cases, so sandbox-mode qualification is retained only for historical parsing and is fail-closed for issuance, execution, settlement and research consumption. The Workroom `record_execution_evidence` writer likewise authenticates who submitted metadata but does not independently observe a host process, so caller-submitted host assertions are non-evidence. A Windows qualification is enabled only through the signed native Edge action described below. Historical `workroom-host` bindings remain parseable but cannot issue, execute, settle or support research.
 
 - `positive`: the tested behavior occurred;
 - `negative`: the tested behavior did not occur;
 - `inconclusive`: the run completed but cannot answer the protocol;
 - `blocked`: the run never began or could not complete under the binding.
 
-The canonical `host-resource-runner` is the responsible host executor. A verify-phase qualification token is supplied to that runner out-of-band, never as a caller-authored result. The runner presents the signed token when it claims its existing `host-heavy-resource` lease. The server verifies the current Workroom principal, exact signed binding, branch/head, required platform, test path/blob and one-start window, then derives the lease claim identity from the binding digest. The runner supervises the child, streams its output unchanged, hashes the observed output, and on terminal success submits the derived receipt through the existing `record_execution_evidence` writer. The writer re-verifies the signed binding and active canonical lease, including owner session/provider, runner PID/process identity, branch/head, claim identity and execution window, then atomically binds the resulting activity id to the lease. A caller-shaped payload without that exact leased runner association is non-evidence.
+### Native Edge qualification action contract
 
-The runner-attested result includes the binding digest, executor lease identity, command/test identity, candidate head/test blobs, platform, bounded output digest and timings. A later research writer may accept only the receipt kind selected by the signed binding, only while its independently observed source/executor metadata matches the complete verification binding, and only inside the admitted execution window. Sandbox-labelled receipts and authenticated Workroom assertions remain auditable but are non-evidence until their own executor provenance contract exists. A caller-selected, foreign lease, foreign build, wrong-platform, skipped-required-case, nonzero execution or prose-only receipt is non-evidence. The result does not set `research=pass`, change BacklogItem status, close a finding or authorize implementation. Missing terminal evidence remains unknown.
+Add exactly one privileged action type, `qualification.windows.verify-v1`. It uses the existing `RemoteAction` lifecycle and is available only to a trusted internal Windows native Edge node that explicitly advertises the action in its fresh `action.execute` capability and scope policy. It is machine-bound, `riskClass=high`, ChangeRequest-approved, one-shot and never selected by generic convergence.
+
+The versioned closed parameter schema contains only server-derived identities: BI id, Workroom id, repository id, base/head SHA, protocol path/blob, immutable production path/blob inventory, allowed test path/blob inventory, qualification binding digest, expected procedure id, result schema version, maximum duration and the selected Edge node id. Every key is required and unknown keys are refused. The schema contains no command, executable, interpreter, argument, writable directory, URL, environment variable, credential, free-form script or caller-owned output field.
+
+The native handler implements the procedure identified by `windows-handle-replacement-v1` in compiled code. It first verifies that the provisioned qualification controller manifest is immutable and matches the action contract. It materializes only an isolated temporary fixture under the agent-owned state directory, opens the controlled Windows handle with the protocol's fixed sharing flags, performs the first replacement while the handle is held, closes it, performs the second replacement and cleans the fixture. It never opens or mutates a repository checkout or production file. Source/test/protocol blobs are identities used for server admission and evidence correlation, not host paths accepted from the caller.
+
+Before creating the action the portal re-reads the Workroom, current branch/head, protocol and candidate blobs, policy review, authority decision, selected node capability and absence of a prior action for the binding digest. Creation and verification-state transition use one transaction and an idempotent action key derived from the binding digest. Claim repeats node trust, scope, ChangeRequest and allow-list checks. The signed envelope repeats the complete closed schema. The Edge verifies signature, expiry, node id, schema and its durable nonce journal before the first effect.
+
+The native terminal report contains the action key, nonce-bound envelope digest, node id, platform/architecture, procedure id/version, qualification binding digest, base/head, protocol/test/production blob inventories, start/end timestamps, both observed replacement outcomes, cleanup disposition and bounded output digest. The portal accepts it only from the node that owns the claim, only through the existing result endpoint, and revalidates every identity against the current immutable binding before appending one Workroom execution-evidence row. Failed, timed-out and refused native actions remain terminal evidence but cannot be rewritten as success. Redelivery may deliver a stored report; it cannot execute the consumed nonce again.
+
+The result does not set `research=pass`, change BacklogItem status, close a finding or authorize implementation. A later research writer may consume only the accepted terminal evidence for the complete binding. Caller-authored host payloads, sandbox labels, foreign nodes/actions, wrong-platform reports, missing steps, cleanup failure, nonterminal actions, prose-only reports and evidence from an unconfigured handler remain non-evidence. Missing terminal evidence remains unknown.
 
 After a terminal result, normal `record_initiative_evidence(gate: "research")` remains the only research writer. A passing receipt that resolves `IF-91E987DA433B0C82` must cite the exact qualification evidence and include that finding in `resolvedFindingRefs`. A negative or inconclusive experiment can support a changed design or a failing research receipt; it cannot be relabelled PASS.
 
 ## Fail-closed rules
 
-Refuse before effect when any bound item, Workroom, repository, branch, base/head, protocol path/blob/review receipt, candidate head/test blob/review receipt, target production blob, installation, executor, tool list, current grant intersection, policy version, expiry or previous-start state differs. Preparation refuses edits outside the exact test/helper paths and refuses any target production-byte change. Verification refuses an unreviewed candidate, changed candidate, general shell authority, production mutation, source editing, deployment, approval/reviewer replay or unbounded test selection. Refuse a result whose TaskRun/tool receipt, output digest or terminal disposition does not match the issued binding.
+Refuse before effect when any bound item, Workroom, repository, branch, base/head, protocol path/blob/review receipt, candidate head/test blob/review receipt, target production blob, installation, Edge node, action key/type/schema, executor, tool list, current grant intersection, policy version, expiry or previous-start state differs. Preparation refuses edits outside the exact test/helper paths and refuses any target production-byte change. Verification refuses an unreviewed candidate, changed candidate, generic shell authority, caller-selected host path or command, production mutation, source editing, deployment, approval/reviewer replay or unbounded test selection. Refuse a result whose node, signed envelope/action, binding digest, native procedure, source identities, output digest or terminal disposition does not match the issued binding.
 
 Retain the current readiness DENY and `IF-91E987DA433B0C82` throughout qualification. A protocol review, scheduled task, tool success, exit code zero or Workroom evidence row is never by itself research evidence.
 
@@ -85,22 +100,23 @@ Retain the current readiness DENY and `IF-91E987DA433B0C82` throughout qualifica
 3. Extend research recovery to offer bounded preparation only for an eligible qualification protocol. Keep the existing author evidence escalation for ordinary fixes and features.
 4. Carry preparation through the existing Workroom stage task config and TaskRun metadata. Enforce exact test/helper write paths, immutable target production blobs, attempt/time limits and current authority immediately before every authoring effect.
 5. Persist the candidate head/diff/blob inventory, require independent candidate review, then derive a separate one-start verification binding. Never retarget the initial protocol/preparation binding.
-6. Retain the existing host-resource lease binding as admission/coordination evidence only. Do not issue a host verification token while the runner and direct caller share one MCP credential.
-7. Refuse host qualification payloads at the execution-evidence writer. A matching active lease, claimed platform, echoed path, output digest and successful exit code remain caller assertions without a distinct trusted producer.
-8. Reuse the existing signed native Edge action substrate only if a later reviewed change adds an explicit bounded qualification action and exact terminal receipt contract. Its current closed allow-list is not a general command surface and cannot be widened by implication.
-9. Validate terminal Workroom evidence against the verification binding and retain positive, negative, inconclusive and blocked outcomes. Do not project any result into readiness automatically.
-10. Extend the research writer validation so a receipt resolving the existing finding must cite matching terminal qualification evidence. Preserve all existing receipt/finding validation.
-11. Add the exact BI-B3DEC077 fixture plus negative matrices for stale protocol/candidate, target production edits, foreign room/install/executor/lease, widened tools, duplicate preparation/execution/receipt, expiry, nonzero or missing/conflicting evidence and attempted research auto-pass.
-12. Obtain independent policy review, protected DCO publication and served deployment before BI-B3DEC077 requests preparation. Then issue current bindings in order; do not revive historical envelopes or rooms.
+6. Add the closed qualification action type and parameter parser to the existing database dispatch package. Extend claim timeout only for this bounded procedure; keep all existing action-type, node-scope, trust, ChangeRequest and capability checks.
+7. Add one portal qualification-action module that selects a fresh eligible node, derives the idempotent action key and creates the machine-bound `RemoteAction` in the same transaction that marks the verification binding dispatched. No alternate queue, lease or result endpoint is added.
+8. Add the native Windows handler and explicit provisioning/capability advertisement. The handler is disabled unless the supported native installer supplies the exact immutable controller manifest and state layout; absent or partial provisioning fails closed.
+9. Extend existing result ingestion to validate the native qualification report against the bound action and append the one canonical Workroom evidence row. Refuse direct `record_execution_evidence` qualification payloads and every legacy host-lease assertion.
+10. Validate terminal Workroom evidence against the verification binding and retain positive, negative, inconclusive and blocked outcomes. Do not project any result into readiness automatically.
+11. Extend the research writer validation so a receipt resolving the existing finding must cite matching terminal qualification evidence. Preserve all existing receipt/finding validation.
+12. Add the exact BI-B3DEC077 fixture plus negative matrices for stale protocol/candidate, production edits, foreign room/install/node/action, widened tools, duplicate preparation/action/result, replayed nonce, expiry, missing handler/provisioning, wrong platform, invalid native steps, cleanup failure, absent/conflicting evidence and attempted research auto-pass.
+13. Obtain independent policy review, protected DCO publication, canonical native Edge package/install delivery and served portal deployment before BI-B3DEC077 requests preparation. Observe a fresh Windows node capability advertising the exact action before issuing it. Do not revive historical envelopes or rooms.
 
 ## Acceptance
 
 | Criterion | Objectives | Observable result |
 | --- | --- | --- |
 | AC-QRA-1 | OBJ-QRA-ADMIT, OBJ-QRA-FENCE | The exact BI-B3DEC077 protocol receives one bounded preparation binding while ordinary implementation remains denied on `RESEARCH_REQUIRED=fail`; preparation can change only named test/helper paths and cannot change target production bytes. |
-| AC-QRA-2 | OBJ-QRA-ADMIT, OBJ-QRA-FENCE | Independent review fixes the completed candidate head/test blobs; only then does a separate one-start verification binding fix item, Workroom, source, protocol, candidate, installation, owner, executor mode/platform, action, tools, duration, expiry and authority. Any drift refuses before effect. |
-| AC-QRA-3 | OBJ-QRA-TRUTH | Positive, negative, inconclusive and blocked outcomes persist through existing TaskRun/tool/Workroom evidence without becoming a research verdict. |
-| AC-QRA-4 | OBJ-QRA-TRUTH, OBJ-QRA-FENCE | Duplicate dispatch, late acknowledgement, missing result, widened tools, unrelated active builds, wrong-platform/skipped runs and caller-controlled diagnostic claims cannot create another start or a PASS. |
+| AC-QRA-2 | OBJ-QRA-ADMIT, OBJ-QRA-FENCE | Independent review fixes the completed candidate head/test blobs; only then does a separate one-start verification binding fix item, Workroom, source, protocol, candidate, installation, owner, native Edge node/platform, action/schema, tools, duration, expiry and authority. Any drift refuses before effect. |
+| AC-QRA-3 | OBJ-QRA-TRUTH | The signed, nonce-consumed, machine-bound native Edge action reports positive, negative, inconclusive or blocked through the existing RemoteAction/result/Workroom evidence chain without becoming a research verdict. |
+| AC-QRA-4 | OBJ-QRA-TRUTH, OBJ-QRA-FENCE | Duplicate dispatch, replayed nonce, late acknowledgement, missing result, widened tools, unrelated active builds, unconfigured/foreign/wrong-platform nodes, caller-controlled commands or diagnostic claims cannot create another start or a PASS. |
 | AC-QRA-5 | OBJ-QRA-RECOVER | Only a genuine later research receipt can resolve `IF-91E987DA433B0C82`, explicitly citing the bound terminal evidence and finding id. |
 | AC-QRA-6 | OBJ-QRA-FENCE | Existing small-fix reproduction, feature research, grants, receipts, Workroom stages and non-qualification callers pass unchanged regression coverage. |
 | AC-QRA-7 | OBJ-QRA-ADMIT, OBJ-QRA-TRUTH, OBJ-QRA-FENCE, OBJ-QRA-RECOVER | Independent policy review, protected CI/merge and served-source verification precede the first qualification action. |
@@ -120,7 +136,7 @@ The governed medium-work coverage receipt binds the acceptance baseline verbatim
 
 ## Scope, compatibility and rollback
 
-Initial source scope is initiative-readiness recovery/receipt validation, Workroom stage task configuration and their focused tests. Prefer pure modules over growing existing large files. No schema migration or new MCP writer is planned. Legacy tasks without a qualification binding behave exactly as before.
+Implementation scope is the qualification readiness/binding modules, a small portal qualification-action adapter, the existing database remote-action dispatcher/parser, existing result ingestion, the native Edge executor/Windows handler and their focused tests and supported installer/configuration path. Prefer pure modules over growing existing large files. `RemoteAction` remains the single execution record; no schema migration, new queue, new MCP writer or generic execution API is planned. Legacy tasks, nodes and actions without a qualification binding behave exactly as before.
 
 Rollback removes future eligibility and dispatch for this binding while retaining issued bindings, TaskRuns, evidence, receipts and findings. Never delete or rewrite BI-B3DEC077 history. A terminal completed Workroom is continued only through a current actual Workroom/source binding and ordinary claim/admission; this repair does not reopen archived rooms or revive their approvals.
 
