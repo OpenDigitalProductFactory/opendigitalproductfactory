@@ -233,6 +233,9 @@ case "$*" in
     effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
     printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
       "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
+    dispatch="\${DPF_REMOTE_ACTION_DISPATCH_ENABLED-}"
+    if [ "\${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}" != x ]; then dispatch="$(sed -n 's/^DPF_REMOTE_ACTION_DISPATCH_ENABLED=//p' "$env_file" | tail -n 1 | tr -d \"\\\"'\\r\")"; fi
+    printf 'dispatch service=%s value=%s process_present=%s\\n' "$service" "\${dispatch:-0}" "\${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}" >> "$DOCKER_LOG"
     ;;
   *"ps -a --services"*)
     # Services this fake install has ever created (any state). Empty by default.
@@ -277,6 +280,9 @@ export function runPromote(opts: {
   targetSha: string;
   fakeBin: string;
   composeEnvFile?: string;
+  dispatchOverride?: string;
+  configuredOverride?: string;
+  dryRun?: boolean;
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
   activityRecoveryDecision?: "recover" | "not-needed" | "blocked";
@@ -343,6 +349,8 @@ export function runPromote(opts: {
   if (opts.existingServices) writeFileSync(inventoryPath, opts.existingServices.join("\n"));
   const exports = [
     "unset DPF_STATE_DIR",
+    opts.dispatchOverride === undefined ? "unset DPF_REMOTE_ACTION_DISPATCH_ENABLED" : `export DPF_REMOTE_ACTION_DISPATCH_ENABLED=${shellQuote(opts.dispatchOverride)}`,
+    opts.configuredOverride === undefined ? "unset DPF_EDGE_ACTION_DISPATCH_CONFIGURED" : `export DPF_EDGE_ACTION_DISPATCH_CONFIGURED=${shellQuote(opts.configuredOverride)}`,
     // promote.sh writes `git config --global`; confine it to a scratch file so
     // a test run never rewrites the developer's real ~/.gitconfig (BI-249EEA02).
     `export GIT_CONFIG_GLOBAL=${shellQuote(toBashPath(join(opts.backup, "gitconfig")))}`,
@@ -420,7 +428,7 @@ export function runPromote(opts: {
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
     ] : []),
   ];
-  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
+  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade${opts.dryRun ? " --dry-run" : ""}`], {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
