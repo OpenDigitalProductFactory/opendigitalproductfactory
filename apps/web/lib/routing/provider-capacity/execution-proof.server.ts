@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { prisma, Prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { accountExecutionVersion } from "../provider-account-candidates";
+import { accountExecutionVersion, isActiveDefaultSubscription } from "../provider-account-candidates";
 import { accountCapacityScope, capacityCredentialRevision, isAccountCapacityState } from "./scopes";
-import { isActiveDefaultSubscription } from "@/lib/inference/active-provider-account-verification";
 import { buildResponsesUrl } from "../responses-contract";
 import { currentExecutionProof, QUOTA_PROOF_TTL_MS, type ExecutionProofBinding, type ExecutionProof } from "./execution-proof";
 import { capacityRoutingExclusionReason } from "../capacity-routing-exclude";

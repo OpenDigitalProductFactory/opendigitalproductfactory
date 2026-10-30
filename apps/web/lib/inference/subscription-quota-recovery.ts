@@ -91,7 +91,7 @@ export async function recheckSubscriptionQuota(connectionId: string, modelId: st
     }
     await assertCurrent();
     await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
-    const { testProviderAuthInternal } = await import("@/lib/actions/provider-auth-test");
+    const { testProviderAuthInternal } = await import("@/lib/inference/provider-auth-verification");
     const result = await testProviderAuthInternal(captured.binding.providerId, false, connectionId, { verificationOnly: true,
       observation: { modelId, beforeDispatch: assertCurrent, completed: async () => {
         await assertCurrent();

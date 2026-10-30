@@ -23,7 +23,7 @@ const schema = `quota_proof_test_${randomUUID().replaceAll("-", "")}`;
 const tables = ["ModelProvider", "CredentialEntry", "AiProviderConnection", "ModelProfile", "ProviderCapacityStatus", "CliPoolStatus", "ScheduledJob"];
 const connectionId = "provider-default-chatgpt", modelId = "proof-fixture-model";
 const providerRequest = vi.fn();
-vi.mock("@/lib/actions/provider-auth-test", () => ({ testProviderAuthInternal: (...args: unknown[]) => providerRequest(...args) }));
+vi.mock("@/lib/inference/provider-auth-verification", () => ({ testProviderAuthInternal: (...args: unknown[]) => providerRequest(...args) }));
 
 describe.skipIf(!url)("exact quota proof on isolated leased PostgreSQL", () => {
   let admin: Pool, pool: Pool, db: PrismaClient;

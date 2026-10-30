@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account }, scheduledJob: mocks.jobs, providerCapacityStatus: { findUnique: vi.fn(async () => ({ executionProof: {} })) } } }));
 vi.mock("@/lib/routing/provider-capacity/execution-proof.server", () => ({ captureExecutionProofBinding: mocks.capture, persistExecutionProof: mocks.persist,
   inspectExecutionProofBinding: mocks.inspect, invalidateExecutionProof: mocks.invalidate, readCurrentExecutionProof: mocks.read }));
-vi.mock("@/lib/actions/provider-auth-test", () => ({ testProviderAuthInternal: mocks.observe }));
+vi.mock("@/lib/inference/provider-auth-verification", () => ({ testProviderAuthInternal: mocks.observe }));
 vi.mock("@/lib/routing/governed-inference-deadline", () => ({ assertGovernedInferenceAuthority: async () => undefined }));
 vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: async () => undefined }));
 import { nextQuotaRecheckAt, quotaRecoveryCommission, recheckSubscriptionQuota, runSubscriptionQuotaRecovery, stopSubscriptionQuotaRecovery } from "./subscription-quota-recovery";
