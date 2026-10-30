@@ -21,6 +21,7 @@ import { driveChangeThrough } from "@/lib/change-management/register-change";
 import { DOCKER_VM_RESTART_ACTION_TYPE, MANAGED_INFERENCE_ACTION_TYPE } from "@dpf/db/remote-action-dispatch";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { managedInferenceReportSettlement } from "@/lib/remote-action/managed-inference-action";
+import { settleQualificationWindowsResult } from "@/lib/remote-action/qualification-windows-result";
 import { parseManagedInferenceAdmissionBinding } from "@/lib/remote-action/managed-inference-admission";
 import { failQuiescenceSwap, signalSwapComplete } from "@/lib/self-upgrade/quiescence";
 import { isRecord } from "@/lib/shared/coerce";
@@ -113,6 +114,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The receipt is persisted, but acknowledgement waits for its own cleanup
     // signal. The agent retains this SAME pending receipt, never re-executes.
     return NextResponse.json({ ok: false, error: "native_receipt_cleanup_pending" }, { status: 503 });
+  }
+  if (!await settleQualificationWindowsResult({ db: prisma as never, actionKey,
+    edgeNodeRowId: authz.edgeNodeRowId, outcome })) {
+    return NextResponse.json({ ok: false, error: "qualification_evidence_settlement_pending" }, { status: 503 });
   }
   await recordDockerVmRestartChange(actionKey, outcome, evidence);
   return NextResponse.json({ ok: true, actionKey, status: res.status }, { status: 200 });
