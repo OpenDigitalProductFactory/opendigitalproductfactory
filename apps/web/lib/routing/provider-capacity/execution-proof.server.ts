@@ -7,7 +7,7 @@ import { isActiveDefaultSubscription } from "@/lib/inference/active-provider-acc
 import { buildResponsesUrl } from "../responses-contract";
 import { currentExecutionProof, QUOTA_PROOF_TTL_MS, type ExecutionProofBinding, type ExecutionProof } from "./execution-proof";
 import { capacityRoutingExclusionReason } from "../capacity-routing-exclude";
-import { isProviderQuotaState } from "./types";
+import { isProviderQuotaState, PROVIDER_QUOTA_STATES } from "./types";
 
 type Db = Pick<Prisma.TransactionClient, "aiProviderConnection" | "modelProfile" | "modelProvider" | "providerCapacityStatus" | "cliPoolStatus">;
 /** Canonical object ordering, with Date values explicitly normalized first. */
@@ -30,10 +30,10 @@ export function endpointExecutionRevision(provider: Prisma.ModelProviderGetPaylo
     maxContextTokens: provider.maxContextTokens, maxOutputTokens: provider.maxOutputTokens, modelRestrictions: provider.modelRestrictions });
 }
 
-export async function captureExecutionProofBinding(connectionId: string, modelId: string, db: Db = prisma) {
+export async function inspectExecutionProofBinding(connectionId: string, modelId: string, db: Db = prisma) {
   const account = await db.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: true, provider: true } });
   if (!isActiveDefaultSubscription(account) || !account.credentialEntry || account.credentialEntry.status !== "ok"
-    || !["active", "degraded"].includes(account.provider.status) || ["expired", "rejected"].includes(account.evidenceStatus)) return null;
+    || !["active", "degraded"].includes(account.provider.status) || ["expired", "rejected"].includes(account.evidenceStatus)) return { captured: null };
   const [model, capacities, pools, subscription] = await Promise.all([
     db.modelProfile.findFirst({ where: { providerId: account.providerId, modelId, modelStatus: "active" } }),
     db.providerCapacityStatus.findMany({ where: { OR: [{ providerId: { in: ["chatgpt", "codex"] } }, { ownedAccountId: account.id }] },
@@ -42,22 +42,30 @@ export async function captureExecutionProofBinding(connectionId: string, modelId
       select: { id: true, adapterType: true, scopeKey: true, rateLimitedAt: true, resetAt: true, retryAfterSeconds: true, updatedAt: true } }),
     account.providerId === "codex" ? db.modelProvider.findUnique({ where: { providerId: "chatgpt" } }) : Promise.resolve(null),
   ]);
-  if (!model) return null;
+  // Canonical quota writers use provider scope. Older or foreign account-scoped
+  // quota records do not prove ownership; preserve them rather than normalizing.
+  if (capacities.some(row => row.ownedAccountId === account.id && isProviderQuotaState(row.state)))
+    return { captured: null, blockedReason: "owned-account-quota" as const };
+  if (!model) return { captured: null };
   // A quota check cannot remove a sign-in/billing/plan refusal on this account.
   if (capacities.some(row => (isAccountCapacityState(row.state) || !isProviderQuotaState(row.state)
     && capacityRoutingExclusionReason({ state: row.state, retryAtMs: row.retryAt?.getTime(), observedAtMs: row.lastObservedAt.getTime() }, Date.now()))
-    && (row.ownedAccountId === account.id || row.providerId === account.providerId))) return null;
+    && (row.ownedAccountId === account.id || row.providerId === account.providerId))) return { captured: null };
   const quotaRows = capacities.filter(row => row.state !== "available").sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const baseUrl = account.providerId === "codex" ? subscription?.baseUrl ?? subscription?.endpoint ?? "https://chatgpt.com/backend-api"
     : account.provider.baseUrl ?? account.provider.endpoint ?? "";
-  if (!baseUrl) return null;
+  if (!baseUrl) return { captured: null };
   const binding: ExecutionProofBinding = { providerId: account.providerId, connectionId, modelId, adapter: "responses",
     accountVersion: accountExecutionVersion(account), credentialRevision: capacityCredentialRevision(account.credentialEntry),
     modelRevision: modelExecutionRevision(model), endpointRevision: endpointExecutionRevision(account.provider, baseUrl),
     quotaRevision: digest({ capacities: quotaRows, pools: pools.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) }) };
-  return { accountId: account.id, binding, quotaRows, resetTimes: [...quotaRows.map(row => row.retryAt), ...pools.map(row => row.resetAt)],
+  return { captured: { accountId: account.id, binding, quotaRows, resetTimes: [...quotaRows.map(row => row.retryAt), ...pools.map(row => row.resetAt)],
     hasQuota: quotaRows.some(row => isProviderQuotaState(row.state) && capacityRoutingExclusionReason({ state: row.state, retryAtMs: row.retryAt?.getTime(), observedAtMs: row.lastObservedAt.getTime() }, Date.now()))
-      || pools.some(row => row.resetAt ? row.resetAt.getTime() > Date.now() : row.rateLimitedAt.getTime() + 3600_000 > Date.now()) };
+      || pools.some(row => row.resetAt ? row.resetAt.getTime() > Date.now() : row.rateLimitedAt.getTime() + 3600_000 > Date.now()) } };
+}
+
+export async function captureExecutionProofBinding(connectionId: string, modelId: string, db: Db = prisma) {
+  return (await inspectExecutionProofBinding(connectionId, modelId, db)).captured;
 }
 
 export async function readCurrentExecutionProof(connectionId: string, modelId: string, value: unknown, now = Date.now(), db: Db = prisma): Promise<ExecutionProof | null> {
@@ -90,6 +98,7 @@ export async function persistExecutionProof(expected: NonNullable<Awaited<Return
 
 /** Any failed new observation invalidates the older exact proof, never another owner. */
 export async function invalidateExecutionProof(connectionId: string, credentialRevision: string) {
-  await prisma.providerCapacityStatus.updateMany({ where: { ownedAccount: { is: { connectionId } }, observedCredentialRevision: credentialRevision },
+  await prisma.providerCapacityStatus.updateMany({ where: { ownedAccount: { is: { connectionId } }, observedCredentialRevision: credentialRevision,
+    state: { notIn: [...PROVIDER_QUOTA_STATES] } },
     data: { executionProof: Prisma.DbNull } });
 }

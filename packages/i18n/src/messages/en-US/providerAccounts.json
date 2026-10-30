@@ -6,6 +6,8 @@
   "resetChoice": "Opening usage or checking capacity does not redeem a reset or buy credits.",
   "capacityModel": "Model to check",
   "capacityCheck": "Check now",
+  "capacityStop": "Stop hourly checks",
+  "capacityStopPreview": "Stops future hourly checks without sending a provider request.",
   "capacityCheckPreview": "Sends one short test to this model. Other models and coding-tool limits stay separate.",
   "capacityHourly": "Recheck hourly while limited",
   "capacityObserved": "Limit observed",

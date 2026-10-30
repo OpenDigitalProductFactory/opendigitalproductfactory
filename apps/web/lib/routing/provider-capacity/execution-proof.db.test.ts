@@ -10,7 +10,9 @@ vi.mock("@dpf/db", async () => {
     const value = state.db[key as keyof PrismaClient]; return typeof value === "function" ? value.bind(state.db) : value;
   } }) };
 });
-import { captureExecutionProofBinding, persistExecutionProof, readCurrentExecutionProof } from "./execution-proof.server";
+import { captureExecutionProofBinding, invalidateExecutionProof, persistExecutionProof, readCurrentExecutionProof } from "./execution-proof.server";
+import { accountCapacityScope } from "./scopes";
+import { recheckSubscriptionQuota, stopSubscriptionQuotaRecovery, quotaRecoveryJobId } from "@/lib/inference/subscription-quota-recovery";
 import { loadProviderCapacitySnapshots, clearProviderCapacityStatus, capacityAccountIdentity, recordProviderCapacityStatus } from "./store";
 import { applyCapacitySoftExclusion } from "../capacity-routing-exclude";
 
@@ -20,6 +22,8 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TE
 const schema = `quota_proof_test_${randomUUID().replaceAll("-", "")}`;
 const tables = ["ModelProvider", "CredentialEntry", "AiProviderConnection", "ModelProfile", "ProviderCapacityStatus", "CliPoolStatus", "ScheduledJob"];
 const connectionId = "provider-default-chatgpt", modelId = "proof-fixture-model";
+const providerRequest = vi.fn();
+vi.mock("@/lib/actions/provider-auth-test", () => ({ testProviderAuthInternal: (...args: unknown[]) => providerRequest(...args) }));
 
 describe.skipIf(!url)("exact quota proof on isolated leased PostgreSQL", () => {
   let admin: Pool, pool: Pool, db: PrismaClient;
@@ -59,6 +63,43 @@ describe.skipIf(!url)("exact quota proof on isolated leased PostgreSQL", () => {
     const selected = { providerId: "chatgpt", providerConnectionId: connectionId, providerConnectionVersion: expected.binding.accountVersion, modelId };
     const local = { providerId: "local", modelId: "local" };
     expect(applyCapacitySoftExclusion({ endpoints: [selected, { ...selected, modelId: "different" }, { ...selected, providerId: "codex" }, local], capacityByProvider: snapshot, nowMs: Date.now() }).eligible).toEqual([selected, local]);
+  });
+  it.each(["quota_resets_at", "rate_limited", "cooling_down"])("preserves an unsupported owned-account %s without a probe or any write", async state => {
+    const expected = await capture();
+    await db.providerCapacityStatus.create({ data: { scopeKey: accountCapacityScope("chatgpt", "fixture-account"), ownedAccountId: "fixture-account",
+      state, action: "retry_at", retryAt: new Date(Date.now() + 86400_000), safeSummary: "Legacy ownership needs reconciliation", source: "manual", confidence: "unknown",
+      observedCredentialRevision: expected.binding.credentialRevision, executionProof: { legacy: true } } });
+    const before = await db.providerCapacityStatus.findMany({ orderBy: { id: "asc" } });
+    const poolsBefore = await db.cliPoolStatus.findMany();
+    const accountBefore = await db.aiProviderConnection.findUnique({ where: { connectionId } });
+    providerRequest.mockClear();
+    expect(await recheckSubscriptionQuota(connectionId, modelId, true)).toMatchObject({ ok: false, observationCompleted: false,
+      message: expect.stringContaining("Reconciliation is required") });
+    expect(providerRequest).not.toHaveBeenCalled();
+    // A stale in-flight success and its failure cleanup also leave the record intact.
+    expect(await persistExecutionProof(expected, Date.now())).toBe(false);
+    await invalidateExecutionProof(connectionId, expected.binding.credentialRevision);
+    expect(await readCurrentExecutionProof(connectionId, modelId, expected)).toBeNull();
+    expect(await db.providerCapacityStatus.findMany({ orderBy: { id: "asc" } })).toEqual(before);
+    expect(await db.cliPoolStatus.findMany()).toEqual(poolsBefore);
+    expect(await db.aiProviderConnection.findUnique({ where: { connectionId } })).toEqual(accountBefore);
+    expect(await db.scheduledJob.count()).toBe(0);
+  });
+  it.each(["active", "paused", "disconnected"])("stops a stale %s commission without provider, account or capacity changes", async status => {
+    await db.aiProviderConnection.update({ where: { connectionId }, data: { status } });
+    await db.scheduledJob.create({ data: { jobId: quotaRecoveryJobId(connectionId), name: "Fixture recovery", schedule: "once",
+      lastRunAt: new Date(Date.now() - 86400_000), metadata: { kind: "subscription-quota-recovery", version: 1, modelId, hourly: true } } });
+    const capacities = await db.providerCapacityStatus.findMany(), pools = await db.cliPoolStatus.findMany();
+    const account = await db.aiProviderConnection.findUnique({ where: { connectionId } });
+    const credential = await db.credentialEntry.findMany();
+    providerRequest.mockClear();
+    expect(await stopSubscriptionQuotaRecovery(connectionId)).toMatchObject({ ok: true, observationCompleted: false });
+    expect(providerRequest).not.toHaveBeenCalled();
+    expect((await db.scheduledJob.findUniqueOrThrow({ where: { jobId: quotaRecoveryJobId(connectionId) } })).metadata)
+      .toEqual({ kind: "subscription-quota-recovery", version: 1, modelId, hourly: false });
+    expect(await db.providerCapacityStatus.findMany()).toEqual(capacities); expect(await db.cliPoolStatus.findMany()).toEqual(pools);
+    expect(await db.aiProviderConnection.findUnique({ where: { connectionId } })).toEqual(account);
+    expect(await db.credentialEntry.findMany()).toEqual(credential);
   });
   it.each(["pause", "credential", "model", "endpoint", "quota", "cli"])("refuses stale completion after a %s change", async change => {
     const expected = await capture();

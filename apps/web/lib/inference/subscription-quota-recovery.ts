@@ -17,27 +17,37 @@ export function quotaRecoveryCommission(value: unknown): { modelId: string; hour
 
 export type QuotaRecheckResult = { ok: boolean; message: string; nextCheckAt?: string; modelId?: string; observationCompleted?: boolean };
 
+/** Reduce an existing commission only. No account activation or inference. */
+export async function stopSubscriptionQuotaRecovery(connectionId: string): Promise<QuotaRecheckResult> {
+  if (!connectionId || connectionId.length > 200) return { ok: false, message: "Choose an existing account." };
+  const [{ prisma }, { isDefaultSubscriptionIdentity }] = await Promise.all([import("@dpf/db"), import("@/lib/inference/active-provider-account-verification")]);
+  const account = await prisma.aiProviderConnection.findUnique({ where: { connectionId }, select: { providerId: true, connectionId: true, organizationId: true } });
+  if (!account || account.organizationId !== null || !isDefaultSubscriptionIdentity(account.providerId, account.connectionId))
+    return { ok: false, message: "Choose an install-owned default subscription account." };
+  const prior = await prisma.scheduledJob.findUnique({ where: { jobId: quotaRecoveryJobId(connectionId) } });
+  const commission = quotaRecoveryCommission(prior?.metadata);
+  if (!prior || !commission) return { ok: false, message: "This account has no recorded recovery commission." };
+  const stopped = await prisma.scheduledJob.updateMany({ where: { jobId: prior.jobId, updatedAt: prior.updatedAt },
+    data: { metadata: { kind: "subscription-quota-recovery", version: 1, modelId: commission.modelId, hourly: false } } });
+  return { ok: stopped.count === 1, observationCompleted: false, message: stopped.count === 1
+    ? "Hourly recovery is stopped. No provider request was sent." : "The recovery commission changed. Refresh its status." };
+}
+
 /** One explicit synthetic request. Restoring an account or original work is never implied. */
 export async function recheckSubscriptionQuota(connectionId: string, modelId: string, hourly?: boolean, options: { scheduled?: boolean } = {}): Promise<QuotaRecheckResult> {
   if (!connectionId || connectionId.length > 200 || !modelId.trim() || modelId.length > 200) return { ok: false, message: "Choose an existing account and model." };
   const [{ prisma }, proofStore] = await Promise.all([import("@dpf/db"), import("@/lib/routing/provider-capacity/execution-proof.server")]);
-  const captured = await proofStore.captureExecutionProofBinding(connectionId, modelId);
-  if (!captured && hourly === false) {
-    // Stopping future work does not require reconnecting or activating its account.
-    const prior = await prisma.scheduledJob.findUnique({ where: { jobId: quotaRecoveryJobId(connectionId) } });
-    const commission = quotaRecoveryCommission(prior?.metadata);
-    if (prior && commission) {
-      const stopped = await prisma.scheduledJob.updateMany({ where: { jobId: prior.jobId, updatedAt: prior.updatedAt },
-        data: { metadata: { kind: "subscription-quota-recovery", version: 1, modelId: commission.modelId, hourly: false } } });
-      return { ok: stopped.count === 1, observationCompleted: false, message: stopped.count === 1
-        ? "Hourly recovery is stopped." : "The recovery commission changed. Refresh its status." };
-    }
-  }
+  const eligibility = await proofStore.inspectExecutionProofBinding(connectionId, modelId);
+  if (eligibility.blockedReason === "owned-account-quota") return { ok: false, observationCompleted: false,
+    message: "This account has an unsupported account-level quota record. Reconciliation is required before checking capacity; the record is unchanged." };
+  const captured = eligibility.captured;
   if (!captured) return { ok: false, message: "This check requires an active subscription account and model, with no sign-in or billing restriction." };
   const now = new Date(), jobId = quotaRecoveryJobId(connectionId);
   let prior = await prisma.scheduledJob.upsert({ where: { jobId },
     create: { jobId, name: "Subscription capacity recheck", schedule: "once", metadata: { kind: "subscription-quota-recovery", version: 1, modelId, hourly: hourly === true } }, update: {} });
   if (!prior.enabled || prior.schedule === "disabled") return { ok: false, message: "Capacity rechecks are paused. Review the existing scheduled job." };
+  if (options.scheduled && !quotaRecoveryCommission(prior.metadata)?.hourly)
+    return { ok: false, observationCompleted: false, message: "Hourly recovery is stopped. No provider request was sent." };
   if (hourly !== undefined) {
     const changed = await prisma.scheduledJob.updateMany({ where: { jobId, updatedAt: prior.updatedAt, enabled: true },
       data: { metadata: { kind: "subscription-quota-recovery", version: 1,
@@ -68,7 +78,7 @@ export async function recheckSubscriptionQuota(connectionId: string, modelId: st
     await assertGovernedInferenceAuthority();
     await assertProviderDispatchCapacity(captured.binding.providerId);
     const expected: ExecutionProof = { version: 1, ...captured.binding, observedAt: now.getTime(), expiresAt: now.getTime() + QUOTA_PROOF_TTL_MS };
-    if (!job?.enabled || job.schedule === "disabled" || job.runCursor !== runCursor || !current
+    if (!job?.enabled || job.schedule === "disabled" || job.runCursor !== runCursor || options.scheduled && !quotaRecoveryCommission(job.metadata)?.hourly || !current
       || !currentExecutionProof(expected, current.binding, Date.now())) throw new Error("Capacity check ownership or restrictions changed");
   };
   let recovered = false;

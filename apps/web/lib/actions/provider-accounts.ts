@@ -29,3 +29,9 @@ export async function recheckProviderAccountQuota(connectionId: string, modelId:
   const { recheckSubscriptionQuota } = await import("@/lib/inference/subscription-quota-recovery");
   return recheckSubscriptionQuota(connectionId, modelId, hourly);
 }
+
+export async function stopProviderAccountQuotaRecovery(connectionId: string) {
+  await requireCapability("manage_provider_connections");
+  const { stopSubscriptionQuotaRecovery } = await import("@/lib/inference/subscription-quota-recovery");
+  return stopSubscriptionQuotaRecovery(connectionId);
+}

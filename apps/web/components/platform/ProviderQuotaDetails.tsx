@@ -2,11 +2,12 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
-import { recheckProviderAccountQuota } from "@/lib/actions/provider-accounts";
+import { recheckProviderAccountQuota, stopProviderAccountQuotaRecovery } from "@/lib/actions/provider-accounts";
 import { formatInstant } from "@/lib/datetime";
 import { FormStatus } from "@/components/ui/form/FormStatus";
 import { SubmitButton } from "@/components/ui/form/SubmitButton";
 import { fieldControlClass } from "@/components/ui/form/styles";
+import { Button } from "@/components/ui/Button";
 
 type QuotaDetailsProps = { connectionId: string; recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]>;
   canWrite: boolean; copy: Record<string, string> };
@@ -15,6 +16,7 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
   const [modelId, setModelId] = useState(recovery.models.some(model => model.modelId === recovery.selectedModelId)
     ? recovery.selectedModelId! : recovery.models[0]?.modelId ?? "");
   const [hourly, setHourly] = useState(recovery.hourly);
+  const [commissioned, setCommissioned] = useState(recovery.hourly);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const sourceLabels: Record<string, string> = { api: copy.capacitySourceApi, cli: copy.capacitySourceCoding, opencode: copy.capacitySourceCoding,
@@ -45,7 +47,12 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
         if (!modelId || pending) return;
         setResult(null);
         startTransition(async () => {
-          try { setResult(await recheckProviderAccountQuota(connectionId, modelId, hourly)); router.refresh(); }
+          try {
+            const outcome = await recheckProviderAccountQuota(connectionId, modelId, hourly);
+            setResult(outcome);
+            if (outcome.ok || outcome.nextCheckAt) setCommissioned(hourly);
+            router.refresh();
+          }
           catch { setResult({ ok: false, message: copy.failed }); }
         });
       }} className="space-y-2">
@@ -56,8 +63,22 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
         </select>
         <label className="flex items-center gap-2 py-2"><input type="checkbox" name="hourly" checked={hourly} disabled={pending} onChange={event => setHourly(event.target.checked)} />{copy.capacityHourly}</label>
         <SubmitButton pending={pending} pendingLabel={copy.working} disabled={!modelId}>{copy.capacityCheck}</SubmitButton>
-        <FormStatus error={result && !result.ok ? result.message : null} success={result?.ok ? result.message : null} />
       </form> : null}
+      {canWrite && commissioned && !recovery.unavailable && <div className="space-y-2">
+        <p id={`${id}-stop-preview`}>{copy.capacityStopPreview}</p>
+        <Button variant="secondary" disabled={pending} aria-busy={pending} aria-describedby={`${id}-stop-preview`} onClick={() => {
+          setResult(null);
+          startTransition(async () => {
+            try {
+              const outcome = await stopProviderAccountQuotaRecovery(connectionId);
+              setResult(outcome);
+              if (outcome.ok) { setHourly(false); setCommissioned(false); }
+              router.refresh();
+            } catch { setResult({ ok: false, message: copy.failed }); }
+          });
+        }}>{copy.capacityStop}</Button>
+      </div>}
+      <FormStatus error={result && !result.ok ? result.message : null} success={result?.ok ? result.message : null} />
       {canWrite && (!recovery.canCheck || recovery.unavailable) && <p>{copy.capacityNoCheck}</p>}
     </div>
   </details>;

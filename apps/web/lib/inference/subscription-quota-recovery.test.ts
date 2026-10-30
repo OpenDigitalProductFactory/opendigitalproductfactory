@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  capture: vi.fn(), persist: vi.fn(), invalidate: vi.fn(), read: vi.fn(), observe: vi.fn(), requests: vi.fn(),
+  capture: vi.fn(), inspect: vi.fn(), persist: vi.fn(), invalidate: vi.fn(), read: vi.fn(), observe: vi.fn(), requests: vi.fn(), account: vi.fn(),
   jobs: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn() },
 }));
-vi.mock("@dpf/db", () => ({ prisma: { scheduledJob: mocks.jobs, providerCapacityStatus: { findUnique: vi.fn(async () => ({ executionProof: {} })) } } }));
+vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account }, scheduledJob: mocks.jobs, providerCapacityStatus: { findUnique: vi.fn(async () => ({ executionProof: {} })) } } }));
 vi.mock("@/lib/routing/provider-capacity/execution-proof.server", () => ({ captureExecutionProofBinding: mocks.capture, persistExecutionProof: mocks.persist,
-  invalidateExecutionProof: mocks.invalidate, readCurrentExecutionProof: mocks.read }));
+  inspectExecutionProofBinding: mocks.inspect, invalidateExecutionProof: mocks.invalidate, readCurrentExecutionProof: mocks.read }));
 vi.mock("@/lib/actions/provider-auth-test", () => ({ testProviderAuthInternal: mocks.observe }));
 vi.mock("@/lib/routing/governed-inference-deadline", () => ({ assertGovernedInferenceAuthority: async () => undefined }));
 vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: async () => undefined }));
-import { nextQuotaRecheckAt, quotaRecoveryCommission, recheckSubscriptionQuota, runSubscriptionQuotaRecovery } from "./subscription-quota-recovery";
+import { nextQuotaRecheckAt, quotaRecoveryCommission, recheckSubscriptionQuota, runSubscriptionQuotaRecovery, stopSubscriptionQuotaRecovery } from "./subscription-quota-recovery";
 
 const now = Date.parse("2026-10-30T02:00:00Z");
 const binding = { providerId: "chatgpt", connectionId: "provider-default-chatgpt", modelId: "target", adapter: "responses",
@@ -21,6 +21,8 @@ beforeEach(() => {
   job = { jobId: "subscription-quota-recovery:provider-default-chatgpt", enabled: true, schedule: "once", updatedAt: new Date(), nextRunAt: null, lastRunAt: null, lastStatus: null,
     metadata: { kind: "subscription-quota-recovery", version: 1, modelId: "target", hourly: true } };
   mocks.capture.mockResolvedValue(captured); mocks.persist.mockResolvedValue(true); mocks.read.mockResolvedValue({ ...binding });
+  mocks.inspect.mockImplementation(async () => ({ captured: await mocks.capture() }));
+  mocks.account.mockResolvedValue({ connectionId: binding.connectionId, providerId: binding.providerId, organizationId: null });
   mocks.jobs.upsert.mockImplementation(async () => ({ ...job }));
   mocks.jobs.findUnique.mockImplementation(async () => ({ ...job }));
   mocks.jobs.findUniqueOrThrow.mockImplementation(async () => ({ ...job }));
@@ -57,6 +59,13 @@ describe("bounded subscription quota recovery", () => {
     mocks.capture.mockResolvedValueOnce(captured).mockResolvedValue(null);
     expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: false });
     expect(mocks.requests).not.toHaveBeenCalled(); expect(mocks.persist).not.toHaveBeenCalled();
+  });
+  it("requires reconciliation for an unsupported account quota before any request or job write", async () => {
+    mocks.inspect.mockResolvedValue({ captured: null, blockedReason: "owned-account-quota" });
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target", true)).toMatchObject({ ok: false, observationCompleted: false,
+      message: expect.stringContaining("Reconciliation is required") });
+    expect(mocks.observe).not.toHaveBeenCalled(); expect(mocks.jobs.upsert).not.toHaveBeenCalled();
+    expect(mocks.jobs.updateMany).not.toHaveBeenCalled(); expect(mocks.invalidate).not.toHaveBeenCalled();
   });
   it("respects a short window without an inference request", async () => {
     mocks.capture.mockResolvedValue({ ...captured, resetTimes: [new Date(Date.now() + 5 * 60_000)] });
@@ -95,10 +104,27 @@ describe("bounded subscription quota recovery", () => {
     expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: false });
     expect(mocks.requests).toHaveBeenCalledTimes(1);
   });
-  it("can stop an existing hourly commission while the account cannot be checked", async () => {
-    mocks.capture.mockResolvedValue(null);
-    expect(await recheckSubscriptionQuota(binding.connectionId, "target", false)).toMatchObject({ ok: true, observationCompleted: false });
+  it.each(["active-stale", "paused", "disconnected"])("stopping an existing %s commission never checks capacity", async status => {
+    mocks.account.mockResolvedValue({ connectionId: binding.connectionId, providerId: binding.providerId, organizationId: null, status });
+    job.lastRunAt = new Date(Date.now() - 86400_000);
+    expect(await stopSubscriptionQuotaRecovery(binding.connectionId)).toMatchObject({ ok: true, observationCompleted: false });
     expect(quotaRecoveryCommission(job.metadata)?.hourly).toBe(false);
-    expect(mocks.requests).not.toHaveBeenCalled();
+    expect(mocks.capture).not.toHaveBeenCalled(); expect(mocks.observe).not.toHaveBeenCalled();
+    expect(mocks.requests).not.toHaveBeenCalled(); expect(mocks.persist).not.toHaveBeenCalled(); expect(mocks.invalidate).not.toHaveBeenCalled();
+  });
+  it("stopping does not create a commission or change a different owner's account", async () => {
+    mocks.account.mockResolvedValue({ connectionId: binding.connectionId, providerId: binding.providerId, organizationId: "other-owner" });
+    expect(await stopSubscriptionQuotaRecovery(binding.connectionId)).toMatchObject({ ok: false });
+    expect(mocks.jobs.updateMany).not.toHaveBeenCalled(); expect(mocks.jobs.upsert).not.toHaveBeenCalled();
+    expect(mocks.observe).not.toHaveBeenCalled();
+  });
+  it("a sweep cannot dispatch after its hourly commission is stopped", async () => {
+    mocks.observe.mockImplementation(async (_provider, _catalog, _account, options) => {
+      await stopSubscriptionQuotaRecovery(binding.connectionId);
+      await options.observation.beforeDispatch(); mocks.requests(); return { ok: true };
+    });
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target", undefined, { scheduled: true })).toMatchObject({ ok: false });
+    expect(mocks.requests).not.toHaveBeenCalled(); expect(mocks.persist).not.toHaveBeenCalled();
+    expect(quotaRecoveryCommission(job.metadata)?.hourly).toBe(false);
   });
 });

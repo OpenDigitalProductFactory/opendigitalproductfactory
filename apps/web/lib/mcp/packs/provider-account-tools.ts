@@ -11,11 +11,11 @@ export const providerAccountDefinitions: ToolDefinition[] = [
   },
   {
     name: "manage_provider_account",
-    description: "Manage an explicit provider account. Test verifies authentication without restoring default subscription quota. Recheck-quota sends one bounded synthetic Responses request for the exact selected active subscription account and model; CLI and other-model restrictions remain separate. Its optional hourly flag explicitly commissions or stops bounded recovery checks. Discovery synchronizes models. Activation, credentials and consequential recovery retain approval checks. Authentication never grants data clearance.",
+    description: "Manage an explicit provider account. Test verifies authentication without restoring default subscription quota. Recheck-quota sends one bounded synthetic Responses request for the exact selected active subscription account and model; its optional hourly flag also sets the future hourly preference. CLI and other-model restrictions remain separate. Stop-quota-recovery only stops an existing hourly commission and never calls a provider. Discovery synchronizes models. Activation, credentials and consequential recovery retain approval checks. Authentication never grants data clearance.",
     inputSchema: { type: "object", properties: {
-      operation: { type: "string", enum: ["add", "configure", "enable", "disable", "sign-in", "disconnect", "test", "discover", "recheck-quota"] },
+      operation: { type: "string", enum: ["add", "configure", "enable", "disable", "sign-in", "disconnect", "test", "discover", "recheck-quota", "stop-quota-recovery"] },
       modelId: { type: "string", description: "Required for recheck-quota. Only this exact model on the selected account's Responses endpoint is checked; CLI and other model limits remain separate." },
-      hourly: { type: "boolean", description: "For recheck-quota only: explicitly commission or stop bounded hourly rechecks of this account/model. Omission preserves an existing commission and otherwise performs one check." },
+      hourly: { type: "boolean", description: "For recheck-quota only: future hourly preference in addition to the one explicit check now. Omission preserves an existing commission. To stop without sending any provider request, use stop-quota-recovery with only connectionId." },
       providerId: { type: "string", description: "Required for add; otherwise checked against the selected account" },
       connectionId: { type: "string", description: "Account identity returned by get_provider_accounts or add" },
       label: { type: "string", description: "Account display name, required for add" },
