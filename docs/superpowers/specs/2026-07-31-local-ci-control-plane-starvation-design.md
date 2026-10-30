@@ -55,6 +55,12 @@ must ship together. Plan coverage belongs to `BI-1A4CC847`; documentation does
 not deliver a separate implementation item. Hydration `BI-E96C5778`, identity
 `BI-CAP-437F7745` and role/room `BI-56E9CEC2` keep their existing ownership.
 
+### Acceptance criteria
+
+- Failed observations persist the exact operation, native error code and available process identity.
+- Genuine observation failures remain non-success; natural closure still requires zero job accounting and members.
+- A primary observation error survives cleanup failure, with cleanup provenance recorded separately.
+- Existing cancellation and owned-job probes retain their bounded containment and truthful outcomes.
 Microsoft's [process handle contract](https://learn.microsoft.com/en-us/windows/win32/procthread/process-handles-and-identifiers)
 distinguishes PID lifetime from retained-handle lifetime. The
 [job process list](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
