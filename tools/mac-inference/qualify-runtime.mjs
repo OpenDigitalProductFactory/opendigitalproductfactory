@@ -16,8 +16,20 @@ import { admittedLeaseTtlMs, superviseLeaseRun } from '../../scripts/lib/lease-s
 import { sha256, hashFile } from './package.mjs';
 import { verifyRuntimePackage, stageVerifiedRuntime, verifyEngineQualification } from './runtime-profile.mjs';
 import { createRuntimeLaunchAgent, renderRuntimeLaunchAgent } from './runtime-launchagent.mjs';
-import { transferRuntimeModel, configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot } from './runtime-model-store.mjs';
+import { transferRuntimeModel, configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot,
+  restoreRuntimeModelProfiles, verifyRuntimeModelProfiles } from './runtime-model-store.mjs';
 export { configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot };
+export function capturedQualificationProfiles(report) {
+  check(Array.isArray(report.models) && report.models.length === 2
+    && Array.isArray(report.configurations) && report.configurations.length === 2, 'Captured qualification profiles unavailable');
+  return report.models.map(model => {
+    const entries = report.configurations.filter(entry => entry.model === model.model);
+    check(entries.length === 1 && entries[0].digest === model.digest && Array.isArray(entries[0].original),
+      'Captured qualification configuration binding changed');
+    return { model: model.model, digest: model.digest, modelMetadataSha256: model.modelMetadataSha256,
+      configuration: structuredClone(entries[0].original) };
+  });
+}
 import { validateOwnedLease, validatedModelDigest, runnerActivity, metric, testEndpoint, makeContext,
   coldMessages, authorityAwareSignal, recordAuthorityFence } from './qualify-engine.mjs';
 
@@ -159,12 +171,25 @@ async function run(a) {
   const cleanup = async () => {
     if (cleaned) return; cleaned = true;
     deadline = Math.min(Date.now() + 45000, Date.parse(lease?.expiresAt) - 15000);
-    if (service) { report.candidateShutdown = await service.stop(); await checkpoint(); }
+    if (service) {
+      report.candidateShutdown = await service.stop();
+      check(report.candidateShutdown?.stopped === true, 'Owned candidate shutdown unconfirmed');
+      await checkpoint();
+    }
     if (report.baselineUnloadedForQualification && !report.baselineRestored) {
       validate();
+      check(report.baselineProfileWriteUncertain !== true, 'Uncertain baseline configuration write requires reconciliation');
+      const models = capturedQualificationProfiles(report);
+      await restoreRuntimeModelProfiles({ expected: models, root: original, json, recovery: true,
+        writeConfiguration: async body => {
+          report.baselineProfileWriteUncertain = true;
+          return (await request(original + '/engines/_configure', { body, timeout: 30000, recovery: true })).arrayBuffer();
+        } });
+      report.baselineProfileWriteUncertain = false;
       const value = await completion(original + '/engines/llama.cpp', [{ role: 'user', content: 'Reply with OK.' }], undefined, true);
-      report.baselineRestored = value.metric.finishReason === 'stop';
-      check(report.baselineRestored, 'Docker restoration completion failed');
+      check(value.metric.finishReason === 'stop', 'Docker restoration completion failed');
+      await verifyRuntimeModelProfiles({ expected: models, root: original, json, recovery: true });
+      report.baselineRestored = true;
       await checkpoint();
     }
   };
@@ -232,6 +257,7 @@ async function run(a) {
       },
       terminate: async () => { fenced = true; recordAuthorityFence(report); authority.abort(); cancel.abort(); if (service) await service.stop(); },
       run: async () => {
+        let primaryFailure = false;
         try {
           report.runtimeInspectionStarted = true;
           const verified = await verifyRuntimePackage(a.package);
@@ -279,10 +305,19 @@ async function run(a) {
             report.configurations.push({ model, digest, original: config, candidate: 'unrun' }); await checkpoint();
           }
           await unload(original);
+          const baselineModels = capturedQualificationProfiles(report);
+          await restoreRuntimeModelProfiles({ expected: baselineModels, root: original, json,
+            writeConfiguration: async body => {
+              report.baselineProfileWriteUncertain = true;
+              return (await request(original + '/engines/_configure', { body, timeout: 30000 })).arrayBuffer();
+            } });
+          // Only exact readback settles these writes; cleanup must not repeat an uncertain dispatch.
+          report.baselineProfileWriteUncertain = false;
           const context = makeContext(3197);
           report.workload = { version: 'dpf-mac-model-controls.v1', contextLineCount: 3197,
             coldMessagesSha256: sha256(JSON.stringify(coldMessages(context))), transport: 'stock-model-runner-api', thinking: false, maxOutputTokens: 256 };
           await testEndpoint('docker-baseline', original + '/engines/llama.cpp', context, { request: completion, results: report.results }); await checkpoint();
+          await verifyRuntimeModelProfiles({ expected: baselineModels, root: original, json });
           await unload(original);
           await configureDrainedCandidate(report.configurations, {
             readBaselineRunners: () => json(original, '/engines/ps', { timeout: 3000 }),
@@ -307,7 +342,14 @@ async function run(a) {
           check(report.results.length === 8 && report.results.every(x => x.correct) && report.embedding.correct && report.baselineRestored,
             'One or more runtime completion controls failed');
           report.status = 'runtime-api-qualified';
-        } finally { await cleanup(); }
+        } catch (error) { primaryFailure = true; throw error; }
+        finally {
+          try { await cleanup(); }
+          catch (error) {
+            if (!primaryFailure) throw error;
+            report.failures.push('Restoration: ' + error.message);
+          }
+        }
       },
     });
   } catch (error) { recordRuntimeFailure(report, error); }
