@@ -19,6 +19,7 @@ afterEach(cleanup);
 describe("provider capacity recovery disclosure", () => {
   it("viewing evidence and opening usage never performs a check or redeems a reset", () => {
     render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={recovery} canWrite copy={copy} />);
+    expect(screen.getByRole("heading", { level: 2, name: copy.limitDetails })).toBeTruthy();
     fireEvent.click(screen.getByText(copy.limitDetails));
     expect(screen.getByText(copy.resetUnknown)).toBeTruthy();
     expect(screen.getByRole("link", { name: copy.providerUsage }).getAttribute("href")).toBe(recovery.usageUrl);

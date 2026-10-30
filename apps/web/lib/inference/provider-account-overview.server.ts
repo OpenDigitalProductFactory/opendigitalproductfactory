@@ -107,7 +107,7 @@ export async function loadProviderAccountOverview(input: {
         : ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
       resetSummary: [...new Set(resetParts)].join(" ") || (account.isDefault && !control ? input.copy.routingCheckUnavailable : null),
       resolvesPhases: account.isDefault ? input.resolvesPhases.get(account.providerId) ?? [] : [],
-      ...((subscriptionIds.includes(account.connectionId) || usageUrl || control?.restrictions.length || ownedRestriction) ? { quotaRecovery: {
+      ...((subscriptionIds.includes(account.connectionId) || usageUrl) ? { quotaRecovery: {
         models: quotaView?.models ?? [], selectedModelId: quotaView?.selectedModelId ?? summary?.representativeModelId ?? null,
         hourly: quotaView?.hourly ?? false,
         canCheck: account.isDefault && account.status === "active" && Boolean(account.credential?.hasUsableMaterial)
