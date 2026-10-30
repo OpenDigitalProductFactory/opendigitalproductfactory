@@ -355,6 +355,7 @@ test("normal launcher loads existing managed trust before its read-only image re
   const result = await cli(endpoint.origin);
   assert.equal(result.status, 0, result.stderr + result.stdout);
   assert.equal(JSON.parse(result.stdout).verdict, "CAN-TEST");
+  assert.match(result.stderr, /\[preflight\] CAN-TEST - /, "human summary uses readable separators");
   assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
 });
 

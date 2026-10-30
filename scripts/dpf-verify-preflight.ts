@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-// dpf-verify-preflight â€” the executable step-zero of "functionally verify a
+// dpf-verify-preflight - the executable step-zero of "functionally verify a
 // feature on the live install."
 //
 // Spec: docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md
@@ -8,7 +8,7 @@
 // This is the thin IO shim over the pure verdict core
 // (apps/web/lib/verify/preflight.ts): it fetches the live install's served
 // identity, resolves the feature commit, computes ancestry via git, then prints
-// ONE verdict and ONE next action. It changes nothing â€” advancing the install
+// ONE verdict and ONE next action. It changes nothing - advancing the install
 // or filing a blocker BI is the skill's job (dpf-verify-on-live-install), not
 // this script's. tsx erases the core's `import type` at runtime, so the verdict
 // logic stays single-sourced with the app + the unit tests.
@@ -136,8 +136,8 @@ function report(result: PreflightResult): void {
   // Keep the existing machine-readable verdict and human summary on every path.
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   process.stderr.write(
-    `\n[preflight] ${result.verdict} â€” ${result.reason}\n` +
-      `[preflight] next: ${result.nextAction.kind} â€” ${result.nextAction.detail}\n`,
+    `\n[preflight] ${result.verdict} - ${result.reason}\n` +
+      `[preflight] next: ${result.nextAction.kind} - ${result.nextAction.detail}\n`,
   );
 }
 
