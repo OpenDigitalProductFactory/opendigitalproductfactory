@@ -14,6 +14,7 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { pageSource, boundedInteger } from "@/lib/source-page";
+import { REPO_COMMIT_RANGE_PATH_PREFIX } from "@/lib/shared/immutable-review-reader";
 import {
   SOURCE_READ_DEFAULT_MAX_CHARS,
   SOURCE_READ_DEFAULT_MAX_LINES,
@@ -53,7 +54,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "read_source_at_version",
-    description: "Read a bounded page at an immutable version. Continue with nextCursor or jump with startLine. Git history works without a source checkout. An initiative-body-version path reads retained criteria only for its exact authorized acceptance TaskRun.",
+    description: "Read a bounded page at an immutable version. Continue with nextCursor or jump with startLine. Git history works without a source checkout. An initiative-body-version path reads retained criteria only for its exact authorized acceptance TaskRun. A repo-commit-range path reads a whole merged change (file list and diff) and requires its bound change digest as expectedBlobId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -105,6 +106,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        repositoryFullName: { type: "string", description: "Canonical repository owner/name for immutable provider fallback" },
         query: { type: "string", description: "Text or regex pattern to search" },
         version: { type: "string", description: "Git tag or ref (default: deployed version)" },
         glob: { type: "string", description: "File glob filter (e.g., '*.ts')" },
@@ -349,31 +351,77 @@ async function readBuildArtifactRevisionHandler(params: Record<string, unknown>)
 
 async function searchSourceAtVersionHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { gitBlobId, gitGrep, isGitAvailable } = await import("@/lib/git-utils");
-  if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
   const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
+  const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
+  const glob = typeof params.glob === "string" ? params.glob : null;
+  const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId : null;
+  const exactPath = glob !== null && !/[*?\[]/.test(glob);
   const offset = boundedInteger(params.offset, 0, 0, MAX_SEARCH_OFFSET);
   if (typeof params.offset === "number" && params.offset > MAX_SEARCH_OFFSET) {
     return { success: false, error: "invalid_search_offset", message: `Search offset exceeds ${MAX_SEARCH_OFFSET}.` };
   }
   const maxResults = boundedInteger(params.maxResults, DEFAULT_SEARCH_RESULTS, 1, MAX_SEARCH_RESULTS);
   let blobId: string | null = null;
-  if (typeof params.expectedBlobId === "string") {
-    if (typeof params.glob !== "string" || /[*?\[]/.test(params.glob)) {
+  if (expectedBlobId !== null) {
+    if (!exactPath) {
       return { success: false, error: "expected_blob_requires_exact_path", message: "expectedBlobId requires glob to name one exact source path." };
     }
-    const resolvedBlob = await gitBlobId({ ref, path: params.glob });
-    if ("error" in resolvedBlob) return { success: false, error: resolvedBlob.error, message: resolvedBlob.error };
-    blobId = resolvedBlob.blobId;
-    if (blobId !== params.expectedBlobId) {
-      return { success: false, error: "immutable_blob_mismatch", message: `Expected blob ${params.expectedBlobId}, but ${ref}:${params.glob} resolved to ${blobId}.` };
-    }
   }
-  const grepOpts: Parameters<typeof gitGrep>[0] = { query: String(params.query ?? ""), ref };
-  if (typeof params.glob === "string") grepOpts.glob = params.glob;
-  grepOpts.maxResults = offset + maxResults + 1;
-  const result = await gitGrep(grepOpts);
-  const page = result.results.slice(offset, offset + maxResults);
-  const hasMore = result.results.length > offset + maxResults;
+  let results: Array<{ path: string; line: number; text: string }>;
+  if (await isGitAvailable()) {
+    if (expectedBlobId !== null) {
+      const resolvedBlob = await gitBlobId({ ref, path: glob! });
+      if ("error" in resolvedBlob) return { success: false, error: resolvedBlob.error, message: resolvedBlob.error };
+      blobId = resolvedBlob.blobId;
+      if (blobId !== expectedBlobId) {
+        return { success: false, error: "immutable_blob_mismatch", message: `Expected blob ${expectedBlobId}, but ${ref}:${glob} resolved to ${blobId}.` };
+      }
+    }
+    const grepOpts: Parameters<typeof gitGrep>[0] = { query: String(params.query ?? ""), ref };
+    if (glob !== null) grepOpts.glob = glob;
+    grepOpts.maxResults = offset + maxResults + 1;
+    results = (await gitGrep(grepOpts)).results;
+  } else {
+    const isSha = /^[a-f0-9]{40}$/i.test(ref);
+    if (!repositoryFullName || !isSha || !exactPath) {
+      const missing = [
+        ...(!repositoryFullName ? ["repositoryFullName"] : []),
+        ...(!isSha ? ["version as a 40-character commit sha"] : []),
+        ...(!exactPath ? ["glob naming one exact source path"] : []),
+      ];
+      return {
+        success: false,
+        error: "immutable_search_locator_required",
+        message: `This deployment needs ${missing.join(", ")} to search immutable source through the repository provider.`,
+      };
+    }
+    const { readRepositoryProviderBlob } = await import("@/lib/backlog/initiative-readiness/repository-artifact");
+    const providerBlob = await readRepositoryProviderBlob({
+      repositoryFullName,
+      commitSha: ref,
+      path: glob,
+      expectedBlobId,
+    });
+    if (!providerBlob.ok) return { success: false, error: providerBlob.code, message: providerBlob.error };
+    blobId = providerBlob.blobId;
+    let content: string;
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(providerBlob.data);
+    } catch {
+      return { success: false, error: "IMMUTABLE_SOURCE_NOT_UTF8", message: "Repository artifact is not valid UTF-8 source text." };
+    }
+    let pattern: RegExp;
+    try {
+      pattern = new RegExp(String(params.query ?? ""));
+    } catch {
+      return { success: false, error: "invalid_search_pattern", message: "Search pattern is not a valid regular expression." };
+    }
+    results = content.split(/\r?\n/).flatMap((text, index) => pattern.test(text)
+      ? [{ path: glob, line: index + 1, text }]
+      : []);
+  }
+  const page = results.slice(offset, offset + maxResults);
+  const hasMore = results.length > offset + maxResults;
   return {
     success: true,
     message: page.length === 0
@@ -382,7 +430,8 @@ async function searchSourceAtVersionHandler(params: Record<string, unknown>): Pr
     data: {
       results: page,
       version: ref,
-      ...(typeof params.glob === "string" ? { glob: params.glob } : {}),
+      ...(glob !== null ? { glob } : {}),
+      ...(repositoryFullName ? { repositoryFullName } : {}),
       ...(blobId ? { blobId } : {}),
       offset,
       hasMore,
@@ -418,6 +467,9 @@ const handlers: Record<string, ToolPackHandler> = {
   query_version_history: (params) => queryVersionHistoryHandler(params),
   read_source_at_version: (params, userId, context) => String(params.path ?? "").startsWith("initiative-body-version/")
     ? import("@/lib/backlog/initiative-readiness/body-baseline-reader").then(({ readInitiativeBodyVersion }) => readInitiativeBodyVersion(params, userId, context))
+    // BI-46E344FE: a merged change bound whole to a post-implementation review.
+    : String(params.path ?? "").startsWith(REPO_COMMIT_RANGE_PATH_PREFIX)
+    ? import("@/lib/backlog/initiative-readiness/repo-commit-range").then(({ readCommitRangeAtVersion }) => readCommitRangeAtVersion(params))
     : readSourceAtVersionHandler(params),
   read_build_artifact_revision: (params) => readBuildArtifactRevisionHandler(params),
   search_source_at_version: (params) => searchSourceAtVersionHandler(params),

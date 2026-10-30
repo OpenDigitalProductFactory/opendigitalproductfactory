@@ -17,6 +17,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { OwnerDecisionCards } from "./OwnerDecisionCards";
+import { ApprovalOutcomeHistory } from "./ApprovalOutcomeHistory";
+import { projectApprovalOutcome } from "@/lib/coworker/approval-outcome";
 import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
 
@@ -62,25 +64,52 @@ function entry(id: string, headline: string): OwnerAttentionEntry {
 }
 
 describe("AC-DEEPLINK: the approval link targets the specific card", () => {
-  it("resolves the link's fragment to the requested card, open, among other cards", () => {
+  it.each(["fragment", "focus"])("reveals and scrolls to a target beyond the preview via %s", (kind) => {
+    const id = "coworker-envelope:env-7";
+    const domId = "owner-decision-coworker-envelope-env-7";
+    if (kind === "fragment") window.location.hash = domId;
+    const scroll = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      render(<OwnerDecisionCards
+        entries={Array.from({ length: 7 }, (_, i) => entry(`coworker-envelope:env-${i + 1}`, `Decision ${i + 1}`))}
+        focusItemId={kind === "focus" ? id : undefined}
+      />);
+      const target = document.getElementById(domId);
+      expect(target?.getAttribute("data-open")).toBe("true");
+      expect(scroll.mock.instances).toContain(target);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previous;
+    }
+  });
+
+  it.each(["request", "waiting status"])("resolves the %s link to the requested card, open, among other cards", (source) => {
     const target = "cmupffie10cdu01t491xmoiby";
-    const href = envelopeInboxRoute(target);
+    const now = new Date("2026-10-24T12:00:00Z");
+    const outcome = projectApprovalOutcome({ id: target, status: "proposed", createdAt: now,
+      expiresAt: null, toolExecutions: [] }, now);
+    const href = source === "request" ? envelopeInboxRoute(target) : outcome.inboxHref;
     const fragment = new URL(href, "https://install.example").hash.slice(1);
     window.location.hash = fragment;
 
     render(
-      <OwnerDecisionCards
-        entries={[
-          entry("coworker-envelope:other-1", "Some unrelated decision"),
-          entry(`coworker-envelope:${target}`, "Merge BI-B into BI-A?"),
-          entry("coworker-envelope:other-2", "Another unrelated decision"),
-        ]}
-      />,
+      <>
+        <ApprovalOutcomeHistory outcomes={[outcome]} exact />
+        <OwnerDecisionCards
+          entries={[
+            entry("coworker-envelope:other-1", "Some unrelated decision"),
+            entry(`coworker-envelope:${target}`, "Merge BI-B into BI-A?"),
+            entry("coworker-envelope:other-2", "Another unrelated decision"),
+          ]}
+        />
+      </>,
     );
 
     const anchor = document.getElementById(fragment);
     expect(anchor, `fragment #${fragment} must exist inside the requested card`).not.toBeNull();
     const card = anchor!.closest("article");
+    expect(card, "the link must target a decision card, not the result banner").not.toBeNull();
     expect(card?.textContent).toContain("Merge BI-B into BI-A?");
     expect(card?.getAttribute("data-open")).toBe("true");
   });

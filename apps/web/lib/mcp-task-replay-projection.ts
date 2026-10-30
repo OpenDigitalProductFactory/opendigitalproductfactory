@@ -35,11 +35,11 @@ type TerminalWriterDispatchFailure = {
   observedAt: string;
 };
 
-function optionalString(value: unknown): string | null {
+export function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function remoteTaskContent(text: string) {
+export function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 

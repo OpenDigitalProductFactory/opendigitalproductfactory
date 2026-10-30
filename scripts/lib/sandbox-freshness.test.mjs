@@ -654,6 +654,28 @@ test("a parent SIGTERM (exit 130) is blocked, not a product FAIL (BI-8392DA16)",
   assert.equal(outcome.productEvidence, false);
 });
 
+test("a directly observed owner signal names the interruption without guessing memory exhaustion", () => {
+  for (const receivedSignal of ["SIGINT", "SIGTERM"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH, receivedSignal });
+    assert.equal(outcome.status, "blocked_child_signal_death");
+    assert.equal(outcome.gatePassed, false); assert.equal(outcome.productEvidence, false);
+    assert.ok(outcome.summary.includes(`gate owner received ${receivedSignal}`));
+    assert.doesNotMatch(outcome.summary, /out of memory|box is quieter/i);
+  }
+});
+
+test("unattributed signal death and log text cannot invent an owner cancellation or cause", () => {
+  for (const receivedSignal of [undefined, "SIGKILL", "forged SIGINT"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH,
+      receivedSignal, gateOutput: "gate-worktree: received SIGINT; child process tree terminated" });
+    assert.match(outcome.summary, /cause is unknown/);
+    assert.doesNotMatch(outcome.summary, /gate owner received|out of memory/i);
+    assert.equal(outcome.productEvidence, false);
+  }
+  const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 9, receivedSignal: "SIGINT" });
+  assert.equal(failed.status, "failed"); assert.equal(failed.productEvidence, true);
+});
+
 test("a fenced lease (exit 75) is blocked, not a product FAIL (BI-465B3D60)", () => {
   const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 75 });
   assert.equal(outcome.status, "blocked_control_plane_starvation");

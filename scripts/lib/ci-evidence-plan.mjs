@@ -61,9 +61,9 @@ function classifyPath(path, compiled) {
   return "other";
 }
 
-function documentationDerivedArtifacts(changedFiles, compiled) {
+function documentationDerivedArtifacts(changedFiles, compiled, registry = DERIVED_ARTIFACTS) {
   const artifacts = new Set();
-  for (const definition of DERIVED_ARTIFACTS) {
+  for (const definition of registry) {
     const changedArtifacts = changedFiles.filter((path) => (
       matchesAnyGlob(path, definition.artifactPaths)
     ));
@@ -80,6 +80,42 @@ function documentationDerivedArtifacts(changedFiles, compiled) {
     }
   }
   return artifacts;
+}
+
+function docsOnlyVerdict(changedFiles, compiled, registry) {
+  const documentationArtifacts = documentationDerivedArtifacts(changedFiles, compiled, registry);
+  const isDocs = (path) => documentationArtifacts.has(path) || classifyPath(path, compiled) === "docs";
+  const nonDocFiles = changedFiles.filter((path) => !isDocs(path));
+  const workspaceRequiredFiles = changedFiles.filter((path) => (
+    matchesAny(path, compiled.workspaceRequiredDocs)
+  ));
+  return {
+    docsOnly: changedFiles.length > 0 && nonDocFiles.length === 0 && workspaceRequiredFiles.length === 0,
+    nonDocFiles,
+    workspaceRequiredFiles,
+    documentationArtifacts,
+  };
+}
+
+/**
+ * BI-78176241. The one answer to "is this diff docs-only?" for the evidence
+ * planner, the pre-push exemption, pregate's sandbox admission and the
+ * documentation evidence lane. Three predicates used to disagree, so a diff
+ * one path exempted could be refused evidence by another. A registered
+ * derived artifact counts as docs only when every changed source it is
+ * derived from is docs (BI-AC48D79F); its freshness is the caller's check.
+ *
+ * @returns {{ docsOnly: boolean, nonDocFiles: string[], workspaceRequiredFiles: string[] }}
+ */
+export function classifyDocsOnlyDiff(changedFiles, { policy = loadEvidencePolicy(), registry = DERIVED_ARTIFACTS } = {}) {
+  const files = sortedUnique((changedFiles ?? []).map(normalizePath));
+  const { docsOnly, nonDocFiles, workspaceRequiredFiles } = docsOnlyVerdict(files, {
+    docs: compilePatterns(policy.patterns.docs),
+    tests: compilePatterns(policy.patterns.tests),
+    production: compilePatterns(policy.patterns.production),
+    workspaceRequiredDocs: compilePatterns(policy.patterns.workspaceRequiredDocs),
+  }, registry);
+  return { docsOnly, nonDocFiles, workspaceRequiredFiles };
 }
 
 function packageOwner(path, packageRoots) {
@@ -204,19 +240,16 @@ export function createEvidencePlan(input) {
     code: rule.code,
     patterns: compilePatterns(rule.patterns),
   }));
-  const documentationArtifacts = documentationDerivedArtifacts(changedFiles, compiled);
+  const docsVerdict = docsOnlyVerdict(changedFiles, compiled, DERIVED_ARTIFACTS);
+  const documentationArtifacts = docsVerdict.documentationArtifacts;
   const kinds = new Map(changedFiles.map((path) => [
     path,
     documentationArtifacts.has(path) ? "docs" : classifyPath(path, compiled),
   ]));
   const productionFiles = changedFiles.filter((path) => kinds.get(path) === "production");
   const changedTests = changedFiles.filter((path) => kinds.get(path) === "test");
-  const workspaceRequired = changedFiles.some((path) => (
-    matchesAny(path, compiled.workspaceRequiredDocs)
-  ));
-  const docsOnly = !workspaceRequired
-    && changedFiles.length > 0
-    && changedFiles.every((path) => kinds.get(path) === "docs");
+  const workspaceRequired = docsVerdict.workspaceRequiredFiles.length > 0;
+  const docsOnly = docsVerdict.docsOnly;
   const mobileOnly = !workspaceRequired
     && !docsOnly
     && changedFiles.length > 0

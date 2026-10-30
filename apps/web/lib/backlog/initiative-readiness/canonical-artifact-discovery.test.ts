@@ -49,9 +49,10 @@ describe("current canonical design observation", () => {
     expect(prepared.evidence).toEqual({ state: "unavailable" });
     expect(await prepared.admissionGuard({} as never)).toEqual({ state: "unavailable" });
   });
-  it("does not read provider bytes for inherited, document or absent own repository scope", async () => {
+  it("does not read provider bytes without an own design or research receipt", async () => {
     const p = ports(); p.loadBinding.mockResolvedValue({ kind: "not-applicable" });
-    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    const { store } = stored(); store.backlogItemActivity.findMany.mockResolvedValue([]);
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never, ports: p });
     expect(prepared.evidence).toEqual({ state: "not-applicable" });
     expect(p.readCurrentArtifact).not.toHaveBeenCalled();
   });
@@ -200,6 +201,18 @@ describe("current canonical design observation", () => {
       expect(result).toMatchObject({ resolved: false, code: "ambiguous-canonical-design" });
       expect(fetchImpl).not.toHaveBeenCalled();
     });
+  it("attaches the missing-objective parser error without treating other bytes as that failure", async () => {
+    const marked = ["**OBJ-1:** Preserve the source.", "", "| ID | Objectives | Criterion |", "| --- | --- | --- |", "| AC-1 | OBJ-1 | Keep all source text. |"].join("\n");
+    const readBlob = vi.fn()
+      .mockResolvedValueOnce({ ok: true, data: new TextEncoder().encode("design with no markers"), blobId: BLOB_SHA })
+      .mockResolvedValueOnce({ ok: true, data: new TextEncoder().encode(marked), blobId: BLOB_SHA });
+    const discoverArtifact = vi.fn().mockResolvedValue({ resolved: false, code: "no-canonical-design" });
+    const unmarked = await readCurrentDesignArtifact({ ...snapshot(), selection: "Source-only repair with no declared design path" }, { discoverArtifact, readBlob });
+    const parsed = await readCurrentDesignArtifact({ ...snapshot(), selection: "Source-only repair with no declared design path" }, { discoverArtifact, readBlob });
+    expect(unmarked).toMatchObject({ state: "verified", scopeManifestError: "The artifact has no marked objective statements." });
+    expect(parsed).toMatchObject({ state: "verified" });
+    expect(parsed).not.toHaveProperty("scopeManifestError");
+  });
   it("uses normal canonical discovery before falling back to an unchanged baseline path", async () => {
     const binding = { ...snapshot(), selection: "Source-only repair with no declared design path" };
     const discoverArtifact = vi.fn().mockResolvedValue({ resolved: false, code: "no-canonical-design" });
@@ -257,6 +270,12 @@ function compareResponse(files: unknown) {
   } as unknown as Response;
 }
 
+/** BI-46E344FE: a multi-file repair binds the whole compared range, digest included. */
+function wholeRange() {
+  return { resolved: true, artifact: { kind: "repo-commit-range", ranges: [{ baseSha: BASE_SHA, headSha: HEAD_SHA }],
+    digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) } };
+}
+
 function args(fetchImpl: typeof fetch) {
   return {
     repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -291,10 +310,10 @@ describe("canonical design artifact discovery", () => {
       .toEqual({ resolved: true, artifact: { path, providerBlobId: BLOB_SHA } });
   });
 
-  it("refuses ambiguous implementation files rather than arbitrarily choosing one for PIR", async () => {
+  it("binds several implementation files as the whole range instead of choosing one (BI-46E344FE)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse(["apps/web/lib/a.ts", "apps/web/lib/b.ts"].map((filename) => ({ filename, sha: BLOB_SHA, status: "modified" }))));
     expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
-      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+      .toEqual(wholeRange());
   });
 
   // BI-09399355: a break-fix that bumps the plugin manifests alongside its one
@@ -319,13 +338,13 @@ describe("canonical design artifact discovery", () => {
   it.each([
     ["changes more than the version", '@@ -1,3 +1,3 @@\n-  "version": "0.2.5",\n+  "version": "0.2.6",\n-  "hooks": "a"\n+  "hooks": "b"'],
     ["arrives without a patch", undefined],
-  ])("keeps a manifest as a competing artifact when it %s", async (_label, patch) => {
+  ])("keeps a manifest in the reviewed range when it %s", async (_label, patch) => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "packages/dpf-skill-pack/.claude-plugin/plugin.json", sha: OTHER_BLOB_SHA, status: "modified", ...(patch ? { patch } : {}) },
       { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
     ]));
     expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
-      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+      .toEqual(wholeRange());
   });
 
   it("binds a version bump that is the whole repair", async () => {
@@ -334,13 +353,13 @@ describe("canonical design artifact discovery", () => {
       .toEqual({ resolved: true, artifact: { path: "packages/dpf-skill-pack/.claude-plugin/plugin.json", providerBlobId: OTHER_BLOB_SHA } });
   });
 
-  it("does not hide a second implementation artifact because it was deleted", async () => {
+  it("keeps a deleted implementation file in the reviewed range", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
       { filename: "apps/web/lib/b.ts", sha: OTHER_BLOB_SHA, status: "removed" },
     ]));
     expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
-      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+      .toEqual(wholeRange());
   });
 
   it("does not infer uniqueness after silently dropping malformed provider entries", async () => {

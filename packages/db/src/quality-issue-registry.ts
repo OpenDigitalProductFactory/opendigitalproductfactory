@@ -293,6 +293,18 @@ const REGISTRY = {
     summary:
       "The watchdog could not check one or more journeys. This reports the watchdog's own readiness, never the health of the business — nothing was established about whether those journeys work.",
   },
+  ai_capacity_loss: {
+    resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
+    autoResolveWhen:
+      "the AI-capacity watch sees the provider (or the platform as a whole) serving requests again in a later 30-minute window — the watch that raised it is the watch that clears it (BI-24092DC9)",
+    operatorActionable: true,
+    expectedSteadyState: 0,
+    owner: "operator",
+    summary:
+      "Usable AI capacity is lost: one provider is failing every request, or too few AI requests across all providers are succeeding.",
+  },
   monitor_source_unreachable: {
     resolvedBy: "monitor-clears",
     subject: "scope",

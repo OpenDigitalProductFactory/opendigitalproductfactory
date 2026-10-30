@@ -61,6 +61,25 @@ describe("heartbeatWorkCapsule", () => {
     expect(db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(db.workroom.findUnique.mock.invocationCallOrder[0]);
   });
 
+  it("stores the latest executor checkpoint with the renewal and keeps other room state (BI-11EF5A8C)", async () => {
+    db.workroom.findUnique
+      .mockResolvedValueOnce(room("principal-owner", LIVE))
+      .mockResolvedValueOnce({ workspaceState: { prDelivery: { status: "open" }, executorCheckpoint: { nextAction: "old" } } });
+    await heartbeatWorkCapsule({ db: capsuleDb(), capsuleId: "WC-LEASE", actor: owner, now: NOW,
+      checkpoint: { nextAction: "Push after gate", pushed: false } });
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      leaseHolderPrincipalId: "principal-owner",
+      workspaceState: { prDelivery: { status: "open" }, executorCheckpoint: {
+        nextAction: "Push after gate", pushed: false, recordedAt: NOW.toISOString(), recordedByPrincipalId: "principal-owner" } },
+    }) }));
+  });
+
+  it("leaves the previous checkpoint untouched when a heartbeat carries none", async () => {
+    db.workroom.findUnique.mockResolvedValueOnce(room("principal-owner", LIVE));
+    await heartbeatWorkCapsule({ db: capsuleDb(), capsuleId: "WC-LEASE", actor: owner, now: NOW });
+    expect(db.workroom.update.mock.calls[0][0].data).not.toHaveProperty("workspaceState");
+  });
+
   it("renews the holder's own live lease", async () => {
     db.workroom.findUnique.mockResolvedValueOnce(room("principal-owner", LIVE));
     await heartbeatWorkCapsule({ db: capsuleDb(), capsuleId: "WC-LEASE", actor: owner, now: NOW });

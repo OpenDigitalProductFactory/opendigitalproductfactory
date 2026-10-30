@@ -1,9 +1,9 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 372,
+  "pageRouteCount": 373,
   "summary": {
     "byAudience": {
-      "admin": 152,
+      "admin": 153,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
@@ -12,7 +12,7 @@
       "worker": 2
     },
     "byDestinationKind": {
-      "advanced-diagnostic": 24,
+      "advanced-diagnostic": 25,
       "detail": 256,
       "legacy-internal": 38,
       "section-home": 32,
@@ -1265,6 +1265,13 @@
     },
     {
       "routePath": "/ops/dev-loop",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/gate-efficacy",
       "audience": "admin",
       "destinationKind": "advanced-diagnostic",
       "confidence": "high",

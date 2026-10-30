@@ -1,3 +1,4 @@
+import {redactDiagnosticEvidenceText} from "../shared/diagnostic-evidence-redaction";
 export type FunctionalFailureEvidenceInput = {
   testId: string;
   suite: string;
@@ -19,11 +20,6 @@ export type FunctionalFailureEvidence = FunctionalFailureEvidenceInput & {
   likelyOwnerArea: string;
 };
 
-const TOKEN_PATTERNS = [
-  /\bdpfmcp_[A-Za-z0-9_-]+/g,
-  /\bBearer\s+[A-Za-z0-9._-]+/g,
-];
-
 export function buildFunctionalFailureEvidence(
   input: FunctionalFailureEvidenceInput,
 ): FunctionalFailureEvidence {
@@ -35,13 +31,10 @@ export function buildFunctionalFailureEvidence(
 }
 
 export function redactEvidence(evidence: FunctionalFailureEvidence): FunctionalFailureEvidence {
-  const redact = (text: string) =>
-    TOKEN_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, "[redacted-token]"), text);
-
   return {
     ...evidence,
-    actual: redact(evidence.actual),
-    expected: redact(evidence.expected),
+    actual: redactDiagnosticEvidenceText(evidence.actual),
+    expected: redactDiagnosticEvidenceText(evidence.expected),
   };
 }
 

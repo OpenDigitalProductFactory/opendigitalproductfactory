@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "packageVersion": "b9879-dpf-metal4.1",
+  "source": {
+    "repository": "https://github.com/ggml-org/llama.cpp",
+    "commit": "72874f559c598b8f89fbb24864868337cf5afb4c",
+    "archiveUrl": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/72874f559c598b8f89fbb24864868337cf5afb4c",
+    "archiveSha256": "52bdf7736d2a4d4c6db7515ad4e03e344f34763f72cde74c6f1069b6a580e837",
+    "metalSourceSha256": "f4dcb1141c4ed47e1c8b0dd7e854aed17a87bae3ca954d58ebe7f6886849231e"
+  },
+  "patchSha256": "21d843a0f7ef5243d8633df8fd06629c3c96679c80ae3e0603c6926cfcfaa070",
+  "minimumMacOS": "13.3",
+  "buildNumber": 9879,
+  "requiredRuntimeLibraries": [
+    "bin/libggml-base.0.15.3.dylib",
+    "bin/libggml-base.0.dylib",
+    "bin/libggml-base.dylib",
+    "bin/libggml-blas.0.15.3.dylib",
+    "bin/libggml-blas.0.dylib",
+    "bin/libggml-blas.dylib",
+    "bin/libggml-cpu.0.15.3.dylib",
+    "bin/libggml-cpu.0.dylib",
+    "bin/libggml-cpu.dylib",
+    "bin/libggml-metal.0.15.3.dylib",
+    "bin/libggml-metal.0.dylib",
+    "bin/libggml-metal.dylib",
+    "bin/libggml.0.15.3.dylib",
+    "bin/libggml.0.dylib",
+    "bin/libggml.dylib",
+    "bin/libllama-bench-impl.dylib",
+    "bin/libllama-common.0.0.9879.dylib",
+    "bin/libllama-common.0.dylib",
+    "bin/libllama-common.dylib",
+    "bin/libllama-server-impl.dylib",
+    "bin/libllama.0.0.9879.dylib",
+    "bin/libllama.0.dylib",
+    "bin/libllama.dylib",
+    "bin/libmtmd.0.0.9879.dylib",
+    "bin/libmtmd.0.dylib",
+    "bin/libmtmd.dylib"
+  ]
+}

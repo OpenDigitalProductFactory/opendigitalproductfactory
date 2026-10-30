@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -109,7 +110,7 @@ import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test
   // overrides simulate losing the claim.

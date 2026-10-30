@@ -2,6 +2,7 @@ import type { WorkCapsuleActor } from "./work-capsule-store-types";
 import type { HandoverRefusal } from "@/lib/work-management/workroom-agent-access.server";
 import type { WorkCapsuleExecutorKind } from "@/lib/work-capsules";
 import { isExternalLeaseExecutor, leaseUntil } from "./work-capsule-branch-identity";
+import { parseBatchCapsuleIds, storedExecutorCheckpoint } from "./batch-executor-handover";
 
 /** Creation and adoption persist the same human/assistant relationship. */
 export function workroomOwnershipData(actor: WorkCapsuleActor, executor: WorkCapsuleExecutorKind | null | undefined, now: Date, requester?: string | null) {
@@ -48,7 +49,26 @@ export function workroomHandoverCall(capsuleId: string, toExecutorKind: WorkCaps
  * what a replacement session looks like. Name the handover instead of sending
  * the assistant to "ask the owner", who is the person it acts for.
  */
-function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExecutorKind) {
+type RoomStanding = {
+  workspaceState?: unknown; pullRequestNumber?: number | null; pullRequestUrl?: string | null; leaseExpiresAt?: Date | null;
+};
+
+/**
+ * Where the room stands, enough to decide on a takeover without reading its
+ * history (BI-D4144471). Shown only to the person's own assistant, after the
+ * handover check found the person may hand the room to it.
+ */
+function roomStanding(room: RoomStanding) {
+  return {
+    checkpoint: storedExecutorCheckpoint(room.workspaceState),
+    pullRequest: typeof room.pullRequestNumber === "number"
+      ? { number: room.pullRequestNumber, url: room.pullRequestUrl ?? null }
+      : null,
+    leaseExpiresAt: room.leaseExpiresAt instanceof Date ? room.leaseExpiresAt.toISOString() : null,
+  };
+}
+
+function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExecutorKind, room: RoomStanding) {
   return {
     success: false as const,
     error: "workroom_assistant_not_admitted",
@@ -56,7 +76,7 @@ function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExec
       "The person you act for owns this workroom, but you have not been admitted to it. " +
       `Take it over with ${WORKROOM_HANDOVER_TOOL} (the exact call is in data.handover). They may be asked to approve it, unless an operator has already graduated you for this kind of action. ` +
       "After that, get_workroom shows where the work stands and what to do next.",
-    data: { handover: workroomHandoverCall(capsuleId, toExecutorKind) },
+    data: { handover: workroomHandoverCall(capsuleId, toExecutorKind), ...roomStanding(room) },
   };
 }
 type HandoverAccess = { decision: { level: string; reason?: string }; handoverRefusal?: HandoverRefusal };
@@ -83,6 +103,26 @@ const workroomAccessDenied = () => ({
   error: "workroom_access_denied",
   message: "You or your assistant are not admitted to this workroom. Ask its owner to invite you.",
 });
+
+/**
+ * The plain refusal, naming the account this connection acts as (BI-F586F8A5).
+ * A connection made in a browser signed in as someone else (the automation
+ * persona, a colleague) gets this refusal on the person's own rooms, and
+ * "ask its owner" sent the owner to themself. The caller's own account is
+ * theirs to see; the room's owner is not named, since the caller is not admitted.
+ */
+async function workroomAccessDeniedFor(userId: string) {
+  const { prisma } = await import("@dpf/db");
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { email: true } }) : null;
+  if (!user?.email) return workroomAccessDenied();
+  return {
+    success: false as const,
+    error: "workroom_access_denied",
+    message: `This connection acts as ${user.email}, which is not admitted to this workroom. `
+      + "If the room is yours, reconnect your assistant while signed in as the room's owner. Otherwise ask its owner to invite you.",
+    data: { connectedAs: user.email },
+  };
+}
 
 const workroomDataAccessRequired = () => ({
   success: false as const,
@@ -135,8 +175,28 @@ export async function coordinatorAppointmentAccessRefusal(input: {
   return await currentPlatformAdministrator(input.userId) ? null : workroomAccessDenied();
 }
 
-export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
-  if (input.authSource !== "oauth" || typeof input.params.capsuleId !== "string") return null;
+/**
+ * A batched handover is checked room by room with the single-room rule; any
+ * room that cannot be handed over refuses the whole call (BI-D4144471).
+ */
+async function batchHandoverAccessRefusal(input: OAuthCapsuleTarget): Promise<AccessRefusal | null> {
+  const parsed = parseBatchCapsuleIds(input.params.capsuleIds);
+  if ("problem" in parsed) return { success: false as const, error: "invalid_input", message: parsed.problem };
+  const { capsuleIds: _set, ...single } = input.params;
+  const ids = typeof single.capsuleId === "string" ? [...parsed.ids, single.capsuleId] : parsed.ids;
+  for (const capsuleId of ids) {
+    const refusal = await workroomTargetAccessRefusal({ ...input, params: { ...single, capsuleId } });
+    if (refusal) return { ...refusal, data: { ...refusal.data, capsuleId } };
+  }
+  return null;
+}
+
+type AccessRefusal = { success: false; error: string; message: string; data?: Record<string, unknown> };
+
+export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget): Promise<AccessRefusal | null> {
+  if (input.authSource !== "oauth") return null;
+  if (input.toolName === WORKROOM_HANDOVER_TOOL && Object.hasOwn(input.params, "capsuleIds")) return batchHandoverAccessRefusal(input);
+  if (typeof input.params.capsuleId !== "string") return null;
   if (input.agentId && CLASSIFICATION_RECOVERY_TOOLS.has(input.toolName ?? "")) {
     return await currentPlatformAdministrator(input.userId) ? null : {
       success: false as const,
@@ -151,10 +211,13 @@ export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
       agentId: input.agentId,
     });
   }
-  const notAdmitted = workroomAccessDenied();
   const { prisma } = await import("@dpf/db");
-  const room = await prisma.workroom.findUnique({ where: { capsuleId: input.params.capsuleId }, select: { id: true } });
-  if (!room || !input.agentId) return notAdmitted;
+  const room = await prisma.workroom.findUnique({
+    where: { capsuleId: input.params.capsuleId },
+    select: { id: true, workspaceState: true, pullRequestNumber: true, pullRequestUrl: true, leaseExpiresAt: true },
+  });
+  // A missing room is refused in the same words, so the refusal is no existence oracle.
+  if (!room || !input.agentId) return workroomAccessDeniedFor(input.userId);
   const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   const requested = input.action ? "action" : "content";
   const handover = input.toolName === WORKROOM_HANDOVER_TOOL;
@@ -169,9 +232,9 @@ export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
   const asHandover = handover ? first : await access(true);
   if (!handover && asHandover.decision.level === "action") {
     const { providerToExecutorKind } = await import("./external-session-capture");
-    return assistantNotAdmitted(input.params.capsuleId, providerToExecutorKind(input.agentId));
+    return assistantNotAdmitted(input.params.capsuleId, providerToExecutorKind(input.agentId), room);
   }
-  return asHandover.handoverRefusal ? handoverRefused(asHandover.handoverRefusal) : notAdmitted;
+  return asHandover.handoverRefusal ? handoverRefused(asHandover.handoverRefusal) : workroomAccessDeniedFor(input.userId);
 }
 
 export async function authorizeOAuthCapsuleTarget(input: OAuthCapsuleTarget): Promise<boolean> {

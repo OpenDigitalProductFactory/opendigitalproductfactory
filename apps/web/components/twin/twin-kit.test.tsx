@@ -18,6 +18,11 @@ import {
 // is exercised via the showcase, not here.
 
 describe("twin grammar kit — pure primitives render statically", () => {
+  it("renders record links, actual unresolved owner references and priority from host-shaped data", () => {
+    const html = renderToStaticMarkup(<><WorkItem label="Restore reports" sublabel="Owner: principal-actual · Priority: high" ownerRef="principal-actual" priority="high" action={{ label: "Open service desk", href: "/platform/service-desk" }} /><ResourceUnitGrid units={[{ key: "a-1", label: "Customer account", state: "At risk", action: { label: "Open customer", href: "/customer/a-1" } }]} /><TwinQueue label="Renewal attention" items={[{ key: "s-1", label: "Customer account", action: { label: "Open customer", href: "/customer/a-1" } }]} /></>);
+    expect(html).toContain("principal-actual"); expect(html).toContain("Priority: high");
+    expect(html).toContain('href="/platform/service-desk"'); expect(html.match(/href="\/customer\/a-1"/g)).toHaveLength(2);
+  });
   it("capacity chips show value / max and a live counter", () => {
     const chips: CapacityChipData[] = [
       { key: "t", label: "Tables", value: 6, max: 8, intent: "info", live: true },

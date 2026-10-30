@@ -11,9 +11,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 
 import { getProactivityLevelCopy } from "./proactivity-copy";
-import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "./proactivity-resolver";
+import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
 import { resolveUserAwareProactivityPlan } from "./proactivity-resolver.server";
-import { PROACTIVITY_ACTIVITY_FAMILIES, PROACTIVITY_LEVELS, isProactivityLevel } from "./proactivity-types";
+import { PROACTIVITY_ACTIVITY_FAMILIES, PROACTIVITY_LEVELS, isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 describe("proactivity types", () => {
   it("keeps the persisted level enum closed and stable", () => {

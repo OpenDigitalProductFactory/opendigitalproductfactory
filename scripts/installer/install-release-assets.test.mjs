@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { link, mkdtemp, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDedicatedSigningKeys, ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { fileURLToPath } from "node:url";
+import { ensureDedicatedSigningKeys, ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, ensureRemoteActionDispatch, installReleaseAssets, persistRemoteActionDispatch, resolveRemoteActionDispatch, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -227,4 +229,261 @@ test("updateEnv carries the Inngest keys into the committed install env", () => 
   const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\r\nINNGEST_SIGNING_KEY=abcdef0123456789\r\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8"); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
   assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}\r$/m);
   assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}\r$/m);
+});
+
+test("an upgrade turns the remote-action channel on where the trust bundle configured it, and keeps an explicit value (BI-084F85E5)", () => {
+  const configured = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n";
+  assert.equal(ensureRemoteActionDispatch(configured, "\n"), `${configured}DPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n`);
+  assert.equal(ensureRemoteActionDispatch("DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1", "\r\n"), "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\r\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=1\r\n");
+  const optedOut = `${configured}DPF_REMOTE_ACTION_DISPATCH_ENABLED=0\n`;
+  assert.equal(ensureRemoteActionDispatch(optedOut, "\n"), optedOut, "an operator's 0 is kept");
+  assert.equal(ensureRemoteActionDispatch("DPF_IMAGE_TAG=v1\n", "\n"), "DPF_IMAGE_TAG=v1\n", "no trust bundle, no channel");
+  assert.equal(ensureRemoteActionDispatch("DPF_EDGE_ACTION_DISPATCH_CONFIGURED=0\n", "\n"), "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=0\n");
+  assert.match(updateEnv(Buffer.from(configured), "v2", "owner").toString(), /^DPF_REMOTE_ACTION_DISPATCH_ENABLED=1$/m);
+});
+
+test("a one-shot dispatch override is not converted into a durable configured default", () => {
+  const configured = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n";
+  for (const value of ["0", "1", "", "invalid"]) {
+    assert.equal(ensureRemoteActionDispatch(configured, "\n", {
+      environment: { DPF_REMOTE_ACTION_DISPATCH_ENABLED: value },
+    }), configured, `process presence ${JSON.stringify(value)} is not persisted`);
+  }
+});
+
+test("dispatch resolution preserves file presence, process precedence and unconfigured defaults", () => {
+  const configured = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n";
+  for (const value of ["0", "1", "", "invalid"]) {
+    const text = `${configured}DPF_REMOTE_ACTION_DISPATCH_ENABLED='${value}'\r\n`;
+    assert.equal(resolveRemoteActionDispatch(text).resolution, "preserve");
+    assert.equal(ensureRemoteActionDispatch(text, "\r\n"), text);
+  }
+  for (const text of ["", "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=0\n", "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=\n"]) {
+    assert.equal(resolveRemoteActionDispatch(text).resolution, "preserve");
+  }
+  assert.equal(resolveRemoteActionDispatch(configured, { DPF_EDGE_ACTION_DISPATCH_CONFIGURED: "0" }).resolution, "preserve");
+  assert.equal(resolveRemoteActionDispatch("", { DPF_EDGE_ACTION_DISPATCH_CONFIGURED: "1" }).resolution, "derive-once");
+  assert.equal(resolveRemoteActionDispatch('export DPF_EDGE_ACTION_DISPATCH_CONFIGURED = "1" # configured\n').resolution, "derive-persist");
+  assert.equal(ensureRemoteActionDispatch(`${configured}export DPF_REMOTE_ACTION_DISPATCH_ENABLED = "0"\n`, "\n"), `${configured}export DPF_REMOTE_ACTION_DISPATCH_ENABLED = "0"\n`);
+  assert.throws(() => resolveRemoteActionDispatch(`${configured}${configured}`), /input_ambiguous/);
+});
+
+test("malformed owned-key lines fail closed without claiming similarly prefixed keys", () => {
+  const configured = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n";
+  for (const key of ["DPF_REMOTE_ACTION_DISPATCH_ENABLED", "DPF_EDGE_ACTION_DISPATCH_CONFIGURED"]) {
+    for (const suffix of [" # comment", "\tunsupported", "   "]) {
+      assert.throws(() => resolveRemoteActionDispatch(`${configured}${key}${suffix}\n`), /input_invalid|input_ambiguous/);
+    }
+    assert.equal(resolveRemoteActionDispatch(`${configured}${key}_OTHER=0\n`).resolution, "derive-persist");
+  }
+});
+
+test("the helper CLI permits an absent implicit env file without enabling or loading it as Node configuration", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dpf-dispatch-cli-"));
+  try {
+    const environment = { ...process.env };
+    delete environment.DPF_REMOTE_ACTION_DISPATCH_ENABLED;
+    delete environment.DPF_EDGE_ACTION_DISPATCH_CONFIGURED;
+    const script = fileURLToPath(new URL("./install-release-assets.mjs", import.meta.url));
+    const envPath = join(root, ".env");
+    const resolve = () => execFileSync(process.execPath, [script, "--remote-action", "resolve", "--install-env", envPath], { env: environment, encoding: "utf8" }).trim();
+    assert.match(resolve(), /^preserve:[a-f0-9]{64}$/);
+    await writeFile(envPath, "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n");
+    assert.match(resolve(), /^derive-persist:[a-f0-9]{64}$/, "file input does not become one-shot process provenance");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a late release commit failure restores the canonical env after adding the derived default", async () => {
+  for (const failAfter of ["identity", "state"]) {
+    const f = await fixture();
+    try {
+      const envPath = join(f.install, ".env");
+      const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+      await writeFile(envPath, original);
+      const decision = resolveRemoteActionDispatch(original);
+      assert.equal(decision.resolution, "derive-persist");
+      await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+        releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"), failAfter,
+        remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      }), new RegExp(`injected_failure:${failAfter}`));
+      assert.equal(await readFile(envPath, "utf8"), original);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
+
+for (const phase of ["assets-installed", "env-committed"]) {
+  test(`a release-phase explicit zero survives ${phase} conflict and rollback`, async () => {
+    const f = await fixture();
+    try {
+      const envPath = join(f.install, ".env");
+      const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+      await writeFile(envPath, original);
+      const decision = resolveRemoteActionDispatch(original);
+      const newer = `${original}DPF_REMOTE_ACTION_DISPATCH_ENABLED=0\nCONCURRENT_SETTING=kept\n`;
+      const operation = installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+        releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"),
+        remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+        failAfter: phase === "env-committed" ? "identity" : undefined,
+        async onCheckpoint(current) { if (current === phase) await writeFile(envPath, newer); },
+      });
+      await assert.rejects(operation, phase === "assets-installed" ? /intent_changed/ : /release_env_rollback_unproven/);
+      assert.equal(await readFile(envPath, "utf8"), newer, `${phase}: preserve the newer writer through refusal/rollback`);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  });
+}
+
+test("a release commit preserves unrelated canonical changes made during asset installation", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+    await writeFile(envPath, original);
+    const decision = resolveRemoteActionDispatch(original);
+    await installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"),
+      remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      async onCheckpoint(phase) { if (phase === "assets-installed") await writeFile(envPath, `${original}CONCURRENT_SETTING=kept\n`); },
+    });
+    const final = await readFile(envPath, "utf8");
+    assert.match(final, /^CONCURRENT_SETTING=kept$/m);
+    assert.match(final, /^DPF_REMOTE_ACTION_DISPATCH_ENABLED=1$/m);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("an owned release rollback restores the latest prewrite canonical baseline", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+    await writeFile(envPath, original);
+    const decision = resolveRemoteActionDispatch(original);
+    const latest = `${original}CONCURRENT_SETTING=kept\n`;
+    await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"), failAfter: "identity",
+      remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      async onCheckpoint(phase) { if (phase === "assets-installed") await writeFile(envPath, latest); },
+    }), /injected_failure:identity/);
+    assert.equal(await readFile(envPath, "utf8"), latest);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("a rollback ownership-probe error preserves the writer and still restores install state", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+    await writeFile(envPath, original);
+    const previousState = await readFile(f.statePath);
+    const decision = resolveRemoteActionDispatch(original);
+    await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"), failAfter: "state",
+      remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      async onCheckpoint(phase) { if (phase === "env-committed") { await rm(envPath); await mkdir(envPath); } },
+    }), error => error.message === "release_env_rollback_unproven" && error.cause?.message === "injected_failure:state");
+    assert.equal((await stat(envPath)).isDirectory(), true);
+    assert.deepEqual(await readFile(f.statePath), previousState);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("release readback rejects a byte-identical replacement inode", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"),
+      async onCheckpoint(phase) {
+        if (phase === "env-written") {
+          const bytes = await readFile(envPath);
+          await rename(envPath, join(f.root, "previous-env-inode"));
+          await writeFile(envPath, bytes);
+        }
+      },
+    }), error => error.message === "release_env_rollback_unproven" && error.cause?.message === "release_env_readback_unproven");
+    assert.match(await readFile(envPath, "utf8"), /^DPF_IMAGE_TAG=v2\.0\.0$/m);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+async function dispatchFixture(text = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=old\n") {
+  const root = await mkdtemp(join(tmpdir(), "dpf-dispatch-env-"));
+  const envPath = join(root, ".env");
+  await writeFile(envPath, text);
+  return { root, envPath, recoveryDir: join(root, "recovery"), ...resolveRemoteActionDispatch(text) };
+}
+
+async function fixtureEnvSnapshot(path) {
+  const handle = await open(path, "r");
+  try {
+    const identity = await handle.stat({ bigint: true });
+    assert.equal(identity.isFile(), true);
+    return { ino: identity.ino, text: await handle.readFile("utf8") };
+  } finally { await handle.close(); }
+}
+
+for (const replacement of ["zero", "identical"]) {
+  test(`source readback preserves a ${replacement} replacement inode and reports uncertainty`, async () => {
+    const f = await dispatchFixture();
+    let replacementBytes;
+    try {
+      await assert.rejects(persistRemoteActionDispatch({ ...f, async onCheckpoint(phase) {
+        if (phase === "after-append") {
+          replacementBytes = replacement === "identical" ? await readFile(f.envPath)
+            : Buffer.from("DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=0\nKEEP=replacement\n");
+          await rename(f.envPath, join(f.root, "previous-env-inode"));
+          await writeFile(f.envPath, replacementBytes);
+        }
+      } }), /persistence_unproven/);
+      assert.deepEqual(await readFile(f.envPath), replacementBytes);
+      assert.equal(JSON.parse(await readFile(join(f.recoveryDir, "dispatch-env.json"), "utf8")).state, "unproven");
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  });
+}
+
+test("source persistence preserves a single-file bind inode and unrelated updates", async () => {
+  const f = await dispatchFixture();
+  try {
+    const alias = join(f.root, "mounted.env");
+    await link(f.envPath, alias);
+    const before = await fixtureEnvSnapshot(alias);
+    await writeFile(f.envPath, "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=new\n");
+    assert.equal((await persistRemoteActionDispatch(f)).status, "persisted");
+    const after = await fixtureEnvSnapshot(alias);
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.text, "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=new\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n");
+    if (process.platform !== "win32") assert.equal((await stat(join(f.recoveryDir, "env.before"))).mode & 0o777, 0o600);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("an intent change is refused without overwriting the operator's zero", async () => {
+  const f = await dispatchFixture();
+  try {
+    const changed = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=0\n";
+    await writeFile(f.envPath, changed);
+    await assert.rejects(persistRemoteActionDispatch(f), /persistence_unproven/);
+    assert.equal(await readFile(f.envPath, "utf8"), changed);
+    assert.equal(JSON.parse(await readFile(join(f.recoveryDir, "dispatch-env.json"), "utf8")).state, "unproven");
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("a post-write failure retains uncertainty and never relabels its checkpoint as restored", async () => {
+  const f = await dispatchFixture();
+  try {
+    const original = await readFile(f.envPath);
+    await assert.rejects(persistRemoteActionDispatch({ ...f, failAfter: "append" }), /persistence_unproven/);
+    assert.match(await readFile(f.envPath, "utf8"), /^DPF_REMOTE_ACTION_DISPATCH_ENABLED=1$/m);
+    assert.deepEqual(await readFile(join(f.recoveryDir, "env.before")), original);
+    assert.equal(JSON.parse(await readFile(join(f.recoveryDir, "dispatch-env.json"), "utf8")).state, "unproven");
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("an existing recovery checkpoint is preserved rather than overwritten by another invocation", async () => {
+  const f = await dispatchFixture();
+  try {
+    await mkdir(f.recoveryDir);
+    await writeFile(join(f.recoveryDir, "env.before"), "original bytes");
+    await writeFile(join(f.recoveryDir, "dispatch-env.json"), '{"state":"original"}\n');
+    await assert.rejects(persistRemoteActionDispatch(f), /persistence_unproven/);
+    assert.equal(await readFile(join(f.recoveryDir, "env.before"), "utf8"), "original bytes");
+    assert.equal(await readFile(join(f.recoveryDir, "dispatch-env.json"), "utf8"), '{"state":"original"}\n');
+    assert.doesNotMatch(await readFile(f.envPath, "utf8"), /^DPF_REMOTE_ACTION_DISPATCH_ENABLED=/m);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
 });

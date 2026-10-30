@@ -139,6 +139,28 @@ describe("ResourceLane serialization", () => {
     expect(order).toEqual(["holder", "interactive", "autonomous"]);
   });
 
+  it("does not let an aged autonomous batch monopolize interactive admission", async () => {
+    let clock = 0;
+    const lane = new ResourceLane("compute:aged-batch", { record: () => {}, now: () => clock });
+    const held = deferred<void>();
+    const order: string[] = [];
+    const holder = lane.run(() => held.promise);
+    await Promise.resolve();
+    const background = Array.from({ length: 4 }, (_, index) => lane.run(async () => {
+      order.push(`background-${index}`);
+    }, { priority: "autonomous", autonomousAgingMs: 100 }));
+    clock = 150;
+    const interactive = Array.from({ length: 3 }, (_, index) => lane.run(async () => {
+      order.push(`interactive-${index}`);
+    }, { priority: "interactive" }));
+    held.resolve();
+    await Promise.all([holder, ...background, ...interactive]);
+    expect(order).toEqual([
+      "background-0", "interactive-0", "background-1", "interactive-1",
+      "background-2", "interactive-2", "background-3",
+    ]);
+  });
+
   it("promotes an aged autonomous waiter ahead of newer interactive work", async () => {
     let clock = 0;
     const lane = new ResourceLane("compute:test", { record: () => {}, now: () => clock });

@@ -34,6 +34,12 @@ describe("marketing language helpers", () => {
 });
 
 describe("marketing work product artifacts", () => {
+  it("captures a customer-proof request as unverified evidence-collection work", () => {
+    const artifact = buildMarketingAssetTaskArtifact({ title: "Customer Case Study: Closed-Won Outcomes", assetType: "email", brief: "Summarize 4 closed-won customer outcomes." });
+    expect(artifact.title).toBe("Collect evidence for customer proof");
+    expect(artifact.brief).toContain("Customer outcomes are unverified");
+    expect(artifact.brief).toContain("Unverified original request");
+  });
   it("normalizes a campaign brief into a saved work product shape", () => {
     const artifact = buildMarketingCampaignBriefArtifact({
       title: "30-day trust stack",

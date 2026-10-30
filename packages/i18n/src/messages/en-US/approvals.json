@@ -1,7 +1,7 @@
 {
   "queue": {
-    "displayedCount": ".input {$count :number}\n.match $count\none {{{$count} item shown for your attention}}\n* {{{$count} items shown for your attention}}",
-    "summary": ".input {$count :number}\n.match $count\none {{{$count} pending approval; {$shown} shown.}}\n* {{{$count} pending approvals; {$shown} shown.}}",
+    "displayedCount": ".input {$count :number}\n.match $count\none {{{$count} item needs your attention}}\n* {{{$count} items need your attention}}",
+    "summary": ".input {$count :number}\n.match $count\none {{{$count} pending approval; {$shown} available in this view.}}\n* {{{$count} pending approvals; {$shown} available in this view.}}",
     "explanation": "Older requests replace completed ones. Other notices: {$count}.",
     "latest": "Latest requests",
     "older": "Older requests",
@@ -33,8 +33,51 @@
     "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
     "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
   },
+  "failure": {
+    "handoff-transaction-required": {
+      "reason": "The handoff stopped before transfer. The platform's required transfer check did not pass.",
+      "next": "Your assistant must inspect the transfer check in the original room. This result does not authorize another attempt."
+    },
+    "unproven": {
+      "reason": "The failure reason could not be confirmed from the saved execution.",
+      "next": "Your assistant must inspect the original execution. Missing evidence does not prove that nothing happened."
+    },
+    "conflicting": {
+      "reason": "The saved executions do not establish a single failure reason.",
+      "next": "Your assistant must reconcile the original executions before taking further action."
+    },
+    "inspectRoom": "Inspect original Workroom",
+    "evidence": "Recorded execution",
+    "roomUnavailable": "The original room is not available for inspection through this result."
+  },
   "card": {
     "authorizationNeeded": "Human authorization needed",
+    "whyDisclosure": "Why am I being asked?",
+    "technicalEvidence": "Technical evidence",
+    "recommendationLabel": "AI recommendation",
+    "coworkerByline": "AI coworker · needs your approval",
+    "whyPlain": "This request needs your permission before the coworker can make the change. It covers this exact request once.",
+    "primary": {
+      "handoverTitle": "Let {$assistant} continue this work?",
+      "recordTitle": "Save this work result?",
+      "reviewTitle": "Record the research review?",
+      "unresolvedTitle": "Review this coworker request?",
+      "handoverDescription": "{$assistant} takes over this work under your account. It can read the work, record results and continue the existing changes.",
+      "blockedDescription": "Records that your coworker could not complete this work.",
+      "recordDescription": "Records your coworker's reported result.",
+      "unresolvedDescription": "The effect of this exact request is unresolved. Review the proposal before authorizing.",
+      "handoverConsequence": "Access stays limited to this work; existing permissions still apply.",
+      "stageConsequence": "This may advance the stage when its evidence meets the completion requirements.",
+      "recordConsequence": "This records a report; it does not mark the work complete.",
+      "reviewConsequence": "Records this recommendation as a review result.",
+      "unresolvedRecommendation": "Keep this on hold until its effect is clear.",
+      "handoverRecommendation": "Continue with {$assistant} for this work.",
+      "recordRecommendation": "Your coworker asks to save this result for the work record.",
+      "targetUnavailable": "Work name unavailable",
+      "permissionScope": "Coworker permissions",
+      "notProvided": "Not provided",
+      "effectUnknown": "Reversibility is not established."
+    },
     "saving": "Saving your decision. This can take a few seconds.",
     "notReached": "Your decision did not reach the platform. Nothing was approved. You can decide again.",
     "unknownResult": "We could not confirm whether your decision was saved. Do not approve again until you have checked its result.",

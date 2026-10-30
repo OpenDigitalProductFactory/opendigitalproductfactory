@@ -63,12 +63,15 @@ import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
 import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
-import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
+import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { isRecord } from "@/lib/shared/coerce";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  authorityDecisionId?: string;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -142,6 +145,13 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
 }
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions") {
+    return { success: false, error: "invalid_view", message: "view must be instances or definitions." };
+  }
+  if (params.view === "definitions") {
+    const { listReviewDefinitions } = await import("./list-review-definitions");
+    return listReviewDefinitions(params, userId, context);
+  }
   const status = stringParam(params, "status");
   const decisionScope = stringParam(params, "decisionScope");
   const portfolioRole = stringParam(params, "portfolioRole");
@@ -176,64 +186,8 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>, user
 }
 
 export async function getWorkCapsuleTool(params: Record<string, unknown>, userId?: string, context?: ToolContext): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  if (!capsuleId) {
-    return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
-  }
-  const { parseAfterSequence, readActivityAfter } = await import("./activity-log-read");
-  const afterSequence = parseAfterSequence(params["afterSequence"]);
-  if (afterSequence === null) {
-    return { success: false, error: "invalid_input", message: "afterSequence must be a non-negative integer." };
-  }
-  const capsule = await prisma.workroom.findUnique({
-    where: { capsuleId },
-    include: {
-      activities: {
-        orderBy: { recordedAt: "desc" },
-        take: 25,
-      },
-      taskRun: { select: { taskRunId: true, status: true } },
-    },
-  });
-
-  if (!capsule) {
-    return {
-      success: false,
-      error: "not_found",
-      message: `Work Capsule ${capsuleId} not found.`,
-    };
-  }
-  const { loadWorkroomRecoveryItems, projectWorkroomRecovery, boundWorkroomRecoveryReadback } = await import("./workroom-recovery-projection");
-  const { loadSemanticReviewRoomProjection } = await import("@/lib/work-management/semantic-review-room-projection");
-  const reviews = await loadSemanticReviewRoomProjection(prisma as never, [capsule.capsuleId], new Date());
-  const recoveryItems = await loadWorkroomRecoveryItems(prisma, [capsule]);
-  const investment = capsule.backlogItemId
-    ? await (await import("../portfolio/investment-balance-server")).projectItemInvestment(prisma, { itemId: capsule.backlogItemId, roomId: capsule.id })
-    : null;
-  const nestedCoordination = userId && context?.agentId
-    ? await (await import("@/lib/work-management/nested-room-coordination.server")).loadNestedRoomCoordination(prisma as never, {
-      roomId: capsule.id,
-      canReadRoom: async workroomId => (await (await import("@/lib/work-management/workroom-agent-access.server"))
-        .resolveAgentWorkroomAccess({ userId, agentId: context.agentId!, workroomId, requested: "content" })).decision.level === "content",
-    }).catch(() => ({ delegations: [], escalation: {
-      state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
-    } })) : null;
-  // BI-62514632: the room's log from a position the caller already holds.
-  const log = afterSequence === undefined ? null
-    : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
-  const message = `Loaded ${capsule.capsuleId}.`;
-  const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule, reviews,
-    recoveryItems.get(capsule.backlogItemId ?? "") ?? null), nestedCoordination, investment },
-    ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
-      { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);
-  if (!data) return { success: false, error: "workroom_recovery_budget_exceeded",
-    message: "Exact Workroom identity and recovery exceed the response budget. No partial identity or passing readiness is reported; bounded-detail repair is required." };
-  return {
-    success: true,
-    entityId: capsule.capsuleId,
-    message,
-    data,
-  };
+  const { readWorkroomDetail } = await import("./workroom-detail-read.server");
+  return readWorkroomDetail(params, userId, context);
 }
 
 export async function adoptWorktreeTool(
@@ -275,6 +229,7 @@ export async function claimCapsuleScopeTool(
   }
 
   const force = params["force"] === true;
+  const qualificationAdmissionToken = stringParam(params, "qualificationAdmissionToken") ?? undefined;
   const db = workCapsuleDb();
   let renewedCapsule;
   try {
@@ -288,6 +243,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        qualificationAdmissionToken,
         buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
@@ -295,6 +251,21 @@ export async function claimCapsuleScopeTool(
     const refusal = scopeClaimRefusal(error);
     if (refusal) return refusal;
     throw error;
+  }
+
+  if (qualificationAdmissionToken) {
+    const workspace = isRecord(renewedCapsule.workspaceState) ? renewedCapsule.workspaceState : {};
+    const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token) : null;
+    if (admission?.ok && admission.data.binding.executorMode === "native-edge") {
+      const currentActor = await actor(userId, context);
+      if (!currentActor.principalId) throw new Error("Native qualification requires an accountable principal.");
+      const queued = await materializeQualificationWindowsAction({ db: workCapsuleDb() as never,
+        capsuleId, requestedByUserId: userId, requestedByPrincipalId: currentActor.principalId,
+        authorityDecisionId: context?.authorityDecisionId });
+      if (!queued.ok) throw new Error(`Native qualification was not queued: ${queued.reason}`);
+      renewedCapsule = await renewLeaseAfterCapsuleWrite(capsuleId, currentActor);
+    }
   }
 
   return {
@@ -567,6 +538,13 @@ export async function heartbeatCapsuleTool(
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  let checkpoint;
+  if (params.checkpoint !== undefined) {
+    const { parseExecutorCheckpoint } = await import("./executor-checkpoint");
+    const parsed = parseExecutorCheckpoint(params.checkpoint);
+    if (!parsed.ok) return { success: false, error: "invalid_checkpoint", message: `${parsed.error} The lease was not renewed.` };
+    checkpoint = parsed.data;
+  }
 
   let capsule;
   try {
@@ -574,6 +552,7 @@ export async function heartbeatCapsuleTool(
       db: workCapsuleDb(),
       capsuleId,
       actor: await actor(userId, context),
+      checkpoint,
     });
   } catch (error) {
     if (!(error instanceof WorkroomLeaseHeldError)) throw error;
@@ -680,6 +659,7 @@ export async function recordCapsuleEvidenceTool(
       capsuleId,
       evidence,
       actor: currentActor,
+      taskRunId: context?.taskRunId ?? null,
     }),
   });
 

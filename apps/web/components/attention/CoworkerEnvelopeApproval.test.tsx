@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { refresh, replace, approveProposal, rejectProposal } = vi.hoisted(() => ({
@@ -18,6 +18,8 @@ import { coworkerEnvelopeToAttentionItem } from "@/lib/attention/sources/coworke
 import { summarizeCoworkerEnvelopeDecision } from "@/lib/attention/coworker-envelope-decision";
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
+import { defaultVisibleHtml } from "@/lib/ux-budget/scope";
+import { visibleUtterances } from "@/lib/owner-first/ux-audit";
 
 const NOW = Date.parse("2026-08-25T20:00:00.000Z");
 
@@ -75,6 +77,58 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
+  it("retains an empty original behind disclosure while recommending that its unknown effect stay on hold", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ toolName: "record_workroom_evidence",
+      proposedParameters: undefined, argsJson: {}, recommenderAgentId: "AGT-WS-PORTFOLIO", authorizerUserId: "user-1" });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ manifestActionId: "record_workroom_evidence", decision })} />);
+    const complete = container.querySelector("pre");
+    expect(complete?.textContent?.trim()).toBe("{}");
+    expect(complete?.closest("details")?.hasAttribute("open")).toBe(false);
+    expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).toContain("Keep this on hold until its effect is clear.");
+  });
+
+  it("defers research identities and policy text while keeping the decision controls visible", () => {
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval()} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).not.toContain("BI-MCP-EFF-0285909C");
+    expect(visible).not.toContain("Covers this one request only");
+    expect(visible).toMatch(/research/i);
+    expect(screen.getByRole("button", { name: "Authorize" }).closest("details")).toBeNull();
+    expect(screen.getByRole("button", { name: "Decline" }).closest("details")).toBeNull();
+    expect(screen.getByText("BI-MCP-EFF-0285909C").closest("details")?.open).toBe(false);
+  });
+
+  it("keeps long routine reports and internal fields behind intentional disclosure", () => {
+    const summary = "The release candidate was not supplied. " + "Internal verification detail. ".repeat(40);
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "record_workroom_evidence",
+      proposedParameters: { capsuleId: "WC-PRIVATE-REPORT", kind: "assurance-finding", outcome: "blocked", summary, stageKey: "report", commandId: "internal-command-123" },
+      recommenderAgentId: "AGT-WS-BUILD", authorizerUserId: "user-1",
+    });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ decision })} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).not.toContain("WC-PRIVATE-REPORT");
+    expect(visible).not.toContain("internal-command-123");
+    expect(visible).not.toContain("Internal verification detail.");
+    expect(visible).toMatch(/record|save/i);
+    expect(JSON.parse(container.querySelector("pre")!.textContent!)).toEqual(JSON.parse(decision.completeProposedContent!));
+  });
+
+  it("does not hide critical nested values when it defers an unsupported proposal", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "unsupported_internal_operation",
+      proposedParameters: { routingId: "internal-routing-456", payment: { amount: 1250, currency: "USD", recurrence: "monthly", recipient: { email: "supplier@example.test" } }, permission: { grant: "admin_write" }, deadline: "2026-11-01" },
+      recommenderAgentId: "AGT-WS-BUILD", authorizerUserId: "user-1", consequence: "irreversible",
+    });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ decision })} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).not.toContain("unsupported_internal_operation");
+    expect(visible).not.toContain("internal-routing-456");
+    for (const fact of ["1250", "USD", "monthly", "supplier@example.test", "admin_write", "2026-11-01"]) expect(visible).toContain(fact);
+    expect(visible).toMatch(/cannot be undone|irreversible/i);
+    expect(visible).toMatch(/unresolved|not established/i);
+  });
+
   it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("offers complete literal content before authorizing %s", (toolName) => {
     const params = { decision: "pass", capsuleId: "WC-1", toExecutorKind: "codex-desktop", body: "x".repeat(900) + "<script>unsafe()</script>", clear: null, empty: "", enabled: false };
     const decision = summarizeCoworkerEnvelopeDecision({ toolName, proposedParameters: params, reviewBinding: { gate: "research", itemId: "BI-1" }, recommenderAgentId: "AGT-EXT-CODEX", authorizerUserId: "user-1" });
@@ -97,14 +151,16 @@ describe("CoworkerEnvelopeApproval", () => {
     expect(
       screen.getByText("record that receipt so implementation planning may continue."),
     ).toBeTruthy();
-    expect(screen.getByText("BI-MCP-EFF-0285909C")).toBeTruthy();
-    expect(screen.getByText("research")).toBeTruthy();
-    expect(screen.getByText("pass")).toBeTruthy();
+    const technical = screen.getByText("Technical details").closest("details")!;
+    expect(technical.open).toBe(false);
+    expect(technical.textContent).toContain("BI-MCP-EFF-0285909C");
+    expect(technical.textContent).toContain("research");
+    expect(technical.textContent).toContain("pass");
     expect(screen.getByText("None")).toBeTruthy();
     expect(screen.getByText("Your coworker")).toBeTruthy();
     expect(screen.getByText("You")).toBeTruthy();
-    expect(screen.queryByText("AGT-WS-PORTFOLIO")).toBeNull();
-    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    expect(screen.getByText("AGT-WS-PORTFOLIO").closest("details")).toBe(technical);
+    expect(screen.getByText("record_initiative_evidence").closest("details")).toBe(technical);
     expect(screen.queryByText("proposed")).toBeNull();
     expect(
       screen.queryByText("TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7A98D78A3948"),
@@ -274,13 +330,80 @@ describe("OwnerDecisionCards routing", () => {
     return buildOwnerAttentionProjection([item], { nowMs: NOW }).needsYouNow[0]!;
   }
 
-  it("renders the envelope approval card, not the proposal controls", async () => {
-    render(<OwnerDecisionCards entries={[entryFor()]} />);
+  function fourthCard(override: Partial<AttentionEnvelopeApproval> = {}) {
+    const target = entryFor();
+    target.item.envelope = { ...target.item.envelope!, ...override };
+    const entries = [entryFor({ id: "first" }), entryFor({ id: "second" }), entryFor({ id: "third" }), target];
+    render(<OwnerDecisionCards entries={entries} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
+    return () => within(document.getElementById("owner-decision-coworker-envelope-cmt932fn301el01p7vfb2gas7")!);
+  }
 
-    expect(screen.getByText("Authorize this research receipt?")).toBeTruthy();
+  function collapseAndReopen() {
+    fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
+  }
+
+  it("keeps an uncertain fourth decision locked after collapsing and reopening the list", async () => {
+    fetchMock.mockRejectedValue(new TypeError("network"));
+    const card = fourthCard();
+    fireEvent.click(card().getByRole("button", { name: "Authorize" }));
+    await waitFor(() => expect(card().getByRole("alert").textContent).toMatch(/Do not approve again/));
+    collapseAndReopen();
+    expect(card().getByRole("alert").textContent).toMatch(/Do not approve again/);
+    expect(card().queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST")).toHaveLength(1);
+  });
+
+  it("retains an in-flight fourth decision across list collapse without a second submission", async () => {
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    const card = fourthCard();
+    fireEvent.click(card().getByRole("button", { name: "Authorize" }));
+    collapseAndReopen();
+    expect(card().getByRole("status").textContent).toMatch(/Saving your decision/);
+    expect((card().getByRole("button", { name: /Authoriz/ }) as HTMLButtonElement).disabled).toBe(true);
+    finish(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    await waitFor(() => expect(card().getByRole("status").textContent).toMatch(/Authorized/));
+    collapseAndReopen();
+    expect(card().queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the fourth card's on-behalf reason and recorded attribution across collapse", async () => {
+    const card = fourthCard({ onBehalf: { ownerLabel: "owner@example.test" } });
+    fireEvent.click(card().getByRole("button", { name: "Decide on their behalf" }));
+    fireEvent.change(card().getByLabelText("Reason (recorded with the decision)"), { target: { value: "Owner is away." } });
+    collapseAndReopen();
+    expect((card().getByLabelText("Reason (recorded with the decision)") as HTMLTextAreaElement).value).toBe("Owner is away.");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true,
+      onBehalf: { by: "admin@example.test", onBehalfOf: "owner@example.test", reason: "Owner is away." },
+    }), { status: 200 }));
+    fireEvent.click(card().getByRole("button", { name: "Authorize" }));
+    await waitFor(() => expect(card().getByText(/Decided by admin@example.test/)).toBeTruthy());
+    collapseAndReopen();
+    expect(card().getByText(/Decided by admin@example.test.*Owner is away/)).toBeTruthy();
+    expect(card().queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ onBehalf: true, reason: "Owner is away." }));
+  });
+
+  it("makes the small deadline label readable while retaining its warning meaning", () => {
+    const value = entryFor();
+    value.card.tags = [{ kind: "deadline", label: "Due in 60 minutes" }];
+    render(<OwnerDecisionCards entries={[value]} />);
+    const badge = screen.getByText("Due in 60 minutes").closest("[data-intent]") as HTMLElement;
+    expect(badge.dataset.intent).toBe("warning");
+    expect(badge.style.color).toBe("var(--dpf-text)");
+  });
+
+  it("renders the envelope approval card, not the proposal controls", async () => {
+    const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
+
+    expect(screen.getByText("Record the research review?")).toBeTruthy();
     expect(screen.getByText(/research passes with no findings/i)).toBeTruthy();
     expect(screen.getByText("Human authorization needed")).toBeTruthy();
-    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).not.toContain("record_initiative_evidence");
     fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -294,20 +417,31 @@ describe("OwnerDecisionCards routing", () => {
   });
 
   it("keeps identity plumbing under technical detail", () => {
-    render(<OwnerDecisionCards entries={[entryFor()]} />);
+    const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
 
-    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
-    expect(
-      screen.queryByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
-    ).toBeNull();
+    const before = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(before).not.toContain("record_initiative_evidence");
+    expect(before).not.toContain("89e875eb49be0604ee8fa4156d0903b6a0932e62");
 
-    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
+    const disclosure = screen.getByText("Technical evidence").closest("details")!;
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(screen.getByText("Technical evidence"));
+    expect(disclosure.open).toBe(true);
 
-    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
+    expect(screen.getAllByText("record_initiative_evidence")).toHaveLength(2);
     expect(
       screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
     ).toBeTruthy();
     expect(screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeTruthy();
+  });
+
+  it("locates a focused decision without opening its technical evidence", () => {
+    const entry = entryFor();
+    const { container } = render(<OwnerDecisionCards entries={[entry]} focusItemId={entry.item.id} />);
+    expect(document.getElementById("owner-decision-coworker-envelope-cmt932fn301el01p7vfb2gas7")).not.toBeNull();
+    expect(Array.from(container.querySelectorAll("details")).every(details => !details.open)).toBe(true);
+    expect(screen.getByRole("button", { name: "Authorize" })).toBeTruthy();
+    expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).not.toContain("89e875eb49be0604ee8fa4156d0903b6a0932e62");
   });
 });
 
@@ -334,9 +468,12 @@ describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
     expect(screen.getByText("Proposed content")).toBeTruthy();
     expect(screen.getByText("Acceptance A.")).toBeTruthy();
     expect(screen.getByText(/None declared/)).toBeTruthy();
-    expect(screen.getByText(/no recorded delegation/)).toBeTruthy();
-    expect(screen.getByText(/does not review the content/)).toBeTruthy();
+    const technical = screen.getByText("Technical details").closest("details")!;
+    expect(technical.open).toBe(false);
+    expect(technical.textContent).toMatch(/no recorded delegation/);
+    expect(technical.textContent).toMatch(/does not review the content/);
     expect(screen.getByText("Waiting for your decision")).toBeTruthy();
+    expect(screen.getByText("Valid until")).toBeTruthy();
     expect(screen.queryByText("Findings")).toBeNull();
   });
 

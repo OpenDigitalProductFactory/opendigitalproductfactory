@@ -413,6 +413,9 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
           draftApprovedAt: true,
           sandboxId: true,
           createdAt: true,
+          designDoc: true,
+          designReview: true,
+          buildPlan: true,
         },
       },
       activities: {
@@ -445,6 +448,12 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  // BI-8ECF7B5C: judge an item with an active build on its build gate's facts, so the router sees the gate's verdict.
+  const ab = item.activeBuild;
+  const buildFacts = ab ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
+    kind: ab.kind, designDoc: ab.designDoc, designReview: ab.designReview, buildPlan: ab.buildPlan,
+    originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
+  }).catch(() => null) : null;
   const evaluatedAt = new Date().toISOString();
   // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
   // evaluation (merge signal included), so this view and the gate agree. Null
@@ -466,7 +475,8 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     item: {
       id: item.id,
       workShape: boundWorkShape,
-      deliverySensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
+      deliverySensitivity: buildFacts?.deliverySensitivity
+        ?? assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
       body: item.body,
       itemId: item.itemId,
       status: item.status,
@@ -484,16 +494,28 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasSpec,
     hasPlan,
     evaluatedAt,
+    buildDesign: buildFacts?.buildDesign ?? null,
   }));
-  const readiness = gateCompletion
+  const deliveryReadiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
+  const { loadPlanBaselinePrerequisite } = await import("@/lib/backlog/initiative-readiness/plan-baseline-prerequisite");
+  const readiness = { ...deliveryReadiness, planBaselinePrerequisite: await loadPlanBaselinePrerequisite({
+    db: prisma, item, decision: projectedReadiness.decisions?.implementation,
+    currentDesignState: projectedReadiness.currentDesignState,
+  }) };
   const requestedGate = params["recoveryGate"];
+  const reassessmentAuthorizationItemId = params["reassessmentAuthorizationItemId"];
+  if (reassessmentAuthorizationItemId !== undefined && (typeof reassessmentAuthorizationItemId !== "string"
+    || !/^BI-[A-F0-9]{8}$/.test(reassessmentAuthorizationItemId)
+    || !["design-spec", "spec-approval"].includes(String(requestedGate)) || context?.authSource !== "oauth")) {
+    return { success: false, error: "reassessment-policy-unproven", message: "A present reassessment requires one exact approved authorization item and design review gate on the current connection." };
+  }
   if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
     return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
   }
   const completion = requestedGate !== undefined
-    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}, readiness.planBaselinePrerequisite) : readiness.decisions?.completion;
   const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
     && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
@@ -530,6 +552,17 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
         .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
       if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
       for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        if (typeof reassessmentAuthorizationItemId === "string") {
+          try {
+            const { issuePresentReassessmentRequest } = await import("@/lib/mcp-task-review-reassessment");
+            route.requestCoworker = await issuePresentReassessmentRequest({ packet: route.requestCoworker,
+              authorizationItemId: reassessmentAuthorizationItemId, userId: currentUserId, actingAgentId: currentAgentId,
+              tokenGrantScopes: context.tokenGrantScopes ?? [] }) as typeof route.requestCoworker;
+          } catch {
+            return { success: false, error: "reassessment-policy-unproven", message: "The current approval, original readback or exact source could not authorize a present request. No replacement was delivered." };
+          }
+          continue;
+        }
         const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
           userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
           tokenGrantScopes: context.tokenGrantScopes });
@@ -559,6 +592,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       triageOutcome: item.triageOutcome,
       deferral: deferralData(item),
       ...scopeData(item),
+      // BI-8DE5429B: the item's own outcome, and whether a person or agent
+      // stated it or the platform derived a draft that is still to be confirmed.
+      outcome: item.outcome ?? null,
+      outcomeSource: item.outcomeSource ?? null,
       body: item.body ?? null,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),

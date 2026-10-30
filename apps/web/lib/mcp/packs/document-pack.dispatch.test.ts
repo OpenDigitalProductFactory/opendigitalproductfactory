@@ -17,6 +17,10 @@ const principalLinking = vi.hoisted(() => ({
 
 vi.mock("@/lib/documents/document-store", () => documentStore);
 vi.mock("@/lib/identity/principal-linking", () => principalLinking);
+// BI-957915CB: every document tool resolves the person it acts for.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
 vi.mock("@dpf/db", () => ({
   prisma: {},
   DISCOVERY_TRIAGE_AGENT_ID: "DISCOVERY-TRIAGE",

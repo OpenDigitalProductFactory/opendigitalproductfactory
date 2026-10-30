@@ -19,7 +19,7 @@ import {
   ratifiedGateFor,
   type GateRatificationEntry,
 } from "./gate-ratification";
-import { gppShapeDocumentSchema } from "./gpp-shape-schema";
+import { gppShapeDocumentSchema } from "@dpf/validators/gpp/gpp-shape-schema";
 
 type GovernedUse = { shape: string; stage: WorkShapeStage };
 

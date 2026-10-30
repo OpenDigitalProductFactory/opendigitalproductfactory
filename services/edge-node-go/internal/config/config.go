@@ -74,7 +74,13 @@ const (
 	// only heartbeat and the action channel: every install gets this node for
 	// host upkeep, while network discovery stays an opt-in edge feature. Empty
 	// or "full" keeps the complete edge behaviour.
-	EnvEdgeRole = "DPF_EDGE_ROLE"
+	EnvEdgeRole                 = "DPF_EDGE_ROLE"
+	EnvManagedInferenceEnabled  = "DPF_MANAGED_INFERENCE_ENABLED"
+	EnvManagedInferenceRoot     = "DPF_MANAGED_INFERENCE_CONTROLLER_ROOT"
+	EnvManagedInferenceManifest = "DPF_MANAGED_INFERENCE_MANIFEST_SHA256"
+	EnvManagedInferenceSource   = "DPF_MANAGED_INFERENCE_SOURCE_SHA"
+	EnvManagedInferenceState    = "DPF_MANAGED_INFERENCE_STATE_DIR"
+	EnvManagedInferenceBaseline = "DPF_MANAGED_INFERENCE_BASELINE_ENGINE"
 )
 
 // Config is the loaded, validated runtime configuration.
@@ -98,6 +104,29 @@ type Config struct {
 	DockerDesktopExe               string
 	AutostartTaskName              string
 	EdgeRole                       string
+	ManagedInferenceOptIn          bool
+	ManagedInferenceRoot           string
+	ManagedInferenceManifest       string
+	ManagedInferenceSource         string
+	ManagedInferenceState          string
+	ManagedInferenceBaseline       string
+}
+
+func (c *Config) ManagedInferenceConfigured() bool {
+	hex := func(value string, size int) bool {
+		return len(value) == size && strings.Trim(value, "0123456789abcdef") == ""
+	}
+	return c.ManagedInferenceOptIn && runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" && c.Platform == "darwin" && c.InstallMode == "native" &&
+		hex(c.ManagedInferenceSource, 40) && hex(c.ManagedInferenceManifest, 64) && filepath.IsAbs(c.ManagedInferenceState) && filepath.IsAbs(c.ManagedInferenceBaseline) &&
+		c.ManagedInferenceRoot == filepath.Join(c.ManagedInferenceState, "native-inference-controller", c.ManagedInferenceSource) && c.StateDir == filepath.Join(c.ManagedInferenceState, "edge-node")
+}
+
+// QualificationWindowsEnabled reports whether this process is the supported
+// native Windows Edge agent. The qualification procedure is compiled and owns
+// its fixture under StateDir; container installs and platform overrides cannot
+// advertise or execute it.
+func (c *Config) QualificationWindowsEnabled() bool {
+	return runtime.GOOS == "windows" && c.Platform == "win32" && c.InstallMode == "native" && filepath.IsAbs(c.StateDir)
 }
 
 // HostUpkeepOnly reports whether the node runs only host upkeep: heartbeat and
@@ -163,6 +192,12 @@ func Load(version string) (*Config, error) {
 		DockerDesktopExe:               strings.TrimSpace(os.Getenv(EnvDockerDesktopExe)),
 		AutostartTaskName:              strings.TrimSpace(os.Getenv(EnvAutostartTaskName)),
 		EdgeRole:                       strings.TrimSpace(os.Getenv(EnvEdgeRole)),
+		ManagedInferenceOptIn:          os.Getenv(EnvManagedInferenceEnabled) == "1",
+		ManagedInferenceRoot:           strings.TrimSpace(os.Getenv(EnvManagedInferenceRoot)),
+		ManagedInferenceManifest:       strings.TrimSpace(os.Getenv(EnvManagedInferenceManifest)),
+		ManagedInferenceSource:         strings.TrimSpace(os.Getenv(EnvManagedInferenceSource)),
+		ManagedInferenceState:          strings.TrimSpace(os.Getenv(EnvManagedInferenceState)),
+		ManagedInferenceBaseline:       strings.TrimSpace(os.Getenv(EnvManagedInferenceBaseline)),
 	}
 
 	if cfg.EdgeNodeName == "" {

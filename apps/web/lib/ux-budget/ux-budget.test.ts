@@ -555,7 +555,7 @@ describe("generated route-shell registry", () => {
     // reads install-state, the capability row and observed services, each failing
     // soft; on the sweep fixture (no install-state, no Docker) it renders a stable
     // read-only state, and it carries an explicit page-purpose contract.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(215);
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(216);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

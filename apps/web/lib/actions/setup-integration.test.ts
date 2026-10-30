@@ -1,4 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const monitoringDecision = vi.hoisted(() => vi.fn(async () => null as "enabled" | "disabled" | "undecided" | null));
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({
+  loadMonitoringCapabilityDecision: monitoringDecision,
+}));
 
 // Mock prisma with in-memory state
 vi.mock("@dpf/db", () => {
@@ -47,7 +52,9 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 12 entries:
+// SETUP_STEPS has 13 entries. monitoring follows platform-development and is
+// offered only while runtime:deep-observability is undecided. This walk has no
+// recorded decision, so monitoring is hidden and does not block:
 //   0: account-bootstrap
 //   1: business-context
 //   2: ai-providers
@@ -57,11 +64,16 @@ import { SETUP_STEPS } from "./setup-constants";
 //   6: storefront
 //   7: mailroom
 //   8: platform-development
-//   9: build-studio
-//   10: meet-your-coo
-//   11: workspace
+//   9: monitoring (hidden unless undecided)
+//   10: build-studio
+//   11: meet-your-coo
+//   12: workspace
 
 describe("setup flow integration", () => {
+  beforeEach(() => {
+    monitoringDecision.mockResolvedValue(null);
+  });
+
   it("walks through the full step sequence", async () => {
     // First run detected
     expect(await isFirstRun()).toBe(true);
@@ -125,5 +137,22 @@ describe("setup flow integration", () => {
     }
 
     expect(current.currentStep).toBe("workspace");
+  });
+
+  it("offers monitoring after platform development only while the decision is undecided", async () => {
+    monitoringDecision.mockResolvedValue("undecided");
+    const progress = await createSetupProgress();
+    let current = progress;
+    while (current.currentStep !== "platform-development") {
+      current = await advanceStep(current.id);
+    }
+    const offered = await advanceStep(current.id);
+    expect(offered.currentStep).toBe("monitoring");
+    expect((offered.steps as Record<string, string> | null)?.monitoring).toBe("pending");
+
+    monitoringDecision.mockResolvedValue("enabled");
+    const chosen = await advanceStep(offered.id);
+    expect((chosen.steps as Record<string, string> | null)?.monitoring).toBe("completed");
+    expect(chosen.currentStep).toBe("build-studio");
   });
 });

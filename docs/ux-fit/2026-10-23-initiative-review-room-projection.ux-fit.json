@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-review-disclosure",
+  "decisionInteractionId": "DI-0FFB15FBEE77",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "extend-existing-review-disclosure",
+      "separate-review-status-page"
+    ]
+  },
+  "owningArea": "Workspace",
+  "primaryPersona": "Delivery coordinator inspecting review blockers",
+  "reuse": "Existing ReviewerExecutionList disclosure and request-history link; no new route or dispatch control.",
+  "sourceTruth": "Existing TaskRun immutable review binding plus canonical Workroom and receipt records.",
+  "failureBehavior": "Unknown, incomplete and conflicting observations remain explicit; ordinary review retry suppressed.",
+  "verificationBoundary": "Recorded design choice, not a claim of deployed UX verification."
+}

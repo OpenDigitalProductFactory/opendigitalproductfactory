@@ -298,6 +298,26 @@ export function workroomStageLiveCounts(
   return counts;
 }
 
+/** The order one drive pass writes a stage's transitions in; a close always comes last. */
+const STAGE_WRITE_ORDER: Readonly<Record<string, number>> = {
+  enqueued: 0, released: 1, held: 2, started: 2, finished: 3, cancelled: 3,
+};
+
+/**
+ * Order stage events by when they happened, then when they were recorded, then
+ * the order the drive writes them. One pass writes several events at one
+ * instant, and often in one recorded millisecond, so the first two keys alone
+ * leave "the latest event" up to the database.
+ */
+export function compareStageEvents(
+  a: { transition: string; occurredAt: Date; createdAt?: Date },
+  b: { transition: string; occurredAt: Date; createdAt?: Date },
+): number {
+  return a.occurredAt.getTime() - b.occurredAt.getTime()
+    || (a.createdAt && b.createdAt ? a.createdAt.getTime() - b.createdAt.getTime() : 0)
+    || (STAGE_WRITE_ORDER[a.transition] ?? 0) - (STAGE_WRITE_ORDER[b.transition] ?? 0);
+}
+
 /**
  * The stage a run of transitions leaves the room's item open at: the stage of
  * the last enqueue not followed by a finish, or `open` unchanged when the run
@@ -310,6 +330,36 @@ export function openStageAfter(open: string | null, transitions: readonly StageT
     else if (t.transition === "finished" || t.transition === "cancelled") current = null;
   }
   return current;
+}
+
+/**
+ * Close a room's open steps when the room ends (BI-C9F1DE01). A terminal room
+ * never writes again, so the drive cannot close them: each step whose latest
+ * event is not a finish or cancel is released (if held) and cancelled, at
+ * `at` or just after its own last event. Steps already closed plan nothing, so
+ * a second pass is a no-op.
+ */
+export function planRoomEndClosures(
+  events: readonly { queueKey: string; itemId: string; transition: string; occurredAt: Date }[],
+  at: Date,
+): StageTransition[] {
+  const latest = new Map<string, (typeof events)[number]>();
+  for (const event of events) {
+    const key = `${event.queueKey}\x00${event.itemId}`;
+    const seen = latest.get(key);
+    if (!seen || compareStageEvents(event, seen) >= 0) latest.set(key, event);
+  }
+  const out: StageTransition[] = [];
+  for (const event of latest.values()) {
+    if (event.transition === "finished" || event.transition === "cancelled") continue;
+    const occurredAt = new Date(Math.max(at.getTime(), event.occurredAt.getTime() + 1));
+    const base = { queueKey: event.queueKey, itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: event.itemId, laneKey: null, actorType: "system" as const, occurredAt };
+    // The cancel lands 1ms after its release: equal timestamps leave "latest event" ambiguous.
+    const released = event.transition === "held";
+    if (released) out.push({ ...base, transition: "released", outcome: null });
+    out.push({ ...base, occurredAt: new Date(occurredAt.getTime() + (released ? 1 : 0)), transition: "cancelled", outcome: "cancelled" });
+  }
+  return out;
 }
 
 /** Hand a plan to the fire-and-forget writer. Never throws. */
@@ -356,14 +406,76 @@ export async function emitStageTelemetryForDriveWrite(input: {
 }
 
 
+/** Rooms at each Workroom stage queue now, from every live room: wip at the stage, depth not being worked. */
+export async function loadWorkroomStageLiveCounts(): Promise<Map<string, { wip: number; depth: number }>> {
+  const { prisma } = await import("@dpf/db");
+  const { TERMINAL_WORKROOM_STATUSES } = await import("./standing-room-nesting");
+  const rooms = await prisma.workroom.findMany({
+    where: { archivedAt: null, status: { notIn: [...TERMINAL_WORKROOM_STATUSES] } },
+    select: { scopeClaims: true, workspaceState: true },
+  });
+  return workroomStageLiveCounts(rooms);
+}
+
+/** Close the open steps of one room that has just ended (BI-C9F1DE01). Never throws. */
+export async function closeStageTelemetryForEndedRoom(capsuleId: string, at: Date): Promise<number> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const events = await prisma.queueTelemetryEvent.findMany({
+      where: { itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: { startsWith: `${capsuleId}:` } },
+      select: { queueKey: true, itemId: true, transition: true, occurredAt: true },
+    });
+    const plan = planRoomEndClosures(events, at);
+    await emitStageTransitions(plan);
+    return plan.filter((t) => t.transition === "cancelled").length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Close every step left open on a room that already ended, at the time the
+ * room last changed (BI-C9F1DE01). The backstop for rooms ended inside a
+ * caller's transaction and for history before the close existed. Idempotent:
+ * a closed step is no longer open. Returns the steps closed.
+ */
+export async function reconcileEndedRoomStageTelemetry(): Promise<number> {
+  const { prisma } = await import("@dpf/db");
+  const { TERMINAL_WORKROOM_STATUSES } = await import("./standing-room-nesting");
+  const open = await prisma.$queryRaw<{ queueKey: string; itemId: string; transition: string; occurredAt: Date; endedAt: Date }[]>`
+    WITH latest AS (
+      SELECT DISTINCT ON (e."queueKey", e."itemId") e."queueKey", e."itemId", e."transition", e."occurredAt"
+      FROM "QueueTelemetryEvent" e
+      WHERE e."itemKind" = ${WORKROOM_STAGE_ITEM_KIND}
+      -- compareStageEvents, newest first: a close written in the same instant wins.
+      ORDER BY e."queueKey", e."itemId", e."occurredAt" DESC, e."createdAt" DESC,
+        CASE e."transition" WHEN 'enqueued' THEN 0 WHEN 'released' THEN 1 WHEN 'finished' THEN 3 WHEN 'cancelled' THEN 3 ELSE 2 END DESC
+    )
+    SELECT l."queueKey", l."itemId", l."transition", l."occurredAt", w."updatedAt" AS "endedAt"
+    FROM latest l
+    JOIN "WorkCapsule" w ON w."capsuleId" = split_part(l."itemId", ':', 1)
+    WHERE l."transition" NOT IN ('finished', 'cancelled')
+      AND w."status" = ANY(${[...TERMINAL_WORKROOM_STATUSES]})`;
+  let closed = 0;
+  for (const row of open) {
+    const plan = planRoomEndClosures([row], row.endedAt);
+    await emitStageTransitions(plan);
+    closed += 1;
+  }
+  return closed;
+}
+
 /** The stage of the room's newest stage event, unless that event closed the item. */
 async function readOpenStageFromTelemetry(capsuleId: string): Promise<string | null> {
   const { prisma } = await import("@dpf/db");
-  const latest = await prisma.queueTelemetryEvent.findFirst({
+  // One drive pass writes several events at one instant; read them all and order them.
+  const newest = await prisma.queueTelemetryEvent.findMany({
     where: { itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: { startsWith: `${capsuleId}:` } },
-    orderBy: { occurredAt: "desc" },
-    select: { queueKey: true, transition: true },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    take: 8,
+    select: { queueKey: true, transition: true, occurredAt: true, createdAt: true },
   });
+  const latest = newest.sort(compareStageEvents).at(-1);
   if (!latest || latest.transition === "finished" || latest.transition === "cancelled") return null;
   return latest.queueKey.slice(latest.queueKey.lastIndexOf(":") + 1);
 }

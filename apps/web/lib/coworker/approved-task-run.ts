@@ -26,6 +26,8 @@ import { currentUserContext } from "@/lib/govern/current-user-context";
 import { normalizeTokenScope } from "@/lib/mcp/token-tool-scope";
 import type { ExistingRemoteTask } from "@/lib/mcp-task-submit-types";
 import { resumeApprovedTask } from "@/lib/mcp-task-submit-approval-recovery";
+import { isBoundReviewTask } from "@/lib/shared/task-execution-fence";
+import { hasExecutionUncertainty } from "@/lib/shared/execution-uncertainty";
 
 import {
   verifyApprovalCredential,
@@ -75,6 +77,9 @@ export async function runApprovedTaskRequest(
     return { status: "not-run", reason: "task-bound" };
   }
   if (task.status !== "input-required") return { status: "not-run", reason: "task-not-waiting" };
+  if (isBoundReviewTask(metadata) && hasExecutionUncertainty(task.progressPayload)) {
+    return { status: "not-run", reason: "task-bound" };
+  }
 
   const userContext = await currentUserContext(envelope.delegatingUserId).catch(() => null)
     ?? { userId: envelope.delegatingUserId, platformRole: null, isSuperuser: false };

@@ -1,3 +1,5 @@
+import { isTerminalLeaseStatus, lockNonprodEnvironment, type NonprodEnvironmentKey } from "./environment-lease-lock";
+export { NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "./environment-lease-lock";
 import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow, ResolvedNonprodPoolPolicy } from "./environment-lease-result";
 export type { ClaimNonprodEnvironmentLeaseResult } from "./environment-lease-result";
 import { randomUUID } from "node:crypto";
@@ -42,7 +44,6 @@ export {
   listQueuedNonprodEnvironmentLeases,
 } from "./environment-lease-registry";
 
-export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci" | "host-heavy-resource";
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
 export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
 
@@ -56,12 +57,6 @@ type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pi
 
 function createLeaseId() {
   return `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
-}
-
-function isTerminalLeaseStatus(
-  status: string,
-): status is "released" | "expired" | "cancelled" {
-  return status === "released" || status === "expired" || status === "cancelled";
 }
 
 async function inLeaseTransaction<T>(
@@ -141,10 +136,7 @@ async function lockEnvironment(
   environmentKey: string,
 ): Promise<void> {
   if (typeof tx.$executeRaw !== "function") return;
-  const lockKey = `dpf:nonprod-environment:${environmentKey}`;
-  await tx.$executeRaw`
-    SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
-  `;
+  await lockNonprodEnvironment(tx, environmentKey);
 }
 
 async function reconcileEnvironmentInTransaction(input: {

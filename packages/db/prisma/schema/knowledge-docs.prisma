@@ -738,14 +738,46 @@ model GraphNode {
 }
 
 model GraphEdge {
-  id      BigInt @id @default(autoincrement())
-  srcKey  String @map("src_key")
-  dstKey  String @map("dst_key")
-  relType String @map("rel_type")
-  props   Json   @default("{}")
+  id           BigInt            @id @default(autoincrement())
+  srcKey       String            @map("src_key")
+  dstKey       String            @map("dst_key")
+  relType      String            @map("rel_type")
+  props        Json              @default("{}")
+  relationType GraphRelationType @relation(fields: [relType], references: [key], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([srcKey, dstKey, relType], name: "graph_edge_triple")
   @@index([dstKey, relType])
   @@index([srcKey, relType])
+  @@index([relType])
   @@map("graph_edge")
+}
+
+/// How an analysis reads a graph_edge relation type (BI-85389A35).
+enum GraphRelationClass {
+  semantic
+  structural
+  navigational
+  provenance
+}
+
+/// Lifecycle of a relation type: deprecated stays writable until its owning item retypes the writer.
+enum GraphRelationStatus {
+  active
+  deprecated
+  retired
+}
+
+/// The governed vocabulary of graph_edge.rel_type (EP-5F6369AB, BI-85389A35). Rows mirror
+/// packages/db/src/relation-vocabulary-entries.ts and are added by migration; the foreign key
+/// from graph_edge refuses an unregistered type from any writer, raw SQL included.
+/// @dpf lifecycle=operational retention=reference sensitivity=public categories=configuration owner=platform-owner steward=data-steward
+model GraphRelationType {
+  key           String              @id
+  relationClass GraphRelationClass  @map("relation_class")
+  label         String
+  inverseLabel  String              @map("inverse_label")
+  status        GraphRelationStatus @default(active)
+  edges         GraphEdge[]
+
+  @@map("graph_relation_type")
 }

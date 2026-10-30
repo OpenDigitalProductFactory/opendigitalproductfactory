@@ -57,7 +57,7 @@ describe("classifyLadderActivity", () => {
   });
 
   it("treats work-room tools as the convene rung", () => {
-    for (const tool of ["invite_room_participant", "post_room_message", "spawn_work_thread"]) {
+    for (const tool of ["invite_room_participant", "post_room_message", "broadcast_workroom_ask", "acknowledge_workroom_broadcast", "spawn_work_thread"]) {
       expect(classifyLadderActivity([ok(tool)]).attemptedRungs).toEqual(["convene"]);
     }
   });

@@ -145,21 +145,83 @@ are gated on it alone. An implication from `registry_read` could therefore
 never narrow anything.
 
 BI-825D3487 adds three grants: `wiki_kernel_read`, `wiki_org_read` and
-`wiki_profession_read`.
+`wiki_profession_read`. Kernel and organization reads are whole-corpus grants.
+The profession read is scoped to job families, because the WSID corpus is 23
+professions, not one body of knowledge. A finance coworker has no need for the
+security or HR craft pages, and under JSI (Job-Specific Intelligence,
+`2026-07-24-job-specific-intelligence-fluid-weight-layer-design.md`) each
+coworker's corpus is meant to be specific to its job.
 
-- **Default.** Every coworker holds all three, so today's behaviour is
-  unchanged.
-- **Narrowing.** The grants are stored per coworker as `AgentToolGrant` rows,
-  the existing per-coworker grant store edited from the coworker record. An
-  organization can remove a corpus from a coworker; that is a WWWD decision.
+- **Kernel and organization defaults.** Every coworker holds
+  `wiki_kernel_read` and `wiki_org_read`, so today's behaviour is unchanged.
+- **Profession default: the coworker's own family.** `wiki_profession_read`
+  lets the coworker read pages under `professions/<key>/` for its bound
+  family only. The family is resolved by
+  `findProfessionFamilyForAgentIdentity`
+  (`apps/web/lib/decision-perspective/resolve-profession-profile.ts`), the
+  same resolver that profession grounding already uses
+  (`apps/web/lib/tak/profession-grounding.ts`). Grant checks and prompt
+  grounding therefore always agree on what a coworker's craft corpus is.
+- **Further families.** A job that genuinely spans professions gets one more
+  `AgentToolGrant` row per extra family, keyed
+  `wiki_profession_read:<professionKey>`. Adding one is a WWWD decision made
+  from the coworker record. Revoking one uses the existing
+  `AgentToolGrantRevocation` tombstone, so the boot seed cannot bring it
+  back. `AgentToolGrant.grantKey` is already a free string, so no schema
+  change is needed.
+- **No family, no profession read.** A coworker that maps to no family
+  reads no profession pages. This fails closed, and it narrows today's
+  behaviour. Before enforcement, one release runs in report-only mode: it
+  lists unmapped coworkers that read profession pages, using
+  `ProfessionCorpusUsageStat` and the tool logs, so the organization can bind
+  or grant a family before access is removed.
+- **Narrowing the kernel or organization corpus.** These grants are stored
+  per coworker as `AgentToolGrant` rows, the existing per-coworker grant
+  store edited from the coworker record. An organization can remove either
+  corpus from a coworker; that is a WWWD decision.
 - **Enforcement.** Every knowledge read tool filters its results by the
-  caller's corpus grants: the existing tools and every linking path in this
-  epic. A tool whose whole purpose is one corpus (`principle_decide` for the
-  kernel, `evaluate_profession_decision` for the profession corpus) refuses
-  cleanly when the caller lacks that grant.
+  caller's corpus grants and profession families. That covers the existing
+  tools and every linking path in this epic. A tool whose whole purpose is
+  one corpus refuses cleanly when the caller lacks the grant:
+  `principle_decide` for the kernel, and `evaluate_profession_decision` for a
+  family outside the caller's set.
+- **People.** Family scoping is a limit on agents. People read the
+  profession corpus through their own RBAC capabilities, as today. A person's
+  occupation family (`OccupationProfile.wsidProfessionFamily`) is used only to rank
+  results (below), never to hide them.
 
 Narrowing the defaults themselves is an organization decision, not a platform
 one.
+
+**Ranking within the job's family.** Every list that the linking features
+return puts the reader's own family first. That covers backlinks, "referenced
+by", unlinked mentions, editor autocomplete and the quick switcher. For an
+agent, the family is its bound family; for a person, it is the family of their
+occupation, if one is bound. The order is: same family, then the kernel and the
+reader's organization overlay, then other granted families. Ranking runs only
+after the R1 filter, so a page that was filtered out cannot affect the order.
+
+**Graph retrieval seeded from the job.** When `wiki_query` runs in `ppr` mode
+(Personalized PageRank over the `WikiPageLink` subgraph,
+`apps/web/lib/wiki/recall.ts`), it does two things:
+
+- It cuts the subgraph down to the pages the caller may read before
+  PageRank runs. A walk therefore never passes through a page outside the
+  caller's families, and such a page cannot raise the score of a readable
+  one.
+- It seeds the walk with the query's vector hits plus the caller's family
+  pages. Links therefore pull in related craft from the coworker's own field,
+  not from neighbouring professions.
+
+`vector` mode applies the same family filter. Links from one family to
+another remain allowed (R4 permits WSID→WSID), but such a link is followed
+only if the far end is in the caller's family set.
+
+**Linking the organization's stance to its craft.** An organization overlay
+page that sets the organization's position for a job may link to that job's
+profession pages. R4 already permits WWWD→WSID links. With family ranking, a
+coworker reading its organization's overlay therefore reaches its own craft
+corpus first. No link runs back from WSID to WWWD.
 
 **R6. Export is the highest-risk path.** Export takes knowledge out of the
 platform. In this epic only a person can start one, from the portal. There is
@@ -278,7 +340,8 @@ by the reference writer, or when their source or target entity is deleted.
   `listInbound(targetKey, reader, page)` and
   `listOutbound(sourceKey, reader, page)`. Each read runs in three steps:
   1. The query pushes the cheap filters into SQL: the organization and corpus
-     columns stored on the edges (R4 and R5).
+     columns stored on the edges, and, for profession pages, the family key
+     taken from the `professions/<key>/` slug prefix (R4 and R5).
   2. The batch check `canReadEntities(reader, kind, keys[])` runs once per
      kind, never once per row.
   3. Titles and snippets are loaded from the source rows that passed.
@@ -290,7 +353,7 @@ by the reference writer, or when their source or target entity is deleted.
 
   | Entity | Rule |
   |--------|------|
-  | Wiki page | Organization scope: `organizationId IN (null, readerOrg)`, with the reader's organization taken from the session. Agents also need the corpus grant for the page (R5). |
+  | Wiki page | Organization scope: `organizationId IN (null, readerOrg)`, with the reader's organization taken from the session. Agents also need the corpus grant for the page; for a profession page, the page's family must be in the agent's family set (R5). Results are ordered by the reader's family after this filter (R5, ranking). |
   | Backlog item, epic | Backlog read capability. Items marked `confidential` or `restricted` also require that level in the reader's `Principal.sensitivityClearance`; for an agent, in the clearance of both the coworker and its operator. Both enums use the same four levels. |
   | Workroom, Workroom message | Room admission |
   | Document | `canReadDocument`, owned by BI-957915CB (enforced document permissions). Until that item lands, the reader applies organization scope, and the readable set excludes any document whose `accessScope` is not `organization`. Excluding them never leaks; it only hides more than strictly necessary. |

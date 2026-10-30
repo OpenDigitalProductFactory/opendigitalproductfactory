@@ -45,6 +45,7 @@ import {
   startRun,
   completeRun,
   recordPromoterReadiness,
+  recordReassessmentCompatibility,
   recordRunRecoveryPoint,
   sanitizePromoterReadinessReport,
   claimAdmittedRunForWorker,
@@ -88,6 +89,16 @@ describe("self-upgrade evidence merging", () => {
     mocks.findUnique.mockResolvedValue({ completionEvidence: { readiness: report, rollback: { status: "pending" } } });
     await recordRunRecoveryPoint("SUR-1", { status: "ok" });
     expect(mocks.update.mock.calls[0][0].data.completionEvidence).toMatchObject({ readiness: report, rollback: { status: "pending" }, recoveryPoint: { status: "ok" } });
+  });
+
+  it("retains installer, recovery and both compatibility observations separately", async () => {
+    const proof = { schemaVersion: 1 as const, configDigest: `sha256:${"d".repeat(64)}`, sourceSha: "a".repeat(40), sourceContentHash: "b".repeat(64), contractSha256: "c".repeat(64),
+      owners: { transport: { version: 2, sourceSha256: "e".repeat(64) }, approval: { version: 2, sourceSha256: "e".repeat(64) }, worker: { version: 2, sourceSha256: "e".repeat(64) }, writer: { version: 2, sourceSha256: "e".repeat(64) } } };
+    const preflight = { stage: "preflight", observedAt: "2026-10-22T01:00:00Z", proof };
+    const swap = { stage: "swap" as const, observedAt: "2026-10-22T01:01:00Z", proof };
+    mocks.findUnique.mockResolvedValue({ completionEvidence: { readiness: { imageDigest: "promoter-digest", migrationHandoff: "signed-installer-proof" }, recoveryPoint: { status: "ok" }, reassessmentCompatibility: { preflight }, future: 42 } });
+    await recordReassessmentCompatibility("SUR-1", swap);
+    expect(mocks.update.mock.calls[0][0].data.completionEvidence).toEqual({ readiness: { imageDigest: "promoter-digest", migrationHandoff: "signed-installer-proof" }, recoveryPoint: { status: "ok" }, future: 42, reassessmentCompatibility: { preflight, swap } });
   });
 });
 

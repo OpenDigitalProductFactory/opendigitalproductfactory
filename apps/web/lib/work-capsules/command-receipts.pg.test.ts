@@ -9,7 +9,9 @@ import { join } from "node:path";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createDatabaseClient } from "@dpf/db";
-import { CommandIdConflictError, ReplayedCommandRejection, runReceiptedCommand, type ReceiptDb } from "./command-receipts";
+import { CommandIdConflictError, ReplayedCommandRejection, commandPayloadBinding, runReceiptedCommand, type ReceiptDb } from "./command-receipts";
+
+import { lockAllNonprodEnvironments, lockNonprodEnvironment } from "../nonprod/environment-lease-lock";
 
 const slotUrl = process.env.DATABASE_URL?.trim() ?? "";
 function canonicalSlotUrl() {
@@ -147,4 +149,120 @@ describe.skipIf(!DATABASE_URL)("command receipts (real Prisma database)", () => 
     expect((await pool.query(`SELECT counter FROM "WorkCapsule" WHERE "capsuleId" = 'WC-1'`)).rows[0].counter).toBe(0);
     expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind = 'command-rejected'`)).rows[0].n).toBe(1);
   });
+
+  function signal<T = void>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+  async function waitForBlockedBy(waiter: number, holder: number) {
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline) {
+      const observed = await pool.query<{ blocking: number[] }>("SELECT pg_blocking_pids($1) AS blocking", [waiter]);
+      if (observed.rows[0]?.blocking.includes(holder)) return;
+      await new Promise((done) => setTimeout(done, 10));
+    }
+    throw new Error(`PostgreSQL did not observe process ${waiter} waiting for ${holder}`);
+  }
+  const boundTarget = { kind: "workroom", id: "WC-1" };
+  const boundScope = "user:bound|agent:handoff";
+  const payloadBinding = commandPayloadBinding({ phase: "request", capsuleId: "WC-1", receiver: "receiver-a" });
+  async function transferOnce(tx: ReceiptDb) {
+    await tx.$executeRaw!`UPDATE "WorkCapsule" SET counter = counter + 1 WHERE "capsuleId" = ${"WC-1"}`;
+    return { accepted: true };
+  }
+  const boundInput = () => ({ db: db(), authorityScopeKey: boundScope, commandId: "handoff", commandType: "reassign",
+    target: boundTarget, payloadBinding, beforeRoomLock: lockAllNonprodEnvironments });
+
+  it.each(["equal", "different"])("returns the %s-payload winner committed between rollback and rejection publication", async (payload) => {
+    const rolledBack = signal();
+    const publish = signal();
+    const original = new Error("original refusal");
+    let attempt = 0;
+    const firstDb: ReceiptDb = { ...db(), $transaction: async (body, options) => {
+      const current = ++attempt;
+      try { return await prisma.$transaction((tx) => body(receiptDb(tx)), options); }
+      catch (error) {
+        if (current === 1 && error === original) { rolledBack.resolve(); await publish.promise; }
+        throw error;
+      }
+    } };
+    const first = runReceiptedCommand({ ...boundInput(), db: firstDb,
+      run: async (tx) => { await transferOnce(tx); throw original; },
+      rejectionOf: (error) => error === original ? { code: "held", message: original.message } : null });
+    // Attach a rejection observer immediately; the assertion below still examines the original promise.
+    void first.catch(() => undefined);
+    await rolledBack.promise;
+    let winner: unknown;
+    try {
+      winner = await runReceiptedCommand({ ...boundInput(),
+        payloadBinding: payload === "equal" ? payloadBinding : commandPayloadBinding({ receiver: "receiver-b" }),
+        run: transferOnce });
+    } finally { publish.resolve(); }
+    if (payload === "equal") await expect(first).resolves.toEqual(winner);
+    else await expect(first).rejects.toBeInstanceOf(CommandIdConflictError);
+    const rows = await pool.query(`SELECT kind, payload FROM "WorkCapsuleActivity"`);
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0].kind).toBe("command-accepted");
+    expect((await pool.query(`SELECT counter FROM "WorkCapsule" WHERE "capsuleId" = 'WC-1'`)).rows[0].counter).toBe(1);
+  });
+
+  it("serializes rejection publication against a different payload and preserves one refusal", async () => {
+    const publicationLocked = signal<number>();
+    const releasePublication = signal();
+    const secondStarted = signal<number>();
+    const original = new Error("held by source");
+    let callbacks = 0;
+    const first = runReceiptedCommand({ ...boundInput(), beforeRoomLock: async (tx) => {
+      await lockAllNonprodEnvironments(tx);
+      if (++callbacks === 2) {
+        const [row] = await tx.$queryRaw!`SELECT pg_backend_pid() AS pid` as Array<{ pid: number }>;
+        publicationLocked.resolve(row!.pid);
+        await releasePublication.promise;
+      }
+    }, run: async () => { throw original; }, rejectionOf: (error) => error === original ? { code: "held", message: original.message } : null });
+    void first.catch(() => undefined);
+    const publisherPid = await publicationLocked.promise;
+    const secondDb: ReceiptDb = { ...db(), $transaction: (body, options) => prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      secondStarted.resolve(row!.pid);
+      return body(receiptDb(tx));
+    }, options) };
+    const second = runReceiptedCommand({ ...boundInput(), db: secondDb,
+      payloadBinding: commandPayloadBinding({ receiver: "different" }), run: transferOnce });
+    void second.catch(() => undefined);
+    try { await waitForBlockedBy(await secondStarted.promise, publisherPid); }
+    finally { releasePublication.resolve(); }
+    await expect(first).rejects.toBe(original);
+    await expect(second).rejects.toBeInstanceOf(CommandIdConflictError);
+    const rows = await pool.query(`SELECT kind, payload FROM "WorkCapsuleActivity"`);
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]).toMatchObject({ kind: "command-rejected", payload: { payloadBinding, rejection: { code: "held" } } });
+    expect((await pool.query(`SELECT counter FROM "WorkCapsule" WHERE "capsuleId" = 'WC-1'`)).rows[0].counter).toBe(0);
+  });
+
+  it("uses the same advisory fence as ordinary lease allocation", async () => {
+    const handoffLocked = signal<number>();
+    const releaseHandoff = signal();
+    const leaseStarted = signal<number>();
+    const handoff = runReceiptedCommand({ ...boundInput(), beforeRoomLock: async (tx) => {
+      await lockAllNonprodEnvironments(tx);
+      const [row] = await tx.$queryRaw!`SELECT pg_backend_pid() AS pid` as Array<{ pid: number }>;
+      handoffLocked.resolve(row!.pid);
+      await releaseHandoff.promise;
+    }, run: transferOnce });
+    const holder = await handoffLocked.promise;
+    const leaseWriter = prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      leaseStarted.resolve(row!.pid);
+      await lockNonprodEnvironment(receiptDb(tx), "local-integration-ci");
+      const [committed] = await tx.$queryRaw<Array<{ counter: number }>>`SELECT counter FROM "WorkCapsule" WHERE "capsuleId" = ${"WC-1"}`;
+      return committed!.counter;
+    }, { isolationLevel: "ReadCommitted" });
+    try { await waitForBlockedBy(await leaseStarted.promise, holder); }
+    finally { releaseHandoff.resolve(); }
+    await expect(handoff).resolves.toEqual({ accepted: true });
+    await expect(leaseWriter).resolves.toBe(1);
+  });
+
 });

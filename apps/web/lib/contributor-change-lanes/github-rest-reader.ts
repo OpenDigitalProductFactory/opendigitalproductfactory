@@ -209,6 +209,16 @@ async function readCredential(prisma: PrismaLike, providerId: string): Promise<s
  */
 const REPOSITORY_CONTROLLER_PROVIDER_ID = "github-repository-controller";
 
+/**
+ * The managed-repository controller login only, never a read fallback
+ * (BI-C899BB40). A write to the managed repository, such as the acceptance
+ * sweep's one submitter question, must not borrow a read token; with no
+ * controller login it gets null and records that nothing was sent.
+ */
+export async function resolveRepositoryControllerToken(prisma: PrismaLike): Promise<string | null> {
+  return readCredential(prisma, REPOSITORY_CONTROLLER_PROVIDER_ID);
+}
+
 export type ResolveGithubTokenOptions = {
   /**
    * Try the managed-repository login first, then the existing chain. Issue

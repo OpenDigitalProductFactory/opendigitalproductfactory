@@ -1,7 +1,7 @@
 import "server-only";
 
 import { capabilityDriftFromObservations, capabilityDriftFromReports, type CapabilityDrift } from "./client-capability-drift";
-import { credentialKindOf, resolveToolchainVerdict, type PublishedToolchain, type ToolchainVerdict } from "./toolchain-verdict";
+import { credentialKindOf, resolveToolchainVerdict, type ConvergeStatus, type PublishedToolchain, type ToolchainVerdict } from "./toolchain-verdict";
 
 // BI-D6DFC0E7 (EP-COMPETENCE-FLYWHEEL, host-agent scope). Make agent-surface
 // readiness OBSERVABLE across the fleet, not just self-attested locally.
@@ -262,6 +262,10 @@ export type ToolchainObservationRow = {
   clientInfoName: string | null;
   clientInfoVersion: string | null;
   lastObservedAt: Date;
+  /** Database form of the host agent's status (underscores), or null when not reported. */
+  convergeStatus?: string | null;
+  convergeCode?: string | null;
+  convergeSince?: Date | null;
 };
 
 export type ToolchainCopyRollup = {
@@ -275,8 +279,11 @@ export type ToolchainCopyRollup = {
     loadedDigest: string;
     authMode: ToolchainObservationRow["authMode"];
     verdict: ToolchainVerdict;
+    /** Why the verdict is what it is (BI-81AB897A E2: the view used to discard these). */
+    reasons: string[];
     silent: boolean;
     lastObservedAt: Date;
+    hostAgent: { status: ConvergeStatus; code: string | null; since: Date | null } | null;
   }>;
 };
 
@@ -301,7 +308,7 @@ export function rollUpToolchainCopies(
       row.loadedDigest !== "undeclared" && row.loadedPackVersion
         ? { pack: row.loadedPackVersion, digest: row.loadedDigest, client: row.clientKind }
         : null;
-    const { verdict } = resolveToolchainVerdict({
+    const { verdict, reasons } = resolveToolchainVerdict({
       declaration,
       credential: {
         authSource: row.authMode === "oauth" ? "oauth" : row.authMode === "bearer" ? "pat" : "session-jwt",
@@ -324,8 +331,14 @@ export function rollUpToolchainCopies(
       loadedDigest: row.loadedDigest,
       authMode: row.authMode,
       verdict,
+      reasons: verdict === "stale" && reasons.length === 0
+        ? ["the files it loaded differ from the released pack"]
+        : reasons,
       silent,
       lastObservedAt: row.lastObservedAt,
+      hostAgent: row.convergeStatus
+        ? { status: row.convergeStatus.replace(/_/g, "-") as ConvergeStatus, code: row.convergeCode ?? null, since: row.convergeSince ?? null }
+        : null,
     });
     if (!silent && (rollup.verdict === "silent" || VERDICT_RANK[verdict] > VERDICT_RANK[rollup.verdict])) {
       rollup.verdict = verdict;

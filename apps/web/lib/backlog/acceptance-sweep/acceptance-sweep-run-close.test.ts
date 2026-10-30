@@ -176,3 +176,56 @@ describe("runAcceptanceSweep — closing under the operator pre-authorisation", 
     });
   });
 });
+
+// BI-C899BB40 (AC-CFD-3): under the new rule a merged item reads allowed, so
+// the sweep drains the pool at the default bound of 100 per run; an item with
+// no delivery evidence still reads input-required and is never touched.
+describe("runAcceptanceSweep — draining delivered work (BI-C899BB40)", () => {
+  it("closes delivered items up to the default bound and leaves undelivered ones alone", async () => {
+    const { DEFAULT_CLOSE_LIMIT } = await import("./close-authorisation");
+    expect(DEFAULT_CLOSE_LIMIT).toBe(100);
+    const evaluations: Record<string, SweepEvaluation | null> = {};
+    for (let i = 0; i < 110; i++) evaluations[`d${String(i).padStart(3, "0")}`] = evaluation("allowed");
+    for (let i = 0; i < 5; i++) evaluations[`u${i}`] = evaluation("input-required", false, { unmet: [{
+      code: "DELIVERY_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator", evidenceRefs: [],
+      evidenceLane: "none", unreadEvidenceRefs: [], nextAction: null } as InitiativeReadinessDecision["unmet"][number]] });
+    const p = ports(evaluations, { resolveCloseAuthorisation: async () => ({ ...ENABLED, limit: DEFAULT_CLOSE_LIMIT }) });
+    const summary = await runAcceptanceSweep(p, { ...CONFIG, pageSize: 200 });
+    expect(p.close).toHaveBeenCalledTimes(100);
+    expect(summary.closing.closed).toHaveLength(100);
+    expect(summary.closing.deferredByLimit).toHaveLength(10);
+    const closedOrDeferred = new Set([...summary.closing.closed, ...summary.closing.deferredByLimit]);
+    for (let i = 0; i < 5; i++) expect(closedOrDeferred.has(`BI-U${i}`)).toBe(false);
+  });
+});
+
+// BI-C899BB40 (AC-CFD-1, AC-CFD-2): a done item is never re-evaluated for
+// acceptance; its one bounded step goes to the confirmation lane.
+describe("runAcceptanceSweep — done items take their one bounded step", () => {
+  it("sends a done item to confirm, never to evaluate or close, and reports the step", async () => {
+    const done = { ...item("x"), status: "done" };
+    const evaluate = vi.fn(async () => evaluation("allowed"));
+    const confirm = vi.fn(async () => ({ step: "question-not-sent" as const, reason: "no-credential" }));
+    const p = ports({}, {
+      selectPage: async () => ({ items: [done, { ...item("y"), status: "done" }], unsnapshotted: 0, nextCursor: null }),
+      evaluate, confirm: vi.fn()
+        .mockImplementationOnce(confirm)
+        .mockImplementationOnce(async () => ({ step: "not-fixed" as const, correctiveItemId: "BI-ACC-1" })),
+    });
+    const summary = await runAcceptanceSweep(p, CONFIG);
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(p.close).not.toHaveBeenCalled();
+    expect(summary.confirmation).toEqual({ visited: 2, steps: { "question-not-sent": 1, "not-fixed": 1 },
+      notSentByReason: { "no-credential": 1 }, correctiveItemIds: ["BI-ACC-1"], errored: [] });
+  });
+
+  it("records a failed step and keeps going", async () => {
+    const p = ports({ a: evaluation("allowed") }, {
+      selectPage: async () => ({ items: [{ ...item("x"), status: "done" }, item("a")], unsnapshotted: 0, nextCursor: null }),
+      confirm: vi.fn(async () => { throw new Error("github down"); }),
+    });
+    const summary = await runAcceptanceSweep(p, CONFIG);
+    expect(summary.confirmation.errored).toEqual([{ itemId: "BI-X", message: "github down" }]);
+    expect(summary.closing.closed).toEqual(["BI-A"]);
+  });
+});

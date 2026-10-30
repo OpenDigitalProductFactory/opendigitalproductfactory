@@ -10,8 +10,8 @@
 // "reconcile-coworker-self-tasks-hourly".
 
 import { prisma } from "@dpf/db";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
+import { isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import {
   PROACTIVITY_FACT_CATEGORY,
   PROACTIVITY_OVERRIDE_FACT_PREFIX,

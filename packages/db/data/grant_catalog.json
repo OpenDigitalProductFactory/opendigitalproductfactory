@@ -1699,10 +1699,12 @@
     },
     {
       "key": "work_room_write",
-      "description": "Post a message into a Work Room and invite participants.",
+      "description": "Post a message into a Work Room, invite participants, and broadcast a COO ask.",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "acknowledge_workroom_broadcast",
+        "broadcast_workroom_ask",
         "invite_room_participant",
         "post_room_message"
       ],
@@ -1724,11 +1726,15 @@
     },
     {
       "key": "workbook_write",
-      "description": "Create and update rows and cells in user-defined Workbook / Universal Grid tables (EP-GRID-WORKBOOKS).",
+      "description": "Create Workbooks, tables, typed columns and views, and create and update rows and cells in user-defined Workbook / Universal Grid tables (EP-GRID-WORKBOOKS).",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "workbook_add_column",
+        "workbook_create",
         "workbook_create_row",
+        "workbook_create_table",
+        "workbook_create_view",
         "workbook_update_cells"
       ],
       "implies": []

@@ -1,5 +1,92 @@
 # Platform Support Watch-List (living document)
 
+**Expired authority-host Edge action client (BI-AFDB58C8).**
+
+On October 29 an enrolled Mac still heartbeated while its separate mTLS action
+client had expired on October 18. Existing certificate files and a live native
+service did not prove that the protected action channel worked. The root CA
+remained valid. Check actual certificate validity and registration separately.
+
+The existing authority PKI owner now distinguishes renewal from expired-client
+reissuance, validates the expected public identity and root, stages the pair
+privately, and retains prior credentials on a failed replacement. Bash and
+PowerShell consume one public-certificate validator; the normal release assets
+carry it and both bootstrap adapters. This does not enable an explicit disabled
+channel, alter node grants or permit expired authentication. Unknown interrupted
+repair checkpoints require reconciliation before another attempt. Native Windows
+execution, live certificate repair and inference activation remain separate
+evidence; passing source fixtures cannot establish them.
+
+Independent review also found that first issuance on PowerShell could suppress a
+rollback deletion error, then discard its checkpoint and lock with a partial key
+still published. Cleanup now requires confirmed removal, and retains recovery
+state on any uncertainty. A fixture executing the production PowerShell owner
+reproduced the failure and verified the correction under PowerShell 7.6.9 on
+macOS, with fake issuer and file-failure adapters. This is not native Windows or
+PowerShell 5.1 execution evidence. The fixture runs when a PowerShell runtime is
+available and explicitly reports a skip otherwise.
+
+**Windows foreground gate cancellation.**
+
+BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows
+`pnpm.cmd` entry point. A controlled Ctrl-C after admission previously stopped
+the owned processes while leaving the native gate record `running` without
+lease release. The termination journal proved cleanup started; it did not prove
+that the final-state writer ran. This reproduction does not establish the cause
+of an earlier interrupted host run.
+
+The existing pregate wrapper and saved-CA startup re-exec share a bounded
+foreground wait. Cancellation listeners remain until the child closes and
+interrupted-state recovery finishes. The HTTPS fixture loads a valid isolated
+CA into the fresh Node process; hostname and certificate validation remain on.
+Explicit cancellation does not revive queued work. Windows receives one console
+Ctrl-C; forwarding `child.kill("SIGINT")` would forcibly terminate the child.
+If normal cancellation cannot close it within 30 seconds, the wrapper terminates
+only its owned child and waits another 10 seconds for closure. Unobserved closure
+remains an error and cannot trigger terminal recovery or lease release.
+The enclosing saved-CA startup owner allows 60 seconds before termination so it
+cannot preempt the inner close budget and existing recovery, then retains the
+same 10-second closure bound.
+
+The Windows console regression runs in the existing Gate Executor Liveness
+guard. Its isolated fixture tests normal completion, admitted cancellation on
+direct and saved-CA routes, and an actual nonzero child exit. Cancellation must retain native nonpass state,
+release the exact fixture lease and leave no owned process requiring harness
+cleanup; completed failures remain failures. Fixture receipts are never platform
+canonical evidence or deployed acceptance. A cancelled Windows Job may have no
+completed execution checkpoint; do not manufacture one or finalize it as a pass.
+`pregate:status` remains read-only. Whole-chain loss still requires reconciliation
+of the original durable task and retained evidence before another attempt.
+
+The driver retains its early two-second closure snapshot, then releases only
+observation handles. The launcher observes its enclosing Windows Job for up to
+ten seconds before the first destructive cleanup, including when the driver
+failed. Driver console closure alone does not prove that every Job member has
+exited. Cleanup outcomes and exceptions remain recorded separately from natural
+settlement; a later empty Job never clears a driver failure. The shared Job query retains initial and final active
+counts, available PID/creation identities, elapsed time, budget and bounded
+progress snapshots. Only verified natural emptiness within that budget passes;
+timeout, query or identity failure, and emergency termination remain failures.
+The Job handle owns containment, so diagnostic PIDs never become kill authority.
+Native regression probes cover an empty Job, a short-lived non-console child,
+a persistent child, missing Job handles, query/identity failures, and a failed
+driver whose descendants close naturally. A controlled delayed lease response
+crosses the early snapshot boundary: native cancellation must still write one
+non-success result, release once, close naturally and leave the outside sentinel
+running. A response held beyond final settlement remains unverified and requires
+explicit containment; it must not produce a passing result. This extends the documented
+[Job member query](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+and [handle membership check](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob).
+The earlier saved-CA fixture recorded emergency cleanup without the residual
+member identity; its cause remains unknown and its failed result is retained.
+
+The documentation-anchor preflight uses the same configured MCP URL and
+refreshable client credential as the gate, retaining the legacy endpoint and
+PAT fallback. A stale ambient legacy connection must not override an explicitly
+configured client file and URL. Unavailable authority evidence remains an
+unverified citation with a warning; it is neither a missing item nor a verified
+anchor. No credential export or switch of identity is needed for this check.
+
 ## Saved host CA trust and stale clients
 
 The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
@@ -62,6 +149,15 @@ child environment. Windows fixtures that invoke `sh` must not inherit WSL or
 depend on an agent manually extending PATH. A missing compatible shell is an
 unavailable prerequisite (exit 88), not a failing product test. The parent
 environment, worker limits, test deadlines and lease fences stay unchanged.
+
+Contributor preview declaration isolation (BI-6B109903) binds a private regular
+host file directly at `/workspace/apps/web/next-env.d.ts`; a host file placed
+under node_modules would be hidden by existing named output volumes. Exact
+Windows/Desktop path matching also applies to this file, with fresh daemon
+qualification. Compose omits `read_only: false` in normalized config; actual
+inspection still requires `RW: true`, and `create_host_path: false` prevents a
+missing file from becoming a directory. A native governed preview must verify
+the bind; a simulated filesystem projection establishes only writer isolation.
 
 ## Literal Windows package-manager arguments (BI-263055E3)
 
@@ -242,7 +338,7 @@ bootstrap runs with the system interpreter.
 | S4 | `Path.write_text(newline="\n")` raises `TypeError: unexpected keyword argument` — the kwarg was added in Python 3.10 | macOS (system python3 can be 3.9) | ✅ `packages/dpf-skill-pack/scripts/update_agent_toolchain.py` writes bytes (`write_bytes(content.encode("utf-8"))`) to keep LF endings; crashed `dpf-bootstrap-agent-toolchain.sh` during `ensure_codex_marketplace`. Locked by `update_agent_toolchain_test.py`. | Any Python invoked via bare `python3` from installer/bootstrap scripts must run on 3.9: no `match`, no `tomllib` (3.11+, test-only), no 3.10+ stdlib kwargs. CI runs 3.11+, so a 3.9 break won't show there — check `docs.python.org` "Changed in version" notes when touching these scripts. |
 | S5 | A synchronous Bash contract test crosses Vitest's timeout, later reports status 127, or shifts the timeout to another case | Windows contributors using Git Bash | ✅ `portal-migrate-boot.test.ts` gives every real-script subprocess its own process-group deadline, captures command/status/signal/stdout/stderr, and retains a non-GNU watchdog fallback for macOS. Repeated `--maxWorkers=4` coverage locks the boundary. | Vitest's timer cannot interrupt a blocked `spawnSync`. Any synchronous shell-contract test needs a subprocess-owned deadline shorter than the test timeout; do not assume GNU `timeout` exists on stock macOS. |
 | S6 | Local-CI FIFO remains frozen on `dependency-convergence-active` after the convergence owner exits | Windows (also applicable cross-platform) | ✅ Convergence locks now carry PID + process-start identity. Admission reconciles a dead/recycled owner atomically, keeps a live or unmeasurable owner fail-closed, and retains a bounded legacy-empty-lock compatibility path. Locked by `local-convergence-lock.test.mjs` and host-pressure acceptance. | A directory's existence or mtime is not owner liveness. Use the shared convergence-lock helper; never delete the lock manually or weaken active-install exclusion. |
-| S7 | Managed worktree bootstrap reports `node_modules_missing` even though `pnpm` is installed | Windows | ✅ Host command resolution now launches the `pnpm` cmd shim through `ComSpec` (without global shell mode), and bootstrap launch/install failures surface structured `managed_install_failed` evidence. Locked by `host-command-invocation.test.mjs` and `bootstrap-worktree-deps.test.mjs`. | Node child-process APIs can return ENOENT for `pnpm` and EINVAL for direct `pnpm.cmd` execution. Reuse `resolveHostCommandInvocation`; do not add another executable-name fallback chain. |
+| S7 | Managed worktree bootstrap reports `node_modules_missing` even though `pnpm` is installed | Windows | ✅ Host command resolution launches the installed pnpm/Corepack JavaScript entrypoint through Node with literal argument arrays and no shell. Managed bootstrap and `gate:wait` reuse this adapter; bootstrap failures retain `managed_install_failed`, while a failed gate launch remains unrun with its diagnostic and no retry. Locked by actual child execution in `host-command-invocation.test.mjs`, `bootstrap-worktree-deps.test.mjs` and `gate-wait.test.mjs` (BI-2FFDBE62). | Node child-process APIs can return ENOENT for `pnpm` and EINVAL for direct `pnpm.cmd` execution. Reuse `resolveHostCommandInvocation`; do not add another executable-name fallback chain. |
 | S8 | Local-CI aborts convergence or rewrites pnpm policy when an agent host injects a newer pnpm than the repository pin | macOS/Linux contributor hosts (observed with pnpm 11 over repository pnpm 10) | ✅ The admitted runner checks `package.json#packageManager`; a mismatch is shadowed by a slot-local shim that invokes the exact repository pin through the available host pnpm. Matching hosts stay unchanged. Locked by `local-ci-runner.test.mjs`. | Never trust contributor `PATH` as the package-manager version contract. Keep the repository pin in force for convergence, Prisma generation, tests, typecheck, and build. |
 | S9 | `git`, `docker` and `prisma` all fail with `dpf-shell-guard.ps1: Parameter cannot be processed because the parameter name '' is ambiguous` — for the whole user account, in every terminal, persisting across reboots; the installer itself then dies at "Step 7: Starting the platform" | Windows | ✅ The generated `safety-bin\*.cmd` shims no longer pass a `--` separator (`pwsh -File` parses `--` as a parameter prefix with an empty name), and `dpf-shell-guard.ps1` is a **simple** script — no `[Parameter()]` attributes, no `[CmdletBinding()]`, reading pass-through args from the automatic `$args`. Locked by `check-shell-guard-shim-contract.test.mjs` (policy guard `shell-guard-shim-contract`). | Step 6 prepends `safety-bin` to the **user PATH in the registry**, so any binding bug there breaks the user's real toolchain, not just DPF. Never make the guard an advanced script: common parameters reappear and forwarded flags prefix-match them (`docker compose up -d` → `-Debug`, `docker compose -f` → a `-ForwardedArgs`-style param). Never name a parameter `$Args` (collides with the automatic `$args`). |
 | S10 | A Node ESM entry script exits 0 silently — no output, `main()` never ran — when invoked through a symlinked path spelling; on macOS this broke the Janitor Tests bundle because `os.tmpdir()` is `/var/folders/…` → `/private/var/…`, so a contract test staging `gate-worktree.mjs` into tmpdir got a false "pass" instead of the refusal exit | macOS (any host where the invocation path crosses a symlink) | ✅ Node realpath-resolves the ESM entry module, so `import.meta.url` and `process.argv[1]` can spell the same file differently and the naive `argv[1] === fileURLToPath(import.meta.url)` guard fails open. The pregate script family (`gate-worktree.mjs`, `pregate.mjs`, `pregate-status.mjs`, `local-ci-runner.mjs`) now shares `scripts/lib/entry-module.mjs` (`isEntryModule`), which compares realpaths. Locked by `entry-module.test.mjs` and a symlinked-invocation test in `tests/release/pregate-node-gate-contract.test.mjs`. | Never write a raw `argv[1] === THIS_FILE` guard in a new `.mjs` entry point — use `isEntryModule(import.meta.url)`. For a gate script this failure mode is the worst kind: it fails open with exit 0. Linux CI can't catch it (its tmpdir isn't a symlink), so a green PR proves nothing about this trap. |
@@ -339,3 +435,10 @@ The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns relea
 and acceptance caveats. Confirm the selected release contains the changes;
 customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
 Historical root-owned directories are preserved and refused for scoped recovery.
+
+## Managed Mac inference qualification
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Qualified Apple M5 Max | A merged portal update is mistaken for a changed native engine; a package/report copied from another Mac is treated as local qualification. | Explicit native installer opt-in stages immutable source and a qualification bound to this enrolled host. A current signed action, owned drain and host inference reservation select it; verify actual mapped engine bytes and useful DPF results. Preserve Docker vendor files and the prior selection for owned rollback. |
+| Other macOS hardware, Windows and Linux | An unqualified acceleration package or native action is adopted automatically. | Native managed inference stays unregistered outside the qualified Apple Silicon procedure. Existing Windows, macOS and Linux native installer/host-upkeep behavior continues; no inference action is added to automatic host-upkeep policy. Qualify each additional hardware/runtime/model profile before offering activation. |

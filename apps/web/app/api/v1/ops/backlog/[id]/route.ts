@@ -9,6 +9,7 @@ import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
 import { completeBacklogItemTransition } from "@/lib/backlog/initiative-readiness/backlog-terminal-transition";
 import { terminalTransitionConflict } from "@/lib/backlog/initiative-readiness/terminal-transition-response";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 
 export async function PATCH(
   request: Request,
@@ -30,7 +31,7 @@ export async function PATCH(
 
     const existing = await prisma.backlogItem.findUnique({
       where: { id },
-      select: { id: true, itemId: true, status: true, organizationId: true },
+      select: { id: true, itemId: true, status: true, organizationId: true, body: true },
     });
     if (!existing) {
       throw apiError("NOT_FOUND", "Backlog item not found", 404);
@@ -48,6 +49,12 @@ export async function PATCH(
       scopeRationale,
       lifecycleTags,
     } = parsed.data;
+
+    // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+    if (status !== undefined && status !== existing.status) {
+      const peerOwned = peerOwnedStatusRefusal(existing.itemId, existing.body);
+      if (peerOwned) throw apiError("PEER_OWNED_ITEM", peerOwned.message, 409);
+    }
 
     if (status === "deferred" || status === "retired") {
       throw apiError(

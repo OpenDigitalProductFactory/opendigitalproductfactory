@@ -34,6 +34,10 @@ export type ConnectedClientRow = {
   lastSeen: Date;
   /** True when a copy it uses is not the released pack (any copy seen this week, else its newest). */
   behind: boolean;
+  /** Why it is behind, in plain words (BI-81AB897A E2); empty when current. */
+  reasons: string[];
+  /** How the host's convergence agent last fared, or null when the connection did not say (BI-3E66F76F). */
+  hostAgent: ToolchainCopyRollup["copies"][number]["hostAgent"];
 };
 
 export type ConnectedClientsView = {
@@ -62,7 +66,9 @@ export function toConnectedClientRows(rollups: ToolchainCopyRollup[]): Connected
     const newest = rollup.copies.reduce((a, b) => (b.lastObservedAt > a.lastObservedAt ? b : a));
     const declared = newest.loadedDigest !== "undeclared";
     const recent = rollup.copies.filter((copy) => !copy.silent);
-    const behind = (recent.length > 0 ? recent : [newest]).some((copy) => copy.verdict !== "current");
+    const considered = recent.length > 0 ? recent : [newest];
+    const behind = considered.some((copy) => copy.verdict !== "current");
+    const reasons = [...new Set(considered.flatMap((copy) => copy.reasons))];
     return {
       credentialRef: rollup.credentialRef,
       ...clientProduct(rollup),
@@ -72,6 +78,8 @@ export function toConnectedClientRows(rollups: ToolchainCopyRollup[]): Connected
       loadedFingerprint: declared ? newest.loadedDigest.slice(0, 12) : null,
       lastSeen: newest.lastObservedAt,
       behind,
+      reasons,
+      hostAgent: newest.hostAgent,
     };
   });
   return rows.sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime());

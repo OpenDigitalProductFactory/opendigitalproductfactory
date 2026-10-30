@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./acceptance-sweep-page";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
+
+import { ACCEPTANCE_CANDIDATE_WHERE, selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./acceptance-sweep-page";
 
 // AC-S2-2 (BI-DF255666; design §3.3 step 1): one run pages at most the
 // configured size, unsnapshotted items first. Snapshotted items are revisited
@@ -79,6 +81,17 @@ describe("selectAcceptanceSweepPage", () => {
       expect(call.take).toBeLessThanOrEqual(5);
     }
     expect(JSON.stringify(db.calls)).not.toContain("updatedAt");
+  });
+
+  // BI-C5794F1D: a work-sync mirror is the peer's to accept; closing it here is
+  // reverted by the next pull. Mirrors never reach the page or the close budget.
+  it("never selects a work-sync mirror owned by a peer installation", async () => {
+    expect(ACCEPTANCE_CANDIDATE_WHERE.AND).toContainEqual(ownedRowBodyWhere());
+    const db = fakeDb([row("a", false)]);
+    await selectAcceptanceSweepPage(db, { pageSize: 5, cursor: "a" });
+    for (const call of db.calls as Array<{ where: { AND: unknown[] } }>) {
+      expect(call.where.AND).toContainEqual(ownedRowBodyWhere());
+    }
   });
 
   it("returns nothing for a zero page", async () => {

@@ -40,7 +40,7 @@ function input(overrides: Partial<CompletionEvidencePolicyInput> = {}): Completi
 }
 
 describe("evaluateCompletionEvidence", () => {
-  it.each(["test_fail", "build_fail", "ux_fail", "migration_fail"] as const)("never grants completion credit for cited %s", (kind) => {
+  it.each(["test_fail", "build_fail", "ux_fail", "migration_fail", "manual_fail"] as const)("never grants completion credit for cited %s", (kind) => {
     const result = evaluateCompletionEvidence(input({
       rawManifest: { workClass: "operational", evidenceActivityIds: ["negative"] },
       evidence: [fact("negative", kind)],
@@ -309,6 +309,30 @@ describe("current failing evidence (BI-4A222439)", () => {
     }));
     expect(result.allowed).toBe(true);
     expect(result.currentFailures).toEqual([]);
+  });
+
+  it("a current manual_fail blocks a manifest that cites an older manual pass", () => {
+    const result = evaluateCompletionEvidence(input({
+      item: { id: "row-1", itemId: "BI-OPS", status: "open", workType: "chore" },
+      rawManifest: {
+        workClass: "operational",
+        evidenceActivityIds: ["manual-pass"],
+      },
+      evidence: [
+        fact("manual-pass", "manual_check", new Date("2026-07-26T09:00:00.000Z")),
+        fact("manual-fail", "manual_fail", new Date("2026-07-26T11:00:00.000Z")),
+      ],
+    }));
+    expect(result.allowed).toBe(false);
+    expect(result.currentFailures).toEqual([
+      { dimension: "manual", evidenceActivityId: "manual-fail", evidenceKind: "manual_fail" },
+    ]);
+    expect(result.blockers).toContainEqual(expect.objectContaining({
+      code: "newer-failure",
+      dimension: "manual",
+      evidenceActivityId: "manual-fail",
+    }));
+    expect(result.acceptanceEvidenceRefs).toEqual([]);
   });
 
   it("a failure outside the completion window is not current", () => {

@@ -28,9 +28,11 @@ function summarizeScan(result: RanOutcome): string {
 async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
   const { prisma } = await import("@dpf/db");
   const entry = ECOSYSTEM_JOB_CATALOG_ENTRIES.find((job) => job.jobId === "ecosystem-inbound-issue-triage")!;
-  const prior = await prisma.scheduledJob.findUnique({ where: { jobId: entry.jobId }, select: { schedule: true } });
   const now = new Date();
-  const schedule = prior?.schedule ?? entry.cron!;
+  // The trigger below is fixed in code, so the catalog cron is the only true
+  // schedule. A stored value could only go stale (BI-78C6646C): refresh it on
+  // every heartbeat so the register and nextRunAt show what actually runs.
+  const schedule = entry.cron!;
   const errors = result.ran ? result.sourceErrors.map(({ source, error }) => `${source}: ${error}`) : [];
   if (result.ran && result.failed > 0) errors.push(`${result.failed} item(s) failed ingestion`);
   const heartbeat = {
@@ -43,7 +45,7 @@ async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
   await prisma.scheduledJob.upsert({
     where: { jobId: entry.jobId },
     create: { jobId: entry.jobId, name: entry.name, schedule, ...heartbeat },
-    update: heartbeat,
+    update: { schedule, ...heartbeat },
   });
 }
 
@@ -51,7 +53,7 @@ async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
 // platform could only POST an issue upstream; nothing ever read one back, so a
 // platform-development install could not see what the ecosystem had submitted.
 //
-// Weekly, matching the ballot cadence in the ecosystem intake spec. No-ops
+// Every four hours: the owner-ratified detection target (spec §6.1). No-ops
 // ("not commissioned") unless this install holds the verified repository-
 // controller commission (BI-FD40397B, spec §6.1). Concurrency 1 is the local
 // single-run protection: a cron fire and a retry never scan concurrently.

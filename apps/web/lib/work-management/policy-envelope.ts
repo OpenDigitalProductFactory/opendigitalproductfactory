@@ -19,7 +19,7 @@ import {
 import {
   hasPassingVerificationEvidence,
   type VerificationEvidence,
-} from "./hitl-join";
+} from "@dpf/validators/workroom-policy/hitl-join";
 
 export type WorkCaseAutonomyMode = "autonomous" | "supervised" | "observed";
 

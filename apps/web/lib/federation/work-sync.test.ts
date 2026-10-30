@@ -17,6 +17,7 @@ function item(itemId: string, updatedAt = "2026-09-01T00:00:00.000Z", epicId: st
     sensitivity: "internal", epicId, source: "user-request", occurrenceCount: 1, scopeKind: null,
     archetypeCategories: [], archetypeIds: [], lifecycleTags: [], createdAt: "2026-08-30T00:00:00.000Z",
     updatedAt, completedAt: null, deferral: null as FederatedWorkItemV1["deferral"],
+    claim: undefined as FederatedWorkItemV1["claim"],
   };
 }
 
@@ -225,5 +226,113 @@ describe("runWorkSync - mirrored deferrals (BI-9DA5F179)", () => {
 
     expect(result.links[0]).toMatchObject({ itemsUpdated: 1, itemsUnchanged: 0 });
     expect(upsertData(db)).toMatchObject({ deferReason: deferral.reason });
+  });
+});
+
+describe("runWorkSync federated twins (BI-91FC6B9A)", () => {
+  const marker = "[origin:tool-defect:surface_open]";
+  const version = BigInt(Date.parse("2026-09-01T00:00:00.000Z"));
+  const synced = (payload: unknown): WorkSyncMirrorRow =>
+    ({ mirrorId: "fwm_x", localRecordRef: "BI-A", version, syncStatus: "synced", payload });
+  const mirroredBody = `Body\n\n${federatedWorkOriginMarker(origin, "BI-A")}`;
+
+  it("stores the origin's claim on the mirror and refreshes on a claim change alone", async () => {
+    const claim = { active: true, since: "2026-09-01T00:00:00.000Z", workrooms: 1 };
+    const db = store({
+      existingItems: { "BI-A": { id: "row-a", body: mirroredBody, status: "open" } },
+      mirrors: [synced({ title: "Item BI-A", status: "open", updatedAt: "2026-09-01T00:00:00.000Z" })],
+    });
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), claim }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsUpdated: 1, itemsUnchanged: 0 });
+    const itemMirror = db.federatedRecordMirror.upsert.mock.calls.map((c) => c[0]).find((a) => a.create.recordType === "backlog-item");
+    expect(itemMirror.update.payload).toEqual({
+      title: "Item BI-A", status: "open", updatedAt: "2026-09-01T00:00:00.000Z", claim,
+    });
+  });
+
+  it("leaves a mirror unchanged when neither version nor claim moved", async () => {
+    const claim = { active: false, since: null, workrooms: 0 };
+    const db = store({
+      existingItems: { "BI-A": { id: "row-a", body: mirroredBody, status: "open" } },
+      mirrors: [synced({ title: "Item BI-A", status: "open", updatedAt: "2026-09-01T00:00:00.000Z", claim })],
+    });
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), claim }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsUnchanged: 1 });
+  });
+
+  it("records the pulled mirror as the twin of this install's own same-origin item", async () => {
+    const db = Object.assign(store(), {
+      backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({}) },
+    });
+    (db.backlogItem as Record<string, unknown>).findMany = vi.fn().mockResolvedValue([
+      { id: "row-local", itemId: "BI-LOCAL", status: "open", body: `Local\n\n${marker}` },
+    ]);
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), body: `Body\n\n${marker}` }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ twinsRecorded: 1 });
+    expect(db.backlogItemActivity.create.mock.calls[0]![0].data).toMatchObject({
+      backlogItemId: "row-local", kind: "federated_twin", payload: { peerItemId: "BI-A", peerInstallationId: origin, marker },
+    });
+  });
+
+  // BI-C5794F1D: the pull's status overwrite is visible in the mirror's history.
+  it("records one status change, attributed to the peer, when a pull changes a mirror's status", async () => {
+    const db = Object.assign(store({
+      existingItems: { "BI-A": { id: "row-a", body: `Body\n\n${federatedWorkOriginMarker(origin, "BI-A")}`, status: "done" } },
+    }), { backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({}) } });
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), status: "awaiting-acceptance" }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsUpdated: 1, statusChangesRecorded: 1 });
+    const statusRows = db.backlogItemActivity.create.mock.calls.map((c) => c[0].data).filter((d) => d.kind === "status_change");
+    expect(statusRows).toHaveLength(1);
+    expect(statusRows[0]).toMatchObject({
+      backlogItemId: "row-a",
+      summary: expect.stringContaining(`done → awaiting-acceptance`),
+      payload: {
+        from: "done", to: "awaiting-acceptance", source: "federated-work-sync",
+        originInstallationId: origin, federationLinkId: "link_1", actorPrincipalId: "peer-principal-row",
+      },
+    });
+  });
+
+  it("records no status change when the pull leaves the status as it was", async () => {
+    const db = Object.assign(store({
+      existingItems: { "BI-A": { id: "row-a", body: `Body\n\n${federatedWorkOriginMarker(origin, "BI-A")}`, status: "open" } },
+    }), { backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({}) } });
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), title: "Renamed" }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsUpdated: 1, statusChangesRecorded: 0 });
+    expect(db.backlogItemActivity.create.mock.calls.filter((c) => c[0].data.kind === "status_change")).toHaveLength(0);
+  });
+
+  it("records the retirement of a mirror the origin removed", async () => {
+    const stale = { mirrorId: "m-gone", localRecordRef: "BI-GONE", version: 1n, syncStatus: "synced" };
+    const db = Object.assign(store({ mirrors: [stale] }), {
+      backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({}) },
+    });
+    (db.backlogItem as Record<string, unknown>).findMany = vi.fn(async (args: { where: { itemId?: unknown } }) =>
+      args.where.itemId ? [{ id: "row-gone", itemId: "BI-GONE", status: "awaiting-acceptance", body: null }] : []);
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([item("BI-A")]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsRetired: 1, statusChangesRecorded: 1 });
+    const statusRows = db.backlogItemActivity.create.mock.calls.map((c) => c[0].data).filter((d) => d.kind === "status_change");
+    expect(statusRows).toEqual([expect.objectContaining({
+      backlogItemId: "row-gone",
+      payload: expect.objectContaining({ from: "awaiting-acceptance", to: "retired", source: "federated-work-sync" }),
+    })]);
   });
 });

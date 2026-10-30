@@ -1,6 +1,6 @@
 import { prisma, Prisma } from "@dpf/db";
 
-import { normalizeHiveResultIntake, resolveHiveDeliveryAttempt } from "./result-intake";
+import { normalizeHiveResultIntake, resolveHiveDeliveryAttempt } from "@dpf/validators/commons/node";
 import { GitHubForgeAdapter, parseGitHubRepositoryUrl } from "@/lib/forge/github-adapter";
 import { resolveHiveToken } from "@/lib/build/identity-privacy";
 

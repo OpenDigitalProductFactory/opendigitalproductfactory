@@ -1,4 +1,22 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const semanticMemory = vi.hoisted(() => ({
+  searchPlatformKnowledge: vi.fn(async () => ({ status: "ok", results: [] })),
+  storePlatformKnowledge: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/semantic-memory", () => semanticMemory);
+
+// Fake-store tests must supply their advisory dependencies instead of reaching
+// the host's embedding service. The mock fences the network; these assertions
+// also catch a newly omitted dependency even when its advisory error is caught.
+afterEach(() => {
+  try {
+    expect(semanticMemory.searchPlatformKnowledge).not.toHaveBeenCalled();
+    expect(semanticMemory.storePlatformKnowledge).not.toHaveBeenCalled();
+  } finally {
+    vi.clearAllMocks();
+  }
+});
 
 import {
   backlogOriginMarker,
@@ -11,6 +29,8 @@ import {
   validateIngestInput,
   type IngestBacklogStore,
 } from "./backlog-ingest";
+
+const quiet = { indexKnowledge: () => {}, listRepoFiles: async () => [] as string[], searchSimilarItems: async () => ({ status: "ok", results: [] }) };
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -149,7 +169,7 @@ describe("ingestBacklogItem", () => {
         itemIdPrefix: "IMP",
         origin: { kind: "improvement", id: "IP-6F240" },
       },
-      { store, indexKnowledge },
+      { store, ...quiet, indexKnowledge },
     );
 
     expect(result.created).toBe(true);
@@ -174,6 +194,21 @@ describe("ingestBacklogItem", () => {
     expect(indexKnowledge).toHaveBeenCalledOnce();
   });
 
+  // BI-B146AB6B slice (BI-3EC4722F): a recurring miss carries its routing answer from filing.
+  it("records a recurring miss's routing answer on its intake activity, and refuses a malformed one", async () => {
+    const routing = { kind: "gate" as const, question: 1 as const, bindsTo: "work-shape:delivery-small#stage:repair", reason: "Decidable at the stage." };
+    const { store, activities } = makeStore();
+    await ingestBacklogItem(
+      { title: "Work keeps piling up", workType: "bug", source: "automated-detection", origin: { kind: "flow-bottleneck", id: "wr:x|y" }, routing },
+      { store, ...quiet },
+    );
+    expect(activities[0]).toMatchObject({ kind: "intake_origin", payload: { routing } });
+    await expect(ingestBacklogItem(
+      { title: "Bad", workType: "bug", source: "automated-detection", routing: { ...routing, question: 3 } },
+      { store: makeStore().store, ...quiet },
+    )).rejects.toThrow(/routing.question must be 1/);
+  });
+
   it("dedupes on the origin marker — bumps occurrence + writes a recurrence activity, no duplicate", async () => {
     const { store, created, activities } = makeStore({
       backlogItem: {
@@ -192,7 +227,7 @@ describe("ingestBacklogItem", () => {
         source: "automated-detection",
         origin: { kind: "improvement", id: "IP-6F240" },
       },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
 
     // implementationCandidates is always present (BI-1A1EC5EC) and empty on the
@@ -218,7 +253,7 @@ describe("ingestBacklogItem", () => {
     const { store, created, activities } = makeStore();
     const result = await ingestBacklogItem(
       { title: "Hand-filed", workType: "chore", source: "user-request", itemId: "BI-PORT-005" },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
     expect(result.itemId).toBe("BI-PORT-005");
     expect(created[0].itemId).toBe("BI-PORT-005");
@@ -232,7 +267,7 @@ describe("ingestBacklogItem", () => {
 
     await ingestBacklogItem(
       { title: "Linked to an epic", workType: "feature", source: "user-request", epicId: "EP-INTAKE-UNIFY" },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
 
     expect(created[0].epicId).toBe("epic-cuid-123");
@@ -249,7 +284,7 @@ describe("ingestBacklogItem", () => {
         organizationId: "org-1",
         businessProductId: "product-events",
       },
-      { store: scoped.store, indexKnowledge: () => {} },
+      { store: scoped.store, ...quiet },
     );
 
     expect(scoped.created[0]).toMatchObject({
@@ -272,7 +307,7 @@ describe("ingestBacklogItem", () => {
         workType: "feature",
         source: "user-request",
       },
-      { store: legacy.store, indexKnowledge: () => {} },
+      { store: legacy.store, ...quiet },
     );
     expect(legacy.created[0]).not.toHaveProperty("demandStage");
     expect(legacy.activities).toHaveLength(0);
@@ -283,7 +318,7 @@ describe("ingestBacklogItem", () => {
     await expect(
       ingestBacklogItem(
         { title: "bad", workType: "bug", source: "user-request", status: "open" },
-        { store, indexKnowledge: () => {} },
+        { store, ...quiet },
       ),
     ).rejects.toThrow(/triageOutcome is required/);
     expect(created).toHaveLength(0);
@@ -302,7 +337,7 @@ describe("ingestBacklogItem", () => {
           workType: "feature",
           source: "user-request",
         },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+        { store, ...quiet, listRepoFiles: async () => REPO },
       );
 
       expect((result.implementationCandidates ?? []).map((c) => c.path)).toEqual([
@@ -322,7 +357,7 @@ describe("ingestBacklogItem", () => {
 
       const result = await ingestBacklogItem(
         { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+        { store, ...quiet, listRepoFiles: async () => REPO },
       );
 
       expect(result.created).toBe(true);
@@ -335,7 +370,7 @@ describe("ingestBacklogItem", () => {
 
       const result = await ingestBacklogItem(
         { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => [] },
+        { store, ...quiet, listRepoFiles: async () => [] },
       );
 
       expect(result.implementationCandidates).toEqual([]);
@@ -349,7 +384,7 @@ describe("ingestBacklogItem", () => {
         { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
         {
           store,
-          indexKnowledge: () => {},
+          ...quiet,
           listRepoFiles: async () => {
             throw new Error("disk gone");
           },
@@ -366,7 +401,7 @@ describe("ingestBacklogItem", () => {
 
       await ingestBacklogItem(
         { title: "Add a payroll remittance ledger", workType: "feature", source: "user-request" },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+        { store, ...quiet, listRepoFiles: async () => REPO },
       );
 
       expect(
@@ -407,6 +442,17 @@ function memoryStore(seed: Array<Partial<MemItem> & { itemId: string }>, seedAct
     if (!where) return true;
     const body = where.body as { contains?: string } | undefined;
     if (body?.contains && !(item.body ?? "").includes(body.contains)) return false;
+    for (const clause of (where.AND as Array<Record<string, unknown>> | undefined) ?? []) {
+      if (clause.OR) {
+        const anyMatch = (clause.OR as Array<Record<string, unknown>>).some((alt) => {
+          if ("body" in alt && alt.body === null) return item.body === null;
+          const notContains = (alt.NOT as { body?: { contains?: string } } | undefined)?.body?.contains;
+          if (notContains) return !(item.body ?? "").includes(notContains);
+          return matches(item, alt);
+        });
+        if (!anyMatch) return false;
+      } else if (!matches(item, clause)) return false;
+    }
     const status = where.status as { notIn?: string[]; in?: readonly string[] } | undefined;
     if (status?.notIn && status.notIn.includes(item.status)) return false;
     if (status?.in && !status.in.includes(item.status)) return false;
@@ -494,7 +540,6 @@ function issueInput(n: number, overrides: {
   };
 }
 
-const quiet = { indexKnowledge: () => {}, listRepoFiles: async () => [] as string[], searchSimilarItems: async () => ({ status: "ok", results: [] }) };
 
 describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-952F08BA)", () => {
   it("exports a qualified marker helper keyed on repository and number", () => {
@@ -664,6 +709,22 @@ describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-9
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ payload: { change: { kind: "reopened", fromState: "closed", toState: "open" } } });
     expect(mem.items[0].status).toBe("done");
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("never folds a local observation into a peer's work-sync mirror (BI-91FC6B9A)", async () => {
+    const mirrorBody = [
+      "x",
+      "[origin:tool-defect:surface_open]",
+      "[origin:federatedWork:inst_0123456789abcdef0123456789abcdef:BI-PEER]",
+    ].join("\n");
+    const mem = memoryStore([{ itemId: "BI-PEER", status: "open", body: mirrorBody }]);
+    const result = await ingestBacklogItem(
+      { title: "Stabilize surface_open", workType: "bug", source: "automated-detection", origin: { kind: "tool-defect", id: "surface_open" } },
+      { store: mem.store, ...quiet },
+    );
+    expect(result).toMatchObject({ created: true, outcome: "created" });
+    expect(mem.items[0]).toMatchObject({ itemId: "BI-PEER", occurrenceCount: 1 });
     expect(mem.itemWrites).toEqual([]);
   });
 

@@ -112,6 +112,22 @@ gate. After deployment, read the original task and digest and reconcile actual
 provider execution before requesting a successor. This repair is observation,
 not evidence that AC6 or the original review has passed.
 
+## October 26 owned authority diagnosis (BI-924ADA3A, WC-1D98EC85)
+
+The BFA3 preview-review hold exposes generic invalid authority without naming
+the failed check. Extend the existing owner-bound recovery reader under the
+[bounded diagnostic design](../specs/2026-10-26-owned-review-authority-diagnostics.md).
+Retain the original request loader and authority predicate as shared execution
+and observation contracts. Add safe current-stage metadata to Tasks get/result
+and the existing signed-in task-detail owner path, with no new grant or dispatch.
+
+The first source regression failed because authority metadata was absent
+(one failed, 18 passed). Verify denial categories, unknown observation, original
+packet binding, owner isolation, no mutation and unchanged worker checks; then
+run exact-head publication gates. After deployment the original owner reads
+BFA3 and records its real current diagnosis. Neither this implementation nor
+the existing bounded-recovery approval settles prior provider execution.
+
 ## September 27 cancellation settlement repair (BI-06AE6833, WC-C9B549CC)
 
 Runtime evidence cmuke4i3b0biz01qs0vq0zpim records a cancelled TaskRun becoming

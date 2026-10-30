@@ -38,6 +38,7 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
     const controlById = new Map(data.controls.map(c => [c.providerId, c.view]));
     const providers = topology.providers.filter(p => p.providerType === "llm");
     const providerLabel = (id: string) => providers.find(p => p.providerId === id)?.label ?? id;
+    const filteredProviders = providers.filter(p => (scope.provider === "all" || p.providerId === scope.provider) && `${p.label} ${p.providerId} ${data.models.filter(m => m.providerId === p.providerId).map(m => m.label + m.modelId).join(" ")}`.toLowerCase().includes(catalogQuery.toLowerCase()));
     const assignments = [...new Set(rows.map(r => r.actorId ?? "unattributed"))];
     const changeScope = (next: Partial<RoutingScope>) => {
         window.history.pushState(null, "", routingHref(`/platform/ai/operations-map?${params}`, { ...scope, ...next }));
@@ -46,6 +47,25 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
     const costCovered = rows.filter(r => r.costUsd !== null).length;
     const known = rows.filter(r => r.execution !== "unknown" && r.execution !== "pending");
     const stops = rows.filter(r => r.execution === "error" || r.execution === "blocked").length;
+    const renderProviderCatalog = () => {
+        if (!filteredProviders.length) {
+            return <EmptyState size="sm" title={t("noMatchingProviders")} description={t("clearSearchOrTryProviderOrModel")}/>;
+        }
+        return <ul className="space-y-3">
+          {filteredProviders.map(p => <li key={p.providerId} className="rounded-lg border border-[var(--dpf-border)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold">{p.label}</h3>
+              <Link className={ROUTING_ACTION_CLASS} href={routingHref(`/platform/ai/providers/${encodeURIComponent(p.providerId)}`, { ...scope, provider: p.providerId })}>{t("settingsOverrides")}</Link>
+            </div>
+            {controlById.get(p.providerId)?.restrictions.map(r => <p key={r.key} className="mt-2 text-sm text-[var(--dpf-muted)]">{r.summary}{r.until && <> · <LocalTime value={r.until}/></>}</p>)}
+            <p className="mt-2 text-sm text-[var(--dpf-muted)]">{controlById.get(p.providerId)?.eligibility.reason ?? t("eligibilityEvidenceUnavailable")}</p>
+            <details className="mt-2">
+              <summary className="min-h-11 cursor-pointer py-3 text-sm">{t("exposedCount", { count: data.models.filter(m => m.providerId === p.providerId).length })}</summary>
+              <ul className="space-y-2">{data.models.filter(m => m.providerId === p.providerId).map(m => <li key={m.endpointId} className="break-words text-sm">{m.label} · {m.modelId} <StatusBadge label={m.status} intent="neutral"/></li>)}</ul>
+            </details>
+          </li>)}
+        </ul>;
+    };
     const columns: Column<RoutingReceipt>[] = [
         { key: "task", header: t("taskAssignment"), mobileFullWidth: true, hideMobileLabel: true, cell: r => <button type="button" onClick={() => { setCatalog(null); setSelectedId(r.id); }} className="min-h-11 text-start text-[var(--dpf-accent)] underline underline-offset-2"><span className="block font-medium">{r.task}</span><span className="block text-xs text-[var(--dpf-muted)]">{r.actorId ?? t("unattributed")}</span></button> },
         { key: "route", header: t("selectedRoute"), mobileFullWidth: true, cell: r => <div className="break-words">{r.providerId ? providerLabel(r.providerId) : t("unresolved")}<p className="text-xs text-[var(--dpf-muted)]">{r.modelId ?? t("modelUnknown")} · {r.sensitivity}</p></div> },
@@ -97,11 +117,11 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
       </Surface>
       <section aria-label={t("recentRoutingDecisions")} className="space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="font-semibold">{t("recentDecisions")}</h2><button className={ROUTING_ACTION_CLASS} onClick={() => openCatalog("decisions")}>{t("viewAllCount", { count: rows.length })}</button></div><DataTable responsive columns={columns} rows={rows.slice(0, 3)} getRowKey={r => r.id} empty={t("noDecisionsRecordedInThisScope")}/></section>
     </>}
-    <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
+    <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{". "}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
     {selected && <RoutingManagementInspector receipt={selected} scope={scope} onClose={() => setSelectedId(null)}/>}
     {catalog && <RoutingManagementOverlay title={catalog === "tuning" ? t("tuningProposalsAndAssignmentEvidence") : catalog === "providers" ? t("providerAndModelCatalog") : catalog === "assignments" ? t("assignments") : t("routingTraffic")} onClose={() => setCatalog(null)}>
-      {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
-      {catalog === "tuning" ? <><p className="text-sm text-[var(--dpf-muted)]">{t("platformTuningNote")}</p><ActivityRoutingWorkbench activityRouting={topology.activityRouting}/></> : catalog === "decisions" ? <DataTable responsive columns={columns} rows={filterRoutingReceipts(rows, scope, anchor, catalogQuery)} getRowKey={r => r.id} pageSize={10}/> : catalog === "assignments" ? <ul className="space-y-2">{assignments.filter(id => `${id} ${topology.coworkers.find(c => c.agentId === id)?.label}`.toLowerCase().includes(catalogQuery.toLowerCase())).map(id => <li key={id}><p className="font-medium">{topology.coworkers.find(c => c.agentId === id)?.label ?? id}</p><div className="mt-2 flex flex-wrap gap-2">{rows.filter(r => (r.actorId ?? "unattributed") === id).map(r => <button key={r.id} className={ROUTING_ACTION_CLASS} onClick={() => { setCatalog(null); setSelectedId(r.id); }}>{r.task} · {r.modelId ?? t("unknown")}</button>)}{id !== "unattributed" && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(id)}`}>{t("assignmentSettings")}</Link>}</div></li>)}</ul> : <ul className="space-y-3">{providers.filter(p => (scope.provider === "all" || p.providerId === scope.provider) && `${p.label} ${p.providerId} ${data.models.filter(m => m.providerId === p.providerId).map(m => m.label + m.modelId).join(" ")}`.toLowerCase().includes(catalogQuery.toLowerCase())).map(p => <li key={p.providerId} className="rounded-lg border border-[var(--dpf-border)] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{p.label}</h3><Link className={ROUTING_ACTION_CLASS} href={routingHref(`/platform/ai/providers/${encodeURIComponent(p.providerId)}`, { ...scope, provider: p.providerId })}>{t("settingsOverrides")}</Link></div>{controlById.get(p.providerId)?.restrictions.map(r => <p key={r.key} className="mt-2 text-sm text-[var(--dpf-muted)]">{r.summary}{r.until && <> · <LocalTime value={r.until}/></>}</p>)}<p className="mt-2 text-sm text-[var(--dpf-muted)]">{controlById.get(p.providerId)?.eligibility.reason ?? t("eligibilityEvidenceUnavailable")}</p><details className="mt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm">{t("exposedCount", { count: data.models.filter(m => m.providerId === p.providerId).length })}</summary><ul className="space-y-2">{data.models.filter(m => m.providerId === p.providerId).map(m => <li key={m.endpointId} className="break-words text-sm">{m.label} · {m.modelId} <StatusBadge label={m.status} intent="neutral"/></li>)}</ul></details></li>)}</ul>}
+      {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} resultCount={catalog === "providers" ? filteredProviders.length : undefined} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
+      {catalog === "tuning" ? <><p className="text-sm text-[var(--dpf-muted)]">{t("platformTuningNote")}</p><ActivityRoutingWorkbench activityRouting={topology.activityRouting}/></> : catalog === "decisions" ? <DataTable responsive columns={columns} rows={filterRoutingReceipts(rows, scope, anchor, catalogQuery)} getRowKey={r => r.id} pageSize={10}/> : catalog === "assignments" ? <ul className="space-y-2">{assignments.filter(id => `${id} ${topology.coworkers.find(c => c.agentId === id)?.label}`.toLowerCase().includes(catalogQuery.toLowerCase())).map(id => <li key={id}><p className="font-medium">{topology.coworkers.find(c => c.agentId === id)?.label ?? id}</p><div className="mt-2 flex flex-wrap gap-2">{rows.filter(r => (r.actorId ?? "unattributed") === id).map(r => <button key={r.id} className={ROUTING_ACTION_CLASS} onClick={() => { setCatalog(null); setSelectedId(r.id); }}>{r.task} · {r.modelId ?? t("unknown")}</button>)}{id !== "unattributed" && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(id)}`}>{t("assignmentSettings")}</Link>}</div></li>)}</ul> : renderProviderCatalog()}
     </RoutingManagementOverlay>}
   </section>;
 }
@@ -112,5 +132,5 @@ function FlowGroup({ label, count, onOpen, children }: {
     children: React.ReactNode;
 }) {
     const t = useT("routingManagement");
-    return <div className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{label}</h2><button className="min-h-11 text-xs text-[var(--dpf-accent)] underline" onClick={onOpen}>{t("allCount", { count })}</button></div>{children}</div>;
+    return <div className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{label}</h2><button className="min-h-11 min-w-11 text-xs text-[var(--dpf-accent)] underline" onClick={onOpen}>{t("allCount", { count })}</button></div>{children}</div>;
 }
