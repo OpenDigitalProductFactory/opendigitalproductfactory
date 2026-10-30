@@ -22,9 +22,7 @@ import {
   DEFAULT_CLAIM_TIMEOUT_MS,
   DOCKER_VM_RESTART_ACTION_TYPE,
   MANAGED_INFERENCE_ACTION_TYPE,
-  QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
   parseManagedInferenceTransitionParameters,
-  parseQualificationWindowsVerifyParameters,
   isPrivilegedDispatchActionType,
   type ClaimingNodeView,
   type DispatchableActionView,
@@ -43,7 +41,6 @@ import {
 } from "@dpf/db/organization-join-action";
 
 import { decryptSecret as decryptStoredSecret, encryptSecret as encryptStoredSecret } from "@/lib/govern/credential-crypto";
-import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 
 const MAX_CLAIM_BATCH = 25;
@@ -207,14 +204,6 @@ export async function claimActionsForNode(
       }
       dispatchParameters = parsed;
     }
-    if (e.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE) {
-      const parsed = parseQualificationWindowsVerifyParameters(dispatchParameters);
-      if (!parsed || parsed.edgeNodeId !== node.nodeId) {
-        await failUndispatchableAction(db, e.actionKey, now, "qualification-windows-parameters-invalid");
-        continue;
-      }
-      dispatchParameters = parsed;
-    }
     const envelope: EdgeActionEnvelope = {
       version: EDGE_ACTION_ENVELOPE_VERSION,
       signingKeyId: opts.signer.signingKeyId,
@@ -245,12 +234,6 @@ export async function claimActionsForNode(
           nativeDispatch: { requestDigest: createHash("sha256").update(canonicalizeEdgeActionEnvelope(signed)).digest("hex"),
             sourceSha: (dispatchParameters as { sourceSha: string }).sourceSha,
             operation: (dispatchParameters as { operation: string }).operation },
-        } } : e.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE ? { evidence: {
-          ...(isRecord(row?.evidence) ? row.evidence : {}),
-          qualificationDispatch: {
-            requestDigest: createHash("sha256").update(canonicalizeEdgeActionEnvelope(signed)).digest("hex"),
-            qualificationBindingDigest: (dispatchParameters as { qualificationBindingDigest: string }).qualificationBindingDigest,
-          },
         } } : {}),
       },
     });
@@ -271,49 +254,8 @@ export interface ActionResultInput {
 }
 
 export type ActionResultResult =
-  | (ActionSuccess & { status: RemoteActionDispatchState })
-  | (ActionFailure & { reason: string });
-
-function refuseActionResult(reason: string): ActionFailure & { reason: string } {
-  return { ...err(reason), reason };
-}
-
-function qualificationNativeReportMatches(
-  row: { actionKey: string; parameters: unknown; evidence?: unknown },
-  evidence: Record<string, unknown> | undefined,
-): boolean {
-  const parameters = parseQualificationWindowsVerifyParameters(row.parameters);
-  const dispatch = isRecord(row.evidence) && isRecord(row.evidence.qualificationDispatch)
-    ? row.evidence.qualificationDispatch : null;
-  if (!parameters || !dispatch || !evidence) return false;
-  const sameBlobs = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-  const observations = isRecord(evidence.observations) ? evidence.observations : null;
-  const checks = {
-    action: evidence.actionKey === row.actionKey,
-    node: evidence.nodeId === parameters.edgeNodeId,
-    request: evidence.requestDigest === dispatch.requestDigest,
-    dispatchBinding: dispatch.qualificationBindingDigest === parameters.qualificationBindingDigest,
-    reportBinding: evidence.qualificationBindingDigest === parameters.qualificationBindingDigest,
-    procedure: evidence.procedureId === parameters.procedureId && evidence.procedureVersion === 1,
-    platform: evidence.platform === "win32",
-    source: evidence.baseSha === parameters.baseSha && evidence.headSha === parameters.headSha,
-    protocol: evidence.protocolPath === parameters.protocolPath && evidence.protocolBlobSha === parameters.protocolBlobSha,
-    production: sameBlobs(evidence.productionBlobs, parameters.productionBlobs),
-    tests: sameBlobs(evidence.testBlobs, parameters.testBlobs),
-    time: typeof evidence.startedAt === "string" && Number.isFinite(Date.parse(evidence.startedAt))
-      && typeof evidence.finishedAt === "string" && Number.isFinite(Date.parse(evidence.finishedAt))
-      && Date.parse(evidence.startedAt) <= Date.parse(evidence.finishedAt),
-    digest: typeof evidence.boundedOutputDigest === "string" && /^[a-f0-9]{64}$/.test(evidence.boundedOutputDigest),
-    observations: observations !== null && typeof observations.firstReplacement === "string"
-      && ((observations.firstReplacement as string).startsWith("refused:")
-        ? observations.firstTarget === "preserved" && observations.firstSourceCleanup === "removed"
-        : observations.firstReplacement === "replaced"
-          && observations.firstTarget === "updated" && observations.firstSourceCleanup === "not-present")
-      && observations.handleRelease === "closed" && observations.secondReplacement === "replaced"
-      && observations.secondTarget === "updated" && observations.cleanup === "removed",
-  };
-  return Object.values(checks).every(Boolean);
-}
+  | { ok: true; status: RemoteActionDispatchState }
+  | { ok: false; reason: string };
 
 /**
  * Record a node's report for an action it claimed. Verifies the action exists,
@@ -328,19 +270,11 @@ export async function recordActionResult(
   opts: { now?: Date; encryptSecret?: (value: string) => string } = {},
 ): Promise<ActionResultResult> {
   const row = await db.remoteAction.findUnique({ where: { actionKey: input.actionKey } });
-  if (!row) return refuseActionResult("action-not-found");
-  if (row.edgeNodeId !== input.edgeNodeRowId) return refuseActionResult("not-claimed-by-this-node");
+  if (!row) return { ok: false, reason: "action-not-found" };
+  if (row.edgeNodeId !== input.edgeNodeRowId) return { ok: false, reason: "not-claimed-by-this-node" };
 
   const from = row.status as RemoteActionDispatchState;
   const to = input.outcome as RemoteActionDispatchState;
-  if (row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && to !== "running"
-    && !qualificationNativeReportMatches(row, input.evidence)) {
-    return refuseActionResult("qualification-native-report-unbound");
-  }
-  if (row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && from === to && to !== "running"
-    && isRecord(row.evidence) && row.evidence.requestDigest === input.evidence?.requestDigest) {
-    return { ...ok(), status: from };
-  }
   if (row.actionType === MANAGED_INFERENCE_ACTION_TYPE && to !== "running") {
     const parameters = parseManagedInferenceTransitionParameters(row.parameters);
     const dispatch = isRecord(row.evidence) && isRecord(row.evidence.nativeDispatch) ? row.evidence.nativeDispatch : null;
@@ -348,11 +282,11 @@ export async function recordActionResult(
     if (!parameters || !dispatch || !evidence || !/^[a-f0-9]{64}$/.test(String(dispatch.requestDigest))
       || dispatch.sourceSha !== parameters.sourceSha || dispatch.operation !== parameters.operation
       || evidence.actionKey !== row.actionKey || evidence.requestDigest !== dispatch.requestDigest || evidence.sourceSha !== parameters.sourceSha) {
-      return refuseActionResult("native-report-unbound");
+      return { ok: false, reason: "native-report-unbound" };
     }
     if (to === "succeeded" && (evidence.settlement !== "confirmed"
       || evidence.nativeStatus !== (parameters.operation === "activate" ? "active" : "rolled-back"))) {
-      return refuseActionResult("native-success-unconfirmed");
+      return { ok: false, reason: "native-success-unconfirmed" };
     }
     if (to === "succeeded" && parameters.operation === "activate") {
       const identity = evidence.activeIdentity;
@@ -360,17 +294,15 @@ export async function recordActionResult(
         || !/^[a-f0-9]{64}$/.test(String(identity.executableSha256)) || !/^[a-f0-9]{64}$/.test(String(identity.engineManifestSha256))
         || !Number.isSafeInteger(identity.daemonPid) || Number(identity.daemonPid) <= 0
         || !Array.isArray(identity.enginePids) || !identity.enginePids.length || identity.enginePids.some(pid => !Number.isSafeInteger(pid) || Number(pid) <= 0)) {
-        return refuseActionResult("native-active-identity-missing");
+        return { ok: false, reason: "native-active-identity-missing" };
       }
     }
     // Only receipt delivery is idempotent. Keep the original evidence and
     // unknown outcome; this neither re-executes nor upgrades its settlement.
-    if (from === to && isRecord(row.evidence) && row.evidence.requestDigest === evidence.requestDigest) {
-      return { ...ok(), status: from };
-    }
+    if (from === to && isRecord(row.evidence) && row.evidence.requestDigest === evidence.requestDigest) return { ok: true, status: from };
   }
   if (!canTransitionDispatch(from, to)) {
-    return refuseActionResult(`illegal-transition ${from}->${to}`);
+    return { ok: false, reason: `illegal-transition ${from}->${to}` };
   }
 
   const now = opts.now ?? new Date();
@@ -378,11 +310,11 @@ export async function recordActionResult(
   let storedResult: Record<string, unknown> = { outcome: to };
   if (terminal && row.actionType === "organization.join.issue" && to === "succeeded") {
     const joinPackage = input.result?.joinPackage;
-    if (typeof joinPackage !== "string") return refuseActionResult("issued-package-missing");
+    if (typeof joinPackage !== "string") return { ok: false, reason: "issued-package-missing" };
     const parsed = parseOrganizationJoinPackage(joinPackage, now);
-    if (!parsed.ok) return refuseActionResult(parsed.reason);
+    if (!parsed.ok) return { ok: false, reason: parsed.reason };
     const encrypted = (opts.encryptSecret ?? encryptStoredSecret)(joinPackage);
-    if (!encrypted.startsWith("enc:")) return refuseActionResult("credential-encryption-unavailable");
+    if (!encrypted.startsWith("enc:")) return { ok: false, reason: "credential-encryption-unavailable" };
     storedResult = { joinPackageEnc: encrypted, expiresAt: parsed.value.expiresAt.toISOString() };
   }
   await db.remoteAction.update({
@@ -397,12 +329,7 @@ export async function recordActionResult(
               ...sanitizeActionEvidence(input.evidence),
               ...(row.actionType === MANAGED_INFERENCE_ACTION_TYPE && isRecord(row.evidence)
                 ? { nativeAdmission: row.evidence.nativeAdmission, nativeDispatch: row.evidence.nativeDispatch,
-                  governance: row.evidence.governance }
-                : row.actionType === QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE && isRecord(row.evidence)
-                  ? { qualificationAdmission: row.evidence.qualificationAdmission,
-                    qualificationDispatch: row.evidence.qualificationDispatch,
-                    governance: row.evidence.governance }
-                  : {}),
+                  governance: row.evidence.governance } : {}),
               reportedByNode: input.edgeNodeRowId,
               reportedAt: now.toISOString(),
             } as never,
@@ -413,7 +340,7 @@ export async function recordActionResult(
         : {}),
     },
   });
-  return { ...ok(), status: to };
+  return { ok: true, status: to };
 }
 
 async function failUndispatchableAction(

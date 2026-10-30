@@ -1,11 +1,10 @@
 import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockResolveToken, mockResolveMtls, mockRecordResult, mockSettleQualification, findAction, findDrain, findConfig, completeSwap, failSwap, driveChange } = vi.hoisted(() => ({
+const { mockResolveToken, mockResolveMtls, mockRecordResult, findAction, findDrain, findConfig, completeSwap, failSwap, driveChange } = vi.hoisted(() => ({
   mockResolveToken: vi.fn(),
   mockResolveMtls: vi.fn(),
   mockRecordResult: vi.fn(),
-  mockSettleQualification: vi.fn(),
   findAction:vi.fn(), findDrain:vi.fn(), findConfig:vi.fn(),completeSwap:vi.fn(),failSwap:vi.fn(),driveChange:vi.fn(),
 }));
 
@@ -15,9 +14,6 @@ vi.mock("@/lib/auth/edge-mtls-proxy-secret", () => ({
   loadEdgeMtlsProxySecret: () => "proxy-secret-with-at-least-32-bytes",
 }));
 vi.mock("@/lib/remote-action/dispatch-orchestrator", () => ({ recordActionResult: mockRecordResult }));
-vi.mock("@/lib/remote-action/qualification-windows-result", () => ({
-  settleQualificationWindowsResult: mockSettleQualification,
-}));
 vi.mock("@dpf/db", () => ({ prisma: { remoteAction:{findUnique:findAction},quiescenceRun:{findUnique:findDrain},platformConfig:{findUnique:findConfig} } }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({ signalSwapComplete:completeSwap,failQuiescenceSwap:failSwap }));
 vi.mock("@/lib/change-management/register-change", () => ({ driveChangeThrough:driveChange }));
@@ -38,7 +34,6 @@ beforeEach(() => {
   mockResolveToken.mockResolvedValue({ ok: true, edgeNodeRowId: "edge-row-1" });
   mockResolveMtls.mockResolvedValue({ ok: true, certificateId: "cert-1" });
   mockRecordResult.mockResolvedValue({ ok: true, status: "succeeded" });
-  mockSettleQualification.mockResolvedValue(true);
   findAction.mockResolvedValue(null); completeSwap.mockResolvedValue(undefined);failSwap.mockResolvedValue(undefined);driveChange.mockResolvedValue(undefined);
 });
 

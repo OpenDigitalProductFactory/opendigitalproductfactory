@@ -1,7 +1,4 @@
 import {
-  advanceQualificationExperimentState,
-  issueQualificationExperimentState,
-  parseQualificationExperimentState,
   verifyQualificationExperimentAdmission,
   type QualificationExperimentState,
 } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
@@ -24,22 +21,8 @@ export function qualificationStateForScopeClaim(args: {
     || binding.accountablePrincipalRef !== args.accountablePrincipalRef) {
     throw new Error("Qualification admission does not match the live Workroom identity.");
   }
-  const workspaceState = args.room.workspaceState && typeof args.room.workspaceState === "object"
-    && !Array.isArray(args.room.workspaceState) ? args.room.workspaceState as Record<string, unknown> : {};
-  const existing = parseQualificationExperimentState(workspaceState.qualificationExperimentAdmission);
-  const state = existing
-    ? (() => {
-        const prior = verifyQualificationExperimentAdmission(existing.token, { now: args.now, allowExpired: true });
-        if (!prior.ok) throw new Error("Existing qualification admission cannot be reconciled.");
-        const advanced = advanceQualificationExperimentState({ existing, existingBinding: prior.data.binding,
-          token: args.token, binding });
-        if (!advanced.ok) throw new Error(advanced.error);
-        return advanced.data;
-      })()
-    : (() => {
-        const issued = issueQualificationExperimentState({ existing: null, token: args.token, binding });
-        if (!issued.ok) throw new Error(issued.error);
-        return issued.data;
-      })();
-  return { state, workspaceState };
+  // Do not consume the one start merely because a historical signed token is
+  // structurally valid. No current executor emits an independently observed
+  // receipt bound to this source/test/platform identity.
+  throw new Error("Qualification execution is unavailable until exact executor provenance is bound.");
 }

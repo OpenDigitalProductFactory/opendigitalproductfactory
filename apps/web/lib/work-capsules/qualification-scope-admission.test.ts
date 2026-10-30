@@ -19,12 +19,11 @@ function binding(phase: "prepare" | "verify"): QualificationExperimentBinding {
     protocol: { path: "docs/protocol.md", commitSha: protocolHead, providerBlobId: "c".repeat(40) },
     installationId: "install-dev", accountablePrincipalRef: "PRN-1", protocolReviewReceiptId: "review-protocol-1",
     shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
-    executorMode: phase === "verify" ? "native-edge" : "sandbox-build", requiredPlatform: "win32",
-    targetProductionPaths: ["scripts/lib/local-ci-gate-state.mjs"],
+    executorMode: "sandbox-build", requiredPlatform: "linux",
     targetProductionBlobIds: ["e".repeat(40)],
     permittedTools: phase === "prepare"
       ? ["write_sandbox_file", "record_workroom_evidence"]
-      : ["record_workroom_evidence"],
+      : ["run_sandbox_tests", "record_workroom_evidence"],
     allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2025-06-18T11:00:00.000Z",
     expiresAt: "2025-06-18T13:00:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
     ...(phase === "verify" ? { candidate: { headSha: candidateHead,
@@ -36,7 +35,7 @@ function binding(phase: "prepare" | "verify"): QualificationExperimentBinding {
 describe("qualificationStateForScopeClaim", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("advances a settled preparation to a separate native verification admission", () => {
+  it("does not advance a historical sandbox token while executor attestation is unavailable", () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
     const prepare = binding("prepare");
     const prepareToken = createQualificationExperimentAdmission(prepare);
@@ -52,10 +51,8 @@ describe("qualificationStateForScopeClaim", () => {
       } },
     };
 
-    const advanced = qualificationStateForScopeClaim({ room, token: verifyToken,
-      accountablePrincipalRef: "PRN-1", now: NOW });
-    expect(advanced.state).toMatchObject({ status: "issued", token: verifyToken, startCount: 0,
-      bindingDigest: qualificationBindingDigest(verify) });
+    expect(() => qualificationStateForScopeClaim({ room, token: verifyToken,
+      accountablePrincipalRef: "PRN-1", now: NOW })).toThrow(/execution is unavailable/i);
     expect(room.workspaceState.qualificationExperimentAdmission).toMatchObject({
       status: "settled", token: prepareToken, startCount: 1,
     });
@@ -73,11 +70,18 @@ describe("qualificationStateForScopeClaim", () => {
       accountablePrincipalRef: "PRN-FOREIGN", now: NOW })).toThrow("does not match");
   });
 
-  it("refuses to mint a legacy host-bound preparation token", () => {
+  it("does not consume a host-bound start from caller-authenticated metadata", () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
     const host = { ...binding("prepare"), executorMode: "workroom-host" as const,
       requiredPlatform: "win32" as const,
       permittedTools: ["read_source_at_version", "record_workroom_evidence"] };
-    expect(() => createQualificationExperimentAdmission(host)).toThrow(/incomplete, widened/i);
+    const token = createQualificationExperimentAdmission(host);
+    const room = { capsuleId: host.workroomId, backlogItemId: host.itemId,
+      repositoryFullName: host.repositoryFullName, baseSha: host.baseSha,
+      headSha: host.headSha, workspaceState: {} };
+
+    expect(() => qualificationStateForScopeClaim({ room, token,
+      accountablePrincipalRef: host.accountablePrincipalRef, now: NOW })).toThrow(/execution is unavailable/i);
+    expect(room.workspaceState).toEqual({});
   });
 });

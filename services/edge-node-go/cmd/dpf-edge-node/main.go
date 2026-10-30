@@ -223,9 +223,6 @@ func run() error {
 		if cfg.DockerVmRestartEnabled() {
 			executor.DockerVmRestart = newDockerVmRestartHandler(cfg)
 		}
-		if cfg.QualificationWindowsEnabled() {
-			executor.QualificationWindows = &action.QualificationWindowsHandler{Platform: cfg.Platform, StateDirectory: cfg.StateDir}
-		}
 		if cfg.ManagedInferenceConfigured() {
 			nativeConfig := action.NativeInferenceConfig{
 				StateDirectory: cfg.ManagedInferenceState, EdgeStateDirectory: cfg.StateDir,
@@ -367,7 +364,7 @@ type hostUpkeepReport struct {
 	dockerRuntime   string
 }
 
-func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string, hostUpkeep hostUpkeepReport, qualificationWindows bool) []api.CapabilityReport {
+func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string, hostUpkeep hostUpkeepReport) []api.CapabilityReport {
 	reports := federationCapabilityReports()
 	if !actionConfigured {
 		return reports
@@ -395,10 +392,6 @@ func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizat
 	if hostUpkeep.dockerVmRestart {
 		actionTypes = append(actionTypes, action.DockerVmRestartActionType)
 		evidence["dockerRuntime"] = hostUpkeep.dockerRuntime
-	}
-	if qualificationWindows {
-		actionTypes = append(actionTypes, action.QualificationWindowsVerifyActionType)
-		evidence["qualificationWindows"] = map[string]any{"schemaVersion": 1, "procedureId": action.WindowsHandleReplacementProcedureID}
 	}
 	if controller := nativeInferenceController.Load(); controller != nil {
 		actionTypes = append(actionTypes, action.ManagedInferenceActionType)
@@ -540,7 +533,7 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		}
 
 		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg), cfg.QualificationWindowsEnabled()),
+			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg)),
 		})
 		if err != nil {
 			if api.IsRevoked(err) {
@@ -617,7 +610,7 @@ func verifyOrganizationJoin(
 	}
 	evidence["portalHealth"] = true
 	if _, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg), cfg.QualificationWindowsEnabled()),
+		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg)),
 	}); err != nil {
 		return evidence, err
 	}

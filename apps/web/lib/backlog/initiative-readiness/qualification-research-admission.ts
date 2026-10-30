@@ -17,7 +17,7 @@ const QUALIFICATION_TOOLS = new Set([
   "record_workroom_evidence",
 ]);
 
-export type QualificationExecutorMode = "sandbox-build" | "workroom-host" | "native-edge";
+export type QualificationExecutorMode = "sandbox-build" | "workroom-host";
 export type QualificationPlatform = "linux" | "win32";
 
 type ProtocolRef = { path: string; commitSha: string; providerBlobId: string };
@@ -47,7 +47,7 @@ export type QualificationExperimentBinding = {
   policyVersion: 1;
   executorMode: QualificationExecutorMode;
   requiredPlatform: QualificationPlatform;
-  /** Added by native-edge qualification bindings; older sandbox bindings remain readable. */
+  /** Production bytes the qualification observes but may never modify. */
   targetProductionPaths?: string[];
   targetProductionBlobIds: string[];
   permittedTools: string[];
@@ -139,7 +139,7 @@ export function advanceQualificationExperimentState(input: {
     && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion
     && prior.stageKey === next.stageKey && prior.policyVersion === next.policyVersion
     && ((prior.executorMode === next.executorMode)
-      || (prior.executorMode === "sandbox-build" && next.executorMode === "native-edge" && next.requiredPlatform === "win32"))
+      || (prior.executorMode === "sandbox-build" && next.executorMode === "workroom-host" && next.requiredPlatform === "win32"))
     && prior.requiredPlatform === next.requiredPlatform
     && JSON.stringify(prior.targetProductionPaths ?? []) === JSON.stringify(next.targetProductionPaths ?? [])
     && JSON.stringify(prior.targetProductionBlobIds) === JSON.stringify(next.targetProductionBlobIds)
@@ -300,18 +300,16 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     : phase === "verify"
       ? tools?.includes("record_workroom_evidence")
         && (executorMode === "sandbox-build" ? tools.includes("run_sandbox_tests") && !tools.includes("record_execution_evidence")
-          : executorMode === "workroom-host" ? tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests")
-            : executorMode === "native-edge" && !tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
+          : tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
         && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file")
       : false;
   const valid = raw?.schemaVersion === 1 && (phase === "prepare" || phase === "verify")
-    && (executorMode === "sandbox-build" || executorMode === "workroom-host" || executorMode === "native-edge")
+    && (executorMode === "sandbox-build" || executorMode === "workroom-host")
     && (requiredPlatform === "linux" || requiredPlatform === "win32")
-    && (executorMode !== "native-edge" || (phase === "verify" && requiredPlatform === "win32"))
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
     && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
-    && (executorMode !== "native-edge" || (productionPaths && productionPaths.every(validProductionPath)))
+    && (!productionPaths || productionPaths.every(validProductionPath))
     && productionBlobIds?.every((blob) => FULL_SHA.test(blob))
     && (!productionPaths || productionPaths.length === productionBlobIds?.length)
     && paths && paths.every(validTestPath) && datesValid && raw?.maxStarts === 1
@@ -410,13 +408,12 @@ export type QualificationExecutionEvidence = {
   outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
 };
 
-/** Execution admission and execution attestation are deliberately separate.
- * Neither current executor mode has a producer identity distinct from the
- * caller that can submit the claimed result, so both remain fail-closed. */
+/** The governed host runner owns the admitted process, hashes its output and
+ * atomically consumes the matching lease when it records execution evidence. */
 export function qualificationExecutorAttestationAvailable(
   executorMode: QualificationExperimentBinding["executorMode"],
 ): boolean {
-  return executorMode === "native-edge";
+  return executorMode === "workroom-host";
 }
 
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
@@ -458,9 +455,9 @@ export function qualificationExecutionEvidenceAllowed(input: {
   const evidence = parseQualificationExecutionEvidence(input.evidence);
   const lease = input.lease;
   const digest = qualificationBindingDigest(input.binding);
-  // Every remaining field is caller-observable or caller-supplied. Preserve
-  // the immutable binding checks for a future trusted producer, but refuse
-  // before they can be mistaken for proof that a supervised child ran.
+  // The host runner's process-bound lease is admission; the transaction that
+  // consumes that lease for one evidence record makes the successful result
+  // single-use. Every immutable identity still has to match below.
   if (!qualificationExecutorAttestationAvailable(input.binding.executorMode)
     || !evidence || !lease || input.binding.phase !== "verify"
     || input.binding.executorMode !== "workroom-host" || !input.binding.candidate

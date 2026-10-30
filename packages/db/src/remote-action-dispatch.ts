@@ -44,69 +44,6 @@ export const DOCKER_VM_RESTART_ACTION_TYPE = "substrate.docker-vm.restart";
 /** A bounded managed runtime transition; permission is explicit per host.
  * This is deliberately absent from automatic host-upkeep convergence. */
 export const MANAGED_INFERENCE_ACTION_TYPE = "inference.runtime.transition";
-export const QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE = "qualification.windows.verify-v1";
-
-export interface QualificationBlobIdentity {
-  path: string;
-  blobSha: string;
-}
-
-export interface QualificationWindowsVerifyParameters {
-  version: 1;
-  backlogItemId: string;
-  workroomId: string;
-  repository: string;
-  baseSha: string;
-  headSha: string;
-  protocolPath: string;
-  protocolBlobSha: string;
-  productionBlobs: QualificationBlobIdentity[];
-  testBlobs: QualificationBlobIdentity[];
-  qualificationBindingDigest: string;
-  procedureId: "windows-handle-replacement-v1";
-  resultSchemaVersion: 1;
-  maxDurationSeconds: number;
-  edgeNodeId: string;
-}
-
-const QUALIFICATION_PARAMETER_KEYS = [
-  "version", "backlogItemId", "workroomId", "repository", "baseSha", "headSha", "protocolPath",
-  "protocolBlobSha", "productionBlobs", "testBlobs", "qualificationBindingDigest", "procedureId",
-  "resultSchemaVersion", "maxDurationSeconds", "edgeNodeId",
-] as const;
-
-function isSafeRepositoryPath(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 500
-    && !value.startsWith("/") && !value.startsWith("\\") && !value.includes("..") && !value.includes("\\");
-}
-
-function isQualificationBlobList(value: unknown): value is QualificationBlobIdentity[] {
-  return Array.isArray(value) && value.length > 0 && value.length <= 100
-    && value.every(entry => entry && typeof entry === "object" && !Array.isArray(entry)
-      && Object.keys(entry).sort().join(",") === "blobSha,path"
-      && isSafeRepositoryPath((entry as Record<string, unknown>).path)
-      && typeof (entry as Record<string, unknown>).blobSha === "string"
-      && /^[a-f0-9]{40}$/.test(String((entry as Record<string, unknown>).blobSha)));
-}
-
-/** Closed signer-side schema for the one compiled Windows qualification procedure. */
-export function parseQualificationWindowsVerifyParameters(value: unknown): QualificationWindowsVerifyParameters | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const p = value as Record<string, unknown>;
-  if (Object.keys(p).sort().join(",") !== [...QUALIFICATION_PARAMETER_KEYS].sort().join(",")
-    || p.version !== 1 || p.resultSchemaVersion !== 1
-    || p.procedureId !== "windows-handle-replacement-v1"
-    || typeof p.backlogItemId !== "string" || !/^BI-[A-Z0-9]+$/.test(p.backlogItemId)
-    || typeof p.workroomId !== "string" || !/^WC-[A-Z0-9]+$/.test(p.workroomId)
-    || typeof p.repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(p.repository)
-    || ![p.baseSha, p.headSha, p.protocolBlobSha].every(sha => typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha))
-    || !isSafeRepositoryPath(p.protocolPath)
-    || !isQualificationBlobList(p.productionBlobs) || !isQualificationBlobList(p.testBlobs)
-    || typeof p.qualificationBindingDigest !== "string" || !/^[a-f0-9]{64}$/.test(p.qualificationBindingDigest)
-    || !Number.isInteger(p.maxDurationSeconds) || Number(p.maxDurationSeconds) < 1 || Number(p.maxDurationSeconds) > 1800
-    || typeof p.edgeNodeId !== "string" || !/^edge_[A-Za-z0-9_-]{1,100}$/.test(p.edgeNodeId)) return null;
-  return value as QualificationWindowsVerifyParameters;
-}
 
 export interface ManagedInferenceTransitionParameters {
   version: 1;
@@ -139,7 +76,6 @@ export const PRIVILEGED_DISPATCH_ACTION_TYPES = [
   "organization.join.import",
   DOCKER_VM_RESTART_ACTION_TYPE,
   MANAGED_INFERENCE_ACTION_TYPE,
-  QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
 ] as const;
 
 export function isPrivilegedDispatchActionType(actionType: string): boolean {
@@ -274,15 +210,12 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
     if (action.riskClass !== "high") return { claimable: false, reason: "privileged-action-risk-class-invalid" };
     if (!action.edgeNodeId) return { claimable: false, reason: "privileged-action-must-be-machine-bound" };
     if (!action.changeRequestApproved) return { claimable: false, reason: "approved-change-request-required" };
-    if ([MANAGED_INFERENCE_ACTION_TYPE, QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE].includes(action.actionType as never)
+    if (action.actionType === MANAGED_INFERENCE_ACTION_TYPE
       && (node.customerAccountId != null || node.customerSiteId != null
         || action.customerAccountId != null || action.customerSiteId != null)) {
-      return { claimable: false, reason: action.actionType === MANAGED_INFERENCE_ACTION_TYPE
-        ? "managed-inference-internal-host-required"
-        : "qualification-internal-host-required" };
+      return { claimable: false, reason: "managed-inference-internal-host-required" };
     }
-    if (![DOCKER_VM_RESTART_ACTION_TYPE, MANAGED_INFERENCE_ACTION_TYPE, QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE]
-      .includes(action.actionType as never)) {
+    if (action.actionType !== DOCKER_VM_RESTART_ACTION_TYPE && action.actionType !== MANAGED_INFERENCE_ACTION_TYPE) {
       const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
       if (node.organizationTrustRole !== requiredRole) {
         return { claimable: false, reason: "wrong-organization-trust-role" };
