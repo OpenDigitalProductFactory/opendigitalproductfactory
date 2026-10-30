@@ -73,22 +73,34 @@ export function createCodexAdapter(deps: {
       proc.onStderr(() => {}); // Drained, never surfaced: it can carry provider detail.
       let threadId: string | null = config.resumeThreadId ?? null;
       let activeTurnId: string | null = null;
+      // Keep settlement for the session lifetime: acknowledgements and replayed
+      // notifications can arrive after more than one later turn has finished.
+      const settledTurnIds = new Set<string>();
       const pending = new Map<string, PendingRequest>();
 
       const peer: JsonRpcPeer = createJsonRpcPeer(proc, {
         onNotification(method, params) {
+          // A process may report child-thread activity. Only this room's root
+          // thread and turn can drive its supervisor's next queued input.
+          if (!threadId || text(params["threadId"]) !== threadId) return;
+          const turnId = turnIdOf(params);
+          if (!turnId) return;
           if (method === "turn/started") {
-            activeTurnId = turnIdOf(params);
-            if (activeTurnId) onEvent({ type: "turn-started", turnId: activeTurnId });
+            if (settledTurnIds.has(turnId) || (activeTurnId && activeTurnId !== turnId)) return;
+            activeTurnId = turnId;
+            onEvent({ type: "turn-started", turnId });
           } else if (method === "item/completed") {
+            if (turnId !== activeTurnId) return;
             const item = params["item"] as { type?: unknown; text?: unknown } | undefined;
             const said = item?.type === "agentMessage" ? text(item.text) : null;
-            if (said) onEvent({ type: "message", turnId: text(params["turnId"]), text: said });
+            if (said) onEvent({ type: "message", turnId, text: said });
           } else if (method === "turn/completed") {
-            const turn = (params["turn"] ?? {}) as { id?: unknown; status?: unknown; error?: { message?: unknown } | null };
-            const turnId = text(turn.id) ?? activeTurnId ?? "unknown";
-            if (activeTurnId === turnId) activeTurnId = null;
-            const status = turn.status === "interrupted" ? "interrupted" : turn.status === "failed" ? "failed" : "completed";
+            if (turnId !== activeTurnId) return;
+            const turn = params["turn"] as { status?: unknown; error?: { message?: unknown } | null };
+            const status = turn?.status;
+            if (status !== "completed" && status !== "interrupted" && status !== "failed") return;
+            activeTurnId = null;
+            settledTurnIds.add(turnId);
             onEvent({ type: "turn-completed", turnId, status, error: text(turn.error?.message) });
           }
         },
@@ -147,7 +159,9 @@ export function createCodexAdapter(deps: {
             sandboxPolicy: { type: "workspaceWrite" },
             ...(config.model ? { model: config.model } : {}),
           });
-          activeTurnId = text(result?.turn?.id) ?? activeTurnId;
+          // A fast turn can finish before the start request is acknowledged.
+          const startedTurnId = text(result?.turn?.id);
+          if (startedTurnId && !settledTurnIds.has(startedTurnId)) activeTurnId = startedTurnId;
           return { turnId: activeTurnId };
         },
         async steerTurn(input) {
