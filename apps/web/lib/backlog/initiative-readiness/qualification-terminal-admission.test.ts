@@ -46,13 +46,12 @@ function fixture() {
 describe("resolveQualificationAdmission", () => {
   beforeEach(() => vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret"));
 
-  it("issues host preparation when the canonical executor attestation is available", async () => {
+  it("withholds host preparation while only caller-authenticated execution claims exist", async () => {
     const { ports } = fixture();
     const result = await resolveQualificationAdmission({ itemId: "BI-QUAL",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, ports);
 
-    expect(result).toMatchObject({ toolName: "claim_workroom_scope", workroomId: "WC-QUAL",
-      binding: { phase: "prepare", executorMode: "workroom-host", requiredPlatform: "win32" } });
+    expect(result).toBeNull();
   });
 
   it("issues the canonical BI-B3 Windows preparation token", async () => {
@@ -73,8 +72,7 @@ describe("resolveQualificationAdmission", () => {
     const result = await resolveQualificationAdmission({ itemId: "BI-B3DEC077",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports);
 
-    expect(result).toMatchObject({ binding: { itemId: "BI-B3DEC077", executorMode: "workroom-host",
-      allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"] } });
+    expect(result).toBeNull();
     expect(f.ports.readBlob).toHaveBeenCalledWith(expect.objectContaining({
       expectedBlobId: BLOB,
     }));
@@ -83,9 +81,7 @@ describe("resolveQualificationAdmission", () => {
   it("issues preparation without consuming the later verification start", async () => {
     const f = fixture();
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL",
-      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toMatchObject({
-        binding: { phase: "prepare", maxStarts: 1 },
-      });
+      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
     expect(f.db.workroomActivity.findUnique).not.toHaveBeenCalled();
   });
 
@@ -125,9 +121,7 @@ describe("resolveQualificationAdmission", () => {
     f.db.externalEvidenceRecord.findMany.mockResolvedValue([failed, semanticReview("review-protocol-1")]);
 
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL", refusedWorkroomId: "WC-QUAL",
-      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toMatchObject({
-        binding: { protocolReviewReceiptId: "review-protocol-1" },
-      });
+      currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
   });
 
   it("refuses unreadable or scope-incomplete immutable protocol bytes", async () => {

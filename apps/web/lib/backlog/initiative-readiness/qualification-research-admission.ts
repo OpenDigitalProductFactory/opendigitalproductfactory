@@ -394,6 +394,16 @@ export type QualificationExecutionEvidence = {
   outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
 };
 
+/** Execution admission and execution attestation are deliberately separate.
+ * Neither current executor mode has a producer identity distinct from the
+ * caller that can submit the claimed result, so both remain fail-closed. */
+export function qualificationExecutorAttestationAvailable(
+  executorMode: QualificationExperimentBinding["executorMode"],
+): boolean {
+  void executorMode;
+  return false;
+}
+
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
   const raw = record(value);
   const workroomId = text(raw?.workroomId);
@@ -433,7 +443,11 @@ export function qualificationExecutionEvidenceAllowed(input: {
   const evidence = parseQualificationExecutionEvidence(input.evidence);
   const lease = input.lease;
   const digest = qualificationBindingDigest(input.binding);
-  if (!evidence || !lease || input.binding.phase !== "verify"
+  // Every remaining field is caller-observable or caller-supplied. Preserve
+  // the immutable binding checks for a future trusted producer, but refuse
+  // before they can be mistaken for proof that a supervised child ran.
+  if (!qualificationExecutorAttestationAvailable(input.binding.executorMode)
+    || !evidence || !lease || input.binding.phase !== "verify"
     || input.binding.executorMode !== "workroom-host" || !input.binding.candidate
     || input.state.status !== "started" || input.state.startCount !== 1 || !input.state.startedAt
     || input.accountablePrincipalRef !== input.binding.accountablePrincipalRef

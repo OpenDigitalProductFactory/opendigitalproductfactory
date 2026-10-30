@@ -11,6 +11,7 @@ import {
   createQualificationExperimentAdmission,
   parseQualificationCandidateEvidence,
   parseQualificationExperimentState,
+  qualificationExecutorAttestationAvailable,
   qualificationBindingDigest,
   verifyQualificationExperimentAdmission,
   type QualificationExperimentBinding,
@@ -33,13 +34,6 @@ type QualificationProtocol = {
   executorMode: "sandbox-build" | "workroom-host";
   requiredPlatform: "linux" | "win32";
 };
-
-function qualificationExecutorAttestationAvailable(protocol: QualificationProtocol): boolean {
-  // The canonical host-resource runner can now bind a terminal observation to
-  // its server-verified lease. Sandbox execution remains fail-closed until it
-  // has the equivalent executor provenance contract.
-  return protocol.executorMode === "workroom-host";
-}
 
 function bodyMatch(body: string, expression: RegExp): string | null {
   return expression.exec(body)?.[1]?.trim() ?? null;
@@ -146,7 +140,7 @@ export async function resolveQualificationAdmission(args: {
   if (!protocol || !shape || !stage) return null;
   // Preserve protocol parsing for audit/recovery, but do not issue a new
   // qualification until the responsible runner supplies exact provenance.
-  if (!qualificationExecutorAttestationAvailable(protocol)) return null;
+  if (!qualificationExecutorAttestationAvailable(protocol.executorMode)) return null;
 
   const receipts = await db.externalEvidenceRecord.findMany({ where: {
     workCapsuleId: room.id, operationType: "semantic-change-review.receipt",

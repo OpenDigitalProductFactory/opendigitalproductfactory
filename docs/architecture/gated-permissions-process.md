@@ -607,14 +607,16 @@ The binding is one-start and fail-closed across task creation, scheduling, stage
 
 The Workroom stores `issued → started → settled` with the token and binding digest. The scheduled TaskRun carries the same immutable phase binding. A stale, expired, widened, superseded, already-started, or cross-run binding is withheld. Positive Verify evidence must contain the exact binding digest, command, output digest, TaskRun, receipt ids, and ordered timestamps; other outcomes remain explicit and cannot satisfy readiness. The normal research writer remains independently governed and consumes only exact settled positive evidence.
 
-For host verification, the effective gate also requires a canonical active
-host-resource lease derived from that signed binding. The supervised runner,
-not the caller, observes the process and output; `record_execution_evidence`
-revalidates the complete binding and atomically associates one evidence
-activity with one unused lease. This is an evidence precondition inside the
-existing envelope, not a new permission or executor type. Missing, sandbox,
-foreign, expired and duplicate attestations refuse without producing research
-credit.
+Host verification is currently unavailable. The host-resource lease proves
+admission and process ownership, but the host runner submits its terminal
+metadata with the same MCP credential available to the caller. The server
+therefore cannot distinguish a supervised result from a direct claim-and-forge
+call. `record_execution_evidence` refuses these qualification claims, and
+terminal recovery withholds both host and sandbox qualification tokens. The
+existing signed native Edge action channel is a distinct machine identity, but
+its closed action allow-list has no bounded qualification-test action; it must
+not be treated as a general remote shell. Qualification remains non-evidence
+until an existing trusted producer gains that explicit, reviewed capability.
 
 See [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts), [scheduled task runs](../../apps/web/lib/tak/scheduled-task-runs.ts), [stage mandate enforcement](../../apps/web/lib/work-management/room-stage-mandate.ts), and the [design](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
 

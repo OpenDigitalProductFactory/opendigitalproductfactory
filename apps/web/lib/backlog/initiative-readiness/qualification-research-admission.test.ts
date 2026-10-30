@@ -194,7 +194,7 @@ describe("qualification research admission", () => {
       params: { ...evidence, result: { ...evidence.result, outputDigest: undefined } }, now: NOW })).toBe(false);
   });
 
-  it("accepts only an exact canonical host lease attestation and rejects caller-shaped drift", () => {
+  it("refuses caller-shaped host success even when every public lease field matches", () => {
     const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
       executorMode: "workroom-host", requiredPlatform: "win32",
       permittedTools: ["read_source_at_version", "record_execution_evidence", "record_workroom_evidence"],
@@ -224,7 +224,10 @@ describe("qualification research admission", () => {
         evidence: { ...evidence, ...change }, accountablePrincipalRef: principal,
         now: new Date(NOW.getTime() + 2_000), lease: { ...lease, ...leaseChange } });
 
-    expect(allowed()).toBe(true);
+    // A caller holding the ordinary MCP credential can claim this lease and
+    // then submit every field below without ever starting the supervised
+    // child. Lease identity is admission evidence, not execution proof.
+    expect(allowed()).toBe(false);
     expect(allowed({ platform: "linux" })).toBe(false);
     expect(allowed({ skipped: true })).toBe(false);
     expect(allowed({ headSha: "9".repeat(40) })).toBe(false);

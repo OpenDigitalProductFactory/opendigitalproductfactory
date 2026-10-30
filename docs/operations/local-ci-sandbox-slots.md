@@ -49,14 +49,14 @@ persisted terminal row with no active slot proves reservation settlement only,
 never command success or descendant exit. Existing immediate-release authority
 checks and pending approval history remain intact.
 
-Qualification verification adds a stricter receipt path to this same runner.
-The server-issued `DPF_QUALIFICATION_ADMISSION_TOKEN` binds the Workroom, source
-head, platform, command and one active lease. The runner streams the supervised
-child output, hashes it, and records terminal evidence through
-`record_execution_evidence` only after a successful exit. The server verifies
-the signed binding and atomically marks that lease as used; a missing, foreign,
-expired or already-used lease produces no qualification evidence. Ordinary
-host-resource commands do not set this variable and retain the contract above.
+Qualification verification is currently unavailable. A signed token and host
+lease can bind admission, but the runner submits its result with the caller's
+ordinary MCP credential. Because the server cannot distinguish that submission
+from a direct forged success, terminal recovery does not issue qualification
+tokens and `record_execution_evidence` refuses qualification payloads. The
+native Edge action channel is separately authenticated but has no bounded
+qualification-test action. Ordinary host-resource commands retain the
+coordination contract above and produce no qualification evidence.
 
 The versioned profile is
 `apps/web/lib/nonprod/host-resource-profiles.json`. On a host with at most 64

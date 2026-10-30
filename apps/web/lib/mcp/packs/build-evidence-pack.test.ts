@@ -189,7 +189,7 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(arg.data.recordedByAgentId).toBe("agent-x");
   });
 
-  it("records exact host qualification evidence and refuses a foreign platform", async () => {
+  it("refuses a forged host qualification receipt after a valid public lease claim", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:02:00Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-evidence-secret");
@@ -232,15 +232,9 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
 
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Windows qualification passed", qualification }, "u1", { agentId: "agent-x" }))
-      .resolves.toMatchObject({ success: true, entityId: "act-qual" });
-    expect(db.leaseUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { leaseId: "NPEL-QUAL", evidenceRecordId: null, status: "active" },
-      data: { evidenceRecordId: expect.any(String) },
-    }));
-    expect(db.activityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-      id: db.leaseUpdateMany.mock.calls[0][0].data.evidenceRecordId,
-    }) }));
-    db.activityCreate.mockClear();
+      .resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });
+    expect(db.leaseUpdateMany).not.toHaveBeenCalled();
+    expect(db.activityCreate).not.toHaveBeenCalled();
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Wrong platform", qualification: { ...qualification, platform: "linux" } }, "u1",
       { agentId: "agent-x" })).resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });

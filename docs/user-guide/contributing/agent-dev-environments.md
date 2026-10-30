@@ -430,13 +430,13 @@ When capacity is unavailable, the command records its queue position and exits w
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
 
-For a server-authorized qualification run, use the exact command and
-`DPF_QUALIFICATION_ADMISSION_TOKEN` supplied for that Workroom. Do not copy the
-token to another branch, host, command or retry: the runner claims the bound
-host lease, streams and hashes the supervised output, and records evidence only
-after a successful terminal exit. A queued or failed command is not evidence,
-and a second invocation cannot reuse the consumed lease. Runs without a signed
-qualification token continue to use the ordinary host-resource behavior.
+Server-authorized host qualification is currently unavailable. The normal host
+runner can supervise a command, but it reports with the same MCP credential as
+its caller, so the server cannot authenticate that the runner—not a direct
+caller—observed the claimed success. Do not manufacture or reuse a
+`DPF_QUALIFICATION_ADMISSION_TOKEN`; terminal recovery withholds it and the
+evidence writer refuses qualification payloads. Ordinary host-resource runs
+continue to provide capacity coordination only, not qualification evidence.
 
 #### Recover a review blocked by endpoint eligibility
 
