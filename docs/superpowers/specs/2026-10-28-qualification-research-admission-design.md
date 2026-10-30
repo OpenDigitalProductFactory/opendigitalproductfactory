@@ -66,7 +66,9 @@ The verification stage exposes only the bound verification tools. Current sandbo
 - `inconclusive`: the run completed but cannot answer the protocol;
 - `blocked`: the run never began or could not complete under the binding.
 
-The eventual runner-attested result must include the binding digest, executor identity, command/test identity, candidate head/test blobs, platform, bounded output digest and timings. A later research writer may accept only the receipt kind selected by the signed binding, only while its independently observed source/executor metadata matches the complete verification binding, and only inside the admitted execution window. Sandbox-labelled receipts and authenticated Workroom assertions remain auditable but are non-evidence until that executor provenance contract exists. A caller-selected, foreign-build, wrong-platform, skipped-required-case or prose-only receipt is non-evidence. The result does not set `research=pass`, change BacklogItem status, close a finding or authorize implementation. Missing terminal evidence remains unknown.
+The canonical `host-resource-runner` is the responsible host executor. A verify-phase qualification token is supplied to that runner out-of-band, never as a caller-authored result. The runner presents the signed token when it claims its existing `host-heavy-resource` lease. The server verifies the current Workroom principal, exact signed binding, branch/head, required platform, test path/blob and one-start window, then derives the lease claim identity from the binding digest. The runner supervises the child, streams its output unchanged, hashes the observed output, and on terminal success submits the derived receipt through the existing `record_execution_evidence` writer. The writer re-verifies the signed binding and active canonical lease, including owner session/provider, runner PID/process identity, branch/head, claim identity and execution window, then atomically binds the resulting activity id to the lease. A caller-shaped payload without that exact leased runner association is non-evidence.
+
+The runner-attested result includes the binding digest, executor lease identity, command/test identity, candidate head/test blobs, platform, bounded output digest and timings. A later research writer may accept only the receipt kind selected by the signed binding, only while its independently observed source/executor metadata matches the complete verification binding, and only inside the admitted execution window. Sandbox-labelled receipts and authenticated Workroom assertions remain auditable but are non-evidence until their own executor provenance contract exists. A caller-selected, foreign lease, foreign build, wrong-platform, skipped-required-case, nonzero execution or prose-only receipt is non-evidence. The result does not set `research=pass`, change BacklogItem status, close a finding or authorize implementation. Missing terminal evidence remains unknown.
 
 After a terminal result, normal `record_initiative_evidence(gate: "research")` remains the only research writer. A passing receipt that resolves `IF-91E987DA433B0C82` must cite the exact qualification evidence and include that finding in `resolvedFindingRefs`. A negative or inconclusive experiment can support a changed design or a failing research receipt; it cannot be relabelled PASS.
 
@@ -83,11 +85,13 @@ Retain the current readiness DENY and `IF-91E987DA433B0C82` throughout qualifica
 3. Extend research recovery to offer bounded preparation only for an eligible qualification protocol. Keep the existing author evidence escalation for ordinary fixes and features.
 4. Carry preparation through the existing Workroom stage task config and TaskRun metadata. Enforce exact test/helper write paths, immutable target production blobs, attempt/time limits and current authority immediately before every authoring effect.
 5. Persist the candidate head/diff/blob inventory, require independent candidate review, then derive a separate one-start verification binding. Never retarget the initial protocol/preparation binding.
-6. Preserve sandbox and host bindings for audit compatibility, but refuse their use as qualification evidence until the responsible executor emits an independently observed receipt bound to the exact candidate/test blobs, one start, expiry, platform and current authority. Authentication of caller-supplied metadata is insufficient.
-7. Validate terminal Workroom evidence against the verification binding and retain positive, negative, inconclusive and blocked outcomes. Do not project any result into readiness automatically.
-8. Extend the research writer validation so a receipt resolving the existing finding must cite matching terminal qualification evidence. Preserve all existing receipt/finding validation.
-9. Add the exact BI-B3DEC077 fixture plus negative matrices for stale protocol/candidate, target production edits, foreign room/install/executor, widened tools, duplicate preparation/execution, expiry, missing/conflicting evidence and attempted research auto-pass.
-10. Obtain independent policy review, protected DCO publication and served deployment before BI-B3DEC077 requests preparation. Then issue current bindings in order; do not revive historical envelopes or rooms.
+6. Retain the existing host-resource lease binding as admission/coordination evidence only. Do not issue a host verification token while the runner and direct caller share one MCP credential.
+7. Refuse host qualification payloads at the execution-evidence writer. A matching active lease, claimed platform, echoed path, output digest and successful exit code remain caller assertions without a distinct trusted producer.
+8. Reuse the existing signed native Edge action substrate only if a later reviewed change adds an explicit bounded qualification action and exact terminal receipt contract. Its current closed allow-list is not a general command surface and cannot be widened by implication.
+9. Validate terminal Workroom evidence against the verification binding and retain positive, negative, inconclusive and blocked outcomes. Do not project any result into readiness automatically.
+10. Extend the research writer validation so a receipt resolving the existing finding must cite matching terminal qualification evidence. Preserve all existing receipt/finding validation.
+11. Add the exact BI-B3DEC077 fixture plus negative matrices for stale protocol/candidate, target production edits, foreign room/install/executor/lease, widened tools, duplicate preparation/execution/receipt, expiry, nonzero or missing/conflicting evidence and attempted research auto-pass.
+12. Obtain independent policy review, protected DCO publication and served deployment before BI-B3DEC077 requests preparation. Then issue current bindings in order; do not revive historical envelopes or rooms.
 
 ## Acceptance
 
@@ -100,6 +104,19 @@ Retain the current readiness DENY and `IF-91E987DA433B0C82` throughout qualifica
 | AC-QRA-5 | OBJ-QRA-RECOVER | Only a genuine later research receipt can resolve `IF-91E987DA433B0C82`, explicitly citing the bound terminal evidence and finding id. |
 | AC-QRA-6 | OBJ-QRA-FENCE | Existing small-fix reproduction, feature research, grants, receipts, Workroom stages and non-qualification callers pass unchanged regression coverage. |
 | AC-QRA-7 | OBJ-QRA-ADMIT, OBJ-QRA-TRUTH, OBJ-QRA-FENCE, OBJ-QRA-RECOVER | Independent policy review, protected CI/merge and served-source verification precede the first qualification action. |
+
+### Backlog acceptance traceability
+
+The governed medium-work coverage receipt binds the acceptance baseline verbatim:
+
+- A server-owned qualification binding names the exact BI, Workroom, repository, base/head, immutable protocol blob, installation, accountable owner, permitted tools, bounded starts and time, and current authority decision.
+- The binding reuses the governed stage/evidence mechanism; no parallel execution controller or generic bypass is introduced.
+- Admission authorizes only the bounded experiment. It does not pass RESEARCH_REQUIRED, resolve IF-91E987DA433B0C82, or authorize ordinary implementation.
+- Positive, negative and inconclusive terminal outcomes are all persisted truthfully and remain auditable.
+- Only a later genuine research receipt may resolve the existing finding, explicitly citing its finding id and the experiment evidence.
+- Changed/stale protocol, source, Workroom, installation, authority, tool scope, expiry, duplicate start, absent result, or conflicting evidence fails closed.
+- Existing small-fix source_verified + test_pass and normal record_initiative_evidence behavior remain unchanged.
+- Independent policy review, protected CI/merge and served deployment precede use by BI-B3DEC077.
 
 ## Scope, compatibility and rollback
 
