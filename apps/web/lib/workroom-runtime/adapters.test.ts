@@ -56,6 +56,84 @@ describe("codex app-server adapter", () => {
       threadId: "thr-1", input: [{ type: "text", text: "do it" }], approvalPolicy: "on-request", sandboxPolicy: { type: "workspaceWrite" } } });
   });
 
+  it("keeps child and foreign activity from changing or completing the root turn", async () => {
+    const { proc, events, session } = await open();
+    await session.ensureThread();
+    await session.startTurn("root work");
+    proc.emit({ method: "turn/started", params: { threadId: "thr-child", turn: { id: "turn-child" } } });
+    proc.emit({ method: "item/completed", params: { threadId: "thr-child", turnId: "turn-child", item: { type: "agentMessage", text: "child result" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-child", turn: { id: "turn-child", status: "completed" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-foreign", turn: { id: "turn-1", status: "completed" } } });
+    expect(session.activeTurnId()).toBe("turn-1");
+    expect(events).toEqual([]);
+    proc.emit({ id: 8, method: "item/commandExecution/requestApproval", params: { threadId: "thr-child", turnId: "turn-child", itemId: "exec-child", command: "git push" } });
+    expect(events).toEqual([expect.objectContaining({ type: "runtime-request", request: expect.objectContaining({ requestId: "exec-child" }) })]);
+    await session.respondToRuntimeRequest("exec-child", "decline");
+    expect(proc.written.at(-1)).toEqual({ id: 8, result: { decision: "decline" } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-1", turn: { id: "turn-1", status: "completed" } } });
+    expect(session.activeTurnId()).toBeNull();
+    expect(events.filter((event) => event.type === "turn-completed")).toEqual([
+      { type: "turn-completed", turnId: "turn-1", status: "completed", error: null },
+    ]);
+  });
+
+  it.each(["completed", "failed", "interrupted"] as const)("settles a matching %s root once and ignores stale or malformed terminals", async (status) => {
+    const { proc, events, session } = await open();
+    await session.ensureThread();
+    await session.startTurn("root work");
+    for (const params of [
+      { threadId: "thr-1", turn: { status } },
+      { turn: { id: "turn-1", status } },
+      { threadId: "thr-1", turn: { id: "turn-1", status: "inProgress" } },
+      { threadId: "thr-1", turn: { id: "turn-old", status } },
+    ]) proc.emit({ method: "turn/completed", params });
+    expect(session.activeTurnId()).toBe("turn-1");
+    expect(events).toEqual([]);
+    const terminal = { method: "turn/completed", params: { threadId: "thr-1", turn: { id: "turn-1", status, error: status === "failed" ? { message: "provider failure" } : null } } };
+    proc.emit(terminal);
+    proc.emit(terminal);
+    expect(session.activeTurnId()).toBeNull();
+    expect(events).toEqual([{ type: "turn-completed", turnId: "turn-1", status, error: status === "failed" ? "provider failure" : null }]);
+  });
+  it("ignores late root activity while a newer root turn runs", async () => {
+    const { proc, events, session } = await open();
+    await session.ensureThread();
+    await session.startTurn("first");
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-1", turn: { id: "turn-1", status: "completed" } } });
+    proc.emit({ method: "turn/started", params: { threadId: "thr-1", turn: { id: "turn-2" } } });
+    const count = events.length;
+    proc.emit({ method: "turn/started", params: { threadId: "thr-1", turn: { id: "turn-1" } } });
+    proc.emit({ method: "item/completed", params: { threadId: "thr-1", turnId: "turn-1", item: { type: "agentMessage", text: "late" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-1", turn: { id: "turn-1", status: "completed" } } });
+    expect(session.activeTurnId()).toBe("turn-2");
+    expect(events).toHaveLength(count);
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-1", turn: { id: "turn-2", status: "completed" } } });
+    expect(events.filter((event) => event.type === "turn-completed").map((event) => event.turnId)).toEqual(["turn-1", "turn-2"]);
+  });
+
+  it("does not reopen a root that completed before its start acknowledgement", async () => {
+    const proc = fakeProcess();
+    autoRespond(proc, { initialize: {}, "account/login/start": {}, "thread/start": { thread: { id: "thr-fast" } } });
+    const originalWrite = proc.write.bind(proc);
+    proc.write = (line) => {
+      originalWrite(line);
+      const frame = JSON.parse(line) as { id?: number; method?: string };
+      if (frame.method === "turn/start") queueMicrotask(() => {
+        proc.emit({ method: "turn/started", params: { threadId: "thr-fast", turn: { id: "turn-fast" } } });
+        proc.emit({ method: "turn/completed", params: { threadId: "thr-fast", turn: { id: "turn-fast", status: "completed" } } });
+        proc.emit({ id: frame.id, result: { turn: { id: "turn-fast" } } });
+      });
+    };
+    const events: RuntimeEvent[] = [];
+    const session = await createCodexAdapter({ launch: () => proc, login: async () => ({ type: "apiKey", apiKey: "sk" }) })
+      .openSession(CONFIG, (event) => events.push(event));
+    await session.ensureThread();
+    await session.startTurn("fast");
+    expect(session.activeTurnId()).toBeNull();
+    expect(events.filter((event) => event.type === "turn-completed")).toHaveLength(1);
+    proc.emit({ method: "turn/started", params: { threadId: "thr-fast", turn: { id: "turn-fast" } } });
+    expect(session.activeTurnId()).toBeNull();
+  });
   it("resumes a stored thread instead of starting one", async () => {
     const { proc, session } = await open("thr-old");
     await expect(session.ensureThread()).resolves.toBe("thr-old");
@@ -67,7 +145,7 @@ describe("codex app-server adapter", () => {
     await session.ensureThread();
     proc.emit({ method: "turn/started", params: { threadId: "thr-1", turn: { id: "turn-1" } } });
     proc.emit({ id: 0, method: "item/commandExecution/requestApproval", params: { threadId: "thr-1", turnId: "turn-1", itemId: "exec-1", command: "git push" } });
-    proc.emit({ method: "item/completed", params: { turnId: "turn-1", item: { type: "agentMessage", text: "done" } } });
+    proc.emit({ method: "item/completed", params: { threadId: "thr-1", turnId: "turn-1", item: { type: "agentMessage", text: "done" } } });
     proc.emit({ method: "turn/completed", params: { threadId: "thr-1", turn: { id: "turn-1", status: "completed" } } });
     expect(events).toEqual([
       { type: "turn-started", turnId: "turn-1" },
