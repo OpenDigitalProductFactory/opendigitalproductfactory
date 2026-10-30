@@ -189,14 +189,20 @@ async function recordExecutionEvidenceHandler(
     const state = parseQualificationExperimentState(workspace?.qualificationExperimentAdmission);
     const admission = state ? verifyQualificationExperimentAdmission(state.token, { allowExpired: true }) : null;
     const actor = await workCapsuleActor(userId, context);
+    const leaseId = typeof raw?.leaseId === "string" ? raw.leaseId.trim() : "";
+    const lease = leaseId ? await prisma.nonProductionEnvironmentLease.findUnique({ where: { leaseId }, select: {
+      leaseId: true, environmentKey: true, status: true, claimKey: true, purpose: true,
+      ownerSessionId: true, ownerProvider: true, branchName: true, buildId: true, taskRunId: true,
+      ownerPid: true, ownerProcessIdentity: true, admittedAt: true, expiresAt: true, evidenceRecordId: true,
+    } }) : null;
     if (!state || !admission?.ok || !qualificationExecutionEvidenceAllowed({ binding: admission.data.binding,
-      state, evidence: qualification, accountablePrincipalRef: actor.principalId, now: new Date() })) {
+      state, evidence: qualification, accountablePrincipalRef: actor.principalId, now: new Date(),
+      lease: lease ?? undefined })) {
       return { success: false, error: "invalid_qualification_evidence",
         message: "Qualification evidence does not match the live signed binding, accountable Workroom principal, source, platform, or execution window." };
     }
   }
-  const activity = await prisma.backlogItemActivity.create({
-    data: {
+  const activityData = {
       backlogItemId: item.id,
       kind: "evidence",
       summary: summaryRaw,
@@ -210,8 +216,27 @@ async function recordExecutionEvidenceHandler(
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,
       toolExecutionId,
-    },
-  });
+  };
+  let activity;
+  if (qualification !== undefined) {
+    const leaseId = typeof (qualification as Record<string, unknown>).leaseId === "string"
+      ? String((qualification as Record<string, unknown>).leaseId) : "";
+    const activityId = crypto.randomUUID();
+    try {
+      activity = await prisma.$transaction(async (tx) => {
+        const bound = await tx.nonProductionEnvironmentLease.updateMany({
+          where: { leaseId, evidenceRecordId: null, status: "active" },
+          data: { evidenceRecordId: activityId },
+        });
+        if (bound.count !== 1) throw new Error("qualification_receipt_conflict");
+        return tx.backlogItemActivity.create({ data: { id: activityId, ...activityData } });
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "qualification_receipt_conflict") throw error;
+      return { success: false, error: "qualification_receipt_conflict",
+        message: "The canonical host lease already has a terminal receipt or is no longer active." };
+    }
+  } else activity = await prisma.backlogItemActivity.create({ data: activityData });
   return {
     success: true,
     entityId: activity.id,

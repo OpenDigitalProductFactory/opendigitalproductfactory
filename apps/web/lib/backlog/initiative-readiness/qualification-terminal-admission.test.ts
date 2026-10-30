@@ -46,7 +46,7 @@ function fixture() {
 describe("resolveQualificationAdmission", () => {
   beforeEach(() => vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret"));
 
-  it("refuses an otherwise approved immutable protocol while executor attestation is unavailable", async () => {
+  it("withholds host preparation while only caller-authenticated execution claims exist", async () => {
     const { ports } = fixture();
     const result = await resolveQualificationAdmission({ itemId: "BI-QUAL",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, ports);
@@ -54,7 +54,7 @@ describe("resolveQualificationAdmission", () => {
     expect(result).toBeNull();
   });
 
-  it("refuses the canonical BI-B3 Windows protocol before issuing a token", async () => {
+  it("issues the canonical BI-B3 Windows preparation token", async () => {
     const f = fixture();
     f.ports.readBlob.mockResolvedValue({ ok: true, data: Buffer.from([
       "# BI-B3DEC077 qualification-only recovery protocol",
@@ -78,7 +78,7 @@ describe("resolveQualificationAdmission", () => {
     }));
   });
 
-  it("does not mint preparation state that could later consume a verification start", async () => {
+  it("issues preparation without consuming the later verification start", async () => {
     const f = fixture();
     await expect(resolveQualificationAdmission({ itemId: "BI-QUAL",
       refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
@@ -114,7 +114,7 @@ describe("resolveQualificationAdmission", () => {
       currentAgentId: "AGT-OWNER" }, f.ports)).resolves.toBeNull();
   });
 
-  it("still refuses when the exact protocol review is present beside an unrelated failure", async () => {
+  it("uses the exact protocol review despite an unrelated-head failure", async () => {
     const f = fixture();
     const failed = semanticReview("review-other-head", "9".repeat(40));
     failed.details.result.decision = "fail";
