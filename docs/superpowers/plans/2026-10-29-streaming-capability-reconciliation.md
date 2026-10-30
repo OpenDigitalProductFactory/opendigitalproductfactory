@@ -26,4 +26,4 @@ No new substrate or runtime repair by direct database edits. Existing source: `a
 
 ## Backlog coverage
 
-Atomic delivery `streaming-projection` maps to BI-AF6DDF01. Immutable coverage receipt is recorded through the platform after publishing this plan; until then coverage is unproven.
+Atomic delivery `streaming-projection` maps to BI-AF6DDF01. Initial immutable coverage receipt `cmvuau37g341u01o20nz1ktnm` binds the published plan at `7af5ab40fff02f8e10afa9667a98bb0d30174ece` (blob `1409a281bb4e7ca527cecd9e4a094a900f9634c4`). Implementation admission `IRD-ACC52D129D6E` was allowed after that receipt.
