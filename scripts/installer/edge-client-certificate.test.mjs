@@ -26,6 +26,12 @@ $RootCert = Join-Path $OutDir 'root_ca.crt'
 $EdgeClientCert = Join-Path $OutDir 'edge-client.crt'
 $EdgeClientKey = Join-Path $OutDir 'edge-client.key'
 function icacls { $global:LASTEXITCODE = 0 }
+function Get-FileHash {
+  param([string]$LiteralPath, [string]$Algorithm)
+  $bytes = [IO.File]::ReadAllBytes($LiteralPath)
+  $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+  [pscustomobject]@{ Hash = ([BitConverter]::ToString($hash) -replace '-', '') }
+}
 function node { $global:LASTEXITCODE = 0; 'issue fixture-root' }
 function Invoke-DpfPkiCompose { param($Arguments); 'FIXTURE-TOKEN' }
 function Invoke-DpfLocalStepClient {
