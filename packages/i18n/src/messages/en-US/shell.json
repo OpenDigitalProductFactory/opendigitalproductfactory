@@ -7,7 +7,8 @@
     "reviewLive": "Review current work"
   },
   "finance": {
-    "ownExpensesDescription": "Enter your expenses, save drafts, and submit for approval.",
+    "ownExpensesDescription": "Enter expenses, save drafts, and submit for approval.",
+    "ownSubmittedClaims": "My submitted claims",
     "ownExpensesLink": "My Expenses",
     "expenseReviewDescription": "Review claims visible to you.",
     "expenseEntrySummary": "Complete the required fields. Receipt links are optional.",

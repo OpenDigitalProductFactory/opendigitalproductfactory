@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getT } from "@/lib/i18n/t.server";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { requireUser } from "@/lib/actions/shared/guards";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { AiSpendSummaryCard } from "@/components/finance/AiSpendSummaryCard";
@@ -11,6 +12,7 @@ import {
 } from "@/lib/finance/ai-provider-finance";
 
 export default async function FinanceSpendPage() {
+  const user = await requireUser();
   const t = await getT("shell");
   const [payables, submittedExpenseClaims, supplierCount, purchaseOrderCount, outboundPayments, orgSettings, aiOverview] =
     await Promise.all([
@@ -20,7 +22,7 @@ export default async function FinanceSpendPage() {
         _count: true,
       }),
       prisma.expenseClaim.count({
-        where: { status: "submitted" },
+        where: { status: "submitted", employee: { userId: user.id } },
       }),
       prisma.supplier.count(),
       prisma.purchaseOrder.count(),
@@ -64,7 +66,7 @@ export default async function FinanceSpendPage() {
           ctaLabel={t("finance.ownExpensesLink")}
           accentColor="var(--dpf-info)"
           metrics={[
-            { label: "Submitted claims", value: `${submittedExpenseClaims}` },
+            { label: t("finance.ownSubmittedClaims"), value: `${submittedExpenseClaims}` },
           ]}
         />
         {/* EP-2FB6C0CC (BI-DD763B93): Mileage had no link; it lives with the other spend records. */}

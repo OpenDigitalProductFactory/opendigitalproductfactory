@@ -13,6 +13,7 @@ At base 4c290ad54d46c650f1fc954d175cb478dbab761d, Finance Spend promises persona
 ## Atomic ordered repair
 
 1. Reuse My Expenses for personal entry and retain a distinct review route.
+   Keep the card metric personal too: count submitted claims through the authenticated user's employee relation (unique userId), with an explicit My submitted claims label. A missing profile produces zero personal claims, regardless of colleagues' submissions. Independent client review of58e78d9b found the previous organization-wide metric mismatched the new destination; focused scope/auth regressions failed before this correction.
 2. Explain title, line date, category, description and positive amount; receipt URL and notes are optional in the existing form. Explain draft versus approval submission. Expose missing employee-profile prerequisites without creating identities or widening access.
 3. Preserve existing claimant and manager authorization actions. Verify navigation, empty states, missing-profile and denied access, authorized fixture save/readback, desktop and narrow layouts.
 4. Obtain UX critique CE-EB8821DD, run affected tests, package typecheck and governed delivery checks, then protected DCO PR and canonical deployment before served acceptance.
