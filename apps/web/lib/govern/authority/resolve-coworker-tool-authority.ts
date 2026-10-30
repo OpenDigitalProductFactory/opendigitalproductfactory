@@ -299,6 +299,8 @@ export function deriveCoworkerApprovalPolicy(input: {
  * no steering, so a room can only ever narrow what a coworker may do alone.
  */
 export function resolveSteering(input: {
+  /** Current server-resolved profile; a numeric HITL default is not this veto. */
+  hitlPolicy?: string | null;
   initiativeReviewBinding: InitiativeReviewBinding | null;
   roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
   /**
@@ -327,6 +329,9 @@ export function resolveSteering(input: {
    */
   connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
 }): EscalationSteering {
+  // A saved operator always policy cannot be displaced by automatic steering.
+  // The evaluator still validates an exact human approval through its normal lane.
+  if (input.hitlPolicy?.trim().toLowerCase() === "always") return "none";
   if (input.initiativeReviewBinding) return "independent-reviewer";
   const room = input.roomAuthority;
   if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
@@ -559,6 +564,7 @@ export const resolveCoworkerToolAuthorityInput =
       },
       // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
       steering: resolveSteering({
+        hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
         taskRunId: execution.context?.taskRunId ?? null,
         agentId: execution.context?.agentId ?? null,
         toolName: execution.toolName,

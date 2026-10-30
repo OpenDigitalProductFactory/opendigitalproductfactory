@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockResolveToken, mockResolveMtls, mockRecordResult } = vi.hoisted(() => ({
+const { mockResolveToken, mockResolveMtls, mockRecordResult, findAction, findDrain, findConfig, completeSwap, failSwap, driveChange } = vi.hoisted(() => ({
   mockResolveToken: vi.fn(),
   mockResolveMtls: vi.fn(),
   mockRecordResult: vi.fn(),
+  findAction:vi.fn(), findDrain:vi.fn(), findConfig:vi.fn(),completeSwap:vi.fn(),failSwap:vi.fn(),driveChange:vi.fn(),
 }));
 
 vi.mock("@/lib/auth/edge-node-token", () => ({ resolveEdgeNodeAuth: mockResolveToken }));
@@ -13,7 +14,9 @@ vi.mock("@/lib/auth/edge-mtls-proxy-secret", () => ({
   loadEdgeMtlsProxySecret: () => "proxy-secret-with-at-least-32-bytes",
 }));
 vi.mock("@/lib/remote-action/dispatch-orchestrator", () => ({ recordActionResult: mockRecordResult }));
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@dpf/db", () => ({ prisma: { remoteAction:{findUnique:findAction},quiescenceRun:{findUnique:findDrain},platformConfig:{findUnique:findConfig} } }));
+vi.mock("@/lib/self-upgrade/quiescence", () => ({ signalSwapComplete:completeSwap,failQuiescenceSwap:failSwap }));
+vi.mock("@/lib/change-management/register-change", () => ({ driveChangeThrough:driveChange }));
 
 import { POST } from "./route";
 
@@ -31,9 +34,23 @@ beforeEach(() => {
   mockResolveToken.mockResolvedValue({ ok: true, edgeNodeRowId: "edge-row-1" });
   mockResolveMtls.mockResolvedValue({ ok: true, certificateId: "cert-1" });
   mockRecordResult.mockResolvedValue({ ok: true, status: "succeeded" });
+  findAction.mockResolvedValue(null); completeSwap.mockResolvedValue(undefined);failSwap.mockResolvedValue(undefined);driveChange.mockResolvedValue(undefined);
 });
 
 describe("POST /api/v1/edge/actions/result", () => {
+  it("keeps an unknown native outcome paused, and closes only its own positively restored operation", async () => {
+    const binding={ownerSessionId:"session",branchName:"codex/native",ownerPid:10,ownerProcessIdentity:"mac:10",quiescenceRunId:"QR-native",controllerManifestSha256:"a".repeat(64),providerDigest:"b".repeat(64)};
+    const action={actionType:"inference.runtime.transition",actionKey:"RA-native",edgeNodeId:"edge-row-1",changeRequestId:"change-1",evidence:{nativeAdmission:binding,nativeStatus:"uncertain",settlement:"unknown"}};
+    findAction.mockResolvedValue(action);
+    await POST(request({actionKey:"RA-native",outcome:"failed",evidence:{settlement:"unknown"}}));
+    expect(completeSwap).not.toHaveBeenCalled();expect(failSwap).not.toHaveBeenCalled();
+    action.evidence.nativeStatus="failed-restored";action.evidence.settlement="confirmed";
+    findDrain.mockResolvedValue({runId:"QR-native",trigger:"manual",triggerRefId:"inference-runtime:RA-native",status:"ready-to-swap"});
+    findConfig.mockResolvedValue({value:{level:"draining",runId:"QR-native"}});
+    await POST(request({actionKey:"RA-native",outcome:"failed",evidence:{settlement:"confirmed",nativeStatus:"failed-restored"}}));
+    expect(failSwap).toHaveBeenCalledWith("QR-native",expect.any(String));
+    expect(completeSwap).not.toHaveBeenCalled();
+  });
   it("requires the machine-bound certificate before accepting a result", async () => {
     mockResolveMtls.mockResolvedValue({ ok: false, error: "certificate_unknown" });
 

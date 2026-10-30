@@ -17,6 +17,12 @@ const SENSITIVITY_RANK: Record<string, number> = {
   critical: 3,
 };
 
+/** Does any held clearance reach the ceiling? One rule for room access and the room charter. */
+export function clearanceCovers(clearance: readonly string[], ceiling: string): boolean {
+  const required = SENSITIVITY_RANK[ceiling] ?? Number.MAX_SAFE_INTEGER;
+  return Math.max(-1, ...clearance.map((value) => SENSITIVITY_RANK[value] ?? -1)) >= required;
+}
+
 export type WorkroomAccessDecision = {
   level: WorkroomAccessLevel;
   reason: "authorized" | "discover-only" | "not-admitted" | "insufficient-clearance";
@@ -75,12 +81,7 @@ export function authorizeWorkroomAccess(input: {
       : { level: "none", reason: "not-admitted" };
   }
 
-  const required = SENSITIVITY_RANK[input.sensitivityCeiling ?? "public"] ?? Number.MAX_SAFE_INTEGER;
-  const clearance = Math.max(
-    -1,
-    ...input.sensitivityClearance.map((value) => SENSITIVITY_RANK[value] ?? -1),
-  );
-  if (clearance < required) {
+  if (!clearanceCovers(input.sensitivityClearance, input.sensitivityCeiling ?? "public")) {
     return { level: "discover", reason: "insufficient-clearance" };
   }
 
