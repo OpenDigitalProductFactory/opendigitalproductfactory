@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({ workroom: { findUnique: vi.fn() }, workroomActivity: { findMany: vi.fn(), findFirst: vi.fn() },
-  taskRun: { findMany: vi.fn() }, backlogItem: { findMany: vi.fn() }, $queryRaw: vi.fn(),
+  taskRun: { findMany: vi.fn(), findFirst: vi.fn() }, backlogItem: { findMany: vi.fn() }, $queryRaw: vi.fn(),
   $executeRaw: vi.fn(), $transaction: vi.fn() }));
 const handoffRecovery = vi.hoisted(() => vi.fn());
 vi.mock("./workroom-failed-handoff-recovery.server", () => ({ loadWorkroomFailedHandoffRecovery: handoffRecovery }));
@@ -12,6 +12,9 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveAgentWorkroomAccess: roomAccess,
   resolveHumanWorkroomAccess: roomAccess,
 }));
+
+const ownedRecovery = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/change-review/semantic-review-recovery-readback", () => ({ readSemanticReviewRecovery: ownedRecovery }));
 
 import { getWorkCapsuleTool } from "./mcp-handlers";
 import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
@@ -43,6 +46,10 @@ describe("get_workroom native review readback", () => {
     db.$transaction.mockImplementation(async work => work(db));
     db.workroom.findUnique.mockResolvedValue(room);
     db.workroomActivity.findMany.mockResolvedValue([]);
+    db.taskRun.findFirst.mockResolvedValue({ taskRunId: "TR-OWN", userId: "requester-1", status: "input-required",
+      updatedAt: now, a2aMetadata: { gateKind: "semantic-review", capsuleId: "WC-1" }, progressPayload: {} });
+    ownedRecovery.mockResolvedValue({ classification: "execution-uncertain", details: {
+      unresolvedNodeIds: ["TN-OWN"], remediation: { executionSettled: false, retryAuthorized: false } } });
     db.backlogItem.findMany.mockResolvedValue([]);
     candidates = [reviewCandidate()];
     candidateFailure = null;
@@ -91,6 +98,68 @@ describe("get_workroom native review readback", () => {
     } } } });
     expect(db.backlogItem.findMany).toHaveBeenCalledTimes(1);
     expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads an explicitly requested owned historical review through the admitted room", async () => {
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-OWN", userId: "forged" }, "requester-1");
+    expect(result).toMatchObject({ success: true, data: { capsule: { ownedReviewRecovery: {
+      taskRunId: "TR-OWN", status: "input-required", recovery: { classification: "execution-uncertain" },
+    } } } });
+    expect(db.taskRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      taskRunId: "TR-OWN", userId: "requester-1", AND: [
+        { a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
+        { a2aMetadata: { path: ["capsuleId"], equals: "WC-1" } },
+      ],
+    } }));
+    expect(ownedRecovery).toHaveBeenCalledWith(expect.objectContaining({ taskRunId: "TR-OWN" }), "requester-1");
+  });
+
+  it("refuses a missing, foreign-owner or wrong-room review without reading its details", async () => {
+    db.taskRun.findFirst.mockResolvedValue(null);
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-FOREIGN" }, "requester-1"))
+      .toMatchObject({ success: false, error: "owned_review_unavailable" });
+    expect(ownedRecovery).not.toHaveBeenCalled();
+  });
+
+  it("refuses a foreign row even if the database returns it", async () => {
+    db.taskRun.findFirst.mockResolvedValue({ taskRunId: "TR-OWN", userId: "another-owner" });
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-OWN" }, "requester-1"))
+      .toMatchObject({ success: false, error: "owned_review_unavailable" });
+    expect(ownedRecovery).not.toHaveBeenCalled();
+  });
+
+  it("refuses mixed activity and owned-review selectors without consuming a cursor", async () => {
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-OWN", activityMode: "bounded" }, "requester-1"))
+      .toMatchObject({ success: false, error: "invalid_review_activity_read" });
+    expect(db.taskRun.findFirst).not.toHaveBeenCalled();
+    expect(db.workroomActivity.findMany).not.toHaveBeenCalled();
+  });
+
+  it("requires authenticated ownership before an explicit review lookup", async () => {
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-OWN" }))
+      .toMatchObject({ success: false, error: "review_owner_required" });
+    expect(db.taskRun.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable recovery rather than a successful empty result", async () => {
+    ownedRecovery.mockRejectedValue(new Error("provider-private-diagnostic"));
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-OWN" }, "requester-1");
+    expect(result).toMatchObject({ success: false, error: "review_recovery_unavailable" });
+    expect(JSON.stringify(result)).not.toContain("provider-private-diagnostic");
+  });
+
+  it.each(["", " ", " TR-OWN", "x".repeat(513), 23, {}])("rejects malformed review identity %j", async reviewTaskRunId => {
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId }, "requester-1"))
+      .toMatchObject({ success: false, error: "invalid_reviewTaskRunId" });
+    expect(db.taskRun.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("retains requested owned recovery when bulky room history must be omitted", async () => {
+    db.workroom.findUnique.mockResolvedValue({ ...room, activities: [{ payload: "x".repeat(150_000) }] });
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1", reviewTaskRunId: "TR-OWN" }, "requester-1");
+    expect(result).toMatchObject({ data: { capsule: { ownedReviewRecovery: {
+      taskRunId: "TR-OWN", recovery: { details: { remediation: { executionSettled: false, retryAuthorized: false } } },
+    } }, omittedFields: expect.arrayContaining(["capsule.activities"]) } });
   });
 
   it("exposes metadata-linked execution without leaking the private task payload", async () => {

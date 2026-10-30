@@ -1,5 +1,13 @@
 # Maintained Mac inference engine candidate
 
+October 28 live status: PR6612 is merged and its source reached the canonical portal, but the faster native runtime is not active. Docker Model Runner is now1.2.9 while the installed engine executable still hashes to `0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26`; the portal still routes to `http://model-runner.docker.internal/v1`. BI-CD4EB130 has been reopened for its genuinely unfinished native lifecycle/activation implementation, not for a waived customer acceptance question. The existing design and plan's October 28 amendment records the missing host-control path and the signed-action integration selected in DI-81525BCDC1F7. No live speedup is established by the portal upgrade. AI Ops' existing performance task still reports a required-writer failure; captured learning is not proof that recurring stewardship works.
+
+The native activation path requires a canonical portal release and separate native installer convergence. Its installer opt-in is `DPF_MANAGED_INFERENCE_ENABLED=1`, with an exact published `DPF_MANAGED_INFERENCE_SOURCE_SHA`, `DPF_MANAGED_INFERENCE_RUNTIME_PACKAGE` and `DPF_MANAGED_INFERENCE_RUNTIME_SHA256`, and the retained report path/hash in `DPF_MANAGED_INFERENCE_REPORT` / `DPF_MANAGED_INFERENCE_REPORT_SHA256`. The executing agent supplies these verified artifact bindings through the supported native installer after protected publication and canonical convergence; the operator does not type infrastructure values. The qualification report must retain its producer's private mode (`0600`); staging validates and reads one bounded, no-follow file descriptor before checking its pinned hash. This stages a private controller and a qualification bound to the enrolled host, then replaces the host Edge agent from the same immutable source. It does not activate the engine, edit provider rows or grant the native action automatically. Windows, Linux and unqualified Macs retain their existing path.
+
+The concrete switch/restore control lives in the existing local-provider settings. It requires a current source-owned inference reservation, current global pause ownership, the original model/configuration/profile and an approved human change. Its exact per-node procedure permission is disclosed for either operation when missing; a disabled action channel remains disabled. The signed machine bridge passes the original envelope to the verified controller and refreshes observations of the actual existing reservation, never renewing it by re-signing a proof. Normal local calls resolve the same installer selection for execution and management. Unknown selection or cleanup refuses new requests and another switch.
+
+Keep three identities distinct in evidence: the OCI image/tag digest, the SHA-256 of an executable file, and the inode actually mapped by the serving process. On October 28 the Docker `b9879-metal` OCI digest remained `b70706f473b4043ca3e0c32704a7fda3412b83bceef0564684187b8011230de8`; the file at `/Users/markbodman/.docker/bin/inference/llama-server` hashed to `0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26`. A fresh file read alone is not fresh mapped-process or performance proof. Retain the historical reports unchanged.
+
 BI-86B65F35 / WC-06E454C7 owns this package repair. The [design](../superpowers/specs/2026-10-26-mac-metal-engine-package-design.md) and [plan](../superpowers/plans/2026-10-26-mac-metal-engine-package-plan.md) define its acceptance.
 
 ## Why this package exists
@@ -57,6 +65,12 @@ The tool stops only its owned test process, then restores Docker with a bounded 
 `model-smoke-qualified` requires eight correct completed controls, observed cache reuse on both engines, matching cold prompt counts and confirmed Docker restoration. It is not a fleet-performance or full-platform-workflow qualification. The recorded prefill ratio is comparable only when controlled runtime properties, cold prompt counts, observed cold-cache counts and positive timings match the comparison contract. An optional baseline report may reuse completed, restored baseline controls from the same device/package/model/binary/profile within one hour. Its report hash and separate-window limitation are recorded. A versioned workload record binds the specification, exact context construction and cold-message content hash; the candidate reconstructs those exact messages before using old timing data. Legacy reports missing workload identity are refused. Mismatched, malformed, incomplete or stale evidence is refused before unloading. Candidate token counts/cache/timings still have to match the comparison contract. One cold sample per engine is an initial observation, not a statistical performance guarantee. An incomplete run, missing timings, truncated output or unmatched input cannot establish a speedup.
 
 ## Activation, rollback and AI Ops
+
+### Native agent source rollout
+
+The October 28 activation foundations do not register a lifecycle implementation or select the corrected runtime. A portal self-upgrade does not replace a host-native Edge executable. Existing Windows installs receive that executable through the governed native install/repair entry `Install-DPFNativeEdgeNode` in `scripts/installer/native-edge-host.ps1`, called by `install-dpf.ps1`. Existing macOS and Linux installs use `dpf_native_edge_install` in `scripts/installer/native-edge-host.sh`, called by `install-dpf.sh`. These entries stage a replacement and manage the platform's existing supervision; retain enrollment and the previous binary. The executing agent performs the supported repair from verified release source and records its evidence. No operator command is needed to inspect this work.
+
+This is an explicit native install/repair step on Windows, macOS and Linux, rather than automatic portal convergence. Until the complete managed inference procedure is implemented and provisioned, the new action remains unsupported and its node permission remains absent. Keep all three platforms on their current inference selection; only physically qualified Macs may later enter the approved activation procedure. Passing source tests or running the native agent repair alone proves no inference performance gain.
 
 Managed integration is tracked separately by BI-CD4EB130 / WC-C8326144 and its
 [runtime design](../superpowers/specs/2026-10-26-mac-inference-runtime-design.md)
@@ -146,3 +160,33 @@ This is **runtime API qualification**, not live activation. The Docker provider 
 Independent review found that the historical report's supervisor event named `released` came from an intentionally empty callback. It is **not** evidence that the platform released the reservation. Actual candidate process shutdown and Docker restoration are separately recorded; the platform's release action has its own outcome. Preserve the original report and hash, and attach this correction rather than editing its history.
 
 The qualifier now records `release-not-attempted` for that callback. It also preserves a definitive fenced verdict after the shared supervisor has settled its final heartbeat/deadline work, even when all model controls finished before a late loss of authority. Injected final-checkpoint, in-flight refusal and in-flight deadline tests cover those paths without loading models. No fence was observed in the historical successful hardware sample; these are source and evidence corrections, not a replacement inference run.
+
+### Qualification profile preservation correction — October 29
+
+The current-profile API report
+`36b8a235ea539ebbc9d57a5f4efb88c01ee621519c1f2dfa925535c78ae9fccf`
+contains eight correct completion controls and finite 768-dimensional embeddings,
+but the later profile verifier failed: the captured Qwen configuration was absent.
+The owner's earlier post-verifier PASS was explicitly superseded. Retain that
+immutable report and correction; neither a successful chat reload nor its
+`baselineRestored` field establishes exact configuration restoration. Source also
+did not establish the captured stored profile immediately before baseline controls,
+so configuration equivalence for that timing pair remains unproven.
+
+BI-C632CC8E repairs the existing qualifier's profile preservation. Before baseline
+controls, it establishes and reads back the captured model identities and settings,
+then checks them again after the controls. During cleanup it first confirms owned
+candidate shutdown, restores missing captured configuration rows through the same
+guarded APIs, reloads Docker and checks the complete profile before reporting
+restoration. Matching settings and empty defaults are not rewritten. Conflicting
+nonempty settings or model identities refuse before any configuration write.
+An uncertain write is not retried automatically or described as zero effects.
+An unresolved baseline-stage dispatch also blocks cleanup from repeating it.
+If qualification and restoration both fail, the report retains both failures.
+
+These source fixtures require no model run. The repair does not activate an engine,
+alter provider configuration or weaken the current qualification verifier. The
+existing native owner retains live profile recovery, staging and managed activation,
+including their actual authority, current lease and drain obligations. Process
+shutdown, persisted lease release, exact-profile restoration and useful DPF
+performance remain separately evidenced outcomes.

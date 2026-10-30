@@ -25,9 +25,9 @@ vi.mock("@/lib/coworker/human-approved-execution", () => ({ humanApprovalForExec
 vi.mock("@/lib/auth/oauth-identity-binding", () => ({ APPROVED_EXTERNAL_ROLES: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", async (original) => ({
   ...await original<typeof import("@/lib/work-management/workroom-agent-access.server")>(),
-  resolveAgentWorkroomAccess: async ({ agentId }: { agentId: string }, db: CapsuleDb) => {
+  resolveAgentWorkroomAccess: async ({ agentId, requested }: { agentId: string; requested: string }, db: CapsuleDb) => {
     const id = agentId === "AGT-EXT-CLAUDE" ? "claude" : "codex";
-    return { decision: { level: "action" }, authorityContext: { humanPrincipal: { id: "human", principalId: "PRN-human" }, agentPrincipal: { id, principalId: "PRN-" + id }, sensitivityCeiling: "internal",
+    return { decision: { level: requested }, authorityContext: { humanPrincipal: { id: "human", principalId: "PRN-human" }, agentPrincipal: { id, principalId: "PRN-" + id }, sensitivityCeiling: "internal",
       room: { ...await db.workroom.findUnique({ where: { capsuleId: "WC-1" } }), participants: [{ principalId: "human", roles: ["coordinator"], lifecycle: "active", principal: { kind: "human" } }, ...["claude", "codex"].map((principalId) => ({ principalId, roles: ["contributor"], lifecycle: "active" }))], workItem: null } } };
   },
 }));

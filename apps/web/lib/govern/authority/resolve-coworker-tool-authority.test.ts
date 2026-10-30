@@ -9,7 +9,22 @@ import {
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
   resolveTrustedInitiativeItemId,
+  resolveSteering,
 } from "./resolve-coworker-tool-authority";
+
+describe("explicit owner approval floor", () => {
+  it.each([
+    { connectionDelegation: { authorityBindingId: "consent", agentId: "agent" } },
+    { roomAuthority: { actionBoundary: "preauthorized", memberOfRoom: true } },
+    { initiativeReviewBinding: {} as never },
+    { taskRunId: "TR-SCHED-1", toolName: "record_execution_evidence", roomMandatedTools: ["record_execution_evidence"] },
+    { taskRunId: "TR-SCHED-1", agentId: "AGT-WS-PLATFORM", toolName: "create_knowledge_article" },
+  ])("withholds automatic steering when the current policy explicitly requires approval: %j", extra => {
+    const input = { initiativeReviewBinding: null, roomAuthority: null, agentId: "agent", ...extra, hitlPolicy: " Always " };
+    expect(resolveSteering({ ...input, hitlPolicy: null })).not.toBe("none");
+    expect(resolveSteering(input)).toBe("none");
+  });
+});
 
 describe("deriveAllowedRouteContexts", () => {
   it("keeps surface-agnostic and wildcard tools route-neutral", () => {

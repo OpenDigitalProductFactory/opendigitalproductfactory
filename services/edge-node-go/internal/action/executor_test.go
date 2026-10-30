@@ -60,3 +60,52 @@ func TestExecutorRejectsUnknownActionAndParametersBeforeConsumption(t *testing.T
 		})
 	}
 }
+
+type qualificationExecutorStub struct{ calls int }
+
+func (s *qualificationExecutorStub) Execute(_ context.Context, parameters json.RawMessage) (ExecutionOutput, error) {
+	s.calls++
+	return ExecutionOutput{Evidence: map[string]any{"procedureId": WindowsHandleReplacementProcedureID}}, nil
+}
+
+func TestExecutorRunsClosedWindowsQualificationExactlyOnce(t *testing.T) {
+	signed, publicKey := signedFixture(t, func(envelope *Envelope) {
+		envelope.ActionType = QualificationWindowsVerifyActionType
+		envelope.Parameters = qualificationParametersFixture(t)
+	})
+	journal, err := OpenReplayJournal(t.TempDir(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &qualificationExecutorStub{}
+	executor := Executor{
+		NodeID: "edge_1", PublicKey: publicKey, Journal: journal,
+		Now: func() time.Time { return now }, QualificationWindows: handler,
+	}
+	output, err := executor.Execute(context.Background(), signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if handler.calls != 1 || output.Evidence["procedureId"] != WindowsHandleReplacementProcedureID {
+		t.Fatalf("calls=%d evidence=%#v", handler.calls, output.Evidence)
+	}
+	if _, err := executor.Execute(context.Background(), signed); !errors.Is(err, ErrNonceConsumed) {
+		t.Fatalf("replay returned %v, want ErrNonceConsumed", err)
+	}
+}
+
+func TestExecutorRejectsWidenedQualificationBeforeNonceConsumption(t *testing.T) {
+	signed, publicKey := signedFixture(t, func(envelope *Envelope) {
+		envelope.ActionType = QualificationWindowsVerifyActionType
+		envelope.Parameters = append(qualificationParametersFixture(t)[:len(qualificationParametersFixture(t))-1], []byte(`,"command":"pwsh"}`)...)
+	})
+	journal, _ := OpenReplayJournal(t.TempDir(), now)
+	handler := &qualificationExecutorStub{}
+	executor := Executor{NodeID: "edge_1", PublicKey: publicKey, Journal: journal, Now: func() time.Time { return now }, QualificationWindows: handler}
+	if _, err := executor.Execute(context.Background(), signed); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("got %v, want ErrInvalidParameters", err)
+	}
+	if handler.calls != 0 || journal.Has(signed.Nonce, now) {
+		t.Fatalf("rejected action executed or consumed: calls=%d", handler.calls)
+	}
+}

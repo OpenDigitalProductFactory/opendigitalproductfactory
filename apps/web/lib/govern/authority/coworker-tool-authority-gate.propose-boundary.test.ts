@@ -266,3 +266,47 @@ describe("withheld scheduled authority reuses exact approvals (BI-D95FD249)", ()
   });
 
 });
+
+
+describe("ordinary platform approval replay admission", () => {
+  function needsApproval() {
+    const input = authorityInput(false);
+    return { ...input, steering: "none" as const, action: { ...input.action, approvalPolicy: "all" as const } };
+  }
+  it.each([
+    ["secret", { secret: "must-not-persist" }, { inputSchema: { properties: { secret: { type: "string", writeOnly: true } } } }],
+    ["bounded", { body: "a".repeat(70_000) }, {}],
+    ["metrics-only", { trigger: "cadence" }, { auditClass: "metrics_only" }],
+    ["reserved audit key", { trigger: "cadence", _approvalResume: { forged: true } }, {}],
+  ])("refuses %s arguments before creating a useless owner request", async (_kind, rawParams, toolOverrides) => {
+    arrange(needsApproval());
+    const decisions = vi.fn(async () => ({}));
+    setCoworkerToolAuthorityOverridesForTests({ authorizationDecisionCreate: decisions });
+    const tool = { ...TOOL, ...toolOverrides } as ToolDefinition;
+    const result = await enforceCoworkerToolAuthority({ ...execution({ approvalCompletion: "platform" }), toolName: tool.name, rawParams }, tool, true);
+    expect(result).toMatchObject({ outcome: "reject", rejection: "authority_denied", authorityReason: "approval-binding-mismatch" });
+    expect(ensure).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(decisions).toHaveBeenCalledWith(expect.objectContaining({ decision: "deny", rationale: expect.objectContaining({ reasonCode: "approval-binding-mismatch" }) }));
+  });
+  it("retains ordinary exact arguments and metrics-only tools with explicit payload retention", async () => {
+    arrange(needsApproval());
+    const tool = { ...TOOL, auditClass: "metrics_only", retainAuditParameters: true } as ToolDefinition;
+    await expect(enforceCoworkerToolAuthority({ ...execution({ approvalCompletion: "platform" }), toolName: tool.name }, tool, true))
+      .resolves.toMatchObject({ rejection: "approval_required" });
+    expect(ensure).toHaveBeenCalledOnce();
+  });
+  it("does not block an authorized immediate call just because delayed replay cannot retain its arguments", async () => {
+    arrange(authorityInput(false));
+    await expect(enforceCoworkerToolAuthority({ ...execution({ approvalCompletion: "platform" }), rawParams: { body: "a".repeat(70_000) } }, TOOL, true))
+      .resolves.toMatchObject({ outcome: "allow" });
+    expect(ensure).not.toHaveBeenCalled();
+  });
+  it("returns an existing terminal outcome before considering a new replay refusal", async () => {
+    arrange(needsApproval());
+    setCoworkerToolAuthorityOverridesForTests({ authorityExecutedOutcome: async () => ({ envelopeId: "ENV-SETTLED", status: "failed", result: { success: false, error: "prior-result" } }) });
+    await expect(enforceCoworkerToolAuthority({ ...execution({ approvalCompletion: "platform" }), rawParams: { body: "a".repeat(70_000) } }, TOOL, true))
+      .resolves.toMatchObject({ outcome: "settled", envelopeId: "ENV-SETTLED", status: "failed" });
+    expect(ensure).not.toHaveBeenCalled();
+  });
+});

@@ -1,10 +1,48 @@
 package main
 
-import "testing"
+import (
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/action"
+	"testing"
+)
+
+func TestNativeInferenceCapabilityRequiresRegisteredVerifiedController(t *testing.T) {
+	nativeInferenceController.Store(nil)
+	t.Cleanup(func() { nativeInferenceController.Store(nil) })
+	read := func() map[string]any {
+		for _, report := range capabilityReports(true, false, "", hostUpkeepReport{}, false) {
+			if report.Capability == "action.execute" {
+				return report.Evidence
+			}
+		}
+		t.Fatal("missing action channel")
+		return nil
+	}
+	if _, present := read()["managedInference"]; present {
+		t.Fatal("unregistered controller advertised")
+	}
+	description := &action.NativeControllerDescription{SourceSHA: "source", ManifestSHA256: "manifest"}
+	nativeInferenceController.Store(description)
+	evidence := read()
+	if !containsString(evidence["actionTypes"].([]string), action.ManagedInferenceActionType) {
+		t.Fatalf("registered native transition missing: %#v", evidence)
+	}
+	metadata, ok := evidence["managedInference"].(map[string]any)
+	if !ok || metadata["sourceSha"] != "source" || metadata["controllerManifestSha256"] != "manifest" {
+		t.Fatalf("wrong controller identity: %#v", metadata)
+	}
+	if _, ok := metadata["nodePath"]; ok {
+		t.Fatal("private executable path disclosed")
+	}
+	for _, report := range capabilityReports(false, false, "", hostUpkeepReport{}, false) {
+		if report.Capability == "action.execute" {
+			t.Fatal("native controller bypassed missing trust bundle")
+		}
+	}
+}
 
 func TestCapabilityReportsAdvertisesActionExecuteOnlyWithCompleteTrustBundle(t *testing.T) {
 	actionDispatchHealth.Store(actionDispatchHealthy)
-	reports := capabilityReports(true, true, "authority", hostUpkeepReport{})
+	reports := capabilityReports(true, true, "authority", hostUpkeepReport{}, false)
 	if len(reports) != 2 || reports[1].Capability != "action.execute" || reports[1].Status != "healthy" {
 		t.Fatalf("expected healthy action.execute report, got %#v", reports)
 	}
@@ -13,7 +51,7 @@ func TestCapabilityReportsAdvertisesActionExecuteOnlyWithCompleteTrustBundle(t *
 		t.Fatalf("expected role-bound join action, got %#v", reports[1])
 	}
 
-	reports = capabilityReports(false, true, "authority", hostUpkeepReport{})
+	reports = capabilityReports(false, true, "authority", hostUpkeepReport{}, false)
 	if len(reports) != 1 || reports[0].Capability != "federation.discovery" {
 		t.Fatalf("unconfigured action channel must not be advertised, got %#v", reports)
 	}
@@ -21,7 +59,7 @@ func TestCapabilityReportsAdvertisesActionExecuteOnlyWithCompleteTrustBundle(t *
 
 // BI-28EFE18A: a host-upkeep agent advertises the restart and its Docker runtime.
 func TestCapabilityReportsAdvertiseTheVmRestartAndDockerRuntime(t *testing.T) {
-	reports := capabilityReports(true, false, "", hostUpkeepReport{dockerVmRestart: true, dockerRuntime: "engine"})
+	reports := capabilityReports(true, false, "", hostUpkeepReport{dockerVmRestart: true, dockerRuntime: "engine"}, false)
 	var evidence map[string]any
 	for _, report := range reports {
 		if report.Capability == "action.execute" {
@@ -39,5 +77,23 @@ func TestCapabilityReportsAdvertiseTheVmRestartAndDockerRuntime(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("restart not advertised: %v", evidence["actionTypes"])
+	}
+}
+
+func TestCapabilityReportsWindowsQualificationOnlyWhenConfigured(t *testing.T) {
+	reports := capabilityReports(true, false, "", hostUpkeepReport{}, true)
+	actionTypes := reports[len(reports)-1].Evidence["actionTypes"].([]string)
+	if !containsString(actionTypes, action.QualificationWindowsVerifyActionType) {
+		t.Fatalf("qualification action not advertised: %v", actionTypes)
+	}
+	metadata, ok := reports[len(reports)-1].Evidence["qualificationWindows"].(map[string]any)
+	if !ok || metadata["procedureId"] != action.WindowsHandleReplacementProcedureID {
+		t.Fatalf("qualification metadata missing: %#v", reports[len(reports)-1].Evidence)
+	}
+	without := capabilityReports(true, false, "", hostUpkeepReport{}, false)
+	for _, actionType := range without[len(without)-1].Evidence["actionTypes"].([]string) {
+		if actionType == action.QualificationWindowsVerifyActionType {
+			t.Fatal("unconfigured qualification action advertised")
+		}
 	}
 }

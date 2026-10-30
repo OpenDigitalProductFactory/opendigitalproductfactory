@@ -7,6 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const publishedSnapshot = vi.hoisted(() => ({ readFile: vi.fn(), spawnSync: vi.fn() }));
 vi.mock("node:fs", () => ({ default: { promises: { readFile: publishedSnapshot.readFile } } }));
 vi.mock("node:child_process", () => ({ spawnSync: publishedSnapshot.spawnSync }));
+// This transport fixture owns its synthetic endpoint; install-state selection
+// is verified separately and must not read the operator's real installation.
+vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: () => null }));
 import { reassessmentBudgetFixture } from "../../test-support/reassessment-budget-fixture";
 import metadata from "./fixtures/reassessment-native-model.json";
 import { reassessmentMessagesAdapter } from "../routing/reassessment-messages-adapter";
