@@ -268,6 +268,16 @@ test("dispatch resolution preserves file presence, process precedence and unconf
   assert.throws(() => resolveRemoteActionDispatch(`${configured}${configured}`), /input_ambiguous/);
 });
 
+test("malformed owned-key lines fail closed without claiming similarly prefixed keys", () => {
+  const configured = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n";
+  for (const key of ["DPF_REMOTE_ACTION_DISPATCH_ENABLED", "DPF_EDGE_ACTION_DISPATCH_CONFIGURED"]) {
+    for (const suffix of [" # comment", "\tunsupported", "   "]) {
+      assert.throws(() => resolveRemoteActionDispatch(`${configured}${key}${suffix}\n`), /input_invalid|input_ambiguous/);
+    }
+    assert.equal(resolveRemoteActionDispatch(`${configured}${key}_OTHER=0\n`).resolution, "derive-persist");
+  }
+});
+
 test("the helper CLI permits an absent implicit env file without enabling or loading it as Node configuration", async () => {
   const root = await mkdtemp(join(tmpdir(), "dpf-dispatch-cli-"));
   try {

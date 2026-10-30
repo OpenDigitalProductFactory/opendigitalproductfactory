@@ -205,7 +205,7 @@ export const REMOTE_ACTION_DISPATCH_KEY = "DPF_REMOTE_ACTION_DISPATCH_ENABLED";
 export const EDGE_ACTION_DISPATCH_CONFIGURED_KEY = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED";
 
 function dispatchEnvEntry(text, key) {
-  const lines = text.split(/\r?\n/).filter(line => new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}(?:[ \\t]*=|[ \\t]*$)`).test(line));
+  const lines = text.split(/\r?\n/).filter(line => new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}(?:[ \\t=]|$)`).test(line));
   if (lines.length > 1) throw new Error("remote_action_dispatch_input_ambiguous");
   if (!lines.length) return { present: false, value: "" };
   const match = new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}[ \\t]*=(.*)$`).exec(lines[0]);
