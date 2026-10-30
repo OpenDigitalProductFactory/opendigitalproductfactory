@@ -48,16 +48,25 @@ a completed response records turn settlement, not business-result acceptance.
 - Specialist engagement: CE-E46D47D4, requested, not fulfilled or passed.
 - Recorded advisory DI-630E1BFBFE6B was low-confidence/all-options-opposed with
   incomplete feature coverage. It is not approval or a qualifying UX manifest.
-- Current blocker: capture_ux_critique discovery reports agent-grant-missing
-  (critique_capture). No alternate credential, database write or self-grant used.
+- The owner applied the approved critique_capture grant; effective authority was
+  verified on 2026-10-30. Discovery reports the writer callable, but this active
+  host has not exposed its function. No further consent or self-grant is needed.
+- Genuine rendered input remains missing. Native managed prototype DOC-DEE7B803
+  preserves the published HTML; native PDF export returned converter-unavailable.
+  A refused browser local-file route was not bypassed with an alternate server.
+- The immutable prototype was published at
+  0f7af35c5dc581e23cca1966f349b43afbd249cc, blob
+  350dd91ed1522b8a8133b4edfc629732dfc67feb. This repairs publication order;
+  it does not assert the prototype preceded the original implementation.
 
 ## Verification and remaining evidence
 
 Source-local tests cover duplicate HTTP submissions, concurrent queue claims,
 the immutable request/deadline, capacity retry, expiration, authority revocation,
 changed coworker and execution generation, cancellation, pending approval,
-unknown outcomes and lost advisory wakes. Both TypeScript programs passed before
-the final persisted-notice change; refreshed checks remain required.
+unknown outcomes and lost advisory wakes. Final source checks included 72 and
+37 affected tests and both TypeScript programs passing. Those source results
+do not establish the unrun exact runtime gate or business acceptance.
 
 Publication requires exact merged-code gate evidence and the normal protected
 PR. UX needs rendered evidence, the measured manifest and the specialist review.
