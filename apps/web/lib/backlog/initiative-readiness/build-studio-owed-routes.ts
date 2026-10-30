@@ -11,7 +11,7 @@ import {
   type BuildStudioDispatchResolution,
 } from "./build-studio-dispatch-context";
 import { designPhaseReviewDecision } from "./design-phase-recovery";
-import { currentBaseline, parseBaselinePayloads } from "./terminal-recovery";
+import { currentBaseline, parseBaselinePayloads } from "./baseline-head";
 import type { InitiativeReadinessDecision } from "./types";
 
 // BI-926A7E90 PR-3 — the independent reviews a Build Studio build in plan owes.

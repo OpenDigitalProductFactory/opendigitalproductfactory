@@ -5,10 +5,14 @@ import { ok } from "@/lib/shared/action-result";
 const mocks = vi.hoisted(() => ({
   findTaskRun: vi.fn(),
   findReads: vi.fn(),
+  findReceipts: vi.fn(),
   readSource: vi.fn(),
   recordGateReceipt: vi.fn(),
   recordSpecApproval: vi.fn(),
   recordObjectiveMapping: vi.fn(),
+  findActivity: vi.fn(),
+  findWorkroom: vi.fn(),
+  findBacklogActivities: vi.fn(),
   preflightArtifact: vi.fn(),
 }));
 
@@ -16,6 +20,10 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     taskRun: { findUnique: (...args: unknown[]) => mocks.findTaskRun(...args) },
     toolExecution: { findMany: (...args: unknown[]) => mocks.findReads(...args) },
+    toolExecutionReceipt: { findMany: (...args: unknown[]) => mocks.findReceipts(...args) },
+    workroomActivity: { findUnique: (...args: unknown[]) => mocks.findActivity(...args) },
+    workroom: { findUnique: (...args: unknown[]) => mocks.findWorkroom(...args) },
+    backlogItemActivity: { findMany: (...args: unknown[]) => mocks.findBacklogActivities(...args) },
   },
 }));
 
@@ -27,6 +35,8 @@ vi.mock("@/lib/backlog/initiative-readiness", async (importOriginal) => ({
 }));
 
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { createQualificationExperimentAdmission, qualificationBindingDigest,
+  type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 vi.mock("@/lib/backlog/initiative-readiness/evidence-preflight", () => ({ preflightEvidenceArtifact: mocks.preflightArtifact }));
 import { initiativeReadinessPack, preflightInitiativeEvidence } from "./initiative-readiness-pack";
 
@@ -44,6 +54,162 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
+  it("does not accept legacy sandbox receipts without exact executor provenance", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-06-18T12:00:00.000Z"));
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-research-writer-secret");
+    const headSha = "d".repeat(40);
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "verify", itemId: "BI-B3DEC077", workroomId: "WC-QUAL",
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha,
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: "principal-1", protocolReviewReceiptId: "review-protocol-1",
+      shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
+      targetProductionBlobIds: ["e".repeat(40)], allowedPaths: ["apps/web/lib/example.test.ts"],
+      executorMode: "sandbox-build", requiredPlatform: "linux",
+      permittedTools: ["run_sandbox_tests", "record_workroom_evidence"],
+      issuedAt: "2025-06-18T11:00:00.000Z", expiresAt: "2025-06-18T13:00:00.000Z",
+      maxStarts: 1, maxDurationMs: 600_000,
+      candidate: { headSha, diffDigest: `sha256:${"f".repeat(64)}`, testBlobIds: ["1".repeat(40)],
+        productionBytesUnchanged: true, reviewReceiptId: "review-1" },
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    const params = { itemId: binding.itemId, gate: "research", decision: "pass", reason: "Bound verification reproduced the gap.",
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: headSha,
+        path: "docs/protocol.md", providerBlobId: binding.protocol.providerBlobId },
+      findings: [], resolvedFindingRefs: ["IF-91E987DA433B0C82"], qualificationEvidenceId: "evidence-verify" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { qualificationExperiment: binding } });
+    const outputDigest = `sha256:${"2".repeat(64)}`;
+    mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+      command: "run_sandbox_tests", outputDigest, taskRunId: "TR-SCHED-QUAL",
+      executorMode: "sandbox-build", requiredPlatform: "linux", headSha,
+      testBlobIds: binding.candidate!.testBlobIds,
+      toolExecutionReceiptIds: ["receipt-verify"], startedAt: "2025-06-18T11:05:00.000Z",
+      completedAt: "2025-06-18T11:06:00.000Z",
+    } } });
+    mocks.findWorkroom.mockResolvedValue({ backlogItemId: binding.itemId, workspaceState: {
+      qualificationExperimentAdmission: { schemaVersion: 1, status: "settled", token,
+        bindingDigest: qualificationBindingDigest(binding), startCount: 1, issuedAt: binding.issuedAt,
+        startedAt: "2025-06-18T11:05:00.000Z", taskId: "task-verify", taskRunId: "TR-SCHED-QUAL",
+        evidenceId: "evidence-verify" },
+    } });
+    mocks.findReceipts.mockResolvedValue([{ id: "receipt-verify", receiptKind: "sandbox-test-run",
+      receiptStatus: "valid", executionStatus: "succeeded", expiresAt: new Date("2025-07-18T11:06:00.000Z"),
+      outputDigest: { sha256: "2".repeat(64) }, toolExecution: { taskRunId: "TR-SCHED-QUAL",
+        toolName: "run_sandbox_tests", success: true, parameters: { auto_fix: false },
+        result: { success: true, data: { testsFailed: 0, typecheckPassed: true, autoFixEnabled: false } },
+        createdAt: new Date("2025-06-18T11:05:30.000Z") } }]);
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "research-receipt" });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    expect(mocks.findReceipts).not.toHaveBeenCalled();
+    mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+      command: "run_sandbox_tests", outputDigest, taskRunId: "TR-FOREIGN",
+      executorMode: "sandbox-build", requiredPlatform: "linux", headSha,
+      testBlobIds: binding.candidate!.testBlobIds,
+      toolExecutionReceiptIds: ["receipt-verify"], startedAt: "2025-06-18T11:05:00.000Z",
+      completedAt: "2025-06-18T11:06:00.000Z",
+    } } });
+    mocks.findReceipts.mockResolvedValue([{ id: "receipt-verify", receiptKind: "sandbox-test-run",
+      receiptStatus: "valid", executionStatus: "succeeded", expiresAt: new Date("2025-07-18T11:06:00.000Z"),
+      outputDigest: { sha256: "2".repeat(64) }, toolExecution: { taskRunId: "TR-FOREIGN",
+        toolName: "run_sandbox_tests", success: true, parameters: { auto_fix: false },
+        result: { success: true, data: { testsFailed: 0, typecheckPassed: true, autoFixEnabled: false } },
+        createdAt: new Date("2025-06-18T11:05:30.000Z") } }]);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    mocks.findActivity.mockResolvedValue({ id: "evidence-verify", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+      command: "run_sandbox_tests", outputDigest, taskRunId: "TR-SCHED-QUAL",
+      executorMode: "sandbox-build", requiredPlatform: "linux", headSha,
+      testBlobIds: binding.candidate!.testBlobIds,
+      toolExecutionReceiptIds: ["receipt-verify"], startedAt: "2025-06-18T11:05:00.000Z",
+      completedAt: "2025-06-18T11:06:00.000Z",
+    } } });
+    mocks.findReceipts.mockResolvedValue([{ id: "receipt-verify", receiptKind: "sandbox-test-run",
+      receiptStatus: "valid", executionStatus: "succeeded", expiresAt: new Date("2025-07-18T11:06:00.000Z"),
+      outputDigest: { sha256: "2".repeat(64) }, toolExecution: { taskRunId: "TR-SCHED-QUAL",
+        toolName: "run_sandbox_tests", success: true, parameters: { auto_fix: false },
+        result: { success: true, data: { testsFailed: 0, typecheckPassed: true, autoFixEnabled: false } },
+        createdAt: new Date("2025-06-18T11:05:30.000Z") } }]);
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { qualificationExperiment: {
+      ...binding, repositoryFullName: "foreign/repo",
+    } } });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    mocks.findReceipts.mockResolvedValue([]);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    mocks.findActivity.mockResolvedValue(null);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("rejects caller-authenticated host activities without executor attestation", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-06-18T12:00:00.000Z"));
+    vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-research-writer-secret");
+    const headSha = "d".repeat(40);
+    const binding: QualificationExperimentBinding = {
+      schemaVersion: 1, phase: "verify", itemId: "BI-B3DEC077", workroomId: "WC-QUAL",
+      repositoryFullName: "owner/repo", baseSha: "a".repeat(40), headSha,
+      protocol: { path: "docs/protocol.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      installationId: "install-dev", accountablePrincipalRef: "principal-1", protocolReviewReceiptId: "review-protocol-1",
+      shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
+      targetProductionBlobIds: ["e".repeat(40)], allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"],
+      executorMode: "workroom-host", requiredPlatform: "win32",
+      permittedTools: ["record_execution_evidence", "record_workroom_evidence"],
+      issuedAt: "2025-06-18T11:00:00.000Z", expiresAt: "2025-06-18T13:00:00.000Z",
+      maxStarts: 1, maxDurationMs: 600_000,
+      candidate: { headSha, diffDigest: `sha256:${"f".repeat(64)}`, testBlobIds: ["1".repeat(40)],
+        productionBytesUnchanged: true, reviewReceiptId: "review-1" },
+    };
+    const token = createQualificationExperimentAdmission(binding);
+    const outputDigest = `sha256:${"2".repeat(64)}`;
+    const execution = { workroomId: binding.workroomId,
+      qualificationBindingDigest: qualificationBindingDigest(binding), executorMode: "workroom-host",
+      platform: "win32", headSha, testBlobIds: binding.candidate!.testBlobIds,
+      command: "pnpm exec vitest run scripts/lib/local-ci-gate-state.test.mjs", outputDigest,
+      startedAt: "2025-06-18T11:05:10.000Z", completedAt: "2025-06-18T11:05:20.000Z",
+      exitCode: 0, skipped: false };
+    const params = { itemId: binding.itemId, gate: "research", decision: "pass",
+      reason: "The exact Windows handle qualification passed.", artifactRef: { kind: "repo-blob-at-commit",
+        repositoryFullName: binding.repositoryFullName, commitSha: headSha,
+        path: binding.protocol.path, providerBlobId: binding.protocol.providerBlobId },
+      findings: [], resolvedFindingRefs: ["IF-91E987DA433B0C82"], qualificationEvidenceId: "evidence-host" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { qualificationExperiment: binding } });
+    mocks.findActivity.mockResolvedValue({ id: "evidence-host", workCapsuleId: "room-row", payload: { result: {
+      qualificationOutcome: "positive", qualificationBindingDigest: qualificationBindingDigest(binding),
+      command: execution.command, outputDigest, executorMode: "workroom-host", requiredPlatform: "win32",
+      headSha, testBlobIds: binding.candidate!.testBlobIds, executionEvidenceActivityIds: ["activity-host"],
+      startedAt: execution.startedAt, completedAt: execution.completedAt,
+    } } });
+    mocks.findWorkroom.mockResolvedValue({ backlogItemId: binding.itemId, workspaceState: {
+      qualificationExperimentAdmission: { schemaVersion: 1, status: "settled", token,
+        bindingDigest: qualificationBindingDigest(binding), startCount: 1, issuedAt: binding.issuedAt,
+        startedAt: "2025-06-18T11:05:00.000Z", taskId: "workroom-host:WC-QUAL",
+        evidenceId: "evidence-host" },
+    } });
+    mocks.findBacklogActivities.mockResolvedValue([{ id: "activity-host",
+      backlogItem: { itemId: binding.itemId }, payload: { evidenceKind: "test_pass", qualification: execution },
+      recordedAt: new Date(execution.completedAt) }]);
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "research-host-receipt" });
+
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+    mocks.findBacklogActivities.mockResolvedValue([{ id: "activity-host",
+      backlogItem: { itemId: binding.itemId }, payload: { evidenceKind: "test_pass",
+        qualification: { ...execution, platform: "linux" } }, recordedAt: new Date(execution.completedAt) }]);
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(params, "user", {} as never))
+      .toMatchObject({ success: false, error: "qualification-evidence-required" });
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
   it("preflights the accepted item and artifact rather than caller replacements", async () => {
     const artifactRef = { kind: "document-version", versionId: "accepted-version" };
     mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {

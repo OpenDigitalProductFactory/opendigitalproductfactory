@@ -311,6 +311,90 @@ function Test-DpfPortalLeafNeedsReissue {
     return $false
 }
 
+function Repair-DpfAuthorityEdgeClient {
+    param([Parameter(Mandatory)][string]$Subject)
+    $lock = Join-Path $OutDir ".edge-client-recovery.lock"
+    New-Item -ItemType Directory -Path $lock -ErrorAction Stop | Out-Null
+    $work = $null
+    $previous = $false
+    $publishing = $false
+    $retainCheckpoint = $false
+    try {
+        $relative = ".edge-client-" + [Guid]::NewGuid().ToString("N")
+        $work = Join-Path $OutDir $relative
+        New-Item -ItemType Directory -Path $work -ErrorAction Stop | Out-Null
+        & icacls $work /inheritance:r /grant:r "$env:USERNAME`:(OI)(CI)F" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "edge_client_private_directory_failed" }
+        $helper = Join-Path $RepoRoot "scripts/installer/edge-client-certificate.mjs"
+        $rootBefore = (Get-FileHash -LiteralPath $RootCert -Algorithm SHA256).Hash
+        $disposition = "issue"
+        $hasCert = Test-Path -LiteralPath $EdgeClientCert
+        $hasKey = Test-Path -LiteralPath $EdgeClientKey
+        if ($hasCert -or $hasKey) {
+            if (-not ($hasCert -and $hasKey)) { throw "edge_client_existing_pair_incomplete" }
+            foreach ($path in @($EdgeClientCert, $EdgeClientKey)) {
+                if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "edge_client_existing_pair_link" }
+            }
+            $identity = (& node $helper --certificate $EdgeClientCert --root $RootCert --subject $Subject --allow-expired) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw "edge_client_existing_identity_invalid" }
+            $disposition = $identity.Trim().Split(' ')[0]
+            if ($disposition -notin @("issue", "renew")) { throw "edge_client_disposition_invalid" }
+            $certPublic = (Invoke-DpfLocalStepClient -Arguments @("certificate", "key", "/work/edge-client.crt")) -join "`n"
+            $keyPublic = (Invoke-DpfLocalStepClient -Arguments @("crypto", "key", "public", "/work/edge-client.key")) -join "`n"
+            if (-not $certPublic.Trim() -or $certPublic.Trim() -cne $keyPublic.Trim()) { throw "edge_client_existing_key_mismatch" }
+            Copy-Item -LiteralPath $EdgeClientCert -Destination (Join-Path $work "previous.crt")
+            Copy-Item -LiteralPath $EdgeClientKey -Destination (Join-Path $work "previous.key")
+            $previous = $true
+        }
+        if ($disposition -eq "renew") {
+            Copy-Item -LiteralPath (Join-Path $work "previous.crt") -Destination (Join-Path $work "client.crt")
+            Copy-Item -LiteralPath (Join-Path $work "previous.key") -Destination (Join-Path $work "client.key")
+            Invoke-DpfLocalStepClient -Arguments @("ca", "renew", "/work/$relative/client.crt", "/work/$relative/client.key", "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
+        } else {
+            $edgeToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $Subject, "--not-after", "15m", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/home/step/secrets/password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")).Trim()
+            try {
+                Invoke-DpfLocalStepClient -Arguments @("ca", "certificate", $Subject, "/work/$relative/client.crt", "/work/$relative/client.key", "--token", $edgeToken, "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
+            } finally { $edgeToken = $null }
+        }
+        & node $helper --certificate (Join-Path $work "client.crt") --root $RootCert --subject $Subject | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "edge_client_replacement_identity_invalid" }
+        Invoke-DpfLocalStepClient -Arguments @("certificate", "verify", "/work/$relative/client.crt", "--roots", "/work/root_ca.crt") | Out-Null
+        $certPublic = (Invoke-DpfLocalStepClient -Arguments @("certificate", "key", "/work/$relative/client.crt")) -join "`n"
+        $keyPublic = (Invoke-DpfLocalStepClient -Arguments @("crypto", "key", "public", "/work/$relative/client.key")) -join "`n"
+        if (-not $certPublic.Trim() -or $certPublic.Trim() -cne $keyPublic.Trim()) { throw "edge_client_replacement_key_mismatch" }
+        if ($rootBefore -cne (Get-FileHash -LiteralPath $RootCert -Algorithm SHA256).Hash) { throw "edge_client_root_changed" }
+        if ($previous) {
+            foreach ($pair in @(@($EdgeClientCert, (Join-Path $work "previous.crt")), @($EdgeClientKey, (Join-Path $work "previous.key")))) {
+                if ((Get-FileHash -LiteralPath $pair[0] -Algorithm SHA256).Hash -cne (Get-FileHash -LiteralPath $pair[1] -Algorithm SHA256).Hash) { throw "edge_client_existing_pair_changed" }
+            }
+        } elseif ((Test-Path -LiteralPath $EdgeClientCert) -or (Test-Path -LiteralPath $EdgeClientKey)) { throw "edge_client_existing_pair_changed" }
+        $publishing = $true
+        Move-Item -LiteralPath (Join-Path $work "client.key") -Destination $EdgeClientKey -Force
+        Move-Item -LiteralPath (Join-Path $work "client.crt") -Destination $EdgeClientCert -Force
+        $publishing = $false
+    } finally {
+        if ($publishing) {
+            try {
+                if ($previous) {
+                    Copy-Item -LiteralPath (Join-Path $work "previous.key") -Destination $EdgeClientKey -Force
+                    Copy-Item -LiteralPath (Join-Path $work "previous.crt") -Destination $EdgeClientCert -Force
+                } else {
+                    foreach ($path in @($EdgeClientKey, $EdgeClientCert)) {
+                        if (Test-Path -LiteralPath $path -ErrorAction Stop) {
+                            Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+                        }
+                        if (Test-Path -LiteralPath $path -ErrorAction Stop) { throw "edge_client_partial_pair_remains" }
+                    }
+                }
+            } catch { $retainCheckpoint = $true; throw "edge_client_restoration_unproven" }
+        }
+        if (-not $retainCheckpoint) {
+            if ($work) { Remove-Item -LiteralPath $work -Recurse -Force }
+            Remove-Item -LiteralPath $lock -Force
+        }
+    }
+}
+
 function New-DpfEdgeActionMaterial {
     if (-not (Test-Path -LiteralPath $ActionSigningPassword)) {
         $password = (& docker run --rm --entrypoint step $StepImage crypto rand --format hex 64).Trim()
@@ -392,13 +476,7 @@ if ($Mode -eq "authority") {
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/certs/dpf-portal.crt", $AuthorityCert)
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/secrets/dpf-portal.key", $AuthorityKey)
     $edgeSubject = "dpf-edge-" + $Hostname.Replace(':', '-')
-    if ((Test-Path -LiteralPath $EdgeClientCert) -and (Test-Path -LiteralPath $EdgeClientKey)) {
-        Invoke-DpfLocalStepClient -Arguments @("ca", "renew", "/work/edge-client.crt", "/work/edge-client.key", "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
-    } else {
-        $edgeToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $edgeSubject, "--not-after", "15m", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/home/step/secrets/password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")).Trim()
-        Invoke-DpfLocalStepClient -Arguments @("ca", "certificate", $edgeSubject, "/work/edge-client.crt", "/work/edge-client.key", "--token", $edgeToken, "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
-        $edgeToken = $null
-    }
+    Repair-DpfAuthorityEdgeClient -Subject $edgeSubject
     $EdgeActionConfigured = $true
 } elseif ($Mode -eq "issue-join") {
     if (-not (Test-Path -LiteralPath $PasswordFile)) { throw "Organization CA is not initialized on this installation" }
