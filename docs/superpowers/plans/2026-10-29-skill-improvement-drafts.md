@@ -26,4 +26,4 @@ For agentic workers: execute one independently reviewable backlog item on one br
 
 ## Backlog coverage
 
-Atomic receipt pending publication of this exact plan. No implementation-ready claim until admitted. Rollback is a protected source revert preserving drafts/history; no data migration, grant change, provider call or automatic skill application is authorized by this plan.
+Initial atomic receipt cmvudedix3m7x01o2puycjnxn binds this plan at f6776617b429739de1d4d920eb9eccb850011aec / blob f205cccb35626fb33a8cbe11f04dd4c831a3b5c2. Its four criteria, contract, flow and verification references map to the single internal skill-draft deliverable. Research receipt initiative-e84da5ca-167e-4993-a976-1afd07628c73 confirms the named live/source reproduction; it is not product test or runtime acceptance. No implementation-ready claim until admitted. Rollback is a protected source revert preserving drafts/history; no data migration, grant change, provider call or automatic skill application is authorized by this plan.
