@@ -5,6 +5,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { providerInferenceFetch } from "./provider-inference-transport";
+import { getOllamaBaseUrl } from "./ollama-url";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -50,14 +51,6 @@ const OVERSIZE_RETRY_FRACTIONS = [0.6, 0.35] as const;
 export function isOversizeRejection(status: number, body: string): boolean {
   if (status < 400) return false;
   return /too large to process|batch size|n_ubatch|exceeds the physical batch/i.test(body);
-}
-
-function getLlmBaseUrl(): string {
-  return (
-    process.env["LLM_BASE_URL"] ??
-    process.env["OLLAMA_INTERNAL_URL"] ??
-    "http://model-runner.docker.internal/v1"
-  );
 }
 
 /**
@@ -110,7 +103,6 @@ export async function generateEmbeddingDetailed(
   opts: { timeoutMs?: number } = {},
 ): Promise<EmbeddingResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_EMBED_TIMEOUT_MS;
-  const baseUrl = getLlmBaseUrl();
   // Full-length attempt first, then shorter slices ONLY if the backend rejects
   // for size. Ordinary text still embeds at full fidelity; dense text degrades
   // to a shorter head instead of degrading to null.
@@ -120,6 +112,9 @@ export async function generateEmbeddingDetailed(
   ];
 
   try {
+    // Resolve inside the failure boundary: an unsettled or invalid selection
+    // must fail without dispatch, just as other local inference callers do.
+    const baseUrl = getOllamaBaseUrl();
     // BI-0AA939DF / DI-7F674966B4B2: no host-capacity check here. Measured at
     // 10-20ms whether or not a local-CI gate holds the slot, with no observable
     // effect on the gate — so gating it only suppressed retrieval platform-wide
@@ -193,7 +188,7 @@ export async function generateEmbeddingDetailed(
  */
 export async function isEmbeddingAvailable(): Promise<boolean> {
   try {
-    const baseUrl = getLlmBaseUrl();
+    const baseUrl = getOllamaBaseUrl();
     const res = await providerInferenceFetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
     const data = (await res.json()) as { data?: Array<{ id: string }> };
