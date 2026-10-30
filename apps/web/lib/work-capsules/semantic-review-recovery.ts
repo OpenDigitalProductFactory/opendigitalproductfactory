@@ -20,7 +20,7 @@ export async function readOwnedRoomReview(capsuleId: string, taskRunId: string, 
       { a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
       { a2aMetadata: { path: ["capsuleId"], equals: capsuleId } },
     ] },
-    select: { taskRunId: true, userId: true, status: true, updatedAt: true,
+    select: { id: true, taskRunId: true, userId: true, status: true, updatedAt: true,
       progressPayload: true, a2aMetadata: true },
   });
   if (!row || row.userId !== userId) return null;
