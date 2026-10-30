@@ -12,6 +12,8 @@ vi.mock("@/lib/work-capsules/work-capsule-activity-store", () => ({ recordWorkCa
 
 import { decideClaudeToolCall, decideCodexRequest } from "./runtime-request-policy";
 import { createRuntimeSupervisor } from "./supervisor";
+import { createCodexAdapter } from "./codex-app-server-adapter";
+import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
 import type { ExecutorAdapter, RuntimeEvent, RuntimeSession } from "./types";
 
 const actor = { userId: "user-1", agentId: "agent-1", principalId: "prn-1" };
@@ -158,4 +160,48 @@ describe("runtime request policy", () => {
     expect(claude("mcp__other__thing", {})).toBe("escalate");
     expect(claude("SomethingNew", {})).toBe("escalate");
   });
+});
+
+it("advances queued room input only after the real adapter settles its root turn", async () => {
+  const proc = fakeProcess();
+  autoRespond(proc, { initialize: {}, "account/login/start": {}, "thread/start": { thread: { id: "thr-root" } } });
+  const write = proc.write.bind(proc);
+  let starts = 0;
+  proc.write = (line) => {
+    write(line);
+    const frame = JSON.parse(line) as { id?: number; method?: string };
+    if (frame.method === "turn/start") {
+      const turnId = `root-${++starts}`;
+      queueMicrotask(() => proc.emit({ id: frame.id, result: { turn: { id: turnId } } }));
+    }
+  };
+  const runtime = createRuntimeSupervisor({
+    adapters: { codex: createCodexAdapter({ launch: () => proc, login: async () => ({ type: "apiKey", apiKey: "sk" }) }) },
+    mcpUrl: "http://portal/api/mcp/v1",
+    issueToken: async () => ({ tokenId: "tok-root", plaintext: "dpfroom_test" }),
+    revokeTokens: async () => 1,
+  });
+  try {
+    await runtime.start({ capsuleId: "WC-1", provider: "codex", actor, prompt: "first" });
+    await runtime.turn({ capsuleId: "WC-1", prompt: "second" });
+    await runtime.turn({ capsuleId: "WC-1", prompt: "third" });
+    proc.emit({ method: "turn/started", params: { threadId: "thr-child", turn: { id: "child-1" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-child", turn: { id: "child-1", status: "completed" } } });
+    await flush();
+    expect(starts).toBe(1);
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-root", turn: { id: "root-1", status: "completed" } } });
+    await flush();
+    expect(starts).toBe(2);
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-root", turn: { id: "root-1", status: "completed" } } });
+    await flush();
+    expect(starts).toBe(2);
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-root", turn: { id: "root-2", status: "completed" } } });
+    await flush();
+    expect(starts).toBe(3);
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-root", turn: { id: "root-3", status: "completed" } } });
+    await flush();
+    expect(starts).toBe(3);
+  } finally {
+    await runtime.stop({ capsuleId: "WC-1", reason: "test finished", actor });
+  }
 });
