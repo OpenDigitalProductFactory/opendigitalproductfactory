@@ -469,3 +469,69 @@ animal reference, an unacknowledged found-animal report appears on "Needs you"
 after four hours, and a drafted reply to an adopter is approved and arrives
 threaded in the adopter's mail client. A second run that skips the step
 completes setup and shows the education state on the Mailroom page.
+
+
+## 9. Native Google onboarding repair (BI-C3171E2E, 2026-10-30)
+
+The implemented IMAP path requires technical server settings and cannot satisfy
+the CEO's native consent journey. Preserve the delivered first-successful-read
+setup fix (PR #6749). Extend the existing mailbox adapter registry,
+`MailboxAccount` encrypted secrets, `OAuthPendingFlow`, recurring poller,
+room ingress, dedupe and reply approval; do not add another mailbox ledger.
+The Google provider is an extension to the closed `MailboxProvider` enum.
+App credentials have one encrypted `IntegrationCredential` home; mailbox grants
+and refresh tokens belong to the individual encrypted mailbox record.
+
+**OBJ-GMAIL-CONSENT:** Connect a chosen Google mailbox through provider consent,
+with exact account verification, owner/browser binding, single-use state and
+PKCE. No password, app password or refresh token is requested in chat.
+
+**OBJ-GMAIL-BOUNDARY:** Before requesting consent, explicitly choose business
+correspondents for a mixed mailbox. Reject the mailbox's own address, wildcards
+and query operators. Explain that Google's read grant is account-wide while
+DPF enforces this narrower selection. No whole-inbox permission is inferred.
+Initial import is limited to 30 days; default recurring checking is hourly.
+Scope is persisted, validated on every poll and bound into the cursor.
+
+**OBJ-GMAIL-RETAIN:** Provider outage preserves the connection and cursor.
+Setup completes only after a successful permitted read, including an empty
+result; OAuth return, a queued check or a rendered screen is insufficient.
+
+### Design grounding and alternatives
+
+Reviewed the current provider contract/registry, `mailbox-form.ts`,
+`runtime.server.ts`, MailboxConnectForm, MailboxAccount and OAuthPendingFlow;
+reviewed LinkedIn's authorization-code flow and Google's existing shared
+refresh client. Reuse their homes, not LinkedIn's lack of owner binding.
+A separate assistant's Gmail connection is not a DPF integration.
+
+Google's [Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes)
+identify `gmail.readonly` as a restricted read scope. Choose it instead of the
+full-mail IMAP OAuth scope, which includes sending and deletion. Drafts stay
+in DPF. Google application registration/verification may require its setup
+owner; agents never enter production secrets. A missing app configuration
+must produce a truthful setup action before the owner attempts consent.
+
+Compare Google's [web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server)
+and Microsoft's [delegated authorization-code flow](https://learn.microsoft.com/en-us/graph/auth-v2-user):
+both require registered applications, explicit provider consent and protected
+refresh credentials. Implement Google first, preserve existing Microsoft Graph
+setup, and never display an unimplemented Microsoft sign-in action. Follow
+[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) for CSRF, PKCE, exact
+redirects and replay prevention. Do not adapt a refresh-token exchange by
+overriding its grant type; authorization-code exchange has a distinct contract.
+
+Google callback must recheck the current authenticated principal, organization
+and permission, bound browser nonce, expiration, single-use flow and mailbox
+profile identity. No mail may be read before the selected scope is validated.
+Use fixed Google API endpoints; do not follow caller-supplied URLs. Message
+normalization retains provider identity and RFC reply/thread headers, with no
+attachment-body download. Poll pagination must be resumable and bounded; a
+failed page must not advance the durable cursor. Changed scope invalidates
+an old cursor. No send, delete or modify permission is requested.
+
+The interactive prototype is
+[2026-10-30-native-mailbox-onboarding-prototype.html](2026-10-30-native-mailbox-onboarding-prototype.html).
+It is example-only and has not connected an account or passed UX review.
+The implementation sequence and acceptance evidence are tracked in the
+[native onboarding plan](../plans/2026-10-30-native-mailbox-onboarding.md).
