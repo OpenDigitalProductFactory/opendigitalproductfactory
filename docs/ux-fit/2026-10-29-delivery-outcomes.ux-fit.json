@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-F7D029136168",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/build/work/page.tsx",
       "apps/web/components/build/work-control/WorkControlPanel.tsx",
       "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx"
     ]

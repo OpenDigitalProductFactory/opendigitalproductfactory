@@ -24,16 +24,17 @@ status: draft
 
 ## Backlog coverage
 
-- **Decision:** atomic.
-- **Parent BI:** `BI-69803ACC`.
-- **Rationale:** the pure projection, bounded source adapter, and operator screen are one
+- Decision: atomic
+- Parent: BI-69803ACC
+- Receipt: blocked-by: the retained published plan head 8b1c16a3bae11d9f88f540c68ff661fccfd09a78 is older than the active room head f6a115435b2d00a82db2128c8d1418ff564623af; native plan-artifact-invalid requires a provider-readable current head after the exact-head publication gate. Implementation admission IRD-B1C2308E56A7 remains separate evidence.
+- Rationale: the pure projection, bounded source adapter, and operator screen are one
   observable contract. Projection-only code does not satisfy the operator outcome;
   presentation without the projection would create a second calculation authority.
 - **Coverage state:** medium-shape implementation admitted by `IRD-B1C2308E56A7`
   on 2026-10-29, using the recorded inherited objective baseline. The older
   large-shape draft's missing-baseline prerequisite is superseded for this
   existing medium unit. This is admission, not delivery or acceptance evidence.
-- **Dependencies:** Phase 1 baseline from `BI-7C1F43E3`; no unfinished source change is
+- Dependencies: BI-7C1F43E3 (Phase 1 baseline); no unfinished source change is
   required. The separate seven-day observation may populate later cohorts but does not
   block the scorecard contract.
 

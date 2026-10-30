@@ -24,6 +24,14 @@ development workload.
 
 ### Development Workrooms
 
+From `/build/work`, open **Delivery outcomes** for the visible Workrooms created
+in the last 30 days. The view shows cycle, recorded process and waiting times,
+source coverage, usage, estimated cost, and links to the underlying evidence.
+Open **Cohort and sources** before comparing periods. Missing milestones remain
+unavailable; a merged PR or completed Workroom alone does not establish a verified
+outcome. Use the separate [flow review](../workspace/work-rooms.md) to investigate
+queues and improvement actions.
+
 Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view. These groups come from the same room-health definition as **Operations > Workrooms**, so a room reads the same on both pages. A room ready to promote is waiting on a person to close it out, so it appears under **Needs attention** on both.
 
 The hub refreshes through one live connection and retains confirmed cards while reconnecting. **Inspect** opens the canonical Workroom, while **Resume**, **Review**, **Handoff**, and pull-request links appear only when the recorded Workroom facts support them. Use **Load older tasks** for the next signed, bounded page. Completion, failure, expiry, approval, review, and takeover attention link back to the same Workroom and are deduplicated, so reading or dismissing a notification does not recreate it. Create/adopt controls remain below the hub. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.

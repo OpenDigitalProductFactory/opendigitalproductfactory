@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/i18n/locale-context.server", async () => {
+    const { DEFAULT_LOCALE } = await import("@dpf/i18n");
+    return { getLocaleContext: async () => ({ language: DEFAULT_LOCALE, formatLocale: DEFAULT_LOCALE }) };
+});
 const mocks = vi.hoisted(() => ({ load: vi.fn(), inventory: vi.fn(), auth: vi.fn() }));
 vi.mock("@/lib/actions/work-capsules", () => ({ getDeliveryOutcomeData: mocks.load, getWorkControlData: mocks.inventory, createGovernedWorkAction: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));

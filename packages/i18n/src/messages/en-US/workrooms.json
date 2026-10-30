@@ -365,5 +365,145 @@
       "legendRoom": "Times are this room's latest pass; typical is the shape's last four weeks.",
       "legendAggregate": "Counts are rooms at each step now; typical is the shape version's last four weeks."
     }
+  },
+  "outcomes": {
+    "title": "Delivery outcomes",
+    "workrooms": "Workrooms",
+    "unavailable": "Unavailable",
+    "period": "30 days · {$from} to {$to} · {$slices :integer} visible slices · {$campaigns :integer} campaigns",
+    "verified": "Verified outcomes",
+    "verifiedHint": "Source and final live acceptance matched",
+    "cycle": "Cycle time",
+    "cycleHint": "Median · p90 {$p90} · {$sample :integer} complete pairs",
+    "firstPass": "First-pass checks",
+    "firstPassHint": "Protected-check history is missing",
+    "readUnavailable": "Read unavailable",
+    "readFailure": "Room data could not be verified. Return to Workrooms and try this view again.",
+    "partial": "Partial coverage",
+    "partialHint": "Open cohort and sources before comparing periods.",
+    "cohort": "Cohort and sources",
+    "cohortDescription": "One slice per visible Workroom created in this fixed 30-day window. Campaigns use distinct recorded epic identities.",
+    "confidence": "Descriptive observations only. Incomplete pairs are excluded. Match the cohort, coverage and observation horizon before comparing periods; correlation does not establish improvement.",
+    "limits": "Missing milestones stay unavailable. A merged PR or completed room does not establish a verified outcome. No person or model is ranked by PR count or lines changed.",
+    "time": "Where time goes",
+    "timeHint": "Process is measured execution time, separate from waiting. It does not measure human touch time or value added. Percentiles use complete pairs; missing pairs remain visible.",
+    "usage": "Usage and cost",
+    "usageHint": "Unique retained adapter runs, direct or with task descendants. Cache reads, writes, output and reasoning stay separate. Estimates are not invoices. Missing classes remain incomplete.",
+    "records": "Workrooms and evidence",
+    "search": "Search cohort",
+    "match": "Match",
+    "all": "All fields",
+    "campaign": "Campaign",
+    "model": "Model",
+    "installation": "Installation",
+    "workKind": "Work kind",
+    "repository": "Repository",
+    "risk": "Risk tier",
+    "profile": "Effort / profile",
+    "noRooms": "No visible Workrooms",
+    "noRoomsHint": "No admitted rooms match this fixed period and filter. This is not a measure of productivity.",
+    "columns": {
+      "measure": "Measure",
+      "median": "Median",
+      "p90": "p90",
+      "complete": "Complete / missing",
+      "workroom": "Workroom",
+      "outcome": "Outcome",
+      "cycle": "Cycle",
+      "attention": "Quality and attention",
+      "evidence": "Evidence",
+      "source": "Source",
+      "coverage": "Coverage",
+      "rows": "Recorded rows",
+      "observed": "Observed",
+      "limits": "Limits",
+      "milestone": "Milestone",
+      "recordedMissing": "Recorded / missing",
+      "scope": "Workroom / scope",
+      "uncached": "Uncached input",
+      "cache": "Cache read / write",
+      "output": "Output / reasoning",
+      "estimate": "API-equivalent estimate (USD)",
+      "invoice": "Invoiced spend / subscription (USD)"
+    },
+    "stages": {
+      "cycle": "Claim to verified",
+      "claimedToPr": "Claim to PR",
+      "prToReady": "PR to ready",
+      "readyToMerge": "Ready to merge",
+      "mergeToVerified": "Merge to verified",
+      "process": "Recorded process",
+      "wait": "Recorded wait"
+    },
+    "milestones": {
+      "claimed": "Claimed",
+      "firstCommit": "First commit",
+      "prOpen": "PR open",
+      "reviewReady": "Review ready",
+      "merged": "Merged",
+      "verified": "Verified"
+    },
+    "quality": {
+      "inspect": "Inspect measures",
+      "checks": "Protected checks / findings per kLOC",
+      "commits": "Post-open commits",
+      "regressions": "Reopens / regressions",
+      "tools": "Tools / failed calls",
+      "approvals": "Recorded approvals / takeovers",
+      "interventions": "Non-progress calls / interventions",
+      "utilization": "Lease wait / lane utilization",
+      "risk": "Package breadth / risk tier"
+    },
+    "result": {
+      "verified": "Verified",
+      "unverified": "Not verified",
+      "abandoned": "Abandoned",
+      "superseded": "Superseded"
+    },
+    "economy": {
+      "direct": "Direct",
+      "descendants": "With descendants"
+    },
+    "tables": {
+      "sources": "Source coverage",
+      "time": "Time through delivery",
+      "milestones": "Recorded delivery milestones",
+      "usage": "Usage and spend by Workroom",
+      "records": "Outcome evidence"
+    },
+    "sources": {
+      "rooms": "Workrooms",
+      "activities": "Room history",
+      "verifications": "Live acceptance",
+      "queue": "Queue history",
+      "tasks": "Task ancestry",
+      "runs": "Model usage",
+      "tools": "Tool calls",
+      "pullRequests": "PR snapshots"
+    },
+    "state": {
+      "ready": "Ready",
+      "empty": "Empty",
+      "partial": "Partial",
+      "stale": "Stale",
+      "failed": "Failed"
+    },
+    "notes": {
+      "recorded": "Recorded within this period",
+      "rowsLimited": "Row limit reached; totals are incomplete",
+      "roomsLimited": "Room limit reached; this cohort is incomplete",
+      "readUnavailable": "Read unavailable",
+      "visibilityUnavailable": "Room visibility unavailable",
+      "descendantUnavailable": "Descendant history unavailable",
+      "descendantLimited": "Descendant history limit reached",
+      "prMissing": "No successful PR snapshot",
+      "prUnavailable": "PR snapshot unavailable",
+      "verificationUnbound": "Some final checks lack immutable source and deployment binding"
+    },
+    "evidence": {
+      "workroom": "Workroom",
+      "pullRequest": "Pull request",
+      "finalAcceptance": "Final acceptance"
+    }
   }
 }

@@ -1,10 +1,12 @@
 import type { prisma } from "@dpf/db";
 import { parseVerifiedPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { isRecord } from "@/lib/shared/coerce";
-import {readSmallAcceptanceBinding,SMALL_ACCEPTANCE_KEY} from "@/lib/runtime-coordination/small-acceptance-binding";
+import { readSmallAcceptanceBinding, SMALL_ACCEPTANCE_KEY } from "@/lib/runtime-coordination/small-acceptance-binding";
 import { projectDeliveryOutcomes, type OutcomeInput, type OutcomeSource, type OutcomeTask } from "./projection";
 type Model = "workroom" | "workroomActivity" | "runtimeVerification" | "taskRun" | "adapterRunTelemetry" | "toolExecution" | "queueTelemetryEvent" | "contributorInventorySyncRun" | "contributorInventorySnapshot";
-type Db = {[K in Model]:Pick<(typeof prisma)[K],K extends "contributorInventorySyncRun" ? "findFirst" : "findMany">};
+type Db = {
+    [K in Model]: Pick<(typeof prisma)[K], K extends "contributorInventorySyncRun" ? "findFirst" : "findMany">;
+};
 const ROOM_LIMIT = 100, FACT_LIMIT = 1000, DAY = 86400000;
 const roomSelect = { id: true, capsuleId: true, title: true, status: true, createdAt: true, updatedAt: true, repositoryFullName: true, headBranch: true, headSha: true, backlogItemId: true, epicId: true, executorKind: true, executorRef: true, featureBuildId: true, taskRunId: true, pullRequestNumber: true,
     branchTaxonomy: true, featureBuild: { select: { buildId: true } }, workItem: { select: { claimedAt: true, effortClass: true } } } as const;
@@ -21,7 +23,7 @@ export async function loadDeliveryOutcomes(args: {
     const { db, userId } = args, now = args.now ?? new Date(), start = new Date(now.getTime() - 30 * DAY);
     const sources: OutcomeSource[] = [];
     const source = (key: string, count: number, state?: OutcomeSource["state"], note: string | null = null, observedAt = now.toISOString()) => {
-        const row = { key, count, state: state ?? (count > FACT_LIMIT ? "partial" : count ? "ready" : "empty"), note: count > FACT_LIMIT ? "Row limit reached; totals are incomplete" : note, observedAt } satisfies OutcomeSource;
+        const row = { key, count, state: state ?? (count > FACT_LIMIT ? "partial" : count ? "ready" : "empty"), note: count > FACT_LIMIT ? "rowsLimited" : note, observedAt } satisfies OutcomeSource;
         const existing = sources.findIndex(s => s.key === key);
         if (existing < 0)
             sources.push(row);
@@ -34,11 +36,11 @@ export async function loadDeliveryOutcomes(args: {
     const bounded = async <T>(key: string, read: () => Promise<T[]>): Promise<T[]> => {
         try {
             const rows = await read();
-            source(key, Math.min(rows.length, FACT_LIMIT), rows.length > FACT_LIMIT ? "partial" : undefined, rows.length > FACT_LIMIT ? "Row limit reached; totals are incomplete" : null);
+            source(key, Math.min(rows.length, FACT_LIMIT), rows.length > FACT_LIMIT ? "partial" : undefined, rows.length > FACT_LIMIT ? "rowsLimited" : null);
             return rows.slice(0, FACT_LIMIT);
         }
         catch {
-            source(key, 0, "failed", "Read unavailable");
+            source(key, 0, "failed", "readUnavailable");
             return [];
         }
     };
@@ -52,10 +54,10 @@ export async function loadDeliveryOutcomes(args: {
             if (await args.canReadRoom(candidate.id))
                 visible.push(candidate);
         rooms = visible;
-        source("rooms", rooms.length, candidates.length > ROOM_LIMIT ? "partial" : rooms.length ? "ready" : "empty", candidates.length > ROOM_LIMIT ? "Room limit reached; this cohort is incomplete" : null);
+        source("rooms", rooms.length, candidates.length > ROOM_LIMIT ? "partial" : rooms.length ? "ready" : "empty", candidates.length > ROOM_LIMIT ? "roomsLimited" : null);
     }
     catch {
-        source("rooms", 0, "failed", "Room visibility unavailable");
+        source("rooms", 0, "failed", "visibilityUnavailable");
         return projectDeliveryOutcomes(empty);
     }
     if (!rooms.length)
@@ -65,7 +67,7 @@ export async function loadDeliveryOutcomes(args: {
     const window = { gte: start, lte: now };
     const [activities, verifications, queue, initialTasks] = await Promise.all([
         bounded("activities", () => db.workroomActivity.findMany({ where: { workCapsuleId: { in: ids }, recordedAt: window }, orderBy: [{ recordedAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { id: true, workCapsuleId: true, kind: true, recordedAt: true } })),
-        bounded("verifications", () => db.runtimeVerification.findMany({ where: { workCapsuleId: { in: ids }, completedAt: window }, orderBy: [{ completedAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { id: true, workCapsuleId: true, kind: true, status: true, completedAt: true, evidenceUrl: true,result:true, runtimeTarget: { select: { targetId: true, acceptanceRole: true, servedCommitSha: true } } } })),
+        bounded("verifications", () => db.runtimeVerification.findMany({ where: { workCapsuleId: { in: ids }, completedAt: window }, orderBy: [{ completedAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { id: true, workCapsuleId: true, kind: true, status: true, completedAt: true, evidenceUrl: true, result: true, runtimeTarget: { select: { targetId: true, acceptanceRole: true, servedCommitSha: true } } } })),
         bounded("queue", () => db.queueTelemetryEvent.findMany({ where: { itemKind: "workroom-stage", occurredAt: window, OR: rooms.map(r => ({ itemId: { startsWith: `${r.capsuleId}:` } })) }, orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true } })),
         bounded("tasks", () => db.taskRun.findMany({ where: { userId, OR: [{ id: { in: rootIds } }, { threadId: { in: directThreads } }] }, take: FACT_LIMIT + 1, orderBy: { id: "asc" }, select: { id: true, parentTaskRunId: true, threadId: true } })),
     ]);
@@ -80,7 +82,7 @@ export async function loadDeliveryOutcomes(args: {
             children = await db.taskRun.findMany({ where: { userId, parentTaskRunId: { in: frontier } }, take: FACT_LIMIT - tasks.length + 1, orderBy: { id: "asc" }, select: { id: true, parentTaskRunId: true, threadId: true } });
         }
         catch {
-            source("tasks", tasks.length, "failed", "Descendant history unavailable");
+            source("tasks", tasks.length, "failed", "descendantUnavailable");
             break;
         }
         frontier = [];
@@ -93,7 +95,7 @@ export async function loadDeliveryOutcomes(args: {
         depth++;
     }
     if (frontier.length || tasks.length > FACT_LIMIT)
-        source("tasks", Math.min(tasks.length, FACT_LIMIT), "partial", "Descendant history limit reached");
+        source("tasks", Math.min(tasks.length, FACT_LIMIT), "partial", "descendantLimited");
     const retainedTasks = tasks.slice(0, FACT_LIMIT), threads = [...new Set([...directThreads, ...retainedTasks.flatMap(t => t.threadId ? [t.threadId] : [])])];
     const [runs, tools, pullRequests] = await Promise.all([
         bounded("runs", () => db.adapterRunTelemetry.findMany({ where: { startedAt: window, OR: [{ threadId: { in: threads } }, { buildId: { in: buildIds } }] }, take: FACT_LIMIT + 1, orderBy: [{ startedAt: "asc" }, { id: "asc" }], select: { id: true, threadId: true, buildId: true, startedAt: true, adapterKind: true, providerId: true, modelId: true, inputTokens: true, cachedInputTokens: true, cacheCreationInputTokens: true, outputTokens: true, reasoningTokens: true, estimatedCostUsd: true, investmentInstallationRef: true } })),
@@ -102,7 +104,7 @@ export async function loadDeliveryOutcomes(args: {
             try {
                 const latest = await db.contributorInventorySyncRun.findFirst({ where: { perSourceResult: { path: ["github-pr", "ok"], equals: true } }, orderBy: [{ startedAt: "desc" }, { id: "desc" }], select: { syncRunId: true, startedAt: true, completedAt: true, perSourceResult: true } });
                 if (!latest) {
-                    source("pullRequests", 0, "empty", "No successful PR snapshot");
+                    source("pullRequests", 0, "empty", "prMissing");
                     return [];
                 }
                 const result = isRecord(latest.perSourceResult) ? latest.perSourceResult["github-pr"] : null;
@@ -114,16 +116,17 @@ export async function loadDeliveryOutcomes(args: {
                 return rows;
             }
             catch {
-                source("pullRequests", 0, "failed", "PR snapshot unavailable");
+                source("pullRequests", 0, "failed", "prUnavailable");
                 return [];
             }
         })(),
     ]);
-    const qualifiedVerifications=verifications.map(({result,...v})=>{
-        const binding=readSmallAcceptanceBinding(isRecord(result)?result[SMALL_ACCEPTANCE_KEY]:null);
-        return {...v,sourceBinding:binding?{workCapsuleId:binding.workCapsuleId,headSha:binding.headSha,servedSha:binding.servedSha,completedAt:binding.completedAt,targetRef:binding.deploymentRunId}:null};
+    const qualifiedVerifications = verifications.map(({ result, ...v }) => {
+        const binding = readSmallAcceptanceBinding(isRecord(result) ? result[SMALL_ACCEPTANCE_KEY] : null);
+        return { ...v, sourceBinding: binding ? { workCapsuleId: binding.workCapsuleId, headSha: binding.headSha, servedSha: binding.servedSha, completedAt: binding.completedAt, targetRef: binding.deploymentRunId } : null };
     });
-    if(qualifiedVerifications.some(v=>v.kind==="final-acceptance"&&!v.sourceBinding)) source("verifications",qualifiedVerifications.length,"partial","Some final checks lack immutable source and deployment binding");
-    return projectDeliveryOutcomes({ now, filters: args.filters, rooms: rooms.map(r => ({ ...r, featureBuildId: r.featureBuild?.buildId ?? null, claimedAt: r.workItem?.claimedAt ?? null, effort: r.workItem?.effortClass ?? null })), activities: activities.map(a => ({ ...a, payload: null })), verifications:qualifiedVerifications, queue, tasks: retainedTasks, tools, pullRequests,
+    if (qualifiedVerifications.some(v => v.kind === "final-acceptance" && !v.sourceBinding))
+        source("verifications", qualifiedVerifications.length, "partial", "verificationUnbound");
+    return projectDeliveryOutcomes({ now, filters: args.filters, rooms: rooms.map(r => ({ ...r, featureBuildId: r.featureBuild?.buildId ?? null, claimedAt: r.workItem?.claimedAt ?? null, effort: r.workItem?.effortClass ?? null })), activities: activities.map(a => ({ ...a, payload: null })), verifications: qualifiedVerifications, queue, tasks: retainedTasks, tools, pullRequests,
         runs: runs.map(r => ({ ...r, estimatedCostUsd: r.estimatedCostUsd === null ? null : Number(r.estimatedCostUsd) })), sources });
 }

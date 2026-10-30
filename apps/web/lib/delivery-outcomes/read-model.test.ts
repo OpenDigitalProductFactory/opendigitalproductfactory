@@ -25,7 +25,7 @@ describe("bounded delivery outcome reader", () => {
         const data = await loadDeliveryOutcomes({ ...f, now, userId: "user1" });
         expect(data.state).toBe("partial");
         expect(data.observations).toHaveLength(1);
-        expect(data.sources.find(s => s.key === "tools")).toMatchObject({ state: "failed", note: "Read unavailable" });
+        expect(data.sources.find(s => s.key === "tools")).toMatchObject({ state: "failed", note: "readUnavailable" });
         expect(JSON.stringify(data)).not.toContain("private database details");
         for (const key of ["workroomActivity", "runtimeVerification", "adapterRunTelemetry", "toolExecution", "queueTelemetryEvent"] as const)
             expect(f.db[key].findMany.mock.calls[0]?.[0]).toHaveProperty("take");
