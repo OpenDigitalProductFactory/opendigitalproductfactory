@@ -459,6 +459,13 @@ original window it retains the request, deadline and remaining attempts. After
 expiry, only the existing qualified bounded-successor contract applies. Neither
 task completion nor successful source tests substitute for an independent verdict.
 
+When the execution outcome is unknown, the recovery guidance first directs you
+to the owned task details and complete execution settlement. This takes priority
+over expiry, remaining attempts and endpoint remediation. Reconcile every
+unresolved provider execution through its evidence owner before requesting any
+retry or successor. An elapsed deadline, inactive worker or empty local audit
+does not establish that the original execution and its effects have ended.
+
 #### Clean up when merged
 
 ```bash
