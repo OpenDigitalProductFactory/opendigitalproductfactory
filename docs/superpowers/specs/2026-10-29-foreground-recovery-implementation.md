@@ -76,3 +76,27 @@ checks is replaced by unit tests, a queue acknowledgement, or a merged PR.
 
 This implementation does not establish mailbox consent, connect Gmail, send
 mail, prove the email-to-ticket lifecycle or verify MSP customer isolation.
+
+### Controlled Finance adapter coverage
+
+The Finance occurrence in managed DOC-82684072 v1 used
+`/finance/expense-claims` and asked for the entry path and required receipt
+information, without creating an expense or moving money. The original review
+author confirms that no conversation, message or TaskRun ID was captured.
+Recovery of that historical request is therefore unproven; do not invent its
+identity or count a new fixture as its continuation.
+
+`foreground-work-finance.integration.test.ts` exercises the real retained worker
+with the real execution-context and generation checks. Its controlled storage
+and coworker doubles cover one retained Finance request across a capacity wait,
+duplicate queue deliveries, one linked fixture-result readback, a possibly saved
+result followed by uncertainty, and authority revocation before capacity returns.
+No browser session is available to lend authority to the queue callback.
+
+All three cases passed. A temporary mutation that bypassed the real execution
+context made all three fail; restoring the unchanged production implementation
+returned the four adapter suites to green (25 tests). The mutation is not part of
+the change. These results establish adapter composition against controlled
+doubles, not PostgreSQL durability, real Finance tool execution, expense/payment
+safety or served acceptance. Reuse the existing cross-boundary harness under
+BI-7DC3B91D for those checks rather than adding another execution engine.
