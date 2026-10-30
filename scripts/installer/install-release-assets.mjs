@@ -66,10 +66,25 @@ async function maybeRead(path) {
   try { return await readFile(path); } catch (error) { if (error?.code === "ENOENT") return null; throw error; }
 }
 
-async function atomicWrite(path, bytes) {
+async function sameFileSnapshot(path, expected) {
+  const current = await maybeRead(path);
+  const identity = await lstat(path).catch(error => { if (error?.code === "ENOENT") return null; throw error; });
+  return (current === null ? expected.bytes === null : expected.bytes !== null && current.equals(expected.bytes))
+    && (identity === null ? expected.identity === null
+      : expected.identity !== null && identity.dev === expected.identity.dev && identity.ino === expected.identity.ino);
+}
+
+async function atomicWrite(path, bytes, expected) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = join(dirname(path), `.${path.split(/[\\/]/).at(-1)}.${randomUUID()}.tmp`);
-  try { await writeFile(temporary, bytes); await rename(temporary, path); }
+  try {
+    await writeFile(temporary, bytes);
+    const identity = await lstat(temporary);
+    // Optimistic conflict check immediately before replacement, not filesystem CAS.
+    if (expected && !await sameFileSnapshot(path, expected)) throw new Error("release_env_input_changed");
+    await rename(temporary, path);
+    return identity;
+  }
   finally { await rm(temporary, { force: true }); }
 }
 
@@ -304,26 +319,34 @@ export async function installReleaseAssets(options) {
   for (const name of managedNames) snapshots.set(name, await maybeRead(safeRelativePath(installDir, name).absolute));
   const envPath = join(installDir, ".env");
   const versionPath = join(installDir, ".verified-release-assets-version");
-  const envBytes = await maybeRead(envPath);
   const versionBytes = await maybeRead(versionPath);
   const stateBytes = await readFile(statePath);
   await mkdir(recoveryDir, { recursive: true });
   const stateRecovery = join(recoveryDir, "install-state.json");
   await writeFile(stateRecovery, stateBytes);
+  let envBeforeWrite;
+  let envWritten;
+  let envWriteIdentity;
 
   try {
     for (const [name, entry] of verified.entries) await atomicWrite(safeRelativePath(installDir, name).absolute, await readFile(entry.absolute));
     for (const name of oldEntries.keys()) {
       if (!verified.entries.has(name)) await rm(safeRelativePath(installDir, name).absolute, { force: true });
     }
+    // Local fixture boundary only; this callback is never exposed by the CLI.
+    await options.onCheckpoint?.("assets-installed");
     if (options.failAfter === "files") throw new Error("injected_failure:files");
     await atomicWrite(oldManifestPath, verified.manifestBytes);
     await atomicWrite(versionPath, Buffer.from(releaseTag));
-    const nextEnv = updateEnv(envBytes, releaseTag, ghcrOwner, {
+    envBeforeWrite = { bytes: await maybeRead(envPath),
+      identity: await lstat(envPath).catch(error => { if (error?.code === "ENOENT") return null; throw error; }) };
+    const nextEnv = updateEnv(envBeforeWrite.bytes, releaseTag, ghcrOwner, {
       environment: process.env, resolution: options.remoteActionResolution, intentSha256: options.remoteActionIntentSha256,
     });
-    await atomicWrite(envPath, nextEnv);
+    envWriteIdentity = await atomicWrite(envPath, nextEnv, envBeforeWrite);
+    envWritten = nextEnv;
     if (!(await readFile(envPath)).equals(nextEnv)) throw new Error("release_env_readback_unproven");
+    await options.onCheckpoint?.("env-committed");
     if (options.failAfter === "identity") throw new Error("injected_failure:identity");
     await updateInstallState(statePath, current => ({
       ...current,
@@ -344,8 +367,19 @@ export async function installReleaseAssets(options) {
     }
     if (oldManifestBytes === null) await rm(oldManifestPath, { force: true }); else await atomicWrite(oldManifestPath, oldManifestBytes);
     if (versionBytes === null) await rm(versionPath, { force: true }); else await atomicWrite(versionPath, versionBytes);
-    if (envBytes === null) await rm(envPath, { force: true }); else await atomicWrite(envPath, envBytes);
+    let envRollbackUnproven = false;
+    if (envWriteIdentity) {
+      const expected = { bytes: envWritten, identity: envWriteIdentity };
+      if (!await sameFileSnapshot(envPath, expected)) envRollbackUnproven = true;
+      else {
+        try {
+          if (envBeforeWrite.bytes === null) await rm(envPath, { force: true });
+          else await atomicWrite(envPath, envBeforeWrite.bytes, expected);
+        } catch { envRollbackUnproven = true; }
+      }
+    }
     if ((await readFile(statePath)).compare(stateBytes) !== 0) await restoreInstallState(statePath, stateRecovery);
+    if (envRollbackUnproven) throw new Error("release_env_rollback_unproven", { cause: error });
     throw error;
   }
 }

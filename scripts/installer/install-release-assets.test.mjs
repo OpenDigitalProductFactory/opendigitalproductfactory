@@ -301,6 +301,62 @@ test("a late release commit failure restores the canonical env after adding the 
   }
 });
 
+for (const phase of ["assets-installed", "env-committed"]) {
+  test(`a release-phase explicit zero survives ${phase} conflict and rollback`, async () => {
+    const f = await fixture();
+    try {
+      const envPath = join(f.install, ".env");
+      const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+      await writeFile(envPath, original);
+      const decision = resolveRemoteActionDispatch(original);
+      const newer = `${original}DPF_REMOTE_ACTION_DISPATCH_ENABLED=0\nCONCURRENT_SETTING=kept\n`;
+      const operation = installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+        releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"),
+        remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+        failAfter: phase === "env-committed" ? "identity" : undefined,
+        async onCheckpoint(current) { if (current === phase) await writeFile(envPath, newer); },
+      });
+      await assert.rejects(operation, phase === "assets-installed" ? /intent_changed/ : /release_env_rollback_unproven/);
+      assert.equal(await readFile(envPath, "utf8"), newer, `${phase}: preserve the newer writer through refusal/rollback`);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  });
+}
+
+test("a release commit preserves unrelated canonical changes made during asset installation", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+    await writeFile(envPath, original);
+    const decision = resolveRemoteActionDispatch(original);
+    await installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"),
+      remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      async onCheckpoint(phase) { if (phase === "assets-installed") await writeFile(envPath, `${original}CONCURRENT_SETTING=kept\n`); },
+    });
+    const final = await readFile(envPath, "utf8");
+    assert.match(final, /^CONCURRENT_SETTING=kept$/m);
+    assert.match(final, /^DPF_REMOTE_ACTION_DISPATCH_ENABLED=1$/m);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("an owned release rollback restores the latest prewrite canonical baseline", async () => {
+  const f = await fixture();
+  try {
+    const envPath = join(f.install, ".env");
+    const original = `${await readFile(envPath, "utf8")}DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n`;
+    await writeFile(envPath, original);
+    const decision = resolveRemoteActionDispatch(original);
+    const latest = `${original}CONCURRENT_SETTING=kept\n`;
+    await assert.rejects(installReleaseAssets({ sourceDir: f.source, installDir: f.install, statePath: f.statePath,
+      releaseTag: "v2.0.0", ghcrOwner: "owner", recoveryDir: join(f.root, "recovery"), failAfter: "identity",
+      remoteActionResolution: decision.resolution, remoteActionIntentSha256: decision.intentSha256,
+      async onCheckpoint(phase) { if (phase === "assets-installed") await writeFile(envPath, latest); },
+    }), /injected_failure:identity/);
+    assert.equal(await readFile(envPath, "utf8"), latest);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 async function dispatchFixture(text = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=old\n") {
   const root = await mkdtemp(join(tmpdir(), "dpf-dispatch-env-"));
   const envPath = join(root, ".env");
