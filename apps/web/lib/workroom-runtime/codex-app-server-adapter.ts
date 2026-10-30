@@ -73,7 +73,9 @@ export function createCodexAdapter(deps: {
       proc.onStderr(() => {}); // Drained, never surfaced: it can carry provider detail.
       let threadId: string | null = config.resumeThreadId ?? null;
       let activeTurnId: string | null = null;
-      let settledTurnId: string | null = null;
+      // Keep settlement for the session lifetime: acknowledgements and replayed
+      // notifications can arrive after more than one later turn has finished.
+      const settledTurnIds = new Set<string>();
       const pending = new Map<string, PendingRequest>();
 
       const peer: JsonRpcPeer = createJsonRpcPeer(proc, {
@@ -84,7 +86,7 @@ export function createCodexAdapter(deps: {
           const turnId = turnIdOf(params);
           if (!turnId) return;
           if (method === "turn/started") {
-            if (turnId === settledTurnId || (activeTurnId && activeTurnId !== turnId)) return;
+            if (settledTurnIds.has(turnId) || (activeTurnId && activeTurnId !== turnId)) return;
             activeTurnId = turnId;
             onEvent({ type: "turn-started", turnId });
           } else if (method === "item/completed") {
@@ -98,7 +100,7 @@ export function createCodexAdapter(deps: {
             const status = turn?.status;
             if (status !== "completed" && status !== "interrupted" && status !== "failed") return;
             activeTurnId = null;
-            settledTurnId = turnId;
+            settledTurnIds.add(turnId);
             onEvent({ type: "turn-completed", turnId, status, error: text(turn.error?.message) });
           }
         },
@@ -159,7 +161,7 @@ export function createCodexAdapter(deps: {
           });
           // A fast turn can finish before the start request is acknowledged.
           const startedTurnId = text(result?.turn?.id);
-          if (startedTurnId && startedTurnId !== settledTurnId) activeTurnId = startedTurnId;
+          if (startedTurnId && !settledTurnIds.has(startedTurnId)) activeTurnId = startedTurnId;
           return { turnId: activeTurnId };
         },
         async steerTurn(input) {

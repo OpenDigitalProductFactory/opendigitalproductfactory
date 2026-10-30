@@ -134,6 +134,38 @@ describe("codex app-server adapter", () => {
     proc.emit({ method: "turn/started", params: { threadId: "thr-fast", turn: { id: "turn-fast" } } });
     expect(session.activeTurnId()).toBeNull();
   });
+  it("keeps older settled roots retired after later turns finish", async () => {
+    const proc = fakeProcess();
+    autoRespond(proc, { initialize: {}, "account/login/start": {}, "thread/start": { thread: { id: "thr-fast" } } });
+    const originalWrite = proc.write.bind(proc);
+    const starts: number[] = [];
+    proc.write = (line) => {
+      originalWrite(line);
+      const frame = JSON.parse(line) as { id?: number; method?: string };
+      if (frame.method === "turn/start") starts.push(frame.id!);
+    };
+    const events: RuntimeEvent[] = [];
+    const session = await createCodexAdapter({ launch: () => proc, login: async () => ({ type: "apiKey", apiKey: "sk" }) })
+      .openSession(CONFIG, (event) => events.push(event));
+    await session.ensureThread();
+    const first = session.startTurn("first");
+    proc.emit({ method: "turn/started", params: { threadId: "thr-fast", turn: { id: "turn-first" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-fast", turn: { id: "turn-first", status: "completed" } } });
+    const second = session.startTurn("second");
+    proc.emit({ method: "turn/started", params: { threadId: "thr-fast", turn: { id: "turn-second" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-fast", turn: { id: "turn-second", status: "completed" } } });
+    proc.emit({ id: starts[1], result: { turn: { id: "turn-second" } } });
+    await second;
+    proc.emit({ id: starts[0], result: { turn: { id: "turn-first" } } });
+    await first;
+    expect(session.activeTurnId()).toBeNull();
+    const count = events.length;
+    proc.emit({ method: "turn/started", params: { threadId: "thr-fast", turn: { id: "turn-first" } } });
+    proc.emit({ method: "turn/completed", params: { threadId: "thr-fast", turn: { id: "turn-first", status: "completed" } } });
+    expect(session.activeTurnId()).toBeNull();
+    expect(events).toHaveLength(count);
+    await session.close();
+  });
   it("resumes a stored thread instead of starting one", async () => {
     const { proc, session } = await open("thr-old");
     await expect(session.ensureThread()).resolves.toBe("thr-old");

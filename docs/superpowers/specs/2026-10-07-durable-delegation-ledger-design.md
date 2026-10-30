@@ -437,3 +437,5 @@ This reuses the existing RuntimeSession contract and fake-process transport. It
 is an OS-independent prerequisite for safe concurrency and DPF2 absorption, not a
 DPF2 implementation. The extraction boundary remains owned by
 [the reusable architecture design](2026-10-18-reusable-architecture-extraction-design.md).
+
+Settlement is retained for the session lifetime. A delayed start acknowledgement or replayed notification for an older root remains retired after subsequent roots finish; remembering only the last terminal turn is insufficient. The regression runs two complete roots before delivering their start acknowledgements in reverse order.
