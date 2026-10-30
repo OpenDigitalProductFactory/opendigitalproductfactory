@@ -1,4 +1,5 @@
 import { prisma, type Prisma } from "@dpf/db";
+import { customerProofTaskPresentation } from "@/lib/marketing/customer-proof";
 import { getPlaybook, type MarketingPlaybook } from "@/lib/tak/marketing-playbooks";
 import { deriveRevenueModelFromActivationProfile, readActivationProfile } from "@/lib/storefront/archetype-activation";
 import { upsertMarketingStrategyTolerant } from "@/lib/marketing/strategy-bootstrap";
@@ -642,13 +643,13 @@ export function buildMarketingCampaignBriefArtifact(
 export function buildMarketingAssetTaskArtifact(
   input: MarketingAssetTaskArtifactInput,
 ): MarketingAssetTaskArtifact {
-  return {
+  return customerProofTaskPresentation({
     title: cleanText(input.title) ?? "Marketing asset task",
     assetType: cleanText(input.assetType) ?? "content",
     channel: normalizeChannel(input.channel),
     dueWindow: cleanText(input.dueWindow),
     brief: cleanText(input.brief),
-  };
+  });
 }
 
 export function buildMarketingKpiCheckpointArtifact(
@@ -1133,11 +1134,9 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       assetTasks: assetTasks.map((task) => ({
         taskId: task.taskId,
         campaignId: task.campaignId,
-        title: task.title,
-        assetType: task.assetType,
+        ...customerProofTaskPresentation({ title: task.title, assetType: task.assetType, brief: cleanText(task.brief) }),
         channel: normalizeChannel(task.channel),
         dueWindow: cleanText(task.dueWindow),
-        brief: cleanText(task.brief),
         status: task.status,
         createdAt: task.createdAt,
       })),
