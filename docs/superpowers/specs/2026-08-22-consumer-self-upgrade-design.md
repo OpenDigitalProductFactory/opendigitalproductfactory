@@ -108,6 +108,118 @@ The canonical release-assets directory and `.env` remain unchanged until the can
 - The final assets/env commit uses a recovery directory and atomic file replacement. If it cannot commit, it restores managed files and identity bytes before returning failure.
 - Existing source-upgrade rollback behavior is unchanged.
 
+### 6. Same-promotion Edge dispatch configuration (BI-EEFCB232)
+
+This ordered corrective plan extends the shared promoter contract, including
+git-source mode. It does not change release target admission or reopen the
+delivered BI-084F85E5. The existing `ensureRemoteActionDispatch` rule currently
+persists only during the release-identity commit, after the portal was recreated;
+source mode skips that commit. A missing configured-channel default can therefore
+remain off in the new process despite the intended initializer.
+
+**OBJ-PDC1:** The first normal portal recreation consumes the existing configured
+Edge channel's intended default, in source and release modes.
+
+**OBJ-PDC2:** Explicit operator values and one-shot overrides retain their
+authority; convergence does not turn an override into persisted intent.
+
+**OBJ-PDC3:** A successful promotion preserves restart configuration, while
+refused, dry-run, build-only and failed persistence paths remain truthful.
+
+| Acceptance | Objectives | Statement | Verification |
+| --- | --- | --- | --- |
+| AC-PDC1 | OBJ-PDC1 | Derive the configured-channel default before the first Compose operation that can recreate the portal, in both promotion modes. | Production-promoter functional fixtures |
+| AC-PDC2 | OBJ-PDC2 | Keep explicit process and selected-file values, including zero, and never persist a one-shot override. | Resolver and precedence fixtures |
+| AC-PDC3 | OBJ-PDC3 | Commit only a derived missing default after successful runtime verification, with explicit persistence/restoration failure and retained recovery evidence. | Persistence and failure fixtures |
+| AC-PDC4 | OBJ-PDC1, OBJ-PDC2, OBJ-PDC3 | Preserve ordinary upgrade admission, identities, quiescence, rollback, signed action policy and separately owned native operations. | Adjacent tests and exact merged-source gate |
+
+The recorded BI-EEFCB232 acceptance criteria are:
+
+- A production-promoter fixture proves that configured1 plus an absent dispatch key reaches the first portal recreation as1 in both git-source and release modes; normalization precedes that recreation rather than relying on a later release-assets write.
+- Existing explicit dispatch values, including0 and1, remain unchanged across supported process/environment-file precedence, quoted/LF/CRLF input and unconfigured channels; missing or unreadable inputs do not authorize a guessed enablement.
+- Successful supported convergence preserves the resolved value for subsequent normal starts; dry-run/build-only/refused paths do not write install configuration, and persistence/rollback failures remain explicit without manual reload or replay.
+- Existing release identity, operator-owned configuration, signed action policy, certificates, enrollment, host task/controller, model/provider settings and all historical UNKNOWN requests remain unchanged. Deterministic source tests and normal exact-source gate/protected publication supply source evidence; live action-channel and inference acceptance remain separately owned.
+
+#### Ownership and precedence
+
+This uses the existing runtime env schema and inherits deployment Contract 12;
+there is no new flag store, install-state field or database setting. Organization
+PKI/trust configuration retains its existing owner. Its configured marker and the
+persisted dispatch initializer/explicit setting use the existing install `.env`
+contract. The promoter reads the recorded `PROMOTE_COMPOSE_ENV_FILE`, falling back
+only when no explicit file was selected, as Compose does. It must not read a
+different workspace `.env` to hide an unavailable selected input.
+
+A real per-invocation process override wins, then the selected persisted runtime
+setting, then the existing documented default. Preserve presence as well as
+value: explicit zero, one, empty or invalid values are not absence and cannot
+authorize synthesized enablement. The normal promoter command builder does not
+forward the portal's default-zero dispatch environment into the promoter; an
+actual promoter override must still be preserved. The initializer is eligible
+only for a verified configured marker of one with no explicit dispatch setting.
+Use one shared pure resolver beside the current release-assets rule; retain
+supported quoting/newlines and preserve unrelated env bytes. Ambiguous owned-key
+assignments cannot become guessed enablement; unsupported input fails closed.
+
+The normal promoter may export a derived value before Compose so the first
+replacement receives it. Keep its origin in local procedure state; never persist
+an operator's one-shot override. Existing explicit file values remain untouched.
+Release-assets installation and source-mode finalization must consume the same
+rule. Only a successfully verified promotion may persist a derived missing
+default, through the existing selected-file write owner and a narrow recovery
+snapshot. Recheck the selected input before writing: changed intent fails closed
+rather than overwriting it. A write or restoration failure must return failure,
+retain its recovery checkpoint and never claim that restoration occurred. Do not
+change the immutable release assets/state commit ordering or add a second portal
+recreation. No secret or unrelated env value is emitted by the resolver.
+
+#### Ordered implementation and verification
+
+1. **Red fixtures:** exercise the real promoter through the existing fake-Docker
+   functional harness in both git-source and release modes. Record the effective
+   dispatch value at the first portal recreation; reproduce the missing default.
+   Add explicit process/file zero and one, quoted/LF/CRLF, unconfigured, missing or
+   unreadable selected input, dry-run/build-only, conflict and persistence failure
+   cases. Test the shared file policy without a live runtime.
+2. **Shared policy and pre-Compose resolution:** extend
+   `scripts/installer/install-release-assets.mjs` and the existing promoter env
+   handling. Keep an explicitly supplied process value and selected-file intent;
+   export only a verified missing configured-channel default before Compose.
+   Keep helper invocation limited to these two public configuration keys.
+3. **Truthful persistence:** retain release-assets transaction ownership, add the
+   corresponding source-mode finalization, and preserve one-shot overrides. Verify
+   persisted readback or retain the bounded recovery snapshot and failure. Never
+   use a manual reload, a convergence-marker reset or a second accidental release.
+4. **Verification and publication:** run the affected Node source suite, the
+   production-promoter functional tests, both affected package typechecks and every
+   test/guard from the claimed scope's impact contract. Use the canonical merged
+   local-CI lane, a DCO-signed ready PR, protected merge-group production checks and
+   exact final source review. Existing certificate source and model evidence are
+   reused only where unchanged; no model call verifies this configuration repair.
+
+The resolved Workroom impact contract requires `node scripts/check-style-drift.mjs`
+and a fresh doc index (`node scripts/gen-doc-index.mjs --check`). Its related-test
+reader resolved the six existing `promote-safe-directory`, `promote-script-cleanup`,
+`promote-script-fake-docker`, `promote-script-functional`,
+`promote-script-legacy-bootstrap` and `promote-script-service-reconcile` test files;
+include all six alongside the new case and installer source suite. The new module
+stays below its 800-line cap. Missing or stale advice expands verification.
+
+These steps are one atomic BI: the policy, current-process export, persistence
+and negative evidence establish one convergence contract and cannot ship as
+independent completed outcomes. Plan coverage maps AC-PDC1--4,
+CONTRACT-PDC-CONFIG (deployment Contracts 2/12), FLOW-PDC-PROMOTE
+(resolve, recreate, verify, persist) and VERIFY-PDC-FIXTURES to BI-EEFCB232.
+
+Expected edit scope is this design, `scripts/promote.sh`,
+`scripts/installer/install-release-assets.mjs` and its existing test file,
+`apps/web/lib/self-upgrade/promote-script-functional.test-support.ts`, and one
+adjacent dispatch-convergence functional test. This excludes the certificate
+owner's ten files, credentials, action allowlists and native/model operations.
+Any additional prerequisite or authority refusal is reported before widening
+that scope. Actual allowed implementation admission and independent frozen-plan
+assessment remain required; this document is not an approval receipt.
+
 ## UX behavior
 
 The existing Upgrade Center remains the only surface; no new operator control is added. Its status vocabulary gains truthful consumer results:
