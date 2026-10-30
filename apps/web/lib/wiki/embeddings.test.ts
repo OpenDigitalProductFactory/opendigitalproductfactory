@@ -675,3 +675,18 @@ describe("wiki embedding boot self-heal (BI-ED117C82)", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 });
+
+
+it("keeps lexical fallback without guessing that an unavailable embedding needs a model download", async () => {
+  generateEmbedding.mockResolvedValue(null);
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    await expect(searchWikiPages({ query: "routing pause", organizationId: null })).resolves.toEqual([]);
+    expect(wikiPageFindMany).toHaveBeenCalled();
+    expect(searchSimilar).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
+    expect(error.mock.calls.flat().join(" ")).not.toContain("docker model pull");
+  } finally {
+    error.mockRestore();
+  }
+});

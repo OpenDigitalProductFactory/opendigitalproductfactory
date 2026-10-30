@@ -55,12 +55,17 @@ const claimOptions = { now: NOW, signer, nonceFactory: () => NONCE };
 
 const nativeParameters = () => ({ version: 1, operation: "activate", sourceSha: "a".repeat(40), profileSha256: "b".repeat(64),
   runtimeManifestSha256: "c".repeat(64), qualificationReportSha256: "d".repeat(64), baselineEngineSha256: "e".repeat(64), leaseId: "NPEL-TEST" });
-const qualificationParameters = () => ({ version: 1, backlogItemId: "BI-B3DEC077", workroomId: "WC-A8C14CBE",
+const qualificationParameters = () => ({ version: 2, backlogItemId: "BI-B3DEC077", workroomId: "WC-A8C14CBE",
   repository: "OpenDigitalProductFactory/opendigitalproductfactory", baseSha: "a".repeat(40), headSha: "b".repeat(40),
   protocolPath: "docs/superpowers/specs/windows-handle-replacement.md", protocolBlobSha: "c".repeat(40),
   productionBlobs: [{ path: "apps/web/lib/file.ts", blobSha: "d".repeat(40) }],
   testBlobs: [{ path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40) }], qualificationBindingDigest: "f".repeat(64),
-  procedureId: "windows-handle-replacement-v1", resultSchemaVersion: 1, maxDurationSeconds: 300, edgeNodeId: "edge_external_1" });
+  procedureId: "windows-bound-node-test-v2", resultSchemaVersion: 2, maxDurationSeconds: 300, edgeNodeId: "edge_external_1",
+  sourceFiles: [
+    { path: "apps/web/lib/file.ts", blobSha: "d".repeat(40), contentBase64: "ZXhwb3J0IHt9Ow==" },
+    { path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40), contentBase64: "dGVzdA==" },
+    { path: "scripts/lib/evidence-validity-policy.mjs", blobSha: "9".repeat(40), contentBase64: "ZXhwb3J0IHt9Ow==" },
+  ] });
 
 function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
   const findMany = vi.fn().mockResolvedValue(candidates);

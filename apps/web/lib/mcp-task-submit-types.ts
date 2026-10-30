@@ -51,4 +51,6 @@ export type RemoteTaskAttemptInput = {
   /** Identity acquired by the caller's reservation CAS; null denotes initial execution. */
   expectedReservation?: string | null;
   expectedDispatchClaim?: string | null;
+  /** Frozen by the reservation owner before hydration; never adopted from a later row. */
+  expectedExecutionFence?: import("./shared/task-execution-fence").TaskExecutionFence;
 };
