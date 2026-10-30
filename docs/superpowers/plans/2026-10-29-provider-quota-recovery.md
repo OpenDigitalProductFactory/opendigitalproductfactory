@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Provider quota recovery delivery
 
 Backlog: BI-D81CCC24. Workroom: WC-2CCBB706. Design: [provider quota recovery](../specs/2026-10-29-provider-quota-recovery-design.md).
