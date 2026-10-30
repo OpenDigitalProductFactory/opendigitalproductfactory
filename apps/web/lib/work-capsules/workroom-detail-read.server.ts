@@ -8,6 +8,14 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  const reviewTaskRunId = params["reviewTaskRunId"];
+  const { validateOwnedReviewInput } = await import("./semantic-review-recovery");
+  const reviewInputError = validateOwnedReviewInput(reviewTaskRunId, userId);
+  if (reviewInputError) return reviewInputError;
+  if (reviewTaskRunId !== undefined && params.activityMode !== undefined) {
+    return { success: false, error: "invalid_review_activity_read",
+      message: "Read an exact owned review separately from bounded activity." };
+  }
   if (params.activityMode === "bounded") {
     const { getBoundedWorkroomActivity } = await import("./bounded-activity-read.server");
     return getBoundedWorkroomActivity({ ...params, capsuleId }, userId, context?.agentId);
@@ -38,6 +46,18 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
       message: `Work Capsule ${capsuleId} not found.`,
     };
   }
+  let ownedReviewRecovery;
+  if (typeof reviewTaskRunId === "string") {
+    try {
+      const { readOwnedRoomReview } = await import("./semantic-review-recovery");
+      ownedReviewRecovery = await readOwnedRoomReview(capsule.capsuleId, reviewTaskRunId, userId!);
+      if (!ownedReviewRecovery) return { success: false, error: "owned_review_unavailable",
+        message: "No review owned by this caller is bound to this Workroom with that task identifier." };
+    } catch {
+      return { success: false, error: "review_recovery_unavailable",
+        message: "The owned review recovery could not be read. No settlement or review verdict is established." };
+    }
+  }
   const { loadWorkroomRecoveryItems, projectWorkroomRecovery, boundWorkroomRecoveryReadback } = await import("./workroom-recovery-projection");
   const { loadSemanticReviewRoomProjection } = await import("@/lib/work-management/semantic-review-room-projection");
   const reviews = await loadSemanticReviewRoomProjection(prisma as never, [capsule.capsuleId], new Date());
@@ -60,7 +80,8 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
     : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
   const message = `Loaded ${capsule.capsuleId}.`;
   const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, delivery: projectDeliveryAgreement({ workspaceState: capsule.workspaceState, currentObjective: capsule.objective, terminal: ["complete", "archived", "abandoned"].includes(capsule.status) }), recovery: projectWorkroomRecovery(capsule, reviews,
-    recoveryItems.get(capsule.backlogItemId ?? "") ?? null, new Date(), failedHandoffRecovery), nestedCoordination, investment },
+    recoveryItems.get(capsule.backlogItemId ?? "") ?? null, new Date(), failedHandoffRecovery), nestedCoordination, investment,
+    ...(ownedReviewRecovery ? { ownedReviewRecovery } : {}) },
     ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
       { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);
   if (!data) return { success: false, error: "workroom_recovery_budget_exceeded",

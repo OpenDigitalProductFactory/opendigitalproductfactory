@@ -338,7 +338,17 @@ syncBuiltinESMExports();
     child.once("error", reject);
     child.once("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
   });
-  return { calls, leases, run };
+  const runWithClosedStdout = command => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [...preloadArgs, fileURLToPath(new URL("./host-resource-runner.mjs", import.meta.url)),
+      "--class", "vitest", "--", ...command],
+    { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], timeout: 45000 });
+    let stderr = "";
+    child.stdout.destroy();
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal, stderr }));
+  });
+  return { calls, leases, run, runWithClosedStdout };
 }
 
 for (const [memoryProbe, availableGiB] of [["available", 42], ["unavailable", 4]]) {
@@ -375,6 +385,18 @@ test("real response-loss recovery reconciles one admitted mock row and executes 
   assert.equal(claims[1].arguments.resumeLeaseId, undefined);
   assert.equal(fixture.calls[1].name, "list_nonprod_environment_leases");
   assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
+});
+
+test("a closed output consumer does not replace the wrapped command outcome with EPIPE", { timeout: 60000 }, async t => {
+  const fixture = await createHostClaimFixture(t);
+  const result = await fixture.runWithClosedStdout([
+    process.execPath,
+    "-e",
+    "process.stdout.write('x'.repeat(1024 * 1024)); process.exit(7)",
+  ]);
+  assert.equal(result.signal, null);
+  assert.equal(result.code, 7, result.stderr);
+  assert.doesNotMatch(result.stderr, /EPIPE|unhandled/i);
 });
 
 test("real host claim tolerates a response beyond the generic ten-second probe budget", { timeout: 60000 }, async t => {

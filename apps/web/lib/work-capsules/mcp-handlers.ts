@@ -64,11 +64,15 @@ import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
 import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
+import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { isRecord } from "@/lib/shared/coerce";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  authorityDecisionId?: string;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -251,6 +255,21 @@ export async function claimCapsuleScopeTool(
     const refusal = scopeClaimRefusal(error);
     if (refusal) return refusal;
     throw error;
+  }
+
+  if (qualificationAdmissionToken) {
+    const workspace = isRecord(renewedCapsule.workspaceState) ? renewedCapsule.workspaceState : {};
+    const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token) : null;
+    if (admission?.ok && admission.data.binding.executorMode === "native-edge") {
+      const currentActor = await actor(userId, context);
+      if (!currentActor.principalId) throw new Error("Native qualification requires an accountable principal.");
+      const queued = await materializeQualificationWindowsAction({ db: workCapsuleDb() as never,
+        capsuleId, requestedByUserId: userId, requestedByPrincipalId: currentActor.principalId,
+        authorityDecisionId: context?.authorityDecisionId });
+      if (!queued.ok) throw new Error(`Native qualification was not queued: ${queued.reason}`);
+      renewedCapsule = await renewLeaseAfterCapsuleWrite(capsuleId, currentActor);
+    }
   }
 
   return {

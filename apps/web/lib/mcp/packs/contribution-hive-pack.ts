@@ -96,10 +96,8 @@ const definitions: ToolDefinition[] = [
   {
     name: "propose_skill_improvement",
     description:
-      "Propose a content change to a specific coworker skill (e.g. tightening instructions, fixing a stale " +
-      "reference). Use when you have observed the current skill prompt produce the wrong behavior and you can " +
-      "draft a better version. Submits an ImprovementProposal(category='skill', targetSkillId=…) that a human " +
-      "reviews on /platform/ai/skills.",
+      "Save an internal skill suggestion for review on /platform/ai/skills. This records a draft; it never applies the change. " +
+      "Identical pending suggestions reuse the same draft. Actual skill application keeps its separate reviewer approval.",
     inputSchema: {
       type: "object",
       properties: {
@@ -126,7 +124,8 @@ const definitions: ToolDefinition[] = [
       required: ["skillId", "title", "description", "proposedContent"],
     },
     requiredCapability: null,
-    executionMode: "proposal",
+    executionMode: "immediate",
+    coworkerArtifact: true,
     sideEffect: true,
   },
   {
@@ -685,7 +684,8 @@ async function proposeSkillImprovementHandler(
     return {
       success: true,
       entityId: result.proposalId,
-      message: `Skill proposal ${result.proposalId} created for ${skillId}. A reviewer must approve before it takes effect.`,
+      data: { proposalId: result.proposalId, reused: result.reused },
+      message: `Skill suggestion ${result.proposalId} ${result.reused ? "already saved" : "saved"} for ${skillId}. A reviewer must approve before it takes effect.`,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

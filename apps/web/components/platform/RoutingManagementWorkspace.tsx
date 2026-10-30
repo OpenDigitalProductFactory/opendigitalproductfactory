@@ -117,7 +117,7 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
       </Surface>
       <section aria-label={t("recentRoutingDecisions")} className="space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="font-semibold">{t("recentDecisions")}</h2><button className={ROUTING_ACTION_CLASS} onClick={() => openCatalog("decisions")}>{t("viewAllCount", { count: rows.length })}</button></div><DataTable responsive columns={columns} rows={rows.slice(0, 3)} getRowKey={r => r.id} empty={t("noDecisionsRecordedInThisScope")}/></section>
     </>}
-    <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
+    <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{". "}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
     {selected && <RoutingManagementInspector receipt={selected} scope={scope} onClose={() => setSelectedId(null)}/>}
     {catalog && <RoutingManagementOverlay title={catalog === "tuning" ? t("tuningProposalsAndAssignmentEvidence") : catalog === "providers" ? t("providerAndModelCatalog") : catalog === "assignments" ? t("assignments") : t("routingTraffic")} onClose={() => setCatalog(null)}>
       {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} resultCount={catalog === "providers" ? filteredProviders.length : undefined} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
@@ -132,5 +132,5 @@ function FlowGroup({ label, count, onOpen, children }: {
     children: React.ReactNode;
 }) {
     const t = useT("routingManagement");
-    return <div className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{label}</h2><button className="min-h-11 text-xs text-[var(--dpf-accent)] underline" onClick={onOpen}>{t("allCount", { count })}</button></div>{children}</div>;
+    return <div className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{label}</h2><button className="min-h-11 min-w-11 text-xs text-[var(--dpf-accent)] underline" onClick={onOpen}>{t("allCount", { count })}</button></div>{children}</div>;
 }
