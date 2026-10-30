@@ -33,7 +33,7 @@ Capture the selected active install-owned default subscription account, credenti
 
 Use the existing conditional quota writer only for quota owned by that exact account or already-proven canonical-default legacy owner. An account cannot clear another provider's quota by alias. In particular, a ChatGPT Responses completion cannot clear the Codex CLI pool.
 
-Where conservative shared quota projections would otherwise reapply an older sibling forecast, a newer exact-account, credential-bound successful Responses observation can qualify the ChatGPT Responses channel only. It does not establish separate budgets or CLI availability. A later failure defeats the older success. Unknown ownership, stale credentials, missing evidence and simultaneous non-quota vetoes remain restrictions. This projection must be shared by routing and provider UI, not implemented as a page-only green label.
+Where conservative shared quota projections would otherwise reapply an older sibling forecast, a newer exact-account, credential-bound successful Responses observation can qualify only the actually tested model on the same endpoint and execution contract. It does not establish separate budgets or CLI availability, or prove another model's allocation. Bind evidence to the current model/catalog and endpoint identity; a changed model, endpoint or contract cannot borrow it. A later applicable failure defeats the older success. Unknown ownership, stale credentials, missing evidence and simultaneous non-quota vetoes remain restrictions. This projection must be shared by routing and provider UI, not implemented as a page-only green label.
 
 ### CT-RECOVERY-COMMISSION: bounded early rechecks
 
@@ -51,7 +51,7 @@ FLOW-RECHECK: exact account → admission/current snapshot → bounded synthetic
 FLOW-HOURLY: recorded commission → eligible quota candidates → per-account bounded observation → durable result/backoff; unchanged routine outcomes remain technical history.
 FLOW-RESET: account restriction → provider Usage link → owner-controlled reset → explicit recheck → actual routing evidence.
 
-VERIFY-ISOLATION covers foreign/changed credentials, manual pause, billing/auth holds, missing/non-quota rows, concurrent newer quota, incomplete output, network/timeout, uncertain settlement, and shared CLI versus Responses independence. VERIFY-RECOVERY covers real old-hold/new-success/late-failure ordering and actual PostgreSQL predicates. VERIFY-UI covers light/dark, desktop/mobile, keyboard, unknown evidence, localized times and safe external Usage links. VERIFY-LIVE requires canonical deployment and fresh observed account/coworker/watch results; source tests cannot supply this acceptance.
+VERIFY-ISOLATION covers foreign/changed credentials, manual pause, billing/auth holds, missing/non-quota rows, concurrent newer quota, incomplete output, network/timeout, uncertain settlement, shared CLI versus Responses independence, model-specific limits and changed catalog/endpoint/contract identity. VERIFY-RECOVERY covers real old-hold/new-success/late-failure ordering and actual PostgreSQL predicates. VERIFY-UI covers light/dark, desktop/mobile, keyboard, unknown evidence, localized times and safe external Usage links, with one dominant hold/action and secondary evidence disclosed. VERIFY-LIVE requires canonical deployment and fresh observed account/coworker/watch results for the actual pinned model (including COO gpt-6.1-sol), not an arbitrary cheap model; source tests cannot supply this acceptance.
 
 ## Scope and rollback
 
