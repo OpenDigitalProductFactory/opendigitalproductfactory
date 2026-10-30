@@ -152,6 +152,16 @@ export function resolveToolUse(
   return profile.provider.supportsToolUse ?? null;
 }
 
+/** Reconcile sparse model discovery with the transport's streaming declaration. */
+function resolveStreaming(profile: ProfileWithProvider): boolean | null {
+  const capabilities = profile.capabilities as unknown as ModelCardCapabilities | null;
+  if (profile.provider.supportsStreaming === false || capabilities?.streaming === false) return false;
+  if (capabilities?.streaming === true) return true;
+  // A provider's text-streaming default says nothing about an embedding/image/audio model.
+  if (!["chat", "reasoning", "code"].includes(profile.modelClass ?? "chat")) return null;
+  return profile.provider.supportsStreaming ?? null;
+}
+
 /**
  * Load all active/degraded endpoints as EndpointManifest objects.
  * Queries ModelProfile joined with ModelProvider — each manifest entry represents
@@ -239,6 +249,7 @@ async function profileToManifest(
   statusOverride?: EndpointManifest["status"],
   riskAcceptedByProvider?: Map<string, SensitivityLevel[]>,
 ): Promise<EndpointManifest> {
+  const streaming = resolveStreaming(mp);
   // BI-7F2FBDA3: learned per-auth-mode eligibility first; the checked-in Codex
   // subscription set is only the seed when nothing has been learned yet.
   const eligibilityExclusionReason = authEligibilityExclusionReason({
@@ -291,7 +302,7 @@ async function profileToManifest(
     // ineligible for tool work with no recovery path (BI-DFC30977).
     supportsToolUse: resolveToolUse(mp),
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
-    supportsStreaming: mp.provider.supportsStreaming,
+    supportsStreaming: streaming === true,
     maxContextTokens,
     maxOutputTokens,
     modelRestrictions: mp.provider.modelRestrictions,
@@ -317,7 +328,7 @@ async function profileToManifest(
     modelFamily: mp.modelFamily ?? null,
     inputModalities: observedImage ? [...new Set([...(mp.inputModalities as string[] ?? ["text"]), "image"])] : (mp.inputModalities as string[]) ?? ["text"],
     outputModalities: (mp.outputModalities as string[]) ?? ["text"],
-    capabilities: observedImage ? { ...capabilities, imageInput: true } : capabilities,
+    capabilities: { ...capabilities, ...(observedImage ? { imageInput: true } : {}), streaming },
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
     ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),

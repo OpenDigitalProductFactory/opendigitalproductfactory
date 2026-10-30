@@ -18,6 +18,7 @@ import {
 import { getMarketingWorkspaceSnapshot, type MarketingWorkspaceSnapshot } from "../marketing";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { platformLeakTermsFor } from "./archetype-fit";
+import { CUSTOMER_PROOF_REMEDY, requiresCustomerProof } from "./customer-proof";
 import {
   PLATFORM_CLAIM_LIMITS,
   describeBuyerForPrompt,
@@ -141,6 +142,12 @@ export async function draftMarketingAsset(input: {
     };
   }
 
+  // Current proof assets contain labels/links, not verified outcomes and consent.
+  // Never promote either an old task or a model assertion into that authority.
+  if (requiresCustomerProof(task)) {
+    return { success: false, error: "customer_proof_requires_evidence", message: CUSTOMER_PROOF_REMEDY };
+  }
+
   if (!isSupportedAssetType(task.assetType)) {
     return {
       success: false,
@@ -181,6 +188,7 @@ ${archetypeVoice}
 
 Constraints:
 - Stay grounded in the brief and the positioning. Do not invent product features that aren't in the brief.
+- Never invent customers, wins, quantities, measured results, quotations or customer permission. Labels and links are not verified facts. Internal dogfooding must be labeled as internal and must not imply customer outcomes.
 - Use the strategist's stakeholder language and the business voice above.
 - No placeholders like [Insert X] except the explicit signer placeholder in email sign-offs.`;
 
@@ -215,6 +223,10 @@ Produce the ${task.assetType} now. Output the body only — no preamble, no comm
       error: "Drafter returned empty body",
       message: "The drafter produced an empty response; retry with a more specific brief or tone note.",
     };
+  }
+
+  if (requiresCustomerProof({ title: "", assetType: "", brief: body })) {
+    return { success: false, error: "customer_proof_requires_evidence", message: CUSTOMER_PROOF_REMEDY };
   }
 
   const draft = await prisma.outboundDraft.create({
