@@ -312,3 +312,138 @@ settlement prerequisite under BI-7906C73E and its current coordinator. This
 continuation creates no proof, disposition, approval, review attempt or receipt.
 The next permitted implementation event is actual native readiness allowing it,
 not another operator confirmation or another read of unchanged history.
+
+## October 29 continuation: concrete qualification and retained criteria
+
+This remains admitted DESIGN preparation on existing BI-E3B918C2 and
+WC-65B54867. It changes no canonical design bytes, scope baseline, gate receipt,
+review task, attempt budget or production implementation. The original seven
+item criteria below and AC-DC-6 remain the requested campaign outcome; a read
+projection cannot stand in for their execution.
+
+### Current native qualification
+
+The October 29 native item read retains `awaiting-acceptance` and Large shape.
+Its unpersisted completion projection is `allowed` and marks design, plan,
+delivery, acceptance and reconciliation requirements pass with empty evidence
+references. In the same response PLAN and IMPLEMENTATION are input-required for
+canonical design, independent spec and architecture approval, objective
+baseline, artifact author identity, plan review, coverage and traceability.
+No actual campaign completion follows from the unpersisted projection.
+
+The existing lease had expired beyond resume grace. The exact DESIGN claim
+refused with IRD-5A3D076CC95C; the prescribed ordinary heartbeat renewed the same
+owner/executor, then the unchanged branch/base/head DESIGN claim was allowed as
+IRD-AD78BE12A0D1. No forced claim, second branch, status reset or executor
+transfer occurred. The sole edit scope remains this plan; its impact contract
+is resolved with the doc-index check and no testImpact/guard obligation.
+
+After resume, the design-spec issuer again offers Change Reviewer the same
+immutable design blob `dc87d98cdf74f9a4d7f96a862e3e631a58f8268f` at this
+continuation's head. It supplies no original recovery locator. That packet was
+not submitted. A changed plan commit does not turn unchanged held design bytes
+into a new authorized review.
+
+A single requester-authorized original `tasks/result` read on October 29
+returned HTTP 200 and preserved original 7F/digest
+`39ab86f6abcbc35e6d68ba01b094984a200a24a13f98643beeb908e80fd9213c`.
+It remains input_required, nonterminal, nonresumable, UNKNOWN, read-only and
+replayAllowed=false. Its checkpoint is still October 16, attempt 1.
+The saved result SHA-256 is
+`fd31c936c6c4f36f56610fea8555cdce4a28dfadf44e1c165a87a5100ca39645`.
+Original result reads do not dispatch, reconcile or settle that execution.
+
+### Retained criterion source and qualification cases
+
+The criterion source is the existing BI body and the held canonical design
+path already cited above. The following item-body statements were read from the
+native item; they are quoted verbatim for traceability, not approved as a new
+baseline or substituted for the held design:
+
+- Confirmed served SHA admits one durable verification campaign keyed by installation, SHA and acceptance-plan digest.
+- Pending obligations retain per-outcome identity; equivalent checks share immutable evidence only when contract, persona, tenant, fixture and environment match.
+- Ten obligations with three compatible checks run three checks, preserving all ten results.
+- Duplicate events, dispatch loss, restart, rollback and missed webhook reconcile without a client polling loop.
+- Behavior failure creates one corrective backlog item per contract/SHA/failure fingerprint and a fresh execution; infra failure uses bounded server retry.
+- Task Hub shows delivered/acceptance pending separately, one release summary and actionable failure notification.
+- Stable cursors process more than 500 pending obligations without starvation.
+
+The prospective check plan freezes the actual source reference, author,
+criterion version/digest and expected result separately from its future runtime
+plan version. Missing source provenance refuses preparation; current prose
+cannot manufacture original provenance. Preparing or adopting a document
+version does not certify plan adequacy or fulfill acceptance.
+
+| Existing criterion | Concrete qualification required | Current continuation outcome |
+| --- | --- | --- |
+| One campaign per installation/SHA/plan | Two duplicate observations of one actual served generation join one durable campaign; changed installation, served SHA or plan digest does not collide. | UNRUN; no campaign implementation admitted. |
+| Per-outcome identity and compatible reuse | Equal contract/persona/tenant/fixture/environment reuses one immutable check; changing any field refuses reuse and keeps each obligation's result. | UNRUN; prior Small runtime acceptance is not campaign proof. |
+| Ten obligations / three checks | Drive ten obligations partitioned into three genuinely compatible checks; assert exactly three executions and ten retained result associations. | UNRUN; AC-DC-6 is not passed. |
+| Dispatch loss/restart/rollback/missed webhook | Use an admitted bounded failure matrix against the same campaign; prove server reconciliation and rollback applicability with no required open author client or polling loop. | UNRUN; old unknown executions are not test fixtures to replay. |
+| Behavior versus infrastructure failure | One repeated behavior fingerprint yields one corrective BI for the exact contract/SHA and a fresh authorized execution; infrastructure loss consumes only the server's bounded retry allowance. | UNRUN; no failure, corrective item or retry generated by this preparation. |
+| Task Hub outcome separation | Existing Task Hub shows delivered with actual acceptance state, one release summary, truthful next owner/event and immutable evidence; inspect keyboard, focus, themes and narrow layout after a containing deployment. | UNRUN for this campaign; earlier bounded UI passes remain separately credited. |
+| More than 500 obligations | Process at least 601 pending obligations with stable cursors, equal timestamps, interruption and new arrivals; prove no loss, duplicate fulfillment or starvation. | UNRUN for the final campaign; reuse an existing valid fixture only when identities and asserted contract match. |
+
+### Exact original proof owners and permitted issuer remedy
+
+The current original result explicitly names these missing evidence owners:
+
+| Retained evidence gap | Existing owner named by the result |
+| --- | --- |
+| Original launch membership and enabled capabilities | Original CLI/sandbox launcher |
+| Original descendant closure | Original process supervisor |
+| Original credential preparation | Provider account owner |
+| Complete reconciliation of possibly started effects | Original domain/provider effect owners |
+| Late writer and approval fence | Canonical writer/approval authority |
+
+The task-linked inventory is captureComplete=false with settlement unknown.
+Zero observed artifacts, tools, approvals or async rows do not establish zero
+effects. A later writer fence, outer-process exit, source gate or server restart
+cannot retroactively supply these missing historical facts.
+
+BI-7906C73E / WC-FDAC8963 remains the existing original-proof producer; its
+current executor and the broader BI06 coordinator were consulted without
+opening another task or item. Its shipped bounded present-reassessment policy
+is not general E3 authority. Source inspected at
+`4718cd4f1c5418ab2eba819dd47d5cb839f8eca0` requires subject BI-285EF102,
+exact independently approved retained policy/baseline/receipt/pin and
+operator-evidence bindings. A `reassessmentAuthorizationItemId` locator
+selects evidence only. No approved policy applicable to E3/7F was established;
+no policy locator was supplied or reassessment request issued.
+
+The next permitted review event is authentic original recovery proof admitted
+by its issuer, or a separately supported, independently approved exact present
+policy whose E3/7F applicability the native issuer actually verifies. Such a
+present assessment would retain the original UNKNOWN outcome; it would not
+settle or replay 7F. Current implementation still requires the normal design,
+independent approval, architecture, baseline and exact plan/coverage admission.
+Do not widen the existing policy parser or alter the original to create an exit.
+
+### Policy, deployment and effort reconciliation
+
+The current October 27 default platform-delivery policy records not-owed rather
+than indefinite post-delivery acceptance obligations. That default does not
+prove E3's explicitly requested campaign behavior implemented or its seven
+criteria executed. Do not resurrect retired default obligations, rewrite old
+receipts or silently drop this item's retained criteria. Any actual scope or
+policy change belongs to its current owner and native decision path.
+
+Small BI-DB4E6F81's genuine closure-bound deployed result and independently read
+owed=[] remain credited to that Small obligation. They do not supply E3's
+independent reviewer/runtime/criterion binding. Likewise the Windows and Critic
+owners retain their source/publication scopes; the broader coordinator retains
+the full acceptance conjunction. No competing gate or runtime advance was run.
+
+A read-only native preflight confirmed served
+`dc1e4b5f66fae06c5c1cfcb8f82ec79b971e5cc7` contains actual approval-result
+merge `b7ee9ec259303456470a62095875d6e37d65f318` and returned CAN-TEST.
+This identifies the current runtime only; it does not deploy or test the E3
+campaign. The continuation worktree remains source-only. Production tests,
+typechecks, SQL, native independent review and campaign acceptance are UNRUN
+for this documentation increment; only applicable documentation checks apply.
+
+Keep the requested 80% relevant refactoring target in shared criteria/version,
+issuer/actor, transaction validation and sweep/Task Hub projection. The seven
+qualification cases above exercise those same boundaries before and after the
+eventual implementation. Historical effort, unknown costs and unavailable
+timings remain unmeasured; no percentage or speedup is manufactured.
