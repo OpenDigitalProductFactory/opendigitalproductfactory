@@ -33,6 +33,19 @@ describe("own expense entry prerequisites", () => {
     expect(html).toContain('aria-label="Expense entry"');
     expect(html).toContain("Receipt links are optional");
   });
+  it("keeps the visible entry header within its existing 14-word budget", async () => {
+    vi.mocked(prisma.employeeProfile.findFirst).mockResolvedValue({ id: "employee" } as never);
+    const html = renderToStaticMarkup(await NewExpensePage());
+    // Closed native details expose only their summary. This is a source-render
+    // header guard, not a substitute for the actual served route sweep.
+    const visible = html.replace(/<details\b[^>]*>([\s\S]*?)<\/details>/g,
+      (_details, inner: string) => inner.match(/<summary\b[^>]*>([\s\S]*?)<\/summary>/)?.[1] ?? "")
+      .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const words = visible.split(" ").filter(word => /[\p{L}\p{N}]/u.test(word));
+    expect(words.length).toBeLessThanOrEqual(14);
+    expect(html).toContain("positive amount");
+    expect(html).toContain("Submit for Approval");
+  });
   it("does not query a claimant profile for an unauthenticated visitor", async () => {
     vi.mocked(requireUser).mockRejectedValue(new Error("Unauthorized"));
     await expect(NewExpensePage()).rejects.toThrow("Unauthorized");
