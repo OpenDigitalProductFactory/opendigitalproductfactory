@@ -167,7 +167,7 @@ name only for sandbox; `scripts/lib/dev-preview-runtime.mjs` supplies the
 preview's development class and nonempty `DPF_PREVIEW_LEASE_ID`. The automation
 sign-in route already imports the exported cookie name and secure policy.
 
-**AC1:** An admitted development preview uses `authjs.session-token.preview`;
+**AC1:** An admitted development preview uses `dpf-preview.authjs.session-token`;
 ordinary portal and sandbox names stay unchanged. A lease marker alone outside
 the development class does not change production authentication.
 **AC2:** Auth.js and automation sign-in retain one cookie-name source of truth,
@@ -184,6 +184,8 @@ Ordered atomic repair plan (all delivered by BI-A8183B4B):
    ordinary development, production with stray lease marker and HTTPS policy.
 2. **ISOLATE:** Extend the existing name selection only when development class
    and the canonical nonempty preview lease marker agree; keep sandbox first.
+   The preview name must not begin with either existing session name: Auth.js
+   groups chunks by prefix, so a suffix alone does not isolate the sessions.
 3. **VERIFY:** Run auth configuration, automation sign-in, auth utilities and
    graph-related tests, both web typechecks, affected guards and exact gate.
 4. **ACCEPT:** On a governed preview, authenticate with the existing automation
@@ -194,6 +196,14 @@ Ordered atomic repair plan (all delivered by BI-A8183B4B):
 Observed Save failure in NPEL-9E16DBBD9A had no session cookie and redirected
 to /welcome without persistence. The shared cookie name is source-confirmed;
 cross-tab causality remains a hypothesis until controlled runtime verification.
+
+The first suffix-based repair passed configuration tests but the governed
+preview still lost its session on navigation. Real Auth.js session-handler
+regressions now reproduce two source failures: the portal deletes the preview
+cookie as a chunk, and simultaneous portal/preview JWTs make the portal session
+unreadable. Both fail with the suffix and pass with the separate prefix;
+legitimate preview chunking remains covered. This establishes the library
+interaction, not a new served coexistence or next-step save acceptance pass.
 No independent phase ships useful behavior, so this plan is deliberately atomic.
 Related completed BI-6B109903 concerns generated declarations; BI-10AC904B
 concerns source/dependency binding. BI-94C4722B concerns deployment renders.

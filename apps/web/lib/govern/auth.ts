@@ -96,13 +96,15 @@ export type DpfSession = {
 // Sandbox and the governed Contributor preview each get a distinct name.
 // The preview runner supplies both development class and a lease identity;
 // an ordinary dev portal or a stray production lease marker keeps its name.
+// Auth.js collects cookie chunks with startsWith(name), so the preview name
+// must not begin with the portal or sandbox name, even when otherwise unique.
 // Portal keeps the default so existing sessions survive.
 const isSandboxEnv = process.env.DPF_ENVIRONMENT === "sandbox";
 const isContributorPreview = process.env.DPF_ENVIRONMENT_CLASS === "development"
   && Boolean(process.env.DPF_PREVIEW_LEASE_ID?.trim());
 const sessionCookieName = isSandboxEnv
   ? "authjs.session-token.sandbox"
-  : isContributorPreview ? "authjs.session-token.preview" : "authjs.session-token";
+  : isContributorPreview ? "dpf-preview.authjs.session-token" : "authjs.session-token";
 
 // `secure: true` on a cookie tells the browser to drop it over plain HTTP.
 // In a self-hosted deploy, the portal can be reached three ways:
