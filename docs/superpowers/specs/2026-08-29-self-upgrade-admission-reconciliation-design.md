@@ -8,6 +8,12 @@ status: active
 **Workroom:** WC-25858CAB
 **Branch:** `fix/durable-self-upgrade-admission-and-dispatch-reco`
 
+**Proposed amendment, 2026-10-30:** original-request disposition and legacy
+uncertainty; DESIGN Workroom WC-1EDB2880 on
+`codex/upgrade-admission-disposition`. This amendment is a review proposal, not
+an implementation approval or a disposition of a historical upgrade request.
+The original Workroom, delivered source, and acceptance history remain intact.
+
 ## Problem
 
 The Upgrade Center persists a `SelfUpgradeRun` before sending the manual Inngest
@@ -55,6 +61,10 @@ failed before dispatch.
   newer-run checks as fail-closed authority boundaries.
 - **OBJ-SUA-005:** Keep one verified immutable release target available through
   a bounded transient registry failure without weakening action-time authority.
+- **OBJ-SUA-008:** Resolve an original request through a caller-owned, issuer-bound
+  read without dispatching, retrying, finalizing, or changing runtime state.
+- **OBJ-SUA-009:** Preserve historical `UNKNOWN` when genuine original provenance
+  is unavailable; prospective identities cannot settle an uncorrelated attempt.
 
 | Acceptance | Objectives | Statement | Design evidence |
 | --- | --- | --- | --- |
@@ -67,6 +77,14 @@ failed before dispatch.
 | AC-SUA-007 | OBJ-SUA-003 | A response interruption after admission still converges from server data; no local success state is treated as evidence. | Operator projection |
 | AC-SUA-008 | OBJ-SUA-004 | Emergency override remains explicit and immutable per admission; ordinary activity/quiescence preflight remains authoritative and cannot be bypassed by reconciliation. | Authority boundary |
 | AC-SUA-009 | OBJ-SUA-004, OBJ-SUA-005 | After live registry discovery agrees with a fresh successful publisher snapshot, a later transient registry failure may reuse only that exact bounded candidate; stale, conflicting, unverified, wrong-install, wrong-platform, malformed, or Git-source evidence remains unavailable. | Verified release-target fallback |
+| AC-SUA-017 | OBJ-SUA-001, OBJ-SUA-008 | Before an upgrade can be submitted, its issuer-owned original locator and immutable authority binding are durably recoverable by its authorized caller; a locator returned only after admission is insufficient. | Original-request preparation |
+| AC-SUA-018 | OBJ-SUA-002, OBJ-SUA-008 | Repeated submission of that exact locator returns its same durable outcome, including after completion; matching an active fingerprint is never original-request attribution. | Original-request transition |
+| AC-SUA-019 | OBJ-SUA-003, OBJ-SUA-008 | Exact readback returns admitted, terminal-nonadmitted, ambiguous, or unavailable and invokes no admission, finalization, reconciliation, scheduling, dispatch, lease, or runtime mutation. | Read-only disposition |
+| AC-SUA-020 | OBJ-SUA-004, OBJ-SUA-008 | Terminal non-admission requires authoritative completion of the original request and a durable barrier excluding its late admission, dispatch, and effects. Missing rows, expiry, elapsed time, or an empty history cannot establish that outcome. | Completion barrier |
+| AC-SUA-021 | OBJ-SUA-003, OBJ-SUA-009 | Unrelated latest runs, matching target/actor/time, new signatures, later success, and new fences never settle an uncorrelated historical request or clear its uncertainty. | Legacy provenance |
+| AC-SUA-022 | OBJ-SUA-004, OBJ-SUA-008 | Wrong-principal, wrong-install, malformed, or unsupported locators fail closed without revealing another caller's request; existing capabilities and grant intersections remain authoritative. | Caller-owned projection |
+| AC-SUA-023 | OBJ-SUA-003, OBJ-SUA-009 | Reload and navigation preserve exact caller-owned uncertainty; a legacy request with irrecoverable original provenance remains UNKNOWN with an accountable missing-capability disposition. | Operator projection |
+| AC-SUA-024 | OBJ-SUA-004, OBJ-SUA-009 | Present-operation eligibility is separate from historical outcome and confers no replay or waiver without its own approved operation-specific contract and actual admission. Independently authorized deployment may satisfy current delivery without settling history. | Present-operation boundary |
 
 ## Governed design-review recording contract
 
@@ -401,3 +419,257 @@ the immediately preceding failed pre-dispatch run only when every CAS predicate
 holds. Any ambiguity leaves the relation null and fails live acceptance. Served
 SHA, CAN-TEST, the successor relation, the unchanged predecessor row, and ordinary
 restart coherence are all required before downstream recovery resumes.
+
+## Proposed original-request disposition amendment — 2026-10-30
+
+### Current evidence and limits
+
+BI-CE244260 supplies the actual interrupted-click acceptance context for this
+BI-3FD07259 amendment. One logged-in operator action targeted public PR #6594,
+SHA `f63d7fbc0bac50fb09320532e6e9831944ca1f1c`, on 2026-10-26 between
+08:08 and 08:18 UTC, with emergency override off. Its response was interrupted.
+No original request, run, or client-attempt key was returned or retained. Its
+historical outcome remains `UNKNOWN`. The retained-response investigation is
+exhausted; this amendment does not authorize another search or action.
+
+At served source `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`, the relevant
+protocol is unchanged in inspected protected source
+`641248e9e8e4999c369c1c85792918f9d521f91b`:
+
+- `promotions.ts:738–795` accepts no original locator and returns a run id only
+  after admission. `admission.ts:139–155` fingerprints authority fields, not a
+  click. `run-store.ts:102–113` coalesces matching active rows only.
+- `run-store.ts:179–183,724–725` reads by a known run id; its latest-row read and
+  the paged history action do not attribute an original click.
+- `SelfUpgradeTriggerControl.tsx:205–213` clears uncertainty on a generic server
+  signature change. The swap-resilience test at lines 220–254 expects an observed
+  succeeded latest run to unlock the control without original correlation.
+- `admission.ts:351–360` reconciles by dispatching. It is a consequential recovery
+  operation, never the read-only resolver proposed here.
+
+The earlier AC-SUA-007 convergence promise therefore needs original provenance.
+This amendment narrows that promise explicitly: convergence applies only to an
+exact original request identified by issuer evidence. No historical acceptance,
+delivery receipt, successful later run, or source test is rewritten as proof of
+the uncorrelated click. OBJ-SUA-006/007 and AC-SUA-010–016 remain owned by the
+existing exact-target recovery design; their known-terminal predecessor rules
+do not apply to this case.
+
+### Original-request preparation and transition
+
+The proposed prospective protocol prepares an issuer-owned `SelfUpgradeRun`
+identity before enabling submission. A separate authenticated preparation write
+returns that opaque identity; it never admits an upgrade, sends an event, or
+starts a physical action. Preparation is not performed by a status GET or the
+disposition read. The existing single visible Upgrade now control remains the
+action surface; there is no second upgrade button or browser-generated id.
+
+The candidate representation extends `SelfUpgradeRun`, not another table or
+queue. A `prepared` lifecycle/dispatch state holds the server-issued run id,
+canonical requesting Principal, exact target/tag, force/dry-run/routine posture,
+impact identity, and existing binding fingerprint. A `not_admitted` state uses
+the same row's completion timestamp and safe reason for definitive rejection.
+The precise enum/schema migration is subject to data-model review. Dispatch
+state must be non-null for these new protocol rows: today's null-state worker
+compatibility branch returns `legacy` and must never execute a prepared intent.
+
+The issuer maintains one indexed unresolved manual intent per caller on this
+installation. Preparation retries recover that same intent; repeated reloads
+cannot accumulate reservations. The caller may carry the locator but cannot
+choose its identity, binding, owner, generation, or disposition. Changing target
+or force cannot silently replace an unresolved intent. A new intent requires an
+explicit new-operation transition from an observed closed predecessor; it does
+not reuse the old identity. Preparation must not block independently authorized
+scheduled work merely because a person viewed the page.
+
+Admission locks that exact row through the existing serialized admission
+boundary, rechecks current authority and immutable inputs, and atomically
+transitions it to the existing admitted `pending` state before any dispatch.
+Repeating its locator returns the same admitted or rejected outcome even after
+the run terminates. Another active row is a conflict, not attribution to this
+intent. Fingerprints remain binding checks; they are not request receipts.
+
+Every admission/finalization path participates in the same completion barrier.
+An issuer rejection can close the original request only after its admission
+transaction has either committed as admitted or been excluded. Once closed
+without admission, delayed ingress, suspended transactions, callbacks and queue
+consumers for that locator cannot admit, dispatch or perform effects. An expiry
+may motivate this separately governed finalization write; expiry alone cannot
+establish terminal non-admission. Readback never performs the write.
+
+Prepared and non-admitted rows are excluded from latest-*accepted*-run,
+recovery-predecessor, active-run, reconciliation and physical-worker selection.
+History labels them as requests without claiming an upgrade occurred. Legacy
+rows retain null provenance; there is no backfill from actor/target/time.
+Forward and rollback compatibility must prove older workers cannot interpret a
+new protocol row as a legacy execution. If that proof is unavailable, deployment
+of the prospective protocol remains blocked rather than assuming compatibility.
+
+### Read-only disposition and caller-owned projection
+
+Extend the existing status projector and self-upgrade MCP pack. The existing
+`get_self_upgrade_queue_status` gains an explicit original-request projection
+mode, using the same repository and existing read authority. That mode reads
+only persisted original disposition; it bypasses fresh queue/registry discovery
+and cannot invoke the admission reconciler. UI and MCP share this projection.
+No new capability or grant is implied: existing capability, token, coworker,
+tenant/install and authenticated Principal checks all remain necessary.
+
+The caller supplies its genuine opaque locator, or asks for its own unresolved
+prepared intent. A different caller's locator never grants access. A bounded
+response carries protocol version, observation time, caller-safe original
+reference when available, outcome, evidence reference/revision, and safe reason.
+Secrets, other actors' requests, internal traces, and raw failure logs are absent.
+
+| Outcome | Required evidence | Meaning |
+| --- | --- | --- |
+| `admitted` | Exact issuer-owned original-to-run binding and durable admission commit | This original request admitted that run; its lifecycle may still be pending or terminal. |
+| `terminal-nonadmitted` | Exact original-request completion record and effective exclusion of its late commit, dispatch and effects | This original request cannot later admit an upgrade. |
+| `ambiguous` | Genuine locator exists but authoritative original completion/admission is unresolved or conflicting | Keep the original action unavailable; no replay or read-triggered repair. |
+| `unavailable` | Provenance absent, inaccessible, unsupported, irrecoverable, or unverifiable | Historical outcome stays UNKNOWN; explain the missing capability without inferring rejection. |
+
+An inaccessible locator has the same safe unavailable projection as one the
+caller cannot verify; no existence oracle is exposed. Reconnect and reload use
+the caller-owned durable intent. A change in latest run, target signature,
+window, token validity, grant state or current health cannot clear original
+uncertainty. Known returned-run locking remains supported.
+
+This rehydration promise is prospective. A legacy click whose identity and
+uncertainty were never durably recorded cannot acquire a reconstructable lock
+through this repair. Its retained acceptance case remains evidence of UNKNOWN;
+the reader must report the missing provenance rather than claim to recover an
+absent record or infer a historical button state.
+
+### Legacy provenance and accountable escalation
+
+Only positive original issuer evidence can settle a legacy request:
+
+1. An authentic contemporaneous receipt or issuer record uniquely binding the
+   original ingress/request to a particular durable admission proves admitted.
+2. An authentic completion record uniquely binding the original request, together
+   with authoritative exclusion of all its late admission/dispatch/effect paths,
+   proves terminal non-admission.
+
+Either packet must identify its actual issuer, original request provenance,
+installation and actor binding, evidence integrity, completion/admission fact,
+and the basis excluding conflicting late effects. A candidate run, approximate
+time, equal target, empty query, expired token, restarted process or current
+fence is not such a packet. A current fence can establish a present safety fact;
+it cannot prove that the past request was never admitted.
+
+For the keyless 2026-10-26 click, neither packet is currently available through
+an audited supported route. Source cannot recreate evidence that was never
+retained. The accurate disposition is `unavailable`, historical `UNKNOWN`, with
+the missing original correlation attributed to BI-3FD07259 and the original
+acceptance context retained under BI-CE244260. The original operator retains
+control of any consequential action. The admission-contract owner must provide
+an actually supported issuer packet or report the capability unavailable; this
+proposal does not confer privileged log, DB, credential, or alternate-actor access.
+
+### Present-operation boundary and options
+
+Current-operation eligibility and historical outcome are separate facts. The
+current source contains no waiver for this unknown request. The options are:
+
+| Option | Effect boundary | Actual prerequisite |
+| --- | --- | --- |
+| Preserve no replay; observe independently authorized deployment | Current bytes/effective configuration may converge while the original outcome remains UNKNOWN. | Normal existing deployment authority and current functional evidence. This amendment adds no deployment request. |
+| Read genuine original issuer proof if a route becomes available | Settle only the exact original request supported by that proof. | An actual supported read route and packet satisfying the legacy proof above; none is presently established. |
+| Consider a separate present-operation contract | Keep history UNKNOWN while judging one named new operation on its own evidence. | Independent approved scope, exact actor/target/action/force posture, technical exclusion of conflicting old effects, expiry/stop rules, recorded accountable human authority, and actual operation admission. No such contract is approved here. |
+
+The third option is not a retry permission, a requested human rubber stamp, or
+an implementation task admitted by this amendment. The following proposed
+contract makes its current-case requirements reviewable. Missing old correlation
+cannot be cured by calling a new request safe. Root's no-replay boundary remains
+in force. No force, abort, reload, latch reset, alternative actor, MCP fallback,
+provider, credential, host or runtime change is authorized.
+
+If independently authorized deployment supplies the required current bytes and
+effective setting, root may verify the local-inference objective under its
+existing authority. Future admission hardening then remains this BI's work; it
+does not become a new universal native or overall completion gate. A source PASS
+never settles the historical click or fabricates BI-CE244260 acceptance.
+
+### Proposed one-operation eligibility contract — not approved
+
+The candidate operation is **one new normal Upgrade now admission by the
+original logged-in operator on the same installation**, with emergency override
+off. Its purpose is to serve the protected repair/configuration needed for
+native registration and local-inference acceptance. It is a distinct operation;
+the 2026-10-26 click remains UNKNOWN and is never submitted again, assigned the
+new locator, or marked superseded/failed/nonexecuted.
+
+| Bound fact | Required value before this candidate could be admitted |
+| --- | --- |
+| Historical subject | BI-CE244260 original 2026-10-26 click, old target f63d7fbc0bac50fb09320532e6e9831944ca1f1c, UNKNOWN retained unchanged. |
+| Actor | The original authenticated human operator, through root's existing logged-in portal control; the issuer resolves and records its actual Principal and installation. No delegation to this design agent, MCP fallback, or borrowed credential. |
+| New target | One canonical publisher-verified immutable release tag, protected source SHA and image digest, freshly signed for that actual installation. It must contain the protected repair required by BI-EEFCB232/PR #6757 and the certificate repair already delivered through PR #6754, without guessing a future squash SHA or tag. |
+| Actual target at this freeze | **Unbound.** PR #6757 source head 36494302add2e21c5051b74f21aaaed222a49578 is review/gate evidence, not a canonical release target or deployment identity. A later release cannot be silently inserted into this frozen proposal. |
+| Action and posture | Normal single Upgrade now action; requestedForce=false; no force/abort/restart/Compose/provider/model/issuer/grant changes. Existing target, quiescence, window/recovery, rollback and protected deployment checks all remain authoritative. |
+| Present effect exclusion | Positive issuer evidence that no prior request can later commit, dispatch or cause a conflicting physical effect, and no unresolved physical effect is already running. A new current fence alone says nothing about historical outcome. |
+| Recovery/rollback | The normal pipeline's pre-update recovery point and source-bound rollback contract. No extra manual swap or restore is authorized if it fails; retain its new exact identity and stop for its supported recovery disposition. |
+| Lifetime | Exact one-operation identity and issuer-bound current target/authority revision; expire on target, actor, authority, fence, activity, override or runtime change. Expiry grants no retry. |
+| Recorded decision | Independent approval of this contract under BI-3FD07259's actual spec-approval/architecture gates, then an accountable human authorization explicitly covering this distinct present action while retaining the old UNKNOWN, followed by the operation's own actual admission. Existing messaging/continuation authority is not that exception. |
+
+The technical exclusion is a positive precondition, not a claim that it exists.
+A possible prospective mechanism is a server-owned monotonic admission/effect
+epoch checked by **every** commit, dispatcher and physical worker, including
+legacy/keyless ingress. Establishing it is a separately governed write with
+mixed-version proof: an old process, queued consumer or already-running
+promoter that ignores it defeats the exclusion. Closing known database rows or
+observing no current rows does not provide that proof. An epoch may prevent
+future effects while still leaving past admission UNKNOWN.
+
+The currently served source has no approved operation-specific epoch/eligibility
+writer or receipt. Installing one through the very unknown manual operation is
+circular and does not satisfy its own precondition. This proposal therefore
+does not make the candidate executable on the current runtime. If no supported
+issuer proof or enforceable exclusion can be established, the result remains a
+specific missing capability, not a generic request to approve the next phase.
+The source owner is BI-3FD07259/WC-1EDB2880; independent design/spec approval
+owns this proposed exception contract, and the original human operator owns the
+consequential authorization and eventual action. Root independently reviews the
+frozen proposal before either gate is requested. The existing independent
+restoration design BI-7A4E70E9 is not an executable alternative merely because
+its preparation exists.
+
+No target has been rebound, human exception approved, present eligibility
+receipt issued, or new upgrade requested by writing this section. If an
+independently authorized automatic deployment first supplies current bytes and
+effective dispatch=1, verify that current outcome and retire this candidate as
+unneeded; preserve the historical UNKNOWN and the BI-3FD07259 future hardening.
+
+### Amendment research and alignment
+
+The existing research remains applicable. Primary sources rechecked 2026-10-30:
+
+- [HTTP Semantics, RFC 9110 §9.2.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.2.2):
+  adopt the distinction between retry semantics and knowledge that a request was
+  applied; reject automatic replay of an unclassified consequential request.
+- [Temporal workflow and run identity](https://docs.temporal.io/workflow-execution/workflowid-runid):
+  adopt explicit original execution identity separate from a later/current run;
+  retain DPF's canonical model and reject a new workflow-engine dependency.
+- [Inngest idempotency](https://www.inngest.com/docs/durable-execution/guides-and-advanced/idempotency):
+  retain a stable business occurrence and consumer effect guard; its 24-hour
+  producer deduplication does not provide historical original-request proof.
+- [AWS StartExecution](https://docs.aws.amazon.com/step-functions/latest/apireference/API_StartExecution.html):
+  adopt stable identity plus bound input and explicit closed-execution behavior;
+  do not treat its finite name-reuse interval as permanent exactly-once proof.
+
+This repairs the existing admission contract rather than introducing a feature
+or provider. Deployment contracts 3 (lifecycle), 4 (Authority Core identity), and
+10 (client/API governance) apply. Canonical Principal ownership and
+`SelfUpgradeRun` remain authoritative. All reads are indexed exact-key or a
+bounded caller-owned unresolved slot; history keeps cursor pagination. The
+existing low-volume upgrade lane and EP-BUILD-A4A726 own the scale boundary.
+
+### Ordered amendment work and review boundary
+
+The linked existing plan carries the ordered work, risks, tests and coverage
+status. This frozen proposal is DESIGN only. Root independently reviews its
+exact immutable source before any implementation; normal research, scope,
+independent design/architecture, plan coverage, funding, publication and runtime
+gates still apply. The claimed shape stays Large because the intended contract
+controls access and consequential operation eligibility, even though this
+proposal's actual diff changes only two documentation files. No paid/native
+review dispatch or new spending allowance is included.

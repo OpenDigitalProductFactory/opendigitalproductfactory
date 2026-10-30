@@ -8,6 +8,10 @@ status: active
 **Workroom:** WC-25858CAB
 **Branch:** `fix/durable-self-upgrade-admission-and-dispatch-reco`
 
+**Proposed amendment, 2026-10-30:** original-request disposition under DESIGN
+Workroom WC-1EDB2880, `codex/upgrade-admission-disposition`. The appended work
+is proposed sequencing, not implementation permission or historical settlement.
+
 ## Outcome
 
 One server-issued `SelfUpgradeRun` identity survives response loss, delayed queue
@@ -263,3 +267,110 @@ Traceability for `exact-target-never-dispatched-recovery`:
 - flows: watchdog-terminal-observation, authenticated-recovery-admission,
   successor-dispatch, worker-claim, live-status-observation; and
 - verification: AC-SUA-010, AC-SUA-011, AC-SUA-012, AC-SUA-013, AC-SUA-014.
+
+## Proposed original-request disposition amendment — 2026-10-30
+
+This amendment implements no runtime change. The canonical specification is the
+2026-10-30 proposed section in the existing admission-reconciliation design.
+BI-3FD07259 remains the implementation owner; BI-CE244260 retains the original
+2026-10-26 interrupted-click acceptance evidence. No new carrier, replacement
+acceptance, peer evidence transfer, or earlier review/budget reuse is proposed.
+
+The specification also freezes a concrete, **unapproved** current-operation
+option: one distinct normal action by the original operator, force off, only
+after exact canonical target binding, positive old-effect exclusion, independent
+contract approval, accountable human authorization, and actual operation
+admission. Its release target is currently unbound; source head
+36494302add2e21c5051b74f21aaaed222a49578 is not substituted for a canonical
+release. The served runtime has no approved exclusion/eligibility writer, and
+upgrading it to establish its own precondition would be circular. The owning
+design decision remains BI-3FD07259's spec-approval/architecture lane; the
+original operator retains the physical action. This names the missing capability
+without inventing a runnable exception or asking for generic phase consent.
+
+The normal DESIGN claim initially returned `federated_twin_in_progress`: this
+item is a mirror of `inst_5825a80201e7476e978622b78dcd04ba`, with inactive peer
+claim and zero Workrooms. The supported deliberate co-claim recorded that fact
+and its bounded design-only reason, then admitted WC-1EDB2880 through
+IRD-7E176ECB9E4B. It declared `delivery-large@1.0.0`; the automatic sensitivity
+at claim was low because only document edits were present. The intended runtime
+contract is access-control work and retains Large. The claim separately reported
+`funding-organization-unresolved`; it supplied no new budget or review dispatch.
+
+### Ordered work, conditional on actual admission
+
+| Step | Deliverable and touched surface | Verification and boundary |
+| --- | --- | --- |
+| 1 | Freeze this two-document proposal, preserve the existing source/history, and obtain root's independent review of the exact head. Refresh the same Workroom's actual normal readiness after binding that head. | Document/index checks; record exact returned gates or refusal. No self-issued approval, paid/native review dispatch, or implementation. |
+| 2 | Before runtime edits, obtain the required independent design/architecture disposition, current research and scope baseline, implementation coverage, funding-owner resolution, and actual implementation admission on this same BI/room. Declare the actual runtime edit paths and consume their refreshed impact contract. | Existing gates decide their own evidence requirements. A source read is design evidence; no unrun failing-to-passing test is called research PASS. Root review does not mint an initiative receipt. |
+| 3 | Extend the existing SelfUpgradeRun lifecycle with issuer-prepared and definitively non-admitted states plus canonical Principal ownership; use its run id as original locator. Keep historical provenance null. | First failing persistence/race tests: preparation response loss, single caller slot, exact-id retry after terminal completion, another active row, target/force drift, and late ingress racing closure. Additive migration must work with legacy data. No old row is relabelled settled. |
+| 4 | Extend admission.ts/run-store.ts and existing manual/request boundaries so admission and rejection serialize on that original row; retain the existing admitted dispatch/worker CAS. | Prove committed admission precedes dispatch, permanent same-original idempotence, closure excludes late commit/send/effects, and new non-executable rows cannot enter any legacy worker path. Test mixed-version/rollback behavior before deployment approval. |
+| 5 | Extend the existing status projector/self-upgrade MCP pack with exact original-request read mode and caller-owned safe response. Reuse view_operations and the existing authorized read scope; do not mint a grant. | Deny wrong principal/install and forged/unsupported provenance. Assert zero writes, finalization, schedule, lease, reconciliation, network discovery or event sends in disposition mode. All four outcomes require their specified evidence. |
+| 6 | Update the existing Upgrade Center control/status provider for preparation, exact disposition and reload-safe uncertainty. Replace the swap-resilience assertion that an unrelated succeeded latest run clears uncertainty. Preserve known-returned-run locking. | Interrupted replies before/after commit and scheduling; same target/actor/time, other actor, unrelated terminal run and signature changes cannot unlock. Legacy no-key case stays unavailable/UNKNOWN. No second upgrade button. |
+| 7 | Run affected unit/component tests, package typechecks, migration/data-impact, UI/accessibility and normal publication checks. Use the canonical/shared governed runtime for runtime evidence. | Consume every future testImpact and guardObligation; exact-tree evidence and all protected PR/merge checks remain mandatory. Infrastructure/refused checks are unrun, not PASS. |
+| 8 | Verify the prospective protocol on served exact bytes under a separately admitted test operation, with one issuer locator, truthful disposition and at most one physical upgrade. | This verifies the new protocol only. It does not replay or settle root's original click, clear its latch, change a provider/runtime, or manufacture BI-CE244260 acceptance. |
+
+Steps 3–6 form one prospective safety boundary: isolated identity preparation,
+readback, or UI unlock is not independently safe to ship. Steps 1–2 are planning
+and review, not delivery of a new runtime feature. If current independent
+deployment completes the root objective, do not promote steps 3–8 into a new
+universal native/overall completion requirement.
+
+### Expected source and impact
+
+Only these two canonical Markdown files are edited by this proposal. Their
+current scope impact contract is resolved, with no runtime testImpact or
+guardObligation, and requires `node scripts/gen-doc-index.mjs --check` for the
+derived document index. The worktree is source-only until managed readiness
+proves otherwise; no bare install or root-clone compile is permitted.
+
+If implementation is admitted, inspect and claim the existing paths before
+editing: `packages/db/prisma/schema/build-delivery.prisma`, its new forward-only
+migration and data-impact record; `apps/web/lib/self-upgrade/admission.ts`,
+`run-store.ts`, `request.ts` and their tests;
+`apps/web/lib/actions/promotions.ts` and self-upgrade tests;
+`apps/web/lib/mcp/packs/self-upgrade-pack.ts` and consumer/authorization tests;
+`apps/web/components/ops/SelfUpgradeTriggerControl.tsx`, its admission-lock and
+swap-resilience suites, and the existing status provider; and the existing
+worker/projection readers identified by the refreshed graph and blast-radius
+review. Access-control and migration impact must be measured from that real
+diff; this list does not claim those files or authorize editing another room.
+
+### Coverage and unresolved approval
+
+- Parent and proposed atomic mapping: BI-3FD07259.
+- Canonical artifact: this existing plan; the ordered fix design is the existing
+  `docs/superpowers/specs/2026-08-29-self-upgrade-admission-reconciliation-design.md`.
+- New amendment receipt: **not recorded**. Earlier coverage and review history
+  are preserved and do not approve this amendment. Normal readiness must supply
+  the current baseline/reviewer route before coverage can be claimed complete.
+- Atomic rationale: the original locator, permanent same-original outcome,
+  completion barrier, authorized read and uncertainty projection jointly prevent
+  replay and false attribution. A partial runtime shipment breaks that contract.
+- Requirement refs: OBJ-SUA-001, OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004,
+  OBJ-SUA-008, OBJ-SUA-009.
+- Contract refs: original-request-preparation, original-request-transition,
+  read-only-disposition, completion-barrier, caller-owned-projection,
+  legacy-provenance, present-operation-boundary.
+- Flow refs: prepare-before-submit, original-admit-or-close, exact-disposition-read,
+  reload-original-intent, legacy-unavailable, independent-current-delivery.
+- Verification refs: AC-SUA-017, AC-SUA-018, AC-SUA-019, AC-SUA-020,
+  AC-SUA-021, AC-SUA-022, AC-SUA-023, AC-SUA-024.
+
+### Risks, rollback and stop condition
+
+The largest risks are falsely attributing an unrelated run, calling a timed-out
+request rejected, and executing a prepared row through legacy compatibility.
+The plan requires race, negative-attribution and mixed-version tests before
+implementation delivery. An additive migration preserves historical rows.
+Rollback must keep new request states non-executable; if an older reader/worker
+cannot uphold that boundary, use a protected forward repair rather than a
+rollback that reopens requests. Never delete an uncertainty record to recover.
+
+The source-design task stops at a frozen reviewable head and the actual next
+gate/refusal. Root must independently review that head; the normal issuer must
+provide any required design/architecture, research, coverage and funding
+admission before implementation. None of those gates can reconstruct root's
+lost original provenance. The present-operation options and missing issuer
+proof remain exactly as stated in the specification; no current upgrade waiver
+is requested or granted by this plan.
