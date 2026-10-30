@@ -20,7 +20,7 @@ The local provider is pre-configured and activates automatically when Docker Mod
 
 ### Pausing local AI
 
-Choose **Pause now** beside Docker Model Runner or Ollama to stop new local-model requests immediately. The pause lasts until you resume it. It persists across refreshes, health checks, and service restarts. Requests already running may finish; new dispatches stay blocked, including requests selected before the pause that have not started yet.
+Choose **Pause now** beside Docker Model Runner or Ollama to stop new local-model requests immediately. The pause lasts until you resume it. It persists across refreshes, health checks, and service restarts. Requests already running may finish; new dispatches stay blocked, including requests selected before the pause that have not started yet. This includes embedding requests and their retries: knowledge indexing and semantic retrieval may defer while local AI is paused. Model-list health checks continue without running inference. A paused provider can still be reachable; a routing pause does not mean it needs setup or has disconnected.
 
 After pausing, choose **Set resume time** and enter a positive duration in hours or days. The control shows the exact resume date and time in your browser's timezone. You can choose **Resume now**, **Change pause**, or **Until I resume it** at any time. Changing a pause cancels the authority of its previous timer.
 

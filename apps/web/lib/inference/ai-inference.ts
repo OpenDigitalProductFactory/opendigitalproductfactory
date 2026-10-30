@@ -25,7 +25,7 @@ import {
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import type { ChatMessage, ToolCallEntry } from "../routing/chat-message-types";
-import { resolveRuntimeConnectionStatus } from "../routing/provider-suitability/onboarding-recommendation";
+import { readEnabledRoutingProvider } from "./provider-routing-admission";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
@@ -176,39 +176,6 @@ async function resolveExecutionBaseUrl(
     return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
   }
   return provider.baseUrl ?? provider.endpoint;
-}
-
-async function readEnabledRoutingProvider(providerId: string) {
-  if (!isLocalProviderId(providerId)) {
-    const [connection, lifecycle] = await Promise.all([
-      prisma.aiProviderConnection.findUnique({
-        where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
-      }),
-      prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
-    ]);
-    // Legacy direct callers can predate the default account. An existing account
-    // and provider lifecycle both remain authoritative after admission. Resuming
-    // an operator pause must not clear an independent automatic provider hold.
-    const effectiveStatus = lifecycle
-      ? connection ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : lifecycle.status
-      : connection?.status;
-    if ((connection || lifecycle) && !["active", "degraded"].includes(effectiveStatus ?? "")) {
-      throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
-    }
-    return null;
-  }
-  const [provider, connection] = await Promise.all([
-    prisma.modelProvider.findUnique({ where: { providerId } }),
-    prisma.aiProviderConnection.findUnique({
-      where: { connectionId: `provider-default-${providerId}` },
-      select: { status: true },
-    }),
-  ]);
-  if (!provider || !["active", "degraded"].includes(provider.status)
-    || !connection || !["active", "degraded"].includes(connection.status)) {
-    throw new InferenceError("Local provider is not enabled for routing", "provider_error", providerId);
-  }
-  return provider;
 }
 
 // ─── Tool Call Extraction & Message Formatting ──────────────────────────────

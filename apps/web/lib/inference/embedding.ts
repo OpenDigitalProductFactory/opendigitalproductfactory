@@ -4,6 +4,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // barrier, so a local copy would leave js/log-injection unbroken.
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
+import { readEnabledRoutingProvider, ProviderRoutingDeferredError } from "./provider-routing-admission";
 import { providerInferenceFetch } from "./provider-inference-transport";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
@@ -71,24 +72,10 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
 }
 
 /**
- * Why a detailed variant exists (BI-339C441F root cause).
- *
- * generateEmbedding() collapses every unhappy path to null, and one of those
- * paths is not a failure at all. Embeddings are produced by the LOCAL provider,
- * so this function first calls assertLocalProviderCapacityAvailable(), which
- * throws LocalProviderCapacityDeferredError whenever a local-integration-ci
- * lease is active or queued. The catch turned that into null, callers turned
- * null into an empty result, and the platform reported "nothing matched".
- *
- * The effect is broad and was mistaken for an outage: while ANY session holds
- * or queues the single local-CI slot, every embedding consumer on the install
- * degrades at once — knowledge search, wiki/principle similarity, document
- * embeddings, and WWWD stance retrieval. The embedding backend is healthy the
- * whole time.
- *
- * `deferred` is a retryable capacity state and must never be reported as
- * "no results" or as a model failure. Callers that can wait should retry;
- * callers that cannot must say which one they hit.
+ * Keep retryable routing/capacity holds distinct from backend failures. Query
+ * callers can report deferred retrieval instead of falsely reporting no match.
+ * Operator pauses apply even though embeddings do not reserve the local-CI
+ * compute slot (BI-0AA939DF, DI-7F674966B4B2; BI-1FB1C9B5).
  */
 export type EmbeddingResult =
   | { status: "ok"; embedding: number[] }
@@ -120,16 +107,16 @@ export async function generateEmbeddingDetailed(
   ];
 
   try {
-    // BI-0AA939DF / DI-7F674966B4B2: no host-capacity check here. Measured at
-    // 10-20ms whether or not a local-CI gate holds the slot, with no observable
-    // effect on the gate — so gating it only suppressed retrieval platform-wide
-    // for the duration of every gate run. The `deferred` branch below is kept
-    // for any caller that still raises the error; nothing here raises it now.
+    // Operator intent is checked per attempt below. Embeddings remain exempt
+    // from the host-capacity reservation so ordinary verification does not
+    // suppress retrieval platform-wide.
 
     for (let attempt = 0; attempt < lengths.length; attempt++) {
       const limit = lengths[attempt]!;
       const truncated = text.slice(0, limit);
 
+      // Each retry is a new dispatch: re-read operator intent immediately.
+      await readEnabledRoutingProvider("local");
       const res = await providerInferenceFetch(`${baseUrl}/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,6 +166,9 @@ export async function generateEmbeddingDetailed(
   } catch (e) {
     // A capacity deferral is NOT a failure — reporting it as one is what made
     // a busy host look like a broken embedding model.
+    if (e instanceof ProviderRoutingDeferredError) {
+      return { status: "deferred", reason: e.reason };
+    }
     if (e instanceof LocalProviderCapacityDeferredError) {
       console.warn(`[embedding] deferred — ${e.reason}`);
       return { status: "deferred", reason: e.reason };
