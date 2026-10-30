@@ -140,7 +140,7 @@ async function packagedFixture(t, { reply, source = true, helper = true, legacyH
     rmSync(absolute, { recursive: true, force: true, maxRetries: 3 });
   });
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-    !/^(?:DPF_MCP_|DPF_SESSION_REF$|CODEX_SESSION_ID$|CODEX_THREAD_ID$|CLAUDE_SESSION_ID$|GIT_)/i.test(key)));
+    !/^(?:DPF_MCP_|DPF_WORKTREE_BREAK_GLASS$|DPF_SESSION_REF$|CODEX_SESSION_ID$|CODEX_THREAD_ID$|CLAUDE_SESSION_ID$|GIT_)/i.test(key)));
   Object.assign(env, { HOME: home, USERPROFILE: home,
     GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: "1",
     DPF_MCP_CLIENT_CREDENTIALS_FILE: join(home, "absent-client.json"),

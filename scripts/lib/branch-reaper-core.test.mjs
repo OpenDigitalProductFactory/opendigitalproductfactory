@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { classifyBranches, stashCensus, summarizeBranchDecisions } from "./branch-reaper-core.mjs";
+import { classifyBranches, stashCensus, summarizeBranchDecisions, mergedPullRequestHeads, openPullRequestBranches } from "./branch-reaper-core.mjs";
 
 const base = {
   branches: [],
@@ -60,5 +60,30 @@ describe("stashCensus", () => {
     const listing = [`stash@{0}\t${at(1)}`, `stash@{1}\t${at(10)}`, `stash@{2}\t${at(45)}`, "garbage"].join("\n");
     assert.deepEqual(stashCensus(listing, now), { count: 3, olderThan7Days: 2, olderThan30Days: 1, oldestDays: 45 });
     assert.deepEqual(stashCensus("", now), { count: 0, olderThan7Days: 0, olderThan30Days: 0, oldestDays: null });
+  });
+});
+
+describe("PR evidence completeness and main provenance", () => {
+  const row = { headRefName: "feat/proof", headRefOid: "a".repeat(40), baseRefName: "main", mergeCommit: { oid: "b".repeat(40) } };
+  it("accepts squash proof only when its main merge is reachable", () => {
+    const observed = [];
+    const heads = mergedPullRequestHeads([row], sha => { observed.push(sha); return true; });
+    assert.equal(heads.get(row.headRefName)?.has(row.headRefOid), true);
+    assert.deepEqual(observed, [row.mergeCommit.oid]);
+  });
+  for (const change of [{ baseRefName: "feat/staging" }, { mergeCommit: null }, { mergeCommit: { oid: "not-an-object" } }]) {
+    it(`rejects unproven main delivery ${JSON.stringify(change)}`, () => {
+      assert.equal(mergedPullRequestHeads([{ ...row, ...change }], () => true).size, 0);
+    });
+  }
+  it("keeps a squash whose merge is not reachable from main", () => {
+    assert.equal(mergedPullRequestHeads([row], () => false).size, 0);
+  });
+  it("refuses saturated or malformed open inventories instead of assuming completeness", () => {
+    assert.equal(openPullRequestBranches([{ headRefName: "one" }, { headRefName: "two" }], 2), null);
+    assert.equal(openPullRequestBranches([{}]), null);
+    assert.equal(openPullRequestBranches({}), null);
+    assert.deepEqual([...openPullRequestBranches([{ headRefName: "one" }], 2)], ["one"]);
+    assert.deepEqual([...openPullRequestBranches([])], []);
   });
 });

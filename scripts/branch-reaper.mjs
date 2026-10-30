@@ -31,7 +31,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs as utilParseArgs } from "node:util";
 
-import { classifyBranches, stashCensus, summarizeBranchDecisions } from "./lib/branch-reaper-core.mjs";
+import { classifyBranches, stashCensus, summarizeBranchDecisions, mergedPullRequestHeads, openPullRequestBranches } from "./lib/branch-reaper-core.mjs";
 import { runGit as runGitShared } from "./lib/git.mjs";
 import { loadActiveWorkroomPaths } from "./lib/worktree-liveness.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
@@ -70,8 +70,9 @@ async function gatherFacts(root) {
       const [name, tip] = line.split("\t");
       return { name, tip };
     });
+  const worktreeInventory = runGit(["worktree", "list", "--porcelain"], root);
   const worktreeBranches = new Set(
-    lines(runGit(["worktree", "list", "--porcelain"], root).stdout)
+    lines(worktreeInventory.stdout)
       .filter((line) => line.startsWith("branch refs/heads/"))
       .map((line) => line.slice("branch refs/heads/".length)),
   );
@@ -79,18 +80,18 @@ async function gatherFacts(root) {
   const ancestorMerged = new Set(lines(runGit(["branch", "--merged", "origin/main", "--format=%(refname:short)"], root).stdout));
 
   const open = ghJson(["pr", "list", "--state", "open", "--limit", "1000", "--json", "headRefName"]);
-  const merged = ghJson(["pr", "list", "--state", "merged", "--limit", "20000", "--json", "headRefName,headRefOid"]);
-  const mergedPrHeads = new Map();
-  for (const row of merged ?? []) {
-    if (!row?.headRefName || !row?.headRefOid) continue;
-    if (!mergedPrHeads.has(row.headRefName)) mergedPrHeads.set(row.headRefName, new Set());
-    mergedPrHeads.get(row.headRefName).add(row.headRefOid);
-  }
+  const merged = ghJson(["pr", "list", "--state", "merged", "--base", "main", "--limit", "20000", "--json", "headRefName,headRefOid,baseRefName,mergeCommit"]);
+  // Enumerate reachable history once. Missing shallow history is conservative:
+  // an absent merge cannot establish delivery, and is never guessed from a title.
+  const history = runGit(["rev-list", "origin/main"], root);
+  const mainCommits = new Set(history.ok ? lines(history.stdout) : []);
+  const mergedPrHeads = mergedPullRequestHeads(merged, sha => mainCommits.has(sha));
+  const openBranches = openPullRequestBranches(open);
 
   // Branches are all the reaper needs; skipping per-room path reads keeps the
   // observation inside its read budget on an install with hundreds of rooms.
   // A scheduled sweep can wait for a large install's full observation.
-  const rooms = await loadActiveWorkroomPaths({ resolvePaths: false, readBudgetMs: 900_000 });
+  const rooms = await loadActiveWorkroomPaths({ resolvePaths: false, requireBranches: true, readBudgetMs: 900_000 });
   const pinFile = path.join(path.resolve(root, runGit(["rev-parse", "--git-common-dir"], root).stdout), "dpf-branch-pins");
   const pinned = new Set(existsSync(pinFile) ? lines(readFileSync(pinFile, "utf8")).map((l) => l.trim()) : []);
 
@@ -101,15 +102,15 @@ async function gatherFacts(root) {
       currentBranch: current.ok ? current.stdout : null,
       ancestorMerged,
       mergedPrHeads,
-      openPrBranches: new Set((open ?? []).map((row) => row.headRefName).filter(Boolean)),
+      openPrBranches: openBranches ?? new Set(),
       liveRoomBranches: rooms.activeBranches ?? new Set(),
       // An unreadable open-PR list is as unsafe as an unreadable Workroom read.
-      ownershipAvailable: rooms.available && open !== null,
+      ownershipAvailable: rooms.available && openBranches !== null && worktreeInventory.ok,
       pinned,
     },
     notes: {
       workrooms: rooms.reason,
-      openPrs: open === null ? "unavailable" : `${open.length} open`,
+      openPrs: openBranches === null ? "unavailable or incomplete" : `${open.length} open`,
       mergedPrs: merged === null ? "unavailable (ancestry only)" : `${merged.length} merged`,
     },
   };

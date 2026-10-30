@@ -72,3 +72,24 @@ export function stashCensus(listing, now) {
     oldestDays: ages.length ? Math.floor(Math.max(...ages)) : null,
   };
 }
+
+/** Reduce provider rows into the branch proof consumed by classification. */
+export function mergedPullRequestHeads(rows, isMergeOnMain = () => false) {
+  const heads = new Map();
+  for (const row of rows ?? []) {
+    if (row?.baseRefName !== "main" || typeof row.headRefName !== "string" || !row.headRefName
+      || !/^[0-9a-f]{40}$/i.test(row.headRefOid ?? "")
+      || !/^[0-9a-f]{40}$/i.test(row.mergeCommit?.oid ?? "")
+      || !isMergeOnMain(row.mergeCommit.oid)) continue;
+    if (!heads.has(row.headRefName)) heads.set(row.headRefName, new Set());
+    heads.get(row.headRefName).add(row.headRefOid);
+  }
+  return heads;
+}
+
+/** A null inventory keeps deletion closed. */
+export function openPullRequestBranches(rows, limit = 1000) {
+  if (!Array.isArray(rows) || rows.length >= limit
+    || rows.some(row => typeof row?.headRefName !== "string" || !row.headRefName.trim())) return null;
+  return new Set(rows.map(row => row.headRefName));
+}

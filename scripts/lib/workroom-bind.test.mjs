@@ -512,3 +512,19 @@ test("a refusal carries the server's error code", async () => {
   assert.equal(r.status, "refused");
   assert.equal(r.code, "worktree_provision_not_admitted");
 });
+
+for (const code of ["mcp_authentication_failed", "mcp_authorization_failed"]) {
+  test(`typed ${code} is refused rather than eligible for break-glass`, async () => {
+    let calls = 0, writes = 0;
+    const result = await bindWorktreeToWorkroom({
+      branch: "fix/denied", worktreePath: "/wt/denied", gitDir: "/git", repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "fixture", DPF_WORKTREE_BREAK_GLASS: "fixture recovery" },
+      call: async () => { calls++; throw Object.assign(new Error("HTTP refusal"), { code }); },
+      writeMarker: () => { writes++; },
+    });
+    assert.equal(result.status, "refused");
+    assert.equal(result.code, code);
+    assert.equal(calls, 1);
+    assert.equal(writes, 0);
+  });
+}

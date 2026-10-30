@@ -257,6 +257,11 @@ export async function bindWorktreeToWorkroom({
         timeoutMs: BIND_TIMEOUT_MS,
       });
     } catch (err) {
+      // HTTP denials prove the authority answered; recovery must not treat
+      // them as an outage and enter the provisioning break-glass path.
+      if (["mcp_authentication_failed", "mcp_authorization_failed"].includes(err?.code)) {
+        return { status: "refused", code: err.code, reason: "The existing MCP identity was refused; use its governed credential or grant remedy." };
+      }
       return { status: "unavailable", reason: err?.message ?? String(err) };
     }
     if (!(payload?.success === false || payload?.error)) {
