@@ -95,14 +95,12 @@ async function readEnvSnapshot(path) {
   catch (error) { if (error?.code === "ENOENT") return { bytes: null, identity: null }; throw error; }
   try {
     const snapshot = await readEnvDescriptor(handle);
-    // Bind the inspected descriptor to a fresh observation of the pathname.
-    // Hard-link aliases are supported; this is not an exclusive-writer lock.
-    const current = await open(path, ENV_READ_FLAGS);
-    try {
-      if (!sameEnvVersion(snapshot.identity, await current.stat({ bigint: true }))) {
-        throw new Error("remote_action_dispatch_input_changed");
-      }
-    } finally { await current.close(); }
+    // Observe only pathname metadata after the descriptor-owned read: do not
+    // reopen a separately checked path. Hard-link aliases remain supported.
+    const current = await lstat(path, { bigint: true });
+    if (!current.isFile() || current.isSymbolicLink() || !sameEnvVersion(snapshot.identity, current)) {
+      throw new Error("remote_action_dispatch_input_changed");
+    }
     return snapshot;
   } finally { await handle.close(); }
 }
