@@ -622,6 +622,18 @@ push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
 
+The separate `hostPreflight` observation identifies the retained host-guard
+attempt, its accountable process owner, last progress, missing proof and next
+action. It never changes the integration verdict or authorizes another run.
+For an abandoned controller with matching strong receipt/lock ownership, use
+`pnpm run pregate:status -- --reconcile-host-receipt` (add `--json` for structured
+output). This records an inconclusive disposition and preserves the original
+heartbeat and observations. It does not invent a child result or remove the
+original execution lock. Resolve child outcome and descendant ownership through
+the accountable executor before seeking new admission. Live, legacy, reused-PID,
+unreadable or changed ownership stays unknown and untouched; a foreign mutation
+lock is also retained. Normal status reads never reconcile automatically.
+
 **Queued and broken read differently (BI-277ECBDB).** A queued claim reads
 `queued behind N other claims`: it is waiting on other work, and its waiter runs
 it. Before claiming, the gate probes every slot's PostgreSQL container
