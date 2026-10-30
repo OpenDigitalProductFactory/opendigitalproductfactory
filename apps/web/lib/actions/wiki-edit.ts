@@ -3,8 +3,9 @@
 // writer is internal server code, never a callable client action.
 import { requireUser } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
-import { saveWikiOverlayEditForActor, type SaveWikiOverlayEditInput, type SaveWikiOverlayEditResult } from "@/lib/wiki/save-overlay.server";
-export type { SaveWikiOverlayEditInput, SaveWikiOverlayEditResult } from "@/lib/wiki/save-overlay.server";
+import { saveWikiOverlayEditForActor, type SaveWikiOverlayEditInput as OverlayInput, type SaveWikiOverlayEditResult as OverlayResult } from "@/lib/wiki/save-overlay.server";
+export type SaveWikiOverlayEditInput = OverlayInput;
+export type SaveWikiOverlayEditResult = OverlayResult;
 
 export async function saveWikiOverlayEdit(input: SaveWikiOverlayEditInput): Promise<SaveWikiOverlayEditResult> {
   try {
