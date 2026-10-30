@@ -18,9 +18,14 @@ export const subscriptionOAuthRenewal = jobs.createFunction(
   async ({ step }) => {
     const gate = await gateAtEntry(step, SUBSCRIPTION_OAUTH_RENEWAL_FUNCTION_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
-    return step.run("renew-subscription-sign-ins", async () => {
+    const renewal = await step.run("renew-subscription-sign-ins", async () => {
       const { runSubscriptionOAuthRenewal } = await import("@/lib/inference/subscription-oauth-renewal");
       return runSubscriptionOAuthRenewal();
     });
+    const recovery = await step.run("recheck-commissioned-subscription-capacity", async () => {
+      const { runSubscriptionQuotaRecovery } = await import("@/lib/inference/subscription-quota-recovery");
+      return runSubscriptionQuotaRecovery();
+    });
+    return { renewal, recovery };
   },
 );

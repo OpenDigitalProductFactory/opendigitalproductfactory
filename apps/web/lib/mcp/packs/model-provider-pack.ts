@@ -314,6 +314,13 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
   const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
   if (!connection || (providerId && providerId !== connection.providerId)) return { success: false, error: "Provider account not found", message: "Provider account not found" };
   switch (params.operation) {
+    case "recheck-quota": {
+      const { recheckSubscriptionQuota } = await import("@/lib/inference/subscription-quota-recovery");
+      if (typeof params.modelId !== "string" || !params.modelId.trim() || (params.hourly !== undefined && typeof params.hourly !== "boolean"))
+        return { success: false, error: "Choose an exact model and valid recovery commission", message: "Choose an exact model and valid recovery commission" };
+      const out = await recheckSubscriptionQuota(connectionId, params.modelId, params.hourly as boolean | undefined);
+      return { success: out.ok, message: out.message, data: out, ...(out.ok ? {} : { error: out.message }) };
+    }
     case "discover": {
       const { discoverProviderAccountModels } = await import("@/lib/inference/provider-account-discovery");
       return result(await discoverProviderAccountModels(connectionId));

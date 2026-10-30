@@ -49,7 +49,14 @@ function signInRecoveryMessage(providerId: string, connectionId?: string): strin
     : "Session expired. Sign in again to this account, then retry verification.";
 }
 
-export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string, options: { verificationOnly?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
+type AuthTestOptions = { verificationOnly?: boolean;
+  /** Server-only observation callbacks: no caller may turn an auth test into a quota write. */
+  observation?: { modelId: string; beforeDispatch: () => Promise<void>; completed: () => Promise<void> };
+};
+
+export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string, options: AuthTestOptions = {}): Promise<{ ok: boolean; message: string }> {
+
+  if (options.observation && !options.verificationOnly) return { ok: false, message: "A quota observation requires verification-only account ownership" };
 
   const catalog = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!catalog) return { ok: false, message: "Provider not found" };
@@ -151,11 +158,12 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       const baseUrl = await resolveResponsesProbeBaseUrl(provider);
       attemptedUrl = buildResponsesUrl(providerId, baseUrl);
       const model = await prisma.modelProfile.findFirst({
-        where: { providerId, modelStatus: "active" },
+        where: { providerId, modelStatus: "active", ...(options.observation ? { modelId: options.observation.modelId } : {}) },
         orderBy: [{ lastSeenAt: "desc" }, { modelId: "asc" }],
         select: { modelId: true },
       });
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
+      if (options.observation && model.modelId !== options.observation.modelId) return { ok: false, message: "Selected model changed before verification" };
       let quotaObservation: ProviderQuotaObservation | null = null;
       if (connection && !activeSnapshot) {
         try {
@@ -168,6 +176,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       headers["Content-Type"] = "application/json";
       const probe = async () => {
         if (activeSnapshot) await assertActiveAccountSnapshot(activeSnapshot);
+        await options.observation?.beforeDispatch();
         return fetch(attemptedUrl, {
         method: "POST",
         headers: { ...headers },
@@ -187,6 +196,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       // Upstream expiry is authoritative even when our cached expiry is future.
       // Renew once through the existing owner; explicit accounts never alias.
       if (isExpiredOAuthResponse(res.status, body)) {
+        if (options.observation) return { ok: false, message: "Sign-in expired during the capacity check. No second inference request was sent." };
         const refreshProviderId = providerId === "chatgpt" && connectionId === undefined ? "codex" : providerId;
         const renewed = activeSnapshot
           ? await refreshOAuthToken(refreshProviderId, connectionId, activeSnapshot)
@@ -204,6 +214,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         let quotaReconciled: ProviderQuotaReconciliation | undefined;
         try {
           quotaReconciled = await markAuthenticated(quotaObservation);
+          await options.observation?.completed();
         } catch (error) {
           const detail = error instanceof Error && error.message.startsWith("Account changed")
             ? error.message

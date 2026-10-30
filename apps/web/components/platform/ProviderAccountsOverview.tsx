@@ -11,6 +11,7 @@ import { fieldControlClass } from "@/components/ui/form/styles";
 import { addProviderAccount } from "@/lib/actions/provider-accounts";
 import { completeProviderAccountSetup } from "@/lib/actions/provider-account-setup";
 import { providerAccountHref, type ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
+import { ProviderQuotaDetails } from "./ProviderQuotaDetails";
 export type { ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
 
 export type ProviderAccountCatalogRow = {
@@ -59,7 +60,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const columns: Column<ProviderAccountOverviewRow>[] = [
     { key: "account", header: copy.accountName, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div>
       <Link href={providerAccountHref(row)} className="font-medium text-[var(--dpf-accent)]">{row.label}</Link>
-      <div className="text-xs text-[var(--dpf-muted)]">{row.providerName} · {row.statusLabel}</div>
+      <div className="text-xs text-[var(--dpf-muted)]">{row.providerName} · <StatusBadge intent={row.statusIntent ?? "neutral"} label={row.statusLabel} /></div>
       {row.resolvesPhases.length > 0 && <div className="text-xs text-[var(--dpf-muted)]">{copy.resolvesPhases} {row.resolvesPhases.join(", ")}</div>}
     </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
     { key: "allowed", header: copy.allowedWork, cell: row => <div>
@@ -70,7 +71,8 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       {row.capabilitySummary && <div className="text-xs text-[var(--dpf-muted)]">{row.capabilitySummary}</div>}
     </div> },
     { key: "capacity", header: copy.capacity, mobileFullWidth: true, cell: row => <div>{row.capacitySummary}
-      {row.resetSummary && <div className="text-xs text-[var(--dpf-muted)]">{row.resetSummary}</div>}
+      {row.quotaRecovery && <ProviderQuotaDetails key={row.connectionId} connectionId={row.connectionId} recovery={row.quotaRecovery} canWrite={canWrite} copy={copy} />}
+      {!row.quotaRecovery && row.resetSummary && <div className="text-xs text-[var(--dpf-muted)]">{row.resetSummary}</div>}
     </div> },
     { key: "manage", header: copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="flex flex-wrap gap-2">
       <Link href={providerAccountHref(row)} data-owner-first-next-action={!canWrite && row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>

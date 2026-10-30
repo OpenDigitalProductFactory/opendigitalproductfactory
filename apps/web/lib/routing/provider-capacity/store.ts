@@ -37,6 +37,7 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 export async function loadProviderCapacitySnapshots(options: { includeInactiveAccountHealth?: boolean } = {}): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
     select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
+      executionProof: true,
       safeSummary: true, action: true, isHumanActionRequired: true,
       ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
@@ -51,6 +52,12 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
       && row.scopeKey === accountCapacityScope(account.providerId, account.id)
       && row.observedCredentialRevision === capacityCredentialRevision(account.credentialEntry)) {
       map.set(accountRuntimeKey(account.providerId, account.connectionId), snapshot);
+      if (row.state === "available" && row.executionProof && typeof row.executionProof === "object" && !Array.isArray(row.executionProof)
+        && typeof row.executionProof.modelId === "string") {
+        const { readCurrentExecutionProof } = await import("./execution-proof.server");
+        const proof = await readCurrentExecutionProof(account.connectionId, row.executionProof.modelId, row.executionProof).catch(() => null);
+        if (proof) snapshot.executionProof = proof;
+      }
     }
   }
   return map;
@@ -67,6 +74,9 @@ function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt:
 async function persistScopedCapacity(input: {
   providerId: string; account?: CapacityAccountIdentity;
 }, data: Omit<Prisma.ProviderCapacityStatusUncheckedCreateInput, "providerId" | "scopeKey">): Promise<void> {
+  // A failure invalidates exact proof. Ordinary success never renews its TTL or
+  // bindings; the reader still rejects stale/changed proof independently.
+  if (data.state !== "available") data = { ...data, executionProof: {} };
   if (!input.account) {
     await prisma.providerCapacityStatus.upsert({ where: { providerId: input.providerId }, create: { providerId: input.providerId, ...data }, update: data });
     return;

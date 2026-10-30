@@ -18,6 +18,14 @@ export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
   modelSummary: string; capacitySummary: string; resetSummary: string | null;
   capabilitySummary?: string;
   resolvesPhases: string[];
+  statusIntent?: "success" | "warning" | "danger" | "neutral";
+  quotaRecovery?: {
+    models: Array<{ modelId: string; name: string }>; selectedModelId: string | null; hourly: boolean;
+    canCheck: boolean; lastCheckAt: string | null; nextCheckAt: string | null; lastResult: string | null;
+    checkedModelId: string | null; checkedAt: string | null; proofExpiresAt: string | null;
+    observedAt: string | null; limits: Array<{ summary: string; until: string | null }>;
+    usageUrl: string | null; unavailable: boolean;
+  };
 };
 
 export function isProviderAccountVisible(
