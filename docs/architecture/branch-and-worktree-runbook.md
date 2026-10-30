@@ -130,12 +130,12 @@ The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the en
 
 ## Branches left without a worktree
 
-The janitor deletes a branch only together with the worktree it removes, so a branch whose tree went some other way stays forever. `scripts/branch-reaper.mjs` (BI-88D75BA3) reaps those branches.
+The janitor deletes a branch only together with the worktree it removes, so a branch whose tree went some other way stays forever. `scripts/branch-reaper.mjs` (BI-88D75BA3) inventories those branches. Local deletion remains incomplete.
 
-- **Dry run by default.** `node scripts/branch-reaper.mjs` classifies and reports; `--live` deletes and prunes, and `--json` gives the full report.
-- **What it reaps.** A local branch whose work is already on `origin/main`: either an ancestor of it, or exactly the head commit a merged PR shipped (squash merge). The branch must also have no worktree, no open PR and no live Workroom, and must not be the current, `main`, `release/*`, `hotfix/*` or a pinned branch. Pin a branch by adding its name as a line in `<git-common-dir>/dpf-branch-pins`.
-- **Fails closed.** If the Workroom observation or the open-PR list cannot be read, nothing is reaped. The observation must be installation-wide: an OAuth client credential sees only caller-visible rooms, so run it with the install's PAT. It reads branches only (`resolvePaths: false`) with a long read budget, because a large install's observation takes minutes.
-- **Never deletes a moved branch.** Deletion is `git update-ref -d refs/heads/<b> <tip>`, so a branch that gained a commit after classification is left alone.
+- **Dry run by default.** `node scripts/branch-reaper.mjs` classifies and reports; `--live` prunes remote-tracking refs and reports local deletion as blocked (exit 3) when candidates exist; `--json` gives the full report.
+- **What it classifies as eligible.** A local branch whose work is already on `origin/main`: either an ancestor of it, or exactly the head commit a PR shipped into main whose merge commit is reachable from the observed main history (squash merge). The branch must also have no worktree, no open PR and no live Workroom, and must not be the current, `main`, `release/*`, `hotfix/*` or a pinned branch. Pin a branch by adding its name as a line in `<git-common-dir>/dpf-branch-pins`.
+- **Fails closed.** Missing exact branch identities, failed Git ownership reads, or an unreadable, malformed or limit-saturated open-PR inventory cannot authorize deletion. The observation must be installation-wide: an OAuth client credential sees only caller-visible rooms, so run it with the install's PAT. It reads branches only (`resolvePaths: false`) with a long read budget, because a large install's observation takes minutes.
+- **Local deletion gate.** A complete snapshot and a tip comparison do not protect a new claim or checkout admitted after observation. The executable deletion path returns `concurrent-ownership-fence-unavailable` and performs zero local-ref mutations. There is no override flag. BI-88D75BA3 stays open until admission and deletion share a verified ownership reservation.
 - **Each live cycle also** runs `git fetch --prune origin`, so remote-tracking refs for deleted remote branches go too.
 - **Stash census.** It reports the stash: entry count, how many are older than 7 or 30 days, and the oldest. It never drops an entry, because the stash stack is repository-wide and holds other sessions' work.
 

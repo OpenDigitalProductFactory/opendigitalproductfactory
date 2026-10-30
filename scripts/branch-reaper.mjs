@@ -11,7 +11,7 @@
 //
 // FLAGS
 //   (default)  Dry run: classify and report; delete nothing, prune nothing.
-//   --live     Delete reapable branches and run `git fetch --prune origin`.
+//   --live     Run `git fetch --prune origin`; local deletion is gated pending an ownership fence.
 //   --json     Machine-readable report on stdout.
 //   --root     Git root clone (default: DPF_REPO_ROOT / git rev-parse).
 //
@@ -20,8 +20,8 @@
 //     (ancestor, or exactly a merged PR's head), no worktree, no open PR, no
 //     live Workroom, not current/protected/pinned. Unreadable ownership or PR
 //     state reaps nothing.
-//   * Deletion is compare-and-delete (`update-ref -d <ref> <tip>`): a branch
-//     that moved since it was classified is left alone.
+//   * Local deletion is blocked in code until ownership admission and deletion
+//     share a fence. Tip compare-and-delete alone cannot protect a new owner.
 //   * Pins: one branch name per line in <git-common-dir>/dpf-branch-pins.
 //   * The stash is reported, never dropped: it is repository-wide.
 
@@ -116,6 +116,14 @@ async function gatherFacts(root) {
   };
 }
 
+export function executeBranchReap(decisions, { live } = {}) {
+  // A complete observation and tip CAS do not fence a later Workroom claim
+  // or checkout. Until admission and deletion share a reservation, this
+  // executable gate admits no local-ref mutation. There is no override flag.
+  return { deleted: 0, failures: [], blockedReason: live && decisions.some(x => x.action === "reap")
+    ? "concurrent-ownership-fence-unavailable" : null };
+}
+
 async function main(argv = process.argv.slice(2)) {
   const { values } = utilParseArgs({
     args: scriptArgv(argv),
@@ -129,15 +137,7 @@ async function main(argv = process.argv.slice(2)) {
   const decisions = classifyBranches(facts);
   const summary = summarizeBranchDecisions(decisions);
 
-  let deleted = 0;
-  const failures = [];
-  if (live) {
-    for (const d of decisions.filter((x) => x.action === "reap")) {
-      const r = runGit(["update-ref", "-d", `refs/heads/${d.name}`, d.tip], root);
-      if (r.ok) deleted++;
-      else failures.push({ name: d.name, error: r.stderr });
-    }
-  }
+  const { deleted, failures, blockedReason } = executeBranchReap(decisions, { live, root });
 
   const remoteBefore = lines(runGit(["for-each-ref", "refs/remotes/origin", "--format=%(refname)"], root).stdout).length;
   let prune;
@@ -159,6 +159,7 @@ async function main(argv = process.argv.slice(2)) {
     summary,
     deleted,
     failures,
+    localBranchDeletion: { status: blockedReason ? "blocked" : live ? "not-needed" : "dry-run", reason: blockedReason },
     prune,
     stash,
     notes,
@@ -170,13 +171,14 @@ async function main(argv = process.argv.slice(2)) {
     const reasons = Object.entries(summary.byReason).map(([k, v]) => `${k}=${v}`).join(" ");
     process.stdout.write(
       `[branch-reaper] ${report.mode}: ${summary.total} local branches, ${summary.reap} reapable (${reasons})\n`
+      + (blockedReason ? `[branch-reaper] local deletion BLOCKED: ${blockedReason}; no local refs changed\n` : "")
       + (live ? `[branch-reaper] deleted ${deleted}, ${failures.length} refused; local branches ${report.localBranchesBefore} -> ${report.localBranchesAfter}\n` : "")
       + `[branch-reaper] remote-tracking refs ${live ? `${prune.remoteRefsBefore} -> ${prune.remoteRefsAfter}` : `${prune.remoteRefsBefore}, ${prune.wouldPrune} would be pruned`}\n`
       + `[branch-reaper] stash: ${stash.count} entries (${stash.olderThan30Days} older than 30 days; never dropped)\n`
       + `[branch-reaper] inputs: workrooms ${notes.workrooms}; PRs ${notes.openPrs}, ${notes.mergedPrs}\n`,
     );
   }
-  return failures.length ? 1 : 0;
+  return blockedReason ? 3 : failures.length ? 1 : 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

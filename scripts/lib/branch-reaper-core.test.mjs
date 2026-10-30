@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 
 import { classifyBranches, stashCensus, summarizeBranchDecisions, mergedPullRequestHeads, openPullRequestBranches } from "./branch-reaper-core.mjs";
+
+import { executeBranchReap } from "../branch-reaper.mjs";
 
 const base = {
   branches: [],
@@ -86,4 +88,22 @@ describe("PR evidence completeness and main provenance", () => {
     assert.deepEqual([...openPullRequestBranches([{ headRefName: "one" }], 2)], ["one"]);
     assert.deepEqual([...openPullRequestBranches([])], []);
   });
+});
+
+test("live deletion fails closed without a fence shared with ownership admission", () => {
+  let mutations = 0;
+  const result = executeBranchReap([{ name: "fix/claimed-after-snapshot", tip: "a".repeat(40), action: "reap" }], {
+    live: true, root: "/fixture", git: () => { mutations++; return { ok: true }; },
+  });
+  assert.equal(mutations, 0);
+  assert.equal(result.deleted, 0);
+  assert.equal(result.blockedReason, "concurrent-ownership-fence-unavailable");
+});
+
+test("dry run and an empty live plan perform zero mutations", () => {
+  for (const live of [false, true]) {
+    const result = executeBranchReap([], { live, git: () => assert.fail("unexpected Git mutation") });
+    assert.equal(result.deleted, 0);
+    assert.equal(result.blockedReason, null);
+  }
 });
