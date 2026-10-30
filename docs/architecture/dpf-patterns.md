@@ -131,6 +131,14 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 
 **Completion contract.** Host supervision stops renewal before draining an in-flight heartbeat; late responses and stale timer callbacks cannot restart supervision. One exact persisted reservation read reports settled, pending or unknown without requesting generic immediate release. Reservation expiry never proves command success or process termination. Shared local-CI callers retain their existing release contract.
 
+**Attested qualification contract.** A qualification is not proved by caller
+metadata. A server-signed token binds one Workroom, source head, platform,
+command and active host lease. The canonical runner observes the child, streams
+and hashes its output, and writes terminal evidence through the existing
+execution-evidence writer. The writer revalidates the binding and atomically
+associates one activity with the unused lease. Sandbox-labelled, foreign,
+expired, duplicate or caller-asserted receipts remain non-evidence.
+
 **When NOT to use.** Do not add a second resource queue or scheduler. Do not hold a thread or shell open while waiting for admission. Do not kill a process merely because its command resembles a known tool. Do not promote a queued claim using stale memory evidence after another lease releases.
 
 **Why this exists.** Process-count limits alone cannot protect a 64 GiB developer host when inference is already resident. Durable, memory-aware admission turns invisible RAM contention into explicit capacity state and prevents dozens of idle waiters from consuming memory and tokens around one bottleneck.

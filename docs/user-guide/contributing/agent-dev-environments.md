@@ -430,6 +430,14 @@ When capacity is unavailable, the command records its queue position and exits w
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
 
+For a server-authorized qualification run, use the exact command and
+`DPF_QUALIFICATION_ADMISSION_TOKEN` supplied for that Workroom. Do not copy the
+token to another branch, host, command or retry: the runner claims the bound
+host lease, streams and hashes the supervised output, and records evidence only
+after a successful terminal exit. A queued or failed command is not evidence,
+and a second invocation cannot reuse the consumed lease. Runs without a signed
+qualification token continue to use the ordinary host-resource behavior.
+
 #### Recover a review blocked by endpoint eligibility
 
 An endpoint eligibility refusal means no model met the review's requirements.

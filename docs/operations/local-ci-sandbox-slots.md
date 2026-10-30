@@ -49,6 +49,15 @@ persisted terminal row with no active slot proves reservation settlement only,
 never command success or descendant exit. Existing immediate-release authority
 checks and pending approval history remain intact.
 
+Qualification verification adds a stricter receipt path to this same runner.
+The server-issued `DPF_QUALIFICATION_ADMISSION_TOKEN` binds the Workroom, source
+head, platform, command and one active lease. The runner streams the supervised
+child output, hashes it, and records terminal evidence through
+`record_execution_evidence` only after a successful exit. The server verifies
+the signed binding and atomically marks that lease as used; a missing, foreign,
+expired or already-used lease produces no qualification evidence. Ordinary
+host-resource commands do not set this variable and retain the contract above.
+
 The versioned profile is
 `apps/web/lib/nonprod/host-resource-profiles.json`. On a host with at most 64
 GiB of memory, inference residency contracts non-inference heavyweight
