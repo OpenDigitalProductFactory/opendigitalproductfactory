@@ -65,7 +65,7 @@ describe("AttentionInbox", () => {
     const projection = buildOwnerAttentionProjection([bill()], { nowMs: 0 });
     const html = renderToStaticMarkup(<AttentionInbox projection={projection} failedSources={[]}
       approvalQueue={{ total: 30, shown: 25, nextCursor: "2026-10-18T10:00:00.000Z|env-005", browsingOlder: false }} />);
-    expect(html).toContain("30 pending approvals; 25 shown.");
+    expect(html).toContain("30 pending approvals; 25 available in this view.");
     expect(html).toContain("Other notices: 1");
     expect(html).toContain("Older requests");
     expect(html).toContain("approvalsBefore=2026-10-18T10%3A00%3A00.000Z%7Cenv-005");
@@ -92,7 +92,7 @@ describe("AttentionInbox", () => {
       <AttentionInbox projection={projection} failedSources={[]} />,
     );
 
-    expect(html).toContain("1 item shown for your attention");
+    expect(html).toContain("1 item needs your attention");
     expect(html).toContain("Approve this bill?");
     expect(html).not.toContain("Approve bill BILL-1");
     expect(html).not.toContain("Open in Operations");
@@ -107,7 +107,7 @@ describe("AttentionInbox", () => {
       <AttentionInbox projection={projection} failedSources={[]} />,
     );
 
-    expect(html).toContain("0 items shown for your attention");
+    expect(html).toContain("0 items need your attention");
     expect(html).toContain("all caught up");
     expect(html).not.toContain("Your digital team is handling");
   });
@@ -125,7 +125,7 @@ describe("AttentionInbox", () => {
       <AttentionInbox projection={projection} failedSources={[]} />,
     );
 
-    expect(html).toContain("0 items shown for your attention");
+    expect(html).toContain("0 items need your attention");
     expect(html).toContain("all caught up");
     expect(html).toContain("Your digital team is handling 1 item");
     // The raw technical title is never surfaced to the owner.
