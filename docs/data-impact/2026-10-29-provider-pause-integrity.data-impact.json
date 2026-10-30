@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "backlogItemId": "BI-1FB1C9B5",
+  "affectedCopies": [
+    "searchPlatformKnowledge unavailable response: retain the embedding deferral reason instead of attributing every hold to local CI.",
+    "Existing platform-knowledge vectors and payloads are not rewritten. This branch adds no stored field, schema, projection store, or retention policy."
+  ],
+  "migration": {
+    "name": null,
+    "backfill": "None. The semantic-memory source change formats an existing unavailable response; no persisted rows or vector payloads change. Existing cleanup, access filters and lifecycle remain authoritative.",
+    "rollback": "Revert the source change through the protected PR workflow; no data rollback is required."
+  },
+  "tests": [
+    "apps/web/lib/inference/semantic-memory-availability.test.ts",
+    "apps/web/lib/inference/semantic-memory-cleanup.test.ts",
+    "apps/web/lib/inference/semantic-memory.test.ts",
+    "apps/web/lib/inference/embedding.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "projection",
+      "store": "Existing transient searchPlatformKnowledge result; no new persistent copy",
+      "derivedContractId": "apps/web/lib/inference/semantic-memory.ts#searchPlatformKnowledge",
+      "cleanupTest": "apps/web/lib/inference/semantic-memory-cleanup.test.ts",
+      "reconciliationTest": "apps/web/lib/inference/semantic-memory-availability.test.ts",
+      "disposition": "Preserve status unavailable, code search_deferred and empty results during routing holds. Expose the original deferral reason without claiming the corpus was searched. Successful retrieval and existing vector lifecycle are unchanged."
+    }
+  ]
+}

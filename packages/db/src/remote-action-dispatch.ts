@@ -51,8 +51,12 @@ export interface QualificationBlobIdentity {
   blobSha: string;
 }
 
+export interface QualificationSourceFile extends QualificationBlobIdentity {
+  contentBase64: string;
+}
+
 export interface QualificationWindowsVerifyParameters {
-  version: 1;
+  version: 2;
   backlogItemId: string;
   workroomId: string;
   repository: string;
@@ -63,16 +67,17 @@ export interface QualificationWindowsVerifyParameters {
   productionBlobs: QualificationBlobIdentity[];
   testBlobs: QualificationBlobIdentity[];
   qualificationBindingDigest: string;
-  procedureId: "windows-handle-replacement-v1";
-  resultSchemaVersion: 1;
+  procedureId: "windows-bound-node-test-v2";
+  resultSchemaVersion: 2;
   maxDurationSeconds: number;
   edgeNodeId: string;
+  sourceFiles: QualificationSourceFile[];
 }
 
 const QUALIFICATION_PARAMETER_KEYS = [
   "version", "backlogItemId", "workroomId", "repository", "baseSha", "headSha", "protocolPath",
   "protocolBlobSha", "productionBlobs", "testBlobs", "qualificationBindingDigest", "procedureId",
-  "resultSchemaVersion", "maxDurationSeconds", "edgeNodeId",
+  "resultSchemaVersion", "maxDurationSeconds", "edgeNodeId", "sourceFiles",
 ] as const;
 
 function isSafeRepositoryPath(value: unknown): value is string {
@@ -89,19 +94,32 @@ function isQualificationBlobList(value: unknown): value is QualificationBlobIden
       && /^[a-f0-9]{40}$/.test(String((entry as Record<string, unknown>).blobSha)));
 }
 
+function isQualificationSourceList(value: unknown): value is QualificationSourceFile[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 101
+    && value.every(entry => entry && typeof entry === "object" && !Array.isArray(entry)
+      && Object.keys(entry).sort().join(",") === "blobSha,contentBase64,path"
+      && isSafeRepositoryPath((entry as Record<string, unknown>).path)
+      && typeof (entry as Record<string, unknown>).blobSha === "string"
+      && /^[a-f0-9]{40}$/.test(String((entry as Record<string, unknown>).blobSha))
+      && typeof (entry as Record<string, unknown>).contentBase64 === "string"
+      && String((entry as Record<string, unknown>).contentBase64).length <= 1_400_000
+      && /^[A-Za-z0-9+/]*={0,2}$/.test(String((entry as Record<string, unknown>).contentBase64)));
+}
+
 /** Closed signer-side schema for the one compiled Windows qualification procedure. */
 export function parseQualificationWindowsVerifyParameters(value: unknown): QualificationWindowsVerifyParameters | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const p = value as Record<string, unknown>;
   if (Object.keys(p).sort().join(",") !== [...QUALIFICATION_PARAMETER_KEYS].sort().join(",")
-    || p.version !== 1 || p.resultSchemaVersion !== 1
-    || p.procedureId !== "windows-handle-replacement-v1"
+    || p.version !== 2 || p.resultSchemaVersion !== 2
+    || p.procedureId !== "windows-bound-node-test-v2"
     || typeof p.backlogItemId !== "string" || !/^BI-[A-Z0-9]+$/.test(p.backlogItemId)
     || typeof p.workroomId !== "string" || !/^WC-[A-Z0-9]+$/.test(p.workroomId)
     || typeof p.repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(p.repository)
     || ![p.baseSha, p.headSha, p.protocolBlobSha].every(sha => typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha))
     || !isSafeRepositoryPath(p.protocolPath)
     || !isQualificationBlobList(p.productionBlobs) || !isQualificationBlobList(p.testBlobs)
+    || !isQualificationSourceList(p.sourceFiles)
     || typeof p.qualificationBindingDigest !== "string" || !/^[a-f0-9]{64}$/.test(p.qualificationBindingDigest)
     || !Number.isInteger(p.maxDurationSeconds) || Number(p.maxDurationSeconds) < 1 || Number(p.maxDurationSeconds) > 1800
     || typeof p.edgeNodeId !== "string" || !/^edge_[A-Za-z0-9_-]{1,100}$/.test(p.edgeNodeId)) return null;

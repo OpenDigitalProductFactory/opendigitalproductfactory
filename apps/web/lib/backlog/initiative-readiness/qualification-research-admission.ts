@@ -17,6 +17,8 @@ const QUALIFICATION_TOOLS = new Set([
   "record_workroom_evidence",
 ]);
 
+/** `native-edge` remains readable for historical bindings created before the
+ * workroom-host correction; new terminal admission never issues it. */
 export type QualificationExecutorMode = "sandbox-build" | "workroom-host" | "native-edge";
 export type QualificationPlatform = "linux" | "win32";
 
@@ -47,7 +49,7 @@ export type QualificationExperimentBinding = {
   policyVersion: 1;
   executorMode: QualificationExecutorMode;
   requiredPlatform: QualificationPlatform;
-  /** Added by native-edge qualification bindings; older sandbox bindings remain readable. */
+  /** Production bytes the qualification observes but may never modify. */
   targetProductionPaths?: string[];
   targetProductionBlobIds: string[];
   permittedTools: string[];
@@ -139,7 +141,7 @@ export function advanceQualificationExperimentState(input: {
     && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion
     && prior.stageKey === next.stageKey && prior.policyVersion === next.policyVersion
     && ((prior.executorMode === next.executorMode)
-      || (prior.executorMode === "sandbox-build" && next.executorMode === "native-edge" && next.requiredPlatform === "win32"))
+      || (prior.executorMode === "sandbox-build" && next.executorMode === "workroom-host" && next.requiredPlatform === "win32"))
     && prior.requiredPlatform === next.requiredPlatform
     && JSON.stringify(prior.targetProductionPaths ?? []) === JSON.stringify(next.targetProductionPaths ?? [])
     && JSON.stringify(prior.targetProductionBlobIds) === JSON.stringify(next.targetProductionBlobIds)
@@ -311,7 +313,9 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
     && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
-    && (executorMode !== "native-edge" || (productionPaths && productionPaths.every(validProductionPath)))
+    && (executorMode !== "native-edge"
+      ? (!productionPaths || productionPaths.every(validProductionPath))
+      : Boolean(productionPaths?.length && productionPaths.every(validProductionPath)))
     && productionBlobIds?.every((blob) => FULL_SHA.test(blob))
     && (!productionPaths || productionPaths.length === productionBlobIds?.length)
     && paths && paths.every(validTestPath) && datesValid && raw?.maxStarts === 1
@@ -410,13 +414,26 @@ export type QualificationExecutionEvidence = {
   outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
 };
 
-/** Execution admission and execution attestation are deliberately separate.
- * Neither current executor mode has a producer identity distinct from the
- * caller that can submit the claimed result, so both remain fail-closed. */
+/** A lease proves admission, not child execution or output. Historical
+ * workroom-host receipts remain verifiable after their atomic write, but no
+ * caller-supplied host result is accepted as a new attestation. */
 export function qualificationExecutorAttestationAvailable(
-  executorMode: QualificationExperimentBinding["executorMode"],
+  _executorMode: QualificationExperimentBinding["executorMode"],
 ): boolean {
-  return executorMode === "native-edge";
+  return false;
+}
+
+function qualificationEvidenceCommandMatchesBinding(
+  command: string,
+  allowedPaths: string[],
+): boolean {
+  const parts = command.trim().split(/\s+/).map((part) => part.replaceAll("\\", "/"));
+  const executable = parts[0]?.split("/").at(-1)?.toLowerCase();
+  const expected = allowedPaths.map((path) => path.replaceAll("\\", "/"));
+  return (executable === "node" || executable === "node.exe")
+    && parts.length === expected.length + 2
+    && parts[1] === "--test"
+    && expected.every((path, index) => parts[index + 2] === path);
 }
 
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
@@ -458,9 +475,9 @@ export function qualificationExecutionEvidenceAllowed(input: {
   const evidence = parseQualificationExecutionEvidence(input.evidence);
   const lease = input.lease;
   const digest = qualificationBindingDigest(input.binding);
-  // Every remaining field is caller-observable or caller-supplied. Preserve
-  // the immutable binding checks for a future trusted producer, but refuse
-  // before they can be mistaken for proof that a supervised child ran.
+  // A process-bound lease authorizes a child but cannot prove the caller ran it
+  // or reported its output. New Windows evidence arrives only through the
+  // machine-authenticated native Edge result path.
   if (!qualificationExecutorAttestationAvailable(input.binding.executorMode)
     || !evidence || !lease || input.binding.phase !== "verify"
     || input.binding.executorMode !== "workroom-host" || !input.binding.candidate
@@ -471,7 +488,7 @@ export function qualificationExecutionEvidenceAllowed(input: {
     || evidence.platform !== input.binding.requiredPlatform
     || evidence.headSha.toLowerCase() !== input.binding.headSha.toLowerCase()
     || canonicalJson(evidence.testBlobIds) !== canonicalJson(input.binding.candidate.testBlobIds)
-    || !input.binding.allowedPaths.every((path) => evidence.command.replaceAll("\\", "/").includes(path))
+    || !qualificationEvidenceCommandMatchesBinding(evidence.command, input.binding.allowedPaths)
     || lease.environmentKey !== "host-heavy-resource" || lease.status !== "active" || !lease.claimKey
     || lease.purpose !== `host-resource:qualification:${digest}`
     || lease.buildId?.toLowerCase() !== input.binding.headSha.toLowerCase()
@@ -490,6 +507,7 @@ export function qualificationExecutionActivitiesMatch(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   itemId: string; activityIds: string[]; rows: unknown[]; accountablePrincipalRef: string | null;
   proof: QualificationVerificationEvidence;
+  leases: unknown[];
 }): boolean {
   if (input.activityIds.length === 0 || input.rows.length !== input.activityIds.length) return false;
   const expected = new Set(input.activityIds);
@@ -498,12 +516,35 @@ export function qualificationExecutionActivitiesMatch(input: {
     const payload = record(row?.payload);
     const backlogItem = record(row?.backlogItem);
     const qualification = parseQualificationExecutionEvidence(payload?.qualification);
+    const lease = qualification ? input.leases.map(record).find((candidate) =>
+      candidate?.leaseId === qualification.leaseId && candidate?.evidenceRecordId === row?.id) : null;
+    const admittedAt = lease?.admittedAt instanceof Date ? lease.admittedAt : new Date(String(lease?.admittedAt ?? ""));
+    const expiresAt = lease?.expiresAt instanceof Date ? lease.expiresAt : new Date(String(lease?.expiresAt ?? ""));
+    const recordedAt = row?.recordedAt instanceof Date ? row.recordedAt : new Date(String(row?.recordedAt ?? ""));
+    const startedAt = qualification ? new Date(qualification.startedAt) : new Date("");
+    const completedAt = qualification ? new Date(qualification.completedAt) : new Date("");
     return typeof row?.id === "string" && expected.delete(row.id)
       && backlogItem?.itemId === input.itemId && payload?.evidenceKind === "test_pass"
       && qualification !== null
-      && qualificationExecutionEvidenceAllowed({ binding: input.binding, state: input.state,
-        evidence: qualification, accountablePrincipalRef: input.accountablePrincipalRef,
-        now: new Date(qualification.completedAt) })
+      && input.binding.executorMode === "workroom-host" && input.binding.phase === "verify"
+      && input.state.status === "started" && input.state.startCount === 1
+      && input.accountablePrincipalRef === input.binding.accountablePrincipalRef
+      && qualification.workroomId === input.binding.workroomId
+      && qualification.qualificationBindingDigest === qualificationBindingDigest(input.binding)
+      && qualification.platform === input.binding.requiredPlatform
+      && qualification.headSha.toLowerCase() === input.binding.headSha.toLowerCase()
+      && canonicalJson(qualification.testBlobIds) === canonicalJson(input.binding.candidate?.testBlobIds)
+      && qualificationEvidenceCommandMatchesBinding(qualification.command, input.binding.allowedPaths)
+      && lease?.environmentKey === "host-heavy-resource"
+      && lease?.purpose === `host-resource:qualification:${qualificationBindingDigest(input.binding)}`
+      && typeof lease?.claimKey === "string" && lease.claimKey.length > 0
+      && String(lease?.buildId ?? "").toLowerCase() === input.binding.headSha.toLowerCase()
+      && lease?.taskRunId === input.binding.workroomId && Boolean(lease?.ownerPid)
+      && typeof lease?.ownerProcessIdentity === "string" && lease.ownerProcessIdentity.length > 0
+      && Number.isFinite(admittedAt.getTime()) && Number.isFinite(expiresAt.getTime())
+      && Number.isFinite(recordedAt.getTime()) && Number.isFinite(startedAt.getTime()) && Number.isFinite(completedAt.getTime())
+      && startedAt.getTime() >= admittedAt.getTime() && completedAt.getTime() <= expiresAt.getTime()
+      && recordedAt.getTime() >= completedAt.getTime()
       && qualification.command === input.proof.command
       && qualification.outputDigest.toLowerCase() === input.proof.outputDigest.toLowerCase()
       && qualification.startedAt === input.proof.startedAt
