@@ -8,7 +8,7 @@ const fixture = vi.hoisted(() => ({
   revisions: [] as Array<Record<string, unknown>>,
 }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(() => { throw new Error("No browser cache context"); }) }));
 vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn().mockResolvedValue({ error: null }) }));
 vi.mock("@/lib/wiki/craft-override-promotion", () => ({ promoteCraftOverrideOnPublish: vi.fn() }));
 vi.mock("@/lib/wiki/embed-published-overlay", () => ({ embedPublishedOverlayPage: vi.fn() }));
@@ -34,13 +34,14 @@ vi.mock("@dpf/db", () => ({ prisma: {
 } }));
 
 import { uxCritiquePack } from "./ux-critique-pack";
+import { revalidatePath } from "next/cache";
 const params = { title: "Expense route fixture", route: "/finance/spend", lens: "hierarchy",
   finding: "The personal-expense card opens a review list without a claim entry action.", proposedVerdict: "change-needed" };
 const context: ToolExecutionContext = { agentId: "fixture-agent", governedSource: "external-jsonrpc",
   userContext: { userId: "fixture-user", platformRole: "HR-000", isSuperuser: false } };
 const capture = (input: Record<string, unknown> = params, ctx: ToolExecutionContext | undefined = context) =>
   uxCritiquePack.handlers.capture_ux_critique(input, "fixture-user", ctx);
-beforeEach(() => { fixture.pages.length = 0; fixture.revisions.length = 0; });
+beforeEach(() => { fixture.pages.length = 0; fixture.revisions.length = 0; vi.mocked(revalidatePath).mockClear(); });
 
 describe("native no-cookie critique capture boundary", () => {
   it("saves and reads back the same scoped draft with authenticated authorship", async () => {
@@ -49,6 +50,7 @@ describe("native no-cookie critique capture boundary", () => {
     expect(fixture.pages).toHaveLength(1);
     expect(fixture.pages[0]).toMatchObject({ organizationId: "fixture-org", status: "draft", isKernel: false });
     expect(fixture.revisions[0]).toMatchObject({ createdById: "fixture-user", createdByAgentId: "fixture-agent" });
+    expect(revalidatePath).not.toHaveBeenCalled();
     const read = await uxCritiquePack.handlers.search_ux_critique_corpus({ route: params.route }, "fixture-user", context);
     expect(JSON.stringify(read)).toContain(params.finding);
     expect(JSON.stringify(read)).toContain('"calibrationEligible":false');

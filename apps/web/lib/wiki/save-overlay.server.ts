@@ -24,7 +24,6 @@ import {
   type WikiPageKind,
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
-import { revalidatePath } from "next/cache";
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
 import { syncWikiPageLinks } from "@/lib/wiki/page-links";
@@ -315,9 +314,6 @@ export async function saveWikiOverlayEditForActor(
         origin: "wiki-edit",
       });
     }
-
-    revalidatePath(`/coworker-decisions/${input.slug}`);
-    revalidatePath("/coworker-decisions");
 
     return {
       ok: true,
