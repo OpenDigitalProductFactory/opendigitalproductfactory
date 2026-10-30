@@ -131,3 +131,55 @@ describe("completeFeatureBuildTransition — the build's own facts", () => {
     expect(buildDeliveryState({ verificationOut: { typecheckPassed: true, testsFailed: 0, buildPassed: true }, uxVerificationStatus: "complete" })).toBe("pass");
   });
 });
+
+// BI-729D9B27: a delivered medium build mints the body baseline its acceptance is mapped against.
+describe("completeFeatureBuildTransition — body baseline on proven delivery", () => {
+  function owedAcceptance(effective: string) {
+    const p = projection("input-required");
+    return {
+      ...p,
+      decision: {
+        ...p.decision,
+        shapeDecision: { declared: effective, effective, sensitivity: "low", raised: false, trigger: null },
+        unmet: [readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })],
+      },
+    };
+  }
+  const verified = { verificationOut: { typecheckPassed: true, testsFailed: 0 }, uxVerificationStatus: "skipped" };
+  const run = (opts: { deliveryProven: boolean; effective: string; minted?: boolean; build?: Record<string, unknown> }) => {
+    const fake = fakeDb({ ...verified, ...(opts.build ?? {}) });
+    const mintBodyBaseline = vi.fn(async () => opts.minted ?? true);
+    const projectReadiness = vi.fn(() => owedAcceptance(opts.effective));
+    return completeFeatureBuildTransition({
+      db: fake.db, buildId: "FB-1", expectedPhase: "ship", deliveryProven: opts.deliveryProven,
+      dependencies: {
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        projectReadiness: projectReadiness as never,
+        loadFacts: async () => null,
+        mintBodyBaseline: mintBodyBaseline as never,
+      },
+    }).then((result) => ({ result, mintBodyBaseline, projectReadiness, fake }));
+  };
+
+  it("mints once delivery is proven, then re-projects on the new history", async () => {
+    const { result, mintBodyBaseline, projectReadiness, fake } = await run({ deliveryProven: true, effective: "medium" });
+    expect(mintBodyBaseline).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ itemRowId: "row-1", effectiveShape: "medium" }));
+    expect(projectReadiness).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(false);
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { deliveryProven: false, effective: "medium" },
+    { deliveryProven: true, effective: "large" },
+    { deliveryProven: true, effective: "medium", build: { uxVerificationStatus: "failed" } },
+  ])("does not mint without proven, passing delivery on a medium shape (%j)", async (opts) => {
+    const { mintBodyBaseline } = await run(opts);
+    expect(mintBodyBaseline).not.toHaveBeenCalled();
+  });
+
+  it("does not re-project when nothing was minted", async () => {
+    const { projectReadiness } = await run({ deliveryProven: true, effective: "medium", minted: false });
+    expect(projectReadiness).toHaveBeenCalledTimes(1);
+  });
+});

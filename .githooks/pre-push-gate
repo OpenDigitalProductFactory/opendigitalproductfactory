@@ -127,6 +127,26 @@ if [ "$branch" = "main" ]; then
   exit 0
 fi
 
+# BI-FEDD8F45: from here on every exit is a gate decision, so record it as a
+# guard outcome run (hook:pre-push-gate) on the way out. Observation only: the
+# recorder runs in the background, its output is discarded, and it can never
+# change this hook's exit status. Overrides are read from the environment by
+# the recorder itself. Checkouts without the recorder (contract-test fixtures)
+# skip it.
+guard_outcome_started="$(date +%s 2>/dev/null || echo 0)"
+guard_outcome_verdict=""
+record_guard_outcome() {
+  [ -f "scripts/record-guard-outcome.mjs" ] || return 0
+  verdict="$guard_outcome_verdict"
+  if [ -z "$verdict" ]; then
+    if [ "$1" = "0" ]; then verdict="passed"; else verdict="refused"; fi
+  fi
+  ended="$(date +%s 2>/dev/null || echo 0)"
+  duration_ms=$(( (ended - guard_outcome_started) * 1000 ))
+  ( node scripts/record-guard-outcome.mjs --runner pre-push-gate --verdict "$verdict" --duration-ms "$duration_ms" >/dev/null 2>&1 & ) || true
+}
+trap 'record_guard_outcome $?' EXIT
+
 # DCO sign-off is mandatory for EVERY commit that will become part of the PR,
 # and it is checked here — before any skip/exempt exit below — because an
 # unsigned commit is unsigned regardless of what it changes. The "DCO" required
@@ -261,7 +281,7 @@ fs.writeFileSync(file, JSON.stringify(record, null, 2) + "\n");
   # Escape hatch for the rare case even the preflight must be skipped:
   # DPF_SKIP_PREGATE_PREFLIGHT_REASON, honoured inside the preflight itself.
   if [ -f "scripts/pregate-preflight.mjs" ]; then
-    if node scripts/pregate-preflight.mjs; then
+    if DPF_GUARD_OUTCOME_RUNNER=pre-push-gate node scripts/pregate-preflight.mjs; then
       echo "[pre-push-gate] guard-parity preflight clean on override path."
     else
       echo "[pre-push-gate] guard-parity preflight found a deterministic guard violation — refusing the override push." >&2
@@ -303,6 +323,7 @@ if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
   if [ -n "$merge_base" ]; then
     if [ -f "scripts/derived-artifacts-gate.mjs" ]; then
       if node scripts/derived-artifacts-gate.mjs push-exempt "$merge_base"; then
+        guard_outcome_verdict="skipped"
         echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
         completion_notice
         exit 0
@@ -310,6 +331,7 @@ if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
     else
       non_docs="$(git diff --name-only "$merge_base" HEAD 2>/dev/null | grep -Ev '^(docs/|memory/)|\.md$' || true)"
       if [ -z "$non_docs" ]; then
+        guard_outcome_verdict="skipped"
         echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
         completion_notice
         exit 0

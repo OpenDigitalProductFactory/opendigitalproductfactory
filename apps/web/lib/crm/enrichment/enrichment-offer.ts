@@ -10,7 +10,7 @@
  *   - balanced/assertive → an offer is returned.
  * A complete record never triggers an offer regardless of level.
  */
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import { scoreCompleteness } from "./completeness";
 import {
   ENRICHMENT_SOURCE_KINDS,

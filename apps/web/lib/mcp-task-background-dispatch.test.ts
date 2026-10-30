@@ -96,7 +96,7 @@ describe("external TaskRun durable dispatch", () => {
     expect(result).toMatchObject({ enqueued: 1, exhausted: 0 });
     expect(queue.send).toHaveBeenCalledWith("TR-REVIEW", "mcp-task-run:TR-REVIEW:execute:1");
     expect(db.findMany.mock.calls[0]![0].where.OR).toEqual(expect.arrayContaining([
-      expect.objectContaining({ status: "input-required" }),
+      expect.objectContaining({ status: { in: ["input-required", "failed"] } }),
     ]));
     expect(db.updateMany.mock.calls[0]![0].data.progressPayload.terminalWriterWait).toEqual(wait);
     for (const writerAttempt of [{ id: "approval-pending" }, { id: "declined" }, { id: "verified-receipt" }]) {

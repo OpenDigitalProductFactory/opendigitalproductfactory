@@ -14,6 +14,7 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { pageSource, boundedInteger } from "@/lib/source-page";
+import { REPO_COMMIT_RANGE_PATH_PREFIX } from "@/lib/shared/immutable-review-reader";
 import {
   SOURCE_READ_DEFAULT_MAX_CHARS,
   SOURCE_READ_DEFAULT_MAX_LINES,
@@ -53,7 +54,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "read_source_at_version",
-    description: "Read a bounded page at an immutable version. Continue with nextCursor or jump with startLine. Git history works without a source checkout. An initiative-body-version path reads retained criteria only for its exact authorized acceptance TaskRun.",
+    description: "Read a bounded page at an immutable version. Continue with nextCursor or jump with startLine. Git history works without a source checkout. An initiative-body-version path reads retained criteria only for its exact authorized acceptance TaskRun. A repo-commit-range path reads a whole merged change (file list and diff) and requires its bound change digest as expectedBlobId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -466,6 +467,9 @@ const handlers: Record<string, ToolPackHandler> = {
   query_version_history: (params) => queryVersionHistoryHandler(params),
   read_source_at_version: (params, userId, context) => String(params.path ?? "").startsWith("initiative-body-version/")
     ? import("@/lib/backlog/initiative-readiness/body-baseline-reader").then(({ readInitiativeBodyVersion }) => readInitiativeBodyVersion(params, userId, context))
+    // BI-46E344FE: a merged change bound whole to a post-implementation review.
+    : String(params.path ?? "").startsWith(REPO_COMMIT_RANGE_PATH_PREFIX)
+    ? import("@/lib/backlog/initiative-readiness/repo-commit-range").then(({ readCommitRangeAtVersion }) => readCommitRangeAtVersion(params))
     : readSourceAtVersionHandler(params),
   read_build_artifact_revision: (params) => readBuildArtifactRevisionHandler(params),
   search_source_at_version: (params) => searchSourceAtVersionHandler(params),

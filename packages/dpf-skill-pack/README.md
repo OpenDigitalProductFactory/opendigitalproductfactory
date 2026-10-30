@@ -48,9 +48,14 @@ caches. Codex, Grok, and Claude have safe disable adapters (`enabled = false` /
 `grok plugin disable` / `claude plugin disable`); Antigravity remains
 **unsupported-until-proven** (no non-interactive plugin disable CLI — skills are
 file-synced only). Grok also materializes a global
-`~/.grok/hooks/dpf-guards.json` (PreToolUse + SessionStart + SessionEnd/Stop)
-because its hook plane ignores plugin-bundled hooks; Build Studio Grok seeds
-the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232). Wave 3 client
+`~/.grok/hooks/dpf-guards.json` because its hook plane ignores plugin-bundled
+hooks; it is generated from `hooks/hooks.json` minus the Grok exclusions in
+`hooks/client-hook-planes.json` (BI-742D707B). Which hooks each client runs, and
+why any is left out, is the generated "By client" table in
+[`hooks/README.md`](hooks/README.md#by-client). Build Studio Grok seeds
+the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232) and generates the
+sandbox hook file with `hooks/lib/grok-hook-plane.mjs`, the Node twin of the
+host generator (BI-413882E5). Wave 3 client
 equalize: BI-A4BEFE99.
 
 ## Skills shipped in v0.1.0
@@ -238,6 +243,11 @@ macOS / Linux:
 ```bash
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
 ```
+
+`--codex-only` selects Codex configuration, hooks and routine permissions.
+It does not configure Grok, Claude or Antigravity, so unrelated client settings
+cannot block a Codex repair. Omit the client selector to update all supported
+clients. Shared pack files and client discovery remain common maintenance.
 
 Start a new Codex thread after the updater finishes; skills and MCP tools are
 loaded at session start.

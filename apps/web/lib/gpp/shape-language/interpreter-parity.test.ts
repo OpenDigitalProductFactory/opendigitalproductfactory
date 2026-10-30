@@ -39,9 +39,9 @@ import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/
 import {
   isCompletingWorkroomDriveReceipt,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
-} from "@/lib/work-management/workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
-import { decompile } from "./decompile";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import {
   markedStageKeys,
   startShapeInstance,
@@ -49,7 +49,7 @@ import {
   type GppShapeEvent,
   type GppShapeMarking,
   type InterpretableShape,
-} from "./interpreter";
+} from "@dpf/validators/gpp/interpreter";
 
 const ALL_DEFINITIONS: readonly WorkShapeDefinition[] = [...listWorkShapes(), ...WORK_SHAPE_PRIOR_VERSIONS];
 const SEQUENCES_PER_SHAPE = 200;

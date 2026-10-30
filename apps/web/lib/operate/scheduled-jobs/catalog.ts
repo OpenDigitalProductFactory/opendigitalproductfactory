@@ -41,6 +41,7 @@ import {
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
+import { GUARD_OUTCOME_JOB_CATALOG_ENTRIES } from "./catalog-guard-outcomes";
 import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
 import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
@@ -501,6 +502,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  ...GUARD_OUTCOME_JOB_CATALOG_ENTRIES,
   {
     jobId: "budget-reservation-settle",
     inngestId: "portfolio/budget-reservation-settle",

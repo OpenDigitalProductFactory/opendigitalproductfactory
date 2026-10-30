@@ -32,7 +32,7 @@ import {
 import { readWorkroomPostureClaim, withWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { buildWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@/lib/work-management/room-shapes";
-import type { RoomPostureDeclaration } from "@/lib/work-posture";
+import type { RoomPostureDeclaration } from "@dpf/validators/workroom-policy";
 
 async function requirePlatformAdmin() {
   const session = await auth();

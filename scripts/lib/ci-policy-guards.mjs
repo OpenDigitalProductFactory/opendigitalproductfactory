@@ -222,6 +222,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // were stale (they now read compose-chain.ps1).
       conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
+      conformanceTest("scripts/installer/edge-client-certificate.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
       // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
@@ -375,7 +376,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/derived-artifacts-registry.test.mjs",
         "scripts/derived-artifacts-gate.test.mjs",
+        "scripts/build-judgment-guard-runtime.test.mjs",
+        "scripts/derived-artifacts-merged-base.test.mjs",
       ),
+      // BI-78176241: reads scripts/pregate.mjs and the live evidence policy, so
+      // the preflight must keep it.
+      conformanceTest("scripts/docs-only-single-source.test.mjs"),
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
     guard("pr-health-test", "PR Health Logic", [
@@ -425,6 +431,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate-preflight-effective-environment.test.mjs",
+        // BI-FEDD8F45: guard outcome records (client record, spool, flush, hook CLI).
+        "scripts/lib/guard-outcome-record.test.mjs",
+        "scripts/lib/guard-outcome-submit.test.mjs",
+        "scripts/record-guard-outcome.test.mjs",
         "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",

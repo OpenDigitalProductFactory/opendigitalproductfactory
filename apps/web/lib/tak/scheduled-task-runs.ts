@@ -1,3 +1,5 @@
+import { promptNamesTool, scheduledMandatoryToolNames } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
+export { scheduledMandatoryToolNames, WORKROOM_STAGE_EVIDENCE_TOOL } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
 import { isRecord } from "@/lib/shared/coerce";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
@@ -5,8 +7,8 @@ import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
 } from "@/lib/tak/autonomous-work-run";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
-import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
+import type { ResolvedDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
 import {
   classifyInferenceFailure,
   type InferenceFailureKind,
@@ -127,19 +129,6 @@ export function scheduledRequiredToolNames(input: {
  * A tool name is a token, so it must match on token boundaries. Underscores
  * are part of the name, which is why \b is not enough on its own.
  */
-function promptNamesTool(lowerPrompt: string, toolName: string): boolean {
-  const name = toolName.toLowerCase();
-  let from = 0;
-  for (;;) {
-    const at = lowerPrompt.indexOf(name, from);
-    if (at < 0) return false;
-    const before = at === 0 ? "" : lowerPrompt[at - 1]!;
-    const after = lowerPrompt[at + name.length] ?? "";
-    const boundary = (ch: string) => ch === "" || !/[a-z0-9_]/.test(ch);
-    if (boundary(before) && boundary(after)) return true;
-    from = at + 1;
-  }
-}
 
 /**
  * The tools this run must reach that are authorized but NOT attached.
@@ -273,32 +262,25 @@ export function detectScheduledRequiredToolFailure(input: {
 }): string | null {
   const outcome = classifyScheduledRequiredTools(input);
   if (outcome.kind !== "absent") return null;
+  // BI-CAP-B5F50D1F: a writer the run called and the server refused was not
+  // "attached and not called". Name the refusals so nobody hunts for a model
+  // refusal or a missing tool that does not exist.
+  const refusals = refusedCalls(input.executedTools, outcome.toolName);
+  if (refusals.length > 0) {
+    const codes = [...new Set(refusals.map((call) => call.result?.error?.trim() || "no error code"))].join(", ");
+    return `required governed tool ${outcome.toolName} was called ${refusals.length} time${refusals.length === 1 ? "" : "s"} and refused every time (${codes})`;
+  }
   const offered = input.attachedToolNames?.includes(outcome.toolName)
     ? "; it was attached to the run and not called"
     : "";
   return `required governed tool ${outcome.toolName} executed zero times${offered}`;
 }
 
-/** The writer every Workroom stage run records its stage evidence through. */
-export const WORKROOM_STAGE_EVIDENCE_TOOL = "record_workroom_evidence";
-
-/**
- * The governed writers a run must be OFFERED, whatever its grants say
- * (BI-62DB6C03).
- *
- * scheduledRequiredToolNames and the verdict derive "required" from the
- * AUTHORIZED set, so a run that is not offered the writer — an advise boundary
- * strips every side-effecting tool, or the grant or owner capability is
- * missing — has nothing required, is recorded ok, and the drive dispatches the
- * stage again. A Workroom stage run (taskConfig.workroomStage, or a brief naming
- * the writer) cannot do its job without the writer, so that requirement is
- * stated here independently of authority.
- */
-export function scheduledMandatoryToolNames(input: { prompt: string; taskConfig?: unknown }): string[] {
-  const isStageRun = readWorkroomStageTaskConfig(input.taskConfig) !== null
-    || promptNamesTool(input.prompt.toLowerCase(), WORKROOM_STAGE_EVIDENCE_TOOL);
-  return isStageRun ? [WORKROOM_STAGE_EVIDENCE_TOOL] : [];
+/** Calls of `toolName` the server refused (success false, not an approval wait). */
+function refusedCalls(executed: ScheduledRunToolExecution[], toolName: string): ScheduledRunToolExecution[] {
+  return executed.filter((call) => call.name === toolName && call.result?.success === false && call.result.error !== "approval_required");
 }
+
 
 /**
  * Why this run must not be dispatched, or null when every mandatory writer is
@@ -341,6 +323,8 @@ export function scheduledRequiredToolCorrection(input: {
 }): { toolName: string; message: string } | null {
   const outcome = classifyScheduledRequiredTools(input);
   if (outcome.kind !== "absent" || !input.attachedToolNames.includes(outcome.toolName)) return null;
+  // The model called it and read the refusal; telling it "you did not call it" is false (BI-CAP-B5F50D1F).
+  if (refusedCalls(input.executedTools, outcome.toolName).length > 0) return null;
   const tool = outcome.toolName;
   return { toolName: tool, message: `${tool} is attached to this run: it is in your tool list now. Your answer did not call it, and it is the only thing that records this run. `
     + `Call ${tool} now. If you could not do the work, call it with outcome "blocked" and say what blocked you. `
@@ -373,8 +357,10 @@ export async function createTaskRunForScheduledTask(input: {
   /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
   delegatedPosture?: ResolvedDelegatedPosture;
   taskConfig?: unknown;
+  scheduledReporting?: { mode: "read-only-history"; scopeDigest: string; nextRunAt: string | null };
 }): Promise<ScheduledTaskRunRef> {
   const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
+  const stage = readWorkroomStageTaskConfig(input.taskConfig);
   return createAutonomousWorkRun({
     trigger: "scheduled",
     userId: input.ownerUserId,
@@ -388,7 +374,11 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
-    ...(checkpoint ? { metadata: { workroomDispatchCheckpoint: checkpoint } } : {}),
+    ...(checkpoint || stage?.qualificationExperiment || input.scheduledReporting ? { metadata: {
+      ...(checkpoint ? { workroomDispatchCheckpoint: checkpoint } : {}),
+      ...(stage?.qualificationExperiment ? { qualificationExperiment: stage.qualificationExperiment } : {}),
+      ...(input.scheduledReporting ? { scheduledReporting: input.scheduledReporting } : {}),
+    } } : {}),
     proactivity: input.proactivity,
     delegatedPosture: input.delegatedPosture,
   });

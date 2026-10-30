@@ -14,7 +14,7 @@
 // a room may narrow what a coworker's standing grants permit; it never widens.
 import { COWORKER_READ_BASELINE_GRANTS, grantsSatisfyRequirement, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import { shapeDefaultPriority, type WorkroomShapeKey } from "./room-shapes";
 

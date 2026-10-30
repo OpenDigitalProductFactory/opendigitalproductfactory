@@ -226,6 +226,7 @@ export async function claimCapsuleScopeTool(
   }
 
   const force = params["force"] === true;
+  const qualificationAdmissionToken = stringParam(params, "qualificationAdmissionToken") ?? undefined;
   const db = workCapsuleDb();
   // GPP admission (BI-D1FB8C4D): a read-only room claims no paths.
   const provisionRefusal = await refuseUnlessRoomProvisions(db, capsuleId, "claim_workroom_scope");
@@ -242,6 +243,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        qualificationAdmissionToken,
         buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
@@ -645,6 +647,7 @@ export async function recordCapsuleEvidenceTool(
       capsuleId,
       evidence,
       actor: currentActor,
+      taskRunId: context?.taskRunId ?? null,
     }),
   });
 

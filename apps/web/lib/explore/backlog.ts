@@ -12,7 +12,7 @@ export type BacklogItemInput = {
   source?: BacklogSource;
   priority?: number;
   body?: string;
-  /** Create only: the outcome the item delivers, stored as the body's "## Outcome" (BI-B1B44777). */
+  /** The outcome the item delivers, stored in BacklogItem.outcome (BI-B1B44777, BI-8DE5429B). */
   outcome?: string;
   taxonomyNodeId?: string;
   digitalProductId?: string;
@@ -40,6 +40,9 @@ export type BacklogItemWithRelations = {
   workType: string | null;
   source: string | null;
   body: string | null;
+  /** BI-8DE5429B: the item's own outcome, and whether it was stated or derived. */
+  outcome?: string | null;
+  outcomeSource?: string | null;
   priority: number | null;
   epicId: string | null;
   triageOutcome: string | null;

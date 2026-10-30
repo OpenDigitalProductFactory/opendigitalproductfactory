@@ -112,6 +112,30 @@ describe("operator-approved Docker VM restart dispatch (BI-F8F8C383)", () => {
   });
 });
 
+describe("managed inference lifecycle dispatch", () => {
+  const type = "inference.runtime.transition";
+  const transition = action({ actionType: type, riskClass: "high", edgeNodeId: "node_1", changeRequestApproved: true });
+  const host = node({ allowedActionTypes: [type], organizationTrustRole: null });
+  it("is a specific privileged operation, never a read-only or general command type", () => {
+    expect(isDispatchActionType(type)).toBe(true);
+    expect(isReadonlyDispatchActionType(type)).toBe(false);
+    expect(isDispatchActionType("inference.runtime.shell")).toBe(false);
+  });
+  it("requires an approved machine-bound change and explicit host action permission", () => {
+    expect(isClaimableByNode(transition, host)).toEqual({ claimable: true });
+    for (const change of [{ edgeNodeId: null }, { edgeNodeId: "other-node" }, { changeRequestApproved: false },
+      { riskClass: "read-only" as const }, { approvalState: "pending" }, { status: "running" }]) {
+      expect(isClaimableByNode({ ...transition, ...change }, host).claimable).toBe(false);
+    }
+    expect(isClaimableByNode(transition, { ...host, allowedActionTypes: [DOCKER_VM_RESTART_ACTION_TYPE] }).claimable).toBe(false);
+    expect(isClaimableByNode(transition, { ...host, actionExecuteEnabled: false }).claimable).toBe(false);
+  });
+  it("cannot administer a customer-scoped estate through an otherwise permitted host", () => {
+    const scoped = { customerAccountId: "customer", customerSiteId: "site" };
+    expect(isClaimableByNode({ ...transition, ...scoped }, { ...host, ...scoped }).claimable).toBe(false);
+  });
+});
+
 describe("isClaimableByNode — scenario 1: INTERNAL (own estate)", () => {
   it("an internal node claims an internal-scoped read-only action", () => {
     expect(isClaimableByNode(action(), node())).toEqual({ claimable: true });

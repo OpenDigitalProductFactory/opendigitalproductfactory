@@ -286,6 +286,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_scheduled_agent_task: ["work_capsule_write"],
   cancel_scheduled_agent_task: ["work_capsule_write"],
   list_scheduled_agent_tasks: ["work_capsule_read"],
+  configure_scheduled_agent_task_reporting: ["work_capsule_write"],
 
   // Org/WWWD business-decision consultation — advisory (returns a recommendation,
   // records a governance ledger row). Read-baseline grant: a coworker may consult

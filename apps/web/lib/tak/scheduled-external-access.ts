@@ -41,8 +41,14 @@ const RESEARCH_TASK_KINDS = new Set([
 // Prompt shapes that unambiguously ask for outside-world material. Deliberately
 // conservative: a false negative degrades to today's behaviour (the run
 // proceeds), while a false positive would fail a task that never needed the web.
+//
+// "research" must be a word of prose, not part of an identifier. `\b` treats
+// "-" and "/" as word boundaries, so a branch
+// (`fix/research-receipt-fields`), a path (`record-ideate-research-receipt.ts`)
+// or a tool name once made a post-implementation review "need the web" and it
+// was refused before it ran (BI-PIR-dc81be34, WWMD DI-E325408A3C34).
 const RESEARCH_PROMPT_PATTERNS: RegExp[] = [
-  /\bresearch\b/i,
+  /(?<![\w./#-])research(?![\w/-]|\.\w)/i,
   /\bcompetitors?\b|\bcompetitive\s+(landscape|analysis|intelligence)\b/i,
   /\bmarket\s+(scan|watch|trends?|intelligence|research)\b/i,
   /\bindustry\s+(news|trends?|reports?)\b/i,

@@ -5,6 +5,7 @@ import { semanticReviewRecoveryObservation, semanticReviewNodeEligibility } from
 import { readSemanticReviewRemediation, SEMANTIC_REVIEW_REMEDIATION_MAX_AGE_MS } from "./semantic-review-remediation";
 import { inspectSemanticReviewAuthority, type SemanticReviewAuthorityObservation } from "./semantic-review-authority";
 import { readPersistedSemanticReviewRequest } from "./semantic-review-request-store";
+import type { OAuthExecutionAuthorityDetail } from "@/lib/auth/oauth-tokens";
 
 const NODE_LIMIT = 100;
 type OwnedTask = {
@@ -24,13 +25,27 @@ const authorityRemedies: Record<SemanticReviewAuthorityObservation["reason"], st
   "task-authority-unavailable": "Task authority could not be observed. Restore its observation service before diagnosing a denial or recovering work.",
 };
 
+const oauthRemedies: Record<OAuthExecutionAuthorityDetail, string> = {
+  "token-kind-invalid": "The saved reference is not an OAuth access credential. Reconcile the original request binding through supported recovery; do not substitute credentials.",
+  "token-revoked": "The original credential is revoked. Its owner must review the revocation through supported account controls; this does not authorize retry.",
+  "client-missing": "The original OAuth client record is missing. Reconcile that original connection through supported recovery; a different working connection is not proof of restoration.",
+  "client-revoked": "The original OAuth client is revoked. Its owner must review that connection through supported account controls; signing in elsewhere does not restore it.",
+  "human-unavailable": "The original human is not currently eligible. The authority administrator must review that account's current access.",
+  "continuity-envelope-missing": "The original queued-work continuity binding is incomplete. Reconcile the original binding; do not infer that reconnecting can restore it.",
+  "continuity-evidence-missing": "No eligible access successor or refresh evidence was found for the original continuity binding. The recovery owner must reconcile that binding; this does not establish why continuity was lost.",
+  "consent-binding-missing": "The original connection has no required consent binding. Review the original consent through supported account controls; do not copy another connection's consent.",
+  "consent-envelope-missing": "The original consent binding lacks its client or resource context. Reconcile the original binding through supported recovery.",
+  "consent-invalid": "The original consent is not currently eligible for the recorded assistant and scope. Its authority owner must review that consent; this observation does not identify a historical cause.",
+};
+
 async function readAuthority(row: OwnedTask) {
   try {
     const packet = row.id ? await readPersistedSemanticReviewRequest({ ...row, id: row.id }) : null;
     if (!packet) return { state: "unavailable" as const, reason: "immutable-request-unavailable" as const,
       nextAction: "The original immutable request could not be verified. Restore its existing binding before authority diagnosis; do not reconstruct its digest." };
     const observation = await inspectSemanticReviewAuthority(packet, row.taskRunId);
-    return { ...observation, nextAction: authorityRemedies[observation.reason] };
+    return { ...observation, nextAction: observation.reason === "oauth-authority-invalid" && observation.detail
+      ? oauthRemedies[observation.detail] : authorityRemedies[observation.reason] };
   } catch {
     return { state: "unavailable" as const, reason: "authority-observation-unavailable" as const,
       nextAction: "Authority could not be observed. Restore the observation service; this is neither a confirmed denial nor permission to recover." };

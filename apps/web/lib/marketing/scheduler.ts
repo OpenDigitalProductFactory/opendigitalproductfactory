@@ -18,7 +18,7 @@ import {
   type ScheduledActionStatus,
 } from "./execution";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 const ADVANCE_DAYS_FOR_DUE_WINDOW = 3;
 

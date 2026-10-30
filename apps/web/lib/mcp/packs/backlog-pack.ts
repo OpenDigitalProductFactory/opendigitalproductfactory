@@ -20,7 +20,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "./backlog-update-item-handler";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
-import { OUTCOME_INTAKE_PROMPT } from "@/lib/backlog/intake-outcome";
+import { OUTCOME_INTAKE_PROMPT, derivedOutcomeAdvisory } from "@/lib/backlog/intake-outcome";
 import {
   getBacklogItem,
   getNextRecommendedWork,
@@ -40,6 +40,7 @@ import {
 } from "@/lib/backlog/deferral-contract";
 import { retireBacklogItemTool, triageBacklogItemTool } from "@/lib/mcp/backlog-retirement-handlers";
 import { completeBacklogItemTransitionTool } from "@/lib/backlog/mcp-terminal-status";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 // ── Handlers (case bodies moved verbatim) ───────────────────────────────────
 
 async function createBacklogItem(
@@ -157,9 +158,10 @@ async function createBacklogItem(
       result.duplicateSemanticUnavailable ?? null,
     );
     const withDuplicates = duplicateAdvisory ? `${scanned}\n\n${duplicateAdvisory}` : scanned;
-    // BI-B1B44777: a soft prompt for the outcome, never a refusal.
+    // BI-B1B44777: a soft prompt for the outcome, never a refusal. With the
+    // outcome a field (BI-8DE5429B), intake derived a draft: name it.
     const message = result.outcomeStated === false
-      ? `${withDuplicates}\n\n${OUTCOME_INTAKE_PROMPT}`
+      ? `${withDuplicates}\n\n${result.derivedOutcome ? derivedOutcomeAdvisory(result.derivedOutcome) : OUTCOME_INTAKE_PROMPT}`
       : withDuplicates;
     return { success: true, entityId: result.itemId, message };
   } catch (err) {
@@ -320,10 +322,21 @@ async function updateBacklogItemStatus(
       claimedAt: true,
       deferredAt: true,
       organizationId: true,
+      body: true,
     },
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  // BI-C5794F1D: a work-sync mirror is changed at its origin; the next pull
+  // would silently undo a status written here, so refuse and name the owner.
+  const peerOwned = peerOwnedStatusRefusal(itemIdRaw, item.body);
+  if (peerOwned)
+    return {
+      success: false,
+      error: peerOwned.error,
+      message: peerOwned.message,
+      data: { originInstallationId: peerOwned.originInstallationId },
+    };
   if (!isBacklogStatus(item.status))
     return {
       success: false,

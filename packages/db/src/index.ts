@@ -177,6 +177,19 @@ export {
 } from "./wiki-taxonomy";
 export { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
 export {
+  RELATION_TYPES,
+  RelationTypeError,
+  assertRelationWrite,
+  getRelationType,
+  isGenericRelationName,
+  lintRelationVocabulary,
+  toRelationType,
+  type RelationClass,
+  type RelationStatus,
+  type RelationType,
+  type RelationTypeDef,
+} from "./relation-vocabulary";
+export {
   getDownstreamImpact,
   getUpstreamDependencies,
   getProductsByPortfolio,

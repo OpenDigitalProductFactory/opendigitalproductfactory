@@ -1882,75 +1882,19 @@ def install_grok_plugin(managed: Path, dry_run: bool) -> str:
     return "reinstalled" if already_installed else "installed"
 
 
-# PreToolUse guards to wire into Grok's hook plane. Blocking safety/decision
-# guards only; the Write/Edit advisory prechecks are Claude-shaped and non-blocking.
-# Flat list kept for drift tests vs hooks.json emitDeny set.
-GROK_HOOK_GUARDS = (
-    "lease-punt-guard.mjs",
-    "decision-routing-guard.mjs",
-    "lease-guard.mjs",
-    "root-clone-guard.mjs",
-    "compose-guard.mjs",
-    "raw-tool-guard.mjs",
-    "portal-image-guard.mjs",
-    "plan-backlog-coverage-guard.mjs",
-    "pregate-evidence-guard.mjs",
-    "pregate-invocation-guard.mjs",
-    # BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on every
-    # surface. Grok ignores the plugin-bundled hooks.json entirely, so a guard
-    # absent from this tuple never reaches Grok at all.
-    "workroom-claim-guard.mjs",
-)
-# Matcher-scoped groups (BI-pretooluse): without matchers Grok runs EVERY PreToolUse
-# command on EVERY tool (6 serial node spawns per call), which looks like
-# "PreToolUse is broken/slow" and races the 15s per-hook timeout under load.
-# Tool names are the Grok+Claude union (Shell/Bash/run_terminal_command).
-GROK_PRETOOLUSE_GROUPS = (
-    (
-        "Shell|Bash|run_terminal_command|run_terminal_cmd",
-        (
-            "lease-punt-guard.mjs",
-            "lease-guard.mjs",
-            "root-clone-guard.mjs",
-            "compose-guard.mjs",
-            "portal-image-guard.mjs",
-            "pregate-evidence-guard.mjs",
-            "pregate-invocation-guard.mjs",
-            "workroom-claim-guard.mjs",
-        ),
-    ),
-    (
-        "AskQuestion|AskUserQuestion",
-        ("decision-routing-guard.mjs",),
-    ),
-    (
-        "Write|Edit|MultiEdit",
-        ("plan-backlog-coverage-guard.mjs", "workroom-claim-guard.mjs"),
-    ),
-)
+# Which hooks.json entries each client runs (BI-742D707B). hooks.json is the one
+# roster; hooks/client-hook-planes.json holds only per-client matcher aliases,
+# bundled substitutes and exclusions, each with its reason. Grok ignores
+# plugin-bundled hooks (BI-883FC2FC), so its global ~/.grok/hooks/dpf-guards.json
+# is built from hooks.json minus those exclusions. Hand-kept tuples used to stand
+# in for it and drifted: raw-tool-guard and the write-path root-clone-guard never
+# reached Grok.
+CLIENT_HOOK_PLANES_FILE = "client-hook-planes.json"
+PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}/hooks/"
+# Stop is NOT SessionEnd (BI-E5D810B8). Grok fires `Stop` after every turn, so
+# hooks.json keeps the destructive reaper (worktree-session-hygiene) on
+# SessionEnd only; the generated Grok plane inherits that from hooks.json.
 
-# Session/Stop plane for Grok (BI-BCA23DBB + session worktree hygiene).
-# Plugin hooks.json names these for Claude; Grok only executes ~/.grok/hooks.
-# - grok-session-start: process-spine exposure + governance-freshness
-# - worktree-session-hygiene: transactional Tier-A reap of THIS worktree (primary;
-#   fleet schedule ops/worktree-janitor is backstop only)
-GROK_SESSION_START_SCRIPTS = (
-    "grok-session-start.mjs",
-    "worktree-session-hygiene.mjs",
-)
-GROK_SESSION_END_SCRIPTS = (
-    "uncommitted-work-guard.mjs",
-    "worktree-session-hygiene.mjs",
-)
-# Stop is NOT SessionEnd (BI-E5D810B8). Grok fires `Stop` after every turn, so a
-# destructive reap wired here removes the worktree the session is still working
-# in — from the turn its PR merges (when a live tree first satisfies Tier A)
-# onward. Stop carries the non-destructive uncommitted-work warning only; the
-# reaper stays on SessionEnd. Mirrors hooks.json for the Claude plane.
-GROK_STOP_SCRIPTS = ("uncommitted-work-guard.mjs",)
-# Back-compat single names (older docs / tests may reference these).
-GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
-GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
 
 # PostToolUse (BI-AB4EA033, BI-C3D3762B): re-cache the claim guard's marker from
 # each dpf claim/heartbeat answer, so a lease renewed over MCP stops the guard
@@ -1978,29 +1922,6 @@ def _managed_hook_command(hooks_dir: Path, script: str, timeout: int = 15, event
     return result
 
 
-def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15, event: str = "PreToolUse") -> dict[str, Any]:
-    """Single-script PreToolUse group (legacy shape used by session events)."""
-    return {"hooks": [_managed_hook_command(hooks_dir, script, timeout=timeout, event=event)]}
-
-
-def _grok_matched_group(
-    hooks_dir: Path,
-    matcher: str,
-    scripts: tuple[str, ...],
-    *,
-    dry_run: bool,
-    timeout: int = 15,
-) -> dict[str, Any] | None:
-    hooks = [
-        _managed_hook_command(hooks_dir, script, timeout=timeout)
-        for script in scripts
-        if dry_run or (hooks_dir / script).exists()
-    ]
-    if not hooks:
-        return None
-    return {"matcher": matcher, "hooks": hooks}
-
-
 def claim_refresh_post_tool_use_groups(hooks_dir: Path, *, dry_run: bool) -> list[dict[str, Any]]:
     """The PostToolUse group that re-caches the Workroom claim marker, or none."""
     if not (dry_run or (hooks_dir / CLAIM_REFRESH_SCRIPT).exists()):
@@ -2011,41 +1932,116 @@ def claim_refresh_post_tool_use_groups(hooks_dir: Path, *, dry_run: bool) -> lis
     }]
 
 
+def client_hook_planes(skill_pack: Path) -> dict[str, Any]:
+    """hooks/client-hook-planes.json: per-client delivery, aliases, substitutes, exclusions."""
+    return json.loads((skill_pack / "hooks" / CLIENT_HOOK_PLANES_FILE).read_text(encoding="utf-8"))
+
+
+def _hooks_json_entries(skill_pack: Path) -> list[dict[str, Any]]:
+    """Every hooks.json entry in definition order: event, matcher, script, hook."""
+    data = json.loads((skill_pack / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    entries = []
+    for event, groups in data.get("hooks", {}).items():
+        for group in groups:
+            for hook in group.get("hooks", []):
+                entries.append({
+                    "event": event,
+                    "matcher": str(group.get("matcher", "")),
+                    "script": hook_script_basename(str(hook.get("command", ""))),
+                    "hook": hook,
+                })
+    return entries
+
+
+def client_hook_coverage(skill_pack: Path, client: str) -> list[dict[str, Any]]:
+    """One row per hooks.json entry: wired, bundled (with its substitute) or excluded, with the reason.
+
+    An entry the planes file neither wires nor explains is "unaccounted"; the
+    coverage test fails on it, so no client can lose a hook silently.
+    """
+    planes = client_hook_planes(skill_pack)["clients"]
+    plane = planes[client]
+    # A client that runs another's plane (the Build Studio sandbox runs Grok's)
+    # inherits its wiring; only its delivery text differs.
+    plane = {**planes[plane["sameAs"]], **{k: v for k, v in plane.items() if k != "sameAs"}} if "sameAs" in plane else plane
+    excluded = plane.get("excluded", {})
+    replaced = {
+        (spec["event"], script): (substitute, spec["reason"], spec.get("purpose"))
+        for substitute, spec in plane.get("bundled", {}).items()
+        for script in spec["replaces"]
+    }
+    rows = []
+    for entry in _hooks_json_entries(skill_pack):
+        event, script = entry["event"], entry["script"]
+        row = {"event": event, "matcher": entry["matcher"], "script": script}
+        reason = excluded.get(f"{event}:{script}") or excluded.get(f"{event}:*") or plane.get("excludedAll")
+        if reason:
+            row.update(state="excluded", reason=reason)
+        elif (event, script) in replaced:
+            substitute, why, purpose = replaced[(event, script)]
+            row.update(state="bundled", substitute=substitute, reason=f"Runs inside {substitute}. {why}", purpose=purpose)
+        elif plane.get("plane"):
+            row.update(state="wired")
+        else:
+            row.update(state="unaccounted")
+        rows.append(row)
+    return rows
+
+
+def _resolved_grok_hook(hooks_dir: Path, hook: dict[str, Any], script: str, timeout: int) -> dict[str, Any]:
+    """The hooks.json entry with the plugin-root token resolved to the managed copy; arguments kept."""
+    command = str(hook.get("command", ""))
+    command = command.replace(f"{PLUGIN_ROOT_TOKEN}{script}", str(hooks_dir / script))
+    result = {"type": "command", "command": command, "timeout": timeout}
+    if hook.get("statusMessage"):
+        result["statusMessage"] = hook["statusMessage"]
+    return result
+
+
 def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
-    """Build the global Grok hooks payload (PreToolUse + SessionStart + SessionEnd/Stop)."""
+    """Grok's global hook payload: hooks.json minus the Grok exclusions, in definition order.
+
+    PreToolUse/PostToolUse keep one group per matcher (aliased to Grok's tool
+    names) so Grok does not run every guard on every tool call. Session events
+    keep one group per hook. A bundled substitute takes the place of the first
+    entry it replaces.
+    """
     hooks_dir = managed / "hooks"
-    pre_entries: list[dict[str, Any]] = []
-    for matcher, scripts in GROK_PRETOOLUSE_GROUPS:
-        group = _grok_matched_group(hooks_dir, matcher, scripts, dry_run=dry_run, timeout=15)
-        if group:
-            pre_entries.append(group)
+    # A dry run, or a first install, can run before the managed copy exists. The
+    # roster is the same pack either way, so read it from this script's own pack.
+    roster = managed if (hooks_dir / CLIENT_HOOK_PLANES_FILE).exists() else default_skill_pack_path()
+    plane = client_hook_planes(roster)["clients"]["grok"]
+    aliases = plane.get("matchers", {})
+    timeouts = plane.get("timeouts", {})
+    hooks_by_entry = {(e["event"], e["matcher"], e["script"]): e["hook"] for e in _hooks_json_entries(roster)}
     payload: dict[str, Any] = {"hooks": {}}
-    if pre_entries:
-        payload["hooks"]["PreToolUse"] = pre_entries
-    post_entries = claim_refresh_post_tool_use_groups(hooks_dir, dry_run=dry_run)
-    if post_entries:
-        payload["hooks"]["PostToolUse"] = post_entries
-    start = [
-        _grok_command_entry(hooks_dir, script, timeout=30, event="SessionStart")
-        for script in GROK_SESSION_START_SCRIPTS
-        if dry_run or (hooks_dir / script).exists()
-    ]
-    if start:
-        payload["hooks"]["SessionStart"] = start
-    end = [
-        _grok_command_entry(hooks_dir, script, timeout=60, event="SessionEnd")
-        for script in GROK_SESSION_END_SCRIPTS
-        if dry_run or (hooks_dir / script).exists()
-    ]
-    if end:
-        payload["hooks"]["SessionEnd"] = end
-    stop = [
-        _grok_command_entry(hooks_dir, script, timeout=60, event="Stop")
-        for script in GROK_STOP_SCRIPTS
-        if dry_run or (hooks_dir / script).exists()
-    ]
-    if stop:
-        payload["hooks"]["Stop"] = stop
+    placed: set[tuple[str, str]] = set()
+    for row in client_hook_coverage(roster, "grok"):
+        event = row["event"]
+        timeout = int(timeouts.get(event, 15))
+        if row["state"] == "wired":
+            script = row["script"]
+            hook = _resolved_grok_hook(hooks_dir, hooks_by_entry[(event, row["matcher"], script)], script, timeout)
+        elif row["state"] == "bundled" and (event, row["substitute"]) not in placed:
+            script = row["substitute"]
+            placed.add((event, script))
+            hook = {"type": "command", "command": f'node "{hooks_dir / script}"', "timeout": timeout}
+            if row.get("purpose"):
+                hook["statusMessage"] = row["purpose"]
+        else:
+            continue
+        if not (dry_run or (hooks_dir / script).exists()):
+            continue
+        groups = payload["hooks"].setdefault(event, [])
+        if row["matcher"]:
+            matcher = aliases.get(row["matcher"], row["matcher"])
+            group = next((g for g in groups if g.get("matcher") == matcher), None)
+            if group is None:
+                group = {"matcher": matcher, "hooks": []}
+                groups.append(group)
+            group["hooks"].append(hook)
+        else:
+            groups.append({"hooks": [hook]})
     return payload
 
 
@@ -2540,7 +2536,7 @@ def guard_liveness_advisory() -> list[str]:
         "  Grok  : guards now DENY (live-probed, Grok 0.2.87). Grok DOES execute PreToolUse "
         + "blocking command-hooks, but its hook plane ignores plugin-bundled hooks — so the guards "
         + "are wired into ~/.grok/hooks/dpf-guards.json (always-trusted) instead, and self-scope to "
-        + "DPF checkouts. Restart Grok to load them; `/hooks` should list 6 PreToolUse guards."
+        + "DPF checkouts. Restart Grok to load them; `/hooks` should list the PreToolUse guards in the Grok column of hooks/README.md."
     )
     return [
         "Guard liveness (plane-1 PreToolUse enforcement is NOT implied by install):",
@@ -2579,6 +2575,8 @@ def hook_reference(skill_pack: Path) -> str:
             lines.append(f"- {entry}")
         else:
             lines.extend(["", f"## {line.strip().rstrip(':')}", ""])
+    if (hooks_dir / CLIENT_HOOK_PLANES_FILE).is_file():
+        lines.extend(client_hook_reference(skill_pack))
     lines.extend(["", "Regenerate with `python scripts/update_agent_toolchain.py --write-hook-reference` from the skill-pack directory.", ""])
     return "\n".join(lines)
 
@@ -2598,6 +2596,58 @@ def register_toolchain_agent(home: Path, portal_sourced: bool, dry_run: bool, en
     if not script.is_file():
         return "skipped: the shared copy has no toolchain_agent.py"
     return toolchain_agent.ensure_schedule(home, sys.executable, str(script), env)
+
+
+def client_hook_reference(skill_pack: Path) -> list[str]:
+    """The per-client section of hooks/README.md: counts, then every entry by client."""
+    planes = client_hook_planes(skill_pack)["clients"]
+    clients = list(planes)
+    coverage = {c: client_hook_coverage(skill_pack, c) for c in clients}
+
+    def esc(text: Any) -> str:
+        return str(text).replace("|", "\\|")
+
+    lines = [
+        "", "## By client", "",
+        f"Generated from [{CLIENT_HOOK_PLANES_FILE}]({CLIENT_HOOK_PLANES_FILE}) (BI-742D707B). hooks.json is the one roster;",
+        "that file records, per client, what delivers the hooks and every entry left out, with the reason.",
+        "A count here is what DPF wires, not proof the client fired it; live probes are recorded in",
+        "[client-capabilities.json](../client-capabilities.json).", "",
+        "| Client | Delivered by | Wired | Run inside a substitute | Not wired |",
+        "|---|---|---|---|---|",
+    ]
+    for client in clients:
+        rows = coverage[client]
+
+        def count(state: str) -> int:
+            return sum(1 for r in rows if r["state"] == state)
+
+        lines.append(
+            f"| {planes[client]['displayName']} | {esc(planes[client].get('plane') or 'none')} "
+            f"| {count('wired')} of {len(rows)} | {count('bundled')} | {count('excluded') + count('unaccounted')} |"
+        )
+    reasons: list[str] = []
+
+    def cell(row: dict[str, Any]) -> str:
+        if row["state"] == "wired":
+            return "yes"
+        if row["state"] == "bundled":
+            return f"in {row['substitute']}"
+        if row["state"] == "unaccounted":
+            return "**unaccounted**"
+        if row["reason"] not in reasons:
+            reasons.append(row["reason"])
+        return f"no ({reasons.index(row['reason']) + 1})"
+
+    header = " | ".join(planes[c]["displayName"] for c in clients)
+    lines.extend(["", f"| Event | Matcher | Hook | {header} |", "|---|---|---|" + "---|" * len(clients)])
+    for index, first in enumerate(coverage[clients[0]]):
+        cells = " | ".join(cell(coverage[c][index]) for c in clients)
+        lines.append(f"| {first['event']} | {esc(first['matcher']) or '—'} | [{first['script']}]({first['script']}) | {cells} |")
+    if reasons:
+        lines.extend(["", "Why an entry is not wired:", ""])
+        lines.extend(f"{n}. {reason}" for n, reason in enumerate(reasons, 1))
+    return lines
 
 
 def main(argv: list[str]) -> int:
@@ -2718,7 +2768,7 @@ def _main(argv: list[str]) -> int:
         permission_runtime_unavailable = routine_permissions.tomllib is None
         if permission_runtime_unavailable:
             print('Routine permissions UNRUN: Python 3.11+ or tomli is required; no permission configuration changed.')
-    selected_permission_clients = ('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
+    selected_permission_clients = ('codex',) if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
     unrun_permission_rows = [{'client': client, 'scope': 'permissions:' + str(args.project_root.resolve()),
         'action': 'unrun', 'sessionVerified': False, 'restartRequired': False,
         'detail': 'TOML parser unavailable; existing permissions retained. Use a supported Python runtime.'}
@@ -2802,7 +2852,8 @@ def _main(argv: list[str]) -> int:
     print(f"  Codex source : {codex_managed}")
     print(f"  shared source: {shared_managed}")
     if declarations is not None:
-        convergence.declare_grok_descriptor(shared_managed, declarations, args.dry_run)
+        if not args.codex_only and not args.claude_only:
+            convergence.declare_grok_descriptor(shared_managed, declarations, args.dry_run)
         print(f"  declares   : pack {declarations.pack}, digest {declarations.digest[:16]}")
     if report:
         report.add("shared", "copy", "copied")
@@ -2857,6 +2908,12 @@ def _main(argv: list[str]) -> int:
                 codex_status = f"failed: {error}"
                 codex_install_failed = True
             print(f"  Codex      : {codex_status}")
+        if report:
+            report.add("codex", "user", codex_status)
+
+    # Client selection applies to adapters and permission planning alike. A
+    # Codex repair must not read another client's settings or refresh its tokens.
+    if not args.codex_only and not args.claude_only:
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
             grok_status = install_grok_plugin(shared_managed, args.dry_run)
@@ -2885,7 +2942,6 @@ def _main(argv: list[str]) -> int:
         )
         print(f"  Grok credential: {grok_credential_status}")
         if report:
-            report.add("codex", "user", codex_status)
             report.add("grok", "user", grok_status)
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
@@ -2962,7 +3018,7 @@ def _main(argv: list[str]) -> int:
         try:
             permission_rows = routine_permissions.apply_permissions(
                 routine_permissions.plan_permissions(args.project_root, home, skill_pack,
-                    clients=('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')),
+                    clients=selected_permission_clients),
                 args.dry_run, native=True)
             permission_failed = any(row['action'] == 'failed' for row in permission_rows)
             if report:

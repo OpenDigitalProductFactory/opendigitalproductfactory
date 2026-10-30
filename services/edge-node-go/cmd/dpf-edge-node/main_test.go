@@ -1,6 +1,44 @@
 package main
 
-import "testing"
+import (
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/action"
+	"testing"
+)
+
+func TestNativeInferenceCapabilityRequiresRegisteredVerifiedController(t *testing.T) {
+	nativeInferenceController.Store(nil)
+	t.Cleanup(func() { nativeInferenceController.Store(nil) })
+	read := func() map[string]any {
+		for _, report := range capabilityReports(true, false, "", hostUpkeepReport{}) {
+			if report.Capability == "action.execute" {
+				return report.Evidence
+			}
+		}
+		t.Fatal("missing action channel")
+		return nil
+	}
+	if _, present := read()["managedInference"]; present {
+		t.Fatal("unregistered controller advertised")
+	}
+	description := &action.NativeControllerDescription{SourceSHA: "source", ManifestSHA256: "manifest"}
+	nativeInferenceController.Store(description)
+	evidence := read()
+	if !containsString(evidence["actionTypes"].([]string), action.ManagedInferenceActionType) {
+		t.Fatalf("registered native transition missing: %#v", evidence)
+	}
+	metadata, ok := evidence["managedInference"].(map[string]any)
+	if !ok || metadata["sourceSha"] != "source" || metadata["controllerManifestSha256"] != "manifest" {
+		t.Fatalf("wrong controller identity: %#v", metadata)
+	}
+	if _, ok := metadata["nodePath"]; ok {
+		t.Fatal("private executable path disclosed")
+	}
+	for _, report := range capabilityReports(false, false, "", hostUpkeepReport{}) {
+		if report.Capability == "action.execute" {
+			t.Fatal("native controller bypassed missing trust bundle")
+		}
+	}
+}
 
 func TestCapabilityReportsAdvertisesActionExecuteOnlyWithCompleteTrustBundle(t *testing.T) {
 	actionDispatchHealth.Store(actionDispatchHealthy)

@@ -1,3 +1,4 @@
+import { BUILD_DELIVERY_ACTUATOR } from "@/lib/build/build-acceptance-entry";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
 import type { OwedAcceptance } from "./owed-acceptance";
@@ -115,6 +116,11 @@ export type AcceptanceSweepSummary = {
   closing: AcceptanceSweepClosing;
   /** BI-C899BB40: done items whose one bounded post-delivery step was advanced. */
   confirmation: AcceptanceSweepConfirmation;
+  /**
+   * BI-C5794F1D: obligations not evaluated or closed because a peer
+   * installation owns them (work-sync mirrors). Only the origin may change them.
+   */
+  peerOwned: { skipped: number };
   cursor: string | null;
 };
 
@@ -156,6 +162,7 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
     `Acceptance sweep: ${pool.size} acceptance obligations, ${pool.aged} aged ${agedDays}+ days`,
     `${pool.agedOverTrend} over ${pool.trendDays} days`,
     `${pool.ageBasisCreated} aged from creation (no entry record)`,
+    ...(summary.peerOwned.skipped > 0 ? [`${summary.peerOwned.skipped} skipped: owned by peer installation`] : []),
     `page of ${page.evaluated}: ${page.snapshotsWritten} changed, ${page.closable} closable, ${page.owned} with an owner, ${page.unroutableItems} unroutable`,
     summary.closing.enabled
       ? `${summary.closing.closed.length} closed under operator pre-authorisation`
@@ -166,6 +173,13 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
         + `${summary.confirmation.correctiveItemIds.length} corrective)`]
       : []),
   ].join("; ").slice(0, 500);
+}
+
+function deliveredBuildEntry(item: { activities?: Array<{ kind: string; payload: unknown }> }): boolean {
+  const payload = item.activities?.find((row) => row.kind === "status_change")?.payload;
+  return Boolean(payload && typeof payload === "object" && !Array.isArray(payload)
+    && (payload as Record<string, unknown>).actuator === BUILD_DELIVERY_ACTUATOR
+    && (payload as Record<string, unknown>).to === "awaiting-acceptance");
 }
 
 export async function runAcceptanceSweep(
@@ -265,7 +279,9 @@ export async function runAcceptanceSweep(
       listed.closable.push(item.itemId);
       await closeIfAuthorised(item, projection, authorisation, closing, ports);
     }
-    if (isRoutingCandidate(itemAge?.ageDays, config.agedDays, projection)) {
+    // BI-729D9B27: a build-originated item whose change is proven live routes at
+    // once; the aged-item wait is for acceptance nobody owns, and this one has none.
+    if (isRoutingCandidate(itemAge?.ageDays, deliveredBuildEntry(item) ? 0 : config.agedDays, projection)) {
       agedCandidates.push({ item, ageDays: itemAge!.ageDays, projection });
     }
     if (projection.owner) page.owned += 1;
@@ -306,6 +322,7 @@ export async function runAcceptanceSweep(
     routing,
     closing,
     confirmation,
+    peerOwned: { skipped: ages.peerOwnedSkipped ?? 0 },
     cursor: nextCursor,
   };
   const summary: AcceptanceSweepSummary = { ...withoutHeadline, headline: headline(withoutHeadline, config.agedDays) };

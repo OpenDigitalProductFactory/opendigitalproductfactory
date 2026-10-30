@@ -22,6 +22,9 @@ type Executor struct {
 	OrganizationJoin *OrganizationJoinHandler
 	// DockerVmRestart is set only on a Windows host (BI-F8F8C383).
 	DockerVmRestart DockerVmRestartExecutor
+	// Optional and disabled until the supported native installer provisions the
+	// complete lifecycle implementation. A type registration never enables it.
+	ManagedInference ManagedInferenceExecutor
 }
 
 type DockerVmRestartExecutor interface {
@@ -65,6 +68,13 @@ func (e *Executor) Execute(ctx context.Context, signed SignedEnvelope) (Executio
 		if !validDockerVmRestartParameters(signed.Parameters) {
 			return ExecutionOutput{}, ErrInvalidParameters
 		}
+	} else if signed.ActionType == ManagedInferenceActionType {
+		if e.ManagedInference == nil {
+			return ExecutionOutput{}, ErrUnsupportedAction
+		}
+		if _, err := parseManagedInferenceParameters(signed.Parameters); err != nil {
+			return ExecutionOutput{}, err
+		}
 	} else if signed.ActionType != "organization.join.issue" && signed.ActionType != "organization.join.import" {
 		return ExecutionOutput{}, ErrUnsupportedAction
 	} else if e.OrganizationJoin == nil {
@@ -84,6 +94,12 @@ func (e *Executor) Execute(ctx context.Context, signed SignedEnvelope) (Executio
 			return ExecutionOutput{}, err
 		}
 		output.Evidence = evidence
+	} else if signed.ActionType == ManagedInferenceActionType {
+		var err error
+		output, err = e.ManagedInference.Execute(ctx, signed)
+		if err != nil {
+			return output, err
+		}
 	} else {
 		var err error
 		output, err = e.dispatchPrivileged(ctx, signed.ActionType, signed.Parameters)

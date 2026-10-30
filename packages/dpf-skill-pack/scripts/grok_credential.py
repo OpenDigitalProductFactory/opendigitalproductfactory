@@ -66,14 +66,42 @@ def validate_client_payload(text: str) -> str:
     return json.dumps({"clientId": client_id, "clientSecret": secret})
 
 
-def _dpf_table_span(lines: list[str]) -> Optional[tuple[int, int]]:
-    for index, line in enumerate(lines):
-        if _DPF_HEADER.match(line):
+def _is_dpf_header(line: str) -> bool:
+    # Any TOML spelling of mcp_servers.dpf. Grok rewrites its own config as
+    # ["mcp_servers"."dpf"], which the header regex alone missed, so a second
+    # table was appended and Grok refused to start (BI-E7806C0F).
+    if _DPF_HEADER.match(line):
+        return True
+    from update_agent_toolchain import canonical_toml_table_header
+
+    return canonical_toml_table_header(line) == "mcp_servers.dpf"
+
+
+def _dpf_table_spans(lines: list[str]) -> list[tuple[int, int]]:
+    """The [start, end) span of every table spelling mcp_servers.dpf, in order."""
+    spans = []
+    index = 0
+    while index < len(lines):
+        if _is_dpf_header(lines[index]):
             end = index + 1
             while end < len(lines) and not _TABLE_START.match(lines[end]):
                 end += 1
-            return index, end
-    return None
+            spans.append((index, end))
+            index = end
+        else:
+            index += 1
+    return spans
+
+
+def _dpf_table_span(lines: list[str]) -> Optional[tuple[int, int]]:
+    spans = _dpf_table_spans(lines)
+    return spans[0] if spans else None
+
+
+def _bare_key(line: str) -> str:
+    """The key of a `key = value` line, unquoted ("url" and url are one key)."""
+    key = line.partition("=")[0].strip()
+    return key[1:-1] if len(key) >= 2 and key[0] == key[-1] and key[0] in "\"'" else key
 
 
 def _string_value(line: str) -> Optional[str]:
@@ -91,7 +119,7 @@ def existing_grok_mcp_url(text: str) -> Optional[str]:
     if span is None:
         return None
     for line in lines[span[0] + 1:span[1]]:
-        if line.partition("=")[0].strip() == "url":
+        if _bare_key(line) == "url":
             return _string_value(line)
     return None
 
@@ -100,16 +128,31 @@ def converged_grok_config(text: str, endpoint: str, token_file: Path) -> str:
     """Set the managed keys of [mcp_servers.dpf]; keep every other line."""
     lines = text.replace("\ufeff", "", 1).splitlines()
     managed = [f"url = {json.dumps(endpoint)}", f"bearer_token_file = {json.dumps(str(token_file))}"]
-    span = _dpf_table_span(lines)
-    if span is None:
+    spans = _dpf_table_spans(lines)
+    if not spans:
         prefix = lines + ([""] if lines and lines[-1].strip() else [])
         return "\n".join([*prefix, "[mcp_servers.dpf]", *managed]) + "\n"
-    start, end = span
-    kept = [line for line in lines[start + 1:end] if line.partition("=")[0].strip() not in MANAGED_KEYS]
+    # A config an earlier converge already doubled is healed here: later copies
+    # fold into the first (its header spelling kept), their unmanaged keys
+    # carried over unless the first copy already sets them.
+    start, end = spans[0]
+    first_keys = {_bare_key(line) for line in lines[start + 1:end]}
+    carried = [
+        line
+        for later_start, later_end in spans[1:]
+        for line in lines[later_start + 1:later_end]
+        if line.strip() and _bare_key(line) not in first_keys
+    ]
+    dropped = {index for later_start, later_end in spans[1:] for index in range(later_start, later_end)}
+    after = [line for index, line in enumerate(lines[end:], start=end) if index not in dropped]
+    while after and not after[-1].strip():
+        after.pop()
+    kept = [line for line in lines[start + 1:end] if _bare_key(line) not in MANAGED_KEYS]
     trailing: list[str] = []
     while kept and not kept[-1].strip():
         trailing.append(kept.pop())
-    return "\n".join([*lines[:start + 1], *managed, *kept, *trailing, *lines[end:]]) + "\n"
+    kept += [line for line in carried if _bare_key(line) not in MANAGED_KEYS]
+    return "\n".join([*lines[:start + 1], *managed, *kept, *trailing, *after]) + "\n"
 
 
 def _run_refresher(

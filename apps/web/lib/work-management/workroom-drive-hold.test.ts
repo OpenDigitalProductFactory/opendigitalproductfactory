@@ -11,7 +11,7 @@ import {
   stallNoticeDue,
   WORKROOM_DRIVE_STALL_TICKS,
   type WorkroomDriveHold,
-} from "./workroom-drive-hold";
+} from "@dpf/validators/workroom-policy/drive-hold";
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 8, 24, 0, minutes));
 const pause = { action: "pause", reason: "conformance_pause", stageKey: "spec",

@@ -15,6 +15,7 @@ import {
   normalizePayload,
   isShellTool,
   isDecisionTool,
+  isFileWriteTool,
   denyEnvelope,
   inDpfWorkspace,
   actionCwd,
@@ -67,7 +68,15 @@ test("shellCommandFromInput accepts command/cmd/script aliases", async () => {
 test("isDecisionTool spans Claude and Grok decision tools", () => {
   assert.ok(isDecisionTool("AskUserQuestion"));
   assert.ok(isDecisionTool("AskQuestion"));
+  assert.ok(isDecisionTool("ask_user_question"));
   assert.ok(!isDecisionTool("Bash"));
+});
+
+test("isFileWriteTool spans Claude and Grok file-write tools (BI-742D707B)", () => {
+  // Grok 1.0.52 names its tools write / search_replace; a Claude-only set let
+  // every write guard fail open there, probed live 2026-10-14.
+  for (const name of ["Write", "Edit", "MultiEdit", "write", "search_replace"]) assert.ok(isFileWriteTool(name), name);
+  for (const name of ["Read", "read_file", "Bash", "NotebookEdit", undefined]) assert.ok(!isFileWriteTool(name), String(name));
 });
 
 test("denyEnvelope carries BOTH channels for Grok, whose verdict is the top-level decision", () => {

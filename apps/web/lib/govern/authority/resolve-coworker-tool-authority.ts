@@ -181,14 +181,26 @@ export async function resolveTrustedInitiativeItemId(input: {
   task: InitiativeReviewTask | null;
   toolName: string;
   boundItemId: string | null;
-  loadStewardItemId: (taskRunId: string) => Promise<string | null>;
+  loadStewardItemId: (taskRunId: string, toolName: string) => Promise<string | null>;
 }): Promise<string | null> {
   if (input.boundItemId) return input.boundItemId;
-  if (input.toolName !== "record_initiative_evidence" || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
-  return input.loadStewardItemId(input.task.taskRunId);
+  if (!STEWARD_WRITERS.has(input.toolName) || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId, input.toolName);
 }
 
-async function loadAcceptanceStewardItemId(taskRunId: string): Promise<string | null> {
+/**
+ * Writers a platform-issued room packet binds for a token-less scheduled run:
+ * the acceptance steward's objective mapping (BI-099A0BA3) and the platform
+ * post-implementation review (BI-AA47C672).
+ */
+const STEWARD_WRITERS: ReadonlySet<string> = new Set(["record_initiative_evidence", "record_initiative_post_implementation_review"]);
+
+async function loadAcceptanceStewardItemId(taskRunId: string, toolName: string): Promise<string | null> {
+  if (toolName === "record_initiative_post_implementation_review") {
+    const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+    const platform = await resolvePlatformReviewRunBinding(taskRunId);
+    return platform?.ok ? platform.data.itemId : null;
+  }
   const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
   const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
   return steward?.ok ? steward.data.itemId : null;
@@ -287,6 +299,8 @@ export function deriveCoworkerApprovalPolicy(input: {
  * no steering, so a room can only ever narrow what a coworker may do alone.
  */
 export function resolveSteering(input: {
+  /** Current server-resolved profile; a numeric HITL default is not this veto. */
+  hitlPolicy?: string | null;
   initiativeReviewBinding: InitiativeReviewBinding | null;
   roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
   /**
@@ -315,6 +329,9 @@ export function resolveSteering(input: {
    */
   connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
 }): EscalationSteering {
+  // A saved operator always policy cannot be displaced by automatic steering.
+  // The evaluator still validates an exact human approval through its normal lane.
+  if (input.hitlPolicy?.trim().toLowerCase() === "always") return "none";
   if (input.initiativeReviewBinding) return "independent-reviewer";
   const room = input.roomAuthority;
   if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
@@ -547,6 +564,7 @@ export const resolveCoworkerToolAuthorityInput =
       },
       // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
       steering: resolveSteering({
+        hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
         taskRunId: execution.context?.taskRunId ?? null,
         agentId: execution.context?.agentId ?? null,
         toolName: execution.toolName,

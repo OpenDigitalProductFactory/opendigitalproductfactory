@@ -5762,724 +5762,844 @@
       "summary": "role_stage@verify x13 | success@- | cycle_complete@- x86"
     },
     {
-      "id": "source-inquiry@1.0.0#0",
+      "id": "platform-post-implementation-review@1.0.0#0",
       "seed": 2289468767,
-      "digest": "sha256:6596c2741a5b857940953e8f54b6f37eed176c55cbd2740ff6b6ecd03df78a3b",
-      "summary": "role_stage@inquire x3 | conformance_stop@- x9"
+      "digest": "sha256:db42be6e77576bab58444d3765b157f24ceabc5930c09c6c8f87f7d76a2e757e",
+      "summary": "role_stage@review x3 | conformance_stop@- x6"
     },
     {
-      "id": "source-inquiry@1.0.0#1",
+      "id": "platform-post-implementation-review@1.0.0#1",
       "seed": 2289468768,
-      "digest": "sha256:78168334460899282ee54e21c5732bf6e31d30884eaf15cf06471a2276fedf86",
-      "summary": "role_stage@inquire x12"
+      "digest": "sha256:4f66c78aa5dccf681fee46b65996177ff505ceaa7f64feb883b4c6196ead0caf",
+      "summary": "role_stage@review x9"
     },
     {
-      "id": "source-inquiry@1.0.0#2",
+      "id": "platform-post-implementation-review@1.0.0#2",
       "seed": 2289468769,
-      "digest": "sha256:68df7cce6ce4d4881adc0be7c6c9c61433daebe1993af94e0d6b6ef988af46e3",
-      "summary": "conformance_escalate@- x7 | conformance_stop@- x5"
+      "digest": "sha256:c8e62cc46678746e16a7670319486c1d3bd8c3a89b4e01ec495f5219be4cfb1f",
+      "summary": "conformance_escalate@- x7 | conformance_stop@- x2"
     },
     {
-      "id": "source-inquiry@1.0.0#3",
+      "id": "platform-post-implementation-review@1.0.0#3",
       "seed": 2289468770,
-      "digest": "sha256:ccf6afc72efbda56c5971c2b8fd9c28d6c512be4f9dd6ceee3e92fc7b03f3825",
-      "summary": "conformance_pause@- | conformance_stop@- x11"
+      "digest": "sha256:5464c73f0f4bbe07a79e200447601c84accbe24fbd88d6591347fbf6e6697cb2",
+      "summary": "conformance_pause@- | conformance_stop@- x8"
     },
     {
-      "id": "source-inquiry@1.0.0#4",
+      "id": "platform-post-implementation-review@1.0.0#4",
       "seed": 2289468771,
-      "digest": "sha256:dd6ac23526e8e2610b043da1955d2c46e5eb7319a3fd07f8c264d585d0bf529e",
+      "digest": "sha256:504e1c32b689c2d5fd86201e13b51714c17fce910d1e09551ba89814e54e8a8b",
       "summary": "quiet@- x100"
     },
     {
-      "id": "source-inquiry@1.0.0#5",
+      "id": "platform-post-implementation-review@1.0.0#5",
       "seed": 2289468772,
-      "digest": "sha256:a35fdafc0c8fc382eac94a9db3843a0e139052df490b9767d567a94112f8fd1f",
+      "digest": "sha256:8d6f4dddb98f6217ae286a11a1ed64e4571defce59150938f0c980db123acf6f",
+      "summary": "role_stage@review x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#6",
+      "seed": 2289468773,
+      "digest": "sha256:0e4963bc84f7f3b76305a048c6a5fd3f89860d55f92eff05898adbdb84b652e8",
+      "summary": "quiet@- x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#7",
+      "seed": 2289468774,
+      "digest": "sha256:9cab75ea235873f129d2a96b2851c9a92b04aa8bcaa59f73a4323ee765e702c3",
+      "summary": "conformance_pause@- x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#8",
+      "seed": 2289468775,
+      "digest": "sha256:e2faa2fc17f85baca96db2070ae70bffcc59363e03446def14235a1b669e17bc",
+      "summary": "role_stage@review x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#9",
+      "seed": 2289468776,
+      "digest": "sha256:b4ea61d7db08f02ff9f451f5c6c4eb9f473080f5e8e193a9fd5f9d06843ff065",
+      "summary": "role_stage@review x23 | success@- | cycle_complete@- x76"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#10",
+      "seed": 2289468777,
+      "digest": "sha256:8501691a35f648a14686d16b2eeeef43b25bf6a93ec2fd1bd485516e71009c58",
+      "summary": "role_stage@review x3 | success@- | cycle_complete@- x5"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#11",
+      "seed": 2289468778,
+      "digest": "sha256:e1eb1e270bc1d5dff4d0151bdad80f8638b7a6c6903d68c71bac148462e2db0c",
+      "summary": "unreachable_substrate@- x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#12",
+      "seed": 2289468779,
+      "digest": "sha256:9f51c2bd9eedce59580e8417cdcc9d6990825b0eba50630c8850c3f6971d1164",
+      "summary": "quiet@- x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#13",
+      "seed": 2289468780,
+      "digest": "sha256:acc2172edb60018e538a9fca93146fbe58405743337a1848552cd00399356064",
+      "summary": "role_stage@review x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#14",
+      "seed": 2289468781,
+      "digest": "sha256:635eff8ce01566f8cac084ba5d5cf36f726236c44845b119a65f67671ba4b542",
+      "summary": "role_stage@review x9 | success@- | cycle_complete@- x90"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#15",
+      "seed": 2289468782,
+      "digest": "sha256:f68523bfc3876a60a6ae555008dc1fc75efcc18fbbe240fe2211cd5150da04df",
+      "summary": "empty_read@- x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#16",
+      "seed": 2289468783,
+      "digest": "sha256:20f16679d5e6161c6505bc3d6c597ed7dd7b7046c0250ccb768fd951c3387f8a",
+      "summary": "role_stage@review x9"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#17",
+      "seed": 2289468784,
+      "digest": "sha256:0f0202918c0d1564431ea1412c807498abbb617933df6273359376672a4c2c97",
+      "summary": "role_stage@review x3 | conformance_pause@- x6"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#18",
+      "seed": 2289468785,
+      "digest": "sha256:fda6f19572e3310b09b2a94c5ccdcd10470bbe63146d7f8602f28fae70aa065a",
+      "summary": "role_stage@review x5 | conformance_stop@- x4"
+    },
+    {
+      "id": "platform-post-implementation-review@1.0.0#19",
+      "seed": 2289468786,
+      "digest": "sha256:b2e1ec22cab6545cc037fda9a38fa98164182a0393b45de0f5beb95c22de26c7",
+      "summary": "role_stage@review x6 | success@- | cycle_complete@- x93"
+    },
+    {
+      "id": "source-inquiry@1.0.0#0",
+      "seed": 2289469767,
+      "digest": "sha256:bec54672b139a6c7ba0975f32b8c1d139f6e55279a966636425e3c1e1e74965f",
+      "summary": "role_stage@inquire x12"
+    },
+    {
+      "id": "source-inquiry@1.0.0#1",
+      "seed": 2289469768,
+      "digest": "sha256:ecf3b0a5ac8e2e69f5baf42435f21519717599520486bc2c85c31cf2a3284126",
+      "summary": "role_stage@inquire x6 | conformance_pause@- x6"
+    },
+    {
+      "id": "source-inquiry@1.0.0#2",
+      "seed": 2289469769,
+      "digest": "sha256:446b1fc3b1b1200959af82675dfa989e34031ec23ebab43debbebb8fa34bc55d",
+      "summary": "unreachable_substrate@- x12"
+    },
+    {
+      "id": "source-inquiry@1.0.0#3",
+      "seed": 2289469770,
+      "digest": "sha256:d68a2468c485b559d5d8819d6da6cd4ec57e39194d48da6fc0e171ba8e5a846e",
+      "summary": "role_stage@inquire x7 | role_stage@answer x5"
+    },
+    {
+      "id": "source-inquiry@1.0.0#4",
+      "seed": 2289469771,
+      "digest": "sha256:626117fc249a5bc56caf9f03517b42d3c43ad03172adb1d14c2327bbb3708109",
+      "summary": "role_stage@inquire x4 | role_stage@answer x6 | success@- | cycle_complete@- x89"
+    },
+    {
+      "id": "source-inquiry@1.0.0#5",
+      "seed": 2289469772,
+      "digest": "sha256:69ba626e768f9be0eba38985edb090c67dac9c1beba132b518d650219b117912",
       "summary": "role_stage@inquire x12"
     },
     {
       "id": "source-inquiry@1.0.0#6",
-      "seed": 2289468773,
-      "digest": "sha256:809cefbe99a955bf4e8d534202f63fc94f3f37e7a2a699dc973153ff47c8f9c2",
-      "summary": "quiet@- x12"
+      "seed": 2289469773,
+      "digest": "sha256:cbce1d064b9dd1dce00cd467f268dd37813eb60179f7f45fd27512c791d5fbb6",
+      "summary": "role_stage@inquire x3 | conformance_pause@- x9"
     },
     {
       "id": "source-inquiry@1.0.0#7",
-      "seed": 2289468774,
-      "digest": "sha256:4ae01b9db8dda0002967fd50bf2672e135657b8257becbf6b82d52c37fdf1354",
-      "summary": "conformance_pause@- x12"
+      "seed": 2289469774,
+      "digest": "sha256:ef7bfce2dd6416847283f0ebfe4c883b12fdbca87649c55c68ef5d9980254493",
+      "summary": "role_stage@inquire x2 | role_stage@answer x10"
     },
     {
       "id": "source-inquiry@1.0.0#8",
-      "seed": 2289468775,
-      "digest": "sha256:7d3919fa8dd09a3f9f05614c8eddeff677ac7ff17c0c60d317ebaf76dc65f79a",
+      "seed": 2289469775,
+      "digest": "sha256:7c4ebd4c55ecc73d80608e97308ac3bb4f885ed43db1fae89aedeef3b4f83599",
       "summary": "role_stage@inquire x12"
     },
     {
       "id": "source-inquiry@1.0.0#9",
-      "seed": 2289468776,
-      "digest": "sha256:e445c55c0e907fec812f79edc07fe5239c23a7003cb97f670df67651fe2f88d5",
-      "summary": "role_stage@inquire x54 | role_stage@answer | success@- | cycle_complete@- x44"
+      "seed": 2289469776,
+      "digest": "sha256:3c50be42e8c84e2f4e4d04e8d7841b7d337afd55f890f8524f2afb0c5744b6e3",
+      "summary": "role_stage@inquire | conformance_stop@- x99"
     },
     {
       "id": "source-inquiry@1.0.0#10",
-      "seed": 2289468777,
-      "digest": "sha256:640ec93e8e32eaac7732ab0c53267713e9127670177f93673549be412aad19ba",
-      "summary": "role_stage@inquire x12"
-    },
-    {
-      "id": "source-inquiry@1.0.0#11",
-      "seed": 2289468778,
-      "digest": "sha256:f7f11a890d21117b07c305eabd2a49075488d61613c91dc0e6cf399e79729627",
+      "seed": 2289469777,
+      "digest": "sha256:95dab88063eb44d8df1f83268b46afb711cc79e4455ab6012bd91c480792b560",
       "summary": "unreachable_substrate@- x12"
     },
     {
+      "id": "source-inquiry@1.0.0#11",
+      "seed": 2289469778,
+      "digest": "sha256:4f6856df1f3c8436ce5d7fa430598f3e9cfb7a510def72d0427d7908ecbce4a0",
+      "summary": "role_stage@inquire x7 | conformance_stop@- x5"
+    },
+    {
       "id": "source-inquiry@1.0.0#12",
-      "seed": 2289468779,
-      "digest": "sha256:96f59e6b1efdd8db829cd06797d5510116a3f611c841077daa75638ae58fad02",
-      "summary": "quiet@- x12"
+      "seed": 2289469779,
+      "digest": "sha256:15420503fd15730908d14e593be907b0a7c29285343a8f5dad3943e9e1852681",
+      "summary": "role_stage@inquire x12"
     },
     {
       "id": "source-inquiry@1.0.0#13",
-      "seed": 2289468780,
-      "digest": "sha256:786414df198fada02c81e94b3ba3f42e51fee2624e5a1f87cd9c3629278e0749",
+      "seed": 2289469780,
+      "digest": "sha256:df5edb1f51ab86c19bab01fa278097bf5e39c3dfb2e7af503aa83994e18dc4af",
       "summary": "role_stage@inquire x12"
     },
     {
       "id": "source-inquiry@1.0.0#14",
-      "seed": 2289468781,
-      "digest": "sha256:d3b1ccac2290edf648c93fcaaa6d314707f65ec49a407896f894727602d4670f",
-      "summary": "role_stage@inquire x22 | role_stage@answer | success@- | cycle_complete@- x76"
+      "seed": 2289469781,
+      "digest": "sha256:c545e690f19eb54537c0e179f94aa1132454ade99cd843774c92b8e2275d172c",
+      "summary": "role_stage@inquire x19 | role_stage@answer x39 | conformance_stop@- x42"
     },
     {
       "id": "source-inquiry@1.0.0#15",
-      "seed": 2289468782,
-      "digest": "sha256:472bd0a34567a5ba2fba2b6233cc60fe59b086e4746865498891a8c1d02a4efb",
-      "summary": "empty_read@- x12"
+      "seed": 2289469782,
+      "digest": "sha256:35495c7c976d1b9609322b3ea02be2e13bf3a4f0cfe1f64076f0803128f3272c",
+      "summary": "role_stage@inquire x2 | conformance_pause@- x10"
     },
     {
       "id": "source-inquiry@1.0.0#16",
-      "seed": 2289468783,
-      "digest": "sha256:0e1eabee68586f4efa2be8fedbf940a27e2dac25820be731f7706b8de348ba02",
+      "seed": 2289469783,
+      "digest": "sha256:c31a89e0774a6302d566b7bba0fa40ddd74da57a896ec5fc0cd54892bf4c7128",
       "summary": "role_stage@inquire x12"
     },
     {
       "id": "source-inquiry@1.0.0#17",
-      "seed": 2289468784,
-      "digest": "sha256:0d8448c7802fe91a9907771e57b146ebc0c3824c1a00baa0ab02dea339a715ec",
-      "summary": "role_stage@inquire x3 | conformance_pause@- x9"
+      "seed": 2289469784,
+      "digest": "sha256:2525f5a39f21fd65f45e2e16fad8b7cfd8e432434608afea5b0bc881bc0a24e8",
+      "summary": "role_stage@inquire x12"
     },
     {
       "id": "source-inquiry@1.0.0#18",
-      "seed": 2289468785,
-      "digest": "sha256:4f4a9ee16f6dd2cd3fe33b4c1edfe86750ecb54dbe394189a0b6827eeecf5383",
-      "summary": "role_stage@inquire x5 | conformance_stop@- x7"
+      "seed": 2289469785,
+      "digest": "sha256:1ca3cf89414a0b4de8b25a17062d6bb4324958bf7728afbfa19299e654c03f14",
+      "summary": "conformance_escalate@- x11 | conformance_stop@-"
     },
     {
       "id": "source-inquiry@1.0.0#19",
-      "seed": 2289468786,
-      "digest": "sha256:5fb7cd39c67869d730074e676e2aef52212e86fa878ebad3ca20dd7e2f2925aa",
-      "summary": "role_stage@inquire x6 | role_stage@answer x4 | success@- | cycle_complete@- x89"
+      "seed": 2289469786,
+      "digest": "sha256:abd9d1f0d818654d77b69b930716a74898ae644ee7b32bc0b676cfebe8bf69db",
+      "summary": "role_stage@inquire x12 | role_stage@answer x24 | success@- | cycle_complete@- x63"
     },
     {
       "id": "pull-request-flow-watch@1.0.0#0",
-      "seed": 2289469767,
-      "digest": "sha256:060c30b710a3690b42c8fdb33691acc7024db147fb81120988561b5727768ed7",
-      "summary": "agent_stage@read x15"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#1",
-      "seed": 2289469768,
-      "digest": "sha256:0096dad96f305cc5cbd4c5fe20b1294fcf9dbd6afbb0643138570aa31f28e9ed",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@classify | executor_writeback_unavailable@classify x2 | conformance_pause@- x9"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#2",
-      "seed": 2289469769,
-      "digest": "sha256:f23a65e2c21d07d60a4197c1cbcd22f1980d03d4c936ba23cec537e0e56027d0",
-      "summary": "unreachable_substrate@- x15"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#3",
-      "seed": 2289469770,
-      "digest": "sha256:93b31b3817e09fc4c7aeb99864534bea400578c5aae31dcd23b66e3d17d496b3",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x6 | agent_stage@classify | governed_decision@merge x2 | success@- | cycle_complete@- x4"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#4",
-      "seed": 2289469771,
-      "digest": "sha256:12cfe778ee9bfec265aa2dba7e64ea4f4a6c4808413b5f428a6f0ba408a0abeb",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x3 | agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify x2 | governed_decision@merge x7 | success@- | cycle_complete@- x80 | agent_stage@read | executor_writeback_unavailable@read x3"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#5",
-      "seed": 2289469772,
-      "digest": "sha256:a2efacd806c0d2d447d891757c5160949c0b9f783e0981d0b419027483f7d8bf",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@classify | executor_writeback_unavailable@classify x4 | governed_decision@merge | success@- | cycle_complete@- x6"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#6",
-      "seed": 2289469773,
-      "digest": "sha256:84b2c2969974a1189e9732949d3b7b26fd6f97a6ed8ed2ad1b474f53337cdcd8",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | conformance_pause@- x11 | conformance_stop@-"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#7",
-      "seed": 2289469774,
-      "digest": "sha256:32d9c88812b30952ca1ddd59c3530db94b2da89bad0bd3eb43d442ab206d47f2",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x12 | agent_stage@classify | conformance_stop@-"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#8",
-      "seed": 2289469775,
-      "digest": "sha256:48ce85cf28e2cc0fe02e6a58e2d639e34740da0886d0ec79c2cb7bde36e1dedf",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x10 | agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify | governed_decision@merge"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#9",
-      "seed": 2289469776,
-      "digest": "sha256:2b861b068c3c63b51df8a855ea5c41e1ca49865a879b9c29606b6854e3572fcb",
-      "summary": "agent_stage@read | conformance_stop@- x99"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#10",
-      "seed": 2289469777,
-      "digest": "sha256:32cbca440a0852c3f87f57df1385d6618501bbe26e6db678f8d24ee3dcbaf2e8",
-      "summary": "unreachable_substrate@- x15"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#11",
-      "seed": 2289469778,
-      "digest": "sha256:c542ae220e4a8bafce35270c893f52dcf22418c4880f39aaa241764ba892db17",
-      "summary": "agent_stage@- | agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@classify | executor_writeback_unavailable@classify x2 | conformance_stop@- x8"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#12",
-      "seed": 2289469779,
-      "digest": "sha256:16f1a6627aa095f88aace62f5b655f62d4f9da7c2d76704d5494b5cbfab78a4f",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@classify | governed_decision@merge x4 | success@- | cycle_complete@- x6"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#13",
-      "seed": 2289469780,
-      "digest": "sha256:a657e42b5e6dd2b185ea51e884c45ad01d52c532194903fd8c01d7288cadb79c",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify x8 | conformance_stop@- x2"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#14",
-      "seed": 2289469781,
-      "digest": "sha256:95f84b516981201412fc772ebfc40e791c2d80d72f5ba3aa36eb310a50bec432",
-      "summary": "agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify x3 | governed_decision@merge x4 | success@- | cycle_complete@- x86 | conformance_stop@- x4"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#15",
-      "seed": 2289469782,
-      "digest": "sha256:69aec71f43027c400b4638c9cd60414fb80dc067c76b2985e42f6e3d1f6a7b08",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read | conformance_pause@- x13"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#16",
-      "seed": 2289469783,
-      "digest": "sha256:1fe4584acda752c64655e44e3e4d7e5e9634a219346dd982009e7d6dd58eb3c1",
-      "summary": "agent_stage@read | agent_stage@classify | governed_decision@merge | success@- | cycle_complete@- x11"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#17",
-      "seed": 2289469784,
-      "digest": "sha256:a09360f5415d91e0b21ddc93979bf99bf67a254efa6573eeb5b06bcde83d6e61",
-      "summary": "agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify | governed_decision@merge x5 | success@- | cycle_complete@- x6"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#18",
-      "seed": 2289469785,
-      "digest": "sha256:6dd38306d5351aa4dc7c9a991f341085a613ade42203775b581dbb5e356d2cbb",
-      "summary": "conformance_escalate@- x11 | conformance_stop@- x4"
-    },
-    {
-      "id": "pull-request-flow-watch@1.0.0#19",
-      "seed": 2289469786,
-      "digest": "sha256:c87eadec49a0979e0df6e77f69d9030e57f721aeda37fc8f82dd1f6c03d32469",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@classify | executor_writeback_unavailable@classify x4 | governed_decision@merge | success@- | cycle_complete@- x84 | conformance_pause@- x4"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#0",
       "seed": 2289470767,
-      "digest": "sha256:7dedf8336274363e3e69ac227fd0e222e1541134a0d10bdbeea87e9cfd52786f",
-      "summary": "agent_stage@sync | conformance_stop@- x14"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#1",
-      "seed": 2289470768,
-      "digest": "sha256:3a51181632dd6302c812514f284578521f4b248cbabece326d989469d39eba50",
-      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x4 | agent_stage@flag | executor_writeback_unavailable@flag | governed_decision@admit x4 | success@- | cycle_complete@- x3"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#2",
-      "seed": 2289470769,
-      "digest": "sha256:0030df344dcbaece055c232453978357d0027a6b462baa068738d3ef1e3ffcad",
-      "summary": "agent_stage@sync | agent_stage@flag | governed_decision@admit | success@- | cycle_complete@- x11"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#3",
-      "seed": 2289470770,
-      "digest": "sha256:8c0288fa4ea009219a7943b386f4f6b51d29fc9b83ec891cb2d6d2dbc9d9fc80",
-      "summary": "conformance_stop@- x15"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#4",
-      "seed": 2289470771,
-      "digest": "sha256:202563bbb6b9472ee93433edd50d782734e9dd20bf964a100263fc71075549bf",
-      "summary": "agent_stage@sync | agent_stage@flag | executor_writeback_unavailable@flag | governed_decision@admit | success@- | cycle_complete@- x91 | conformance_stop@- x4"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#5",
-      "seed": 2289470772,
-      "digest": "sha256:09777d8f042835a4de5567d3e9162c85fa73aa9602c6018605ec4e5807be02ba",
-      "summary": "missing_shape@- x15"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#6",
-      "seed": 2289470773,
-      "digest": "sha256:4b85cf9fecd4a0d8592809c9c67f18071586607424ce1bc3855769d2d4c0aa4f",
-      "summary": "agent_stage@sync | executor_writeback_unavailable@sync | conformance_pause@- x6 | conformance_stop@- x7"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#7",
-      "seed": 2289470774,
-      "digest": "sha256:b5e2fd133c58cdf3c6d32f6aa91ef935f9591137f6a7156154740df805cc5f0b",
-      "summary": "agent_stage@sync | agent_stage@flag | executor_writeback_unavailable@flag | governed_decision@admit x3 | success@- | cycle_complete@- x8"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#8",
-      "seed": 2289470775,
-      "digest": "sha256:7602c27483611dc30e76e077c0bca88cacf6035c3a11d338609387835858bee1",
-      "summary": "empty_read@- x15"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#9",
-      "seed": 2289470776,
-      "digest": "sha256:215bff3a7834fb5cf05da265c6d6b4252f7bc42c44b96420a670881734c31a1b",
-      "summary": "quiet@- x100"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#10",
-      "seed": 2289470777,
-      "digest": "sha256:7f3032ab2cee667456c1011328c826a677e1909e0798645057b34e5e837b14d5",
-      "summary": "agent_stage@sync | agent_stage@flag | executor_writeback_unavailable@flag x2 | governed_decision@admit | success@- | cycle_complete@- x9"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#11",
-      "seed": 2289470778,
-      "digest": "sha256:6e1a6f304d315a9d46b859cfba4190476fea775c1d7f23b68741867bb2ee35c2",
-      "summary": "agent_stage@sync | executor_writeback_unavailable@sync | agent_stage@flag | executor_writeback_unavailable@flag x6 | governed_decision@admit x2 | success@- | cycle_complete@- x3"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#12",
-      "seed": 2289470779,
-      "digest": "sha256:4785c769bade74b5152e79031fad26447b4096759a1c7de8e6bdb63034db1089",
-      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x11 | agent_stage@flag | governed_decision@admit | success@-"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#13",
-      "seed": 2289470780,
-      "digest": "sha256:14d0058a0beeeed4f3e69ce506627b059a926e08c2cfbc7bf7f120c1f1e96d92",
-      "summary": "agent_stage@- | conformance_stop@- x14"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#14",
-      "seed": 2289470781,
-      "digest": "sha256:414fa2cfee69ff617c7e8b121a769e736909a6bab3fdf4cf2546cbfada7671bf",
-      "summary": "agent_stage@sync | executor_writeback_unavailable@sync | agent_stage@flag | governed_decision@admit x6 | success@- | cycle_complete@- x86 | agent_stage@sync | executor_writeback_unavailable@sync | agent_stage@sync | agent_stage@flag"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#15",
-      "seed": 2289470782,
-      "digest": "sha256:4b7eaf7728d40258d741297911016f25c2300fb08b4b56af3436b0a8a0be7c89",
-      "summary": "conformance_pause@- x15"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#16",
-      "seed": 2289470783,
-      "digest": "sha256:17bda5afa6e176c17904df5d18fb2b8ebc5a8539db74320aa6897c38699764fd",
-      "summary": "agent_stage@- | agent_stage@sync | executor_writeback_unavailable@sync x3 | agent_stage@flag | executor_writeback_unavailable@flag x6 | governed_decision@admit | success@- | cycle_complete@-"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#17",
-      "seed": 2289470784,
-      "digest": "sha256:e1b0d6de83f0a62f74f34d2575727003eb9cf632f4c328b41d400b6c6603bae8",
-      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x13 | agent_stage@flag"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#18",
-      "seed": 2289470785,
-      "digest": "sha256:b1def1334c9fc4eb71aa39b40a0d9fc6a01b61fc0c30b44dda4a5d5321ed5dbc",
-      "summary": "agent_stage@- | agent_stage@sync | executor_writeback_unavailable@sync | agent_stage@flag | executor_writeback_unavailable@flag x4 | governed_decision@admit x3 | success@- | cycle_complete@- x3"
-    },
-    {
-      "id": "contributor-intake-watch@1.0.0#19",
-      "seed": 2289470786,
-      "digest": "sha256:828146c25a18776ee9940d0805f136510104c194f19edf097ffcf3bc96e3e22e",
-      "summary": "agent_stage@sync | agent_stage@flag | governed_decision@admit x2 | success@- | cycle_complete@- x91 | conformance_stop@- x4"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#0",
-      "seed": 2289471767,
-      "digest": "sha256:7819b1b2d727e798d27e56199900f8b67e31105a382018d729924fab6fb312e5",
-      "summary": "conformance_stop@- x15"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#1",
-      "seed": 2289471768,
-      "digest": "sha256:d0b7989a3f7c786e55f4820ca9f8db53030fe02571c1369b85c14755e3f60974",
-      "summary": "agent_stage@- | agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@report | executor_writeback_unavailable@report x2 | governed_decision@decide x5 | success@-"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#2",
-      "seed": 2289471769,
-      "digest": "sha256:bc48b58751425a54530c0d5b12913538fa1e117147aac9d344717a863550d203",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x6 | agent_stage@report | governed_decision@decide x7"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#3",
-      "seed": 2289471770,
-      "digest": "sha256:b63e3d4da4a7422118e951155cbe5f15b1255638ddeacd50ba1e624514117954",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@report | conformance_stop@- x9"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#4",
-      "seed": 2289471771,
-      "digest": "sha256:50de81aba54ab6f5ae5dc74aa473de67d4374be069926047b1ff97341e7ee037",
-      "summary": "agent_stage@read x18 | agent_stage@report x82"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#5",
-      "seed": 2289471772,
-      "digest": "sha256:1fe13e1100b8ce29bb3cf1ced26c80efa80ae9acc565b81db15c76e61ae15acd",
-      "summary": "unreachable_substrate@- x15"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#6",
-      "seed": 2289471773,
-      "digest": "sha256:7c4f2b43313bf23886954fa8e1ea902316ef0926eff35d4cc9bf840ec36d1552",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x8 | agent_stage@report | governed_decision@decide x5"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#7",
-      "seed": 2289471774,
-      "digest": "sha256:77bb7a17723cef2e59c37067b8ce2b5698c41cc754325ec1b2bddbc7401d632c",
-      "summary": "agent_stage@read | agent_stage@report | governed_decision@decide x2 | success@- | cycle_complete@- x10"
-    },
-    {
-      "id": "vendor-renewal-watch@1.0.0#8",
-      "seed": 2289471775,
-      "digest": "sha256:3bd20f94bd020213df19fc455f46856389e9b2b008864d5bbf4700dab4843a3e",
+      "digest": "sha256:7e070933ceff78cc8cac2c22cb3c673e06204daa7ce1c228d07c1547ef290b6c",
       "summary": "agent_stage@read | conformance_stop@- x14"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#9",
-      "seed": 2289471776,
-      "digest": "sha256:ba363720e7b999ef46252978b318a8150134a19ece4a68564a771608b99f5c06",
-      "summary": "conformance_escalate@- x78 | conformance_stop@- x22"
+      "id": "pull-request-flow-watch@1.0.0#1",
+      "seed": 2289470768,
+      "digest": "sha256:bdaa6745772f20c6b35f026518e4c42f92c6fe501dfa2087eb498650be2a6543",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@classify | executor_writeback_unavailable@classify | governed_decision@merge x4 | success@- | cycle_complete@- x3"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#10",
-      "seed": 2289471777,
-      "digest": "sha256:dcc413063ac23566fa335214d0ef80c7a0e8faa93d9586a04967e87895dc466d",
-      "summary": "agent_stage@read | agent_stage@report | executor_writeback_unavailable@report x8 | conformance_pause@- x5"
+      "id": "pull-request-flow-watch@1.0.0#2",
+      "seed": 2289470769,
+      "digest": "sha256:11046295c12af461d4d0bcac725b118b3be298684a9ded04fba2d60ebb6a679b",
+      "summary": "agent_stage@read | agent_stage@classify | governed_decision@merge | success@- | cycle_complete@- x11"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#11",
-      "seed": 2289471778,
-      "digest": "sha256:b291e8859b66a5783fa7f99ea11759e1beac83b8a0960ac991e4f08125e277df",
+      "id": "pull-request-flow-watch@1.0.0#3",
+      "seed": 2289470770,
+      "digest": "sha256:f753443679b18d2c612cad2f8c77f74be1b1b967bef8746a56ac06976d79b4f3",
+      "summary": "conformance_stop@- x15"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#4",
+      "seed": 2289470771,
+      "digest": "sha256:a9fd896bfb2d2aeae08ba8d76d9dd9b8ffb4393b70511344da4d5011d70a119e",
+      "summary": "agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify | governed_decision@merge | success@- | cycle_complete@- x91 | conformance_stop@- x4"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#5",
+      "seed": 2289470772,
+      "digest": "sha256:a23ddfab422ed9fe64032ee097da79731efb05dfb060eef7061bee83eaa2da64",
+      "summary": "missing_shape@- x15"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#6",
+      "seed": 2289470773,
+      "digest": "sha256:4495f5aa8db95aa373f334cdec0c232ce4960cf292fb9303eff6b87ede9229e8",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read | conformance_pause@- x6 | conformance_stop@- x7"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#7",
+      "seed": 2289470774,
+      "digest": "sha256:ba8105233a15b966cb118fb24fe9508b1b4214e112b0515a078697fd37f7850b",
+      "summary": "agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify | governed_decision@merge x3 | success@- | cycle_complete@- x8"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#8",
+      "seed": 2289470775,
+      "digest": "sha256:37d61f2cf3c3b98770a37e12c3c3c94e9a8ad4449426ec3d646a2010920d558b",
+      "summary": "empty_read@- x15"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#9",
+      "seed": 2289470776,
+      "digest": "sha256:0e4da70aa1908aa394f6d8c856cfbf2f3a431e8cbd09b4c4ee42c33ac90d7ae4",
+      "summary": "quiet@- x100"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#10",
+      "seed": 2289470777,
+      "digest": "sha256:acf63a1f5b2efa8333277ee797256e604d77ec76ac007b4beaf753d54e08acf8",
+      "summary": "agent_stage@read | agent_stage@classify | executor_writeback_unavailable@classify x2 | governed_decision@merge | success@- | cycle_complete@- x9"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#11",
+      "seed": 2289470778,
+      "digest": "sha256:870353a01cfafdb5bc561163435c88436d39ed189787906b980503568e2d3753",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@classify | executor_writeback_unavailable@classify x6 | governed_decision@merge x2 | success@- | cycle_complete@- x3"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#12",
+      "seed": 2289470779,
+      "digest": "sha256:f959582e2512d7cbf24ee374cc5e38b14caef2535ad8fa7de4030fb32d9fa4c2",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x11 | agent_stage@classify | governed_decision@merge | success@-"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#13",
+      "seed": 2289470780,
+      "digest": "sha256:cb6b8b30557d574ff2dd9aac79f49f55095f045bae01c498c3f5c2d9eab0d9ae",
+      "summary": "agent_stage@- | conformance_stop@- x14"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#14",
+      "seed": 2289470781,
+      "digest": "sha256:95139ff32a473b845d11a611a3a67c5735358141fdb28f59c419adb8ef5291a3",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@classify | governed_decision@merge x6 | success@- | cycle_complete@- x86 | agent_stage@read | executor_writeback_unavailable@read | agent_stage@read | agent_stage@classify"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#15",
+      "seed": 2289470782,
+      "digest": "sha256:0693280dba326c01d3db9415af9f17684bfdcb7df6f0d40eeea20db1743ab5a0",
       "summary": "conformance_pause@- x15"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#12",
+      "id": "pull-request-flow-watch@1.0.0#16",
+      "seed": 2289470783,
+      "digest": "sha256:e38cf0d33b557ce216b56fedd22baf7b661697698a135a5f5b81094e28d0a496",
+      "summary": "agent_stage@- | agent_stage@read | executor_writeback_unavailable@read x3 | agent_stage@classify | executor_writeback_unavailable@classify x6 | governed_decision@merge | success@- | cycle_complete@-"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#17",
+      "seed": 2289470784,
+      "digest": "sha256:7809c98d1b2b90631025faec1396f2bf6b72d6d7ef190eaa04387dc6694196af",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x13 | agent_stage@classify"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#18",
+      "seed": 2289470785,
+      "digest": "sha256:9e985db807410824e224922fab19bf86d139e989f3450fe15079b4b43d6c0b29",
+      "summary": "agent_stage@- | agent_stage@read | executor_writeback_unavailable@read | agent_stage@classify | executor_writeback_unavailable@classify x4 | governed_decision@merge x3 | success@- | cycle_complete@- x3"
+    },
+    {
+      "id": "pull-request-flow-watch@1.0.0#19",
+      "seed": 2289470786,
+      "digest": "sha256:74fa9f82ea06d593ba45d70c9a689a89416d0f5db4b358dac7c84532d58aebb8",
+      "summary": "agent_stage@read | agent_stage@classify | governed_decision@merge x2 | success@- | cycle_complete@- x91 | conformance_stop@- x4"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#0",
+      "seed": 2289471767,
+      "digest": "sha256:fae2f864b07be60b8329ddc6a3d7463bb1f74a9a6b95198ebe48fa14c76fb642",
+      "summary": "conformance_stop@- x15"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#1",
+      "seed": 2289471768,
+      "digest": "sha256:ff000f9db356bbb0c4dd6b165b047515ef047e77ab1ba06f7ab8c9536e04f677",
+      "summary": "agent_stage@- | agent_stage@sync | executor_writeback_unavailable@sync x4 | agent_stage@flag | executor_writeback_unavailable@flag x2 | governed_decision@admit x5 | success@-"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#2",
+      "seed": 2289471769,
+      "digest": "sha256:641f3546fe06acc10893c964451b877cfeca5959c2f0938ec0f1b0dbc2b2894e",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x6 | agent_stage@flag | governed_decision@admit x7"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#3",
+      "seed": 2289471770,
+      "digest": "sha256:c27a9641fead37dd8cc0cabfe40b06d1ac91fdb2895cad7471f8b1ff9e1b19af",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x4 | agent_stage@flag | conformance_stop@- x9"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#4",
+      "seed": 2289471771,
+      "digest": "sha256:5f578b13c3c477ee0a10550ba887f92622105464e2f1d5c127dd21e71acf22bb",
+      "summary": "agent_stage@sync x18 | agent_stage@flag x82"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#5",
+      "seed": 2289471772,
+      "digest": "sha256:377cb75fa63ccb06feeb39188d2122f6fc3d23e7804dbdb9adeef8635382ea03",
+      "summary": "unreachable_substrate@- x15"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#6",
+      "seed": 2289471773,
+      "digest": "sha256:05d642d1ca3e1b0adbcf871291efb553fedfcb75e5dda1a3bcc365672416db30",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x8 | agent_stage@flag | governed_decision@admit x5"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#7",
+      "seed": 2289471774,
+      "digest": "sha256:0d863e39b183d00fba490426cb69a0e5ace02098d2f64d5e80d0b83b5121a716",
+      "summary": "agent_stage@sync | agent_stage@flag | governed_decision@admit x2 | success@- | cycle_complete@- x10"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#8",
+      "seed": 2289471775,
+      "digest": "sha256:54c9cabf34454f648a0f1dc1deeba84038973957e3f395f99f3b9422a6a4e08c",
+      "summary": "agent_stage@sync | conformance_stop@- x14"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#9",
+      "seed": 2289471776,
+      "digest": "sha256:4767c6269bafdf7157739c108e58571a8fc196a894240a297a868ecc03d3f661",
+      "summary": "conformance_escalate@- x78 | conformance_stop@- x22"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#10",
+      "seed": 2289471777,
+      "digest": "sha256:e5d4194cb67f3734c6e76d8db2b9d263e068bd30361bae70c63629221c74cc7f",
+      "summary": "agent_stage@sync | agent_stage@flag | executor_writeback_unavailable@flag x8 | conformance_pause@- x5"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#11",
+      "seed": 2289471778,
+      "digest": "sha256:28d522ec068c0f9870deb65cdd6004f85e908390073f74cc89ddd9b6e4dd5909",
+      "summary": "conformance_pause@- x15"
+    },
+    {
+      "id": "contributor-intake-watch@1.0.0#12",
       "seed": 2289471779,
-      "digest": "sha256:a3d013260c5504685b51d7726cdb6483dd42074c7ab7bc70f44b3a0f3086f7fa",
+      "digest": "sha256:3ff1e4ff42491cae69763b3072e651465c27ab4b83d1f55e6962d349beee138a",
       "summary": "conformance_escalate@- x15"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#13",
+      "id": "contributor-intake-watch@1.0.0#13",
       "seed": 2289471780,
-      "digest": "sha256:145cede559872290247fdbff7e40c0af1f8c1e282fd7fd9fdb01ebf7311dd1a0",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@report | executor_writeback_unavailable@report x2 | conformance_pause@- x9"
+      "digest": "sha256:a97aeca35c4b4a4994e29cd7580658f9c60112acf87902c0d92846b31b70f6f7",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x2 | agent_stage@flag | executor_writeback_unavailable@flag x2 | conformance_pause@- x9"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#14",
+      "id": "contributor-intake-watch@1.0.0#14",
       "seed": 2289471781,
-      "digest": "sha256:938306d76551c44d9cbc568e03c484bac50727ef492a9321c67787411347ad5c",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | executor_writeback_unavailable@report | governed_decision@decide x3 | success@- | cycle_complete@- x88 | conformance_pause@- x4"
+      "digest": "sha256:7c284c5cb566f0bac789a3ccdb52ea52b00d001c81b42e5469e767328bbb0d25",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync | agent_stage@flag | executor_writeback_unavailable@flag | governed_decision@admit x3 | success@- | cycle_complete@- x88 | conformance_pause@- x4"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#15",
+      "id": "contributor-intake-watch@1.0.0#15",
       "seed": 2289471782,
       "digest": "sha256:97a05f8db859751f571f2644f0324c44598e830a77f0a1009ddde23b1929bb6a",
       "summary": "missing_shape@- x15"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#16",
+      "id": "contributor-intake-watch@1.0.0#16",
       "seed": 2289471783,
       "digest": "sha256:c901dca85d4411361009857c8bb43b1950a3a33b51679911e47c3a91d675a137",
       "summary": "missing_shape@- x15"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#17",
+      "id": "contributor-intake-watch@1.0.0#17",
       "seed": 2289471784,
-      "digest": "sha256:1996885e1e4a25e9c7bc5f1a4191ff7e026005c3c78f4036373b170493ea9678",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x8 | conformance_stop@- x6"
+      "digest": "sha256:e08cfe2d745ac830a5d67084238066dcba306f3ae79fcf2a88343076de4dc57d",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x8 | conformance_stop@- x6"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#18",
+      "id": "contributor-intake-watch@1.0.0#18",
       "seed": 2289471785,
-      "digest": "sha256:caf4eb4af0087288abc427d9c20990538e20a5df1a3260f1e78c264b2e1ac648",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | conformance_pause@- x10"
+      "digest": "sha256:dbb09c9913dca8eaeda4b24925be86d14172568abc0dfe43d27b9cdb00813290",
+      "summary": "agent_stage@sync | executor_writeback_unavailable@sync x4 | conformance_pause@- x10"
     },
     {
-      "id": "vendor-renewal-watch@1.0.0#19",
+      "id": "contributor-intake-watch@1.0.0#19",
       "seed": 2289471786,
-      "digest": "sha256:3c018156e6ddd62ef2469f3c722d5176762d2d9307b1529436b20e5a82f8d542",
-      "summary": "agent_stage@read x2 | agent_stage@report | governed_decision@decide x15 | success@- | cycle_complete@- x77 | agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | executor_writeback_unavailable@report"
+      "digest": "sha256:1dc3054c46f46161ea9806b2bc9533018732ef041370a085eddd232f9c462e11",
+      "summary": "agent_stage@sync x2 | agent_stage@flag | governed_decision@admit x15 | success@- | cycle_complete@- x77 | agent_stage@sync | executor_writeback_unavailable@sync | agent_stage@flag | executor_writeback_unavailable@flag"
     },
     {
-      "id": "payables-watch@1.0.0#0",
+      "id": "vendor-renewal-watch@1.0.0#0",
       "seed": 2289472767,
-      "digest": "sha256:f6b1497874b9a15284f1aeba400960e1a91b75187c186d561f048874ad70a090",
+      "digest": "sha256:39afc0725a51ecc4de29d9559cb8b647d8016982129b794e85332a3b31f820af",
       "summary": "conformance_escalate@- x15"
     },
     {
-      "id": "payables-watch@1.0.0#1",
+      "id": "vendor-renewal-watch@1.0.0#1",
       "seed": 2289472768,
-      "digest": "sha256:db44ebb0252bba636a4006ffd6d172d5b0253dc220909fed7a0ae6bb695b1f9a",
-      "summary": "agent_stage@read | agent_stage@report | executor_writeback_unavailable@report x4 | governed_decision@pay | success@- | cycle_complete@- x7"
+      "digest": "sha256:4960497e18f3df484b509d5fe9ecb50a81f01dcfd70b2150d3c39d772d974b33",
+      "summary": "agent_stage@read | agent_stage@report | executor_writeback_unavailable@report x4 | governed_decision@decide | success@- | cycle_complete@- x7"
     },
     {
-      "id": "payables-watch@1.0.0#2",
+      "id": "vendor-renewal-watch@1.0.0#2",
       "seed": 2289472769,
-      "digest": "sha256:98efbed6cf0460d79fe332824d1957af26c328a5c28ffe149643bb9cf80f3e45",
+      "digest": "sha256:9374fd63c4c4ce03bfdce11e0b94a9fa1640c55bd5c22bbfb85e1ec3ce08b5c0",
       "summary": "agent_stage@read x15"
     },
     {
-      "id": "payables-watch@1.0.0#3",
+      "id": "vendor-renewal-watch@1.0.0#3",
       "seed": 2289472770,
-      "digest": "sha256:c25f51ccf2c39b3fdc09257f4e60b400ccf940a3239b6527357d4979aea55073",
+      "digest": "sha256:382ecda4107f86b22627a62f16e9885830d85fc817e47fb9661cdd1f36e0abc8",
       "summary": "conformance_pause@- | conformance_stop@- x14"
     },
     {
-      "id": "payables-watch@1.0.0#4",
+      "id": "vendor-renewal-watch@1.0.0#4",
       "seed": 2289472771,
-      "digest": "sha256:c02402581540638f63283fc5bf758a133e28f435218877cce1426fbbb077dd1f",
+      "digest": "sha256:cee700c35a5bc21558d783dfec6d1d660218117a5573323c6e1afd476ea7aa04",
       "summary": "conformance_pause@- x100"
     },
     {
-      "id": "payables-watch@1.0.0#5",
+      "id": "vendor-renewal-watch@1.0.0#5",
       "seed": 2289472772,
-      "digest": "sha256:c53d662a4a24a733c293c1f7ec0389a0d23cc3b6ea61c979b6694c81e6ec841e",
+      "digest": "sha256:94a16a9f957331b0f4aeda2c2d29b9e4a1611950b6fab57bb3b958656141f0fb",
       "summary": "conformance_stop@- x15"
     },
     {
-      "id": "payables-watch@1.0.0#6",
+      "id": "vendor-renewal-watch@1.0.0#6",
       "seed": 2289472773,
-      "digest": "sha256:32be3458351992e994950ab5d11c93b06b7e0ab12a16406d2d38c0f4305f7003",
+      "digest": "sha256:cb181e1ea18fbadd9a0dcbfa025cb4004fac9f4bcf65b17e4acb524fbc4508ce",
       "summary": "conformance_escalate@- x3 | conformance_stop@- x12"
     },
     {
-      "id": "payables-watch@1.0.0#7",
+      "id": "vendor-renewal-watch@1.0.0#7",
       "seed": 2289472774,
-      "digest": "sha256:5bc8f28cf6d4c705a99695babde216636578756602373039a4b80aa5c0739c98",
+      "digest": "sha256:fe34e3e3eaeee2ae575b791082e589db62449773cce95fd29cdfd75ad0307140",
       "summary": "agent_stage@read | executor_writeback_unavailable@read x14"
     },
     {
-      "id": "payables-watch@1.0.0#8",
+      "id": "vendor-renewal-watch@1.0.0#8",
       "seed": 2289472775,
-      "digest": "sha256:1b28c809daa7e5791bd9f0fea9deaed434ff2bf70d36b96719965eed0f0f73fe",
+      "digest": "sha256:6259c8430a7b40373c98b424850cf9fca47dd0c8cb3f39dde16b3984e169d6a6",
       "summary": "conformance_escalate@- x15"
     },
     {
-      "id": "payables-watch@1.0.0#9",
+      "id": "vendor-renewal-watch@1.0.0#9",
       "seed": 2289472776,
-      "digest": "sha256:33fae8c3614cbb10fb5249aa1c5564a07005e38c35f86f4a63619ce7faafcde9",
+      "digest": "sha256:28f9751bbf5a2ab82a31937834aefebbabf86d6b7a5da6b517c81e71fd3e20dc",
       "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | conformance_pause@- x95"
     },
     {
-      "id": "payables-watch@1.0.0#10",
+      "id": "vendor-renewal-watch@1.0.0#10",
       "seed": 2289472777,
-      "digest": "sha256:e20e02bd7dd62a029bf5e0f94aa94513594f08677a38fe6be59b2e977a418d05",
+      "digest": "sha256:b8863b66b0d5fd1789b27349aabefd296dfee5baed368f970fbc3de6ebd03f9c",
       "summary": "agent_stage@read x2 | conformance_stop@- x13"
     },
     {
-      "id": "payables-watch@1.0.0#11",
+      "id": "vendor-renewal-watch@1.0.0#11",
       "seed": 2289472778,
-      "digest": "sha256:8a8234dd304fd6212783ee9f79f6b5e18a7cfc38a13f44b9bbd7008ce8f1d37b",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | governed_decision@pay x2 | success@- | cycle_complete@- x9"
+      "digest": "sha256:aad0fc51e5b8131046418969bf60ed6a5e38d2bfb8f4a6cdd6a76613cd8b6a60",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | governed_decision@decide x2 | success@- | cycle_complete@- x9"
     },
     {
-      "id": "payables-watch@1.0.0#12",
+      "id": "vendor-renewal-watch@1.0.0#12",
       "seed": 2289472779,
-      "digest": "sha256:cf16e79c616b95e6dc35a76847f80853a2c96e385648e461f1a5ec8553be4271",
+      "digest": "sha256:3c3a240b11c85f7eea892b9b853ae2cb666ef04edc73e012c4d922e78fa249e9",
       "summary": "conformance_stop@- x15"
     },
     {
-      "id": "payables-watch@1.0.0#13",
+      "id": "vendor-renewal-watch@1.0.0#13",
       "seed": 2289472780,
-      "digest": "sha256:754aa59fe3ed9a5e6856749f8b7bd427cf537aab96e859cefc5aab6288cc3abf",
+      "digest": "sha256:108202310b846b90f6bdc1b7feff73d1a6fc164a80217acd131f6f66936c9ac2",
       "summary": "conformance_escalate@- x11 | conformance_stop@- x4"
     },
     {
-      "id": "payables-watch@1.0.0#14",
+      "id": "vendor-renewal-watch@1.0.0#14",
       "seed": 2289472781,
-      "digest": "sha256:0e28999e64deeacf8d3c39eaeaadfef1b33b7492208ca00305f60a123090fc1b",
+      "digest": "sha256:0887ea3e40060aab3617a7f26db10b470411de3b415549ba9f72460d1dcfa649",
       "summary": "conformance_escalate@- x100"
     },
     {
-      "id": "payables-watch@1.0.0#15",
+      "id": "vendor-renewal-watch@1.0.0#15",
       "seed": 2289472782,
-      "digest": "sha256:e635ef1021f89f0eaa16c761dc7fd3348c001f0dc5402561d922a5f10720fcfd",
+      "digest": "sha256:18c8e5885ed9ca79e0ccff58c620a6a43162abc51fa0d7e9de29c7003ad7d499",
       "summary": "empty_read@- x15"
     },
     {
-      "id": "payables-watch@1.0.0#16",
+      "id": "vendor-renewal-watch@1.0.0#16",
       "seed": 2289472783,
-      "digest": "sha256:ec8a1f694aa0802d12ac5fb42f5a235401acfb67fa12f253c2eb46da7bcecc1a",
+      "digest": "sha256:4f4fdc333cc5a90e370c709f6c2144eb9651d494f31baa53aeba77206f0ccb09",
       "summary": "conformance_pause@- x7 | conformance_stop@- x8"
     },
     {
-      "id": "payables-watch@1.0.0#17",
+      "id": "vendor-renewal-watch@1.0.0#17",
       "seed": 2289472784,
-      "digest": "sha256:3d54089a406b01522c3dc204ef737e88b87e8898f4130b473f87729457921305",
-      "summary": "agent_stage@read | agent_stage@report | governed_decision@pay | success@- | cycle_complete@- x11"
+      "digest": "sha256:fc69c81b831ac200061f068623d7431347a158e4c297ef900ae5573bbf4aec94",
+      "summary": "agent_stage@read | agent_stage@report | governed_decision@decide | success@- | cycle_complete@- x11"
     },
     {
-      "id": "payables-watch@1.0.0#18",
+      "id": "vendor-renewal-watch@1.0.0#18",
       "seed": 2289472785,
-      "digest": "sha256:f31a2e006f7c65e5e27b56f8023214279a36bd079585e87864e005e418fab583",
+      "digest": "sha256:d681c965d14ad267aecc12f1264f012bfc47e48bf33861255679799fb9d8cd8e",
       "summary": "quiet@- x15"
     },
     {
-      "id": "payables-watch@1.0.0#19",
+      "id": "vendor-renewal-watch@1.0.0#19",
       "seed": 2289472786,
-      "digest": "sha256:a326301343db71a51c789fdd22dd093f08282ff20e63073fbd3410e0ef3b7403",
-      "summary": "agent_stage@read | executor_writeback_unavailable@read x3 | agent_stage@report | executor_writeback_unavailable@report | governed_decision@pay | success@- | cycle_complete@- x88 | agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@report"
+      "digest": "sha256:ac9c1423ed1451956bb15311bd6a2d40d8b891e29008b57057a53b66418ba33c",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x3 | agent_stage@report | executor_writeback_unavailable@report | governed_decision@decide | success@- | cycle_complete@- x88 | agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@report"
+    },
+    {
+      "id": "payables-watch@1.0.0#0",
+      "seed": 2289473767,
+      "digest": "sha256:5d7bb662bd9851de1efb86e5524688c5c738998c2e79da7c7bb9a0cb6a539c64",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@report | executor_writeback_unavailable@report x9"
+    },
+    {
+      "id": "payables-watch@1.0.0#1",
+      "seed": 2289473768,
+      "digest": "sha256:d1bc8fa60f4fd2a8deffcf66cd25ab24cc5ff85ed5dbddc1fcb35987eaa2ba49",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@report | executor_writeback_unavailable@report x5 | governed_decision@pay x2 | success@- | cycle_complete@-"
+    },
+    {
+      "id": "payables-watch@1.0.0#2",
+      "seed": 2289473769,
+      "digest": "sha256:23b82e3ee7d70bb5a8ab80ac964f2263e5894961d2b1cc1dc1a205c77bce2292",
+      "summary": "agent_stage@read | agent_stage@report | governed_decision@pay x6 | success@- | cycle_complete@- x6"
+    },
+    {
+      "id": "payables-watch@1.0.0#3",
+      "seed": 2289473770,
+      "digest": "sha256:8c39351417a498e361e6ea77e812a89e8b58fe9be14c9e6c38adcb46ea5860b7",
+      "summary": "agent_stage@- | agent_stage@read | executor_writeback_unavailable@read | agent_stage@read | conformance_pause@- x8 | conformance_stop@- x3"
+    },
+    {
+      "id": "payables-watch@1.0.0#4",
+      "seed": 2289473771,
+      "digest": "sha256:9cdb67f0fc57d3fb62ac6783ac28f1404eb71e47d40203269ce4a801ac8b50f8",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@report | governed_decision@pay | success@- | cycle_complete@- x90 | conformance_stop@- x4"
+    },
+    {
+      "id": "payables-watch@1.0.0#5",
+      "seed": 2289473772,
+      "digest": "sha256:eb32947a64011c587b21d38e28600ffe8d1dfce953d8d23c2587b140d9490462",
+      "summary": "conformance_escalate@- x4 | conformance_stop@- x11"
+    },
+    {
+      "id": "payables-watch@1.0.0#6",
+      "seed": 2289473773,
+      "digest": "sha256:b7b102a7997bba4b5b13c54469562297e598b84843467c46f4ad0bbcdbd05f5f",
+      "summary": "conformance_escalate@- x4 | conformance_stop@- x11"
+    },
+    {
+      "id": "payables-watch@1.0.0#7",
+      "seed": 2289473774,
+      "digest": "sha256:d83e677eaba95cce7c55b548050f11e539d9e8723c5ac5019f4fe41db4b4afe1",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x4 | agent_stage@report | governed_decision@pay | success@- | cycle_complete@- x7"
+    },
+    {
+      "id": "payables-watch@1.0.0#8",
+      "seed": 2289473775,
+      "digest": "sha256:12e8701b4e58bb6e829b9bd123aba9ede91f1c4c691f46a0bac2386dccd6294b",
+      "summary": "missing_shape@- x15"
+    },
+    {
+      "id": "payables-watch@1.0.0#9",
+      "seed": 2289473776,
+      "digest": "sha256:d17782e5c09571761c4e065d1ba2bd1a2456869d4fe9ddfaa3733d6b823b8af9",
+      "summary": "agent_stage@read | agent_stage@report | governed_decision@pay x5 | success@- | cycle_complete@- x88 | conformance_pause@- x4"
+    },
+    {
+      "id": "payables-watch@1.0.0#10",
+      "seed": 2289473777,
+      "digest": "sha256:24f14c795b69ca4bb6c9e0b8e22b70ad432eb95616f8828d22ae2a05a1887204",
+      "summary": "agent_stage@read | conformance_pause@- x14"
+    },
+    {
+      "id": "payables-watch@1.0.0#11",
+      "seed": 2289473778,
+      "digest": "sha256:27b64b8574c4ab73a9aa49d0532e35914c861003a7c1f1136c9062d62643aaff",
+      "summary": "agent_stage@read x11 | agent_stage@report x4"
+    },
+    {
+      "id": "payables-watch@1.0.0#12",
+      "seed": 2289473779,
+      "digest": "sha256:016a23cf33e67d1d963a398b3cffed7678b9c62f121c57ab681e5f5ddb1073f7",
+      "summary": "agent_stage@read x15"
+    },
+    {
+      "id": "payables-watch@1.0.0#13",
+      "seed": 2289473780,
+      "digest": "sha256:e4c27a6cbcc82c47768b2dc093b31889ba1a838d6dd29030175d86e0ffc5c854",
+      "summary": "conformance_escalate@- x15"
+    },
+    {
+      "id": "payables-watch@1.0.0#14",
+      "seed": 2289473781,
+      "digest": "sha256:685ed7730e681b1cdbe0eaa9dc5bb3c910456257f2d13ddd961ad5ebd9efe15f",
+      "summary": "agent_stage@read x26 | agent_stage@report x65 | governed_decision@pay | success@- | cycle_complete@- x3 | agent_stage@read x4"
+    },
+    {
+      "id": "payables-watch@1.0.0#15",
+      "seed": 2289473782,
+      "digest": "sha256:76db5918841cb1092cfb79fe454123ace28b75dc7888204b41c7630159e86a35",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read | conformance_stop@- x13"
+    },
+    {
+      "id": "payables-watch@1.0.0#16",
+      "seed": 2289473783,
+      "digest": "sha256:9002c6ea23c47acba087ec2ca912ea38b25152c6e09b2806ecd0f0222da0d67f",
+      "summary": "conformance_stop@- x15"
+    },
+    {
+      "id": "payables-watch@1.0.0#17",
+      "seed": 2289473784,
+      "digest": "sha256:d728828aa751b9e481142b714f8fb2b0930dd40f744033aaadf1911d06d821e1",
+      "summary": "agent_stage@- | agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | governed_decision@pay x10 | success@-"
+    },
+    {
+      "id": "payables-watch@1.0.0#18",
+      "seed": 2289473785,
+      "digest": "sha256:4b40595e534b1aab945102ad63f567d93378da2bac9ef1c779d984f83689f0cf",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | governed_decision@pay | success@- | cycle_complete@- x10"
+    },
+    {
+      "id": "payables-watch@1.0.0#19",
+      "seed": 2289473786,
+      "digest": "sha256:ec050662bd72bef2382ea7fc63926b66d263c9b0a333e8c15dd0caf394269ee8",
+      "summary": "agent_stage@read | executor_writeback_unavailable@read x2 | agent_stage@read | agent_stage@report | governed_decision@pay | success@- | cycle_complete@- x89 | agent_stage@read | executor_writeback_unavailable@read x3"
     },
     {
       "id": "acceptance-verification@1.0.0#0",
-      "seed": 2289473767,
-      "digest": "sha256:dade4f425f4b662327447fac8e1491008c675880282ac098c654e088f07f9906",
+      "seed": 2289474767,
+      "digest": "sha256:204b88d73152da4f6c442608f4b81197b1eaa27814c7b2f71257c24834dabd4c",
       "summary": "role_stage@verify x9"
     },
     {
       "id": "acceptance-verification@1.0.0#1",
-      "seed": 2289473768,
-      "digest": "sha256:d0749b72308b8e88c0bc5b0980d2fc4986f855c0a03424a814cb36b058f4184d",
-      "summary": "role_stage@verify x9"
+      "seed": 2289474768,
+      "digest": "sha256:2e5ada8247061a250dd3c4658c3cc0797d71045113ed4e4cf1012c03ed9f4657",
+      "summary": "quiet@- x9"
     },
     {
       "id": "acceptance-verification@1.0.0#2",
-      "seed": 2289473769,
-      "digest": "sha256:bf10827e4b0890f3e14c805fc8d9d9fa99e291c41dcf8aa2651b47e5fd7b6c9d",
+      "seed": 2289474769,
+      "digest": "sha256:fbd7d3ca47de2d2fcacea40fc80ae7abae6fd185d27e5716ced125fecd957ed4",
       "summary": "role_stage@verify x9"
     },
     {
       "id": "acceptance-verification@1.0.0#3",
-      "seed": 2289473770,
-      "digest": "sha256:46daa7c29707dfbce3474348a254a74fd7dbd31c0577a7cd0f26c8adb2e6fb67",
-      "summary": "role_stage@verify x4 | conformance_pause@- x5"
+      "seed": 2289474770,
+      "digest": "sha256:d5f719823cc31ac5e02bf5e0d4630fd977bdabe1a1e881c58bbcbf6540036811",
+      "summary": "role_stage@verify x9"
     },
     {
       "id": "acceptance-verification@1.0.0#4",
-      "seed": 2289473771,
-      "digest": "sha256:b74dccedeeb8964812fe0782f2b81eedbe120b27c3ac8bc8668e8995bce20142",
+      "seed": 2289474771,
+      "digest": "sha256:720b792884247b0e283a270a81782346ae6b115da7d96344dace68430f2bc8fb",
       "summary": "role_stage@verify x5 | success@- | cycle_complete@- x94"
     },
     {
       "id": "acceptance-verification@1.0.0#5",
-      "seed": 2289473772,
-      "digest": "sha256:177a53da6365af6aa3951592b45ad314461a91c78285ab770f1a30c6c707fc28",
-      "summary": "conformance_escalate@- x4 | conformance_stop@- x5"
+      "seed": 2289474772,
+      "digest": "sha256:ff883aae78fc9ecd24720e79dbf78785301efbec73b076fe08cb08a08750b0d2",
+      "summary": "conformance_pause@- x9"
     },
     {
       "id": "acceptance-verification@1.0.0#6",
-      "seed": 2289473773,
-      "digest": "sha256:24fa1f4246fbae718e7f951c38779e79cc2436fe5bb3b439117bb9371b55e1a7",
-      "summary": "conformance_escalate@- x4 | conformance_stop@- x5"
-    },
-    {
-      "id": "acceptance-verification@1.0.0#7",
-      "seed": 2289473774,
-      "digest": "sha256:7e472390cabcba5d576f1cad6bce0ec7e81650f719462e894534efaad62ff7ad",
+      "seed": 2289474773,
+      "digest": "sha256:21a52ae9ed56437dd52583fc4b4c63d81f628b8a86368929ad802441ab028762",
       "summary": "role_stage@verify x9"
     },
     {
+      "id": "acceptance-verification@1.0.0#7",
+      "seed": 2289474774,
+      "digest": "sha256:795dcd3fe68e1485aa7d2741571fef2d06397056b6b90430c18765615abbc604",
+      "summary": "role_stage@verify x5 | conformance_stop@- x4"
+    },
+    {
       "id": "acceptance-verification@1.0.0#8",
-      "seed": 2289473775,
-      "digest": "sha256:148b396b210b43e778ea82cf8fbfe683e548ad3e90ffd281242625b37bd239f6",
-      "summary": "missing_shape@- x9"
+      "seed": 2289474775,
+      "digest": "sha256:bcffda79299cc583ab432ae59112e6ecae1c9134ed1b70458ef653e4b700e021",
+      "summary": "conformance_stop@- x9"
     },
     {
       "id": "acceptance-verification@1.0.0#9",
-      "seed": 2289473776,
-      "digest": "sha256:d2291c33e95377ffee887eb1056e8c80c387225a1a19d0a1f51027c09c5bd402",
-      "summary": "role_stage@verify x23 | conformance_pause@- x77"
+      "seed": 2289474776,
+      "digest": "sha256:0fa8b696c5df13f9325dec2e39786fae13418aadd3d294af8bd42bd65346e392",
+      "summary": "conformance_pause@- x100"
     },
     {
       "id": "acceptance-verification@1.0.0#10",
-      "seed": 2289473777,
-      "digest": "sha256:de7a62c2bab961b12f47353d92227518a4c9d77b1173aeaff925fc6f3d40691a",
+      "seed": 2289474777,
+      "digest": "sha256:7a2b0adbebc080b6b4768241f891884d1420a0044cfaf8f2a9c3b59ae5286b9f",
       "summary": "role_stage@verify | conformance_pause@- x8"
     },
     {
       "id": "acceptance-verification@1.0.0#11",
-      "seed": 2289473778,
-      "digest": "sha256:ca0c5c5696ee3824e8d3e253dc9851f1c29ff44ff30f997e2ede844f6e803b6f",
-      "summary": "role_stage@verify x3 | success@- | cycle_complete@- x5"
+      "seed": 2289474778,
+      "digest": "sha256:8a1d3b5dcd40c7cdbf622b610acfecbc733159c2409f6306c60334c0cf77719b",
+      "summary": "empty_read@- x9"
     },
     {
       "id": "acceptance-verification@1.0.0#12",
-      "seed": 2289473779,
-      "digest": "sha256:8b1b7792f16be26436cdad6f3d0aa4ed07a5c21ad7a9a40d6fb103765c880859",
+      "seed": 2289474779,
+      "digest": "sha256:9a4ee4168811b51367f864db583f66754f85baaec624f911f8fc049f4418bb4b",
       "summary": "role_stage@verify x9"
     },
     {
       "id": "acceptance-verification@1.0.0#13",
-      "seed": 2289473780,
-      "digest": "sha256:e2a2f4294743e97cf667fdab85bdc40319e8a0a437999fa7c0d26621274fa2f6",
-      "summary": "conformance_escalate@- x9"
-    },
-    {
-      "id": "acceptance-verification@1.0.0#14",
-      "seed": 2289473781,
-      "digest": "sha256:f27b0ccc4d8142ac31736fd5c84908e4a07bc4a028b2a44da0c221e7958f2d1c",
-      "summary": "role_stage@verify x26 | success@- | cycle_complete@- x73"
-    },
-    {
-      "id": "acceptance-verification@1.0.0#15",
-      "seed": 2289473782,
-      "digest": "sha256:934b5d463a8961004561be3f2edfb408767a7d57636b6935a3fd2ecf9f662d97",
-      "summary": "role_stage@verify x2 | conformance_stop@- x7"
-    },
-    {
-      "id": "acceptance-verification@1.0.0#16",
-      "seed": 2289473783,
-      "digest": "sha256:bd255ea715735513fb84f9afd337ef02d45b485125fa8d23f847e9e9138990f7",
-      "summary": "conformance_stop@- x9"
-    },
-    {
-      "id": "acceptance-verification@1.0.0#17",
-      "seed": 2289473784,
-      "digest": "sha256:ea513955a01cf7429200a6f8396cdc9a0c8e976b714ff12953c3fb0f03bdd2b4",
-      "summary": "role_stage@verify x7 | success@- | cycle_complete@-"
-    },
-    {
-      "id": "acceptance-verification@1.0.0#18",
-      "seed": 2289473785,
-      "digest": "sha256:f8d40fec9c79856e1ff9a93c4109723b0ae57ad60373f4c9f22887791b36e52a",
+      "seed": 2289474780,
+      "digest": "sha256:691543a0d18a1c3ed93ebbae8d76f482afe7b98f732ca1782e5551218b85aca0",
       "summary": "role_stage@verify x5 | success@- | cycle_complete@- x3"
     },
     {
+      "id": "acceptance-verification@1.0.0#14",
+      "seed": 2289474781,
+      "digest": "sha256:93da8ece6af85356cd97126e0b1969d23b1b23b2b2379a35d429919c487c44db",
+      "summary": "role_stage@verify x33 | success@- | cycle_complete@- x66"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#15",
+      "seed": 2289474782,
+      "digest": "sha256:c2fb9a5bfbe799b4f65ee1ed474baee30045653c44d0cde3b474d11e15f2b90a",
+      "summary": "role_stage@verify x6 | conformance_stop@- x3"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#16",
+      "seed": 2289474783,
+      "digest": "sha256:89fcf0b75ba62a987b3a543ae3a39ef889f8717b90dca4b0fbc372b91aaaf7aa",
+      "summary": "role_stage@verify x8 | success@-"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#17",
+      "seed": 2289474784,
+      "digest": "sha256:7ed5fc818d1c03ee15d4566ac1867e25d48eced990051ffb0de0396a4d3e7d07",
+      "summary": "quiet@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#18",
+      "seed": 2289474785,
+      "digest": "sha256:fba15e20829d4a4487057868b64fccef3935a002102ed9fcc3320fafe5c6e7a2",
+      "summary": "conformance_escalate@- x8 | conformance_stop@-"
+    },
+    {
       "id": "acceptance-verification@1.0.0#19",
-      "seed": 2289473786,
-      "digest": "sha256:a500bb4e654701354057c03e0b6f89f592488a2a565a8873947862fe268e9be4",
-      "summary": "role_stage@verify x6 | success@- | cycle_complete@- x93"
+      "seed": 2289474786,
+      "digest": "sha256:00eb97f2cebded6295106802d89dd6e098cae632567bd32da93feb9b110e67cf",
+      "summary": "role_stage@verify x11 | success@- | cycle_complete@- x88"
     }
   ],
   "direct": [

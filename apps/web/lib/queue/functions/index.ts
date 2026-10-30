@@ -46,6 +46,7 @@ import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
 import { subscriptionOAuthRenewal } from "./subscription-oauth-renewal";
 import { legacyProposalExpirySweep } from "./legacy-proposal-expiry-sweep";
+import { backlogOutcomeReconcile } from "./backlog-outcome-reconcile";
 import {
   contributorInventorySyncCron,
   contributorInventorySyncOnDemand,
@@ -61,6 +62,8 @@ import { workroomFlowReview } from "./workroom-flow-review";
 import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
+import { guardOutcomeClassify } from "./guard-outcome-classify";
+import { guardRetirementReview } from "./guard-retirement-review";
 import { a2aCollaborationHealthScan } from "./a2a-collaboration-health-scan";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
@@ -196,6 +199,7 @@ export const scheduledFunctions = [
   tokenExpiryMonitor,
   subscriptionOAuthRenewal, // BI-A53C594E: renew subscription OAuth sign-ins ahead of expiry, retry with backoff
   legacyProposalExpirySweep, // BI-753D69A9: expire undecided legacy proposals under the approval lifetime
+  backlogOutcomeReconcile, // BI-8DE5429B: every open item gets an outcome; reopens and failures measured against it
   contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,
@@ -204,6 +208,8 @@ export const scheduledFunctions = [
   businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
+  guardOutcomeClassify, // BI-FEDD8F45: daily guard refusal classification + 365-day guard-outcome prune
+  guardRetirementReview, // BI-FEDD8F45: daily guard retirement review → one review item per guard (never disables)
   a2aCollaborationHealthScan, // BI-3003EE63: daily A2A edge health (failed/blocked/stuck/orphan) — slice 1 analyze+log
 
   workPatternProfileReview,
