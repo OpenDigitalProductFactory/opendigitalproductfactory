@@ -744,21 +744,3 @@ it("limits an explicit capacity wake to the already authorized original task", a
   await reconcilePersistedRemoteTaskDispatches({ taskRunId: "TR-ORIGINAL", includeOrdinary: false } as never);
   expect(db.findMany.mock.calls[0][0].where).toMatchObject({ taskRunId: "TR-ORIGINAL" });
 });
-
-it("never queues a same-call engagement assessment even when a caller claims its projection was persisted", async () => {
-  db.findUnique.mockResolvedValue({ status: "submitted", updatedAt: new Date(), progressPayload: {
-    dispatch: { state: "pending", eventId: "mcp-task-run:TR-MCP-present:execute:1", attempt: 1 },
-    engagementPresent: { schemaVersion: 1, mode: "same-governed-call", resumable: false } } });
-  const result = await enqueuePersistedRemoteTask({ taskRunId: "TR-MCP-present", projectionAlreadyPersisted: true });
-  expect(result.queued).toBe(false);
-  expect(queue.send).not.toHaveBeenCalled();
-  expect(db.updateMany).not.toHaveBeenCalled();
-});
-
-it.each([false, true])("refuses queue mutation/send from a persisted present binding with a missing progress marker (persisted=%s)", async persisted => {
-  db.findUnique.mockResolvedValue({ status: persisted ? "submitted" : "working", updatedAt: new Date(),
-    a2aMetadata: { engagementBinding: { presentAssessment: { schemaVersion: 1 } } },
-    progressPayload: { dispatch: { state: "pending", eventId: "mcp-task-run:TR-MCP-present:execute:1", attempt: 1 } } });
-  const result = await enqueuePersistedRemoteTask({ taskRunId: "TR-MCP-present", projectionAlreadyPersisted: persisted });
-  expect(result.queued).toBe(false); expect(queue.send).not.toHaveBeenCalled(); expect(db.updateMany).not.toHaveBeenCalled();
-});

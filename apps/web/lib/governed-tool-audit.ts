@@ -3,7 +3,7 @@ import { prisma, type GppPermitVerdict } from "@dpf/db";
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-types";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
-import { boundLargeStrings } from "./evidence/bounded-evidence-output";
+import { retainedGovernedToolParameters } from "./governed-tool-audit-parameters";
 import { APPROVAL_RESUME_MARKER_KEY, buildApprovalResumeMarker } from "./coworker/approval-resume-marker";
 import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute-types";
 import type { ToolDefinition, ToolResult } from "./mcp-tool-types";
@@ -19,22 +19,6 @@ export function setGovernedToolAuditOverridesForTests(overrides: {
 }): void {
   createOverride = overrides.create ?? null;
   updateOverride = overrides.update ?? null;
-}
-
-function redactWriteOnlyParameters(
-  value: Record<string, unknown>, schema: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const properties = schema?.properties && typeof schema.properties === "object"
-    ? schema.properties as Record<string, unknown> : {};
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
-    const property = properties[key] && typeof properties[key] === "object"
-      ? properties[key] as Record<string, unknown> : undefined;
-    if (property?.writeOnly === true) return [key, "[REDACTED]"];
-    if (entry && typeof entry === "object" && !Array.isArray(entry) && property?.properties) {
-      return [key, redactWriteOnlyParameters(entry as Record<string, unknown>, property)];
-    }
-    return [key, entry];
-  }));
 }
 
 /** The result as the audit row keeps it: declared secret keys never persist. */
@@ -68,20 +52,16 @@ export async function writeGovernedToolAudit(data: {
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
-  const retainParameters = !isMetricsOnly || data.tool?.retainAuditParameters === true;
   // BI-39AAE9B8: the ledger records THAT a call happened and what it carried,
   // by digest — never a multi-megabyte payload. Any string leaf above the
   // ceiling becomes {__dpfBounded, sha256, byteLength, head}; the durable full
   // copy is the evidence record's blob (same sha256), not this row.
-  const redactedParameters = { ...boundLargeStrings(
-    redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema),
-  ) };
-  delete redactedParameters[TASK_EXECUTION_FENCE_AUDIT_KEY];
+  const redactedParameters = retainedGovernedToolParameters(data, auditClass);
   const executionFence = data.context?.taskRunId ? parseTaskExecutionFence(data.context.taskExecutionFence) : null;
   const row = {
     threadId: data.context?.threadId ?? "", agentId: data.context?.agentId ?? "unknown",
     userId: data.userId, taskRunId: data.context?.taskRunId ?? null, toolName: data.toolName,
-    parameters: retainParameters ? {
+    parameters: redactedParameters !== null ? {
       ...redactedParameters,
       ...(executionFence ? { [TASK_EXECUTION_FENCE_AUDIT_KEY]: executionFence } : {}),
       ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),

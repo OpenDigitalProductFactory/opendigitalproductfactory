@@ -13,6 +13,7 @@ import type { WorkItemData } from "@/lib/twin/kit-types";
 export function WorkItem({
   label,
   owner,
+  action,
   progress,
   blockedOnExternal,
   blockedLabel,
@@ -28,7 +29,9 @@ export function WorkItem({
       data-blocked={blockedOnExternal ? "true" : undefined}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium text-[var(--dpf-text)]">{label}</span>
+        {action ? (
+          <a href={action.href} aria-label={`${action.label}: ${label}`} className="text-xs font-medium text-[var(--dpf-text)] underline focus-visible:outline-2 focus-visible:outline-offset-2">{label}</a>
+        ) : <span className="text-xs font-medium text-[var(--dpf-text)]">{label}</span>}
         {owner ? <ActorMark name={owner.name} kind={owner.kind} compact /> : null}
       </div>
 

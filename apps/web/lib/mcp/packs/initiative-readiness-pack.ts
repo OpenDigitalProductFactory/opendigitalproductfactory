@@ -10,7 +10,7 @@ import {
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
   type InitiativeReadinessLane as Lane,
@@ -20,6 +20,9 @@ import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-con
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
+import { parseQualificationExperimentState,
+  parseQualificationVerificationEvidence, qualificationBindingDigest,
+  verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 const artifactRefSchema = {
   type: "object",
@@ -110,6 +113,10 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
       ...(name === "record_initiative_evidence" ? {
         operation: { type: "string", enum: ["gate-receipt", "objective-mapping"] },
         baselineId: { type: "string" },
+        qualificationEvidenceId: {
+          type: "string",
+          description: "Required when a passing research receipt resolves a finding from a bounded qualification experiment. Must name the exact terminal verification Workroom evidence row.",
+        },
         objectiveMappings: {
           type: "array",
           items: {
@@ -225,6 +232,43 @@ function parseStringArray(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string" && entry.trim())
     ? value as string[]
     : null;
+}
+
+async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId: string): Promise<boolean> {
+  const activity = await prisma.workroomActivity.findUnique({ where: { id: evidenceId },
+    select: { id: true, workCapsuleId: true, payload: true } });
+  if (!activity) return false;
+  const room = await prisma.workroom.findUnique({ where: { id: activity.workCapsuleId },
+    select: { backlogItemId: true, workspaceState: true } });
+  if (!room || room.backlogItemId !== itemId || !room.workspaceState || typeof room.workspaceState !== "object"
+    || Array.isArray(room.workspaceState)) return false;
+  const state = parseQualificationExperimentState(
+    (room.workspaceState as Record<string, unknown>).qualificationExperimentAdmission,
+  );
+  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId) return false;
+  const admission = verifyQualificationExperimentAdmission(state.token, { allowExpired: true });
+  if (!admission.ok || admission.data.binding.phase !== "verify"
+    || admission.data.bindingDigest !== state.bindingDigest) return false;
+  const payload = activity.payload && typeof activity.payload === "object" && !Array.isArray(activity.payload)
+    ? activity.payload as Record<string, unknown> : null;
+  const result = payload?.result && typeof payload.result === "object" && !Array.isArray(payload.result)
+    ? payload.result as Record<string, unknown> : null;
+  const proof = parseQualificationVerificationEvidence(result);
+  if (result?.qualificationOutcome !== "positive" || !proof
+    || proof.executorMode !== admission.data.binding.executorMode
+    || proof.requiredPlatform !== admission.data.binding.requiredPlatform
+    || proof.headSha.toLowerCase() !== admission.data.binding.candidate?.headSha.toLowerCase()
+    || canonicalJson(proof.testBlobIds) !== canonicalJson(admission.data.binding.candidate?.testBlobIds)
+    || result.qualificationBindingDigest !== qualificationBindingDigest(admission.data.binding)) return false;
+  if (admission.data.binding.executorMode === "workroom-host") {
+    // The current Workroom writer authenticates the submitter but does not
+    // independently observe a host process. Caller metadata cannot satisfy
+    // research, even when every field matches the signed binding.
+    return false;
+  }
+  // Historical sandbox receipts are auditable but not sufficient evidence:
+  // they do not prove which sandbox, source tree, or test cases actually ran.
+  return false;
 }
 
 function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; evidenceRefs: string[] }> | null {
@@ -385,26 +429,28 @@ async function resolvePlatformReviewBinding(
   } };
 }
 
-function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
-  return async (params, userId, context): Promise<ToolResult> => {
+/** One trusted binding selection for admission and execution; caller fields never replace it. */
+async function prepareInitiativeWrite(actionKey: string, lane: Lane, params: Record<string, unknown>,
+  context?: ToolExecutionContext): Promise<{ params: Record<string, unknown>; binding: ExternalInitiativeReviewBinding | null;
+    platformReview: boolean } | { refusal: ToolResult }> {
     const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
     let binding = resolved.binding;
-    if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
-      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (binding?.workroomRef === null) return { refusal: { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." } };
     if (lane.independent && resolved.externalMcp && !resolved.validated) {
-      return { success: false, error: "initiative_review_binding_required",
-        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." };
+      return { refusal: { success: false, error: "initiative_review_binding_required",
+        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." } };
     }
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
-      if (steward && "refusal" in steward) return steward.refusal;
+      if (steward && "refusal" in steward) return steward;
       if (steward) binding = steward.binding;
     }
     // BI-AA47C672: the platform's own reviewer, dispatched with no client token.
     let platformReview = false;
     if (!binding) {
       const platform = await resolvePlatformReviewBinding(actionKey, context?.taskRunId);
-      if (platform && "refusal" in platform) return platform.refusal;
+      if (platform && "refusal" in platform) return platform;
       if (platform) { binding = platform.binding; platformReview = true; }
     }
     if (binding) {
@@ -418,6 +464,25 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
           : {}),
       };
     }
+    return { params, binding, platformReview };
+}
+
+/** Read-only admission for the ordinary evidence lane, before any owner escalation. */
+export async function preflightInitiativeEvidence(params: Record<string, unknown>, userId: string,
+  context?: ToolExecutionContext): Promise<ToolResult | null> {
+  const prepared = await prepareInitiativeWrite("record_initiative_evidence", LANES.record_initiative_evidence, params, context);
+  if ("refusal" in prepared) return prepared.refusal;
+  const { preflightEvidenceArtifact } = await import("@/lib/backlog/initiative-readiness/evidence-preflight");
+  return preflightEvidenceArtifact({ params: prepared.params, userId, context,
+    workroomRef: prepared.binding?.workroomRef ?? undefined });
+}
+
+function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
+  return async (params, userId, context): Promise<ToolResult> => {
+    const prepared = await prepareInitiativeWrite(actionKey, lane, params, context);
+    if ("refusal" in prepared) return prepared.refusal;
+    const { binding, platformReview } = prepared;
+    params = prepared.params;
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
@@ -464,6 +529,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     }
     const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
     if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
+    const qualificationEvidenceId = typeof params.qualificationEvidenceId === "string"
+      ? params.qualificationEvidenceId.trim() : "";
+    if (gate === "research" && decision === "pass" && resolvedFindingRefs.includes("IF-91E987DA433B0C82")
+      && (!qualificationEvidenceId || !await qualificationEvidenceSupportsResearch(String(params.itemId ?? ""), qualificationEvidenceId))) {
+      return { success: false, error: "qualification-evidence-required",
+        message: "Resolving IF-91E987DA433B0C82 requires the exact positive terminal verification evidence from the bound qualification experiment." };
+    }
     if (binding && findings.length > 0
       && (binding.artifactRef.kind === "repo-blob-at-commit" || binding.artifactRef.kind === "repo-commit-range")) {
       const reads = await prisma.toolExecution.findMany({

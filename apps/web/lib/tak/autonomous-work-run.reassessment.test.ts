@@ -96,23 +96,3 @@ describe("restricted review tool resolution", () => {
     expect(mocks.reflection).not.toHaveBeenCalled(); expect(mocks.patterns).not.toHaveBeenCalled();
   });
 });
-
-it("prepares only the finite engagement's already authorized readers before any ambient runtime probe", async () => {
-  const runtime = await import("@/lib/inference/local-model-context-reconcile");
-  const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
-  const names = ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"];
-  const available = [...names, "delete_data"].map(name => ({ name, description: name, inputSchema: { type: "object" }, requiredCapability: null }));
-  mocks.available.mockResolvedValue(available);
-  vi.mocked(runtime.resolveLocalServingPosture).mockClear();
-  const binding = { version: 1, engagementId: "CE-1FE20783", offerId: "offer-ux-design-critique", serviceId: "svc-ux-design-critique",
-    providerAgentId: "ux-design-critic", actorAgentId: "actor", userId: "owner", workroomId: "WC-9C02621A", stageKey: "accept", inputDigest: "a".repeat(64),
-    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "fixture/repo", commitSha: "b".repeat(40), path: "prototype.html", providerBlobId: "c".repeat(40) },
-    visualEvidenceRef: { kind: "document-version", repositoryFullName: "fixture/repo", versionId: "images", valueDigest: "d".repeat(64) },
-    presentAssessment: { schemaVersion: 1, policyArtifactId: "ta-engagement-present-policy-" + "e".repeat(64), policyDigest: "f".repeat(64), originalTaskRunId: "TR-MCP-original", originalRequestDigest: "1".repeat(64) } };
-  const input = { agentId: "ux-design-critic", userContext: { platformRole: "developer", isSuperuser: false }, requiredToolNames: names, restrictedEngagementBinding: binding };
-  const result = await resolveAutonomousWorkTools(input as never);
-  expect(runtime.resolveLocalServingPosture).not.toHaveBeenCalled();
-  expect(result.tools.map(t => t.name)).toEqual(names); expect(result.deferredTools).toEqual([]);
-  mocks.available.mockResolvedValue(available.filter(t => t.name !== "read_source_at_version"));
-  await expect(resolveAutonomousWorkTools(input as never)).rejects.toThrow("engagement-present-tool-surface-unavailable");
-});

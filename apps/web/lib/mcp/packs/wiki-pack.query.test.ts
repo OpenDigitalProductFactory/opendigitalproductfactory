@@ -9,7 +9,6 @@ const { mockPrisma } = vi.hoisted(() => ({
 }));
 
 const searchWikiPages = vi.fn();
-const searchWikiPagesLexically = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -18,7 +17,6 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/lib/wiki/embeddings", () => ({
   searchWikiPages: (...args: unknown[]) => searchWikiPages(...args),
-  searchWikiPagesLexically: (...args: unknown[]) => searchWikiPagesLexically(...args),
 }));
 
 import { executeTool } from "@/lib/mcp-tools";
@@ -26,7 +24,6 @@ import { executeTool } from "@/lib/mcp-tools";
 afterEach(() => {
   mockPrisma.organization.findFirst.mockReset();
   searchWikiPages.mockReset();
-  searchWikiPagesLexically.mockReset();
 });
 
 describe("wiki_query MCP tool", () => {
@@ -269,13 +266,4 @@ describe("wiki_query MCP tool: principle filters (Task 2.4)", () => {
     expect(res.message).toContain("commandment");
     expect(res.message).toContain("Evidence Before Diagnosis");
   });
-});
-
-it("uses the existing Postgres lexical owner directly when a finite workflow requests lexical retrieval", async () => {
-  mockPrisma.organization.findFirst.mockResolvedValue({ id: "org_a", wikiRetrievalMode: "ppr" });
-  searchWikiPagesLexically.mockResolvedValue([{ slug: "professions/ux-design/information-hierarchy-and-density", title: "Hierarchy", pageKind: "heuristic", source: "profession", score: 1 }]);
-  const result = await executeTool("wiki_query", { query: "hierarchy", professionKey: "ux-design", includeProfessionCorpus: true, retrievalMode: "lexical", limit: 8 }, "user_test");
-  expect(searchWikiPages).not.toHaveBeenCalled(); expect(searchWikiPagesLexically).toHaveBeenCalledOnce();
-  expect(searchWikiPagesLexically).toHaveBeenCalledWith(expect.objectContaining({ organizationId: "org_a", professionKeys: ["ux-design"], query: "hierarchy" }));
-  expect(result).toMatchObject({ success: true, data: { retrievalMode: "lexical", results: [{ slug: "professions/ux-design/information-hierarchy-and-density" }] } });
 });

@@ -66,30 +66,3 @@ it("keeps the legacy admitted prompt byte-for-byte at the optional image boundar
  expect(prompt).toContain('Never grant acceptance or author disposition.\nOriginal request and inputs (assessment data):');
  expect(prompt).not.toContain('Provided rendered inputs');
 });
-
-it("preserves an explicit additive present-assessment relation without changing the original artifact or legacy digest", () => {
-  const { parsed } = fixture(); const prior = remoteTaskRequestDigest(parsed);
-  const original = { ...parsed.engagementBinding!, engagementId: "CE-1FE20783", serviceId: "svc-ux-design-critique",
-    visualEvidenceRef: { kind: "document-version" as const, repositoryFullName: "owner/repo", versionId: "manifest", valueDigest: "f".repeat(64) } };
-  const relation = { schemaVersion: 1, policyArtifactId: "ta-engagement-present-policy-" + "a".repeat(64), policyDigest: "b".repeat(64),
-    originalTaskRunId: "TR-MCP-original", originalRequestDigest: "c".repeat(64) };
-  const bound = parseEngagementTaskBinding({ ...original, presentAssessment: relation });
-  expect(bound?.presentAssessment).toEqual(relation);
-  expect(bound?.artifactRef).toEqual(original.artifactRef);
-  expect(parseEngagementTaskBinding({ ...original, presentAssessment: { ...relation, approved: true } })).toBeNull();
-  expect(parseEngagementTaskBinding({ ...original, presentAssessment: { ...relation, policyDigest: "untrusted" } })).toBeNull();
-  expect(parseEngagementTaskBinding({ ...original, presentAssessment: null })).toBeNull();
-  expect(remoteTaskRequestDigest(parsed)).toBe(prior);
-});
-
-it("labels the separate present assessment and its model-visible source basis in the generated prompt", () => {
-  const { parsed } = fixture();
-  const binding = { ...parsed.engagementBinding!, presentAssessment: { schemaVersion: 1 as const,
-    policyArtifactId: "ta-engagement-present-policy-" + "a".repeat(64), policyDigest: "b".repeat(64),
-    originalTaskRunId: "TR-MCP-original", originalRequestDigest: "c".repeat(64) } };
-  const prompt = buildEngagementTaskPrompt(binding, { requestedOutcome: "Review", inputPayload: {} });
-  expect(prompt).toContain("separately attributed present advisory assessment");
-  expect(prompt).toContain("TR-MCP-original");
-  expect(prompt).toContain("full raw source was not delivered to your model");
-  expect(prompt).toContain("never execute");
-});

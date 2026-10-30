@@ -368,14 +368,12 @@ const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
  *  own callers queue instead of misclassifying each other as external owners. */
 export function withLocalInferenceLock<T>(
   fn: () => Promise<T>,
-  options?: { modelId?: string | null; origin?: "interactive" | "autonomous"; signal?: AbortSignal;
-    /** Server-owned probe preserves captured native effects; never decoded from a task or tool packet. */
-    capturedCapacityProbe?: () => Promise<void> },
+  options?: { modelId?: string | null; origin?: "interactive" | "autonomous"; signal?: AbortSignal },
 ): Promise<T> {
   const origin = options?.origin ?? "interactive";
   const waitTimeoutMs = resolveAcquireTimeoutMs(origin);
   return localInferenceLane.run(
-    () => probeLocalGpuThenRun(fn, options?.modelId ?? null, options?.signal, options?.capturedCapacityProbe),
+    () => probeLocalGpuThenRun(fn, options?.modelId ?? null, options?.signal),
     {
       maxQueueDepth: localInferenceMaxQueueDepth(),
       priority: origin,
@@ -390,16 +388,14 @@ export function withLocalInferenceLock<T>(
   );
 }
 
-async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null, signal?: AbortSignal,
-  capturedCapacityProbe?: () => Promise<void>): Promise<T> {
+async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   const { assertGovernedInferenceAuthority } = await import("@/lib/routing/governed-inference-deadline");
   await assertGovernedInferenceAuthority(signal);
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
   const { assertLocalProviderCapacityAvailable } = await import("@/lib/routing/local-provider-capacity");
   await assertLocalProviderCapacityAvailable();
-  if (capturedCapacityProbe) await capturedCapacityProbe();
-  else await assertLocalGpuFree({ modelId });
+  await assertLocalGpuFree({ modelId });
   signal?.throwIfAborted();
   await assertGovernedInferenceAuthority(signal);
   return fn();

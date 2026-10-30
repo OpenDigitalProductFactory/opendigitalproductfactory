@@ -107,32 +107,3 @@ as a contribution, authorize replay or change an unknown execution outcome.
 Settlement preserves the first reason rather than validating the generated hold
 message. A completed contribution still requires all source, corpus and rendered
 input checks; the requesting author must provide a separate disposition.
-
-### A held original UX request
-
-An original request whose earlier execution is uncertain can be observed with
-its existing engagementId. Observation starts no work. When the current native
-policy permits one additional bounded assessment, the supported request is:
-
-```json
-{
-  "engagementId": "CE-1234ABCD",
-  "fulfillment": { "presentAssessment": true }
-}
-```
-
-This keeps the engagement and its original artifacts. It records a separate
-assessment and preserves the earlier task and its unresolved history. It cannot
-change the revision, replace the screenshots or restart the earlier execution.
-
-Read presentAssessment for the new task reference, state and next action. A
-completed result has its own resultArtifactId, executionRef, native authority
-decision, exact artifact and capture references, actual criteria and findings.
-A request, working task or held assessment is not a returned critique.
-
-Failure retains the first available reply and failed predicate. An expired or
-cancelled task remains observable; repeating the request does not replenish its
-allowance or start another generation. Configuration, permission and evidence
-failures identify what must be inspected. The requesting author still owns the
-response and disposition. Empty calibration evidence remains an explicit
-limitation, and the Critic's findings remain advisory.

@@ -10,11 +10,12 @@
 // not claims.
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import type { DecisionScope } from "@dpf/validators/decision-scopes";
 
 /** One capability a permit grants. Phase 2 grants exactly one tool per permit. */
 export type PermitCapability = { tool: string; argConstraints?: Record<string, unknown> };
 
-export type PermitAuthority = "wwmd" | "wwwd" | "wsid";
+export type PermitAuthority = DecisionScope;
 
 export type PermitClaims = {
   permitId: string;

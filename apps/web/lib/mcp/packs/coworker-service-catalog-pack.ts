@@ -94,7 +94,7 @@ const definitions: ToolDefinition[] = [
         contractContext: { type: "object", description: "Terms and data-boundary context." },
         metadata: { type: "object", description: "Additional engagement metadata." },
         engagementId: { type: "string", description: "Existing caller-owned engagement to fulfill. Never create another request to retry the same work." },
-        fulfillment: { type: "object", description: "For a held original UX request, {presentAssessment:true} requests its single separately attributed finite present assessment with preserved original scope and UNKNOWN history; it cannot replay an old task. Otherwise: current workroomId (WC-*), stageKey, optional guidanceArtifacts (exact UX profession repository blobs at the room head), optional visualEvidenceRef {kind: document-version, repositoryFullName, versionId, valueDigest} for an owned immutable capture manifest explicitly associated at FIRST binding, and the ORIGINAL artifactRef {kind: repo-blob-at-commit, repositoryFullName, commitSha, path, providerBlobId}. Original caller, offer and provider remain server-owned." },
+        fulfillment: { type: "object", description: "Current workroomId (WC-*), stageKey, optional guidanceArtifacts (exact UX profession repository blobs at the room head), optional visualEvidenceRef {kind: document-version, repositoryFullName, versionId, valueDigest} for an owned immutable capture manifest explicitly associated at FIRST binding, and the ORIGINAL artifactRef {kind: repo-blob-at-commit, repositoryFullName, commitSha, path, providerBlobId}. Original caller, offer and provider remain server-owned." },
       },
       required: [],
     },
@@ -217,7 +217,7 @@ async function resolveCoworkerOfferAgentCard(params: Record<string, unknown>): P
   };
 }
 
-type EngagementFulfillmentPort = (engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext, rawParams?: Record<string, unknown>) => Promise<ToolResult>;
+type EngagementFulfillmentPort = (engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext) => Promise<ToolResult>;
 
 async function requestCoworkerEngagement(
   params: Record<string, unknown>,
@@ -231,7 +231,7 @@ async function requestCoworkerEngagement(
       return { success: false, error: "invalid_engagement_resume", message: "Resume with engagementId and fulfillment only; original request identity cannot be replaced." };
     }
     if (!fulfill) return { success: false, error: "engagement_executor_unavailable", message: "The service execution adapter is unavailable. Restore the configured catalog adapter, then observe or resume this same engagementId." };
-    try { return await fulfill(params["engagementId"].trim(), params["fulfillment"], userId, context, params); }
+    try { return await fulfill(params["engagementId"].trim(), params["fulfillment"], userId, context); }
     catch (error) { return { success: false, error: "engagement_fulfillment_refused", message: getErrorMessage(error) }; }
   }
   if (params["fulfillment"] !== undefined) return { success: false, error: "invalid_engagement_resume", message: "Fulfillment must name the original engagementId; create the request first and resume that same engagement." };

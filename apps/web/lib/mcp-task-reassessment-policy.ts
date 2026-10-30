@@ -1,4 +1,3 @@
-import { parseCapturedJson } from "./shared/captured-effect-store";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
@@ -21,6 +20,22 @@ const unique = (v: unknown, max: number): v is string[] => Array.isArray(v) && v
 
 /** JSON.parse accepts duplicate member names. Authority must not depend on
  * which duplicate a parser happens to retain, including escaped key names. */
+function duplicateMember(source: string): boolean {
+  const stack: Array<{ object: boolean; key: boolean; names: Set<string> }> = [];
+  for (const match of source.matchAll(/"(?:\\[\s\S]|[^"\\])*"|[{}\[\],:]/g)) {
+    const token = match[0], frame = stack.at(-1);
+    if (token === "{" || token === "[") stack.push({ object: token === "{", key: token === "{", names: new Set() });
+    else if (token === "}" || token === "]") stack.pop();
+    else if (token === "," && frame?.object) frame.key = true;
+    else if (token.startsWith('"') && frame?.object && frame.key) {
+      const name = JSON.parse(token) as string;
+      if (frame.names.has(name)) return true;
+      frame.names.add(name); frame.key = false;
+    }
+  }
+  return false;
+}
+
 /** Decoding selects evidence only. A policy never grants authority without its
  * independently approved, current immutable baseline and live owner checks. */
 export function parseReassessmentPolicy(source: string): ReassessmentPolicy | null {
@@ -28,7 +43,7 @@ export function parseReassessmentPolicy(source: string): ReassessmentPolicy | nu
   const blocks = [...source.matchAll(/^```review-reassessment-policy-v1\s*\r?\n([\s\S]*?)^```[ \t]*$/gm)];
   if (blocks.length !== 1 || [...source.matchAll(/^```review-reassessment-policy-v1[ \t]*\r?$/gm)].length !== 1) return null;
   let v: unknown;
-  try { v = parseCapturedJson(blocks[0]![1]!); } catch { return null; }
+  try { v = JSON.parse(blocks[0]![1]!); if (duplicateMember(blocks[0]![1]!)) return null; } catch { return null; }
   if (!object(v) || !keys(v, ["schemaVersion", "subjectItemId", "maxAssessments", "historicalConsumption", "currentLimits", "originalReplay", "operatorEvidenceActivityIds", "requirements"])
     || v.schemaVersion !== 1 || v.subjectItemId !== "BI-285EF102" || v.maxAssessments !== 2
     || v.historicalConsumption !== "retain-unknown" || v.currentLimits !== "normal-recorded" || v.originalReplay !== false

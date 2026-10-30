@@ -56,7 +56,8 @@ vi.mock("@dpf/db/wiki-taxonomy", async (importActual) => ({
 vi.mock("@/lib/wiki/embeddings", () => ({
   searchWikiPages: (...a: unknown[]) => wiki.searchWikiPages(...a),
 }));
-vi.mock("@/lib/wiki/principle-decide", () => ({
+vi.mock("@dpf/validators/judgment/option-scoring", async (importOriginal) => ({
+  ...await importOriginal<object>(),
   decide: (...a: unknown[]) => wiki.decide(...a),
 }));
 vi.mock("@/lib/wiki/calling-ring-map", () => ({

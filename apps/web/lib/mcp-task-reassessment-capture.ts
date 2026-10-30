@@ -1,4 +1,3 @@
-import { appendCapturedTaskArtifact } from "./shared/captured-effect-store";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { prisma, type Prisma } from "@dpf/db";
@@ -65,11 +64,13 @@ async function readManifest(tx: Prisma.TransactionClient, input: PersistedReasse
 
 async function artifact(tx: Prisma.TransactionClient, context: ReassessmentExecutionContext, recordId: string,
   kind: string, data: unknown, key: unknown): Promise<void> {
-  await appendCapturedTaskArtifact(tx, { namespace: "reassessment", taskRunId: context.taskRunId,
-    manifestDigest: context.manifest.digest, taskRunRecordId: recordId, agentId: context.agentId, kind, key,
-    data: json(data), metadata: json({ schemaVersion: 1, requestDigest: context.requestDigest,
-      manifestArtifactId: context.manifest.artifactId, manifestDigest: context.manifest.digest,
-      compositionVersion: context.qualification.compositionVersion }) });
+  await tx.taskArtifact.create({ data: {
+    id: randomUUID(), artifactId: `ta-reassessment-${hash({ taskRunId: context.taskRunId, manifestDigest: context.manifest.digest, kind, key })}`,
+    taskRunId: recordId, name: kind, parts: json([{ type: kind, mimeType: "application/json", data }]),
+    metadata: json({ schemaVersion: 1, requestDigest: context.requestDigest, manifestArtifactId: context.manifest.artifactId,
+      manifestDigest: context.manifest.digest, compositionVersion: context.qualification.compositionVersion }),
+    producerAgentId: context.agentId,
+  } });
 }
 
 /** Every finite reservation is present in both existing owners in the same transaction. */
@@ -274,10 +275,9 @@ export async function loadPersistedReassessmentQualificationRoot(input: Persiste
 
 async function phaseArtifact(tx: Prisma.TransactionClient, input: PersistedReassessmentExecutionInput, root: ReassessmentQualificationSeedV2,
   kind: string, data: unknown, key: unknown): Promise<void> {
-  await appendCapturedTaskArtifact(tx, { namespace: "reassessment", taskRunId: root.taskRunId,
-    manifestDigest: root.manifest.digest, taskRunRecordId: input.taskRunRecordId, agentId: root.agentId, kind, key,
-    data: json(data), metadata: json({ schemaVersion: 2, requestDigest: root.requestDigest,
-      manifestArtifactId: root.manifest.artifactId, manifestDigest: root.manifest.digest }) });
+  await tx.taskArtifact.create({ data: { id: randomUUID(), artifactId: `ta-reassessment-${hash({ taskRunId: root.taskRunId, manifestDigest: root.manifest.digest, kind, key })}`,
+    taskRunId: input.taskRunRecordId, name: kind, parts: json([{ type: kind, mimeType: "application/json", data }]), producerAgentId: root.agentId,
+    metadata: json({ schemaVersion: 2, requestDigest: root.requestDigest, manifestArtifactId: root.manifest.artifactId, manifestDigest: root.manifest.digest }) } });
 }
 
 /** Read both authoritative capture owners. Missing, duplicated, unknown or mismatched observations never count as zero. */

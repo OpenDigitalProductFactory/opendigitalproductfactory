@@ -413,6 +413,9 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
           draftApprovedAt: true,
           sandboxId: true,
           createdAt: true,
+          designDoc: true,
+          designReview: true,
+          buildPlan: true,
         },
       },
       activities: {
@@ -445,6 +448,12 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  // BI-8ECF7B5C: judge an item with an active build on its build gate's facts, so the router sees the gate's verdict.
+  const ab = item.activeBuild;
+  const buildFacts = ab ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
+    kind: ab.kind, designDoc: ab.designDoc, designReview: ab.designReview, buildPlan: ab.buildPlan,
+    originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
+  }).catch(() => null) : null;
   const evaluatedAt = new Date().toISOString();
   // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
   // evaluation (merge signal included), so this view and the gate agree. Null
@@ -466,7 +475,8 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     item: {
       id: item.id,
       workShape: boundWorkShape,
-      deliverySensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
+      deliverySensitivity: buildFacts?.deliverySensitivity
+        ?? assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
       body: item.body,
       itemId: item.itemId,
       status: item.status,
@@ -484,6 +494,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasSpec,
     hasPlan,
     evaluatedAt,
+    buildDesign: buildFacts?.buildDesign ?? null,
   }));
   const deliveryReadiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
@@ -581,6 +592,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       triageOutcome: item.triageOutcome,
       deferral: deferralData(item),
       ...scopeData(item),
+      // BI-8DE5429B: the item's own outcome, and whether a person or agent
+      // stated it or the platform derived a draft that is still to be confirmed.
+      outcome: item.outcome ?? null,
+      outcomeSource: item.outcomeSource ?? null,
       body: item.body ?? null,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),

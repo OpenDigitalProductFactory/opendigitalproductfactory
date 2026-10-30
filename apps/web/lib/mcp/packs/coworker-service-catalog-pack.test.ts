@@ -35,7 +35,7 @@ it("binds the supported fulfillment port without exposing a caller-selected exec
   const pack = withEngagementFulfillment(fulfill);
   const context = { agentId: "AGT-EXT-CODEX" };
   await expect(pack.handlers.request_coworker_engagement({ engagementId: "CE-724328D6" }, "operator", context)).resolves.toMatchObject({ success: true });
-  expect(fulfill).toHaveBeenCalledExactlyOnceWith("CE-724328D6", undefined, "operator", context, { engagementId: "CE-724328D6" });
+  expect(fulfill).toHaveBeenCalledExactlyOnceWith("CE-724328D6", undefined, "operator", context);
   await expect(pack.handlers.request_coworker_engagement({ engagementId: "CE-724328D6", requestedOutcome: "replacement" }, "operator", context)).resolves.toMatchObject({ success: false, error: "invalid_engagement_resume" });
   expect(fulfill).toHaveBeenCalledTimes(1);
 });
@@ -43,5 +43,5 @@ it("the runtime registry binds fulfillment to the governed adapter", async () =>
   const handler = TOOL_PACK_REGISTRY.getHandler("request_coworker_engagement")!;
   const context = { agentId: "AGT-EXT-CODEX" };
   await expect(handler({ engagementId: "CE-724328D6" }, "operator", context)).resolves.toMatchObject({ success: true });
-  expect(adapter).toHaveBeenCalledExactlyOnceWith("CE-724328D6", undefined, "operator", context, undefined, { engagementId: "CE-724328D6" });
+  expect(adapter).toHaveBeenCalledExactlyOnceWith("CE-724328D6", undefined, "operator", context);
 });

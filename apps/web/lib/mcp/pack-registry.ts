@@ -213,4 +213,4 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   productOutcomesPack,
   initiativeReadinessPack,
   surfaceReadinessPack,
-].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment((engagementId, locator, userId, context, rawParams) => fulfillCoworkerEngagement(engagementId, locator, userId, context, undefined, rawParams)) : pack));
+].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment(fulfillCoworkerEngagement) : pack));

@@ -29,6 +29,7 @@ import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
 import { assertScopeClaimLease } from "./scope-claim-lease";
+import { qualificationStateForScopeClaim } from "./qualification-scope-admission";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import {
@@ -367,7 +368,7 @@ export async function claimBacklogItemWorkspace(args: {
     select: {
       id: true,
       itemId: true,
-      epicId: true, title: true, body: true,
+      epicId: true, title: true, body: true, outcome: true,
       claimStatus: true,
       claimedById: true,
       claimedByAgentId: true,
@@ -405,7 +406,8 @@ export async function claimBacklogItemWorkspace(args: {
     db: args.db,
     input: {
       title: args.input.title ?? `Work on ${item.itemId}`,
-      objective: args.input.objective ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
+      // BI-8DE5429B (WWMD DI-139981F74A44): the room's outcome is the item's.
+      objective: args.input.objective ?? item.outcome ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
       acceptanceSource: { itemId: item.itemId, body: item.body ?? null },
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
@@ -588,7 +590,6 @@ export async function recordAgentActivity(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
   return recordActivity(args.db, {
     workCapsuleId: capsule.id,
     kind: args.activity.type,
@@ -700,6 +701,8 @@ export async function claimWorkCapsuleScope(args: {
   now?: Date;
   /** Deliberately co-claim despite an overlap with another active capsule. */
   force?: boolean;
+  /** Signed, server-issued qualification admission stored atomically with the scope claim. */
+  qualificationAdmissionToken?: string;
   /** Prospective, advisory impact derived before the scope write. */
   buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
 }) {
@@ -707,6 +710,11 @@ export async function claimWorkCapsuleScope(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+  let qualificationAdmission: ReturnType<typeof qualificationStateForScopeClaim> | null = null;
+  if (args.qualificationAdmissionToken) {
+    qualificationAdmission = qualificationStateForScopeClaim({ room: capsule,
+      token: args.qualificationAdmissionToken, accountablePrincipalRef: args.actor.principalId ?? null, now: args.now });
+  }
 
   // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
   // (the abandoned-main false-success path landed claims on an unrelated WC).
@@ -764,6 +772,8 @@ export async function claimWorkCapsuleScope(args: {
       where: scopeWriteWhere(capsule),
       data: {
         scopeClaims,
+        ...(qualificationAdmission ? { workspaceState: { ...qualificationAdmission.workspaceState,
+          qualificationExperimentAdmission: qualificationAdmission.state } } : {}),
         ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
       },
     });
@@ -777,6 +787,7 @@ export async function claimWorkCapsuleScope(args: {
       payload: {
         added,
         refreshed,
+        ...(qualificationAdmission ? { qualificationBindingDigest: qualificationAdmission.state.bindingDigest } : {}),
         ...(conflicts.length > 0 ? { forcedOverConflicts: conflicts } : {}),
       },
       actor: args.actor,

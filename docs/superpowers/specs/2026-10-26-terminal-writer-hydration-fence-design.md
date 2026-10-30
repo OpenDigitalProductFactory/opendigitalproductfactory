@@ -100,3 +100,9 @@ The three focused suites passed 53 tests. The graph-selected set ran 284 tests: 
 
 Documentation impact: this restores an existing internal recovery contract and adds no user-facing action, route, configuration or permission. The design records the implementation; no operator workflow documentation changes are required.
 The module-size guard caught the expanded legacy test module. Shared setup was extracted into test-support/terminal-writer-fixture.ts and the real-governance matrix into mcp-task-terminal-writer-hydration-fence.test.ts. All four directly affected suites passed 50 tests after extraction; the test TypeScript program and module-size guard passed. The initial local guard run passed 13 checks and failed only module size; its corrected isolated rerun passed. Native/runtime verification remains pending.
+
+## October 30 dependency separation
+
+The candidate is integrated with protected main 07f23d32acb0027a817afe9cc105fd578e0a8589. The unpublished Critic dependency is removed from the delivered tree: the expected execution fence extends the existing inline executor input, and submit-types plus the TAK tool resolver remain exactly as published on main. BI-BCBCA8D1 remains related independent work, not an implementation dependency. The original 6d57ff8bddcdb459466148fdc7d998a899eeb809 candidate is retained in a recovery ref.
+
+This separation preserves the same reservation, reader, settlement and writer-admission repair and shared regression fixture. Historical source results above remain historical; the revised tree requires fresh affected tests, both TypeScript programs, independent assessment and canonical gate evidence. Original task UNKNOWN outcomes remain unchanged and do not authorize replay.

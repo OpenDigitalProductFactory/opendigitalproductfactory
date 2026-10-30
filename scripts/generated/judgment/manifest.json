@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "owner": "@markdbodman",
+  "backlogItem": "BI-4DD124E7",
+  "license": "Apache-2.0",
+  "compiler": {
+    "name": "typescript",
+    "version": "6.0.3",
+    "target": "ES2022",
+    "module": "ES2022",
+    "newLine": "LF",
+    "removeComments": false,
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true
+  },
+  "sources": {
+    "packages/validators/src/judgment/option-scoring.ts": "4947e9f9ac5f8bb2e1964da42779fc8fa5ceefca69dfa9e8334a17e68fac2125",
+    "packages/validators/src/judgment/mcda-quality-gates.ts": "ce54eeeaf08cd0e74264f6293352a1154ab075ffc2f55deb423e5f811a369e49"
+  },
+  "outputs": {
+    "scripts/generated/judgment/package.json": "230cbdd6c17ad56a2436422d7ec17f8bd0c91d8bc01847d5bdd591bec22ae83c",
+    "scripts/generated/judgment/option-scoring.js": "10ecc15dc84ace4548fb779186cfee608cab9611189473e74818baf691c8e3af",
+    "scripts/generated/judgment/mcda-quality-gates.js": "85cdb7319e371cb73201dc9d21e6e5580f74023d9ccc2f1214a84056d69c7640"
+  },
+  "runtimeDependencies": []
+}

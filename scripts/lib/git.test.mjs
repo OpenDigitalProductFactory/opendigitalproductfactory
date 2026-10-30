@@ -94,3 +94,28 @@ test("without input stdin stays ignored and output is utf8 text", () => {
   assert.equal(seen.stdio[0], "ignore");
   assert.equal(seen.encoding, "utf8");
 });
+
+test("reads a tracked-file inventory beyond Node's 1 MiB default without ignoring explicit limits", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-git-inventory-"));
+  try {
+    assert.equal(runGit(["init", "--quiet"], { cwd }).ok, true);
+    const blob = gitText(["hash-object", "-w", "--stdin"], { cwd, input: "" });
+    // Virtual index entries need no worktree files. Each path component stays
+    // within normal filesystem limits while the complete inventory exceeds 1 MiB.
+    const directory = ["docs", "a".repeat(220), "b".repeat(220), "c".repeat(220)].join("/");
+    const paths = Array.from({ length: 1700 }, (_, i) => `${directory}/fixture-${String(i).padStart(4, "0")}.md`);
+    const expected = paths.join("\0") + "\0";
+    assert.ok(Buffer.byteLength(expected) > 1024 * 1024);
+    const input = paths.map(file => `100644 ${blob}\t${file}\n`).join("");
+    assert.equal(runGit(["update-index", "--add", "--index-info"], { cwd, input }).ok, true);
+    assert.equal(gitText(["ls-files", "-z"], { cwd, trim: false }), expected);
+    const binary = runGit(["ls-files", "-z"], { cwd, binary: true });
+    assert.equal(binary.ok, true);
+    assert.ok(binary.stdout.equals(Buffer.from(expected)));
+    const bounded = runGit(["ls-files", "-z"], { cwd, maxBuffer: 64 * 1024 });
+    assert.equal(bounded.ok, false);
+    assert.match(bounded.stderr, /ENOBUFS|maxBuffer/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
