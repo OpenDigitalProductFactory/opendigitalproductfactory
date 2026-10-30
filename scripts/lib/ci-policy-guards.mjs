@@ -222,6 +222,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // were stale (they now read compose-chain.ps1).
       conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
+      conformanceTest("scripts/installer/edge-client-certificate.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
       // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
