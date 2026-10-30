@@ -675,9 +675,9 @@ if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
     }
     @edge_actions path /api/v1/edge/actions/*
     handle @edge_actions {
+        request_header -X-DPF-Edge-Cert-*
+        request_header -X-DPF-MTLS-Proxy-Secret
         reverse_proxy portal:3000 {
-            header_up -X-DPF-Edge-Cert-*
-            header_up -X-DPF-MTLS-Proxy-Secret
             header_up X-DPF-MTLS-Proxy-Secret "$proxy_secret_value"
             header_up X-DPF-Edge-Cert-Fingerprint {tls_client_fingerprint}
             header_up X-DPF-Edge-Cert-Serial {tls_client_serial}
