@@ -61,6 +61,13 @@ work; a quote states an offer; and a sales order records an accepted commitment.
 
 ## Find the Right View
 
+**Customer follow-up** shows up to three open sales opportunities with an
+overdue or missing next step, alongside inbound work. Overdue steps appear first.
+Choose **Set next step** to open that deal's existing pipeline inspector, record
+the next action, or ask Customer Advisor for a draft to review. This does not
+send a message. Open **Pipeline** for the remaining opportunities. Rescue views
+keep their existing adoption and community follow-up instead.
+
 The section navigation is permission-aware:
 
 - **Accounts** (`/customer`) — daily attention summary, revenue posture,

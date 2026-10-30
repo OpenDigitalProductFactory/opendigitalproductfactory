@@ -9,6 +9,7 @@
 // the rendered output deterministically.
 
 import type { OwnerDomainVocabulary } from "./vocabulary";
+import { isOpenOpportunityStage } from "@/lib/crm/presentation";
 
 export type OwnerFirstDomain = "workspace" | "customer" | "employee" | "finance";
 
@@ -66,6 +67,9 @@ export type CustomerSummaryInput = {
   unworkedEngagements: number;
   overdueInvoices: number;
   renewalsDueSoon: number;
+  /** Present only when the caller has loaded the permitted sales follow-up view. */
+  opportunityFollowups?: Array<{ id: string; title: string; stage: string; nextActivityAt: Date | null }>;
+  now?: Date;
 };
 
 export function buildCustomerOwnerSummary(
@@ -118,6 +122,25 @@ export function buildCustomerOwnerSummary(
     });
   }
 
+  const now = (input.now ?? new Date()).getTime();
+  const salesFollowups = (input.opportunityFollowups ?? [])
+    .filter((opportunity) => isOpenOpportunityStage(opportunity.stage)
+      && (opportunity.nextActivityAt === null || opportunity.nextActivityAt.getTime() < now))
+    .sort((a, b) => (a.nextActivityAt?.getTime() ?? Infinity) - (b.nextActivityAt?.getTime() ?? Infinity))
+    .slice(0, 3);
+  for (const opportunity of salesFollowups) {
+    actions.push({
+      id: `opportunity-${opportunity.id}`,
+      title: opportunity.title,
+      why: opportunity.nextActivityAt ? "Recorded sales next step is overdue." : "No next step is recorded for this sales opportunity.",
+      nextAction: {
+        label: "Set next step",
+        href: `/customer/opportunities?opportunity=${encodeURIComponent(opportunity.id)}`,
+      },
+      tone: opportunity.nextActivityAt ? "attention" : "info",
+    });
+  }
+
   if (input.overdueInvoices > 0) {
     const n = input.overdueInvoices;
     actions.push({
@@ -132,9 +155,11 @@ export function buildCustomerOwnerSummary(
   return {
     domain: "customer",
     headline: vocab.guestFollowUpLabel,
-    subhead: vocab.customerSummarySubhead,
+    subhead: input.opportunityFollowups ? "Inbound replies and recorded sales next steps that need you." : vocab.customerSummarySubhead,
     actions: orderActions(actions),
-    clearMessage: `No ${vocab.guestsLabel} are waiting on a reply right now. New ${vocab.reservationsLabel} and ${vocab.inquiriesLabel} will appear here first.`,
+    clearMessage: input.opportunityFollowups
+      ? "No replies are waiting. No recorded sales next steps are overdue or missing."
+      : `No ${vocab.guestsLabel} are waiting on a reply right now. New ${vocab.reservationsLabel} and ${vocab.inquiriesLabel} will appear here first.`,
   };
 }
 
