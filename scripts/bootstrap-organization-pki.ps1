@@ -378,7 +378,14 @@ function Repair-DpfAuthorityEdgeClient {
                 if ($previous) {
                     Copy-Item -LiteralPath (Join-Path $work "previous.key") -Destination $EdgeClientKey -Force
                     Copy-Item -LiteralPath (Join-Path $work "previous.crt") -Destination $EdgeClientCert -Force
-                } else { Remove-Item -LiteralPath $EdgeClientKey, $EdgeClientCert -Force -ErrorAction SilentlyContinue }
+                } else {
+                    foreach ($path in @($EdgeClientKey, $EdgeClientCert)) {
+                        if (Test-Path -LiteralPath $path -ErrorAction Stop) {
+                            Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+                        }
+                        if (Test-Path -LiteralPath $path -ErrorAction Stop) { throw "edge_client_partial_pair_remains" }
+                    }
+                }
             } catch { $retainCheckpoint = $true; throw "edge_client_restoration_unproven" }
         }
         if (-not $retainCheckpoint) {

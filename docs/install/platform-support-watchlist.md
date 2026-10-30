@@ -17,6 +17,15 @@ repair checkpoints require reconciliation before another attempt. Native Windows
 execution, live certificate repair and inference activation remain separate
 evidence; passing source fixtures cannot establish them.
 
+Independent review also found that first issuance on PowerShell could suppress a
+rollback deletion error, then discard its checkpoint and lock with a partial key
+still published. Cleanup now requires confirmed removal, and retains recovery
+state on any uncertainty. A fixture executing the production PowerShell owner
+reproduced the failure and verified the correction under PowerShell 7.6.9 on
+macOS, with fake issuer and file-failure adapters. This is not native Windows or
+PowerShell 5.1 execution evidence. The fixture runs when a PowerShell runtime is
+available and explicitly reports a skip otherwise.
+
 **Windows foreground gate cancellation.**
 
 BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows

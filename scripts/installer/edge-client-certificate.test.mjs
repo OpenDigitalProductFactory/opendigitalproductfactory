@@ -9,6 +9,74 @@ import {resolveGuardBash} from '../lib/guard-bash.mjs';
 
 const subject = 'dpf-edge-localhost';
 const stamp = ms => new Date(ms).toISOString().replace(/[-:TZ]/g, '').slice(0, 14) + 'Z';
+const powershell = process.env.DPF_TEST_POWERSHELL || (process.platform === 'win32' ? 'powershell' : 'pwsh');
+const hasPowerShell = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], {timeout: 10000}).status === 0;
+
+test('PowerShell first issuance retains its checkpoint when rollback cannot remove a partial key', {skip: !hasPowerShell}, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-client-rollback-test-'));
+  try {
+    const source = await readFile(new URL('../bootstrap-organization-pki.ps1', import.meta.url), 'utf8');
+    const owner = source.match(/^function Repair-DpfAuthorityEdgeClient \{[\s\S]*?^\}/m)?.[0];
+    assert.ok(owner, 'execute the production recovery owner without running the full bootstrap');
+    const script = join(dir, 'rollback.ps1');
+    await writeFile(script, `param([string]$OutDir, [string]$Failure)
+$ErrorActionPreference = 'Stop'
+$RepoRoot = $OutDir
+$RootCert = Join-Path $OutDir 'root_ca.crt'
+$EdgeClientCert = Join-Path $OutDir 'edge-client.crt'
+$EdgeClientKey = Join-Path $OutDir 'edge-client.key'
+function icacls { $global:LASTEXITCODE = 0 }
+function node { $global:LASTEXITCODE = 0; 'issue fixture-root' }
+function Invoke-DpfPkiCompose { param($Arguments); 'FIXTURE-TOKEN' }
+function Invoke-DpfLocalStepClient {
+  param($Arguments)
+  if ($Arguments[0] -eq 'ca') {
+    [IO.File]::WriteAllText((Join-Path $OutDir $Arguments[3].Substring(6)), 'fixture-certificate')
+    [IO.File]::WriteAllText((Join-Path $OutDir $Arguments[4].Substring(6)), 'fixture-key')
+  } elseif ($Arguments[1] -eq 'key') { 'fixture-public-key' }
+}
+function Move-Item {
+  [CmdletBinding()]param([string]$LiteralPath, [string]$Destination, [switch]$Force)
+  if ($Destination -eq $EdgeClientCert) { throw 'fixture-certificate-publication-failed' }
+  Microsoft.PowerShell.Management\\Move-Item @PSBoundParameters
+}
+function Remove-Item {
+  [CmdletBinding()]param([string[]]$LiteralPath, [switch]$Force, [switch]$Recurse)
+  if ($Failure -eq 'deletion' -and $LiteralPath -contains $EdgeClientKey) {
+    Write-Error 'fixture-sharing-violation'
+    return
+  }
+  Microsoft.PowerShell.Management\\Remove-Item @PSBoundParameters
+}
+${owner}
+$failureMessage = $null
+try { Repair-DpfAuthorityEdgeClient -Subject 'dpf-edge-localhost' } catch { $failureMessage = $_.Exception.Message }
+@{ failure=$failureMessage; key=(Test-Path -LiteralPath $EdgeClientKey); cert=(Test-Path -LiteralPath $EdgeClientCert);
+   lock=(Test-Path -LiteralPath (Join-Path $OutDir '.edge-client-recovery.lock'));
+   checkpoints=@(Get-ChildItem -LiteralPath $OutDir -Force -Directory | Where-Object { $_.Name -like '.edge-client-*' -and $_.Name -ne '.edge-client-recovery.lock' }).Count } | ConvertTo-Json -Compress
+`);
+    for (const failure of ['deletion', 'clean']) {
+      const host = join(dir, failure);
+      await mkdir(host);
+      await writeFile(join(host, 'root_ca.crt'), 'fixture-public-root');
+      const child = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-File', script, host, failure], {encoding: 'utf8', timeout: 15000});
+      assert.equal(child.status, 0, child.stderr);
+      const result = JSON.parse(child.stdout.trim());
+      assert.equal(result.cert, false);
+      if (failure === 'deletion') {
+        assert.equal(result.failure, 'edge_client_restoration_unproven');
+        assert.equal(result.key, true);
+        assert.equal(result.lock, true);
+        assert.equal(result.checkpoints, 1);
+      } else {
+        assert.equal(result.failure, 'fixture-certificate-publication-failed');
+        assert.equal(result.key, false);
+        assert.equal(result.lock, false);
+        assert.equal(result.checkpoints, 0);
+      }
+    }
+  } finally { await rm(dir, {recursive: true, force: true}); }
+});
 
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), 'dpf-client-cert-test-'));
