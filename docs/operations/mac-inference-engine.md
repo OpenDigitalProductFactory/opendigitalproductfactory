@@ -1,5 +1,18 @@
 # Maintained Mac inference engine candidate
 
+October 29, 2026 (Chicago), current physical checkpoint: canonical app update
+`1f8c111c409a4e8cc3575d118a7a154134791ba9` is healthy with the host action channel
+enabled. The supported native installer refreshed the enrolled Mac service and
+staged the qualified runtime/report without activating it. The repaired client
+certificate is valid, but actual registration returns
+`machine_authentication_failed`. BI-2A52F271 repairs both PKI generators: Caddy
+2.10.2 applies upstream header insertion before deletion, so combining identity
+scrubbing and insertion in one upstream operation removes the verified identity.
+Scrubbing belongs in a separate incoming-request middleware before proxy
+insertion. Re-enrollment, wider grants and weaker certificate checks do not fix
+this defect. Source tests and configuration adaptation remain separate from
+successful live registration, engine activation, rollback and useful DPF work.
+
 October 28 live status: PR6612 is merged and its source reached the canonical portal, but the faster native runtime is not active. Docker Model Runner is now1.2.9 while the installed engine executable still hashes to `0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26`; the portal still routes to `http://model-runner.docker.internal/v1`. BI-CD4EB130 has been reopened for its genuinely unfinished native lifecycle/activation implementation, not for a waived customer acceptance question. The existing design and plan's October 28 amendment records the missing host-control path and the signed-action integration selected in DI-81525BCDC1F7. No live speedup is established by the portal upgrade. AI Ops' existing performance task still reports a required-writer failure; captured learning is not proof that recurring stewardship works.
 
 The native activation path requires a canonical portal release and separate native installer convergence. Its installer opt-in is `DPF_MANAGED_INFERENCE_ENABLED=1`, with an exact published `DPF_MANAGED_INFERENCE_SOURCE_SHA`, `DPF_MANAGED_INFERENCE_RUNTIME_PACKAGE` and `DPF_MANAGED_INFERENCE_RUNTIME_SHA256`, and the retained report path/hash in `DPF_MANAGED_INFERENCE_REPORT` / `DPF_MANAGED_INFERENCE_REPORT_SHA256`. The executing agent supplies these verified artifact bindings through the supported native installer after protected publication and canonical convergence; the operator does not type infrastructure values. The qualification report must retain its producer's private mode (`0600`); staging validates and reads one bounded, no-follow file descriptor before checking its pinned hash. This stages a private controller and a qualification bound to the enrolled host, then replaces the host Edge agent from the same immutable source. It does not activate the engine, edit provider rows or grant the native action automatically. Windows, Linux and unqualified Macs retain their existing path.
