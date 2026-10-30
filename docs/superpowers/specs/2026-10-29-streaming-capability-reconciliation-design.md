@@ -1,3 +1,9 @@
+---
+status: active
+backlog_item: BI-AF6DDF01
+workroom: WC-8A42FBA2
+---
+
 # Reconcile streaming capability for interactive routing
 
 Backlog: BI-AF6DDF01. Corrective follow-up to BI-038AA4BC.
@@ -17,7 +23,7 @@ BI-7F2FBDA3 covers learned authentication/model eligibility and is delivered; BI
 ## Ordered repair
 
 1. Reproduce the interactive exclusion through the real loader and hard filter with provider streaming true and model streaming absent/null.
-2. Resolve text-model streaming at the loader boundary: explicit provider false wins; explicit model false remains false; explicit model true remains true unless the provider refuses; otherwise use the provider declaration for general text model classes only. Unknown remains unknown without positive transport evidence. Preserve all unrelated capability fields.
+2. Resolve text-model streaming at the loader boundary: explicit provider false wins; explicit model false remains false; explicit model true remains true unless the provider refuses; otherwise use the provider declaration for general text model classes only. Unknown remains unknown without positive transport evidence. Both the legacy Boolean and ModelCard capability use this resolution, with the Boolean true only for confirmed support. Preserve all unrelated capability fields.
 3. Exercise explicit refusals, unknowns, model classes, alternate providers and enable-candidate preview parity. Run impacted tests and typecheck.
 4. Publish with the normal exact-tree gate, protected review and canonical upgrade. Verify a fresh read-only coworker request only after the existing unsettled execution is reconciled. A real remaining quota, quality or policy exclusion remains a blocker and must be named.
 

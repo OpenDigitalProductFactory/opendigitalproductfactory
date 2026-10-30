@@ -1,3 +1,9 @@
+---
+status: active
+backlog_item: BI-AF6DDF01
+workroom: WC-8A42FBA2
+---
+
 # Streaming capability reconciliation plan
 
 Backlog: BI-AF6DDF01. Design: `docs/superpowers/specs/2026-10-29-streaming-capability-reconciliation-design.md`.
