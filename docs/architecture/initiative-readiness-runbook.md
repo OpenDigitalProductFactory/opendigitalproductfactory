@@ -420,6 +420,15 @@ The protocol is deliberately two-phase. **Prepare** is pinned to the item, Workr
 
 The scheduled task, stage mandate, Workroom state, tool effects, and recorded evidence all recheck the same binding digest. A token cannot be rearmed after start or settlement, and pages from another identity, path, phase, attempt, or outcome never combine into evidence. Only complete positive terminal Verify evidence can be selected for the governed research writer. Negative, inconclusive, blocked, stale, conflicting, or failed-only evidence remains audit history and readiness stays closed. The design author must still persist the normal `record_initiative_evidence(gate:"research")` receipt; qualification evidence never writes that receipt directly.
 
+Verify is executable only through the attested `workroom-host` path. The signed
+token is presented to the canonical host-resource runner, which claims the
+exact server-derived lease, supervises the bound command, streams and hashes
+its output, and calls the existing execution-evidence writer only after a
+successful terminal exit. The writer revalidates the lease, source, platform,
+command and timing and atomically associates one Workroom activity with that
+previously unused lease. Sandbox-labelled, caller-asserted, foreign, expired or
+duplicate receipts remain audit history and cannot support research.
+
 The source contract is [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts); routing and progression live in [terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts). The design is [qualification research admission](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
 
 ### A present assessment authorized by an approved policy
