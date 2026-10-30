@@ -318,7 +318,7 @@ test("source persistence preserves a single-file bind inode and unrelated update
     assert.equal((await persistRemoteActionDispatch(f)).status, "persisted");
     assert.equal((await stat(alias)).ino, before.ino);
     assert.equal(await readFile(alias, "utf8"), "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\nKEEP=new\nDPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n");
-    assert.equal((await stat(join(f.recoveryDir, "env.before"))).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal((await stat(join(f.recoveryDir, "env.before"))).mode & 0o777, 0o600);
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
