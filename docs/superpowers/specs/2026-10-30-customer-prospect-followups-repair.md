@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Customer follow-up: show recorded sales next steps
 
 Backlog and implementation parent: **BI-3C34D453**. Workroom: **WC-7DCAB9F6**.
