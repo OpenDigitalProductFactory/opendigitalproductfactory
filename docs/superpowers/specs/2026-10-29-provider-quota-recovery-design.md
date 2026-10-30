@@ -1,0 +1,58 @@
+---
+status: draft
+---
+
+# Provider quota recovery and visible reset options
+
+Backlog: BI-D81CCC24. Parent outcome: BI-C5E51A15. Workroom: WC-2CCBB706.
+This extends the existing [account quota reconciliation design](2026-10-14-provider-quota-revalidation-design.md), not its completed historical assurance.
+
+## Objective and evidence
+
+**OBJ-1:** The operator can see which limit blocks an account, when that evidence was observed, its expected reset, and the next supported recovery action.
+**OBJ-2:** A bounded fresh inference observation can restore its own eligible channel before a distant recorded reset, without clearing another account, transport or independent restriction.
+**OBJ-3:** Routine recovery is autonomous under its recorded commission; finite-use reset redemption and genuine authority changes remain separate decisions.
+
+On 2026-10-29 the owner reported early limit releases and hidden reset offers. An authorized account test completed, but the provider page retained both shared-pool and provider-capacity holds. Existing `test` deliberately uses `verificationOnly`; its successful snapshot check does not reconcile quota. That contract remains unchanged. A normal COO turn separately excluded preferred models for missing streaming capability; BI-AF6DDF01 owns that repair. Successful authentication, model quality and routing eligibility are separate facts.
+
+Official sources consulted 2026-10-29:
+- [Claude limit resets](https://support.claude.com/en/articles/17007452-what-is-a-limit-reset): occasional eligible offers can reset session or weekly allocation; expiry may apply; redemption is irreversible and occurs in provider Usage settings.
+- [Claude API limits](https://platform.claude.com/docs/en/api/rate-limits): rate windows and API spending caps differ. Subscription offers do not prove a changed API spending cap.
+
+## Existing substrate and decision
+
+Reuse the existing provider account, capacity observation, credential-revision hash, CLI pool, ScheduledJob, governed provider-management operation, strict Responses completion validator, account overview/detail and canonical conditional reconciliation. No new table, credential store, provider, inference route, billing allowance or automatic reset redemption.
+
+Keep ordinary connection `test` verification-only. Add an explicit quota-recheck operation to the existing account-management contract because restoring routing is a different effect from checking authentication. Both the portal action and MCP operation call one bounded server implementation. It is admitted through existing account capabilities and governance, with exact account identity. No actor-name exemption or relaxed explicit-always policy.
+
+The request uses a fixed synthetic prompt, a supported current model, bounded response/timeout, no business transcript or tools, and existing spend/privacy controls. An unknown result never authorizes replay of original coworker work.
+
+### CT-QUOTA-OBSERVATION: current channel proof
+
+Capture the selected active install-owned default subscription account, credential revision and relevant quota generations before dispatch. Check the same account/credential again before the request and transaction. Preserve operator pause/disable/disconnect, authentication/billing/terms/grants restrictions and newer observations. A completed response alone is not full routing acceptance.
+
+Use the existing conditional quota writer only for quota owned by that exact account or already-proven canonical-default legacy owner. An account cannot clear another provider's quota by alias. In particular, a ChatGPT Responses completion cannot clear the Codex CLI pool.
+
+Where conservative shared quota projections would otherwise reapply an older sibling forecast, a newer exact-account, credential-bound successful Responses observation can qualify the ChatGPT Responses channel only. It does not establish separate budgets or CLI availability. A later failure defeats the older success. Unknown ownership, stale credentials, missing evidence and simultaneous non-quota vetoes remain restrictions. This projection must be shared by routing and provider UI, not implemented as a page-only green label.
+
+### CT-RECOVERY-COMMISSION: bounded early rechecks
+
+Reuse the durable scheduler for the already-requested hourly subscription-recovery commission. Check only eligible active install-owned default subscription accounts with quota observations; serialize the sweep, bound its batch and requests, and record last attempt/result without a recurring owner approval. Respect a current short Retry-After. Distant weekly forecasts may be revalidated hourly; no fixed-date busy loop. Do not activate paused accounts, reset financial caps, redeem offers, broaden trust or infer CLI recovery from a Responses result. Persist uncertainty as uncertainty and retain the execution identity.
+
+### CT-RECOVERY-VIEW: useful evidence and actions
+
+Extend the existing provider account view instead of adding a dashboard. Show session/short-window, weekly/shared subscription and API spend restrictions distinctly when evidence identifies them; otherwise label the limit unknown. Show last observation and source, expected reset in the operator locale, and check-again result separately from authentication.
+
+Expose the provider Usage page for supported reset offers. Since the inspected supported contracts expose no authoritative reset-offer feed, show availability as unknown rather than claiming no offer. Explain the provider can offer an early reset and show its expiry only when actually observed. Opening Usage or checking capacity never consumes a reset. Redemption remains an explicit finite-use owner action; no provider credential is entered by an agent.
+
+## Failure and verification cases
+
+FLOW-RECHECK: exact account → admission/current snapshot → bounded synthetic inference → strict completion → conditional reconciliation → shared routing/UI readback.
+FLOW-HOURLY: recorded commission → eligible quota candidates → per-account bounded observation → durable result/backoff; unchanged routine outcomes remain technical history.
+FLOW-RESET: account restriction → provider Usage link → owner-controlled reset → explicit recheck → actual routing evidence.
+
+VERIFY-ISOLATION covers foreign/changed credentials, manual pause, billing/auth holds, missing/non-quota rows, concurrent newer quota, incomplete output, network/timeout, uncertain settlement, and shared CLI versus Responses independence. VERIFY-RECOVERY covers real old-hold/new-success/late-failure ordering and actual PostgreSQL predicates. VERIFY-UI covers light/dark, desktop/mobile, keyboard, unknown evidence, localized times and safe external Usage links. VERIFY-LIVE requires canonical deployment and fresh observed account/coworker/watch results; source tests cannot supply this acceptance.
+
+## Scope and rollback
+
+Existing consultation error handling and account readiness are reused; independently owned streaming/quality corrections are not copied here. Revert the scoped source through protected PR delivery if needed, preserving existing observations and audit history. Pause the same recovery commission through supported controls if verification is inconclusive. Never clear quota rows manually or replay unsettled original work.
