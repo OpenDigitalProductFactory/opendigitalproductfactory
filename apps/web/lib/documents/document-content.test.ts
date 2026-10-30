@@ -4,12 +4,13 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 import { resolveDocumentContent, type DocumentContentDeps } from "./document-content";
 
+const VIEWER = { principalId: "p-reader" };
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 function deps(document: unknown, bytes = Buffer.from("bytes")) {
   const findUnique = vi.fn(async () => document);
   const readBlob = vi.fn(async () => bytes);
-  return { deps: { db: { document: { findUnique } } as never, readBlob } satisfies DocumentContentDeps, findUnique, readBlob };
+  return { deps: { db: { document: { findFirst: findUnique } } as never, readBlob } satisfies DocumentContentDeps, findUnique, readBlob };
 }
 
 function documentRow(overrides: Record<string, unknown> = {}) {
@@ -28,7 +29,7 @@ function documentRow(overrides: Record<string, unknown> = {}) {
 describe("resolveDocumentContent (BI-9D43CBEF)", () => {
   it("serves the original as a download named after the document", async () => {
     const { deps: d, readBlob } = deps(documentRow());
-    const result = await resolveDocumentContent({ documentId: "DOC-1", rendition: "original" }, d);
+    const result = await resolveDocumentContent({ documentId: "DOC-1", rendition: "original", viewer: VIEWER }, d);
     expect(result).toEqual({
       ok: true,
       data: {
@@ -42,29 +43,29 @@ describe("resolveDocumentContent (BI-9D43CBEF)", () => {
 
   it("serves the PDF rendition inline", async () => {
     const { deps: d, readBlob } = deps(documentRow());
-    const result = await resolveDocumentContent({ documentId: "DOC-1", rendition: "pdf" }, d);
+    const result = await resolveDocumentContent({ documentId: "DOC-1", rendition: "pdf", viewer: VIEWER }, d);
     expect(result).toMatchObject({ ok: true, data: { mimeType: "application/pdf", disposition: 'inline; filename="Q3 Board Pack - final.pdf"' } });
     expect(readBlob).toHaveBeenCalledWith({ storageKey: "pdf-key", sha256: "p".repeat(64) });
   });
 
   it("answers 404 when the document, the blob or the rendition is missing", async () => {
-    expect(await resolveDocumentContent({ documentId: "DOC-X", rendition: "original" }, deps(null).deps)).toEqual({ ok: false, status: 404, error: "Document not found." });
+    expect(await resolveDocumentContent({ documentId: "DOC-X", rendition: "original", viewer: VIEWER }, deps(null).deps)).toEqual({ ok: false, status: 404, error: "Document not found." });
     const noBlob = documentRow({ currentVersion: { ...documentRow().currentVersion, contentBlob: null } });
-    expect(await resolveDocumentContent({ documentId: "DOC-1", rendition: "original" }, deps(noBlob).deps)).toMatchObject({ ok: false, status: 404 });
+    expect(await resolveDocumentContent({ documentId: "DOC-1", rendition: "original", viewer: VIEWER }, deps(noBlob).deps)).toMatchObject({ ok: false, status: 404 });
     const noPdf = documentRow({ currentVersion: { ...documentRow().currentVersion, renditions: [] } });
-    expect(await resolveDocumentContent({ documentId: "DOC-1", rendition: "pdf" }, deps(noPdf).deps)).toEqual({ ok: false, status: 404, error: "This version has no PDF rendition yet." });
+    expect(await resolveDocumentContent({ documentId: "DOC-1", rendition: "pdf", viewer: VIEWER }, deps(noPdf).deps)).toEqual({ ok: false, status: 404, error: "This version has no PDF rendition yet." });
   });
 
   it("reads a pinned version when one is asked for", async () => {
     const { deps: d, findUnique } = deps({ title: "T", currentVersion: null, versions: [documentRow().currentVersion] });
-    await resolveDocumentContent({ documentId: "DOC-1", rendition: "original", version: 3 }, d);
+    await resolveDocumentContent({ documentId: "DOC-1", rendition: "original", version: 3, viewer: VIEWER }, d);
     expect(JSON.stringify((findUnique.mock.calls as unknown as unknown[][])[0]![0])).toContain('"version":3');
   });
 
   it("answers 410 when stored bytes are gone or do not match their digest", async () => {
     const d = deps(documentRow()).deps;
     d.readBlob = vi.fn(async () => { throw new Error("ENOENT"); });
-    expect(await resolveDocumentContent({ documentId: "DOC-1", rendition: "original" }, d)).toEqual({ ok: false, status: 410, error: "The stored file could not be read." });
+    expect(await resolveDocumentContent({ documentId: "DOC-1", rendition: "original", viewer: VIEWER }, d)).toEqual({ ok: false, status: 410, error: "The stored file could not be read." });
   });
 });
 

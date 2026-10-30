@@ -6,12 +6,14 @@
 // (BI-4865EB4D) and serves it as a download; the export is stored as a
 // rendition, so asking again serves the stored file.
 //
-// Access matches the document page it serves: a signed-in session.
+// Access matches the document page it serves: a signed-in session that may
+// read the document (BI-957915CB); any other answers 404, like a missing one.
 // @exposure authenticated
 
 import { auth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/error";
 import { resolveDocumentContent } from "@/lib/documents/document-content";
+import { resolveDocumentViewer } from "@/lib/documents/document-access";
 import {
   documentExportFailureMessage,
   exportDocumentVersion,
@@ -28,6 +30,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   if (!session?.user?.id) return apiErrorResponse("UNAUTHORIZED", "Sign in to open this document.", 401);
 
   const { documentId } = await context.params;
+  const viewer = await resolveDocumentViewer(session.user.id);
   const params = new URL(request.url).searchParams;
   const versionParam = params.get("version");
   const version = versionParam && /^\d+$/.test(versionParam) ? Number(versionParam) : null;
@@ -36,7 +39,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     if (!isDocumentExportFormat(exportFormat)) {
       return apiErrorResponse("BAD_REQUEST", "Export to docx, odt or pdf.", 400);
     }
-    const exported = await exportDocumentVersion({ documentId: decodeURIComponent(documentId), version, format: exportFormat });
+    const exported = await exportDocumentVersion({ documentId: decodeURIComponent(documentId), version, format: exportFormat, viewer });
     if (!exported.ok) {
       const { code, status } = EXPORT_FAILURE_STATUS[exported.reason];
       return apiErrorResponse(code, documentExportFailureMessage(exported.reason), status);
@@ -48,6 +51,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     documentId: decodeURIComponent(documentId),
     rendition: params.get("rendition") === "pdf" ? "pdf" : "original",
     version,
+    viewer,
   });
   if (!result.ok) {
     return apiErrorResponse(result.status === 404 ? "NOT_FOUND" : "GONE", result.error, result.status);

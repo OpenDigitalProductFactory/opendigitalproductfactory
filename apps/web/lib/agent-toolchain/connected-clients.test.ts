@@ -10,6 +10,8 @@ import type { ToolchainCopyRollup } from "./fleet-readiness";
 const copy = (over: Partial<ToolchainCopyRollup["copies"][number]>): ToolchainCopyRollup["copies"][number] => ({
   loadedPackVersion: "0.4.0",
   loadedDigest: "1111111111111111",
+  reasons: [],
+  hostAgent: null,
   authMode: "oauth",
   verdict: "current",
   silent: false,

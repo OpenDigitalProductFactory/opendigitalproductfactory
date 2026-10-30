@@ -16,11 +16,12 @@ import {
   refreshMigrationHandoffAfterDrain,
   resolveReadinessBackupHostPath,
   runCandidatePreflight,
+  runReassessmentCandidatePreflight,
   type InstallStateMigrationHandoff,
 } from "@/lib/self-upgrade/preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
-import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
+import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint, recordReassessmentCompatibility, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
 import { resumedSwapAlreadyLanded } from "@/lib/self-upgrade/landed-swap-identity";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
@@ -173,6 +174,15 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
     if (!guard.ok) {
       return finishFailure("admission-reopened-before-swap: " + guard.error, { reason: "admission-reopened-before-swap", excerpt: guard.error });
+    }
+  }
+
+  if (!dryRun) {
+    const compatibility = await runReassessmentCandidatePreflight({ runId, targetSha: ctx.builtStamp,
+      composeProject: ctx.promoter.composeProject, release: ctx.promoter.release, stage: "swap",
+      failRun: recordPreflightFailure, emitFailure, recordCompatibility: recordReassessmentCompatibility });
+    if (!compatibility.ok) {
+      return finishFailure(compatibility.reason, { reason: compatibility.reason });
     }
   }
 

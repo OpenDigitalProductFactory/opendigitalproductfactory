@@ -36,8 +36,15 @@ export const SHELL_TOOL_NAMES = new Set([
   "run_terminal_cmd",
 ]);
 
-// Operator-decision tool across surfaces. Claude: "AskUserQuestion"; Grok: "AskQuestion".
-export const DECISION_TOOL_NAMES = new Set(["AskUserQuestion", "AskQuestion"]);
+// Operator-decision tool across surfaces. Claude: "AskUserQuestion"; older Grok:
+// "AskQuestion"; Grok 1.0.52: "ask_user_question" (live-probed 2026-10-14, BI-742D707B).
+export const DECISION_TOOL_NAMES = new Set(["AskUserQuestion", "AskQuestion", "ask_user_question"]);
+
+// File-write tools across surfaces. Claude/Codex: Write, Edit, MultiEdit. Grok
+// 1.0.52: write, search_replace, both with a file_path input (live-probed
+// 2026-10-14, BI-742D707B). A Claude-only set let every write guard fail open on
+// Grok. NotebookEdit stays out: it carries notebook_path, which these guards do not read.
+export const FILE_WRITE_TOOL_NAMES = new Set(["Write", "Edit", "MultiEdit", "write", "search_replace"]);
 
 export function isShellTool(name) {
   return typeof name === "string" && SHELL_TOOL_NAMES.has(name);
@@ -45,6 +52,10 @@ export function isShellTool(name) {
 
 export function isDecisionTool(name) {
   return typeof name === "string" && DECISION_TOOL_NAMES.has(name);
+}
+
+export function isFileWriteTool(name) {
+  return typeof name === "string" && FILE_WRITE_TOOL_NAMES.has(name);
 }
 
 // ── DPF-workspace scoping ────────────────────────────────────────────────────
@@ -173,8 +184,9 @@ export function normalizePayload(raw) {
   const toolName = p.toolName ?? p.tool_name;
   const rawInput = p.toolInput ?? p.tool_input ?? {};
   const toolInput = rawInput && typeof rawInput === "object" ? rawInput : {};
-  // Only Grok sends camelCase; Claude and Codex send snake_case.
-  const surface = p.toolName !== undefined && p.tool_name === undefined ? "grok" : "claude";
+  // Only Grok sends camelCase; Claude and Codex send snake_case. Grok 1.0.52 sends
+  // BOTH casings, so any camelCase key means Grok (BI-6145A168).
+  const surface = p.toolName !== undefined || p.hookEventName !== undefined || p.workspaceRoot !== undefined ? "grok" : "claude";
   // Both surfaces send the working dir at top level (Claude: cwd; Grok: cwd + workspaceRoot).
   const sessionCwd = p.cwd ?? p.workspaceRoot;
   let cwd = sessionCwd;

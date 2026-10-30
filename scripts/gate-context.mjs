@@ -51,15 +51,18 @@ function safePath(path) {
   return normalized;
 }
 
-export function collectWorktreeDiff({ base = "origin/main", cwd = process.cwd() } = {}) {
+// Readiness supplies an immutable candidate. Ordinary callers keep the full
+// working-tree view, including staged, unstaged and untracked changes.
+export function collectWorktreeDiff({ base = "origin/main", head = null, cwd = process.cwd() } = {}) {
   assertSafeRef(base);
-  const mergeBase = git(["merge-base", base, "HEAD"], cwd).trim();
+  const diffEnd = head === null ? [] : [assertSafeRef(head)];
+  const mergeBase = git(["merge-base", base, head ?? "HEAD"], cwd).trim();
   assertSafeRef(mergeBase);
 
   const changedFiles = [];
   const addedLinesByFile = new Map();
 
-  for (const line of git(["diff", "--name-status", "--diff-filter=ACMRD", mergeBase], cwd).split(/\r?\n/)) {
+  for (const line of git(["diff", "--name-status", "--diff-filter=ACMRD", mergeBase, ...diffEnd], cwd).split(/\r?\n/)) {
     // Renames arrive as "R<score>\told\tnew" — the new path is the live one.
     const parts = line.split("\t");
     if (parts.length < 2) continue;
@@ -69,16 +72,18 @@ export function collectWorktreeDiff({ base = "origin/main", cwd = process.cwd() 
     changedFiles.push({ path, status: status === "C" || status === "R" ? "A" : status });
   }
 
-  for (const line of git(["diff", "--numstat", mergeBase], cwd).split(/\r?\n/)) {
+  for (const line of git(["diff", "--numstat", mergeBase, ...diffEnd], cwd).split(/\r?\n/)) {
     const match = line.match(/^(\d+)\t\d+\t(.+)$/);
     if (!match) continue;
     const path = safePath(match[2]);
     if (path) addedLinesByFile.set(path, Number(match[1]));
   }
 
-  for (const line of git(["ls-files", "--others", "--exclude-standard"], cwd).split(/\r?\n/)) {
-    const path = safePath(line);
-    if (path) changedFiles.push({ path, status: "A" });
+  if (head === null) {
+    for (const line of git(["ls-files", "--others", "--exclude-standard"], cwd).split(/\r?\n/)) {
+      const path = safePath(line);
+      if (path) changedFiles.push({ path, status: "A" });
+    }
   }
 
   return { base, mergeBase, changedFiles, addedLinesByFile };

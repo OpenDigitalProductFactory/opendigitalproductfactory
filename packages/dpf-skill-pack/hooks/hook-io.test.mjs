@@ -15,6 +15,7 @@ import {
   normalizePayload,
   isShellTool,
   isDecisionTool,
+  isFileWriteTool,
   denyEnvelope,
   inDpfWorkspace,
   actionCwd,
@@ -67,7 +68,15 @@ test("shellCommandFromInput accepts command/cmd/script aliases", async () => {
 test("isDecisionTool spans Claude and Grok decision tools", () => {
   assert.ok(isDecisionTool("AskUserQuestion"));
   assert.ok(isDecisionTool("AskQuestion"));
+  assert.ok(isDecisionTool("ask_user_question"));
   assert.ok(!isDecisionTool("Bash"));
+});
+
+test("isFileWriteTool spans Claude and Grok file-write tools (BI-742D707B)", () => {
+  // Grok 1.0.52 names its tools write / search_replace; a Claude-only set let
+  // every write guard fail open there, probed live 2026-10-14.
+  for (const name of ["Write", "Edit", "MultiEdit", "write", "search_replace"]) assert.ok(isFileWriteTool(name), name);
+  for (const name of ["Read", "read_file", "Bash", "NotebookEdit", undefined]) assert.ok(!isFileWriteTool(name), String(name));
 });
 
 test("denyEnvelope carries BOTH channels for Grok, whose verdict is the top-level decision", () => {
@@ -241,4 +250,31 @@ test("lease-punt-guard now fires for a checkout command run from a session opene
     encoding: "utf8",
   });
   assert.match(out, /"deny"/, "the session folder no longer switches the guard off");
+});
+
+// BI-6145A168: Grok 1.0.52 sends BOTH casings (toolName AND tool_name). Keying the
+// surface on "camelCase without snake_case" classed it as Claude, so every guard
+// answered in Claude's envelope and Grok, which reads the top-level decision,
+// went ahead. Claude never sends a camelCase key, so any one of them means Grok.
+const GROK_BOTH_CASINGS = {
+  hookEventName: "PreToolUse", hook_event_name: "PreToolUse",
+  toolName: "run_terminal_command", tool_name: "run_terminal_command",
+  toolInput: { command: "ls" }, tool_input: { command: "ls" },
+  cwd: "/w", workspaceRoot: "/w",
+};
+
+test("a Grok payload carrying both casings is still Grok", () => {
+  assert.equal(normalizePayload(GROK_BOTH_CASINGS).surface, "grok");
+  assert.equal(denyEnvelope("nope", normalizePayload(GROK_BOTH_CASINGS).surface).decision, "deny");
+});
+
+test("a Claude payload, which has no camelCase keys, stays Claude", () => {
+  const claude = { session_id: "s", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" }, cwd: "/c" };
+  assert.equal(normalizePayload(claude).surface, "claude");
+});
+
+test("lease-punt-guard denies on the top-level channel for a both-casings Grok payload", () => {
+  const cmd = ["npx", "prisma", "migrate", "dev"].join(" ");
+  const v = runGuard("lease-punt-guard.mjs", { ...GROK_BOTH_CASINGS, toolInput: { command: cmd }, tool_input: { command: cmd } }, { DATABASE_URL: "", ...ANY });
+  assert.equal(v.decision, "deny");
 });

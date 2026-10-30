@@ -68,12 +68,16 @@ export async function completeBacklogItemTransition(args: {
   authority: TerminalAuthority;
   evaluatedAt?: string;
   dependencies?: BacklogCompletionDependencies;
+  /** Records the delivered work's outcome observation (BI-42399593); injectable for tests. */
+  recordDeliveredOutcome?: RecordDeliveredOutcome;
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
   const evaluatedAt = args.evaluatedAt ?? new Date().toISOString();
   let lockedItem: BacklogCompletionItem | null = null;
   let deployment: DeploymentClosureProof | null = null;
   let acceptanceState = "missing";
+  let closureFollowsDelivery = false;
+  let customerReported = false;
   // BI-DC2758DE: refresh the trunk the merge signal reads before the
   // transaction opens; the signal itself never touches the network.
   if (!args.dependencies?.resolveMergeDelivery) await refreshMergeSignalTrunk();
@@ -129,6 +133,8 @@ export async function completeBacklogItemTransition(args: {
       }
       deployment = evaluated.deployment;
       acceptanceState = evaluated.acceptanceState;
+      closureFollowsDelivery = evaluated.closureFollowsDelivery;
+      customerReported = evaluated.customerReported;
       return {
         governed: evaluated.governed,
         decision: evaluated.decision,
@@ -156,8 +162,9 @@ export async function completeBacklogItemTransition(args: {
     mutate: async (genericTx) => {
       const tx = genericTx as unknown as BacklogTerminalClient;
       if (!lockedItem) throw new Error("Terminal readiness did not resolve a backlog item.");
-      const resolution = deployment
-        ? `${args.resolution}\nDelivery closed on ${deployment.runId}; acceptance ${acceptanceState}. Acceptance remains a separate verification obligation.`
+      const closure = deliveryClosureRecord({ deployment, closureFollowsDelivery, acceptanceState, customerReported });
+      const resolution = closure
+        ? `${args.resolution}\n${closure.summary}`
         : args.resolution;
       const updated = await tx.backlogItem.updateMany({
         where: { id: lockedItem.id, status: args.expectedStatus },
@@ -173,16 +180,88 @@ export async function completeBacklogItemTransition(args: {
         await tx.backlogItemActivity.create({ data: {
           backlogItemId: lockedItem.id,
           kind: "status_change",
-          summary: `${args.expectedStatus} → done${deployment ? ` (deployed; acceptance ${acceptanceState})` : ""}`,
-          payload: { from: args.expectedStatus, to: "done", resolution,
-            ...(deployment ? { closureBasis: "canonical-deployment", deployment, acceptanceState,
-              acceptanceObligation: acceptanceState === "pass" ? "satisfied" : acceptanceState === "fail" ? "corrective-work-required" : "pending-independent-verification" } : {}),
-          },
+          summary: `${args.expectedStatus} → done${closure ? ` (${closure.payload.closureBasis}; acceptance ${closure.payload.acceptanceObligation})` : ""}`,
+          payload: { from: args.expectedStatus, to: "done", resolution, ...(closure?.payload ?? {}) },
           recordedById: args.actor.humanContextRef,
           recordedByAgentId: args.actor.agentContextRef,
         } });
+        await recordDeliveredOutcomeIsolated(genericTx, {
+          itemId: lockedItem.itemId,
+          backlogItemRowId: lockedItem.id,
+          observedAt: new Date(evaluatedAt),
+        }, args.recordDeliveredOutcome ?? defaultRecordDeliveredOutcome);
       }
       return updated.count;
     },
   });
+}
+
+export type RecordDeliveredOutcome = (
+  tx: unknown,
+  input: { backlogItemRowId: string; observedAt: Date },
+) => Promise<unknown>;
+
+const defaultRecordDeliveredOutcome: RecordDeliveredOutcome = async (tx, input) => {
+  const { recordDeliveredWorkOutcome } = await import("@/lib/product-management/delivered-work-outcomes-repository");
+  return recordDeliveredWorkOutcome(tx as never, input);
+};
+
+/**
+ * BI-42399593: record the delivered work's outcome observation in the same
+ * transaction as the delivery, so the two commit together, but behind a
+ * savepoint: a recording failure rolls back only the recording and never
+ * blocks or reverses the delivery. A client that cannot open a savepoint
+ * records nothing rather than risk the delivery.
+ */
+async function recordDeliveredOutcomeIsolated(
+  tx: unknown,
+  input: { itemId: string; backlogItemRowId: string; observedAt: Date },
+  record: RecordDeliveredOutcome,
+): Promise<void> {
+  const raw = tx as { $executeRawUnsafe?: (query: string) => Promise<unknown> };
+  if (typeof raw.$executeRawUnsafe !== "function") return;
+  await raw.$executeRawUnsafe("SAVEPOINT delivered_work_outcome");
+  try {
+    await record(tx, { backlogItemRowId: input.backlogItemRowId, observedAt: input.observedAt });
+    await raw.$executeRawUnsafe("RELEASE SAVEPOINT delivered_work_outcome");
+  } catch (error) {
+    await raw.$executeRawUnsafe("ROLLBACK TO SAVEPOINT delivered_work_outcome");
+    await raw.$executeRawUnsafe("RELEASE SAVEPOINT delivered_work_outcome");
+    console.warn(`[delivered-work-outcome] ${input.itemId}: outcome observation not recorded; the delivery stands.`, error);
+  }
+}
+
+/**
+ * What a delivery closure records on its status_change (BI-C899BB40). Every
+ * obligation is bounded: `not-owed` ends it, `pending-submitter-confirmation`
+ * is one question with a window (acceptance-sweep/submitter-confirmation.ts).
+ * `pending-independent-verification` is no longer written.
+ */
+export type AcceptanceObligation = "satisfied" | "corrective-work-required" | "not-owed" | "pending-submitter-confirmation";
+
+export function deliveryClosureRecord(input: {
+  deployment: DeploymentClosureProof | null;
+  closureFollowsDelivery: boolean;
+  acceptanceState: string;
+  customerReported: boolean;
+}): { summary: string; payload: Record<string, unknown> & { closureBasis: string; acceptanceObligation: AcceptanceObligation } } | null {
+  if (!input.deployment && !input.closureFollowsDelivery) return null;
+  const acceptanceObligation: AcceptanceObligation = input.acceptanceState === "pass" ? "satisfied"
+    : input.acceptanceState === "fail" ? "corrective-work-required"
+      : input.customerReported ? "pending-submitter-confirmation" : "not-owed";
+  const closureBasis = input.deployment ? "canonical-deployment" : "delivery-evidence";
+  const on = input.deployment ? `Delivery closed on ${input.deployment.runId}` : "Delivery closed on merged delivery evidence";
+  const next = acceptanceObligation === "pending-submitter-confirmation"
+    ? " The submitter is asked once whether it is fixed."
+    : acceptanceObligation === "not-owed" ? " No further acceptance is owed." : "";
+  return {
+    summary: `${on}; acceptance ${acceptanceObligation}.${next}`,
+    payload: {
+      closureBasis,
+      ...(input.deployment ? { deployment: input.deployment } : {}),
+      acceptanceState: input.acceptanceState,
+      acceptanceObligation,
+      customerReported: input.customerReported,
+    },
+  };
 }

@@ -7,6 +7,7 @@ relatedCode:
   - apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
+  - apps/web/components/workspace/workroom/WorkroomHeader.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
@@ -27,7 +28,11 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
+When a room carries a backlog item, its outcome is that item's outcome. The room reads it from the item each time, so editing the item's outcome updates the room. A room only shows a different outcome when someone declares one in its boundary.
+
 From **Platform > Workrooms**, select a room ID to open its canonical case. A room tied to backlog work resolves to that backlog case while retaining the selected room in the URL. Its process, room journal, reviewer evidence, participants and workforce stay scoped to that room. Shared case messages are labelled **Case context**; case receipts do not prove completion of an individual room step. A stale selection or a room belonging to another case is unavailable rather than silently showing a different room. A room without a backlog item opens its own Work Capsule case.
+
+A delivery room also shows its **Structure**: where its current step sits on the IT4IT value streams, for example *Integrate · Build, Integrate, & Test Stage*, and the next stage it advances to. Each step of a delivery work shape maps to one IT4IT 3.0.1 stage. Design and reproduction steps sit in Design & Develop, building and repairing in Build, Integrate & Test, merging in Accept & Publish Release, and runtime checks and acceptance in Validate Deployment. A room that has not reached a step yet shows no structure rather than a guessed one.
 
 Coworker service engagements can also appear as Work Cases. When a requested coworker service needs approval, is accepted, or is in progress, the room opens around the engagement itself: the requested outcome is the room boundary, the provider coworker appears as a contributor, and approval context or audit references stay attached as evidence. These rooms do not show the WorkItem comment box until a WorkItem exists, because there is no task message thread to post into yet.
 
@@ -44,6 +49,9 @@ The top of a Workroom answers four questions:
 2. What needs attention now?
 3. Who is accountable and who is participating?
 4. What is the next action?
+
+Long names and source identifiers wrap within the header on narrow screens,
+keeping the full value available.
 
 Below that header, **Room definition** names the reusable room pattern and its version.
 **This room** identifies whether you are seeing one occurrence, a standing stream, or its
@@ -125,15 +133,21 @@ success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
 
 After a minute, the process snapshot is marked stale. **Refresh state** reads
-the room again while keeping your selected step and filters. The warning clears
-only when a newer server read arrives. Refreshing does not resume work, approve
-a transition, or prove progress. A missing or future read time remains unknown.
+the selected room's process, definition and flow map together. Your selected
+step, filters, layout, open evidence and keyboard focus stay in place. The warning
+clears only when a newer server read arrives. Other room panels retain their own
+snapshot. Refreshing does not resume work, approve a transition, or prove progress.
+A missing or future read time remains unknown.
 
 If your browser reports offline, **Refresh state** keeps the displayed snapshot
 and announces that you need to reconnect. When the browser reports a restored
 connection, refresh manually to check for changes. Reconnecting alone does not
-refresh the page or establish that the server is reachable. A connection lost
-during a request may still require a browser reload after reconnection.
+refresh the page or establish that the server is reachable. If a request fails
+or times out, the saved process snapshot remains available with a manual retry.
+A changed selection asks you to reopen the case. If your session ends or room
+access is removed, the protected process is hidden with a sign-in or My Work
+link. A failed flow-map read is marked partial rather than retaining an old map
+under a new check time.
 
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
@@ -146,6 +160,25 @@ reported as incomplete. A completed reviewer task still needs its completion rec
 it does not prove that the Workroom outcome is complete.
 
 The **Activity** stream distinguishes messages, asks, coworker handoffs, work changes, decisions, artifacts, governed actions, verification, receipts, and cycle transitions. A message is an update; it is not proof that the outcome was achieved.
+
+### Handing development work to another assistant
+
+An assistant can request a handoff to another assistant already admitted to the
+same room. The request records the destination and next action. **Waiting for
+receiver** means the current executor still owns the work. **Handoff completed**
+appears only after the named receiving assistant acknowledges the request for
+the same human owner.
+
+A same-mandate handoff uses existing authority and standing delegation. It does
+not invite a participant or expand anyone's permissions. Restricted work, linked
+builds, or changes to the room's owner, scope or authority keep their existing
+controlled handover. A destination session is endorsed by the receiving assistant;
+the platform does not authenticate an external chat from its session label.
+
+**Handoff refused** gives the recorded reason. If the room or its lease changed,
+the requesting assistant reads the current room and submits a fresh request.
+Active or queued verification leases and an applicable review exemption must be
+settled through their owning workflow before execution moves.
 
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
@@ -160,6 +193,12 @@ AI coworkers remain governed participants. Joining a room does not expand their 
 An admitted coworker can **read the room's message feed and post into it**, and appears as present while it works. Whether a coworker may read or post is decided per room, scoped to that room's outcome and sensitivity—being admitted to one room grants nothing in another. A coworker working the room's underlying task (for example an external CLI session on the room's build) is admitted to that room as it joins.
 
 A room can also **call in new participants on demand**: a member with action rights (typically the Coordinator) can invite another coworker or a person into the room, either to participate or read-only. The invitee is admitted only to that room, for that room's outcome—never granted anything elsewhere.
+
+You are not asked to approve every invite. A room has a **charter**: the kinds of participant it admits without asking, and the most they may do there. By default, a room whose sensitivity is public or internal admits your organization's own AI coworkers and your own assistants (Claude, Codex, Grok), up to posting and creating records. When an invite fits the charter, it goes ahead under a decision that's already on record: the room's own decision for a coworker working in it, or the consent you gave when you connected your assistant. When nothing like that applies, you're still asked.
+
+Every other invite still comes to you for approval. That includes inviting a person, inviting into a confidential or restricted room, inviting a retired coworker, and asking for more than the charter allows. The charter only decides whether you're asked. It never grants access: the invitee still needs the clearance and permissions the room requires.
+
+A room takes its sensitivity from the work it serves. Rooms for work on the open-source platform itself count as public, so any AI coworker can be invited to them. Rooms for your organization's own work are usually internal. A coworker joins one only once someone who manages coworkers has given it internal data access, under **Coworker data access**. Until then, an invite into such a room comes to you, and the coworker cannot read the room.
 
 Across rooms, you can see **where each AI coworker is engaged**—which active rooms it is in and its role in each (including where it coordinates). This 360 view helps manage how coworkers are used and recognise the routine patterns worth pre-positioning them for.
 
@@ -210,7 +249,7 @@ Each area's **Work** view opens with the same five measures, so the four portfol
 | **Finished per week** | Runs that reached a success stop. |
 | **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
 
-**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. A dashed mark on a trend line shows the week a new version of a work shape started running in this area, so you can read a change in the line against the change that may have caused it. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
+All four measures, **in flow now**, **flow time**, **flow efficiency** and **finished per week**, have a small trend line for the last eight weeks and their change against the four weeks before. A dashed mark on a trend line shows the week a new version of a work shape started running in this area, so you can read a change in the line against the change that may have caused it. A week's **in flow** count follows the same rule as today's: a room that has ended is out of flow from when it ended, and a room parked with nothing to do (its work item inactive, or a quiet posture) is out of flow while it is parked.
 
 Below the measures:
 
@@ -249,15 +288,15 @@ The panel shows four things:
 
 - **One sentence** naming where the most waiting builds up right now, and why. It weighs how many rooms are held at a step by how long work typically waits there, so two rooms stuck for days outrank five that clear in an hour. For example: *2 rooms are held at review in Small change, typically waiting 2d (waiting on a person).* A step with too few finished passes to measure is only named when no held step can be measured.
 - **Four numbers**: in flow now, flow time, flow efficiency, and finished per week.
-- **The busiest work shape**, drawn live.
+- **A work shape, drawn live.** It is the busiest of the shapes your business type puts at its delivery stage, or the busiest shape if none of those is in flow. Delivery shapes sit at the delivery stage when your business type builds and deploys on the IT4IT value streams. A software platform does; most other business types do not, so the home draws their busiest shape.
 
 Choose a step on the map to open that step in the area's Work view, where you can see the rooms waiting there.
 
 ### When work keeps piling up
 
-Every morning the platform reviews where rooms are held. When three or more rooms wait at the same step of the same shape, the platform notes the pile as an improvement signal.
+Each work shape is reviewed on its own schedule (see **Flow reviews** above). Every morning the platform records the newest review of each shape on the day it falls: the step where the most waiting built up, and why rooms were held there.
 
-A pile that is still there on later reviews is filed once in the backlog, for its owner to fix. The backlog item names the step, the shape and the reason. A pile that clears on its own is never filed. This keeps the backlog to problems that persist.
+When two reviews in a row name the same step for the same reason, the platform files it once in the backlog. The item names the step, the shape, the reason and both review dates. It is assigned to whoever the work shape makes accountable for that step, and it records how the fix should be made: as a check at that step, which every room of the shape then inherits. If the same pile is named again later, the open item is updated rather than filed twice. A pile that clears between reviews is never filed, so the backlog holds only problems that persist.
 
 ## Access and Other Channels
 
@@ -439,6 +478,11 @@ The order of precedence, strongest first:
 
 Your default sits below what the work is on purpose. A blanket preference about rooms
 should not overrule the shape of the job in front of you.
+
+One exception: **Build Studio rooms**. A Build Studio change is already checked by the build
+gates (tests, the merge queue and review) before it lands, so "asks first" there would mean
+asking the gates, not you. In those rooms your default decides whether work may act alone,
+and the business being closed does not slow them down. A room's own declaration still wins.
 
 ## Giving a Room Its Shape
 

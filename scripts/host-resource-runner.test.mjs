@@ -9,6 +9,7 @@ import {
   classifyHeavyProcess,
   findUngovernedHeavyProcesses,
   parseHostResourceArgs,
+  parseQualificationRunnerBinding,
   readMcpConnection,
   readProcessRows,
   claimHostResourceAdmission,
@@ -43,6 +44,37 @@ test("rejects invalid requested durations rather than silently changing approved
 });
 
 const GiB = 1024 ** 3;
+
+test("qualification runner derives only the non-secret claim projection from the signed payload", () => {
+  const admission = { schemaVersion: 1, purpose: "qualification-research-admission",
+    bindingDigest: `sha256:${"a".repeat(64)}`, binding: { phase: "verify", executorMode: "workroom-host",
+      requiredPlatform: "win32", itemId: "BI-B3DEC077", workroomId: "WC-7036EB63",
+      headSha: "b".repeat(40), allowedPaths: ["scripts/example.test.mjs"],
+      candidate: { testBlobIds: ["c".repeat(40)] } } };
+  const token = `${Buffer.from(JSON.stringify(admission)).toString("base64url")}.signature-not-trusted-locally`;
+  assert.deepEqual(parseQualificationRunnerBinding(token), {
+    token, digest: admission.bindingDigest, itemId: "BI-B3DEC077", workroomId: "WC-7036EB63",
+    headSha: "b".repeat(40), requiredPlatform: "win32", allowedPaths: ["scripts/example.test.mjs"],
+    testBlobIds: ["c".repeat(40)],
+  });
+  assert.equal(parseQualificationRunnerBinding("caller-json"), null);
+});
+
+test("host claim carries the signed qualification binding on the existing lease substrate", () => {
+  const qualification = { token: "opaque.signed", digest: `sha256:${"a".repeat(64)}`,
+    headSha: "b".repeat(40), workroomId: "WC-7036EB63", requiredPlatform: "win32",
+    command: "pnpm exec vitest run scripts/example.test.mjs" };
+  const claim = buildHostResourceClaim({ resourceClass: "vitest", ownerProvider: "codex",
+    ownerSessionId: "session", worktreePath: "D:/worktree", branchName: "fix/qualification",
+    pid: 42, processIdentity: "process-42", now: new Date("2026-01-01T00:00:00Z"),
+    totalMemoryBytes: 16 * GiB, availableMemoryBytes: 8 * GiB, inferenceResident: false,
+    ungovernedProcesses: [], attempt: { claimKey: "attempt-key" }, qualification });
+  assert.equal(claim.purpose, `host-resource:qualification:${qualification.digest}`);
+  assert.equal(claim.buildId, qualification.headSha);
+  assert.equal(claim.taskRunId, qualification.workroomId);
+  assert.equal(claim.qualificationAdmissionToken, qualification.token);
+  assert.equal(claim.qualificationCommand, qualification.command);
+});
 
 function admissionFixture() {
   const context = { fixture: "claim" };
@@ -200,7 +232,7 @@ test("a malformed claim response stops as unrun without automatic reconciliation
   assert.equal(calls, 1);
 });
 
-async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse = false, releaseRefused = false, extraEnv = {}, memoryProbe } = {}) {
+async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse = false, releaseRefused = false, readbackUnproven = false, extraEnv = {}, memoryProbe } = {}) {
   const cwd = mkdtempSync(join(tmpdir(), "host-claim-test-"));
   const git = args => execFileSync("git", args, { cwd, windowsHide: true, stdio: "pipe" });
   git(["init"]);
@@ -230,7 +262,10 @@ async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse =
     if (rpc.params.name === "list_nonprod_environment_leases") {
       response.setHeader("Content-Type", "application/json");
       response.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: {
-        success: true, data: { leases: [...leases.values()], queued: [] },
+        success: true,
+        ...(args.leaseId ? { entityId: readbackUnproven ? "UNPROVEN" : args.leaseId,
+          data: readbackUnproven ? {} : { lease: [...leases.values()].find(row => row.leaseId === args.leaseId) } }
+          : { data: { leases: [...leases.values()], queued: [] } }),
       } }));
       return;
     }
@@ -241,6 +276,7 @@ async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse =
     response.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: {
       success: true, entityId: "NPEL-FIXTURE-CLAIM",
       data: { admission: { status: "admitted" }, lease: {
+        ...[...leases.values()][0],
         leaseId: "NPEL-FIXTURE-CLAIM", expiresAt: new Date(Date.now() + 600000).toISOString(),
         status: rpc.params.name === "release_nonprod_environment_lease" ? "released" : "active",
         ownerSessionId: args.ownerSessionId,
@@ -302,7 +338,17 @@ syncBuiltinESMExports();
     child.once("error", reject);
     child.once("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
   });
-  return { calls, leases, run };
+  const runWithClosedStdout = command => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [...preloadArgs, fileURLToPath(new URL("./host-resource-runner.mjs", import.meta.url)),
+      "--class", "vitest", "--", ...command],
+    { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], timeout: 45000 });
+    let stderr = "";
+    child.stdout.destroy();
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal, stderr }));
+  });
+  return { calls, leases, run, runWithClosedStdout };
 }
 
 for (const [memoryProbe, availableGiB] of [["available", 42], ["unavailable", 4]]) {
@@ -321,7 +367,7 @@ for (const [memoryProbe, availableGiB] of [["available", 42], ["unavailable", 4]
     assert.equal(claims[0].arguments.expectedMemoryBytes, 8 * GiB);
     assert.equal(claims[0].arguments.hostResource.totalMemoryBytes, 128 * GiB);
     assert.equal(claims[0].arguments.hostResource.availableMemoryBytes, availableGiB * GiB);
-    assert.equal(fixture.calls.at(-1).name, "release_nonprod_environment_lease");
+    assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
   });
 }
 
@@ -338,7 +384,19 @@ test("real response-loss recovery reconciles one admitted mock row and executes 
   assert.equal(claims[0].arguments.claimKey, claims[1].arguments.claimKey);
   assert.equal(claims[1].arguments.resumeLeaseId, undefined);
   assert.equal(fixture.calls[1].name, "list_nonprod_environment_leases");
-  assert.equal(fixture.calls.at(-1).name, "release_nonprod_environment_lease");
+  assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
+});
+
+test("a closed output consumer does not replace the wrapped command outcome with EPIPE", { timeout: 60000 }, async t => {
+  const fixture = await createHostClaimFixture(t);
+  const result = await fixture.runWithClosedStdout([
+    process.execPath,
+    "-e",
+    "process.stdout.write('x'.repeat(1024 * 1024)); process.exit(7)",
+  ]);
+  assert.equal(result.signal, null);
+  assert.equal(result.code, 7, result.stderr);
+  assert.doesNotMatch(result.stderr, /EPIPE|unhandled/i);
 });
 
 test("real host claim tolerates a response beyond the generic ten-second probe budget", { timeout: 60000 }, async t => {
@@ -350,17 +408,17 @@ test("real host claim tolerates a response beyond the generic ten-second probe b
   assert.equal(fixture.calls.filter(call => call.name === "claim_nonprod_environment_lease").length, 1);
 });
 
-test("a missing wrapped executable is a redacted unrun outcome and still releases its mock lease", { timeout: 60000 }, async t => {
+test("a missing wrapped executable is redacted unrun and observes its reservation", { timeout: 60000 }, async t => {
   const fixture = await createHostClaimFixture(t);
   const result = await fixture.run(["fixture-secret-missing-executable"]);
   assert.equal(result.signal, null, "fixture timeout is unrun, not a product verdict");
   assert.equal(result.code, 88, result.stderr);
   assert.equal(result.stdout, "");
   assert.doesNotMatch(result.stderr, /fixture-secret/);
-  const packet = JSON.parse(result.stderr.trim());
+  const packet = result.stderr.trim().split("\n").map(line => JSON.parse(line)).find(row => row.status === "unrun");
   assert.equal(packet.status, "unrun");
   assert.equal(packet.commandExecuted, false);
-  assert.equal(fixture.calls.at(-1).name, "release_nonprod_environment_lease");
+  assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
 });
 
 test("Windows host runner launches the installed pnpm shim through the shared command resolver", {
@@ -371,7 +429,7 @@ test("Windows host runner launches the installed pnpm shim through the shared co
   assert.equal(result.signal, null);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+$/);
-  assert.equal(fixture.calls.at(-1).name, "release_nonprod_environment_lease");
+  assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
 });
 
 test("an executed child failure remains a code result rather than launch-unrun", { timeout: 60000 }, async t => {
@@ -380,28 +438,29 @@ test("an executed child failure remains a code result rather than launch-unrun",
   assert.equal(result.signal, null);
   assert.equal(result.code, 7);
   assert.doesNotMatch(result.stderr, /host_command_unavailable/);
-  assert.equal(fixture.calls.at(-1).name, "release_nonprod_environment_lease");
+  assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
 });
 
-test("a refused cleanup is exposed separately and never relabels an executed code failure", { timeout: 60000 }, async t => {
+test("pending reservation never relabels an executed code failure or requests human release", { timeout: 60000 }, async t => {
   const fixture = await createHostClaimFixture(t, { releaseRefused: true });
   const result = await fixture.run([process.execPath, "-e", "process.exit(7)"]);
   assert.equal(result.signal, null);
   assert.equal(result.code, 7);
   const packet = JSON.parse(result.stderr.trim());
-  assert.equal(packet.status, "cleanup-unproven");
-  assert.equal(packet.cleanupVerified, false);
-  assert.equal(packet.commandExecuted, true);
-  assert.equal(packet.recovery.tool, "release_nonprod_environment_lease");
-  assert.equal(packet.recovery.arguments.ownerSessionId, "fixture-claim-session");
-  assert.equal(fixture.calls.at(-1).arguments.ownerSessionId, "fixture-claim-session");
+  assert.equal(packet.status, "host-reservation");
+  assert.equal(packet.reservationState, "pending");
+  assert.equal(packet.processCleanupVerified, false);
+  assert.equal(fixture.calls.filter(call => call.name === "release_nonprod_environment_lease").length, 0);
+  assert.deepEqual(fixture.calls.at(-1).arguments, { leaseId: "NPEL-FIXTURE-CLAIM" });
 });
 
-test("a success flag without the exact terminal lease is not verified cleanup", { timeout: 60000 }, async t => {
-  const fixture = await createHostClaimFixture(t, { releaseRefused: "unproven" });
+test("a success flag without exact reservation readback is unknown", { timeout: 60000 }, async t => {
+  const fixture = await createHostClaimFixture(t, { readbackUnproven: true });
   const result = await fixture.run([process.execPath, "-e", "process.exit(0)"]);
   assert.equal(result.code, 0, "actual command success remains its own fact");
-  assert.equal(JSON.parse(result.stderr.trim()).cleanupVerified, false);
+  const packet = JSON.parse(result.stderr.trim());
+  assert.equal(packet.reservationState, "unknown");
+  assert.equal(packet.processCleanupVerified, false);
 });
 
 test("a conflicting authoritative lease identity never replaces the reconciled original", async () => {
@@ -471,6 +530,7 @@ test("real runner resumes one mock lease across processes and never runs termina
   writeFileSync(join(cwd, "input.txt"), "dirty baseline");
   const calls = [];
   const leases = new Map();
+  const bindings = new Map();
   let status = "queued";
   const server = createServer(async (request, response) => {
     let body = "";
@@ -482,13 +542,14 @@ test("real runner resumes one mock lease across processes and never runs termina
       leases.set(claim.claimKey, `NPEL-TEST-${leases.size + 1}`);
     }
     const leaseId = leases.get(claim.claimKey) ?? claim.leaseId;
+    if (rpc.params.name === "claim_nonprod_environment_lease") bindings.set(leaseId, { ...claim, leaseId });
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: status === "terminal" ? {
       success: false, error: "lease_terminal", entityId: leaseId,
       data: { lease: { leaseId }, reason: "released", retryable: false },
     } : {
       success: true, entityId: leaseId,
-      data: { admission: { status }, lease: { leaseId, expiresAt: new Date(Date.now() + 600000).toISOString() } },
+      data: { admission: { status }, lease: { ...bindings.get(leaseId), leaseId, status: status === "admitted" ? "active" : "queued", expiresAt: new Date(Date.now() + 600000).toISOString() } },
     } }));
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -524,7 +585,8 @@ test("real runner resumes one mock lease across processes and never runs termina
   const admitted = await run(packet.resumePin, { DPF_DURABLE_RESUME: "1" });
   assert.equal(admitted.code, 0, admitted.stderr);
   assert.equal(admitted.stdout, "EXECUTED");
-  assert.equal(calls.at(-1).name, "release_nonprod_environment_lease");
+  assert.equal(calls.at(-1).name, "list_nonprod_environment_leases");
+  assert.equal(calls.filter(call => call.name === "release_nonprod_environment_lease").length, 0);
   status = "terminal";
   const terminal = await run(packet.resumePin);
   assert.equal(terminal.code, 81, terminal.stderr);
@@ -775,4 +837,17 @@ test("a client_credentials client wins over the PAT", () => {
   });
   assert.equal(connection.mcpUrl, "http://127.0.0.1:3000/api/mcp/v1");
   assert.equal(typeof connection.bearerToken.get, "function");
+});
+
+
+test("completed host command observes its reservation without requesting immediate release", { timeout: 60000 }, async t => {
+  const fixture = await createHostClaimFixture(t, { releaseRefused: true });
+  const result = await fixture.run([process.execPath, "-e", "process.stdout.write('DONE')"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, "DONE");
+  assert.equal(fixture.calls.filter(call => call.name === "release_nonprod_environment_lease").length, 0,
+    "normal completion must not create a human cleanup envelope");
+  const reads = fixture.calls.filter(call => call.name === "list_nonprod_environment_leases" && call.arguments.leaseId);
+  assert.equal(reads.length, 1, "one exact read, no expiry polling");
+  assert.equal(reads[0].arguments.leaseId, "NPEL-FIXTURE-CLAIM");
 });

@@ -105,6 +105,27 @@ lane maintains separate interactive and autonomous queues. It normally serves
 interactive first. When the oldest autonomous waiter reaches a bounded age, that
 waiter is promoted for the next free slot; running work is never preempted.
 
+The 2026-10-25 regression repair (`BI-PIR-e8acc2f1`) bounds that promotion
+across a burst: while both classes wait, an aged autonomous promotion is
+followed by an interactive dispatch before another aged promotion. Aging must
+not let an entire old background batch drain ahead of a person. FIFO within
+each class, single active execution, cancellation and caller authority remain
+unchanged. A running request still finishes before either class can start;
+this scheduling contract cannot guarantee a 120-second admission behind a
+holder with more than 120 seconds remaining.
+
+An exact local admission timeout is reported as a queue-capacity wait. It does
+not establish an offline model, stopped sandbox or incorrect provider setup,
+and it must not promise automatic continuation that was never scheduled.
+Mixed endpoint failures retain their individual provider fault evidence.
+
+The repair's regression proof is in `apps/web/lib/queue/resource-lane.test.ts`
+(four aged background requests with three interactive waiters) and
+`apps/web/lib/tak/inference-dead-ends.test.ts` (direct and aggregated local
+admission expiry, plus a mixed provider-failure negative control). These failed
+against the unchanged source before the repair. Related authority, cancellation,
+module-boundary and provider-dispatch tests remain required before publication.
+
 Priority is explicit at the producer:
 
 - local provider dispatch uses `currentInferenceOrigin()`;

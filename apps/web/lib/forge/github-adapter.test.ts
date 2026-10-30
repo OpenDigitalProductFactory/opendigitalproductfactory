@@ -185,3 +185,34 @@ describe("GitHubForgeAdapter.closeIssue", () => {
     expect(methods).toEqual(["GET", "PATCH"]);
   });
 });
+
+// BI-C899BB40: the one submitter question is a comment, never a state change.
+describe("GitHubForgeAdapter.commentOnIssue", () => {
+  const repository = { forge: "github" as const, owner: "acme", repo: "portal" };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts exactly one comment and changes no state", async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : null });
+      return response(201, { id: 991, html_url: "https://github.com/acme/portal/issues/42#issuecomment-991" });
+    }));
+    const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
+    const result = await adapter.commentOnIssue({ repository, number: 42, body: "Is this fixed for you?", egressClass: "own-repo" });
+    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ remote: { number: 42, url: "https://github.com/acme/portal/issues/42" }, commentId: "991",
+      commentUrl: "https://github.com/acme/portal/issues/42#issuecomment-991" });
+    expect(calls).toEqual([{ url: "https://api.github.com/repos/acme/portal/issues/42/comments", method: "POST",
+      body: { body: "Is this fixed for you?" } }]);
+  });
+
+  it("classifies an unauthorized controller token instead of throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => response(401, { message: "Bad credentials" })));
+    const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
+    const result = await adapter.commentOnIssue({ repository, number: 42, body: "q", egressClass: "own-repo" });
+    expect(result).toMatchObject({ ok: false, category: "unauthorized", status: 401 });
+  });
+});

@@ -493,3 +493,21 @@ describe("Work Room read model", () => {
     expect(room.activity[0]?.kind).toBe("message");
   });
 });
+
+
+it("replaces a generic wait with read-only blocker inspection while preserving stronger execution and drive directions", () => {
+  const recordedBlocker = { reason: "workroom-blocked" as const, explanation: "Unverified reported cause",
+    explanationState: "current" as const, expiresAt: "2026-10-27T00:00:00.000Z",
+    source: { kind: "workroom-status-override" as const, capsuleId: "WC-ONE" }, coordinationOnly: true as const };
+  const input = { caseKey: "booking%3ABK-100", detail: caseDetail({ state: "waiting-on-system", nextAction: "Wait for system recovery" }),
+    boundary: completeBoundary(), recordedBlocker };
+  const view = buildWorkroomView(input);
+  expect(view.work).toMatchObject({ nextAction: "Inspect the recorded blocker before continuing.", attentionRequired: true, recordedBlocker });
+  expect(view.work.attentionReason).toBe("Work is blocked.");
+  expect(view.boundary.accountablePrincipalRef).toBe("prn-user-1");
+  expect(buildWorkroomView({ ...input, executionAttentionReason: "Original reviewer is unsettled" }).work.nextAction)
+    .toBe("Inspect Observed execution for the reviewer status and required action.");
+  expect(buildWorkroomView({ ...input, processOverseerObservation: { attentionReason: "Wait for the recorded dependency" } }).work.nextAction)
+    .toBe("Wait for the recorded dependency");
+  expect(buildWorkroomView({ ...input, detail: caseDetail({ state: "resolved", terminal: true }) }).work.recordedBlocker).toBeNull();
+});

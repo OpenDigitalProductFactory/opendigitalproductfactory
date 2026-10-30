@@ -33,6 +33,7 @@ function row(overrides: Partial<DeliveryTaskHubRow> = {}): DeliveryTaskHubRow {
     capsuleId: "WC-1",
     title: "Ship the task hub",
     objective: "Operators can leave work and return to its outcome.",
+    health: "working",
     group: "working",
     status: "working",
     statusIntent: "info",
@@ -77,7 +78,7 @@ describe("DeliveryTaskHub", () => {
         progressPct: 45,
         progressMessage: "Generating result",
       } }),
-      row({ capsuleId: "WC-2", group: "needs-attention", status: "failed", statusIntent: "danger", title: "Repair reviewer", primaryAction: { label: "Inspect", href: "/build/work/WC-2" }, nextAction: "Inspect" }),
+      row({ capsuleId: "WC-2", health: "stuck", group: "needs-attention", status: "failed", statusIntent: "danger", title: "Repair reviewer", primaryAction: { label: "Inspect", href: "/build/work/WC-2" }, nextAction: "Inspect" }),
     ])} />);
 
     expect(screen.getByRole("heading", { name: "Delivery task hub" })).toBeTruthy();

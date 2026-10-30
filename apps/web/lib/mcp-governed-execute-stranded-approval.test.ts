@@ -27,6 +27,10 @@
 //     still stands — the retry runs the call once (AC-RESERVED-REFUSAL-RELEASED,
 //     AC-NO-STRANDED-RETRY).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: vi.fn(async () => null) }));
+const reportingGuard = vi.hoisted(() => vi.fn());
+vi.mock("./operate/scheduled-jobs/scheduled-reporting-authority", () => ({ scheduledReportingToolRefusal: reportingGuard }));
 
 import {
   finalizeAuthorityApprovalEnvelope,
@@ -209,6 +213,7 @@ async function recordedOutcome() {
 }
 
 beforeEach(() => {
+  reportingGuard.mockReset().mockResolvedValue(null);
   tool = { name: TOOL, capability: "manage_platform", args: ARGS };
   audits = [];
   execute = vi.fn(async (): Promise<ToolResult> => ({ success: true, message: "created", entityId: "DP-1" }));
@@ -444,6 +449,15 @@ describe("BI-5B34D277: a lost reservation returns the winner's recorded outcome"
 });
 
 describe("BI-5B34D277: a run settles its approval at most once", () => {
+  it("a current reporting refusal executes no writer and settles the old approval failed exactly once", async () => {
+    reportingGuard.mockResolvedValue({ success: false, error: "scheduled_reporting_write_refused", message: "This watch permits observations only." });
+    const result = await call({ callerClient: "approval-completion", taskRunId: "TR-WATCH" });
+    expect(result).toMatchObject({ success: false, error: "scheduled_reporting_write_refused" });
+    expect(execute).not.toHaveBeenCalled();
+    expect(finalize).toHaveBeenCalledExactlyOnceWith(ENVELOPE_ID, false);
+    expect(envelope.status).toBe("failed");
+    expect(envelopeCreate).not.toHaveBeenCalled();
+  });
   it("the success path finalises once and never releases", async () => {
     const release = vi.fn(async () => undefined);
     install({ authorityApprovalReservationRelease: release });

@@ -62,6 +62,15 @@ test("registry ids are unique", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
+test("canonical judgment source and compiler lock enroll the Node20 guard distribution", () => {
+  const entry = DERIVED_ARTIFACTS.find((item) => item.id === "judgment-guard-runtime");
+  assert.ok(entry);
+  for (const path of ["packages/validators/src/judgment/option-scoring.ts", "packages/validators/src/judgment/mcda-quality-gates.ts", "scripts/build-judgment-guard-runtime.mjs", "pnpm-lock.yaml"])
+    assert.ok(matchesAnyGlob(path, entry.sourceGlobs), path);
+  assert.deepEqual(entry.check, ["node", "scripts/build-judgment-guard-runtime.mjs", "--check"]);
+  assert.equal(entry.artifactPaths.length, 4);
+});
+
 test("doc-diagrams stages the portal version module, not only the SVGs (BI-970E36D9)", () => {
   const entry = DERIVED_ARTIFACTS.find((item) => item.id === "doc-diagrams");
   assert.ok(entry.artifactPaths.includes("apps/web/lib/docs/diagram-versions.generated.mjs"));

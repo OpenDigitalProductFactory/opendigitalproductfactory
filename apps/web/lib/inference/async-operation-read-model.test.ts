@@ -9,6 +9,8 @@ import {
   type AsyncOperationReadStore,
 } from "./async-operation-read-model";
 
+const access = vi.hoisted(() => vi.fn(async ({ requested }) => ({ decision: { level: requested === "content" ? "content" : "none" } })));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveCanonicalWorkroomActorAccess: access }));
 const now = new Date("2026-09-04T12:00:00.000Z");
 const operation: AsyncOperationRecord = {
   id: "op-1",
@@ -175,6 +177,11 @@ describe("authorized async operation read/reconcile surface", () => {
       },
       limit: 100,
     });
+    expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ requested: "content" }), deps.db);
+    await expect(requestAuthorizedAsyncOperationCancellation({ target: { kind: "workroom", workroomId: "WC-1" },
+      requestKey: "logical-1", actor: { userId: null, agentId: "session-1", principalId: null, isSuperuser: false }, now }, deps))
+      .rejects.toThrow("ASYNC_OPERATION_AUTHORITY_DENIED");
+    expect(deps.store.requestAuthorizedCancellation).not.toHaveBeenCalled();
     expect(result.operations).toHaveLength(1);
     expect(result.operations[0]).not.toHaveProperty("screenedRequestContext");
     expect(result.nextCursor).toEqual({

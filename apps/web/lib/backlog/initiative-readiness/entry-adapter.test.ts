@@ -274,6 +274,26 @@ describe("projectBacklogItemReadiness", () => {
     expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
   });
 
+  it("quotes a bound design with no marked objectives on the design requirements (BI-93A0E9A7)", () => {
+    const parserError = "The artifact has no marked objective statements.";
+    const project = (scopeManifestError?: string) => projectBacklogItemReadiness({
+      item, activities: [], target: "plan", transitionObject, authorization: "pass",
+      capsuleIdentity: "pass", evaluatedAt: "2026-10-25T00:00:00.000Z",
+      ...(scopeManifestError ? { currentDesign: { state: "verified" as const, digest: "sha256:unmarked", scopeManifestError } } : {}),
+    });
+    for (const code of ["CANONICAL_DESIGN_REQUIRED", "SPEC_APPROVAL_REQUIRED"] as const) {
+      const nextAction = project(parserError).decision.unmet.find((entry) => entry.code === code)?.nextAction ?? "";
+      expect(nextAction).toContain(parserError);
+      expect(nextAction).toContain("OBJ-");
+      expect(nextAction).toContain("AC/OBJ table rows");
+      expect(nextAction).toContain("record_initiative_design_review");
+    }
+    const generic = project().decision.unmet.find((entry) => entry.code === "CANONICAL_DESIGN_REQUIRED")?.nextAction ?? "";
+    expect(generic).not.toContain(parserError);
+    expect(generic).not.toContain("OBJ-");
+    expect(generic).toContain('record_initiative_design_review(gate: "design-spec")');
+  });
+
   it("fails closed for an implementation claim with only textual spec and plan hints", () => {
     const projection = projectBacklogItemReadiness({
       item,
@@ -741,6 +761,14 @@ describe("v3: the bound delivery shape keys the gates", () => {
     it("leaves an unshaped item on the v2 table", () => {
       expect(unmet(project({ workShape: null }))).toContain("RESEARCH_REQUIRED");
     });
+  });
+
+  it("hands the active build's reviewed design through the summary projection (BI-8ECF7B5C)", () => {
+    const base = { item: { ...item, workShape: "delivery-medium@1.0.0", deliverySensitivity: "low" as const, body: "just prose" },
+      activities: [], hasSpec: false, hasPlan: false, evaluatedAt: "2026-10-13T00:00:00.000Z" };
+    const withDesign = projectBacklogItemReadinessSummary({ ...base, buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 3 } });
+    expect(withDesign.decisions.implementation.verdict).toBe("allowed");
+    expect(projectBacklogItemReadinessSummary(base).decisions.implementation.unmet.map((e) => e.code)).toContain("RESEARCH_REQUIRED");
   });
 
   it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {

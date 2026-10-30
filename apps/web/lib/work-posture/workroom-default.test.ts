@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveWorkPosture } from "./resolve";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import { resolveWorkPosture } from "@dpf/validators/workroom-policy/resolve";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
+import { GENERIC_DEFAULTS } from "@/lib/operating-hours-types";
 
 // EP-WORK-POSTURE — the DECREED DEFAULT for rooms.
 //
@@ -100,6 +101,83 @@ describe("the decreed workroom default", () => {
     expect(resolveWorkPosture(base({ workroomDefault: null })).inert).toBe(true);
   });
 
+  it("still tightens the boundary outside a gate-governed room, out of hours too", () => {
+    // BI-D0DFE502: the gate-governed exception below must not leak into rooms a
+    // person reviews. A change-consequential room keeps "asks first", and the
+    // closed business still quiets its pace.
+    const result = resolveWorkPosture(
+      base({
+        shape: { shapeKey: "change-consequential" },
+        workroomDefault: { proactivityLevel: "assertive", actionBoundary: "preauthorized" },
+        temporal: CLOSED,
+      }),
+    );
+    expect(result.actionBoundary).toBe("propose");
+    expect(result.proactivityLevel).toBe("quiet");
+  });
+});
+
+// BI-D0DFE502 / WWMD DI-EDAF65D71636: a room whose change already passes a
+// governed gate chain (Build Studio: CI, merge queue, semantic review, DCO)
+// proposes to those gates, not to a person. There the decreed default decides
+// the boundary exactly as the runtime turn authority does, and the clock does
+// not quiet it.
+// 2026-10-15 is a Thursday; 22:00 UTC is after a nine-to-five close.
+const CLOSED = {
+  now: new Date("2026-10-15T22:00:00.000Z"),
+  schedule: GENERIC_DEFAULTS,
+  timezone: "UTC",
+};
+
+describe("the decreed workroom default in a gate-governed room", () => {
+  it("decides the boundary and the pace, out of hours", () => {
+    const result = resolveWorkPosture(
+      base({
+        gateGoverned: true,
+        workroomDefault: { proactivityLevel: "assertive", actionBoundary: "preauthorized" },
+        temporal: CLOSED,
+      }),
+    );
+    expect(result.actionBoundary).toBe("preauthorized");
+    expect(result.proactivityLevel).toBe("assertive");
+    expect(result.proactivitySource).toBe("workroom-default");
+  });
+
+  it("ignores a shape's ask-first: the gates review the change", () => {
+    const result = resolveWorkPosture(
+      base({
+        gateGoverned: true,
+        shape: { shapeKey: "change-consequential" },
+        workroomDefault: { actionBoundary: "preauthorized" },
+      }),
+    );
+    expect(result.actionBoundary).toBe("preauthorized");
+  });
+
+  it("is still tightened by the room's own declaration", () => {
+    const result = resolveWorkPosture(
+      base({
+        gateGoverned: true,
+        workroomDefault: { actionBoundary: "preauthorized" },
+        declaration: { actionBoundary: "propose" },
+      }),
+    );
+    expect(result.actionBoundary).toBe("propose");
+  });
+
+  it("is still outranked by hard policy", () => {
+    const result = resolveWorkPosture(
+      base({
+        gateGoverned: true,
+        workroomDefault: { actionBoundary: "preauthorized" },
+        hardPolicy: { regulated: true },
+      }),
+    );
+    expect(result.actionBoundary).toBe("advise");
+  });
+});
+
+describe("the decreed workroom default and hard policy", () => {
   it("is still outranked by hard policy", () => {
     const result = resolveWorkPosture(
       base({

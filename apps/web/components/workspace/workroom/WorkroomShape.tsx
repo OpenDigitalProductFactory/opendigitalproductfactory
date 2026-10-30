@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { FilterBar } from "@/components/ui/report-kit/FilterBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
 import { ReviewerExecutionList } from "./ReviewerExecutionList";
-import { ProjectionFreshness } from "./ProjectionFreshness";
+import { ProjectionFreshness, type ProjectionRefreshControl } from "./ProjectionFreshness";
 import type { ShapeGraph, ShapeNodeState, ShapeRow } from "@/lib/work-management/shape-projection";
 
 const STATE_LABEL: Record<ShapeNodeState, string> = {
@@ -20,7 +20,7 @@ function Evidence({ rows }: { rows: ShapeRow[] }) {
   if (!rows.length) return <p>No correlated records.</p>;
   return <ul className="space-y-2">{rows.map((row) => <li key={row.key}>
     <details className="rounded border border-[var(--dpf-border)] p-2">
-      <summary className="cursor-pointer">{row.label} · {STATE_LABEL[row.state]}</summary>
+      <summary className="min-h-11 cursor-pointer break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">{row.label} · {STATE_LABEL[row.state]}</summary>
       <dl className="mt-2 space-y-1 break-words">
         <dt>Source</dt><dd>{row.receiptRef ? `${row.receiptRef.table}:${row.receiptRef.id}` : row.sourceRef ? `${row.sourceRef.kind}:${row.sourceRef.id} · ${row.key}` : "Unknown"}</dd>
         <dt>Actor</dt><dd>{row.actor ?? "Unknown"}</dd>
@@ -32,7 +32,7 @@ function Evidence({ rows }: { rows: ShapeRow[] }) {
 }
 
 /** Intended order and observed evidence remain separate in both layouts. */
-export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
+export function WorkroomShape({ graph, refresh }: { graph: ShapeGraph; refresh?: ProjectionRefreshControl }) {
   const titleId = useId();
   const router = useRouter();
   const pathname = usePathname();
@@ -81,9 +81,9 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       </div>
     </div>
     {graph.process ? <div className="text-[var(--dpf-muted)]">
-      <ProjectionFreshness readAt={graph.process.readAt} lastEvidenceAt={graph.process.lastEvidenceAt} />
+      <ProjectionFreshness readAt={graph.process.readAt} lastEvidenceAt={graph.process.lastEvidenceAt} {...refresh} />
       {graph.process.gaps.length ? <details className="mt-2 rounded border border-[var(--dpf-border)] p-3">
-        <summary className="cursor-pointer">Projection gaps ({graph.process.gaps.length})</summary>
+        <summary className="min-h-11 cursor-pointer break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">Projection gaps ({graph.process.gaps.length})</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">{graph.process.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
       </details> : null}
     </div> : null}
@@ -124,7 +124,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
     </p>
     {stage ? <aside id={`${titleId}-inspection`} aria-label={`${stage.label} inspection`} className="rounded-lg border border-[var(--dpf-border)] p-4">
       <h3 className="mb-3 text-base font-semibold">{stage.label}</h3>
-      <dl className="grid gap-4 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:[overflow-wrap:anywhere]">
         <div><dt className="font-medium">Where are we?</dt><dd>{inspection?.position ?? `${stage.label}: ${STATE_LABEL[stage.state]}`}</dd></div>
         <div><dt className="font-medium">Why are we here?</dt><dd>{inspection?.reason ?? "No reason recorded."}</dd></div>
         <div><dt className="font-medium">What can happen next?</dt><dd>{inspection?.next ?? "Permitted transitions are unknown."}</dd></div>
@@ -147,7 +147,7 @@ export function WorkroomShape({ graph }: { graph: ShapeGraph }) {
       </dl>
     </aside> : <p className="text-[var(--dpf-muted)]">Select a step for state and evidence.</p>}
     {graph.process ? <details className="rounded border border-[var(--dpf-border)] p-3">
-      <summary className="cursor-pointer font-medium">Observed execution · {graph.process.events?.length ?? 0} events · {graph.process.receipts.length} receipts</summary>
+      <summary className="min-h-11 cursor-pointer break-words py-2 font-medium [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">Observed execution · {graph.process.events?.length ?? 0} events · {graph.process.receipts.length} receipts</summary>
       <div className="mt-3 space-y-3">
         <ReviewerExecutionList runs={graph.process.reviewerRuns ?? []} />
         <h4 className="font-medium">Events</h4>

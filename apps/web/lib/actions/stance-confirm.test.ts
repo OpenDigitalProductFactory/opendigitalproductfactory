@@ -25,8 +25,10 @@ vi.mock("@/lib/onboarding/ensure-org-decision-perspective-profile", () => ({
 }));
 vi.mock("@/lib/wiki/embeddings", () => ({ storeWikiPage: vi.fn(async () => true) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn(async () => ({ error: null })) }));
 
 import { confirmStanceVectors } from "./stance-confirm";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,6 +67,8 @@ describe("confirmStanceVectors", () => {
     });
 
     expect(result).toEqual({ ok: true, confirmedVectors: 1, upgradedIdentityPages: 0 });
+    // BI-23900D0A: every body write replaces the page's out-links.
+    expect(syncWikiPageLinks).toHaveBeenCalledWith(mockPrisma, expect.objectContaining({ organizationId: "org-rescue" }));
     expect(mockEnsureProfile).toHaveBeenCalledWith({
       organizationId: "org-rescue",
       organizationName: "Second Chance Animal Rescue",

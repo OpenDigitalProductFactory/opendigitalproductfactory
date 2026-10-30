@@ -111,7 +111,7 @@ without inflating the one space every decision reasons over.
 ### 2.2 The scoring formula
 
 For an option `o` with numeric features `f_d` and a principle `p` with signed weights `v_d` over
-the same dimension set `D`, `computeStructuredAlignment` (`apps/web/lib/decision/option-scoring.ts`)
+the same dimension set `D`, `computeStructuredAlignment` (`packages/validators/src/judgment/option-scoring.ts`)
 computes:
 
 ```
@@ -355,8 +355,8 @@ already-designed gap).
 |---|---|---|---|
 | Authority scope partition | `docs/design/golden-triangle-design.md` §5 | Subsidiarity (*Quadragesimo Anno* 1931; TEU Art. 5(3)) | Shipped |
 | Dimension registry, spine/profession-local split | `packages/db/src/wiki-taxonomy.ts` | AHP's hierarchical problem-structuring (Saaty 1980) — decomposition only, not weight derivation | Shipped (BI-AA7D80FE) |
-| Structured alignment scoring | `apps/web/lib/decision/option-scoring.ts` | Simple Additive Weighting / Weighted Sum Model (Churchman & Ackoff 1954; Hwang & Yoon 1981) | Shipped |
-| Semantic alignment fallback | `apps/web/lib/decision/option-scoring.ts` | Vector space model (Salton et al. 1975) | Shipped |
+| Structured alignment scoring | `packages/validators/src/judgment/option-scoring.ts` | Simple Additive Weighting / Weighted Sum Model (Churchman & Ackoff 1954; Hwang & Yoon 1981) | Shipped |
+| Semantic alignment fallback | `packages/validators/src/judgment/option-scoring.ts` | Vector space model (Salton et al. 1975) | Shipped |
 | Evidence-coverage confidence discounting | `apps/web/lib/decision-perspective/material.ts` | GRADE evidence-quality discounting (Guyatt et al. 2008) | Shipped |
 | Material authority ladder | `apps/web/lib/decision-perspective/stance-promotion.ts` | Revealed preference (Samuelson 1938) | Shipped |
 | Medium-timescale weight inference | `apps/web/lib/decision-perspective/weight-inference.ts` | Bradley-Terry (1952); LinUCB/Thompson sampling; ADWIN/DDM | Engine shipped and unit-tested; **zero live callers** (fluid-weight design §2) |

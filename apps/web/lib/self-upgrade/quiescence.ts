@@ -18,6 +18,10 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { reserveQuiescenceStart, advanceOwnedQuiescenceLevel, clearOwnedQuiescenceLevel, QuiescenceStartUncertainError,
+  type QuiescenceReservationDb } from "./quiescence-start-reservation";
+import { transitionState } from "./quiescence-state-write";
+export { transitionState, heartbeatQuiescenceRun } from "./quiescence-state-write";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
@@ -154,17 +158,14 @@ export async function setQuiescenceLevel(
   level: QuiescenceLevel,
   runId: string | null,
   now: Date = new Date(),
+  expectedRunId?: string,
 ): Promise<void> {
-  const config: QuiescenceConfig = {
-    level,
-    runId,
-    enteredAt: now.toISOString(),
-  };
-  await prisma.platformConfig.upsert({
-    where: { key: QUIESCENCE_CONFIG_KEY },
-    create: { key: QUIESCENCE_CONFIG_KEY, value: config as unknown as object },
-    update: { value: config as unknown as object },
-  });
+  if (expectedRunId) {
+    if (level !== "normal" || runId !== null) throw new Error("Expected-owner clear must restore normal admission");
+    await clearOwnedQuiescenceLevel({ db: prisma as unknown as QuiescenceReservationDb,
+      configKey: QUIESCENCE_CONFIG_KEY, expectedRunId, now });
+  } else await advanceOwnedQuiescenceLevel({ db: prisma as unknown as QuiescenceReservationDb,
+    configKey: QUIESCENCE_CONFIG_KEY, level, runId, now });
   invalidateQuiescenceCache();
 }
 
@@ -181,84 +182,6 @@ export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" |
  * spot a concurrent transition that already advanced past the requested
  * state — defensive against the watchdog racing the coordinator).
  */
-export async function transitionState(
-  runId: string,
-  toStatus: QuiescenceRunStatus,
-  patches: {
-    initialSnapshot?: unknown;
-    finalSnapshot?: unknown;
-    swapStartedAt?: Date;
-    swapCompletedAt?: Date;
-    completedAt?: Date;
-    deferReason?: string;
-    deferSurface?: string;
-    forcedSurfaces?: unknown[];
-    outcome?: string;
-    completionSource?: string;
-    outcomeNotes?: string;
-    actualWaitMs?: number;
-  } = {},
-  now: Date = new Date(),
-): Promise<{ status: string; enteredStateAt: EnteredStateAt } | null> {
-  const row = await prisma.quiescenceRun.findUnique({
-    where: { runId },
-    select: { enteredStateAt: true },
-  });
-  if (!row) return null;
-  const prior =
-    (row.enteredStateAt as unknown as EnteredStateAt | null | undefined) ?? {};
-  const enteredStateAt: EnteredStateAt = { ...prior, [toStatus]: now.toISOString() };
-
-  const updated = await prisma.quiescenceRun.update({
-    where: { runId },
-    data: {
-      status: toStatus,
-      enteredStateAt: enteredStateAt as unknown as object,
-      ...(patches.initialSnapshot !== undefined
-        ? { initialSnapshot: patches.initialSnapshot as unknown as object }
-        : {}),
-      ...(patches.finalSnapshot !== undefined
-        ? { finalSnapshot: patches.finalSnapshot as unknown as object }
-        : {}),
-      ...(patches.swapStartedAt !== undefined ? { swapStartedAt: patches.swapStartedAt } : {}),
-      ...(patches.swapCompletedAt !== undefined ? { swapCompletedAt: patches.swapCompletedAt } : {}),
-      ...(patches.completedAt !== undefined ? { completedAt: patches.completedAt } : {}),
-      ...(patches.deferReason !== undefined ? { deferReason: patches.deferReason } : {}),
-      ...(patches.deferSurface !== undefined ? { deferSurface: patches.deferSurface } : {}),
-      ...(patches.forcedSurfaces !== undefined
-        ? { forcedSurfaces: patches.forcedSurfaces as unknown as object }
-        : {}),
-      ...(patches.outcome !== undefined ? { outcome: patches.outcome } : {}),
-      ...(patches.completionSource !== undefined
-        ? { completionSource: patches.completionSource }
-        : {}),
-      ...(patches.outcomeNotes !== undefined ? { outcomeNotes: patches.outcomeNotes } : {}),
-      ...(patches.actualWaitMs !== undefined ? { actualWaitMs: patches.actualWaitMs } : {}),
-    },
-    select: { status: true, enteredStateAt: true },
-  });
-
-  return {
-    status: updated.status,
-    enteredStateAt: (updated.enteredStateAt as unknown as EnteredStateAt | null) ?? {},
-  };
-}
-
-/**
- * Coordinator function heartbeat — fired every wait-loop tick. Cheap update;
- * the watchdog (BI-QUIESCE-007) scans `lastHeartbeatAt` to detect crashed
- * coordinators.
- */
-export async function heartbeatQuiescenceRun(
-  runId: string,
-  now: Date = new Date(),
-): Promise<void> {
-  await prisma.quiescenceRun.update({
-    where: { runId },
-    data: { lastHeartbeatAt: now },
-  });
-}
-
 /**
  * Flips every actively-working TaskRun to 'quiescing' status. Triggered on
  * the normal→draining transition. The cooperative-cancel pathway in
@@ -283,6 +206,10 @@ export type StartQuiescenceOpts = {
   budgetMs?: number;
   targetVersion?: string;
   targetBundleHash?: string;
+  /** Native host effects must own their original drain rather than join one. */
+  ifBusy?: "join-active" | "refuse";
+  /** Bounded first acceptance for a persisted operator request identity. */
+  requestNotAfter?: Date;
   /**
    * Operator-acknowledged emergency override for the ship-phase
    * BuildPhaseRun blocker. Per spec §6.5 + taskrun-recovery.ts:191-197
@@ -312,7 +239,7 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
   runId: string;
   awaitReady: () => Promise<QuiescenceOutcome>;
 }> {
-  const runId = generateRunId(new Date());
+  const candidateRunId = generateRunId(new Date());
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
 
   // We populate initialSnapshot here so the row is always queryable as
@@ -322,9 +249,9 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
     thresholdMs: budgetMs,
   });
 
-  await prisma.quiescenceRun.create({
-    data: {
-      runId,
+  const reservation = await reserveQuiescenceStart({ db: prisma as unknown as QuiescenceReservationDb,
+    configKey: QUIESCENCE_CONFIG_KEY, ifBusy: opts.ifBusy ?? "join-active", requestNotAfter: opts.requestNotAfter, now: new Date(), runData: {
+      runId: candidateRunId,
       trigger: opts.trigger,
       triggerRefId: opts.triggerRefId,
       status: "pending",
@@ -338,9 +265,13 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
         : ([] as unknown as object),
     },
   });
+  const runId = reservation.runId;
+  invalidateQuiescenceCache();
 
-  const { jobs } = await import("@/lib/jobs");
-  await jobs.send({
+  if (reservation.created) {
+    const { jobs } = await import("@/lib/jobs");
+    try { await jobs.send({
+    id: `quiescence-start:${runId}`,
     name: "ops/quiescence.start",
     data: {
       runId,
@@ -351,12 +282,13 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
       // pauses for the operator. Other triggers keep the bounded defer.
       awaitOperatorAtBudget: opts.trigger === "self-upgrade",
     },
-  });
+    }); } catch { throw new QuiescenceStartUncertainError(runId); }
+  }
 
   return {
     runId,
     awaitReady: async () =>
-      (await import("./drain-wait")).awaitQuiescenceReady(runId, { budgetMs, followDrain: opts.trigger === "self-upgrade" }),
+      (await import("./drain-wait")).awaitQuiescenceReady(runId, { budgetMs: reservation.budgetMs, followDrain: opts.trigger === "self-upgrade" }),
   };
 }
 
@@ -528,7 +460,7 @@ export async function isShipForceEscalated(runId: string): Promise<boolean> {
  * SSE first so any connected operator banner dismisses immediately, then the
  * Inngest event so suspended functions wake. Best-effort on the SSE leg.
  */
-async function broadcastQuiescenceCleared(payload: {
+export async function broadcastQuiescenceCleared(payload: {
   runId: string;
   outcome: "succeeded" | "failed";
   triggerRefId: string | null;

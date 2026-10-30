@@ -2,11 +2,14 @@
 
 import { EmptyState, StatusBadge } from "@/components/ui/report-kit";
 import { Surface } from "@/components/ui/Surface";
+import { formatDate } from "@/lib/datetime";
 import { useT } from "@/lib/i18n/use-t";
 import type { ClientStanding, ConnectedClientRow, ConnectedClientsView } from "@/lib/agent-toolchain/connected-clients";
 
 // BI-E7974C18 — which AI coding clients connect to this install, and whether
 // each one loaded the agent tools this update ships (design 2026-10-07 §5.2c).
+// BI-3E66F76F adds why a client is behind and how its computer's automatic
+// update last fared (design 2026-10-27-self-converging-agent-toolchain M9).
 // The data comes from connection observations, never a client report. Copy
 // lives in the "upgrade" catalog, which the page provides.
 
@@ -67,6 +70,17 @@ function ClientItem({ t, row, now }: { t: T; row: ConnectedClientRow; now: Date 
       {row.standing === "current" ? null : (
         <p className="text-xs text-[var(--dpf-muted)]">{t(`agentClients.standing.${row.standing}.explanation`)}</p>
       )}
+      {row.behind && row.reasons.length > 0 ? (
+        <p className="text-xs text-[var(--dpf-muted)]">{t("agentClients.why", { reasons: row.reasons.join("; ") })}</p>
+      ) : null}
+      {row.hostAgent ? (
+        <p className="text-xs text-[var(--dpf-muted)]" data-host-agent={row.hostAgent.status}>
+          {t(`agentClients.hostAgent.${row.hostAgent.status}`)}
+          {row.hostAgent.since && (row.hostAgent.status === "failed" || row.hostAgent.status === "needs-operator")
+            ? ` ${t("agentClients.hostAgentSince", { date: formatDate(row.hostAgent.since) })}`
+            : null}
+        </p>
+      ) : null}
     </li>
   );
 }

@@ -1,5 +1,6 @@
 import "next-auth";
 import "next-auth/jwt";
+import type { AutomationOAuthConsent } from "@/lib/auth/oauth-automation-consent";
 
 declare module "next-auth" {
   interface Session {
@@ -24,6 +25,7 @@ declare module "next-auth" {
     accountId?: string | null;
     accountName?: string | null;
     contactId?: string | null;
+    automationOAuthConsent?: AutomationOAuthConsent;
   }
 }
 
@@ -36,5 +38,6 @@ declare module "next-auth/jwt" {
     accountId?: string | null;
     accountName?: string | null;
     contactId?: string | null;
+    automationOAuthConsent?: AutomationOAuthConsent;
   }
 }

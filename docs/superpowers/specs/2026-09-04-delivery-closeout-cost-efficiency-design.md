@@ -605,3 +605,14 @@ later failure, malformed/future versions, and bounded 10,000-receipt recovery.
 Run real PostgreSQL and native adapters before containing-release acceptance.
 All implementation, new tests and native Large approvals remain unrun. See the
 [existing wakeup plan](../plans/2026-10-12-acceptance-upgrade-wakeup.md).
+
+### Amendment 2026-10-27: closure follows delivery
+
+Operator direction 2026-10-27 (BI-C899BB40) supersedes this addendum's
+"Backlog `done` continues to require its actual acceptance contract" and
+"pending verification remains a durable obligation" for work no customer
+reported. Delivery evidence closes the item, `acceptanceObligation` is recorded
+as `not-owed`, and nothing re-selects it. Customer-reported work closes on
+delivery too and owes one bounded confirmation question. Corrective work for a
+later miss is unchanged: a new item, the delivered one stays done. See
+[acceptance accountability §9](2026-09-24-acceptance-accountability-design.md#9-closure-follows-delivery-operator-direction-2026-10-27).

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { EventEmitter } from "node:events";
 import { createServer } from "node:https";
 import { getCACertificates } from "node:tls";
 import { tmpdir } from "node:os";
@@ -10,18 +11,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { readHostClientEnv, readTrustBundle, resolveHostMcpTrust, probeMcpTransport, describeMcpTransportError, runWithHostMcpTrust } from "../../scripts/lib/mcp-host-trust.mjs";
 import { mcpCall } from "../../scripts/lib/mcp-client.mjs";
 import { readEarlyQuiescenceStatus } from "../../scripts/lib/gate-quiescence.mjs";
-import { runHostPreflight } from "../../scripts/pregate.mjs";
+import { runForegroundGate, runGateWithQueuedRevival, runHostPreflight } from "../../scripts/pregate.mjs";
 import { classifyGateExit } from "../../scripts/lib/gate-exit-classification.mjs";
+import { createGateFixtureTls } from "../../scripts/fixtures/gate-worktree.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const openssl = process.platform === "win32" && existsSync(join(process.env.ProgramFiles || "C:/Program Files", "Git/usr/bin/openssl.exe"))
-  ? join(process.env.ProgramFiles || "C:/Program Files", "Git/usr/bin/openssl.exe") : "openssl";
 const fixture = mkdtempSync(join(tmpdir(), "dpf-tls-"));
-const key = join(fixture, "server.key"), cert = join(fixture, "server.crt");
-const mint = spawnSync(openssl, ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
-  "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost", "-addext", "basicConstraints=critical,CA:TRUE",
-  "-keyout", key, "-out", cert], { encoding: "utf8", windowsHide: true });
-assert.equal(mint.status, 0, `TLS fixtures require OpenSSL: ${mint.stderr || mint.error}`);
+const { key, cert } = createGateFixtureTls(fixture);
 test.after(() => rmSync(fixture, { recursive: true, force: true }));
 
 function child(script, env = {}) {
@@ -89,6 +85,74 @@ test("only pre-main trust failures are marked as unrun host prerequisites", asyn
     args: [], env: {}, resolveImpl: () => { throw unreadable; },
   }), error => error === unreadable && error.hostTrustPrerequisite === true);
   assert.equal(calls, 1, "host prerequisite failure prevents main");
+});
+
+test("trusted Windows re-exec retains repeated cancellation until its child closes", { skip: process.platform !== "win32" }, async () => {
+  const signals = new EventEmitter(), proc = new EventEmitter();
+  proc.exitCode = null; proc.signalCode = null;
+  proc.kill = () => assert.fail("console Ctrl-C must not be forwarded as a Windows hard kill");
+  let launches = 0;
+  const status = await runWithHostMcpTrust(() => assert.fail("main must only execute in the re-exec child"), {
+    args: [], env: {}, signalSource: signals,
+    resolveImpl: () => ({ certificates: [readFileSync(cert, "utf8")], env: { NODE_EXTRA_CA_CERTS: cert } }),
+    spawnImpl: (_command, _args, options) => {
+      launches++;
+      assert.equal(options.env.NODE_EXTRA_CA_CERTS, cert);
+      assert.ok(options.env.DPF_HOST_TRUST_REEXEC);
+      setImmediate(() => {
+        signals.emit("SIGINT"); signals.emit("SIGINT");
+        assert.equal(signals.listenerCount("SIGINT"), 1);
+        proc.exitCode = 87; proc.emit("close", 87, null);
+      });
+      return proc;
+    },
+  });
+  assert.equal(status, 87); assert.equal(launches, 1);
+  assert.equal(signals.listenerCount("SIGINT"), 0); assert.equal(signals.listenerCount("SIGTERM"), 0);
+});
+
+test("a re-exec execution error stays uncertain instead of becoming an unrun trust prerequisite", async () => {
+  const uncertain = Object.assign(Error("owned child outcome unavailable"), { code: "EIO" });
+  const proc = new EventEmitter(), signals = new EventEmitter();
+  let launches = 0;
+  await assert.rejects(runWithHostMcpTrust(() => assert.fail("never replay main"), {
+    args: [], env: {}, signalSource: signals,
+    resolveImpl: () => ({ certificates: [readFileSync(cert, "utf8")], env: { NODE_EXTRA_CA_CERTS: cert } }),
+    spawnImpl: () => {
+      launches++; setImmediate(() => { proc.emit("error", uncertain); proc.emit("close", 1, null); }); return proc;
+    },
+  }), error => error === uncertain && !error.hostTrustPrerequisite);
+  assert.equal(launches, 1); assert.equal(signals.listenerCount("SIGINT"), 0);
+});
+
+test("trust parent outlives the gate close grace and existing recovery", { skip: process.platform !== "win32" }, async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const signals = new EventEmitter(), owner = new EventEmitter(), gate = new EventEmitter();
+  for (const child of [owner, gate]) { child.exitCode = null; child.signalCode = null; }
+  let ownerKills = 0, gateKills = 0, recovering = false;
+  owner.kill = () => { ownerKills++; return true; };
+  gate.kill = () => { gateKills++; return true; };
+  const pending = runWithHostMcpTrust(() => assert.fail("main executes only in the child"), {
+    args: [], env: {}, signalSource: signals,
+    resolveImpl: () => ({ certificates: [readFileSync(cert, "utf8")], env: { NODE_EXTRA_CA_CERTS: cert } }),
+    spawnImpl: () => {
+      void runGateWithQueuedRevival({ signalSource: signals,
+        runGateImpl: (command, args, options) => runForegroundGate(command, args, { ...options, spawnImpl: () => gate }),
+        recoverInterruptedGateImpl: async () => { recovering = true; await new Promise(resolve => setTimeout(resolve, 10000)); },
+        stderr: { write() {} },
+      }).then(({ result }) => { owner.exitCode = result.status; owner.emit("close", result.status, null); });
+      return owner;
+    },
+  });
+  signals.emit("SIGINT");
+  t.mock.timers.tick(30000);
+  assert.equal(gateKills, 1); assert.equal(ownerKills, 0, "outer owner preempted its child's cancellation grace");
+  t.mock.timers.tick(9000); gate.exitCode = 87; gate.emit("close", 87, null);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(recovering, true);
+  t.mock.timers.tick(10000);
+  assert.equal(await pending, 87); assert.equal(ownerKills, 0);
+  assert.equal(signals.listenerCount("SIGINT"), 0);
 });
 
 test("OS adapters consume existing saved-state resolvers without credential output", () => {

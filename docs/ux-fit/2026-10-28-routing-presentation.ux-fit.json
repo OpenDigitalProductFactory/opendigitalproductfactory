@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "reuse-existing-controls-and-clarify-copy",
+  "decisionInteractionId": "DI-F7320F797AA0",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/RoutingManagementWorkspace.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "reuse-existing-controls-and-clarify-copy",
+      "replace-flow-layout-and-metrics"
+    ]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "recommendationVerdict": "proceed",
+    "confidence": "high",
+    "resolvedBy": "agent",
+    "evidenceClass": "Author engineering selection under explicit resumed routing correction direction. Reuse the existing FlowGroup buttons and localized cohort copy; retain all selected-execution counts, unknown coverage, navigation and provider authority. Native UX Critic contribution and actual containing-release measurements remain outstanding. No native UX approval or human ratification is claimed."
+  }
+}

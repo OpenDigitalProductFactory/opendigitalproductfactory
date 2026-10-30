@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ agent: vi.fn(), human: vi.fn(), current: vi.fn(), capsules: vi.fn(), principals: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { workroom: { findMany: mocks.capsules }, principal: { findMany: mocks.principals } } }));
+const mocks = vi.hoisted(() => ({ agent: vi.fn(), human: vi.fn(), current: vi.fn(), capsules: vi.fn(), principals: vi.fn(), backlog: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { workroom: { findMany: mocks.capsules }, principal: { findMany: mocks.principals },
+  backlogItem: { findFirst: mocks.backlog } } }));
 vi.mock("@/lib/identity/principal-linking", () => ({ ensureAgentPrincipalIdentity: mocks.agent, syncUserPrincipal: mocks.human }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.current }));
 import { resolveAgentRoomAccess } from "./room-agent-access.server";
@@ -45,5 +46,33 @@ describe("human and coworker room authority intersection", () => {
     expect((await resolveAgentRoomAccess(request)).decision.level).toBe("action");
     mocks.agent.mockResolvedValue({ principalId: "PRN-shared-agent", sensitivityClearance: ["public"] });
     expect((await resolveAgentRoomAccess(request)).decision.reason).toBe("insufficient-clearance");
+  });
+});
+
+// BI-ED5561BB: caseKey rooms apply DI-5E19848444FC (platform work is public),
+// so a public-cleared coworker is admitted to platform rooms and nowhere higher.
+describe("room ceiling from the room's backlog item", () => {
+  const platformRoom = { id: "room-p", assignedToAgentId: "shared-agent", assignedToUserId: "alice", evidence: [],
+    sourceType: "backlog-item", sourceId: "BI-PLATFORM" };
+  const publicAgent = { principalId: "PRN-shared-agent", sensitivityClearance: ["public"] };
+
+  it("admits a public-cleared coworker to a platform room with no explicit ceiling", async () => {
+    mocks.agent.mockResolvedValue(publicAgent);
+    mocks.backlog.mockResolvedValue({ sensitivity: "internal", scopeKind: "platform", digitalProduct: null });
+    const result = await resolveAgentRoomAccess({ agentId: "shared-agent", userId: "alice", requested: "content", workItem: platformRoom });
+    expect(result.decision.level).toBe("content");
+  });
+
+  it.each([
+    ["a non-platform internal room", { sensitivity: "internal", scopeKind: "archetype-leaf", digitalProduct: null }, []],
+    ["a restricted platform room", { sensitivity: "restricted", scopeKind: "platform", digitalProduct: null }, []],
+    ["a room whose policy sets internal", { sensitivity: "internal", scopeKind: "platform", digitalProduct: null },
+      [{ workroomPolicy: { sensitivityCeiling: "internal" } }]],
+  ])("still refuses a public-cleared coworker in %s", async (_label, backlog, evidence) => {
+    mocks.agent.mockResolvedValue(publicAgent);
+    mocks.backlog.mockResolvedValue(backlog);
+    const result = await resolveAgentRoomAccess({ agentId: "shared-agent", userId: "alice", requested: "content",
+      workItem: { ...platformRoom, evidence } });
+    expect(result.decision.reason).toBe("insufficient-clearance");
   });
 });

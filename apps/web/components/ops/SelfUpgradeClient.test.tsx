@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { LatestRun } from "@/lib/self-upgrade/run-types";
 
 const shared = vi.hoisted(() => ({
   isPending: false,
   triggerResult: null as { queued: boolean; reason?: string } | null,
+  liveSnapshot: null as { latestRun: LatestRun | null } | null,
 }));
 
 vi.mock("react", async () => {
@@ -32,11 +34,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/actions/promotions", () => ({
   rollbackSelfUpgrade: vi.fn(),
 }));
+vi.mock("@/components/ops/SelfUpgradeLiveProvider", () => ({
+  useOptionalSelfUpgradeLive: () => shared.liveSnapshot ? { snapshot: shared.liveSnapshot } : null,
+}));
 
-// The global useState mock above keys off `initial === null`, so any child
-// component with its own `useState<X | null>(null)` would otherwise receive
-// `shared.triggerResult` and try to render it. Stub the impact panel so the
-// trigger-control tests stay focused on this component's behavior.
+// Keep the parent's null-state mock from leaking into the impact panel's own state.
 vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
   default: ({ enabled }: { enabled: boolean }) => <div data-impact-enabled={enabled} />,
 }));
@@ -60,6 +62,13 @@ const baseStatus = {
   },
 };
 
+const savedRecoveryPoint = {
+  schemaVersion: 1, status: "ok", trigger: "pre-upgrade-recovery",
+  members: [{ target: "postgres", runId: "BR-PG", status: "ok" },
+    { target: "neo4j", runId: "BR-N4J", status: "ok" },
+    { target: "qdrant", runId: "BR-QD", status: "ok" }],
+};
+
 function makeRun(status: string, overrides: Record<string, unknown> = {}) {
   return {
     runId: "SUR-0001",
@@ -81,6 +90,7 @@ function makeRun(status: string, overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   shared.isPending = false;
   shared.triggerResult = null;
+  shared.liveSnapshot = null;
 });
 
 // Trigger/force/abort button behavior (disabled notice, Upgrade now, loading,
@@ -291,29 +301,22 @@ describe("SelfUpgradeClient – succeeded", () => {
     expect(html).toContain("scheduled");
   });
 
-  it("shows rollback controls when the latest run has a complete recovery point", () => {
+  it("keeps a complete backup visible without offering an unsafe restore", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
         latestRun={makeRun("succeeded", {
           completionEvidence: {
-            recoveryPoint: {
-              schemaVersion: 1,
-              status: "ok",
-              trigger: "pre-upgrade-recovery",
-              members: [
-                { target: "postgres", runId: "BR-PG", status: "ok" },
-                { target: "neo4j", runId: "BR-N4J", status: "ok" },
-                { target: "qdrant", runId: "BR-QD", status: "ok" },
-              ],
-            },
+            recoveryPoint: savedRecoveryPoint,
           },
         })}
       />,
     );
     expect(html).toContain("Recovery point: ok");
     expect(html).toContain("postgres: backed up");
-    expect(html).toContain("Restore recovery point");
+    expect(html).toContain("Database restoration is unavailable until review history can be preserved safely.");
+    expect(html).not.toContain("Restore recovery point");
+    expect(html).not.toContain("Rollback confirmation");
   });
 
   it("labels intentionally-skipped derived stores as re-derived, not 'missing'", () => {
@@ -323,16 +326,9 @@ describe("SelfUpgradeClient – succeeded", () => {
         latestRun={makeRun("succeeded", {
           completionEvidence: {
             recoveryPoint: {
-              schemaVersion: 1,
-              status: "ok",
-              trigger: "pre-upgrade-recovery",
-              // The default postgres-only recovery point: postgres backed up,
-              // the derived stores skipped (they re-derive from source).
-              members: [
-                { target: "postgres", runId: "BR-PG", status: "ok" },
-                { target: "neo4j", runId: null, status: "skipped" },
-                { target: "qdrant", runId: null, status: "skipped" },
-              ],
+              ...savedRecoveryPoint,
+              members: savedRecoveryPoint.members.map(member => member.target === "postgres"
+                ? member : { ...member, runId: null, status: "skipped" }),
             },
           },
         })}
@@ -352,16 +348,7 @@ describe("SelfUpgradeClient – succeeded", () => {
         {...baseStatus}
         latestRun={makeRun("succeeded", {
           completionEvidence: {
-            recoveryPoint: {
-              schemaVersion: 1,
-              status: "ok",
-              trigger: "pre-upgrade-recovery",
-              members: [
-                { target: "postgres", runId: "BR-PG", status: "ok" },
-                { target: "neo4j", runId: "BR-N4J", status: "ok" },
-                { target: "qdrant", runId: "BR-QD", status: "ok" },
-              ],
-            },
+            recoveryPoint: savedRecoveryPoint,
             rollback: { status: "ok" },
           },
         })}
@@ -369,6 +356,18 @@ describe("SelfUpgradeClient – succeeded", () => {
     );
     expect(html).toContain('data-rollback-status="ok"');
     expect(html).not.toContain("Restore recovery point");
+  });
+
+  it("recomputes recovery state from each live snapshot, including a cleared run", () => {
+    const savedRun = makeRun("succeeded", { completionEvidence: { recoveryPoint: savedRecoveryPoint } });
+    const render = () => renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} latestRun={savedRun} />);
+    shared.liveSnapshot = { latestRun: { ...savedRun, status: "running" } };
+    expect(render()).toContain('data-recovery-unavailable-reason="upgrade-running"');
+    shared.liveSnapshot = { latestRun: savedRun };
+    expect(render()).toContain('data-recovery-unavailable-reason="reassessment-rollback-retention-unproven"');
+    expect(render()).not.toContain("Restore recovery point");
+    shared.liveSnapshot = { latestRun: null };
+    expect(render()).not.toContain("Recovery point:");
   });
 });
 

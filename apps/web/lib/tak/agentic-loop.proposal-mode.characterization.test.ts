@@ -214,9 +214,18 @@ describe("S1 — a proposal-mode tool in chat raises an approval request", () =>
     }));
     expect(result.proposal).toBeNull();
     expect(result.pendingApproval).toEqual({ envelopeIds: ["env-1"] });
-    expect(result.content).toBe("I'd like to share this.");
+    expect(result.content).toBe(pending("env-1").message);
     // The turn ends on the request: the model is not called again.
     expect(routeAndCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a declared proposal's actual wait even if the model claims it already completed", async () => {
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference("I already shared it successfully.", [CALL]) as never);
+    vi.mocked(governedExecuteTool).mockResolvedValueOnce(pending("env-1") as never);
+    const result = await runAgenticLoop(params("chat"));
+    expect(result.content).toBe(pending("env-1").message);
+    expect(result.pendingApproval).toEqual({ envelopeIds: ["env-1"] });
+    expect(routeAndCall).toHaveBeenCalledOnce();
   });
 
   it("ends the step on the first request raised: later calls from the same model batch are not run", async () => {
@@ -228,7 +237,7 @@ describe("S1 — a proposal-mode tool in chat raises an approval request", () =>
     expect(governedExecuteTool).toHaveBeenCalledTimes(1);
     expect(result.pendingApproval).toEqual({ envelopeIds: ["env-1"] });
     expect(result.executedTools.map((tool) => tool.args)).toEqual([{ title: "Finding", body: "Details" }]);
-    expect(result.content).toBe("I'd like to contribute to hive with the following details.");
+    expect(result.content).toBe(pending("env-1").message);
     expect(routeAndCall).toHaveBeenCalledTimes(1);
   });
 
@@ -296,4 +305,77 @@ describe("S2 — the loop sends a propose-boundary call through the monitor", ()
     expect(result.content).toBe("Proposed the triage run.");
     expect(result.pendingApproval).toBeUndefined();
   });
+});
+
+// Ordinary immediate writes use the existing platform completion contract.
+describe('BI-0B70FA79 ordinary immediate-call completion', () => {
+  it.each(['chat', 'autonomous'] as const)('%s platform immediate calls retain a completion route if the monitor asks for approval', async mode => {
+    const tool = { name: 'record_execution_evidence', description: 'Record ordinary evidence', inputSchema: {}, requiredCapability: null, executionMode: 'immediate' as const, sideEffect: true };
+    const call = { id: 'e1', name: tool.name, arguments: { itemId: 'BI-FIXTURE', kind: 'manual_check', summary: 'Fixture only' } };
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference('Recording.', [call]) as never).mockResolvedValue(inference('This request is waiting for the recorded approval outcome. '.repeat(20)) as never);
+    vi.mocked(governedExecuteTool).mockResolvedValueOnce({ success: false, error: 'approval_required', message: 'waiting', data: { envelopeId: 'ENV-DIAGNOSTIC' } } as never);
+    await runAgenticLoop({ ...params(mode, tool as never), taskRunId: mode === 'autonomous' ? 'TR-FIXTURE' : undefined });
+    expect(governedExecuteTool).toHaveBeenCalledOnce();
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]?.[0].context?.approvalCompletion).toBe('platform');
+  });
+  it('external-token immediate calls keep credential-bound completion', async () => {
+    const tool = { name: 'record_execution_evidence', description: 'Record evidence', inputSchema: {}, requiredCapability: null, executionMode: 'immediate' as const, sideEffect: true };
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference('Recording.', [{ id: 'e2', name: tool.name, arguments: {} }]) as never).mockResolvedValueOnce(inference('Done.') as never);
+    await runAgenticLoop({ ...params('autonomous', tool as never), apiTokenId: 'TOKEN-FIXTURE', taskRunId: 'TR-FIXTURE' });
+    expect(governedExecuteTool).toHaveBeenCalledOnce();
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]?.[0].context).toMatchObject({ apiTokenId: 'TOKEN-FIXTURE', taskRunId: 'TR-FIXTURE' });
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]?.[0].context?.approvalCompletion).toBeUndefined();
+  });
+  it.each([
+    ['read', undefined, false, {}],
+    ['blank-token', '', true, {}],
+    ['whitespace-token', '   ', true, {}],
+    ['external-argument-claim', 'TOKEN-FIXTURE', true, { approvalCompletion: 'platform' }],
+  ] as const)('%s cannot acquire the new platform write marker', async (_kind, apiTokenId, sideEffect, args) => {
+    const tool = { name: 'fixture_operation', description: 'Fixture only', inputSchema: {}, requiredCapability: null, executionMode: 'immediate' as const, sideEffect };
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference('Checking.', [{ id: 'ctrl', name: tool.name, arguments: args }]) as never).mockResolvedValueOnce(inference('The fixture completed through its existing context. '.repeat(10)) as never);
+    await runAgenticLoop({ ...params('autonomous', tool as never), apiTokenId });
+    expect(governedExecuteTool).toHaveBeenCalledOnce();
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]?.[0].context?.approvalCompletion).toBeUndefined();
+  });
+  it('retains the assigned run and original captured execution fence on the platform write', async () => {
+    const tool = { name: 'record_execution_evidence', description: 'Fixture only', inputSchema: {}, requiredCapability: null, executionMode: 'immediate' as const, sideEffect: true };
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: 'original', dispatchClaim: null, authorityDigest: null, requestDigest: 'a'.repeat(64) };
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference('Recording.', [{ id: 'fence', name: tool.name, arguments: {} }]) as never).mockResolvedValueOnce(inference('The fixture completed through its existing context. '.repeat(10)) as never);
+    await runAgenticLoop({ ...params('autonomous', tool as never), taskRunId: 'TR-FIXTURE', taskExecutionFence, tokenScope: 'write' });
+    expect(governedExecuteTool).toHaveBeenCalledOnce();
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]?.[0].context).toMatchObject({ taskRunId: 'TR-FIXTURE', taskExecutionFence, tokenScope: 'write', approvalCompletion: 'platform' });
+  });
+});
+
+describe('BI-0B70FA79 ordinary pending batch', () => {
+  it.each(['chat','autonomous'] as const)('%s stops the batch and reports the actual wait', async mode => {
+    const tool = { name: 'fixture_internal_write', description: 'Fixture only', inputSchema: {}, requiredCapability: null, executionMode: 'immediate' as const, sideEffect: true };
+    const first = { id: 'pending-first', name: tool.name, arguments: { step: 1 } };
+    const later = { id: 'must-not-run', name: tool.name, arguments: { step: 2 } };
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference('Both fixture writes completed.', [first, later]) as never)
+      .mockResolvedValue(inference('Both fixture writes completed. '.repeat(20)) as never);
+    vi.mocked(governedExecuteTool).mockResolvedValueOnce({ success: false, error: 'approval_required', message: 'Waiting on the recorded owner decision.', data: { envelopeId: 'ENV-PENDING-FIXTURE' } } as never)
+      .mockResolvedValue({ success: true, message: 'Second fixture call ran.' } as never);
+    const result = await runAgenticLoop(params(mode, tool as never));
+    expect.soft(governedExecuteTool).toHaveBeenCalledOnce();
+    expect.soft(routeAndCall).toHaveBeenCalledOnce();
+    expect.soft(result.pendingApproval).toEqual({ envelopeIds: ['ENV-PENDING-FIXTURE'] });
+    expect.soft(result.content).not.toContain('Both fixture writes completed.');
+  });
+  it('uses the exact pending call after an earlier successful call of the same tool', async () => {
+    const tool = { name: 'fixture_internal_write', description: 'Fixture only', inputSchema: {}, requiredCapability: null, executionMode: 'immediate' as const, sideEffect: true };
+    const calls = [0,1,2].map(step => ({ id: 'call-' + step, name: tool.name, arguments: { step } }));
+    vi.mocked(routeAndCall).mockResolvedValueOnce(inference('All fixture writes completed.', calls) as never).mockResolvedValue(inference('All fixture writes completed. '.repeat(20)) as never);
+    vi.mocked(governedExecuteTool).mockResolvedValueOnce({ success: true, message: 'Only first write completed.' } as never)
+      .mockResolvedValueOnce({ success: false, error: 'approval_required', message: 'Second write is waiting for owner approval.', data: { envelopeId: 'ENV-SECOND' } } as never)
+      .mockResolvedValue({ success: true, message: 'Third write ran.' } as never);
+    const result = await runAgenticLoop(params('chat', tool as never));
+    expect.soft(governedExecuteTool).toHaveBeenCalledTimes(2);
+    expect.soft(routeAndCall).toHaveBeenCalledOnce();
+    expect.soft(result.executedTools.map(x => x.args)).toEqual([{ step: 0 }, { step: 1 }]);
+    expect.soft(result.pendingApproval).toEqual({ envelopeIds: ['ENV-SECOND'] });
+    expect.soft(result.content).toBe('Second write is waiting for owner approval.');
+  });
+
 });

@@ -91,7 +91,7 @@ This skill is the DPF-specific operationalization of the `evidence-before-diagno
 
 7. **Write the diagnosis as a structured report**, not screenshots (per `feedback_dynamic_analysis_is_evidence`). Structure: drove X, observed Y, signed off Z.
 
-8. **Surface to operator** for ratification before mutating anything. Diagnoses can be wrong even when they're well-grounded.
+8. **Report the evidence and continue authorized repair.** Follow the [routine-maintenance authority rule](../../../../docs/architecture/contributor-procedure-runbook.md#routine-maintenance-and-recovery-authority). Reuse current scoped authorization; ask only for missing authority or material scope expansion. A diagnosis is evidence, not an authority grant; host and tool refusals still stop the refused action.
 
 ## Output template
 

@@ -15,6 +15,7 @@ import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import { branchOccupiedResult } from "./mcp-result-errors";
 import { defaultPlatformRepositoryFullName, invalidSourceCommitField } from "./work-capsule-branch-identity";
 import { BacklogItemAlreadyClaimedError } from "./backlog-workroom-ownership";
+import { evaluateTwinClaimGate, type TwinGateOutcome } from "./twin-claim-gate";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
@@ -91,6 +92,29 @@ export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolu
   await db.workroom.update({ where: scopeWriteWhere({ ...row, capsuleId }), data: { scopeClaims } });
 }
 
+async function recordTwinOverride(
+  db: {
+    workroom: { findUnique(args: unknown): Promise<{ id: string } | null> };
+    workroomActivity: { create(args: unknown): Promise<unknown> };
+  },
+  capsuleId: string,
+  gate: Extract<TwinGateOutcome, { kind: "overridden" }>,
+  actor: WorkCapsuleActor,
+): Promise<void> {
+  const room = await db.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!room) return;
+  await db.workroomActivity.create({
+    data: {
+      workCapsuleId: room.id,
+      kind: "federated-twin-override",
+      summary: `Deliberately claimed despite the paired installation's work on ${gate.blockers.map((b) => b.itemId).join(", ")}: ${gate.reason}`,
+      payload: { reason: gate.reason, twins: gate.blockers },
+      recordedById: actor.userId,
+      recordedByAgentId: actor.agentId,
+    },
+  });
+}
+
 export async function claimBacklogItemForWork(args: {
   params: Record<string, unknown>;
   userId: string;
@@ -149,6 +173,15 @@ export async function claimBacklogItemForWork(args: {
     }
     if (admission.verdict !== "admit") admissionWarning = admission.reason;
   }
+  // The paired installation may already be working this defect (BI-91FC6B9A).
+  const { prisma: twinDb } = await import("@dpf/db");
+  const twinGate = await evaluateTwinClaimGate(twinDb as never, {
+    itemId,
+    headBranch: branchName,
+    force: params["force"] === true,
+    overrideReason: stringParam(params, "overrideReason"),
+  });
+  if (twinGate.kind === "refused") return twinGate.result;
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -183,6 +216,7 @@ export async function claimBacklogItemForWork(args: {
       };
     }
     const result = governed.data.claim;
+    if (twinGate.kind === "overridden") await recordTwinOverride(twinDb as never, result.capsuleId, twinGate, await args.resolveActor(args.userId, args.context));
     await persistClaimShape(args.db, result.capsuleId, shape.resolution);
     await ensureCapsuleWorkItemAnchorWithPrisma({
       capsuleId: result.capsuleId,

@@ -3,16 +3,36 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CLAIM_TIMEOUT_MS,
   DOCKER_VM_RESTART_ACTION_TYPE,
+  QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
   canTransitionDispatch,
   claimTimeoutMsForActionType,
   claimableActionsForNode,
   isClaimableByNode,
   isDispatchActionType,
   isReadonlyDispatchActionType,
+  parseQualificationWindowsVerifyParameters,
   nodeScopeMatchesAction,
   type ClaimingNodeView,
   type DispatchableActionView,
 } from "./remote-action-dispatch";
+
+const qualificationParameters = {
+  version: 1,
+  backlogItemId: "BI-B3DEC077",
+  workroomId: "WC-A8C14CBE",
+  repository: "OpenDigitalProductFactory/opendigitalproductfactory",
+  baseSha: "a".repeat(40),
+  headSha: "b".repeat(40),
+  protocolPath: "docs/superpowers/specs/windows-handle-replacement.md",
+  protocolBlobSha: "c".repeat(40),
+  productionBlobs: [{ path: "apps/web/lib/file.ts", blobSha: "d".repeat(40) }],
+  testBlobs: [{ path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40) }],
+  qualificationBindingDigest: "f".repeat(64),
+  procedureId: "windows-handle-replacement-v1",
+  resultSchemaVersion: 1,
+  maxDurationSeconds: 300,
+  edgeNodeId: "edge_windows_1",
+} as const;
 
 function action(over: Partial<DispatchableActionView> = {}): DispatchableActionView {
   return {
@@ -109,6 +129,60 @@ describe("operator-approved Docker VM restart dispatch (BI-F8F8C383)", () => {
   it("gets a claim timeout long enough for the VM to stop and Docker to come back", () => {
     expect(claimTimeoutMsForActionType(DOCKER_VM_RESTART_ACTION_TYPE)).toBe(30 * 60 * 1000);
     expect(claimTimeoutMsForActionType("inventory.collect")).toBe(DEFAULT_CLAIM_TIMEOUT_MS);
+  });
+});
+
+describe("managed inference lifecycle dispatch", () => {
+  const type = "inference.runtime.transition";
+  const transition = action({ actionType: type, riskClass: "high", edgeNodeId: "node_1", changeRequestApproved: true });
+  const host = node({ allowedActionTypes: [type], organizationTrustRole: null });
+  it("is a specific privileged operation, never a read-only or general command type", () => {
+    expect(isDispatchActionType(type)).toBe(true);
+    expect(isReadonlyDispatchActionType(type)).toBe(false);
+    expect(isDispatchActionType("inference.runtime.shell")).toBe(false);
+  });
+  it("requires an approved machine-bound change and explicit host action permission", () => {
+    expect(isClaimableByNode(transition, host)).toEqual({ claimable: true });
+    for (const change of [{ edgeNodeId: null }, { edgeNodeId: "other-node" }, { changeRequestApproved: false },
+      { riskClass: "read-only" as const }, { approvalState: "pending" }, { status: "running" }]) {
+      expect(isClaimableByNode({ ...transition, ...change }, host).claimable).toBe(false);
+    }
+    expect(isClaimableByNode(transition, { ...host, allowedActionTypes: [DOCKER_VM_RESTART_ACTION_TYPE] }).claimable).toBe(false);
+    expect(isClaimableByNode(transition, { ...host, actionExecuteEnabled: false }).claimable).toBe(false);
+  });
+  it("cannot administer a customer-scoped estate through an otherwise permitted host", () => {
+    const scoped = { customerAccountId: "customer", customerSiteId: "site" };
+    expect(isClaimableByNode({ ...transition, ...scoped }, { ...host, ...scoped }).claimable).toBe(false);
+  });
+});
+
+describe("bounded Windows qualification dispatch", () => {
+  const actionRow = action({
+    actionType: QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
+    riskClass: "high",
+    edgeNodeId: "node_1",
+    changeRequestApproved: true,
+  });
+  const windowsNode = node({
+    allowedActionTypes: [QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE],
+    organizationTrustRole: null,
+  });
+
+  it("admits only the exact machine-bound privileged action", () => {
+    expect(QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE).toBe("qualification.windows.verify-v1");
+    expect(isDispatchActionType(QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE)).toBe(true);
+    expect(isReadonlyDispatchActionType(QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE)).toBe(false);
+    expect(isClaimableByNode(actionRow, windowsNode)).toEqual({ claimable: true });
+    expect(isClaimableByNode({ ...actionRow, edgeNodeId: null }, windowsNode).claimable).toBe(false);
+    expect(isClaimableByNode({ ...actionRow, changeRequestApproved: false }, windowsNode).claimable).toBe(false);
+  });
+
+  it("accepts the closed server-derived schema and rejects widening", () => {
+    expect(parseQualificationWindowsVerifyParameters(qualificationParameters)).toEqual(qualificationParameters);
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, command: "pwsh" })).toBeNull();
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, procedureId: "shell-v1" })).toBeNull();
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, protocolPath: "../secret" })).toBeNull();
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, productionBlobs: [] })).toBeNull();
   });
 });
 

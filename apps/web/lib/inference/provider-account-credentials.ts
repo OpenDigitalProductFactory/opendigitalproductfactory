@@ -5,6 +5,31 @@ import { currentInferenceSignal } from "../routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 import { capacityCredentialRevision } from "../routing/provider-capacity/scopes";
 import { isActiveDefaultSubscription, type ActiveAccountSnapshot, ACCOUNT_CHANGED } from "./active-provider-account-verification";
+import { providerWorkspaceHeaders } from "./provider-workspace";
+
+/** Restricted execution can read an existing key, never renew or repair it. */
+export async function readReassessmentProviderAuthHeaders(input: {
+  providerId: string;
+  authMethod: string | null;
+  authHeader: string | null;
+  connectionId?: string;
+  expectedExecutionVersion?: string;
+}): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (input.authMethod === "none") return headers;
+  if (input.authMethod !== "api_key") throw new Error("Restricted review authentication must not prepare or renew an account");
+  if (!input.connectionId || !input.expectedExecutionVersion || !input.authHeader) {
+    throw new Error("Restricted review credential identity is unproven");
+  }
+  const credential = await findProviderCredential(input.providerId, input.connectionId, input.expectedExecutionVersion);
+  // Deliberately do not call decryptProviderCredential: its normal failed-key
+  // observation updates credential status, which is outside this composition.
+  const key = credential?.secretRef ? decryptSecret(credential.secretRef) : null;
+  if (!key) throw new Error("Restricted review credential is unavailable");
+  Object.assign(headers, providerWorkspaceHeaders(input.providerId, credential!.providerWorkspaceId));
+  headers[input.authHeader] = input.authHeader === "Authorization" ? `Bearer ${key}` : key;
+  return headers;
+}
 
 /** Catalog aliases apply only to the legacy default, never to explicit accounts. */
 export function resolveCredentialProviderId(providerId: string): string {

@@ -10,7 +10,7 @@ import type { prisma } from "@dpf/db";
 
 import { isRecord } from "@/lib/shared/coerce";
 
-import { driveDeviationCodes, readDriveHold } from "./workroom-drive-hold";
+import { driveDeviationCodes, readDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "./room-workforce.server";
 import { resolveDriveConclusion } from "./drive-conclusion";
 import { loadWorkroomDisplayTitles, workroomDisplayTitle } from "@/lib/work-capsules/workroom-display-titles.server";

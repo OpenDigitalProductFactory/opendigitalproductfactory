@@ -100,6 +100,20 @@ describe("runAcceptanceSweep — routing aged items (BI-C1781121)", () => {
     expect(summary.headline).toContain("routing: 1 routed, 0 already routed, 0 routed-unresolved, 0 unroutable, 1 deferred past the limit of 2");
   });
 
+  // BI-729D9B27: a build-originated item whose change is proven live routes at once.
+  it("routes a young item that entered acceptance on its build's proven delivery, and no other young item", async () => {
+    const delivered = { ...item("young"), activities: [{ kind: "status_change", recordedAt: NOW,
+      payload: { to: "awaiting-acceptance", actuator: "build-delivery-proven", buildId: "FB-1" } }] };
+    const p = ports({ selectPage: async () => ({ items: [item("old"), delivered, item("mid")], unsnapshotted: 3, nextCursor: null }), });
+    await runAcceptanceSweep(p, { ...CONFIG, routeLimit: 5 });
+    const [candidates] = vi.mocked(p.route).mock.calls[0]!;
+    expect(candidates.map((candidate) => candidate.item.itemId)).toEqual(["BI-OLD", "BI-YOUNG", "BI-MID"]);
+
+    const plain = ports({ selectPage: async () => ({ items: [item("young")], unsnapshotted: 1, nextCursor: null }) });
+    await runAcceptanceSweep(plain, CONFIG);
+    expect(plain.route).not.toHaveBeenCalled();
+  });
+
   it("closes a closable aged item under the pre-authorisation and never routes it", async () => {
     const p = ports({ resolveCloseAuthorisation: async () => ENABLED });
     const summary = await runAcceptanceSweep(p, CONFIG);

@@ -79,6 +79,36 @@
     "dialogPlaceholder": "For example: setup account nobody uses",
     "revokedNotice": ".input {$grants :integer}\n.input {$tokens :integer}\n.match $grants $tokens\none one {{Ended {$email}'s access (1 sign-in grant, 1 access token).}}\none * {{Ended {$email}'s access (1 sign-in grant, {$tokens} access tokens).}}\n* one {{Ended {$email}'s access ({$grants} sign-in grants, 1 access token).}}\n* * {{Ended {$email}'s access ({$grants} sign-in grants, {$tokens} access tokens).}}"
   },
+  "accountAgentAccess": {
+    "heading": "Agent access for one account",
+    "intro": "Everything an account still uses to let AI agents act for it: personal tokens, sign-ins through each connected app, and automated-tool keys it owns. Handing over an account's work leaves all of this live.",
+    "accountLabel": "Account email",
+    "accountHint": "The person's sign-in email.",
+    "show": "Show access",
+    "loading": "Loading…",
+    "handedOver": "Work handed over {$when}. Its agent access is still live until someone ends it here.",
+    "inactive": "This account cannot sign in.",
+    "nothingLive": "This account holds no live agent access.",
+    "personalHeading": "Personal tokens",
+    "clientsHeading": "Connected apps",
+    "ownedHeading": "Automated-tool keys it owns",
+    "ownedHint": "These connect without a consent screen and act with this account's authority.",
+    "colName": "Name",
+    "colToken": "Token",
+    "colApp": "App",
+    "colClientId": "Client id",
+    "colAccessTokens": "Access tokens",
+    "colGrants": "Sign-in grants",
+    "colLastUsed": "Last used",
+    "colCreated": "Created",
+    "never": "never",
+    "end": "End this account's agent access",
+    "you": "This is your own account. End your own connections from each app instead.",
+    "dialogTitle": "End this account's agent access",
+    "dialogMessage": "Every personal token, app sign-in and automated-tool key that {$email} holds stops working now. Other people stay connected. The account can still sign in and connect again unless it is deactivated. Why is its access ending?",
+    "dialogPlaceholder": "For example: work handed over, account no longer used",
+    "endedNotice": "Ended {$email}'s agent access: {$tokens} token(s), {$grants} sign-in grant(s) and {$clients} automated-tool key(s)."
+  },
   "closeAuthorisation": {
     "heading": "Let the acceptance sweep close finished work",
     "on": "On",
@@ -305,6 +335,32 @@
       "requestMismatch": "The request no longer matches what the platform sees. Refresh and try again.",
       "protocolUnavailable": "The host's change tool could not be verified, so nothing was changed. Open runtime health.",
       "unknown": "The platform returned an answer this page does not recognise."
+    }
+  },
+  "gateEfficacy": {
+    "title": "Gate efficacy",
+    "from": "From",
+    "to": "to",
+    "summaryRegion": "Summary",
+    "summary": "{$runs} guard checks recorded, {$classified} refusals classified. Unknown measures: {$unknown}.",
+    "none": "none",
+    "noDecision": "Nothing here needs your decision. Guards that look wasteful get a review item automatically.",
+    "stats": {
+      "checks": "Guard checks",
+      "checksHint": "last 14 days",
+      "refusals": "Refusals classified",
+      "waiting": "Approvals waiting",
+      "waitingHint": "requests, not cards",
+      "unknown": "Unknown measures"
+    },
+    "sections": {
+      "measures": "GPP §11 measures",
+      "guards": "Guards, most expensive first"
+    },
+    "tables": {
+      "gpp": "GPP §11 measures",
+      "proxies": "Subset proxies and approval load",
+      "breakdowns": "Breakdowns"
     }
   }
 }

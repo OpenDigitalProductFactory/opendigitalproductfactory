@@ -4,7 +4,7 @@
 // coworker services/offers. The tools stay in a scoped pack so mcp-tools.ts
 // remains a composition layer instead of growing the frozen inline switch.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -81,7 +81,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "request_coworker_engagement",
-    description: "Create a governed request to engage a coworker offer. High-risk or external offers return approval requirements.",
+    description: "Create a governed request, or fulfill the original caller-owned engagement by engagementId and an immutable Workroom artifact locator. Fulfillment is bounded to already-admitted internal advisory work; approval-required, paid or external offers retain their boundaries. A request or accepted task is not a completed contribution.",
     inputSchema: {
       type: "object",
       properties: {
@@ -93,8 +93,10 @@ const definitions: ToolDefinition[] = [
         fundingContext: { type: "object", description: "Budget or funding context." },
         contractContext: { type: "object", description: "Terms and data-boundary context." },
         metadata: { type: "object", description: "Additional engagement metadata." },
+        engagementId: { type: "string", description: "Existing caller-owned engagement to fulfill. Never create another request to retry the same work." },
+        fulfillment: { type: "object", description: "Current workroomId (WC-*), stageKey, optional guidanceArtifacts (exact UX profession repository blobs at the room head), optional visualEvidenceRef {kind: document-version, repositoryFullName, versionId, valueDigest} for an owned immutable capture manifest explicitly associated at FIRST binding, and the ORIGINAL artifactRef {kind: repo-blob-at-commit, repositoryFullName, commitSha, path, providerBlobId}. Original caller, offer and provider remain server-owned." },
       },
-      required: ["offerId", "requestedOutcome"],
+      required: [],
     },
     requiredCapability: "view_platform",
     sideEffect: true,
@@ -215,11 +217,24 @@ async function resolveCoworkerOfferAgentCard(params: Record<string, unknown>): P
   };
 }
 
+type EngagementFulfillmentPort = (engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext) => Promise<ToolResult>;
+
 async function requestCoworkerEngagement(
   params: Record<string, unknown>,
   userId: string,
-  context?: { agentId?: string },
+  context?: ToolExecutionContext,
+  fulfill?: EngagementFulfillmentPort,
 ): Promise<ToolResult> {
+  if (params["engagementId"] !== undefined) {
+    if (typeof params["engagementId"] !== "string" || !params["engagementId"].trim()
+      || Object.keys(params).some(key => !["engagementId", "fulfillment"].includes(key))) {
+      return { success: false, error: "invalid_engagement_resume", message: "Resume with engagementId and fulfillment only; original request identity cannot be replaced." };
+    }
+    if (!fulfill) return { success: false, error: "engagement_executor_unavailable", message: "The service execution adapter is unavailable. Restore the configured catalog adapter, then observe or resume this same engagementId." };
+    try { return await fulfill(params["engagementId"].trim(), params["fulfillment"], userId, context); }
+    catch (error) { return { success: false, error: "engagement_fulfillment_refused", message: getErrorMessage(error) }; }
+  }
+  if (params["fulfillment"] !== undefined) return { success: false, error: "invalid_engagement_resume", message: "Fulfillment must name the original engagementId; create the request first and resume that same engagement." };
   const offerId = typeof params["offerId"] === "string" ? params["offerId"].trim() : "";
   const requestedOutcome = typeof params["requestedOutcome"] === "string" ? params["requestedOutcome"].trim() : "";
   if (!offerId || !requestedOutcome) {
@@ -243,7 +258,7 @@ async function requestCoworkerEngagement(
       success: true,
       message: engagement.approvalContext.required
         ? `Created engagement ${engagement.engagementId}; approval is required before execution.`
-        : `Created engagement ${engagement.engagementId}.`,
+        : `Created engagement ${engagement.engagementId}; no contribution has executed yet. Fulfill or observe this same engagementId through this tool.`,
       data: { engagement },
     };
   } catch (err) {
@@ -309,3 +324,10 @@ export const coworkerServiceCatalogPack: ToolPack = {
     analyze_coworker_engagement_refinement: ["coworker_catalog_read"],
   },
 };
+
+/** Composition supplies the execution owner; catalog metadata stays outside its runtime cycle. */
+export function withEngagementFulfillment(fulfill: EngagementFulfillmentPort): ToolPack {
+  return { ...coworkerServiceCatalogPack, handlers: { ...coworkerServiceCatalogPack.handlers,
+    request_coworker_engagement: (params, userId, context) => requestCoworkerEngagement(params, userId, context, fulfill),
+  } };
+}

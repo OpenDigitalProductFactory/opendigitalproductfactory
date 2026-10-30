@@ -5,6 +5,7 @@
 import { prisma } from "@dpf/db";
 import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
 import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import { getOllamaBaseUrl } from "./ollama-url";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
@@ -40,8 +41,9 @@ import {
   capacityAccountIdentity,
   recordProviderCapacityStatus,
 } from "../routing/provider-capacity/store";
-import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
-import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
+import { chatAdapter } from "../routing/chat-adapter";
+import { responsesAdapter } from "../routing/responses-adapter";
+import { reassessmentMessagesAdapter } from "../routing/reassessment-messages-adapter";
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
 import "../routing/embedding-adapter"; // EP-INF-009c: registers "embedding" adapter
 import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter
@@ -61,6 +63,12 @@ import { providerInferenceFetch, withInferenceCancellationFetch } from "./provid
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 import { accountAuthMethod, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
+import { assertReassessmentActive, assertReassessmentPlan, currentFiniteReassessmentExecution, refuseReassessmentExecution,
+  runReassessmentEffect, validateReassessmentToolCalls } from "../routing/reassessment-execution-scope";
+import { assertReassessmentQualificationCurrent, refreshReassessmentNativeRuntime } from "./reassessment-execution-qualification";
+import { readReassessmentProviderAuthHeaders } from "./provider-account-credentials";
+import { captureReassessmentHttpResponse, withReassessmentHttpTransport } from "./reassessment-http-capture";
+import { reassessmentNativeMessagesFetch } from "./reassessment-native-runtime";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +112,11 @@ async function buildAuthHeaders(
   connectionId?: string,
   expectedExecutionVersion?: string,
 ): Promise<Record<string, string>> {
+  if (assertReassessmentActive()) return {
+    ...getProviderExtraHeaders(providerId),
+    ...await readReassessmentProviderAuthHeaders({ providerId, authMethod, authHeader,
+      connectionId, expectedExecutionVersion }),
+  };
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...getProviderExtraHeaders(providerId),
@@ -152,6 +165,7 @@ async function resolveExecutionBaseUrl(
   providerId: string,
   provider: { authMethod: string | null; baseUrl: string | null; endpoint: string | null },
 ): Promise<string | null> {
+  if (providerId === "local") return getOllamaBaseUrl({ ...provider, providerId });
   // Route codex through the ChatGPT backend (flat-rate subscription billing).
   // The Responses API SSE parser now handles function call events.
   if (providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
@@ -209,6 +223,55 @@ export {
   formatMessageForResponses,
 } from "../routing/provider-message-format";
 
+/** The capture boundary wraps the actual transport, so adapter retries consume starts. */
+function reassessmentFetch(fetchImpl: typeof fetch, plan: RoutedExecutionPlan,
+  tools?: Array<Record<string, unknown>>): typeof fetch {
+  if (!assertReassessmentActive()) return fetchImpl;
+  return async (input, init) => {
+    const context = assertReassessmentPlan({ providerId: plan.providerId, modelId: plan.modelId, plan, tools });
+    if (!context) return refuseReassessmentExecution("reassessment-context-missing");
+    if (init?.method !== "POST" || typeof init.body !== "string" || !(typeof input === "string" || input instanceof URL)) {
+      return refuseReassessmentExecution("reassessment-transport-not-qualified");
+    }
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    const generation = body.generationConfig as Record<string, unknown> | undefined;
+    const limits = [body.max_tokens, body.max_output_tokens, body.max_completion_tokens, generation?.maxOutputTokens]
+      .filter(value => value !== undefined);
+    if (!limits.length || limits.some(value => typeof value !== "number" || !Number.isSafeInteger(value)
+      || value <= 0 || value > context.qualification.bounds.maxOutputTokens)) {
+      return refuseReassessmentExecution("reassessment-provider-output-unbounded");
+    }
+    const expected = tools?.map(tool => (tool.function as { name?: unknown } | undefined)?.name ?? tool.name).sort();
+    const names = Array.isArray(body.tools) ? body.tools.flatMap((tool: Record<string, unknown>) => {
+      if (Array.isArray(tool.functionDeclarations) && Object.keys(tool).length === 1) {
+        return tool.functionDeclarations.map((declaration: { name?: unknown }) => declaration.name);
+      }
+      if (tool.type !== undefined && tool.type !== "function") return [null];
+      return [(tool.function as { name?: unknown } | undefined)?.name ?? tool.name];
+    }).sort() : [];
+    if (names.length !== 2 || expected?.length !== 2 || names.some((name, index) => typeof name !== "string" || name !== expected[index])) {
+      return refuseReassessmentExecution("reassessment-provider-tools-changed");
+    }
+    await assertReassessmentQualificationCurrent(context.qualification);
+    const url = new URL(input.toString());
+    if (url.username || url.password || url.search || url.hash) return refuseReassessmentExecution("reassessment-transport-not-qualified");
+    return runReassessmentEffect({ kind: "provider", name: `${plan.providerId}/${plan.modelId}`,
+      input: { providerId: plan.providerId, modelId: plan.modelId, providerConnectionId: plan.providerConnectionId,
+        url: `${url.origin}${url.pathname}`, method: "POST", body, bodyUtf8: init.body } },
+    () => {
+      // Capture reservation and current-config reads consume the original
+      // window; neither can restart its HTTP cancellation allowance.
+      const remaining = Date.parse(context.deadlineAt) - Date.now();
+      if (!Number.isSafeInteger(remaining) || remaining <= 0 || remaining > 2_147_483_647) {
+        return refuseReassessmentExecution("reassessment-deadline-exhausted");
+      }
+      const deadline = AbortSignal.timeout(remaining);
+      return fetchImpl(input, { ...init, redirect: "error", signal: init.signal ? AbortSignal.any([init.signal, deadline]) : deadline });
+    },
+    captureReassessmentHttpResponse);
+  };
+}
+
 // ─── callProvider ────────────────────────────────────────────────────────────
 
 export async function callProvider(
@@ -246,6 +309,9 @@ export async function callProvider(
     toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
     responsePolicy: {},
   };
+  const reassessment = assertReassessmentPlan({ providerId, modelId, plan: effectivePlan, tools });
+  const finite = currentFiniteReassessmentExecution();
+  if ((reassessment?.qualification.budgetConfiguration?.configuredPerTaskLimit ?? 0) > 0 && !finite) return refuseReassessmentExecution("reassessment-finite-execution-unproven");
   const executionAdapterRaw = effectivePlan.executionAdapter;
   let selector: ExecutionAdapterSelector | null;
   try {
@@ -254,8 +320,24 @@ export async function callProvider(
     if (typeof executionAdapterRaw !== "string") throw e;
     selector = null;
   }
+  if (selector?.kind === "claude-code-cli" && messages.some(message => Array.isArray(message.content) && message.content.some(block => block.type === "image_url"))) {
+    // Local transport refusal: no provider request or health mutation occurred.
+    throw new Error("image_input_transport_unavailable: Claude CLI cannot deliver supplied pixels; select an image-capable transport");
+  }
+  let providedImageHashes:string[]|null=null;
+  if(mcpSession?.recordImageInputDelivery&&messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image_url"))){
+    const {codexImageInput}=await import("../routing/codex-image-input"),{createHash}=await import("node:crypto");
+    providedImageHashes=codexImageInput(messages,"/tmp/unused-input-hash").images.map(i=>createHash("sha256").update(Buffer.from(i.base64,"base64")).digest("hex"));
+  }
   const isCliAdapter = selector !== null
     && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+  if (reassessment && (selector ? !selector.kind.startsWith("http-") : executionAdapterRaw !== "responses")) {
+    return refuseReassessmentExecution("reassessment-requires-in-process-HTTP");
+  }
+  if (reassessment && (effectivePlan.providerSettings.providerTools !== undefined
+    || effectivePlan.providerSettings.thinking_budget_tokens !== undefined || !finite && effectivePlan.localThinkingBudgetEvidence !== undefined)) {
+    return refuseReassessmentExecution("reassessment-hidden-tools-or-runtime-probe");
+  }
   // Required tool choice on an adapter that cannot force it: refuse, or — for a
   // bound terminal writer reachable through a governed MCP session — dispatch
   // under the receipt-verified contract (BI-C35576A9). See the guard module.
@@ -285,7 +367,7 @@ export async function callProvider(
   // more tokens. At 80–95% log a warning; at ≥95% also write a budget event.
   // The check is non-blocking: any DB error is swallowed so a budget-gate DB
   // failure never breaks inference.
-  if (attribution?.agentId) {
+  if (attribution?.agentId && !reassessment) {
     try {
       const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
       const budget = await checkAgentBudgetFromRegistry(attribution.agentId);
@@ -368,7 +450,8 @@ export async function callProvider(
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
   const adapter =
-    selector !== null
+    finite ? reassessmentMessagesAdapter : reassessment ? executionAdapterRaw === "responses" ? responsesAdapter : chatAdapter
+    : selector !== null
       ? await resolveExecutionAdapter(selector, effectivePlan.capabilityRequirements)
       : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
@@ -389,6 +472,8 @@ export async function callProvider(
   let result;
   let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
   let investmentGuidance = "";
+  const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+  const actualFetch = parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch;
   try {
     const execute = async () => {
       await assertProviderDispatchCapacity(providerId);
@@ -410,14 +495,15 @@ export async function callProvider(
       }
       await assertGovernedInferenceAuthority(currentInferenceSignal());
       currentInferenceSignal()?.throwIfAborted();
-      const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+      if (reassessment) await assertReassessmentQualificationCurrent(reassessment.qualification);
+      if (finite) await refreshReassessmentNativeRuntime(finite.qualification, actualFetch);
       return adapter.execute({
         providerId,
         modelId,
         plan: effectivePlan,
         provider: { baseUrl, headers },
         readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
-        fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
+        fetchImpl: finite ? reassessmentNativeMessagesFetch(effectivePlan, tools) : reassessmentFetch(actualFetch, effectivePlan, tools),
         messages,
         systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
         tools,
@@ -426,8 +512,10 @@ export async function callProvider(
       });
     };
     if (isLocalProviderId(providerId)) {
-      result = await withLocalInferenceLock(execute, { modelId, origin,
+      const admitted = () => withLocalInferenceLock(execute, { modelId, origin,
         signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) });
+      result = finite ? await withReassessmentHttpTransport({ fetchImpl: actualFetch,
+        assertCurrent: () => assertReassessmentQualificationCurrent(finite.qualification) }, admitted) : await admitted();
     } else {
       releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
         providerId,
@@ -436,6 +524,9 @@ export async function callProvider(
       });
       result = await execute();
     }
+    validateReassessmentToolCalls(result.toolCalls);
+    // Receipt persistence cannot authorize another provider call after actual inference.
+    if (providedImageHashes && mcpSession?.recordImageInputDelivery) await mcpSession.recordImageInputDelivery({sha256:providedImageHashes,providerId,modelId,adapterKind:selector?.kind??String(executionAdapterRaw)}).catch(()=>console.warn("[image-input] delivery receipt unavailable; specialist completion remains held"));
     endTimer();
   } catch (err) {
     endTimer();

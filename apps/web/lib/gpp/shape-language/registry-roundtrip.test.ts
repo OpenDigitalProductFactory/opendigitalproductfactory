@@ -40,10 +40,10 @@ import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prio
 import { getWorkShape, listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
 import { serializeStableJson } from "../../../scripts/registry-generator-support";
-import { decompile } from "./decompile";
-import { lowerToDefinition } from "./emit";
-import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
-import { legacyDroppedFields, legacyProjection } from "./legacy";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { lowerToDefinition } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { gppShapeDocumentSchema, type GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
+import { legacyDroppedFields, legacyProjection } from "@dpf/validators/gpp/legacy";
 import { buildRatificationReport } from "./ratification-report";
 import { reversedKeys, seedFor, SHUFFLE_SALTS, shuffledKeys } from "./__fixtures__/key-order";
 

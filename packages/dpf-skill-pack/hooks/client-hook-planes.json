@@ -1,0 +1,84 @@
+{
+  "$comment": "Which hooks.json entries each client runs (BI-742D707B). hooks.json stays the one roster; this file holds only per-client delivery, matcher aliases, bundled substitutes and exclusions. Exclusion keys are Event:script (or Event:* for a whole event), and every one carries its reason. Client keys are the client kinds toolchain_convergence.DISCOVERY finds, plus grok-sandbox for Build Studio dispatch; a test fails when the two lists differ. update_agent_toolchain.py (host) and hooks/lib/grok-hook-plane.mjs (Build Studio sandbox, no Python there) both build Grok's dpf-guards.json from hooks.json minus these, and a test pins their output equal. The generated hooks/README.md renders the per-client table from this file. What a client was observed to do lives in ../client-capabilities.json; this file is what DPF chooses to wire.",
+  "schemaVersion": 1,
+  "clients": {
+    "claude-code": {
+      "displayName": "Claude Code",
+      "plane": "plugin hooks/hooks.json",
+      "excluded": {}
+    },
+    "codex": {
+      "displayName": "Codex",
+      "plane": "plugin hooks/hooks.json from the Codex plugin cache (~/.codex/hooks.json only as the blocking-guard fallback)",
+      "excluded": {
+        "WorktreeCreate:*": "Codex does not run it: on 2026-10-14 its hook trust state listed 33 of the 34 entries and none for WorktreeCreate."
+      }
+    },
+    "grok": {
+      "displayName": "Grok",
+      "plane": "~/.grok/hooks/dpf-guards.json, generated from hooks.json (Grok ignores plugin-bundled hooks, BI-883FC2FC)",
+      "matchers": {
+        "Bash": "Shell|Bash|run_terminal_command|run_terminal_cmd",
+        "AskUserQuestion": "AskQuestion|AskUserQuestion|ask_user_question",
+        "Write|Edit|MultiEdit": "Write|Edit|MultiEdit|write|search_replace"
+      },
+      "timeouts": {
+        "PreToolUse": 15,
+        "PostToolUse": 15,
+        "SessionStart": 30,
+        "SessionEnd": 60,
+        "Stop": 60
+      },
+      "bundled": {
+        "grok-session-start.mjs": {
+          "event": "SessionStart",
+          "replaces": [
+            "process-spine-health-check.mjs",
+            "governance-freshness-check.mjs",
+            "toolchain-freshness.mjs"
+          ],
+          "reason": "grok-session-start.mjs runs these after probing which Grok plugins are active, so process-spine can report exposed skills honestly.",
+          "purpose": "Run the DPF session checks Grok needs at start"
+        }
+      },
+      "excluded": {
+        "PreToolUse:ux-fit-precheck.mjs": "Advisory precheck. Grok's PreToolUse has no non-blocking channel, so context-only output cannot reach the agent.",
+        "PreToolUse:spec-plan-doc-precheck.mjs": "Advisory precheck. Grok's PreToolUse has no non-blocking channel, so context-only output cannot reach the agent.",
+        "PreToolUse:design-grounding-precheck.mjs": "Advisory precheck. Grok's PreToolUse has no non-blocking channel, so context-only output cannot reach the agent.",
+        "PreToolUse:tool-economy-precheck.mjs": "Advisory precheck. Grok's PreToolUse has no non-blocking channel, so context-only output cannot reach the agent.",
+        "SessionStart:pretooluse-guard-selftest.mjs": "Probes the Claude deny contract and the plugin hooks.json commands; neither is Grok's plane or envelope.",
+        "WorktreeCreate:*": "No WorktreeCreate event is known for Grok (none is recorded in client-capabilities.json)."
+      }
+    },
+    "grok-sandbox": {
+      "displayName": "Grok (Build Studio sandbox)",
+      "plane": "/home/node/.grok/hooks/dpf-guards.json in the sandbox, generated at each dispatch from the workspace pack by hooks/lib/grok-hook-plane.mjs",
+      "sameAs": "grok"
+    },
+    "antigravity": {
+      "displayName": "Antigravity",
+      "plane": null,
+      "excludedAll": "No hook plane is proven for Antigravity (client-capabilities.json hookPlane unproven); nothing is wired until a probe is recorded."
+    },
+    "vscode": {
+      "displayName": "VS Code",
+      "plane": null,
+      "excludedAll": "No DPF hook adapter: VS Code does not load the pack (client-capabilities.json loadsPack false). Discovery reports it unproven."
+    },
+    "cursor": {
+      "displayName": "Cursor",
+      "plane": null,
+      "excludedAll": "No DPF hook adapter for Cursor yet. Discovery reports it unproven."
+    },
+    "gemini-cli": {
+      "displayName": "Gemini CLI",
+      "plane": null,
+      "excludedAll": "No DPF hook adapter for Gemini CLI yet. Discovery reports it unproven."
+    },
+    "opencode": {
+      "displayName": "OpenCode",
+      "plane": null,
+      "excludedAll": "No DPF hook adapter for OpenCode yet. Discovery reports it unproven."
+    }
+  }
+}

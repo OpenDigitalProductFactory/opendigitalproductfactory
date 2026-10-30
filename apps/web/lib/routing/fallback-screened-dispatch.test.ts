@@ -145,6 +145,14 @@ beforeEach(() => {
 });
 
 describe("screened fallback dispatch", () => {
+  it("preserves the server-bound native session through fallback dispatch",async()=>{
+    const mintReadOnlySession=vi.fn(async()=>"test-session");
+    const mcpSession={userId:"human",mintReadOnlySession};
+    mocks.callProvider.mockResolvedValue({content:"review",providerId:"openai",modelId:"model1",toolCalls:[],usage:{inputTokens:1,outputTokens:1}});
+    await callWithFallbackChain(makeDecision("prov1","model1"),[{role:"user",content:"Review prototype"}],"system",undefined,undefined,undefined,mcpSession);
+    expect(mocks.callProvider.mock.calls[0]?.[7]).toBe(mcpSession);
+    expect(mintReadOnlySession).not.toHaveBeenCalled();
+  });
   it("requires a data-screen receipt before governed inference dispatch", async () => {
     await expect(
       callWithFallbackChain(

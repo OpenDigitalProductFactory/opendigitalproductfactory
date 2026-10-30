@@ -67,7 +67,7 @@ export async function automaticReviewerRecoveryWait(row: {
 export async function healParkedReviewFromReceipt(row: {
   taskRunId: string; status: string; updatedAt: Date; progressPayload: unknown; a2aMetadata: unknown;
 }): Promise<boolean> {
-  if (row.status !== "input-required" && row.status !== "submitted") return false;
+  if (!["input-required", "submitted", "failed"].includes(row.status)) return false;
   const metadata = record(row.a2aMetadata);
   if (metadata?.["trigger"] !== "external-mcp") return false;
   const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
@@ -301,6 +301,8 @@ const MAX_DISPATCH_ATTEMPTS = 5;
  * the TaskRun CAS still permits only one execution winner.
  */
 export async function reconcilePersistedRemoteTaskDispatches(input?: {
+  /** Server-owned exact task after current caller and immutable scope validation. */
+  taskRunId?: string;
   now?: Date;
   limit?: number;
   includeOrdinary?: boolean;
@@ -335,7 +337,9 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     progressPayload: { path: ["resourceWait", "kind"], equals: "provider-capacity" },
   };
   const missingReviewerReceipt: Prisma.TaskRunWhereInput = {
-    status: "input-required",
+    // Failed writer waits can hold a committed exact-task receipt too. Only
+    // input-required waits remain eligible for automatic inference recovery.
+    status: { in: ["input-required", "failed"] },
     archivedAt: null,
     actionEnvelopes: { none: {} },
     a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
@@ -348,6 +352,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
   const rows = await prisma.taskRun.findMany({
     where: {
       updatedAt: { lt: cutoff },
+      ...(input?.taskRunId ? { taskRunId: input.taskRunId } : {}),
       OR: [
         durableSubmitted,
         durableAdmitting,

@@ -63,11 +63,15 @@ import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
 import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
+import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { isRecord } from "@/lib/shared/coerce";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  authorityDecisionId?: string;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -141,6 +145,13 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
 }
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions") {
+    return { success: false, error: "invalid_view", message: "view must be instances or definitions." };
+  }
+  if (params.view === "definitions") {
+    const { listReviewDefinitions } = await import("./list-review-definitions");
+    return listReviewDefinitions(params, userId, context);
+  }
   const status = stringParam(params, "status");
   const decisionScope = stringParam(params, "decisionScope");
   const portfolioRole = stringParam(params, "portfolioRole");
@@ -218,6 +229,7 @@ export async function claimCapsuleScopeTool(
   }
 
   const force = params["force"] === true;
+  const qualificationAdmissionToken = stringParam(params, "qualificationAdmissionToken") ?? undefined;
   const db = workCapsuleDb();
   let renewedCapsule;
   try {
@@ -231,6 +243,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        qualificationAdmissionToken,
         buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
@@ -238,6 +251,21 @@ export async function claimCapsuleScopeTool(
     const refusal = scopeClaimRefusal(error);
     if (refusal) return refusal;
     throw error;
+  }
+
+  if (qualificationAdmissionToken) {
+    const workspace = isRecord(renewedCapsule.workspaceState) ? renewedCapsule.workspaceState : {};
+    const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token) : null;
+    if (admission?.ok && admission.data.binding.executorMode === "native-edge") {
+      const currentActor = await actor(userId, context);
+      if (!currentActor.principalId) throw new Error("Native qualification requires an accountable principal.");
+      const queued = await materializeQualificationWindowsAction({ db: workCapsuleDb() as never,
+        capsuleId, requestedByUserId: userId, requestedByPrincipalId: currentActor.principalId,
+        authorityDecisionId: context?.authorityDecisionId });
+      if (!queued.ok) throw new Error(`Native qualification was not queued: ${queued.reason}`);
+      renewedCapsule = await renewLeaseAfterCapsuleWrite(capsuleId, currentActor);
+    }
   }
 
   return {
@@ -510,6 +538,13 @@ export async function heartbeatCapsuleTool(
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  let checkpoint;
+  if (params.checkpoint !== undefined) {
+    const { parseExecutorCheckpoint } = await import("./executor-checkpoint");
+    const parsed = parseExecutorCheckpoint(params.checkpoint);
+    if (!parsed.ok) return { success: false, error: "invalid_checkpoint", message: `${parsed.error} The lease was not renewed.` };
+    checkpoint = parsed.data;
+  }
 
   let capsule;
   try {
@@ -517,6 +552,7 @@ export async function heartbeatCapsuleTool(
       db: workCapsuleDb(),
       capsuleId,
       actor: await actor(userId, context),
+      checkpoint,
     });
   } catch (error) {
     if (!(error instanceof WorkroomLeaseHeldError)) throw error;
@@ -623,6 +659,7 @@ export async function recordCapsuleEvidenceTool(
       capsuleId,
       evidence,
       actor: currentActor,
+      taskRunId: context?.taskRunId ?? null,
     }),
   });
 

@@ -38,8 +38,25 @@ developer host. Canonical TypeScript, Vitest, Next build, Docker build,
 preview, inference, and semantic-review entry points declare a resource class
 through `scripts/host-resource-runner.mjs`. The runner requests the durable
 `host-heavy-resource` lease before starting its child, supervises that child
-and its descendants, renews while it runs, and releases only after the owned
-process group exits.
+and its descendants, and renews while it runs. When supervision ends, it stops
+renewal and reads that exact persisted reservation once. It does not request
+generic immediate release of a process-owned reservation. Natural expiry uses
+the existing reaper cadence; elapsed time alone never proves settlement.
+
+The runner reports command outcome separately from reservation state. Active or
+queued is pending; an unavailable or mismatched read is unknown. A matching
+persisted terminal row with no active slot proves reservation settlement only,
+never command success or descendant exit. Existing immediate-release authority
+checks and pending approval history remain intact.
+
+Qualification verification is currently unavailable. A signed token and host
+lease can bind admission, but the runner submits its result with the caller's
+ordinary MCP credential. Because the server cannot distinguish that submission
+from a direct forged success, terminal recovery does not issue qualification
+tokens and `record_execution_evidence` refuses qualification payloads. The
+native Edge action channel is separately authenticated but has no bounded
+qualification-test action. Ordinary host-resource commands retain the
+coordination contract above and produce no qualification evidence.
 
 The versioned profile is
 `apps/web/lib/nonprod/host-resource-profiles.json`. On a host with at most 64

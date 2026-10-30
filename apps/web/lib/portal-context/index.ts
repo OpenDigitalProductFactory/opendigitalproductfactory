@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { getRouteDataContext as getDefaultRouteDataContext } from "@/lib/route-context";
 
 import {
@@ -159,7 +159,18 @@ export async function resolvePortalContextEnvelopeUncached(
     resolverTimeoutMs,
   );
   attention.push(...promotionReviewerGrantKeysResult.attention);
+  const roomActionResult = await resolveSource("room-authority", (async () => {
+    const capsule = workProjection.work.capsule;
+    if (!capsule || capsule.isLeaseExpired) return false;
+    const room = await db.workroom.findUnique({ where: { capsuleId: capsule.capsuleId }, select: { id: true } });
+    if (!room) return false;
+    const { resolveHumanWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+    const access = await resolveHumanWorkroomAccess({ userId, workroomId: room.id, requested: "action" }, db as unknown as Prisma.TransactionClient);
+    return access.decision.level === "action";
+  })(), false, resolverTimeoutMs);
+  attention.push(...roomActionResult.attention);
   const authority = resolvePortalAuthority({
+    roomActionAccess: roomActionResult.value,
     user,
     userPrincipalId: principalId,
     platformRole,

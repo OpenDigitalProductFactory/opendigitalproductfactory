@@ -53,6 +53,17 @@
         "label": "Not seen this week",
         "explanation": "It has not connected in the last 7 days, so its current copy is unknown."
       }
-    }
+    },
+    "why": "Why: {$reasons}.",
+    "hostAgent": {
+      "ok": "This computer updates its agent tools on its own.",
+      "failed": "This computer's automatic update has been failing.",
+      "needs-operator": "This computer's automatic update is waiting for a person.",
+      "opted-out": "Automatic updates are turned off on this computer.",
+      "offline": "This computer could not reach this portal on its last update check.",
+      "ahead-of-portal": "This computer runs a newer copy of the tools from its source checkout than this portal ships.",
+      "busy": "This computer is updating its agent tools now."
+    },
+    "hostAgentSince": "Since {$date}."
   }
 }

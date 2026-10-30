@@ -13,6 +13,13 @@ const principalLinking = vi.hoisted(() => ({
   syncUserPrincipal: vi.fn(),
 }));
 vi.mock("@/lib/identity/principal-linking", () => principalLinking);
+// BI-957915CB: a revision names a document, so the acting person must be able to read it.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
+vi.mock("@/lib/documents/document-store", () => ({
+  readableDocumentIds: vi.fn(async (ids: string[]) => new Set(ids)),
+}));
 
 import { documentPack } from "./document-pack";
 import { DOCUMENT_FAMILY_TOOL_GRANTS } from "./document-family-tools";

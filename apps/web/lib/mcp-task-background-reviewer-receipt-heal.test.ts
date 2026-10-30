@@ -172,3 +172,11 @@ describe("BI-2E479619 AC-4 stranded reviewer runs heal from their persisted rece
     expect(db.update).not.toHaveBeenCalled();
   });
 });
+
+// A provider/settlement failure must not hide a receipt already committed by this task.
+it("heals a failed exact-task review without another dispatch", async () => {
+  db.executions = [nativeWriter(true)];
+  expect(await healParkedReviewFromReceipt({ ...stranded, status: "failed" })).toBe(true);
+  expect(completedWrites()).toHaveLength(1);
+  expect(queue.send).not.toHaveBeenCalled();
+});

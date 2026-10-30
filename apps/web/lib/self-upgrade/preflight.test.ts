@@ -1,10 +1,155 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
-import { refreshMigrationHandoffAfterDrain, resolveReadinessBackupHostPath, runCandidatePreflight, type InstallStateMigrationHandoff } from "./preflight";
+import { refreshMigrationHandoffAfterDrain, resolveReadinessBackupHostPath, runCandidatePreflight, runReassessmentCandidatePreflight, type InstallStateMigrationHandoff } from "./preflight";
 
 const fsMocks = vi.hoisted(() => ({ readFile: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ readFile: fsMocks.readFile }));
+
+describe("reassessment candidate compatibility", () => {
+  const configDigest = `sha256:${"d".repeat(64)}`;
+  const sourceSha = "a".repeat(40);
+  const info = { schemaVersion: 1, sourceSha, sourceContentHash: "b".repeat(64), contractSha256: "c".repeat(64),
+    owners: Object.fromEntries(["transport", "approval", "worker", "writer"].map(owner => [owner, { version: 2, sourceSha256: "e".repeat(64) }])) };
+  const ports = (override: { probe?: unknown; inspection?: string; exitCode?: number } = {}) => {
+    const runDocker = vi.fn(async (args: string[]) => args[0] === "image"
+      ? { exitCode: override.exitCode ?? 0, stdout: override.inspection ?? `${configDigest}\n`, stderr: "" }
+      : { exitCode: override.exitCode ?? 0, stdout: JSON.stringify(override.probe ?? info), stderr: "" });
+    return { runId: "SUR-COMPAT", targetSha: sourceSha, composeProject: "actual-project", stage: "preflight" as const,
+      failRun: vi.fn(), emitFailure: vi.fn(), recordCompatibility: vi.fn(), runDocker };
+  };
+  it("resolves the source candidate once and probes only its immutable config digest", async () => {
+    const p = ports();
+    const result = await runReassessmentCandidatePreflight(p);
+    expect(result).toEqual({ ok: true, data: { proof: { ...info, configDigest } } });
+    expect(p.runDocker.mock.calls.filter(([args]) => args[0] === "image").map(([args]) => args)).toEqual([
+      ["image", "inspect", "--format", "{{.Id}}", "actual-project-portal"],
+      ["image", "inspect", "--format", "{{.Id}}", "actual-project-portal"],
+    ]);
+    const command = p.runDocker.mock.calls.find(([args]) => args[0] === "run")![0];
+    expect(command).toEqual(expect.arrayContaining(["--network", "none", "--read-only", configDigest, "/app/scripts/reassessment-capability-probe.mjs"]));
+    expect(command).not.toContain("actual-project-portal");
+    expect(p.recordCompatibility).toHaveBeenCalledWith("SUR-COMPAT", { stage: "preflight", observedAt: expect.any(String), proof: { ...info, configDigest } });
+    expect(p.failRun).not.toHaveBeenCalled();
+  });
+  it("uses the default compose project and refuses tag movement before evidence is recorded", async () => {
+    const p = ports();
+    p.runDocker.mockResolvedValueOnce({ exitCode: 0, stdout: configDigest, stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(info), stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: `sha256:${"f".repeat(64)}`, stderr: "" });
+    expect(await runReassessmentCandidatePreflight({ ...p, composeProject: undefined })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+    expect(p.runDocker).toHaveBeenCalledWith(["image", "inspect", "--format", "{{.Id}}", "dpf-portal"]);
+    expect(p.recordCompatibility).not.toHaveBeenCalled();
+  });
+  it("probes a release's frozen config digest without resolving any moving image tag", async () => {
+    const p = ports();
+    const release = { tag: "v2.0.0", ghcrOwner: "owner", channelDigest: `sha256:${"1".repeat(64)}`, platformManifestDigest: `sha256:${"2".repeat(64)}`, configDigest,
+      platformOs: "linux" as const, platformArchitecture: "amd64" };
+    expect(await runReassessmentCandidatePreflight({ ...p, stage: "swap", release })).toMatchObject({ ok: true });
+    expect(p.runDocker.mock.calls.flatMap(([args]) => args)).not.toContain("actual-project-portal");
+    expect(p.runDocker.mock.calls.flatMap(([args]) => args)).not.toContain("ghcr.io/owner/dpf-portal:v2.0.0");
+    expect(p.recordCompatibility).toHaveBeenCalledWith("SUR-COMPAT", expect.objectContaining({ stage: "swap" }));
+  });
+  // BI-A9BA9583: Docker's containerd image store names a pulled image by its
+  // index (channel) digest, so `--pull never <configDigest>` finds nothing and
+  // every release upgrade was refused. Resolve the engine's id through the
+  // release's immutable references, exactly as promote.sh accepts it.
+  describe("a release on either Docker image store", () => {
+    const channelDigest = `sha256:${"1".repeat(64)}`, platformManifestDigest = `sha256:${"2".repeat(64)}`;
+    const release = { tag: "v2.0.0", ghcrOwner: "owner", channelDigest, platformManifestDigest, configDigest,
+      platformOs: "linux" as const, platformArchitecture: "amd64" };
+    const engine = (known: Record<string, string>, probe: unknown = info) => {
+      const runDocker = vi.fn(async (args: string[]) => {
+        if (args[0] === "image") {
+          const id = known[args[4]!];
+          return id ? { exitCode: 0, stdout: `${id}
+`, stderr: "" } : { exitCode: 1, stdout: "", stderr: "No such image" };
+        }
+        return { exitCode: 0, stdout: JSON.stringify(probe), stderr: "" };
+      });
+      return { ...ports(), runDocker };
+    };
+
+    it("probes by the channel digest the containerd store names the image by", async () => {
+      const p = engine({ [`ghcr.io/owner/dpf-portal@${channelDigest}`]: channelDigest });
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toEqual({ ok: true, data: { proof: { ...info, configDigest: channelDigest } } });
+      const command = p.runDocker.mock.calls.find(([args]) => args[0] === "run")![0];
+      expect(command).toEqual(expect.arrayContaining(["--pull", "never", channelDigest]));
+      expect(p.runDocker.mock.calls.flatMap(([args]) => args)).not.toContain("ghcr.io/owner/dpf-portal:v2.0.0");
+    });
+
+    it("probes by the config digest the classic store names the image by", async () => {
+      const p = engine({ [configDigest]: configDigest });
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toEqual({ ok: true, data: { proof: { ...info, configDigest } } });
+    });
+
+    it("refuses an engine id that is none of the release's frozen digests", async () => {
+      const p = engine({ [`ghcr.io/owner/dpf-portal@${channelDigest}`]: `sha256:${"9".repeat(64)}` });
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+      expect(p.runDocker.mock.calls.some(([args]) => args[0] === "run")).toBe(false);
+      expect(p.recordCompatibility).not.toHaveBeenCalled();
+    });
+
+    it("refuses a release image that is not present locally", async () => {
+      const p = engine({});
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+      expect(p.recordCompatibility).not.toHaveBeenCalled();
+    });
+
+    // BI-578131A3: SUR-F2A0D477's run row said only "reassessment-compatibility-unproven";
+    // Docker's "No such image" was discarded and the cause took a manual repro.
+    it("names every reference it tried and Docker's answer in the run's failure log", async () => {
+      const p = engine({ [`ghcr.io/owner/dpf-portal@${channelDigest}`]: `sha256:${"9".repeat(64)}` });
+      await runReassessmentCandidatePreflight({ ...p, release });
+      const [, log, reason] = p.failRun.mock.calls[0]!;
+      expect(reason).toBe("reassessment-compatibility-unproven: release-image-unresolved");
+      expect(log).toContain(`${configDigest} -> No such image`);
+      expect(log).toContain(`ghcr.io/owner/dpf-portal@${channelDigest} -> foreign id sha256:${"9".repeat(64)}`);
+    });
+
+    it("carries the probe's exit code and stderr when the image will not run", async () => {
+      const p = engine({ [configDigest]: configDigest });
+      p.runDocker.mockImplementation(async (args: string[]) => args[0] === "image"
+        ? { exitCode: 0, stdout: configDigest, stderr: "" }
+        : { exitCode: 125, stdout: "", stderr: `docker: Error response from daemon: No such image: ${configDigest}` });
+      await runReassessmentCandidatePreflight({ ...p, release });
+      const [, log, reason] = p.failRun.mock.calls[0]!;
+      expect(reason).toBe("reassessment-compatibility-unproven: probe-exit-125");
+      expect(log).toContain("No such image");
+    });
+  });
+
+  it("refuses a release missing its frozen digest instead of falling back to a source image", async () => {
+    const p = ports();
+    expect(await runReassessmentCandidatePreflight({ ...p, release: {} as never })).toMatchObject({ ok: false });
+    expect(p.runDocker).not.toHaveBeenCalled(); expect(p.recordCompatibility).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["missing image identity", { inspection: "" }, "source-image-unresolved"],
+    ["mutable image identity", { inspection: "latest" }, "source-image-unresolved"],
+    ["failed observation", { exitCode: 1 }, "source-image-unresolved"],
+    ["different source", { probe: { ...info, sourceSha: "f".repeat(40) } }, "probe-source-mismatch"],
+    ["missing owner", { probe: { ...info, owners: {} } }, "probe-output-invalid"],
+    ["old worker", { probe: { ...info, owners: { ...info.owners, worker: { version: 1, sourceSha256: "e".repeat(64) } } } }, "probe-output-invalid"],
+  ])("refuses %s before recording proof, naming the cause", async (_name, override, subcode) => {
+    const p = ports(override);
+    expect(await runReassessmentCandidatePreflight(p)).toEqual({ ok: false, reason: "reassessment-compatibility-unproven" });
+    expect(p.recordCompatibility).not.toHaveBeenCalled();
+    expect(p.failRun).toHaveBeenCalledWith("SUR-COMPAT", expect.stringMatching(new RegExp(`^reassessment-compatibility-unproven: ${subcode}`)),
+      `reassessment-compatibility-unproven: ${subcode}`);
+    expect(p.emitFailure).toHaveBeenCalledWith("SUR-COMPAT");
+  });
+  it("refuses unavailable evidence persistence instead of admitting an unrecorded candidate", async () => {
+    const p = ports(); p.recordCompatibility.mockRejectedValueOnce(new Error("unavailable"));
+    expect(await runReassessmentCandidatePreflight(p)).toMatchObject({ ok: false });
+    expect(p.failRun).toHaveBeenCalledExactlyOnceWith("SUR-COMPAT", "reassessment-compatibility-unproven: proof-unrecorded: unavailable",
+      "reassessment-compatibility-unproven: proof-unrecorded");
+  });
+  it("dry run performs no image or proof effects", async () => {
+    const p = ports(); expect(await runReassessmentCandidatePreflight({ ...p, dryRun: true })).toEqual({ ok: true, data: {} });
+    expect(p.runDocker).not.toHaveBeenCalled(); expect(p.recordCompatibility).not.toHaveBeenCalled();
+  });
+});
 
 describe("candidate signed install-state handoff", () => {
   it("resolves a published release promoter without attempting a source build", async () => {

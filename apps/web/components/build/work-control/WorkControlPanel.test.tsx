@@ -19,6 +19,7 @@ describe("WorkControlPanel", () => {
           capsuleId: "WC-1",
           title: "Adopt work",
           objective: "Deliver the governed outcome",
+          health: "working",
           group: "working",
           status: "working",
           statusIntent: "info",

@@ -18,10 +18,12 @@
  * Pure: rooms and stage telemetry in, numbers out.
  */
 import { computeFlowDurations, percentile } from "@/lib/queue/flow-metrics";
+
+import { compareStageEvents } from "./workroom-stage-telemetry";
 import { reconstructTimelines, type QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 import { PORTFOLIO_ROLES, isPortfolioRole, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 
-import { classifyDriveSegment } from "./workroom-flow-state";
+import { classifyDriveSegment, IDLE_HOLD_LANES } from "./workroom-flow-state";
 import { holdCauseTag, WORKROOM_STAGE_QUEUE_PREFIX, type DriveObservation } from "./workroom-stage-telemetry";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -100,7 +102,21 @@ type Run = {
   /** No longer in flow: finished, or cancelled when a new cycle superseded it. */
   closedAt: Date | null;
   success: boolean;
+  /** Each event's time, oldest first, and whether it left the run parked in an idle hold (no demand). */
+  marks: { at: number; idle: boolean }[];
 };
+
+/** In flow at `to`: entered before it, not closed by it, and not parked in an idle hold then. */
+function inFlowAt(run: Run, to: Date): boolean {
+  const t = to.getTime();
+  if (run.startedAt.getTime() >= t || (run.closedAt && run.closedAt.getTime() < t)) return false;
+  let idle = false;
+  for (const mark of run.marks) {
+    if (mark.at >= t) break;
+    idle = mark.idle;
+  }
+  return !idle;
+}
 
 function runsFrom(rows: readonly QueueTelemetryRow[]): Map<string, Run> {
   const byItem = new Map<string, QueueTelemetryRow[]>();
@@ -111,7 +127,7 @@ function runsFrom(rows: readonly QueueTelemetryRow[]): Map<string, Run> {
   }
   const runs = new Map<string, Run>();
   for (const [itemId, itemRows] of byItem) {
-    const ordered = [...itemRows].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    const ordered = [...itemRows].sort(compareStageEvents);
     const entered = ordered.find((row) => row.transition === "enqueued");
     const last = ordered.at(-1)!;
     // A run is over when its newest event finishes a step and nothing re-opened;
@@ -125,6 +141,7 @@ function runsFrom(rows: readonly QueueTelemetryRow[]): Map<string, Run> {
       endedAt: ended ? last.occurredAt : null,
       closedAt: ended || cancelled ? last.occurredAt : null,
       success: ended && last.outcome !== "failed",
+      marks: ordered.map((row) => ({ at: row.occurredAt.getTime(), idle: row.transition === "held" && !!row.laneKey && IDLE_HOLD_LANES.has(row.laneKey) })),
     });
   }
   return runs;
@@ -271,9 +288,8 @@ export function computePortfolioFlow(input: {
     const weekEnds = Array.from({ length: TREND_WEEKS }, (_, i) => new Date(now.getTime() - (TREND_WEEKS - 1 - i) * 7 * DAY_MS));
     const weekOf = (to: Date) => new Date(to.getTime() - 7 * DAY_MS);
     flow.weeklyFlowTimeP50Ms = weekEnds.map((to) => percentile(durationsIn(weekOf(to), to), 0.5));
-    // In flow at a week's end: entered before it, not closed by it.
-    flow.weeklyFlowLoad = weekEnds.map((to) => bucketRuns.filter((run) =>
-      run.startedAt.getTime() < to.getTime() && (!run.closedAt || run.closedAt.getTime() >= to.getTime())).length);
+    // In flow at a week's end: entered before it, not closed by it, not parked idle.
+    flow.weeklyFlowLoad = weekEnds.map((to) => bucketRuns.filter((run) => inFlowAt(run, to)).length);
     flow.weeklyThroughput = weekEnds.map((to) => successIn(weekOf(to), to));
     flow.weeklyVersionChanges = weekEnds.map((to) => replacements
       .filter((version) => version.bucket === key && version.at >= weekOf(to).getTime() && version.at < to.getTime())

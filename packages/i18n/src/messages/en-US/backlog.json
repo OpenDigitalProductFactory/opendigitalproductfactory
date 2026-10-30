@@ -1,0 +1,8 @@
+{
+  "intake": {
+    "outcomeLabel": "Outcome",
+    "outcomePlaceholder": "What will be true, and for whom, when this is done?",
+    "outcomeHint": "Optional. Left blank, a draft is written for you. Delivery closes the item.",
+    "outcomeDerivedHint": "Draft written by DPF from the title. Edit it to say what will be true, and for whom."
+  }
+}

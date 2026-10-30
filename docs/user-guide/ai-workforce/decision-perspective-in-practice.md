@@ -23,7 +23,7 @@ The three scopes are the same engine pointed at three different bodies of doctri
 | **WSID** | *What Should I Do?* | "What would a **competent professional in this role** do here?" | A per-profession, source-traced corpus |
 
 All three share the inner scoring engine
-([`apps/web/lib/decision/option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/option-scoring.ts)),
+([`packages/validators/src/judgment/option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/validators/src/judgment/option-scoring.ts)),
 the four-outcome contract (`recommend` / `arbitrate` / `escalate` / `defer`), and the same audit
 ledger (`DecisionInteraction`). The worked numbers below are **representative illustrations of the
 real math**, not transcripts of a single captured run — they show how the contribution ledger adds

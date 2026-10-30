@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import * as pregate from "./pregate.mjs";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
+import { isolatedGateFixtureEnvironment, makeTempWorktree, startGateFixtureMcp } from "./fixtures/gate-worktree.mjs";
+import { exitCodeForVerdict } from "./lib/pregate-status.mjs";
 
 test("wrapped pregate stops only when stdout is captured and no escape hatch is set", () => {
   const captured = { stdoutIsTTY: false, env: {}, args: [] };
@@ -71,6 +76,7 @@ import {
   resolvePregateGateContext,
   reviveInterruptedQueuedGateState,
   shouldReuseExistingPass,
+  shouldTakeReducedTier,
   shouldUseShell,
   stripForceRerunFlag,
 } from "./pregate.mjs";
@@ -259,7 +265,7 @@ test("queued gate survival is bounded by time rather than an arbitrary revival c
     args: ["--lease-wait-seconds", "7200"],
     useShell: false,
     now: () => nowMs,
-    spawnSyncImpl: (_command, args) => {
+    runGateImpl: async (_command, args) => {
       invocations.push(args);
       nowMs += 300_000;
       return results.shift();
@@ -280,6 +286,49 @@ test("queued gate survival is bounded by time rather than an arbitrary revival c
   assert.equal(revivals.length, 7);
   assert.equal(recovered, false);
   assert.equal(invocations.at(-1).at(-1), "5100");
+});
+
+test("explicit foreground cancellation waits for close and recovery without reviving queued work", async () => {
+  const signals = new EventEmitter();
+  const child = new EventEmitter(); child.exitCode = null; child.signalCode = null;
+  child.kill = () => assert.fail("one Windows console cancellation must not be forwarded as hard kill");
+  let reviveCalls = 0, recovered = false;
+  const result = await runGateWithQueuedRevival({ signalSource: signals,
+    runGateImpl: (command, args, options) => {
+      const pending = pregate.runForegroundGate(command, args, { ...options, platform: "win32",
+        spawnImpl: () => child });
+      signals.emit("SIGINT");
+      assert.equal(options.signal.aborted, true);
+      setImmediate(() => { child.exitCode = 87; child.emit("close", 87, null); });
+      return pending;
+    },
+    reviveInterruptedQueuedGateImpl: async () => { reviveCalls++; return { revived: true }; },
+    recoverInterruptedGateImpl: async ({ result: closed }) => {
+      assert.equal(closed.status, 87);
+      assert.equal(signals.listenerCount("SIGINT"), 1);
+      signals.emit("SIGINT"); // Repeated cancellation cannot kill recovery.
+      await new Promise(resolve => setImmediate(resolve)); recovered = true;
+    }, stderr: { write() {} } });
+  assert.equal(result.result.status, 87); assert.equal(recovered, true);
+  assert.equal(reviveCalls, 0); assert.equal(signals.listenerCount("SIGINT"), 0);
+  assert.equal(signals.listenerCount("SIGTERM"), 0);
+});
+
+for (const observedExit of [null, 87]) test("foreground cancellation requires close even with exit " + observedExit,
+  { timeout: 1000 }, async () => {
+  const signals = new EventEmitter(); const child = new EventEmitter();
+  child.exitCode = observedExit; child.signalCode = null;
+  let killed = 0;
+  child.kill = signal => { assert.equal(signal, "SIGKILL"); killed++; return true; };
+  const result = await runGateWithQueuedRevival({ signalSource: signals,
+    runGateImpl: (command, args, options) => {
+      const pending = pregate.runForegroundGate(command, args, { ...options, platform: "win32",
+        spawnImpl: () => child, cancellationGraceMs: 1, closeGraceMs: 1 });
+      signals.emit("SIGINT"); return pending;
+    }, recoverInterruptedGateImpl: async () => assert.fail("unobserved closure cannot release a running owner"),
+    stderr: { write() {} } });
+  assert.equal(killed, observedExit === null ? 1 : 0); assert.match(result.result.error.message, /closure|did not close/);
+  assert.equal(signals.listenerCount("SIGINT"), 0);
 });
 
 function shellProbe(status = 0) {
@@ -355,6 +404,48 @@ test("pregate recovery releases an interrupted running gate and marks it INFRAST
   assert.equal(written.gatePassed, false);
   assert.equal(written.leaseEvents.at(-1).type, "pregate_interrupted_gate_recovery");
   assert.equal(written.recovery.reason, "gate-wrapper-exited-before-terminal-state");
+});
+
+test("surviving pregate recovery atomically persists an inconclusive filesystem record", async t => {
+  // This verifies the existing reconciler independently; it cannot stand in for
+  // the real console test or prove that a reconciler survives whole-chain loss.
+  const worktree = makeTempWorktree();
+  const evidence = mkdtempSync(join(tmpdir(), "dpf-recovery-acceptance-"));
+  const git = args => spawnSync("git", args, { cwd: worktree, encoding: "utf8" }).stdout.trim();
+  const branch = git(["branch", "--show-current"]);
+  const sha = git(["rev-parse", "HEAD"]);
+  const stateFile = join(worktree, ".git/dpf-local-ci-gate.json");
+  const state = { branch, sha, status: "running", gatePassed: false, leaseId: "NPEL-FILESYSTEM-FIXTURE",
+    evidenceRecordId: "", evidencePending: false, expiresAt: new Date(Date.now() + 60000).toISOString(),
+    leaseEvents: [{ type: "admitted", at: new Date().toISOString() }] };
+  writeFileSync(stateFile, JSON.stringify(state));
+  const mcp = await startGateFixtureMcp(call => {
+    assert.equal(call.name, "release_nonprod_environment_lease");
+    assert.deepEqual(call.args, { leaseId: state.leaseId });
+    return { success: true };
+  });
+  try {
+    const result = await recoverInterruptedGateState({ stateFile, state, branch, sha,
+      childStatus: WINDOWS_WRAPPER_TERMINATED_STATUS, mcpUrl: mcp.url, bearerToken: "test-token" });
+    assert.equal(result.recovered, true); assert.equal(result.releaseSucceeded, true);
+    const saved = JSON.parse(readFileSync(stateFile, "utf8"));
+    assert.equal(saved.status, "blocked_wrapper_exited");
+    assert.equal(saved.gatePassed, false); assert.equal(saved.evidenceRecordId, "");
+    assert.equal(saved.leaseEvents.at(-1).type, "pregate_interrupted_gate_recovery");
+    assert.equal(mcp.calls.length, 1);
+    const status = spawnSync(process.execPath, [resolve("scripts/pregate-status.mjs"), "--json"], {
+      cwd: worktree, env: isolatedGateFixtureEnvironment(evidence, {}), encoding: "utf8" });
+    const projection = JSON.parse(status.stdout);
+    assert.equal(status.status, exitCodeForVerdict("INCONCLUSIVE"));
+    assert.equal(projection.verdict, "INCONCLUSIVE");
+    assert.equal(projection.headSha, sha); assert.equal(projection.boundSha, sha);
+    assert.equal(projection.gateStatus, saved.status);
+    // Terminal state is idempotent and cannot release again or become a pass.
+    const replay = await recoverInterruptedGateState({ stateFile, state: saved, branch, sha,
+      mcpUrl: mcp.url, bearerToken: "test-token" });
+    assert.equal(replay.recovered, false); assert.equal(mcp.calls.length, 1);
+    writeFileSync(join(evidence, "projection.json"), status.stdout);
+  } finally { await mcp.close(); t.diagnostic("Filesystem recovery evidence retained: " + evidence); }
 });
 
 test("pregate recovery releases an interrupted queued gate as INFRASTRUCTURE, not failed (BI-D088D06D)", async () => {
@@ -683,4 +774,12 @@ test("the force flag is consumed by the wrapper and never forwarded to the gate"
   );
   assert.deepEqual(stripForceRerunFlag([]), []);
   assert.deepEqual(stripForceRerunFlag(["--no-push"]), ["--no-push"]);
+});
+
+test("BI-25CB699C: only a main refresh of a passed published head takes the reduced tier", () => {
+  assert.equal(shouldTakeReducedTier({ classification: "main-refresh" }), true);
+  for (const classification of ["authored-correction", "unchanged-head", "commit-metadata", null]) {
+    assert.equal(shouldTakeReducedTier({ classification }), false, String(classification));
+  }
+  assert.equal(shouldTakeReducedTier({ args: ["--force-rerun"], classification: "main-refresh" }), false);
 });
