@@ -29,6 +29,7 @@ import path from "node:path";
 import { mcpCall } from "./mcp-client.mjs";
 import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./mcp-credential.mjs";
 import { gitTextOrNull } from "./git.mjs";
+import { isMcpCredentialRefusal } from "../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs";
 
 export const DEFAULT_MCP_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 /** Must match packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs. */
@@ -259,7 +260,7 @@ export async function bindWorktreeToWorkroom({
     } catch (err) {
       // HTTP denials prove the authority answered; recovery must not treat
       // them as an outage and enter the provisioning break-glass path.
-      if (["mcp_authentication_failed", "mcp_authorization_failed"].includes(err?.code)) {
+      if (isMcpCredentialRefusal(err)) {
         return { status: "refused", code: err.code, reason: "The existing MCP identity was refused; use its governed credential or grant remedy." };
       }
       return { status: "unavailable", reason: err?.message ?? String(err) };

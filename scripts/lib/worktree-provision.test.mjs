@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { bindWorktreeToWorkroom } from "./workroom-bind.mjs";
+import { mcpCall } from "./mcp-client.mjs";
+import { createClientCredentialsBearer, exchangeClientCredentials } from "./mcp-credential.mjs";
+
 import { BREAK_GLASS_ENV, provisionWorktree } from "./worktree-provision.mjs";
 
 // BI-D1FB8C4D AC-WPG-6..8: admit and bind BEFORE the worktree exists, fail closed,
@@ -99,4 +103,54 @@ test("a failed identity re-bind after creation is a warning: the claim already e
   assert.equal(out.status, "created");
   assert.match(out.warning, /observation failed/);
   assert.deepEqual(calls.map((c) => c[0]), ["bind", "add", "after"]);
+});
+
+for (const [status, oauthError, expectedCode] of [
+  [400, "invalid_client", "mcp_authentication_failed"],
+  [400, "invalid_scope", "mcp_authorization_failed"],
+  [401, "invalid_client", "mcp_authentication_failed"],
+  [403, "access_denied", "mcp_authorization_failed"],
+  [429, "temporarily_unavailable", "mcp_credential_exchange_refused"],
+]) {
+  test(`OAuth ${status}/${oauthError} cannot enter break-glass through the real bearer and binder`, async () => {
+    const env = { DPF_MCP_ENDPOINT: "http://127.0.0.1:1/api/mcp/v1", DPF_MCP_CLIENT_ID: "fixture-client",
+      DPF_MCP_CLIENT_SECRET: "fixture-secret", [BREAK_GLASS_ENV]: "fixture operator recovery" };
+    let exchanges = 0, adoptionRequests = 0;
+    const bearer = createClientCredentialsBearer({ mcpUrl: env.DPF_MCP_ENDPOINT, clientId: "fixture-client", clientSecret: "fixture-secret",
+      exchange: options => exchangeClientCredentials({ ...options, post: async () => {
+        exchanges++;
+        return { status, body: JSON.stringify({ error: oauthError, error_description: "fixture-denial-detail" }) };
+      } }),
+    });
+    const { effects, calls } = recorder(null);
+    effects.bind = args => bindWorktreeToWorkroom({ ...args, env,
+      call: (name, params, options) => mcpCall(name, params, { ...options, bearerToken: bearer,
+        fetchImpl: async () => { adoptionRequests++; assert.fail("no MCP request after denied token exchange"); },
+      }),
+    });
+    const result = await provisionWorktree({ mainRoot: "D:/fixture", plan, env, effects });
+    assert.equal(result.status, "refused");
+    assert.equal(result.code, expectedCode);
+    assert.equal(exchanges, 1);
+    assert.equal(adoptionRequests, 0);
+    assert.equal(calls.length, 0, "no creation, marker, or source rebind");
+    assert.ok(!result.message.includes("fixture-denial-detail"));
+  });
+}
+
+test("a genuine OAuth service outage retains bounded break-glass recovery", async () => {
+  const env = { DPF_MCP_ENDPOINT: "http://127.0.0.1:1/api/mcp/v1", DPF_MCP_CLIENT_ID: "fixture-client",
+    DPF_MCP_CLIENT_SECRET: "fixture-secret", [BREAK_GLASS_ENV]: "fixture service outage" };
+  const bearer = createClientCredentialsBearer({ mcpUrl: env.DPF_MCP_ENDPOINT, clientId: "fixture-client", clientSecret: "fixture-secret",
+    exchange: options => exchangeClientCredentials({ ...options, post: async () => ({ status: 503, body: "service unavailable" }) }),
+  });
+  const { effects, calls } = recorder(null);
+  effects.bind = args => bindWorktreeToWorkroom({ ...args, env,
+    call: (name, params, options) => mcpCall(name, params, { ...options, bearerToken: bearer,
+      fetchImpl: async () => assert.fail("no adoption request without a token"),
+    }),
+  });
+  const result = await provisionWorktree({ mainRoot: "D:/fixture", plan, env, effects });
+  assert.equal(result.status, "break-glass");
+  assert.deepEqual(calls.map(call => call[0]), ["add", "pending-marker"]);
 });
