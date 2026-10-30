@@ -15,7 +15,7 @@ const db = vi.hoisted(() => ({
 const autonomous = vi.hoisted(() => ({
   create: vi.fn(),
   execute: vi.fn(),
-  executeTool: vi.fn(),
+  workToolMock: vi.fn(),
   resolveAgent: vi.fn(),
   resolveTools: vi.fn(),
 }));
@@ -36,7 +36,7 @@ vi.mock("@/lib/tak/autonomous-work-run", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/tak/autonomous-work-run")>(),
   createAutonomousWorkRun: (...args: unknown[]) => autonomous.create(...args),
   executeAutonomousAgenticLoop: (...args: unknown[]) => autonomous.execute(...args),
-  executeAutonomousWorkTool: (...args: unknown[]) => autonomous.executeTool(...args),
+  executeAutonomousWorkTool: (...args: unknown[]) => autonomous.workToolMock(...args),
   resolveAutonomousWorkAgent: (...args: unknown[]) => autonomous.resolveAgent(...args),
   resolveAutonomousWorkTools: (...args: unknown[]) => autonomous.resolveTools(...args),
 }));
@@ -132,7 +132,7 @@ beforeEach(() => {
   });
   autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
   autonomous.execute.mockResolvedValue({ content: "Done.", providerId: "local", executedTools: [] });
-  autonomous.executeTool.mockResolvedValue({
+  autonomous.workToolMock.mockResolvedValue({
     success: true,
     message: "Read design.md lines 1-3 of 3.",
     data: {

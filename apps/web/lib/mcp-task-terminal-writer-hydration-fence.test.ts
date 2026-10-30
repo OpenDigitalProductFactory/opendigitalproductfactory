@@ -21,7 +21,7 @@ describe("reserved hydration through real governance", () => {
     const history = historyKind === "none" ? [] : [persistedReaderExecution];
     db.findToolExecutions.mockImplementation(async () => [...history]);
     const actual = await vi.importActual<typeof import("./tak/autonomous-work-run")>("./tak/autonomous-work-run");
-    autonomous.executeTool.mockImplementation(actual.executeAutonomousWorkTool);
+    autonomous.workToolMock.mockImplementation(actual.executeAutonomousWorkTool);
     const { _setGovernanceForTests } = await import("./mcp-governed-execute");
     const authority = await import("./govern/authority/coworker-tool-authority-gate");
     vi.spyOn(authority, "enforceCoworkerToolAuthority").mockResolvedValue({
@@ -70,10 +70,10 @@ describe("reserved hydration through real governance", () => {
       expect(autonomous.create).not.toHaveBeenCalled();
       return;
     }
-    expect(backend, JSON.stringify({ outcome, reader: await autonomous.executeTool.mock.results[0]?.value })).toHaveBeenCalled();
+    expect(backend, JSON.stringify({ outcome, reader: await autonomous.workToolMock.mock.results[0]?.value })).toHaveBeenCalled();
     expect(autonomous.execute).toHaveBeenCalled();
     expect(autonomous.create).not.toHaveBeenCalled();
-    const readerFence = autonomous.executeTool.mock.calls[0]?.[0].taskExecutionFence;
+    const readerFence = autonomous.workToolMock.mock.calls[0]?.[0].taskExecutionFence;
     expect(readerFence).toMatchObject({ requestDigest: metadata.requestDigest, reservation: expect.any(String) });
     expect(autonomous.execute.mock.calls[0]?.[0].taskExecutionFence).toEqual(readerFence);
   });

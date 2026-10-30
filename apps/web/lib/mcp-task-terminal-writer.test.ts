@@ -204,7 +204,7 @@ describe("terminal writer resumption", () => {
     const outcome = await submit("PAT-WRITER-ZERO-READER");
 
     if (historyKind !== "none" && historyKind !== "invalid-cursors") {
-      expect(autonomous.executeTool).not.toHaveBeenCalled();
+      expect(autonomous.workToolMock).not.toHaveBeenCalled();
       expect(autonomous.execute).not.toHaveBeenCalled();
       expect(autonomous.create).not.toHaveBeenCalled();
       expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
@@ -218,8 +218,8 @@ describe("terminal writer resumption", () => {
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-ZERO-READER", status: "input-required", updatedAt },
     }));
-    expect(autonomous.executeTool).toHaveBeenCalledTimes(2);
-    expect(autonomous.executeTool).toHaveBeenCalledWith(expect.objectContaining({
+    expect(autonomous.workToolMock).toHaveBeenCalledTimes(2);
+    expect(autonomous.workToolMock).toHaveBeenCalledWith(expect.objectContaining({
       toolName: "read_source_at_version",
       taskRunId: "TR-MCP-ZERO-READER",
       args: {
@@ -276,7 +276,7 @@ describe("terminal writer resumption", () => {
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
-    autonomous.executeTool.mockResolvedValue({
+    autonomous.workToolMock.mockResolvedValue({
       success: false,
       message: "The exact immutable source could not be read.",
       error: "provider-unavailable",
@@ -285,7 +285,7 @@ describe("terminal writer resumption", () => {
     db.findUnique.mockResolvedValue({ status: "working", userId: "user-1", currentAgentId: params.agentId, a2aMetadata: metadata });
     const outcome = await submit("PAT-WRITER-ZERO-READER-FAIL");
 
-    expect(autonomous.executeTool).toHaveBeenCalledTimes(1);
+    expect(autonomous.workToolMock).toHaveBeenCalledTimes(1);
     expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(db.updateMany).toHaveBeenCalledWith({
@@ -419,7 +419,7 @@ describe("terminal writer resumption", () => {
         persistedEvidenceAvailable: true,
       }),
     }));
-    expect(autonomous.executeTool).toHaveBeenCalledWith(expect.objectContaining({
+    expect(autonomous.workToolMock).toHaveBeenCalledWith(expect.objectContaining({
       toolName: "read_source_at_version",
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",
       args: expect.objectContaining({
@@ -500,7 +500,7 @@ describe("terminal writer resumption", () => {
     const outcome = await submit("PAT-WRITER-ALREADY-ESCALATED", exhaustedParams);
 
     expect(db.updateMany).not.toHaveBeenCalled();
-    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.workToolMock).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",
@@ -547,7 +547,7 @@ describe("terminal writer resumption", () => {
     const outcome = await submit("PAT-WRITER-CONTEXT-TRUNCATED", truncatedParams);
 
     expect(db.updateMany).not.toHaveBeenCalled();
-    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.workToolMock).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",
@@ -616,7 +616,7 @@ describe("terminal writer resumption", () => {
 
     const outcome = await submit("PAT-WRITER-UNRELATED-DECLINE", exhaustedParams);
 
-    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.workToolMock).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",
