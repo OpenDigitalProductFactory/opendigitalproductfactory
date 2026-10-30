@@ -160,3 +160,33 @@ This is **runtime API qualification**, not live activation. The Docker provider 
 Independent review found that the historical report's supervisor event named `released` came from an intentionally empty callback. It is **not** evidence that the platform released the reservation. Actual candidate process shutdown and Docker restoration are separately recorded; the platform's release action has its own outcome. Preserve the original report and hash, and attach this correction rather than editing its history.
 
 The qualifier now records `release-not-attempted` for that callback. It also preserves a definitive fenced verdict after the shared supervisor has settled its final heartbeat/deadline work, even when all model controls finished before a late loss of authority. Injected final-checkpoint, in-flight refusal and in-flight deadline tests cover those paths without loading models. No fence was observed in the historical successful hardware sample; these are source and evidence corrections, not a replacement inference run.
+
+### Qualification profile preservation correction — October 29
+
+The current-profile API report
+`36b8a235ea539ebbc9d57a5f4efb88c01ee621519c1f2dfa925535c78ae9fccf`
+contains eight correct completion controls and finite 768-dimensional embeddings,
+but the later profile verifier failed: the captured Qwen configuration was absent.
+The owner's earlier post-verifier PASS was explicitly superseded. Retain that
+immutable report and correction; neither a successful chat reload nor its
+`baselineRestored` field establishes exact configuration restoration. Source also
+did not establish the captured stored profile immediately before baseline controls,
+so configuration equivalence for that timing pair remains unproven.
+
+BI-C632CC8E repairs the existing qualifier's profile preservation. Before baseline
+controls, it establishes and reads back the captured model identities and settings,
+then checks them again after the controls. During cleanup it first confirms owned
+candidate shutdown, restores missing captured configuration rows through the same
+guarded APIs, reloads Docker and checks the complete profile before reporting
+restoration. Matching settings and empty defaults are not rewritten. Conflicting
+nonempty settings or model identities refuse before any configuration write.
+An uncertain write is not retried automatically or described as zero effects.
+An unresolved baseline-stage dispatch also blocks cleanup from repeating it.
+If qualification and restoration both fail, the report retains both failures.
+
+These source fixtures require no model run. The repair does not activate an engine,
+alter provider configuration or weaken the current qualification verifier. The
+existing native owner retains live profile recovery, staging and managed activation,
+including their actual authority, current lease and drain obligations. Process
+shutdown, persisted lease release, exact-profile restoration and useful DPF
+performance remain separately evidenced outcomes.
