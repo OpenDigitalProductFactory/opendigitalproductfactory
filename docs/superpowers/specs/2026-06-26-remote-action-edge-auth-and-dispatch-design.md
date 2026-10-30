@@ -86,6 +86,13 @@ restricted organization issuer while preserving device and CA authority.
 **OBJ-ECR2:** Leave failed repairs recoverable and existing explicit opt-outs
 unchanged, with no private material returned to an agent.
 
+The medium delivery plan quotes the recorded BI-AFDB58C8 acceptance criteria:
+
+- Deterministic fixture first reproduces the existing expired-certificate branch; fixed tests prove the existing restricted issuance route is used only when validity requires it, and renewed/reissued public metadata is verified before replacing usable prior state.
+- Valid existing credentials renew normally. Failed issuance, wrong identity/EKU/issuer, changed root or partial output leave prior state and explicit opt-outs intact; no expired certificate becomes authorization.
+- The published supported repair can restore actual certificate validity and machine registration on the enrolled host without a human command, private-key handling or TLS bypass by the agent.
+- Actual registration/identity observations and scoped rollback evidence are recorded; engine activation remains its own gated operation and is not implied by certificate repair.
+
 | Acceptance | Objectives | Statement |
 | --- | --- | --- |
 | AC-ECR1 | OBJ-ECR1 | Certificate validity selects renewal for a valid existing client and restricted reissuance for an expired authority-host client; missing or invalid identity is refused before replacing a usable credential. |
