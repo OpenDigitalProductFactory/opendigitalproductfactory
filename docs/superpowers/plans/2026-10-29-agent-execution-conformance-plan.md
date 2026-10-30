@@ -17,7 +17,7 @@ Fix the shortest complete development loop first. Limit the critical-path execut
 | Key | Deliverable and existing BI owner | Depends on | Concrete exit evidence |
 |---|---|---|---|
 | P0 | Research, actual source/served inventory and scope reconciliation — BI-1FDAA62B | — | Published immutable design/plan; each boundary marked implemented/unverified/partial/blocked; independent review obligations and active owners recorded. |
-| P1 | Native authenticated capture — BI-A615654F, under BI-0AABCD1F | P0 direction; existing admitted repair continues | No-cookie actual MCP→domain writer→draft→owner readback; denied/forged/cross-org controls write nothing. |
+| P1 | Native authenticated capture — BI-A615654F, under BI-0AABCD1F | P0 direction; existing admitted repair continues | No-cookie actual MCP→domain writer→draft→owner readback. Invalid server authority writes nothing; caller-supplied impersonation fields never change real actor/org/agent-proposed authority, including sanitized permitted drafts. |
 | P2 | Retained foreground work — BI-D0D2FF0D; provider readiness BI-D81CCC24 remains its enabling owner | P0; P1 is first fixture, not a hard code dependency | Commit-bound request/task association, durable dispatch/reconciliation and exact artifact result. Refresh/lost wake/repeated request/cancel/provider wait pass. |
 | P3 | Real specialist admission and result return — BI-0AABCD1F and BI-CC057853 | P1, P2 where their adapters intersect | Original refusal diagnosed; one exact reviewer executes and returns an attributed result. Existing eligible receipt fulfills its own gate. No replacement-request storm. |
 | P4 | Fault/reconnect conformance — BI-7DC3B91D | P1–P3; retain independently testable early boundary cases | Real ingress/auth/DB/jobs/read model matrix; deliberate failure points, uncertainty, stale fences and revoked-authority negatives. Bounded live-model smoke is separate. |
@@ -47,7 +47,7 @@ Candidate touch paths, to reconcile with each child's admitted impact contract b
 
 Paths above are relative to `apps/web`. Resolve every child's current `verificationState.changeImpactContract` after its exact scope claim and include all returned test/guard obligations. If unresolved, plan exhaustive verification plus an explicit impact-resolution step; absence of advice is not an exemption. No source runtime changes are admitted by this parent design claim.
 
-- Keep the browser wrapper's session resolution separate from the authenticated shared domain writer. Never accept actor/org/verdict authority from model input. Verify no cookie with a real authorized MCP entry, not a success-mocked action.
+- Keep the browser wrapper's session resolution separate from the authenticated shared domain writer. Never accept actor/org/verdict authority from model input. Verify no cookie with a real authorized MCP entry, not a success-mocked action. Distinguish true server-authorization rejection (zero writes) from unsupported caller fields ignored under the existing contract (only the real caller's permitted draft may save).
 - Review and finish existing foreground admission/worker code. The saved user message, immutable request, TaskRun and intended artifact must be joined correctly; wake failure is recovered from durable state. Repeat submissions carry a stable request key scoped to the actual caller; changed content/target is refused or intentionally new.
 - Inspect the original engagement's exact token, caller, provider and required-tool intersection through authorized evidence. Valid denial is not bypassed. Repair a broken projection/binding under its own existing scope; if the authority really is missing, return the precise limited owner remedy.
 - Preserve current command receipt transaction, activity sequence, child process-bound failure semantics and supervised runtime adapters. Restart of non-repeatable work is not automatically safe. Resume through retained artifacts/provider handle only when verified, otherwise record explicit reconciliation/terminal disposition.
@@ -60,13 +60,16 @@ Extend existing test registration, real-Postgres receipt tests and canonical non
 | Injection or action | Expected invariant | Acceptance |
 |---|---|---|
 | Authorized portal and no-cookie MCP entry | Correct authenticated owner/org; same domain restrictions; no hidden browser dependency | AC-EXEC-01 |
-| Missing/revoked grant, forged owner/org/verdict | Typed refusal and zero protected writes; receipt replay discloses nothing after access loss | AC-EXEC-01,05 |
+| Missing/revoked/mismatched server authority | Typed refusal and zero writes; receipt replay discloses nothing after access loss | AC-EXEC-01,05 |
+| Unsupported caller actor/org/status/verdict fields | Reject or ignore per current contract; zero unauthorized effects. A sanitized permitted draft is never attributed to the supplied fake identity or human verdict | AC-EXEC-01 |
 | Duplicate submit; response dropped after commit | Existing logical task/result returned; no repeated effect; changed digest/target cannot reuse the key | AC-EXEC-02,04 |
 | Crash after acceptance/before wake; worker lease expires | Durable pending work reconciles, or justified terminal outcome; stale worker fenced | AC-EXEC-02,04 |
 | Provider unavailable; source reader unavailable; budget exhausted | Named reason, current next actor, retained counters/deadline; no manual retyping or infinite retry | AC-EXEC-05 |
 | Child succeeds, fails, waits or is cancelled | Attributed exact result; parent policy respected; cancellation/revocation prevents late effects | AC-EXEC-03,05 |
+| Original review: budget expired, execution inactive, unknown/not-dispatched node outcomes, empty unresolved IDs, executionSettled=false | No settlement inferred; request-digest/room/node-bound reconciliation and fresh required health proof precede an authorized successor. Aggregate budget/attempts retained; no replacement request based only on current authority or remaining attempts | AC-EXEC-03,05 |
 | Lost remote-effect response | Authoritative reconciliation or explicit unknown outcome; no blind replay | AC-EXEC-04,05 |
 | Refresh, reconnect, new allowed session, event lost | Canonical current status/result, same artifact, ordered progress; signal transport is not truth | AC-EXEC-06 |
+| Accepted or admitted but still queued; no live execution proof | Remains waiting. Working/progress requires actual current execution evidence, not a lease or admission | AC-EXEC-06 |
 | Complete fixture development task | Actual independent review, protected delivery, canonical upgrade and served result | AC-EXEC-07,09 |
 | Complete internal business draft; later real permitted email | Correct saved artifact/work ownership and reply draft; external-send approval preserved | AC-EXEC-08 |
 

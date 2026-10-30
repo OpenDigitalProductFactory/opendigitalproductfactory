@@ -91,7 +91,7 @@ This is a logical flow, not a proposal that all domain tools must become asynchr
 
 ### Authentication and tool usability
 
-Transport adapters authenticate; a shared server-only domain service receives a verified principal and scoped context. Browser wrappers may resolve sessions, but domain persistence must not read ambient browser auth. MCP arguments cannot choose actor, tenant, founder verdict or publication authority. Keep existing capability/grant intersection, kernel protection and author/reviewer separation. Model-facing tool descriptions must state required inputs, side effects and supported recovery; a refusal returns the exact missing prerequisite and owning remedy without exposing secrets.
+Transport adapters authenticate; a shared server-only domain service receives a verified principal and scoped context. Browser wrappers may resolve sessions, but domain persistence must not read ambient browser auth. MCP arguments cannot choose actor, tenant, founder verdict or publication authority. Keep existing capability/grant intersection, kernel protection and author/reviewer separation. Missing, revoked or mismatched server authority refuses before persistence. Unsupported actor/org/status/verdict fields may be rejected or ignored according to the existing tool contract; if ignored, only a permitted draft under the real caller may save. The invariant is zero unauthorized effects, not zero writes for every otherwise authorized request containing an unsupported field. Model-facing tool descriptions must state required inputs, side effects and supported recovery; a refusal returns the exact missing prerequisite and owning remedy without exposing secrets.
 
 ### Reasoning and execution
 
@@ -101,11 +101,13 @@ Keep the model responsible for analysis and bounded tool choice. The server owns
 
 Follow §5.1, not a second state machine. Repeated delivery of the same authenticated immutable request returns its existing result or current disposition; changed intent is distinct. Revalidate authorization on resume. Replay only operations whose effect safety is established. A process-bound step may fail visibly, then a separately authorized successor resumes from durable artifacts/provider context; do not replay an arbitrary agent turn. If effect outcome is unknown, retain uncertainty until readback or explicit reconciliation. Receipt replay itself must recheck current read/content authority and must not disclose a prior result after access was revoked.
 
+Original review settlement needs an explicit negative control: the expense review was reported input-required with expired budget, current authority, executing=false and pollUseful=false; listed nodes were completed with unknown/not-dispatched outcomes and no unresolved node IDs, while executionSettled=false and missing-current-proof remained. Neither inactivity, a completed node label nor an empty unresolved list proves a terminal effect. Use existing request-digest/room/node-bound reconciliation and required fresh health evidence before any authorized successor. Preserve aggregate attempt limits; current authority and remaining attempts alone do not authorize a replacement inference.
+
 Preserve the October 13 founder choice in BI-AD979E79: general parent auto-continuation is optional and off by default. Returning a child result and making its wait visible do not authorize a new model turn. Any eligible bound workflow continuation must use its existing standing scope; off/closed/cancelled parents stay stopped. No global automatic enablement belongs in this plan.
 
 ### Owner experience
 
-One summary first: result or specific wait, business consequence, responsible next actor, and one supported action if the owner must decide. The saved artifact opens directly. IDs, provider traces, receipts and history are disclosed on demand. “Saved” means persisted; “working” means admitted execution; “complete” requires the requested deliverable. An unavailable reviewer is a specialist/platform task, not a request for the owner to guess a grant. OAuth/credentials, material scope changes and genuinely consequential decisions retain human gates.
+One summary first: result or specific wait, business consequence, responsible next actor, and one supported action if the owner must decide. The saved artifact opens directly. IDs, provider traces, receipts and history are disclosed on demand. “Saved” means persisted; accepted but queued/admitted work remains waiting; “working” needs actual execution/liveness evidence from the existing projection; “complete” requires the requested deliverable. Admission or a lease alone cannot imply progress. An unavailable reviewer is a specialist/platform task, not a request for the owner to guess a grant. OAuth/credentials, material scope changes and genuinely consequential decisions retain human gates.
 
 ## 5. Objectives and acceptance
 
@@ -121,7 +123,7 @@ One summary first: result or specific wait, business consequence, responsible ne
 
 | Acceptance ID | Objective IDs | Statement |
 |---|---|---|
-| AC-EXEC-01 | OBJ-EXEC-AUTH | Actual no-cookie MCP ingress saves a permitted draft, read back by its owner; revoked, forged actor/org/verdict and protected-content cases write nothing. |
+| AC-EXEC-01 | OBJ-EXEC-AUTH | Actual no-cookie MCP ingress saves a permitted draft, read back by its owner. Missing/revoked/mismatched server authority writes nothing. Caller fields cannot impersonate an actor, cross an organization boundary, mint a human verdict or change protected content; accepted sanitized drafts remain real-caller/organization-scoped and agent-proposed. |
 | AC-EXEC-02 | OBJ-EXEC-WORK | Submit, repeat the same request, lose the response and reconnect: one logical job and one intended artifact result; accepted status only follows durable admission. |
 | AC-EXEC-03 | OBJ-EXEC-WORK, OBJ-EXEC-RECOVER | Reviewer request either admits the exact eligible execution and returns its contribution, or shows the precise pending/denied condition. Parent result delivery/continuation obeys its configured policy and existing authority. |
 | AC-EXEC-04 | OBJ-EXEC-RECOVER | Kill caller/worker after acceptance, before dispatch, during inference and after effect commit; each reconciles or reaches a safe explicit disposition. Duplicates/stale leases cannot repeat or overwrite committed effects. |
@@ -130,6 +132,8 @@ One summary first: result or specific wait, business consequence, responsible ne
 | AC-EXEC-07 | OBJ-EXEC-DELIVER | An identified nonproduction development fixture runs request→small source fix→affected tests→real independent review→protected PR→governed deployment→served verification. External publication/production changes use their normal authority, not fixture bypass. |
 | AC-EXEC-08 | OBJ-EXEC-DELIVER, OBJ-EXEC-UX | A bounded internal business document job completes through the same acceptance/result contract. Later authorized real operator-company mail→owned work→reply draft passes under the Mailroom owner; no synthetic mail is represented as a prospect result. |
 | AC-EXEC-09 | OBJ-EXEC-DELIVER | Existing alternatives are inventoried and explicitly retained, narrowed or removed. Source, merged and served evidence remain separately labelled; no documentation-only PR claims to deliver these runtime objectives. |
+
+Advisory review of initial commit `430ee1008859b02feca7ee5f4489412a91141227` by the existing owner-workflow repair chat identified admission-versus-liveness ambiguity, overly broad zero-write wording, and the missing original-review settlement case. These were corrected here. This is a separately attributed advisory assessment, not a canonical independent spec-approval receipt or runtime evidence.
 
 ## 6. Verification, release and rollback
 
