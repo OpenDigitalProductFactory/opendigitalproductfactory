@@ -16,7 +16,7 @@
   "capacityFreshUntil": "Evidence valid until",
   "capacityUnknownTime": "Time not reported",
   "capacityUnavailable": "Recovery details could not be loaded. Refresh before checking.",
-  "capacityNoCheck": "Review this account's connection or restrictions before checking capacity.",
+  "capacityNoCheck": "Manage this account to review its restrictions.",
   "accountName": "Account name",
   "apiKey": "API key",
   "clientId": "Client ID",

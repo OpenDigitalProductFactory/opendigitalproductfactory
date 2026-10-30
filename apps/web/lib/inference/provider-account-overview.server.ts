@@ -103,10 +103,11 @@ export async function loadProviderAccountOverview(input: {
       capabilitySummary: account.isDefault && summary?.routingScores && (!account.modelsVerifiedAt || accessible.includes(summary.representativeModelId ?? ""))
         ? `${input.copy.catalogCapability} ${input.copy.reasoning} ${summary.routingScores.reasoning} · ${input.copy.coding} ${summary.routingScores.codegen} · ${input.copy.tools} ${summary.routingScores.toolFidelity}`
         : input.copy.capabilityUnmeasured,
-      capacitySummary: ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
+      capacitySummary: proof ? `${input.copy.capacityProof}: ${proof.modelId}`
+        : ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
       resetSummary: [...new Set(resetParts)].join(" ") || (account.isDefault && !control ? input.copy.routingCheckUnavailable : null),
       resolvesPhases: account.isDefault ? input.resolvesPhases.get(account.providerId) ?? [] : [],
-      ...((subscriptionIds.includes(account.connectionId) || usageUrl) ? { quotaRecovery: {
+      ...((subscriptionIds.includes(account.connectionId) || usageUrl || control?.restrictions.length || ownedRestriction) ? { quotaRecovery: {
         models: quotaView?.models ?? [], selectedModelId: quotaView?.selectedModelId ?? summary?.representativeModelId ?? null,
         hourly: quotaView?.hourly ?? false,
         canCheck: account.isDefault && account.status === "active" && Boolean(account.credential?.hasUsableMaterial)
