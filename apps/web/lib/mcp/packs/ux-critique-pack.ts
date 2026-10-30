@@ -159,7 +159,7 @@ async function captureUxCritique(
     gitRef: str("gitRef") ?? str("commitSha") ?? null,
     viewportWidth: num("viewportWidth") ?? null,
     colorScheme: (colorScheme as "light" | "dark" | undefined) ?? null,
-  }, (draft) => saveWikiOverlayEditForActor(draft, { userId, agentId: context.agentId }));
+  }, (draft) => saveWikiOverlayEditForActor(draft, { userId, agentId: context.agentId }, { createOnly: true }));
 
   if (!result.ok) {
     return { success: false, error: "capture_rejected", message: result.error };

@@ -19,6 +19,9 @@ vi.mock("@dpf/db", () => ({ prisma: {
     findFirst: async ({ where }: { where: Record<string, unknown> }) => fixture.pages.find(p =>
       Object.entries(where).every(([key, value]) => p[key] === value)) ?? null,
     create: async ({ data }: { data: Record<string, unknown> }) => {
+      if (fixture.pages.some(p => p.organizationId === data.organizationId && p.slug === data.slug)) {
+        throw Object.assign(new Error("Unique organization/slug constraint"), { code: "P2002" });
+      }
       const page = { ...data, id: `fixture-page-${fixture.pages.length}`, updatedAt: new Date("2026-10-30T00:00:00Z") };
       fixture.pages.push(page); return page;
     },
@@ -75,5 +78,15 @@ describe("native no-cookie critique capture boundary", () => {
   it("retains critique validation before persistence", async () => {
     expect(await capture({ ...params, finding: "feels cluttered" })).toMatchObject({ success: false });
     expect(fixture.pages).toHaveLength(0);
+  });
+  it.each(["draft", "published"])("never replaces an existing %s finding with the same title", async (status) => {
+    const existing = { id: "fixture-reviewed", organizationId: "fixture-org",
+      slug: "craft/ux-design/expense-route-fixture", status, isKernel: false,
+      title: params.title, body: "An earlier human observation must remain intact.",
+      metadata: { verdictAuthority: "founder" } };
+    fixture.pages.push({ ...existing });
+    expect(await capture()).toMatchObject({ success: false });
+    expect(fixture.pages).toEqual([existing]);
+    expect(fixture.revisions).toHaveLength(0);
   });
 });

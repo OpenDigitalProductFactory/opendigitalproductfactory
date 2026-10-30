@@ -19,6 +19,7 @@ import "server-only";
 import { prisma } from "@dpf/db";
 import {
   appendRevision,
+  createWikiOverlayPage,
   upsertWikiPage,
   type UpsertWikiPageInput,
   type WikiPageKind,
@@ -128,9 +129,13 @@ function readKernelVersionFromManifest(): string | null {
 export async function saveWikiOverlayEditForActor(
   input: SaveWikiOverlayEditInput,
   actor: { userId: string; agentId?: string },
+  options?: { createOnly?: boolean },
 ): Promise<SaveWikiOverlayEditResult> {
   try {
     if (!actor.userId) throw new Error("Unauthorized");
+    if (options?.createOnly && (input.pageId || input.overridesKernelPageId || (input.status && input.status !== "draft"))) {
+      return { ok: false, error: "Capture can only create a new draft." };
+    }
     const org = await requireOrganization();
 
     // Reject empty body / missing title at the action boundary so the form
@@ -246,7 +251,7 @@ export async function saveWikiOverlayEditForActor(
         : null,
     };
 
-    const saved = (await upsertWikiPage(prisma, upsertInput)) as {
+    const saved = (await (options?.createOnly ? createWikiOverlayPage : upsertWikiPage)(prisma, upsertInput)) as {
       id: string;
       slug: string;
       status: WikiPageStatus;
@@ -322,6 +327,9 @@ export async function saveWikiOverlayEditForActor(
       status: saved.status,
     };
   } catch (err) {
+    if (options?.createOnly && typeof err === "object" && err !== null && "code" in err && err.code === "P2002") {
+      return { ok: false, error: "A critique with this title already exists. Read it before retrying, or use a distinct title for a new observation." };
+    }
     return {
       ok: false,
       error: (err as Error).message ?? "Unknown error saving page.",
