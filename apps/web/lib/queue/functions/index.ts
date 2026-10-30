@@ -17,6 +17,7 @@ import { documentRenditionBackfill, documentRenditionGenerate } from "./document
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
+import { foregroundWorkRun } from "./foreground-work";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
@@ -323,6 +324,7 @@ export const eventFunctions = [
   nonprodCapacityAvailable,
   mcpTaskRunExecute,
   asyncInferenceOperationRun,
+  foregroundWorkRun,
   asyncInferenceOperationTaskRunTransition,
   asyncOperationTaskHub,
 ];

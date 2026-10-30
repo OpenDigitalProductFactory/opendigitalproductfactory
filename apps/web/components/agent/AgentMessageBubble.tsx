@@ -1,5 +1,7 @@
 "use client";
 
+import { FOREGROUND_RECEIPT_PREFIX } from "@/lib/agent/foreground-work-contract";
+
 import Link from "next/link";
 import { FileText, PlugZap } from "lucide-react";
 import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker-types";
@@ -380,6 +382,7 @@ export function AgentMessageBubble({
   onRetry,
 }: Props) {
   if (message.role === "system") {
+    const retainedReceipt = message.id.startsWith(FOREGROUND_RECEIPT_PREFIX);
     return (
       <div
         data-testid="agent-message"
@@ -387,14 +390,16 @@ export function AgentMessageBubble({
         role="status"
         aria-live="polite"
         style={{
-          textAlign: "center",
+          textAlign: retainedReceipt ? undefined : "center",
           padding: "8px 0",
-          fontSize: 11,
+          fontSize: retainedReceipt ? 14 : 11,
           color: "var(--dpf-muted)",
-          fontStyle: "italic",
+          fontStyle: retainedReceipt ? undefined : "italic",
         }}
       >
-        {referencesTerminalProviderRecovery(message.content)
+        {retainedReceipt ? (
+          <details><summary>{message.content.split(/\n\n/)[0]}</summary><code>{message.id.slice(FOREGROUND_RECEIPT_PREFIX.length)}</code></details>
+        ) : referencesTerminalProviderRecovery(message.content)
           ? <ProviderRoutingInlineRecovery content={message.content} />
           : message.content}
       </div>

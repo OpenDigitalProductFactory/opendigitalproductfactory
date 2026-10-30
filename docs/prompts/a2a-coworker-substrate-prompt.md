@@ -1,5 +1,12 @@
 # Prompt — A2A Coworker Communication & Background-Work Substrate
 
+**Current source extension:** foreground conversation recovery now reuses the
+existing interactive TaskRun, queue, capacity projection and execution fence.
+The scheduled dispatcher reconciles lost wakes; uncertain effects never authorize
+replay. Consult the
+[foreground implementation record](../superpowers/specs/2026-10-29-foreground-recovery-implementation.md)
+before proposing another ledger or retry path. Its served acceptance remains unrun.
+
 **Use this in a fresh thread.** Paste everything below the line.
 
 ---

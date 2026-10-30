@@ -5,6 +5,7 @@ import {
   failOptimisticMessage,
   reconcileOptimisticMessage,
   retryOptimisticMessage,
+  acknowledgeRetainedMessage,
 } from "./agent-message-state";
 
 function makeUserMessage(id: string, content: string): AgentMessageRow {
@@ -53,5 +54,14 @@ describe("agent-message-state", () => {
 
     expect(retried.deliveryState).toBe("sending");
     expect(retried.content).toBe("Please update the epic");
+  });
+  it("settles message delivery and retains the stored receipt only once", () => {
+    const optimistic = createOptimisticUserMessage("Prepare the checklist", "/workspace");
+    const receipt = { id: "foreground-receipt-TR-one", role: "system", content: "Your request is saved.", createdAt: "2026-10-29T00:00:00Z" };
+    const once = acknowledgeRetainedMessage([optimistic], optimistic.id, receipt);
+    expect(once[0].deliveryState).toBe("sent");
+    expect(once[1].content).toBe("Your request is saved.");
+    expect(acknowledgeRetainedMessage(once, optimistic.id, receipt)).toHaveLength(2);
+    expect(acknowledgeRetainedMessage([optimistic], optimistic.id, { ...receipt, role: "assistant" })).toHaveLength(1);
   });
 });

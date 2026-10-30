@@ -27,6 +27,25 @@ The coworker does not use raw page HTML as authority. If a surface is not yet co
 
 For example, **Estate Discovery** publishes its real Discovery Method, target, credential state, validation, connection status, and **Save & Test** outcome. It knows that **SNMP** discovers network devices and **SMTP** configures outbound email elsewhere; the community string remains write-only and is never repeated back.
 
+## Saved requests and recovery
+
+When a conversation says **Your request is saved**, DPF has retained the original
+message and its job reference. This confirms receipt; it does not confirm that
+the requested business result is complete.
+
+A provider-capacity wait keeps the same request. DPF checks again within its
+original recovery window, with a bounded number of attempts. You do not need to
+resend the message. The coworker must still have permission when work resumes.
+
+If execution ends without a confirmed outcome, DPF retains the request and
+records an explanation in the conversation. Existing results must be checked
+before another attempt, because an action may already have taken effect.
+An action awaiting approval remains pending. A saved response alone does not
+prove that a delegated business task succeeded.
+
+**Stop** cancels the conversation's open retained requests. A canceled request
+does not resume automatically.
+
 ## Quick Actions
 
 Each page has skill buttons that trigger common tasks. These appear at the top of the coworker panel when you open it. Examples:

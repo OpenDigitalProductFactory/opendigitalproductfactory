@@ -102,9 +102,11 @@ import { filterToolsForCoworkerRuntime, buildAdvisePromptSuffix } from "./cowork
 import { labelHistory, prependLabelled } from "@/lib/tak/message-origins";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
+import { persistCoworkerResponseArtifact } from "@/lib/coworker/response-artifact";
+import { requireForegroundUser, foregroundExecutionFence, assertForegroundAgent } from "@/lib/agent/foreground-work-context";
+import { preInferenceResourceWait, type ResourceWaitFailureKind } from "@/lib/mcp-task-capacity-contract";
 import {
   formatPortalContextPromptSection,
-  isSubstantiveCoworkerOutput,
   normalizePortalContextPathname,
   normalizePortalContextRoute,
   isPortalContextSupportedPath,
@@ -141,95 +143,6 @@ async function buildPortalContextPromptSection(input: {
   } catch (error) {
     console.warn("[portal-context] Failed to resolve coworker prompt context", error);
     return null;
-  }
-}
-
-async function persistCoworkerResponseArtifact(input: {
-  taskRunId: string | null;
-  responseContent: string;
-  routeContext: string;
-  threadId: string;
-  agentId: string;
-  agentName: string;
-  providerId: string | null;
-  modelId: string | null;
-  portalContext: PortalContextEnvelope | null;
-  userId: string;
-}): Promise<void> {
-  if (!input.taskRunId) return;
-  if (!isSubstantiveCoworkerOutput(input.responseContent)) return;
-
-  try {
-    const { createTaskArtifact } = await import("@/lib/tak/task-records");
-    await createTaskArtifact({
-      taskRunId: input.taskRunId,
-      artifactType: "coworker_response",
-      name: "Coworker response",
-      summary: input.responseContent.slice(0, 240),
-      content: {
-        routeContext: input.routeContext,
-        threadId: input.threadId,
-        response: input.responseContent,
-        providerId: input.providerId,
-        modelId: input.modelId,
-        anchors: input.portalContext?.anchors ?? [],
-      },
-      metadata: {
-        kind: "coworker-response",
-        deliveryState: "responded",
-        routeContext: input.routeContext,
-        envelopeId: input.portalContext?.envelopeId ?? null,
-      },
-      producerAgentId: input.agentId,
-    });
-
-    const capsuleId = input.portalContext?.work?.capsule?.capsuleId ?? null;
-    if (capsuleId) {
-      const { recordWorkCapsuleEvidence } = await import("@/lib/work-capsules/work-capsule-store");
-      await recordWorkCapsuleEvidence({
-        db: prisma,
-        capsuleId,
-        evidence: {
-          kind: "note",
-          summary: `${input.agentName} response captured for the current portal context.`,
-          result: {
-            taskRunId: input.taskRunId,
-            threadId: input.threadId,
-            agentId: input.agentId,
-            routeContext: input.routeContext,
-          },
-        },
-        actor: {
-          userId: input.userId,
-          agentId: input.agentId,
-          principalId: input.portalContext?.user?.principalId ?? null,
-        },
-      });
-    }
-
-    const backlogItemId = input.portalContext?.work?.backlogItem?.backlogItemId ?? null;
-    if (backlogItemId) {
-      const { recordPortalContextBacklogEvidence } = await import("@/lib/portal-context/evidence-recording");
-      await recordPortalContextBacklogEvidence({
-        db: prisma,
-        backlogItemId,
-        kind: "portal-context-coworker-response",
-        summary: `${input.agentName} response captured for the current portal context.`,
-        payload: {
-          taskRunId: input.taskRunId,
-          threadId: input.threadId,
-          agentId: input.agentId,
-          routeContext: input.routeContext,
-          envelopeId: input.portalContext?.envelopeId ?? null,
-        },
-        actor: {
-          userId: input.userId,
-          agentId: input.agentId,
-        },
-      });
-    }
-  } catch (error) {
-    console.warn("[portal-context] Failed to persist coworker response artifact", error);
   }
 }
 
@@ -370,10 +283,10 @@ export async function sendMessage(input: {
   /** Row already written by /api/agent/send before it acknowledged (BI-DEFA25EE). */
   acceptedUserMessageId?: string;
 }): Promise<
-  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
+  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown>; resourceWait?: ResourceWaitFailureKind; pendingApproval?: boolean }
   | { error: string }
 > {
-  const user = await requireUser();
+  const user = await requireForegroundUser();
 
   // Verify thread ownership
   const thread = await prisma.agentThread.findUnique({
@@ -389,7 +302,7 @@ export async function sendMessage(input: {
   if (validationError) return { error: validationError };
 
   const trimmedContent = input.content.trim();
-  const userMsgSelect = { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true } as const;
+  const userMsgSelect = { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true, taskRunId: true } as const;
   // BI-DEFA25EE: reuse the row the send route already persisted; the match on
   // thread, role and content keeps a caller from steering a turn with a stray id.
   const acceptedUserMsg = input.acceptedUserMessageId
@@ -507,6 +420,7 @@ export async function sendMessage(input: {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, useUnified);
+  assertForegroundAgent(agent.agentId);
   if (!agent.canAssist) return coworkerUnavailableResult();
 
   // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3, BI-2C4056BF): a draft or
@@ -550,7 +464,9 @@ export async function sendMessage(input: {
     where: {
       threadId: input.threadId,
       role: { in: ["user", "assistant"] },
-      ...withheld.windowWhere,
+      ...(acceptedUserMsg?.taskRunId ? { AND: [withheld.windowWhere, {
+        OR: [{ createdAt: { lt: acceptedUserMsg.createdAt } }, { id: acceptedUserMsg.id }],
+      }] } : withheld.windowWhere),
     },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
@@ -1736,6 +1652,7 @@ export async function sendMessage(input: {
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;
   let responseIsSystemFailure = false;
+  let foregroundResourceWait: ResourceWaitFailureKind | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
   // Pre-allocate the assistant AgentMessage id so adapter telemetry rows
@@ -1745,7 +1662,7 @@ export async function sendMessage(input: {
   // always null and the per-turn provider/model badge degrades to provider
   // name only.
   const pendingAgentMessageId = randomUUID();
-  const currentTaskRun = await findCurrentAutonomousWorkRun({
+  const currentTaskRun = acceptedUserMsg?.taskRunId ? { taskRunId: acceptedUserMsg.taskRunId } : await findCurrentAutonomousWorkRun({
     userId: user.id!,
     threadId: input.threadId,
   }).catch(() => null);
@@ -1947,6 +1864,10 @@ export async function sendMessage(input: {
         routeContext: input.routeContext,
         agentId: agent.agentId,
         threadId: input.threadId,
+        ...(foregroundExecutionFence() ? {
+          taskRunId: currentTaskRun?.taskRunId,
+          taskExecutionFence: foregroundExecutionFence(),
+        } : {}),
         taskType: taskTypeId,
         effortWarrant,
         agentDisplayName: agent.agentName,
@@ -1998,7 +1919,7 @@ export async function sendMessage(input: {
       });
       const approvalRequests = await loadInlineApprovalRequests([agentMsg]);
       observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
-      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)) };
+      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)), pendingApproval: true };
     }
 
     // The Golden Triangle review already ran inside executeAutonomousAgenticLoop.
@@ -2014,6 +1935,7 @@ export async function sendMessage(input: {
       toolCalls: undefined as undefined, // already handled by loop
     };
     responseIsSystemFailure = Boolean(agenticResult.failure);
+    foregroundResourceWait = preInferenceResourceWait({ failure: agenticResult.failure, executedTools: agenticResult.executedTools });
 
     // Caveat blind local answers; preserve the loop's evidence provenance.
     responseContent = applyLocalDegradationCaveat(result.content, {
@@ -2452,7 +2374,7 @@ export async function sendMessage(input: {
   }).catch((e) => console.warn("[memory-store] import failed:", getErrorMessage(e)));
 
   // Fire-and-forget: extract user facts from substantive user messages
-  if (trimmedContent.length > 30) {
+  if (!responseIsSystemFailure && trimmedContent.length > 30) {
     import("@/lib/tak/user-facts").then(({ extractAndStoreFacts }) => {
       extractAndStoreFacts({
         userId: user.id!,
@@ -2495,6 +2417,7 @@ export async function sendMessage(input: {
   return {
     userMessage: serializeMessage(userMsg),
     agentMessage: serializeMessage(agentMsg),
+    ...(foregroundResourceWait ? { resourceWait: foregroundResourceWait } : {}),
     ...(formAssistUpdate !== undefined && { formAssistUpdate }),
     ...(systemMessage !== undefined && { systemMessage }),
     ...(responseProviderId && responseModelId && { providerInfo: { providerId: responseProviderId, modelId: responseModelId } }),
