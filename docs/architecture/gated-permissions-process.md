@@ -599,6 +599,16 @@ principals entitled to the underlying work. A GPP model does not reduce the need
 egress control, credential isolation or data-flow controls. It determines what those controls
 must permit.
 
+## Qualification research narrows a stage binding
+
+Initiative-readiness recovery can attach a signed `qualificationExperiment` to a scheduled Workroom-stage task. This is a refinement of the existing stage capability envelope, not a second authorization system. Runtime discovery and execution intersect the declared stage tools, the actor's grants, and the exact phase binding; a tool excluded by any layer is absent or refused.
+
+The binding is one-start and fail-closed across task creation, scheduling, stage-mandate resolution, tool effects, Workroom evidence, and settlement. **Prepare** permits only the declared immutable readers, exact test/helper writes, and candidate evidence; it excludes test execution. After independent review of that candidate, **Verify** permits the exact test execution and terminal evidence, excludes all writes, and refuses `run_sandbox_tests(auto_fix: true)`. Neither phase authorizes production-byte changes or ordinary implementation.
+
+The Workroom stores `issued → started → settled` with the token and binding digest. The scheduled TaskRun carries the same immutable phase binding. A stale, expired, widened, superseded, already-started, or cross-run binding is withheld. Positive Verify evidence must contain the exact binding digest, command, output digest, TaskRun, receipt ids, and ordered timestamps; other outcomes remain explicit and cannot satisfy readiness. The normal research writer remains independently governed and consumes only exact settled positive evidence.
+
+See [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts), [scheduled task runs](../../apps/web/lib/tak/scheduled-task-runs.ts), [stage mandate enforcement](../../apps/web/lib/work-management/room-stage-mandate.ts), and the [design](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
+
 ## Annex A (informative): DPF realization status
 
 Assessed against repository source on 2026-09-30. Source presence is not runtime enforcement; the

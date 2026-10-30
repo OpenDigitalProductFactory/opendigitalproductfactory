@@ -27,6 +27,19 @@ A declined, expired, failed, cancelled, or unreadable outcome stays paused for r
 
 Recording a blocker does not hide another action in the same run that still needs approval. If you choose **Ask again** for an expired request, work follows that exact replacement while preserving the old request in history. Executing the replacement releases that request's wait; a separate unanswered request still holds the work.
 
+## Qualification research when implementation is not yet admitted
+
+When initiative readiness refuses implementation because research is missing, the recovery packet can offer a signed qualification admission for the named Workroom. This is not implementation authority and does not satisfy research by itself.
+
+The admission has two separate one-start phases:
+
+1. **Prepare** may read the pinned source and write only the exact named test or test-helper paths. It cannot run the tests. It records an exact candidate whose production bytes are unchanged.
+2. An independent semantic review must accept that exact candidate head and diff. The server can then issue **Verify**, which may run the exact qualification test but cannot edit files or use auto-fix.
+
+Each phase is bound to the item, Workroom, repository, base and head, protocol blob, installation, accountable principal, authority decision, stage, allowed paths, allowed tools, expiry, duration, and one start. A changed or previously used binding is refused. The stage's ordinary tool mandate is narrowed to this signed set; it is never widened by the recovery.
+
+Only settled positive Verify evidence for the exact binding can satisfy the research lane. Negative, inconclusive, blocked, expired, conflicting, or incomplete evidence remains visible and keeps readiness closed. The design author must still record the ordinary governed research receipt before implementation can proceed.
+
 This prevents repeated requests from scheduled Workroom stages. Broader handling of repeated permission denials and changes to the approval-card layout are separate work.
 
 ## Ordinary coworker requests

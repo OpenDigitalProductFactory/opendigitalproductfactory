@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reassessmentBudgetFixture } from "../../test-support/reassessment-budget-fixture";
 const mocks = vi.hoisted(() => ({ available: vi.fn(), local: vi.fn(), fidelity: vi.fn(), profession: vi.fn(), surface: vi.fn(),
-  review: vi.fn(), reflection: vi.fn(), patterns: vi.fn() }));
+  reporting: vi.fn(), review: vi.fn(), reflection: vi.fn(), patterns: vi.fn() }));
 vi.mock("@dpf/db", () => {
   const tx = { taskRun: { create: vi.fn() }, taskMessage: { create: vi.fn() } };
   return { prisma: { ...tx, $transaction: vi.fn(async callback => callback(tx)) } };
 });
+vi.mock("@/lib/operate/scheduled-jobs/scheduled-reporting-authority", () => ({ resolveScheduledReportingContext: mocks.reporting }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 vi.mock("@/lib/tak/agentic-loop", () => ({ runAgenticLoop: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ getAvailableTools: mocks.available,
@@ -29,7 +30,7 @@ const names = ["read_source_at_version", binding.writerToolName];
 const tool = (name: string) => ({ name, description: "Fixture", inputSchema: { type: "object", properties: {} },
   requiredCapability: null, sideEffect: false, executionMode: "immediate" });
 beforeEach(() => {
-  vi.clearAllMocks(); mocks.available.mockResolvedValue([...names, "run_shell", "load_tools"].map(tool));
+  vi.clearAllMocks(); mocks.reporting.mockResolvedValue(null); mocks.available.mockResolvedValue([...names, "run_shell", "load_tools"].map(tool));
   mocks.local.mockRejectedValue(new Error("A restricted path must not probe the engine."));
   mocks.fidelity.mockRejectedValue(new Error("A restricted path must not probe fidelity."));
   mocks.profession.mockResolvedValue({ systemPrompt: "Captured review instructions.", grounded: false });
@@ -113,6 +114,17 @@ it("prepares only the finite engagement's already authorized readers before any 
   const result = await resolveAutonomousWorkTools(input as never);
   expect(runtime.resolveLocalServingPosture).not.toHaveBeenCalled();
   expect(result.tools.map(t => t.name)).toEqual(names); expect(result.deferredTools).toEqual([]);
+  // A finite reader list must still intersect the current persisted commission.
+  const reportingInput = { ...input, userContext: { ...input.userContext, userId: "owner" },
+    taskRunId: "TR-REPORTING", scheduledReportingMode: "read-only-history" };
+  mocks.reporting.mockResolvedValue({ mode: "read-only-history" });
+  mocks.available.mockResolvedValue(available.map(t => ({ ...t, sideEffect: t.name === "wiki_query", executionMode: "immediate" })));
+  await expect(resolveAutonomousWorkTools(reportingInput as never)).rejects.toThrow("engagement-present-tool-surface-unavailable");
+  expect(mocks.reporting).toHaveBeenCalledWith("owner", expect.objectContaining({ taskRunId: "TR-REPORTING", agentId: "ux-design-critic" }));
+  mocks.available.mockResolvedValue(available.map(t => ({ ...t, sideEffect: false, executionMode: "immediate" })));
+  mocks.reporting.mockResolvedValue(null);
+  await expect(resolveAutonomousWorkTools(reportingInput as never)).rejects.toThrow("current persisted commission");
+
   mocks.available.mockResolvedValue(available.filter(t => t.name !== "read_source_at_version"));
   await expect(resolveAutonomousWorkTools(input as never)).rejects.toThrow("engagement-present-tool-surface-unavailable");
 });
