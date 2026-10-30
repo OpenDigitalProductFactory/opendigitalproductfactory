@@ -189,7 +189,7 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(arg.data.recordedByAgentId).toBe("agent-x");
   });
 
-  it("refuses a forged host qualification receipt after a valid public lease claim", async () => {
+  it("rejects invented host qualification output even with an approved token and active process lease", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:02:00Z"));
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-evidence-secret");
@@ -226,7 +226,7 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     const qualification = { workroomId: binding.workroomId, leaseId: "NPEL-QUAL",
       qualificationBindingDigest: qualificationBindingDigest(binding), executorMode: "workroom-host",
       platform: "win32", headSha: binding.headSha, testBlobIds: binding.candidate!.testBlobIds,
-      command: "pnpm exec vitest run scripts/lib/local-ci-gate-state.test.mjs",
+      command: "node --test scripts/lib/local-ci-gate-state.test.mjs",
       outputDigest: `sha256:${"2".repeat(64)}`, startedAt: "2026-01-01T00:01:10Z",
       completedAt: "2026-01-01T00:01:20Z", exitCode: 0, skipped: false };
 
