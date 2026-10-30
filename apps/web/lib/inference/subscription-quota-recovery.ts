@@ -18,10 +18,21 @@ export function quotaRecoveryCommission(value: unknown): { modelId: string; hour
 export type QuotaRecheckResult = { ok: boolean; message: string; nextCheckAt?: string; modelId?: string; observationCompleted?: boolean };
 
 /** One explicit synthetic request. Restoring an account or original work is never implied. */
-export async function recheckSubscriptionQuota(connectionId: string, modelId: string, hourly?: boolean): Promise<QuotaRecheckResult> {
+export async function recheckSubscriptionQuota(connectionId: string, modelId: string, hourly?: boolean, options: { scheduled?: boolean } = {}): Promise<QuotaRecheckResult> {
   if (!connectionId || connectionId.length > 200 || !modelId.trim() || modelId.length > 200) return { ok: false, message: "Choose an existing account and model." };
   const [{ prisma }, proofStore] = await Promise.all([import("@dpf/db"), import("@/lib/routing/provider-capacity/execution-proof.server")]);
   const captured = await proofStore.captureExecutionProofBinding(connectionId, modelId);
+  if (!captured && hourly === false) {
+    // Stopping future work does not require reconnecting or activating its account.
+    const prior = await prisma.scheduledJob.findUnique({ where: { jobId: quotaRecoveryJobId(connectionId) } });
+    const commission = quotaRecoveryCommission(prior?.metadata);
+    if (prior && commission) {
+      const stopped = await prisma.scheduledJob.updateMany({ where: { jobId: prior.jobId, updatedAt: prior.updatedAt },
+        data: { metadata: { kind: "subscription-quota-recovery", version: 1, modelId: commission.modelId, hourly: false } } });
+      return { ok: stopped.count === 1, observationCompleted: false, message: stopped.count === 1
+        ? "Hourly recovery is stopped." : "The recovery commission changed. Refresh its status." };
+    }
+  }
   if (!captured) return { ok: false, message: "This check requires an active subscription account and model, with no sign-in or billing restriction." };
   const now = new Date(), jobId = quotaRecoveryJobId(connectionId);
   let prior = await prisma.scheduledJob.upsert({ where: { jobId },
@@ -34,15 +45,18 @@ export async function recheckSubscriptionQuota(connectionId: string, modelId: st
     if (changed.count !== 1) return { ok: false, message: "The recovery commission changed. Refresh its status." };
     prior = await prisma.scheduledJob.findUniqueOrThrow({ where: { jobId } });
   }
-  if (prior.nextRunAt && prior.nextRunAt > now) return hourly !== undefined
-    ? { ok: true, observationCompleted: false, message: hourly ? "Hourly recovery is scheduled. Capacity was not checked again." : "Hourly recovery is stopped. Capacity was not checked again.", ...(hourly ? { nextCheckAt: prior.nextRunAt.toISOString() } : {}) }
-    : { ok: false, observationCompleted: false, message: "A capacity check has already run or is in progress. The next check is scheduled.", nextCheckAt: prior.nextRunAt.toISOString() };
+  const recent = prior.lastRunAt && prior.lastRunAt.getTime() + 60_000 > now.getTime();
+  const running = prior.lastStatus === "running" && (!prior.lastRunAt || prior.lastRunAt.getTime() + 90_000 > now.getTime());
+  if (running || recent || options.scheduled && prior.nextRunAt && prior.nextRunAt > now) return hourly !== undefined
+    ? { ok: true, observationCompleted: false, message: hourly ? "Hourly recovery is scheduled. Capacity was not checked again." : "Hourly recovery is stopped. Capacity was not checked again.", ...(hourly && prior.nextRunAt ? { nextCheckAt: prior.nextRunAt.toISOString() } : {}) }
+    : { ok: false, observationCompleted: false, message: "A capacity check just ran or is still in progress. Wait a minute before checking again.", ...(prior.nextRunAt ? { nextCheckAt: prior.nextRunAt.toISOString() } : {}) };
   const runCursor = randomUUID();
   const commissioned = hourly ?? quotaRecoveryCommission(prior.metadata)?.hourly ?? false;
   const nextRunAt = new Date(nextQuotaRecheckAt(now.getTime(), captured.resetTimes));
   // Atomic durable admission prevents overlapping clicks, sweep retries and client loss.
   const claimed = await prisma.scheduledJob.updateMany({ where: { jobId, updatedAt: prior.updatedAt, enabled: true, schedule: { not: "disabled" },
-    OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }] },
+    ...(options.scheduled ? { OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }] }
+      : { OR: [{ lastRunAt: null }, { lastRunAt: { lte: new Date(now.getTime() - 60_000) } }] }) },
     data: { runCursor, lastStatus: "running", lastRunAt: now, nextRunAt,
       metadata: { kind: "subscription-quota-recovery", version: 1, modelId, hourly: commissioned } } });
   if (claimed.count !== 1) return { ok: false, message: "This account's check changed or is already in progress. Refresh its status." };
@@ -101,7 +115,7 @@ export async function runSubscriptionQuotaRecovery() {
     const { captureExecutionProofBinding } = await import("@/lib/routing/provider-capacity/execution-proof.server");
     const binding = await captureExecutionProofBinding(job.jobId.slice(QUOTA_RECOVERY_JOB_PREFIX.length), commission.modelId);
     if (!binding?.hasQuota) continue;
-    outcomes.push(await recheckSubscriptionQuota(job.jobId.slice(QUOTA_RECOVERY_JOB_PREFIX.length), commission.modelId));
+    outcomes.push(await recheckSubscriptionQuota(job.jobId.slice(QUOTA_RECOVERY_JOB_PREFIX.length), commission.modelId, undefined, { scheduled: true }));
   }
   return { checked: outcomes.length, outcomes };
 }

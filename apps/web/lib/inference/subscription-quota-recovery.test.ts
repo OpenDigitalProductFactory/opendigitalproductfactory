@@ -15,10 +15,10 @@ const now = Date.parse("2026-10-30T02:00:00Z");
 const binding = { providerId: "chatgpt", connectionId: "provider-default-chatgpt", modelId: "target", adapter: "responses",
   accountVersion: "a".repeat(64), credentialRevision: "b".repeat(64), modelRevision: "c".repeat(64), endpointRevision: "d".repeat(64), quotaRevision: "e".repeat(64) };
 const captured = { accountId: "owned", binding, quotaRows: [], resetTimes: [], hasQuota: true };
-let job: { jobId: string; enabled: boolean; schedule: string; updatedAt: Date; nextRunAt: Date | null; lastStatus: string | null; metadata: unknown; runCursor?: string };
+let job: { jobId: string; enabled: boolean; schedule: string; updatedAt: Date; nextRunAt: Date | null; lastRunAt: Date | null; lastStatus: string | null; metadata: unknown; runCursor?: string };
 beforeEach(() => {
   vi.clearAllMocks();
-  job = { jobId: "subscription-quota-recovery:provider-default-chatgpt", enabled: true, schedule: "once", updatedAt: new Date(), nextRunAt: null, lastStatus: null,
+  job = { jobId: "subscription-quota-recovery:provider-default-chatgpt", enabled: true, schedule: "once", updatedAt: new Date(), nextRunAt: null, lastRunAt: null, lastStatus: null,
     metadata: { kind: "subscription-quota-recovery", version: 1, modelId: "target", hourly: true } };
   mocks.capture.mockResolvedValue(captured); mocks.persist.mockResolvedValue(true); mocks.read.mockResolvedValue({ ...binding });
   mocks.jobs.upsert.mockImplementation(async () => ({ ...job }));
@@ -84,5 +84,21 @@ describe("bounded subscription quota recovery", () => {
     mocks.capture.mockResolvedValue({ ...captured, hasQuota: false });
     expect(await runSubscriptionQuotaRecovery()).toEqual({ checked: 0, outcomes: [] });
     expect(mocks.observe).not.toHaveBeenCalled();
+  });
+  it("an explicit Check now can confirm an early provider reset before the next hourly sweep", async () => {
+    job.lastStatus = "unconfirmed"; job.lastRunAt = new Date(Date.now() - 5 * 60_000); job.nextRunAt = new Date(Date.now() + 55 * 60_000);
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: true, observationCompleted: true });
+    expect(mocks.requests).toHaveBeenCalledTimes(1);
+  });
+  it("a repeated click cannot send a second immediate request", async () => {
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: true });
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: false });
+    expect(mocks.requests).toHaveBeenCalledTimes(1);
+  });
+  it("can stop an existing hourly commission while the account cannot be checked", async () => {
+    mocks.capture.mockResolvedValue(null);
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target", false)).toMatchObject({ ok: true, observationCompleted: false });
+    expect(quotaRecoveryCommission(job.metadata)?.hourly).toBe(false);
+    expect(mocks.requests).not.toHaveBeenCalled();
   });
 });

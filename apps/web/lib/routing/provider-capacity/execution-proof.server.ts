@@ -14,6 +14,21 @@ type Db = Pick<Prisma.TransactionClient, "aiProviderConnection" | "modelProfile"
 function digest(value: unknown) {
   return createHash("sha256").update(canonicalJson(JSON.parse(JSON.stringify(value)))).digest("hex");
 }
+export function modelExecutionRevision(model: Prisma.ModelProfileGetPayload<{}>) {
+  // Evaluation scores and last-seen timestamps are not a new upstream allocation.
+  return digest({ id: model.id, providerId: model.providerId, modelId: model.modelId, modelStatus: model.modelStatus,
+    modelClass: model.modelClass, catalogHash: model.catalogHash, discoveryHash: model.discoveryHash, rawMetadataHash: model.rawMetadataHash,
+    capabilities: model.capabilities, capabilityOverrides: model.capabilityOverrides, defaultParameters: model.defaultParameters,
+    supportedParameters: model.supportedParameters, perRequestLimits: model.perRequestLimits, inputModalities: model.inputModalities,
+    outputModalities: model.outputModalities, supportedModalities: model.supportedModalities, supportsToolUse: model.supportsToolUse,
+    maxInputTokens: model.maxInputTokens, maxContextTokens: model.maxContextTokens, maxOutputTokens: model.maxOutputTokens });
+}
+export function endpointExecutionRevision(provider: Prisma.ModelProviderGetPayload<{}>, baseUrl: string) {
+  return digest({ contract: "responses-capacity-observation/v1", url: buildResponsesUrl(provider.providerId, baseUrl), adapter: "responses",
+    providerId: provider.providerId, status: provider.status, authMethod: provider.authMethod, authHeader: provider.authHeader,
+    category: provider.category, endpointType: provider.endpointType, supportsStreaming: provider.supportsStreaming,
+    maxContextTokens: provider.maxContextTokens, maxOutputTokens: provider.maxOutputTokens, modelRestrictions: provider.modelRestrictions });
+}
 
 export async function captureExecutionProofBinding(connectionId: string, modelId: string, db: Db = prisma) {
   const account = await db.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: true, provider: true } });
@@ -38,8 +53,7 @@ export async function captureExecutionProofBinding(connectionId: string, modelId
   if (!baseUrl) return null;
   const binding: ExecutionProofBinding = { providerId: account.providerId, connectionId, modelId, adapter: "responses",
     accountVersion: accountExecutionVersion(account), credentialRevision: capacityCredentialRevision(account.credentialEntry),
-    modelRevision: digest(model), endpointRevision: digest({ url: buildResponsesUrl(account.providerId, baseUrl),
-      adapter: "responses", providerUpdatedAt: account.provider.updatedAt, subscriptionUpdatedAt: subscription?.updatedAt ?? null }),
+    modelRevision: modelExecutionRevision(model), endpointRevision: endpointExecutionRevision(account.provider, baseUrl),
     quotaRevision: digest({ capacities: quotaRows, pools: pools.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) }) };
   return { accountId: account.id, binding, quotaRows, resetTimes: [...quotaRows.map(row => row.retryAt), ...pools.map(row => row.resetAt)],
     hasQuota: quotaRows.some(row => isProviderQuotaState(row.state) && capacityRoutingExclusionReason({ state: row.state, retryAtMs: row.retryAt?.getTime(), observedAtMs: row.lastObservedAt.getTime() }, Date.now()))

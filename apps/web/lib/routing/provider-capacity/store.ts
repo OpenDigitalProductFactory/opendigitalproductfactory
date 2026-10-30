@@ -38,6 +38,7 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
   const rows = await prisma.providerCapacityStatus.findMany({
     select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
       executionProof: true,
+      source: true,
       safeSummary: true, action: true, isHumanActionRequired: true,
       ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
@@ -65,10 +66,11 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
 
 /** Explicit safe fields only: raw snippets and credential storage stay server-side. */
 function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt: Date | null;
-  safeSummary: string | null; action: string; isHumanActionRequired: boolean }): CapacitySnapshot {
+  safeSummary: string | null; action: string; isHumanActionRequired: boolean; source?: string }): CapacitySnapshot {
   return { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null,
     observedAtMs: row.lastObservedAt?.getTime() ?? null, safeSummary: row.safeSummary,
-    action: row.action, isHumanActionRequired: row.isHumanActionRequired };
+    action: row.action, isHumanActionRequired: row.isHumanActionRequired,
+    ...(row.source ? { observationSource: ["api", "cli", "oauth", "opencode", "manual"].includes(row.source) ? row.source : "unknown" } : {}) };
 }
 
 async function persistScopedCapacity(input: {

@@ -11,7 +11,7 @@ const copy = SOURCE_CATALOG.providerAccounts;
 const recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]> = {
   models: [{ modelId: "selected-model", name: "Selected model" }, { modelId: "other-model", name: "Other model" }], selectedModelId: "selected-model",
   hourly: false, canCheck: true, lastCheckAt: null, nextCheckAt: null, lastResult: null,
-  checkedModelId: null, checkedAt: null, proofExpiresAt: null, observedAt: "2026-10-29T07:09:00Z",
+  checkedModelId: null, checkedAt: null, proofExpiresAt: null, observedAt: "2026-10-29T07:09:00Z", observationSource: "cli",
   limits: [{ summary: "Shared subscription limit", until: "2026-11-04T07:09:00Z" }], usageUrl: "https://chatgpt.com/codex/settings/usage", unavailable: false,
 };
 beforeEach(() => { vi.resetAllMocks(); mocks.recheck.mockResolvedValue({ ok: true, message: "Selected model check completed." }); });

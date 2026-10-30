@@ -17,6 +17,8 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
   const [hourly, setHourly] = useState(recovery.hourly);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const sourceLabels: Record<string, string> = { api: copy.capacitySourceApi, cli: copy.capacitySourceCoding, opencode: copy.capacitySourceCoding,
+    oauth: copy.capacitySourceCheck, manual: copy.capacitySourceManual };
   const instant = (value: string | null) => value ? <time dateTime={value}>{formatInstant(value, { timeZone: copy.viewerTimeZone ?? "UTC" })}</time> : copy.capacityUnknownTime;
   return <details className="mt-1 text-sm">
     <summary className="cursor-pointer py-2 text-[var(--dpf-accent)]">{copy.limitDetails}</summary>
@@ -27,6 +29,7 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
       </li>)}</ul>}
       <dl className="space-y-1">
         <div><dt className="inline text-[var(--dpf-muted)]">{copy.capacityObserved}: </dt><dd className="inline">{instant(recovery.observedAt)}</dd></div>
+        <div><dt className="inline text-[var(--dpf-muted)]">{copy.capacitySource}: </dt><dd className="inline">{sourceLabels[recovery.observationSource ?? ""] ?? copy.capacitySourceUnknown}</dd></div>
         {recovery.checkedModelId && <div><dt className="inline text-[var(--dpf-muted)]">{copy.capacityProof}: </dt><dd className="inline">{recovery.checkedModelId} · {instant(recovery.checkedAt)}</dd></div>}
         {recovery.proofExpiresAt && <div><dt className="inline text-[var(--dpf-muted)]">{copy.capacityFreshUntil}: </dt><dd className="inline">{instant(recovery.proofExpiresAt)}</dd></div>}
         {recovery.lastCheckAt && <div><dt className="inline text-[var(--dpf-muted)]">{copy.capacityLastCheck}: </dt><dd className="inline">{instant(recovery.lastCheckAt)}</dd></div>}

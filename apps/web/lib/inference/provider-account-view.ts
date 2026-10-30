@@ -23,7 +23,7 @@ export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
     models: Array<{ modelId: string; name: string }>; selectedModelId: string | null; hourly: boolean;
     canCheck: boolean; lastCheckAt: string | null; nextCheckAt: string | null; lastResult: string | null;
     checkedModelId: string | null; checkedAt: string | null; proofExpiresAt: string | null;
-    observedAt: string | null; limits: Array<{ summary: string; until: string | null }>;
+    observedAt: string | null; observationSource: string | null; limits: Array<{ summary: string; until: string | null }>;
     usageUrl: string | null; unavailable: boolean;
   };
 };
