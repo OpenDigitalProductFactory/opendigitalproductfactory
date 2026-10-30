@@ -50,6 +50,102 @@ cause is a live defect in the steering engine and worth keeping.
 
 ---
 
+## October 29 amendment: routine coordination before human escalation (BI-97445674)
+
+Status: proposed implementation contract under the operator's direction to log
+and implement routine decisions across chats and clients. This amendment does
+not itself approve an execution, widen a grant or replace an independent receipt.
+
+### Observed defect and outcome
+
+A non-forced source-scope claim reached a person because another principal held
+the room lease. The person approved it, but execution still refused `lease_held`.
+The approval did not resolve the actual prerequisite. Ordinary own-room claims
+already narrow their consequence under BI-2D65BD1B; a second blanket exemption
+would neither fix ownership nor preserve the write fence.
+
+An admitted coordinator must resolve routine coordination within its recorded
+mandate, and report a durable ownership dependency when it cannot yet act.
+Human attention is reserved for a decision that can change an outcome, under
+the existing escalation policy. A scheduler wake or approval click is not delivery.
+
+### Shared server contract
+
+1. Resolve current caller, human, room content access, grants and mandate before
+   disclosing an ownership prerequisite. Client names and caller-supplied labels
+   cannot establish authority. Keep the existing governor as the common entry
+   point for external MCP and native callers.
+2. Before creating an approval envelope for a non-forced scope claim, check the
+   existing scope-claim lease predicate. A proven incompatible live holder is a
+   coordination prerequisite, not a request to authorize an impossible write.
+   Return a typed non-executed result with a bounded reason and existing room
+   reference. Do not return private holder/task history to an unauthorized caller.
+3. An unavailable prerequisite read fails closed and reports unavailable evidence;
+   it must not be relabeled routine or treated as an invitation to override.
+   A forced claim retains its current consequence and human gate.
+4. The existing coordinator recovery obligation consumes that prerequisite.
+   Where current admission permits a same-mandate handoff, reuse the existing
+   request, receiver acknowledgement and completion contract. The coordinator
+   cannot acknowledge for the receiver. Otherwise retain the named dependency
+   and its next observable trigger. No new polling service or handoff store.
+5. Recheck authority, mandate, current lease and exact action inside the existing
+   transactional writer. An earlier preflight is never a lease reservation or
+   execution permit. A lease acquired after preflight must still prevent the write.
+6. Reconcile a stored approved action through the existing approval-completion
+   owner, retaining its original binding and recorded failure. This amendment
+   does not authorize replay of unknown effects, changed fingerprints or fresh
+   envelopes to evade a cached result. A prerequisite change alone is not proof
+   that an old action executed.
+
+Section 7 remains in force: coordinator/evaluator and coordinator/approver
+separation remains unchanged. Resolving a routine coordination prerequisite is
+not independent approval. Explicit always-approval policy, human-owned stages,
+credentials, spend, destructive effects, external effects and grant changes keep
+their existing controls. There is no global coordinator role bypass.
+
+### Substrate and implementation sequence
+
+Extend the existing shared authority pipeline and scope-claim classifier/writer:
+`resolve-coworker-tool-authority.ts`, `scope-claim-consequence.ts` and
+`scope-claim-lease.ts`. First inspect the governor's existing refusal contract;
+prefer its typed result over a parallel preflight framework. Keep consequence
+narrowing separate from a refusal to execute. Reuse Workroom recovery projection,
+command receipts and bounded handoff for durable routing.
+
+BI-5366EF78 owns same-mandate handoff; BI-82B5855A is overlapping intake.
+BI-C43FD3E5 owns durable COO recovery. BI-0B70FA79 owns approval completion.
+BI-C5E51A15 and its children own learning/monitoring and explicit-policy repair.
+This item integrates these contracts and the missing prerequisite ordering; it
+does not independently reimplement those owners' changes.
+
+### Verification and delivery
+
+- Reproduce the current foreign-live-lease envelope in a controlled regression.
+- Prove a non-forced blocked claim creates no human envelope and no scope write;
+  prove an eligible own-room claim still executes without an extra approval.
+- Prove force, explicit always policy and consequential controls retain their gates.
+- Exercise lease changes between preflight and write, revoked delegation, wrong
+  room/actor, unavailable reads and duplicate handoff acknowledgement.
+- Verify both shared server entry paths and transport adapters without depending
+  on a desktop hook. An external-client source contract is not live-client proof.
+- After protected publication and canonical deployment, observe an admitted
+  positive flow and a blocked/control flow with exact recorded effects. Do not
+  manufacture a production conflict, force takeover or reuse historical approval
+  as test authority. Completion requires the item's actual delivery evidence.
+
+### Research & Benchmarking and architecture reconciliation
+
+Reuse this design's October 25 research comparison of Kubernetes, Temporal,
+BMAD, Camunda and Step Functions: reconcile observed prerequisites, preserve
+durable identity and bounded retries, and reject a client-local recovery loop.
+No fresh external-product verification is claimed by this amendment. The new
+evidence is the reproduced approved-but-refused claim and current source predicate.
+Canonical identity remains Principal/Workroom; persistence remains existing
+activities/checkpoints. No dependency, schema, tool, credential or runtime service
+is added. The shared governed-tool response needs compatibility tests for existing
+clients; rollout and rollback use the existing governed release path and preserve
+all receipts and outstanding obligations.
+
 ## 1. What is actually true today
 
 Code-verified against `main` at `867c7e8be`, or live-queried from the reference install.
