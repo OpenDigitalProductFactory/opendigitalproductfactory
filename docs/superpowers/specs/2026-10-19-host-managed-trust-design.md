@@ -80,3 +80,46 @@ those hosts; simulated adapters do not prove native execution.
 
 References: [Node environment loading](https://nodejs.org/api/cli.html#node_extra_ca_certsfile),
 [effective CA roots](https://nodejs.org/api/tls.html#tlsgetcacertificatestype).
+
+## Live verification preflight follow-on (BI-95B102AA)
+
+The existing trust contract also applies to `scripts/dpf-verify-preflight.ts`.
+At fbe8c75ca511701a93a89103f7324aea84c4fb75, that normal launcher calls
+`fetch` without preparing saved trust and collapses TLS failures into a claim
+that the portal is not serving. During DEV verification the unchanged command
+returned BLOCKED with `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, while launching the
+same entry point with the existing resolver's child environment returned
+CAN-TEST for served dc1e4b5f66fae06c5c1cfcb8f82ec79b971e5cc7.
+
+This is a small caller-integration repair, not a new trust mechanism or an
+amendment to BI-F89C7FBD's original acceptance. Reuse `runWithHostMcpTrust` and
+`resolveHostMcpTrust` from `scripts/lib/mcp-host-trust.mjs`, and the existing
+preflight verdict core. Resolve the trust against the requested portal origin,
+not an unrelated ambient MCP destination. Its HTTPS path uses the existing
+validated saved bundle and fresh Node startup; explicit HTTP stays explicit.
+No trust store, credential, client configuration or grant is changed.
+
+Order the work in one independently shippable repair:
+
+1. Add behavior regressions around the real CLI with the existing TLS fixture.
+   Prove the saved-CA case fails before implementation. Include malformed and
+   missing bundles, certificate name mismatch, explicit HTTP, source mismatch
+   and non-200 image responses. Confirm only the read-only image endpoint is
+   requested; the transport probe sends no HTTP request.
+2. Integrate the existing trust launcher before the image fetch, preserve child
+   status and all original arguments, and retain structured BLOCKED output with
+   a transport-specific remedy for setup failures. Keep the canonical verdict
+   core and ancestry logic unchanged. This shared-adapter integration is the
+   relevant refactoring allocation; do not duplicate trust parsing.
+3. Run the focused launcher/TLS regressions and existing verdict tests, then
+   normal exact-tree verification, independent assessment, DCO publication and
+   protected merge. Prove the normal source command on the authorized live
+   install without a custom per-command trust wrapper; source-local checks do
+   not establish canonical runtime deployment.
+
+Acceptance is the four AC-PF criteria in BI-95B102AA: automatically load saved
+managed trust, fail closed with accurate transport diagnostics, preserve the
+read-only verdict/ancestry contract, and verify the normal supported launcher.
+Rollback reverts the caller integration only and retains all saved trust and
+credentials. Native Windows proof does not stand in for native macOS/Linux
+execution; shared resolver tests retain their own platform limits.
