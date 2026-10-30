@@ -34,10 +34,11 @@ type QualificationProtocol = {
   requiredPlatform: "linux" | "win32";
 };
 
-function qualificationExecutorAttestationAvailable(_protocol: QualificationProtocol): boolean {
-  // No current sandbox or Workroom host runner emits an independently observed
-  // receipt bound to the exact source, tests, platform and output.
-  return false;
+function qualificationExecutorAttestationAvailable(protocol: QualificationProtocol): boolean {
+  // The canonical host-resource runner can now bind a terminal observation to
+  // its server-verified lease. Sandbox execution remains fail-closed until it
+  // has the equivalent executor provenance contract.
+  return protocol.executorMode === "workroom-host";
 }
 
 function bodyMatch(body: string, expression: RegExp): string | null {

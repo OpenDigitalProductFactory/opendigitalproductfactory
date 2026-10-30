@@ -389,7 +389,7 @@ export type QualificationVerificationEvidence = {
 };
 
 export type QualificationExecutionEvidence = {
-  workroomId: string; qualificationBindingDigest: string; executorMode: "workroom-host";
+  workroomId: string; leaseId: string; qualificationBindingDigest: string; executorMode: "workroom-host";
   platform: QualificationPlatform; headSha: string; testBlobIds: string[]; command: string;
   outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
 };
@@ -397,6 +397,7 @@ export type QualificationExecutionEvidence = {
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
   const raw = record(value);
   const workroomId = text(raw?.workroomId);
+  const leaseId = text(raw?.leaseId);
   const bindingDigest = text(raw?.qualificationBindingDigest);
   const platform = raw?.platform;
   const headSha = text(raw?.headSha);
@@ -405,14 +406,15 @@ export function parseQualificationExecutionEvidence(value: unknown): Qualificati
   const outputDigest = text(raw?.outputDigest);
   const startedAt = text(raw?.startedAt);
   const completedAt = text(raw?.completedAt);
-  if (!workroomId || !bindingDigest || !SHA256.test(bindingDigest)
+  if (!workroomId || !leaseId || !/^NPEL-[A-Za-z0-9-]{1,100}$/.test(leaseId)
+    || !bindingDigest || !SHA256.test(bindingDigest)
     || raw?.executorMode !== "workroom-host" || (platform !== "linux" && platform !== "win32")
     || !headSha || !FULL_SHA.test(headSha) || !testBlobIds?.every((blob) => FULL_SHA.test(blob))
     || !command || !outputDigest || !SHA256.test(outputDigest)
     || !startedAt || !completedAt || !Number.isFinite(Date.parse(startedAt))
     || !Number.isFinite(Date.parse(completedAt)) || Date.parse(startedAt) > Date.parse(completedAt)
     || raw?.exitCode !== 0 || raw?.skipped !== false) return null;
-  return { workroomId, qualificationBindingDigest: bindingDigest, executorMode: "workroom-host",
+  return { workroomId, leaseId, qualificationBindingDigest: bindingDigest, executorMode: "workroom-host",
     platform, headSha, testBlobIds, command, outputDigest, startedAt, completedAt,
     exitCode: 0, skipped: false };
 }
@@ -420,12 +422,39 @@ export function parseQualificationExecutionEvidence(value: unknown): Qualificati
 export function qualificationExecutionEvidenceAllowed(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   evidence: unknown; accountablePrincipalRef: string | null; now: Date;
+  lease?: {
+    leaseId: string; environmentKey: string; status: string; claimKey: string | null;
+    purpose: string; ownerSessionId: string; ownerProvider: string; branchName: string | null;
+    buildId: string | null; taskRunId: string | null; ownerPid: number | null;
+    ownerProcessIdentity: string | null; admittedAt: Date | null; expiresAt: Date;
+    evidenceRecordId: string | null;
+  };
 }): boolean {
-  // Authentication proves who submitted these fields, not that a process ran.
-  // Until the host runner emits its own exact source/test/platform receipt,
-  // even perfectly matching caller metadata is non-evidence.
-  void input;
-  return false;
+  const evidence = parseQualificationExecutionEvidence(input.evidence);
+  const lease = input.lease;
+  const digest = qualificationBindingDigest(input.binding);
+  if (!evidence || !lease || input.binding.phase !== "verify"
+    || input.binding.executorMode !== "workroom-host" || !input.binding.candidate
+    || input.state.status !== "started" || input.state.startCount !== 1 || !input.state.startedAt
+    || input.accountablePrincipalRef !== input.binding.accountablePrincipalRef
+    || evidence.workroomId !== input.binding.workroomId || evidence.leaseId !== lease.leaseId
+    || evidence.qualificationBindingDigest !== digest
+    || evidence.platform !== input.binding.requiredPlatform
+    || evidence.headSha.toLowerCase() !== input.binding.headSha.toLowerCase()
+    || canonicalJson(evidence.testBlobIds) !== canonicalJson(input.binding.candidate.testBlobIds)
+    || !input.binding.allowedPaths.every((path) => evidence.command.replaceAll("\\", "/").includes(path))
+    || lease.environmentKey !== "host-heavy-resource" || lease.status !== "active" || !lease.claimKey
+    || lease.purpose !== `host-resource:qualification:${digest}`
+    || lease.buildId?.toLowerCase() !== input.binding.headSha.toLowerCase()
+    || lease.taskRunId !== input.binding.workroomId || !lease.ownerPid || !lease.ownerProcessIdentity
+    || lease.evidenceRecordId !== null || !lease.admittedAt) return false;
+  const started = Date.parse(evidence.startedAt);
+  const completed = Date.parse(evidence.completedAt);
+  const stateStarted = Date.parse(input.state.startedAt);
+  return started >= lease.admittedAt.getTime() && started >= stateStarted
+    && completed <= lease.expiresAt.getTime()
+    && completed - stateStarted <= input.binding.maxDurationMs
+    && input.now.getTime() >= completed;
 }
 
 export function qualificationExecutionActivitiesMatch(input: {

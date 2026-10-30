@@ -6,11 +6,23 @@ const db = vi.hoisted(() => ({
   backlogItemCreate: vi.fn(),
   backlogItemUpdate: vi.fn(),
   activityCreate: vi.fn(),
+  activityDelete: vi.fn(),
   toolExecutionFindUnique: vi.fn(),
   workroomFindUnique: vi.fn(),
+  leaseFindUnique: vi.fn(),
+  leaseUpdateMany: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: async (callback: (tx: unknown) => unknown) => callback({
+      nonProductionEnvironmentLease: {
+        findUnique: (...a: unknown[]) => db.leaseFindUnique(...a),
+        updateMany: (...a: unknown[]) => db.leaseUpdateMany(...a),
+      },
+      backlogItemActivity: {
+        create: (...a: unknown[]) => db.activityCreate(...a),
+      },
+    }),
     backlogItem: {
       findUnique: (...a: unknown[]) => db.backlogItemFindUnique(...a),
       findFirst: (...a: unknown[]) => db.backlogItemFindFirst(...a),
@@ -19,12 +31,17 @@ vi.mock("@dpf/db", () => ({
     },
     backlogItemActivity: {
       create: (...a: unknown[]) => db.activityCreate(...a),
+      delete: (...a: unknown[]) => db.activityDelete(...a),
     },
     toolExecution: {
       findUnique: (...a: unknown[]) => db.toolExecutionFindUnique(...a),
     },
     workroom: {
       findUnique: (...a: unknown[]) => db.workroomFindUnique(...a),
+    },
+    nonProductionEnvironmentLease: {
+      findUnique: (...a: unknown[]) => db.leaseFindUnique(...a),
+      updateMany: (...a: unknown[]) => db.leaseUpdateMany(...a),
     },
   },
 }));
@@ -198,7 +215,15 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
       taskId: "workroom-host:WC-QUAL",
     } } });
     db.activityCreate.mockResolvedValue({ id: "act-qual", recordedAt: new Date("2026-01-01T00:02:00Z") });
-    const qualification = { workroomId: binding.workroomId,
+    db.leaseFindUnique.mockResolvedValue({ leaseId: "NPEL-QUAL", environmentKey: "host-heavy-resource",
+      status: "active", claimKey: "attempt-key",
+      purpose: `host-resource:qualification:${qualificationBindingDigest(binding)}`,
+      ownerSessionId: "session-1", ownerProvider: "codex", branchName: "fix/qualification",
+      buildId: binding.headSha, taskRunId: binding.workroomId, ownerPid: 42,
+      ownerProcessIdentity: "process-42", admittedAt: new Date("2026-01-01T00:01:05Z"),
+      expiresAt: new Date("2026-01-01T00:15:00Z"), evidenceRecordId: null });
+    db.leaseUpdateMany.mockResolvedValue({ count: 1 });
+    const qualification = { workroomId: binding.workroomId, leaseId: "NPEL-QUAL",
       qualificationBindingDigest: qualificationBindingDigest(binding), executorMode: "workroom-host",
       platform: "win32", headSha: binding.headSha, testBlobIds: binding.candidate!.testBlobIds,
       command: "pnpm exec vitest run scripts/lib/local-ci-gate-state.test.mjs",
@@ -207,8 +232,15 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
 
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Windows qualification passed", qualification }, "u1", { agentId: "agent-x" }))
-      .resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });
-    expect(db.activityCreate).not.toHaveBeenCalled();
+      .resolves.toMatchObject({ success: true, entityId: "act-qual" });
+    expect(db.leaseUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leaseId: "NPEL-QUAL", evidenceRecordId: null, status: "active" },
+      data: { evidenceRecordId: expect.any(String) },
+    }));
+    expect(db.activityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      id: db.leaseUpdateMany.mock.calls[0][0].data.evidenceRecordId,
+    }) }));
+    db.activityCreate.mockClear();
     await expect(buildEvidencePack.handlers.record_execution_evidence({ itemId: "BI-1", kind: "test_pass",
       summary: "Wrong platform", qualification: { ...qualification, platform: "linux" } }, "u1",
       { agentId: "agent-x" })).resolves.toMatchObject({ success: false, error: "invalid_qualification_evidence" });
