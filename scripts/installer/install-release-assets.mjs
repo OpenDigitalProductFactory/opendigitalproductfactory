@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { restoreInstallState, updateInstallState } from "./install-state-transaction.mjs";
 
 const VERSION = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
@@ -188,13 +189,85 @@ export function ensureInngestKeys(text, newline, exported = process.env) {
 export const REMOTE_ACTION_DISPATCH_KEY = "DPF_REMOTE_ACTION_DISPATCH_ENABLED";
 export const EDGE_ACTION_DISPATCH_CONFIGURED_KEY = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED";
 
-export function ensureRemoteActionDispatch(text, newline) {
-  if (envValue(text, EDGE_ACTION_DISPATCH_CONFIGURED_KEY) !== "1") return text;
-  if (new RegExp(`^${REMOTE_ACTION_DISPATCH_KEY}=`, "m").test(text)) return text;
+function dispatchEnvEntry(text, key) {
+  const lines = text.split(/\r?\n/).filter(line => new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}(?:[ \\t]*=|[ \\t]*$)`).test(line));
+  if (lines.length > 1) throw new Error("remote_action_dispatch_input_ambiguous");
+  if (!lines.length) return { present: false, value: "" };
+  const match = new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}[ \\t]*=(.*)$`).exec(lines[0]);
+  if (!match) throw new Error("remote_action_dispatch_input_invalid");
+  const raw = match[1].trim();
+  const quoted = /^(?:"([^"]*)"|'([^']*)')(?:\s*#.*)?$/.exec(raw);
+  return { present: true, value: quoted ? quoted[1] ?? quoted[2] : raw.replace(/\s+#.*$/, "").trim() };
+}
+
+export function resolveRemoteActionDispatch(text, environment = {}) {
+  const configured = dispatchEnvEntry(text, EDGE_ACTION_DISPATCH_CONFIGURED_KEY);
+  const dispatch = dispatchEnvEntry(text, REMOTE_ACTION_DISPATCH_KEY);
+  const intentSha256 = sha256(JSON.stringify({ configured, dispatch }));
+  let resolution = "preserve";
+  if (!Object.hasOwn(environment, REMOTE_ACTION_DISPATCH_KEY) && !dispatch.present) {
+    const override = Object.hasOwn(environment, EDGE_ACTION_DISPATCH_CONFIGURED_KEY);
+    if ((override ? environment[EDGE_ACTION_DISPATCH_CONFIGURED_KEY] : configured.value) === "1") {
+      resolution = override ? "derive-once" : "derive-persist";
+    }
+  }
+  return { resolution, intentSha256 };
+}
+
+export function ensureRemoteActionDispatch(text, newline, context = {}) {
+  // A derived override belongs to this procedure; a real invocation override
+  // never becomes durable intent. Only the promoter passes a bound resolution.
+  const decision = resolveRemoteActionDispatch(text, context.resolution === "derive-persist" ? {} : context.environment);
+  if (context.resolution !== undefined) {
+    if (!["preserve", "derive-once", "derive-persist"].includes(context.resolution)
+      || !/^[a-f0-9]{64}$/.test(context.intentSha256 ?? "")
+      || decision.intentSha256 !== context.intentSha256) throw new Error("remote_action_dispatch_intent_changed");
+    if (context.resolution !== "derive-persist") return text;
+    if (decision.resolution !== "derive-persist") throw new Error("remote_action_dispatch_intent_changed");
+  }
+  if (decision.resolution !== "derive-persist") return text;
   return `${text}${text && !text.endsWith("\n") ? newline : ""}${REMOTE_ACTION_DISPATCH_KEY}=1${newline}`;
 }
 
-export function updateEnv(bytes, releaseTag, ghcrOwner) {
+export async function persistRemoteActionDispatch({ envPath, recoveryDir, resolution, intentSha256, failAfter }) {
+  if (resolution !== "derive-persist") return { status: "unchanged" };
+  const handle = await open(envPath, constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let checkpoint;
+  let checkpointOwned = false;
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.size > 1024 * 1024) throw new Error("remote_action_dispatch_input_invalid");
+    const bytes = await handle.readFile();
+    await mkdir(recoveryDir, { recursive: true, mode: 0o700 });
+    checkpoint = join(recoveryDir, "dispatch-env.json");
+    await writeFile(join(recoveryDir, "env.before"), bytes, { flag: "wx", mode: 0o600 });
+    await writeFile(checkpoint, JSON.stringify({ state: "prepared", intentSha256 }) + "\n", { flag: "wx", mode: 0o600 });
+    checkpointOwned = true;
+    const text = bytes.toString("utf8");
+    const next = ensureRemoteActionDispatch(text, text.includes("\r\n") ? "\r\n" : "\n", { resolution, intentSha256 });
+    const current = await lstat(envPath);
+    if (!current.isFile() || current.dev !== before.dev || current.ino !== before.ino
+      || !(await readFile(envPath)).equals(bytes)) throw new Error("remote_action_dispatch_input_changed");
+    const suffix = Buffer.from(next.slice(text.length));
+    if (failAfter === "checkpoint") throw new Error("injected_failure:checkpoint");
+    const written = await handle.write(suffix, 0, suffix.length, bytes.length);
+    if (written.bytesWritten !== suffix.length) throw new Error("remote_action_dispatch_partial_write");
+    await handle.sync();
+    if (failAfter === "append") throw new Error("injected_failure:append");
+    const after = await lstat(envPath);
+    if (!after.isFile() || after.dev !== before.dev || after.ino !== before.ino
+      || !(await readFile(envPath)).equals(Buffer.from(next))) throw new Error("remote_action_dispatch_readback_unproven");
+    await writeFile(checkpoint, JSON.stringify({ state: "persisted", intentSha256 }) + "\n", { mode: 0o600 });
+    return { status: "persisted" };
+  } catch (cause) {
+    if (checkpointOwned) await writeFile(checkpoint, JSON.stringify({ state: "unproven", intentSha256 }) + "\n", { mode: 0o600 }).catch(() => {});
+    // The portal was already swapped. Neither a file snapshot nor unwinding
+    // this process proves its running configuration was restored.
+    throw new Error("remote_action_dispatch_persistence_unproven", { cause });
+  } finally { await handle.close(); }
+}
+
+export function updateEnv(bytes, releaseTag, ghcrOwner, dispatchContext = {}) {
   let text = bytes?.toString("utf8") ?? "";
   const preExisting = text.trim().length > 0;
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
@@ -214,7 +287,7 @@ export function updateEnv(bytes, releaseTag, ghcrOwner) {
   text = ensureGppPermitSecret(text, newline);
   text = ensureDedicatedSigningKeys(text, newline);
   text = ensureInngestKeys(text, newline);
-  text = ensureRemoteActionDispatch(text, newline);
+  text = ensureRemoteActionDispatch(text, newline, dispatchContext);
   return Buffer.from(text);
 }
 
@@ -246,7 +319,11 @@ export async function installReleaseAssets(options) {
     if (options.failAfter === "files") throw new Error("injected_failure:files");
     await atomicWrite(oldManifestPath, verified.manifestBytes);
     await atomicWrite(versionPath, Buffer.from(releaseTag));
-    await atomicWrite(envPath, updateEnv(envBytes, releaseTag, ghcrOwner));
+    const nextEnv = updateEnv(envBytes, releaseTag, ghcrOwner, {
+      environment: process.env, resolution: options.remoteActionResolution, intentSha256: options.remoteActionIntentSha256,
+    });
+    await atomicWrite(envPath, nextEnv);
+    if (!(await readFile(envPath)).equals(nextEnv)) throw new Error("release_env_readback_unproven");
     if (options.failAfter === "identity") throw new Error("injected_failure:identity");
     await updateInstallState(statePath, current => ({
       ...current,
@@ -279,19 +356,34 @@ function parseArgs(argv) {
     args: argv,
     strict: false,
     allowPositionals: true,
-    options: Object.fromEntries(["source", "install", "state", "tag", "owner", "recovery"].map((name) => [name, { type: "string" }])),
+    options: Object.fromEntries(["source", "install", "state", "tag", "owner", "recovery", "remote-action", "install-env", "remote-action-resolution", "remote-action-intent-sha256"].map((name) => [name, { type: "string" }])),
   });
   return Object.fromEntries(Object.entries(values).map(([name, value]) => [name, typeof value === "string" ? value : undefined]));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
-  installReleaseAssets({
-    sourceDir: args.source,
-    installDir: args.install,
-    statePath: args.state,
-    releaseTag: args.tag,
-    ghcrOwner: args.owner,
-    recoveryDir: args.recovery,
-  }).catch(error => { console.error(error.message); process.exitCode = 1; });
+  const run = async () => {
+    if (args["remote-action"] === "resolve") {
+      const decision = resolveRemoteActionDispatch((await maybeRead(args["install-env"]))?.toString("utf8") ?? "", process.env);
+      console.log(`${decision.resolution}:${decision.intentSha256}`);
+      return;
+    }
+    if (args["remote-action"] === "persist") {
+      await persistRemoteActionDispatch({ envPath: args["install-env"], recoveryDir: args.recovery,
+        resolution: args["remote-action-resolution"], intentSha256: args["remote-action-intent-sha256"] });
+      return;
+    }
+    if (args["remote-action"] !== undefined) throw new Error("remote_action_dispatch_operation_invalid");
+    await installReleaseAssets({
+      sourceDir: args.source,
+      installDir: args.install,
+      statePath: args.state,
+      releaseTag: args.tag,
+      ghcrOwner: args.owner,
+      recoveryDir: args.recovery,
+      remoteActionResolution: args["remote-action-resolution"], remoteActionIntentSha256: args["remote-action-intent-sha256"],
+    });
+  };
+  run().catch(error => { console.error(error.message); process.exitCode = 1; });
 }
