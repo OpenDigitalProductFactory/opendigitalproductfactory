@@ -162,7 +162,8 @@ supported quoting/newlines and preserve unrelated env bytes. Ambiguous owned-key
 assignments cannot become guessed enablement; unsupported input fails closed.
 
 The normal promoter may export a derived value before Compose so the first
-replacement receives it. Keep its origin in local procedure state; never persist
+replacement receives it. Capture original process presence and value before
+deriving anything, and keep that origin in local procedure state; never persist
 an operator's one-shot override. Existing explicit file values remain untouched.
 Release-assets installation and source-mode finalization must consume the same
 rule. Only a successfully verified promotion may persist a derived missing
@@ -173,6 +174,16 @@ retain its recovery checkpoint and never claim that restoration occurred. Do not
 change the immutable release assets/state commit ordering or add a second portal
 recreation. No secret or unrelated env value is emitted by the resolver.
 
+An exported derived one must be unwound before every existing rollback Compose
+call: restore the original process presence/value, unsetting the variable when
+it was originally absent, before recreating an old image. Restoring file bytes
+alone is insufficient because the derived process value would still win. A
+production-promoter failure fixture must derive one, fail release identity or
+persistence, and observe effective default zero at the actual rollback portal
+recreation. A source-mode post-swap persistence failure must retain truthful
+runtime/configuration uncertainty and recovery evidence; restoring this
+promoter's environment does not prove the already-running portal was restored.
+
 #### Ordered implementation and verification
 
 1. **Red fixtures:** exercise the real promoter through the existing fake-Docker
@@ -180,7 +191,9 @@ recreation. No secret or unrelated env value is emitted by the resolver.
    dispatch value at the first portal recreation; reproduce the missing default.
    Add explicit process/file zero and one, quoted/LF/CRLF, unconfigured, missing or
    unreadable selected input, dry-run/build-only, conflict and persistence failure
-   cases. Test the shared file policy without a live runtime.
+   cases, including the effective value at rollback recreation after a derived
+   default and failed release commit. Test the shared file policy without a live
+   runtime.
 2. **Shared policy and pre-Compose resolution:** extend
    `scripts/installer/install-release-assets.mjs` and the existing promoter env
    handling. Keep an explicitly supplied process value and selected-file intent;
@@ -188,8 +201,10 @@ recreation. No secret or unrelated env value is emitted by the resolver.
    Keep helper invocation limited to these two public configuration keys.
 3. **Truthful persistence:** retain release-assets transaction ownership, add the
    corresponding source-mode finalization, and preserve one-shot overrides. Verify
-   persisted readback or retain the bounded recovery snapshot and failure. Never
-   use a manual reload, a convergence-marker reset or a second accidental release.
+   persisted readback or retain the bounded recovery snapshot and failure. Unwind
+   a synthesized process override before each existing rollback Compose call;
+   do not add a second success-path recreation. Never use a manual reload, a
+   convergence-marker reset or a second accidental release.
 4. **Verification and publication:** run the affected Node source suite, the
    production-promoter functional tests, both affected package typechecks and every
    test/guard from the claimed scope's impact contract. Use the canonical merged
