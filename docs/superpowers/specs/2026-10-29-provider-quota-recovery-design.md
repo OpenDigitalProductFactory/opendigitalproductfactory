@@ -52,6 +52,8 @@ The existing account operation explicitly records its optional hourly commission
 
 ### CT-RECOVERY-VIEW: useful evidence and actions
 
+UI location choice DI-295459E701E6 compares contextual recovery disclosure, the existing provider detail route, and always-visible inline recovery. The agent recorded contextual recovery disclosure following the WWMD recommendation. This is a design choice using explicitly estimated UI costs, not measured usability or permission to skip verification. Reuse `ExpandableCard` for subordinate account detail among peer records, control one open account in the parent, and use the existing form `SearchableSelect` so the complete model catalog remains reachable without a long flat dropdown. It replaces the checkpoint's native details/flat select, following the existing usability standard. All asynchronous actions show the existing busy primitive and retain one result region. No new route or navigation layer is added.
+
 Extend the existing provider account view instead of adding a dashboard. Show session/short-window, weekly/shared subscription and API spend restrictions distinctly when evidence identifies them; otherwise label the limit unknown. Show last observation and source, expected reset in the operator locale, and check-again result separately from authentication.
 
 Expose the provider Usage page for supported reset offers. Since the inspected supported contracts expose no authoritative reset-offer feed, show availability as unknown rather than claiming no offer. Explain the provider can offer an early reset and show its expiry only when actually observed. Opening Usage or checking capacity never consumes a reset. Redemption remains an explicit finite-use owner action; no provider credential is entered by an agent.

@@ -91,18 +91,23 @@ export async function verifyProviderQuotaRecovery() {
           await page.goto(runtime.origin + PATH, { waitUntil: "domcontentloaded", timeout: 60_000 });
           await waitForRouteDomToSettle(page);
           const section = page.getByRole("region", { name: copy.connection, exact: true });
-          // Native details is initially closed and keyboard operable. Find the exact owned account row.
+          // The canonical record disclosure is closed and keyboard operable.
           const row = section.locator("tr, [data-testid='mobile-row']").filter({ has: page.getByRole("link", { name: "Recovery verification account", exact: true }) });
-          const details = row.locator("details");
-          check(await details.count() === 1, "The fixture account does not have one recovery disclosure");
-          check(!await details.evaluate(node => (node as HTMLDetailsElement).open), "Recovery opened without an operator request");
-          const summary = details.locator(":scope > summary"); await summary.focus(); await page.keyboard.press("Enter");
-          check(await details.evaluate(node => (node as HTMLDetailsElement).open), "Keyboard cannot open recovery evidence");
+          const card = row.locator("article[data-dpf-disclosure-trigger]");
+          check(await card.count() === 1, "The fixture account does not have one recovery disclosure");
+          const summary = card.getByRole("button", { name: copy.limitDetails, exact: true });
+          check(await summary.getAttribute("aria-expanded") === "false", "Recovery opened without an operator request");
+          await summary.focus(); await page.keyboard.press("Enter");
+          const details = card.getByRole("region", { name: copy.limitDetails, exact: true });
+          await details.waitFor({ state: "visible" });
+          check(await summary.getAttribute("aria-expanded") === "true", "Keyboard cannot open recovery evidence");
           check((await details.innerText()).includes(copy.resetUnknown), "Unreported reset offers are not visible");
           check(await details.getByRole("link", { name: copy.providerUsage }).getAttribute("href") === "https://chatgpt.com/codex/settings/usage", "Provider usage target changed");
           check(transport.counts().requests === countBefore, "Viewing limits or reset guidance sent inference");
           if (scenario === "limited" || scenario === "recovered") {
-            await details.getByLabel(copy.capacityModel, { exact: true }).selectOption(fixture.modelId);
+            await details.getByLabel(copy.capacityModel, { exact: true }).click();
+            await details.getByRole("textbox", { name: copy.capacityModelSearch, exact: true }).fill(fixture.modelId);
+            await details.getByRole("option", { name: `Recovery verification model (${fixture.modelId})`, exact: true }).click();
             await details.getByRole("button", { name: copy.capacityCheck, exact: true }).click();
             await details.getByRole(scenario === "recovered" ? "status" : "alert").filter({ hasText: scenario === "recovered" ? "completed a Responses capacity check" : "did not confirm capacity" }).waitFor({ timeout: 45_000 });
             check(transport.counts().requests === countBefore + 1, "Check now did not send exactly one fixed synthetic request");
@@ -126,10 +131,12 @@ export async function verifyProviderQuotaRecovery() {
           const geometry = await page.evaluate(() => ({ width: innerWidth, documentWidth: document.documentElement.scrollWidth,
             dark: matchMedia("(prefers-color-scheme: dark)").matches, visibility: document.visibilityState }));
           check(geometry.documentWidth <= geometry.width && geometry.dark === (theme === "dark") && geometry.visibility === "visible", "Scenario viewport or theme is incorrect");
-          const axe = await new AxeBuilder({ page }).include("details[open]").options(uxSweepAxeOptions()).analyze();
+          const panelId = await summary.getAttribute("aria-controls");
+          check(panelId, "Recovery disclosure has no associated panel");
+          const axe = await new AxeBuilder({ page }).include('[id="' + panelId + '"]').options(uxSweepAxeOptions()).analyze();
           check(axe.violations.filter(value => value.impact === "serious" || value.impact === "critical").length === 0, "Recovery disclosure has serious accessibility findings");
           const slug = `${scenario}-${layout}-${theme}`, path = resolve(OUT, slug + ".png");
-          const bytes = await details.screenshot({ path });
+          const bytes = await row.screenshot({ path });
           const evidence = { scenario, layout, theme, sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun",
             path: slug + ".png", sha256: createHash("sha256").update(bytes).digest("hex"), geometry, ariaSnapshot: await details.ariaSnapshot(),
             checks: { initiallyClosed: true, keyboard: true, exactModel: true, resetGuidance: true, broadForecastPreserved: true, cliPreserved: true },
@@ -148,8 +155,8 @@ export async function verifyProviderQuotaRecovery() {
     finally { await transport.close(); await browser.close(); await prisma.$disconnect(); }
   }
   check(completed, "No complete scenario result was produced");
-  write("measured-ux-fit.json", { version: "1", decidedOption: "contextual-recovery-disclosure", scope: { files: ["apps/web/components/platform/ProviderAccountsOverview.tsx", "apps/web/components/platform/ProviderQuotaDetails.tsx"] },
-    evidence: { kind: "sweep-measurement", measured: { [PATH]: measurements[0]!.metrics } }, verification: { sourceSha: runtime.sourceSha, captures: captures.length, realSubscriptionCapacity: "unrun" } });
+  write("measured-ux-fit.json", { version: "1", decidedOption: "contextual-recovery-disclosure", scope: { files: ["apps/web/components/platform/ProviderQuotaDetails.tsx"] },
+    evidence: { kind: "sweep-measurement", measured: { [PATH]: measurements[0]!.metrics } }, verification: { additionalReviewedFiles: ["apps/web/components/platform/ProviderAccountsOverview.tsx"], sourceSha: runtime.sourceSha, captures: captures.length, realSubscriptionCapacity: "unrun" } });
   write("execution.json", completed);
   console.log("Provider recovery scenarios passed: synthetic transport, preserved quota and CLI records, stop-only controls, keyboard, mobile and both themes. Real subscription capacity remains unrun.");
 }

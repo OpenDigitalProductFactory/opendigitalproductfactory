@@ -33,6 +33,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const [search, setSearch] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [showCatalog, setShowCatalog] = useState(firstRun);
+  const [openRecoveryId, setOpenRecoveryId] = useState<string | null>(null);
   const [newProvider, setNewProvider] = useState<ProviderAccountCatalogRow | null>(null);
   const [label, setLabel] = useState("");
   const [method, setMethod] = useState("");
@@ -71,7 +72,8 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       {row.capabilitySummary && <div className="text-xs text-[var(--dpf-muted)]">{row.capabilitySummary}</div>}
     </div> },
     { key: "capacity", header: copy.capacity, mobileFullWidth: true, cell: row => <div>{row.capacitySummary}
-      {row.quotaRecovery && <ProviderQuotaDetails key={row.connectionId} connectionId={row.connectionId} recovery={row.quotaRecovery} canWrite={canWrite} copy={copy} />}
+      {row.quotaRecovery && <ProviderQuotaDetails key={row.connectionId} connectionId={row.connectionId} recovery={row.quotaRecovery} canWrite={canWrite} copy={copy}
+        open={openRecoveryId === row.connectionId} onOpenChange={open => setOpenRecoveryId(open ? row.connectionId : null)} />}
       {!row.quotaRecovery && row.resetSummary && <div className="text-xs text-[var(--dpf-muted)]">{row.resetSummary}</div>}
     </div> },
     { key: "manage", header: copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="flex flex-wrap gap-2">

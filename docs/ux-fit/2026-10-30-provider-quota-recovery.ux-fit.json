@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "decidedOption": "contextual-recovery-disclosure",
+  "decisionInteractionId": "DI-295459E701E6",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderQuotaDetails.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "contextual-recovery-disclosure",
+      "provider-detail-recovery",
+      "visible-inline-recovery"
+    ]
+  },
+  "verification": {
+    "additionalReviewedFiles": ["apps/web/components/platform/ProviderAccountsOverview.tsx"],
+    "designDecision": "Agent-recorded choice in WWMD, using explicitly estimated UI costs and counted interaction flows. It supplies no runtime, authority or measured-usability verdict.",
+    "canonicalComponents": "ExpandableCard with one account open; existing form SearchableSelect preserves complete model reachability. Check now and stop-only remain separate.",
+    "requiredBeforeMerge": "Protected exact-tree UX Route Sweep Runtime and provider recovery scenarios, including synthetic Responses integration, failed check, current proof, paused/sign-in restriction, stop-only, keyboard, mobile, both themes and completed cleanup.",
+    "specialistReview": "Completed UX Critic review of the actual rendered changed surface remains owed. Earlier source-prototype engagement CE-F00D8D7F is requested only and does not cover this rendered artifact.",
+    "liveAcceptance": "Actual subscription capacity, canonical installation, pinned model quality and fresh coworker/watch acceptance remain unrun for this change.",
+    "baseline": "Unchanged. No invented route measurements or accessibility pass is asserted. The protected served scenario emits an actual measured artifact only after successful execution and cleanup."
+  }
+}

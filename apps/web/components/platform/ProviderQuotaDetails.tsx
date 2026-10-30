@@ -6,13 +6,16 @@ import { recheckProviderAccountQuota, stopProviderAccountQuotaRecovery } from "@
 import { formatInstant } from "@/lib/datetime";
 import { FormStatus } from "@/components/ui/form/FormStatus";
 import { SubmitButton } from "@/components/ui/form/SubmitButton";
-import { fieldControlClass } from "@/components/ui/form/styles";
+import { SearchableSelect } from "@/components/ui/form/SearchableSelect";
 import { Button } from "@/components/ui/Button";
+import { InlineBusy } from "@/components/ui/InlineBusy";
+import { ExpandableCard } from "@/components/ui/report-kit/ExpandableCard";
 
 type QuotaDetailsProps = { connectionId: string; recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]>;
-  canWrite: boolean; copy: Record<string, string> };
-export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }: QuotaDetailsProps) {
+  canWrite: boolean; copy: Record<string, string>; open?: boolean; onOpenChange?: (open: boolean) => void };
+export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy, open, onOpenChange }: QuotaDetailsProps) {
   const id = useId(), router = useRouter();
+  const [localOpen, setLocalOpen] = useState(false);
   const [modelId, setModelId] = useState(recovery.models.some(model => model.modelId === recovery.selectedModelId)
     ? recovery.selectedModelId! : recovery.models[0]?.modelId ?? "");
   const [hourly, setHourly] = useState(recovery.hourly);
@@ -22,9 +25,9 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
   const sourceLabels: Record<string, string> = { api: copy.capacitySourceApi, cli: copy.capacitySourceCoding, opencode: copy.capacitySourceCoding,
     oauth: copy.capacitySourceCheck, manual: copy.capacitySourceManual };
   const instant = (value: string | null) => value ? <time dateTime={value}>{formatInstant(value, { timeZone: copy.viewerTimeZone ?? "UTC" })}</time> : copy.capacityUnknownTime;
-  return <details className="mt-1 text-sm">
-    <summary className="cursor-pointer py-2 text-[var(--dpf-accent)]">{copy.limitDetails}</summary>
-    <div className="space-y-3 rounded border border-[var(--dpf-border)] p-3">
+  return <ExpandableCard id={`${id}-recovery`} open={open ?? localOpen} onOpenChange={onOpenChange ?? setLocalOpen}
+    summary={copy.limitDetails} headingLevel={4} className="mt-1 text-sm">
+    <div className="space-y-3">
       {recovery.unavailable && <p role="status">{copy.capacityUnavailable}</p>}
       {recovery.limits.length > 0 && <ul className="m-0 list-inside space-y-1 p-0">{recovery.limits.map((limit, index) => <li key={index}>
         {limit.summary}{limit.until && <span className="block text-[var(--dpf-muted)]">{copy.capacityExpectedReset}: {instant(limit.until)}</span>}
@@ -58,9 +61,10 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
       }} className="space-y-2">
         <p id={`${id}-preview`}>{copy.capacityCheckPreview}</p>
         <label className="block" htmlFor={`${id}-model`}>{copy.capacityModel}</label>
-        <select id={`${id}-model`} name="modelId" className={fieldControlClass} value={modelId} disabled={pending} onChange={event => setModelId(event.target.value)}>
-          {recovery.models.map(model => <option key={model.modelId} value={model.modelId}>{model.name}</option>)}
-        </select>
+        <p className="text-[var(--dpf-muted)]">{copy.capacityAvailableModels}: {recovery.models.length}</p>
+        <SearchableSelect id={`${id}-model`} name="modelId" value={modelId} disabled={pending} onValueChange={setModelId}
+          searchLabel={copy.capacityModelSearch} placeholder={copy.capacityModel} emptyMessage={copy.capacityNoMatchingModels}
+          options={recovery.models.map(model => ({ value: model.modelId, label: model.name === model.modelId ? model.modelId : `${model.name} (${model.modelId})` }))} />
         <label className="flex items-center gap-2 py-2"><input type="checkbox" name="hourly" checked={hourly} disabled={pending} onChange={event => setHourly(event.target.checked)} />{copy.capacityHourly}</label>
         <SubmitButton pending={pending} pendingLabel={copy.working} disabled={!modelId}>{copy.capacityCheck}</SubmitButton>
       </form> : null}
@@ -76,10 +80,10 @@ export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy }:
               router.refresh();
             } catch { setResult({ ok: false, message: copy.failed }); }
           });
-        }}>{copy.capacityStop}</Button>
+        }}>{pending ? <InlineBusy label={copy.working} tone="current" /> : copy.capacityStop}</Button>
       </div>}
       <FormStatus error={result && !result.ok ? result.message : null} success={result?.ok ? result.message : null} />
       {canWrite && (!recovery.canCheck || recovery.unavailable) && <p>{copy.capacityNoCheck}</p>}
     </div>
-  </details>;
+  </ExpandableCard>;
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isRecord } from "@/lib/shared/coerce";
+import { ok } from "@/lib/shared/action-result";
 import { QUOTA_PROOF_TTL_MS, currentExecutionProof, type ExecutionProof } from "@/lib/routing/provider-capacity/execution-proof";
 
 export const QUOTA_RECOVERY_JOB_PREFIX = "subscription-quota-recovery:";
@@ -58,7 +59,7 @@ export async function recheckSubscriptionQuota(connectionId: string, modelId: st
   const recent = prior.lastRunAt && prior.lastRunAt.getTime() + 60_000 > now.getTime();
   const running = prior.lastStatus === "running" && (!prior.lastRunAt || prior.lastRunAt.getTime() + 90_000 > now.getTime());
   if (running || recent || options.scheduled && prior.nextRunAt && prior.nextRunAt > now) return hourly !== undefined
-    ? { ok: true, observationCompleted: false, message: hourly ? "Hourly recovery is scheduled. Capacity was not checked again." : "Hourly recovery is stopped. Capacity was not checked again.", ...(hourly && prior.nextRunAt ? { nextCheckAt: prior.nextRunAt.toISOString() } : {}) }
+    ? { ...ok(), observationCompleted: false, message: hourly ? "Hourly recovery is scheduled. Capacity was not checked again." : "Hourly recovery is stopped. Capacity was not checked again.", ...(hourly && prior.nextRunAt ? { nextCheckAt: prior.nextRunAt.toISOString() } : {}) }
     : { ok: false, observationCompleted: false, message: "A capacity check just ran or is still in progress. Wait a minute before checking again.", ...(prior.nextRunAt ? { nextCheckAt: prior.nextRunAt.toISOString() } : {}) };
   const runCursor = randomUUID();
   const commissioned = hourly ?? quotaRecoveryCommission(prior.metadata)?.hourly ?? false;

@@ -28,11 +28,22 @@ describe("provider capacity recovery disclosure", () => {
   it("sends only the explicitly selected account/model and hourly choice", async () => {
     render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={recovery} canWrite copy={copy} />);
     fireEvent.click(screen.getByText(copy.limitDetails));
-    fireEvent.change(screen.getByLabelText(copy.capacityModel), { target: { value: "other-model" } });
+    fireEvent.click(screen.getByLabelText(copy.capacityModel));
+    fireEvent.click(screen.getByRole("option", { name: "Other model (other-model)" }));
     fireEvent.click(screen.getByLabelText(copy.capacityHourly));
     fireEvent.click(screen.getByRole("button", { name: copy.capacityCheck }));
     await waitFor(() => expect(mocks.recheck).toHaveBeenCalledExactlyOnceWith("provider-default-chatgpt", "other-model", true));
     expect((await screen.findByRole("status")).textContent).toContain("Selected model check completed.");
+  });
+  it("keeps a model beyond the first twenty reachable by search without dispatch", () => {
+    const models = Array.from({ length: 25 }, (_, i) => ({ modelId: `model-${i}`, name: `Model ${i}` }));
+    render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={{ ...recovery, models }} canWrite copy={copy} />);
+    fireEvent.click(screen.getByText(copy.limitDetails));
+    fireEvent.click(screen.getByLabelText(copy.capacityModel));
+    fireEvent.change(screen.getByRole("textbox", { name: copy.capacityModelSearch }), { target: { value: "Model 24" } });
+    fireEvent.click(screen.getByRole("option", { name: "Model 24 (model-24)" }));
+    expect((screen.getByLabelText(copy.capacityModel) as HTMLInputElement).value).toBe("Model 24 (model-24)");
+    expect(mocks.recheck).not.toHaveBeenCalled();
   });
   it.each([false, true])("a read-only or restricted account cannot dispatch (write=%s)", canWrite => {
     render(<ProviderQuotaDetails connectionId="account" recovery={{ ...recovery, canCheck: false }} canWrite={canWrite} copy={copy} />);
