@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveQualificationAdmission } from "./qualification-terminal-admission";
+import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "./qualification-research-admission";
 
 const NOW = new Date("2025-06-18T12:00:00.000Z");
 const HEAD = "a".repeat(40);
@@ -80,6 +81,47 @@ describe("resolveQualificationAdmission", () => {
     expect(f.ports.readBlob).toHaveBeenCalledWith(expect.objectContaining({
       expectedBlobId: BLOB,
     }));
+  });
+
+  it("binds Windows verification to the governed host runner instead of a parallel native procedure", async () => {
+    const f = fixture();
+    const prepared = await resolveQualificationAdmission({ itemId: "BI-QUAL",
+      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports);
+    expect(prepared?.binding).toMatchObject({ phase: "prepare", executorMode: "sandbox-build" });
+
+    const candidate = { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
+      testBlobIds: ["f".repeat(40)], targetProductionBlobIds: [PROD],
+      productionBytesUnchanged: true, reviewReceiptId: "review-candidate-1" };
+    const state = { schemaVersion: 1, status: "settled", token: prepared!.qualificationAdmissionToken,
+      bindingDigest: prepared!.bindingDigest, startCount: 1, issuedAt: prepared!.binding.issuedAt,
+      startedAt: NOW.toISOString(), taskId: "prepare-1", evidenceId: "candidate-evidence-1" };
+    expect(parseQualificationExperimentState(state)).not.toBeNull();
+    expect(verifyQualificationExperimentAdmission(prepared!.qualificationAdmissionToken, { now: NOW, allowExpired: true })).toMatchObject({ ok: true });
+    f.db.workroom.findUnique.mockResolvedValue({
+      ...(await f.db.workroom.findUnique()),
+      headSha: candidate.headSha,
+      workspaceState: { qualificationExperimentAdmission: state },
+    });
+    f.db.workroomActivity.findUnique.mockResolvedValue({
+      id: "candidate-evidence-1", kind: "evidence",
+      payload: { result: { qualificationOutcome: "candidate", candidate } },
+    });
+    f.db.externalEvidenceRecord.findMany.mockResolvedValue([
+      semanticReview("review-candidate-1", candidate.headSha, candidate.diffDigest),
+      semanticReview("review-protocol-1"),
+    ]);
+
+    const result = await resolveQualificationAdmission({ itemId: "BI-QUAL",
+      refusedWorkroomId: "WC-QUAL", currentAgentId: "AGT-OWNER" }, f.ports);
+    expect(f.db.workroomActivity.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "candidate-evidence-1" },
+    }));
+    expect(result?.binding).toMatchObject({
+      phase: "verify",
+      executorMode: "native-edge",
+      requiredPlatform: "win32",
+      permittedTools: expect.not.arrayContaining(["record_execution_evidence"]),
+    });
   });
 
   it("issues preparation without consuming the later verification start", async () => {
