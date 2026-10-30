@@ -409,3 +409,33 @@ produces; `BI-05D7A0DC` (async completion hub) renders 4.5's results;
 - Cross-installation orchestration (federation owns it).
 - Any UI beyond existing Workroom and queue-health surfaces.
 - Replacing Build Studio's phase orchestrator; it becomes a client of 4.5.
+
+### Root turn correlation repair (BI-1C23E1F3)
+
+The supervised Codex adapter must distinguish its room's root thread and active
+turn from child or unrelated provider activity. Only a terminal event for that
+exact root turn advances the supervisor's queued input. Child approvals still
+reach the room's existing decision path; filtering progress must not discard
+requests that need a decision.
+
+**OBJ-DDL-ROOT:** Concurrent provider activity cannot change or complete another
+room's root turn. A root turn settles once, with its actual terminal status.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-DDL-ROOT-1 | OBJ-DDL-ROOT | Interleaved child and foreign starts, messages and completions leave the active root identity unchanged and emit no root completion. |
+| AC-DDL-ROOT-2 | OBJ-DDL-ROOT | Matching completed, failed and interrupted root turns each settle once; duplicate, late, unknown-status and identity-missing terminal frames do not settle a current turn. |
+| AC-DDL-ROOT-3 | OBJ-DDL-ROOT | Runtime approval requests remain visible through the existing permission path, including requests from child activity. |
+
+Ordered atomic repair: replay the faulty sequence against the current adapter;
+observe failure; correlate notifications at the existing adapter boundary; replay
+normal, interleaved, duplicate and malformed sequences; run the runtime suites,
+typechecks and governed publication gate. No independently shippable subcomponent,
+new scheduler, schema, package or deployment mechanism is introduced.
+
+This reuses the existing RuntimeSession contract and fake-process transport. It
+is an OS-independent prerequisite for safe concurrency and DPF2 absorption, not a
+DPF2 implementation. The extraction boundary remains owned by
+[the reusable architecture design](2026-10-18-reusable-architecture-extraction-design.md).
+
+Settlement is retained for the session lifetime. A delayed start acknowledgement or replayed notification for an older root remains retired after subsequent roots finish; remembering only the last terminal turn is insufficient. The regression runs two complete roots before delivering their start acknowledgements in reverse order.
