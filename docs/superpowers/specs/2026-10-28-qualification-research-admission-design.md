@@ -105,6 +105,19 @@ Retain the current readiness DENY and `IF-91E987DA433B0C82` throughout qualifica
 | AC-QRA-6 | OBJ-QRA-FENCE | Existing small-fix reproduction, feature research, grants, receipts, Workroom stages and non-qualification callers pass unchanged regression coverage. |
 | AC-QRA-7 | OBJ-QRA-ADMIT, OBJ-QRA-TRUTH, OBJ-QRA-FENCE, OBJ-QRA-RECOVER | Independent policy review, protected CI/merge and served-source verification precede the first qualification action. |
 
+### Backlog acceptance traceability
+
+The governed medium-work coverage receipt binds the acceptance baseline verbatim:
+
+- A server-owned qualification binding names the exact BI, Workroom, repository, base/head, immutable protocol blob, installation, accountable owner, permitted tools, bounded starts and time, and current authority decision.
+- The binding reuses the governed stage/evidence mechanism; no parallel execution controller or generic bypass is introduced.
+- Admission authorizes only the bounded experiment. It does not pass RESEARCH_REQUIRED, resolve IF-91E987DA433B0C82, or authorize ordinary implementation.
+- Positive, negative and inconclusive terminal outcomes are all persisted truthfully and remain auditable.
+- Only a later genuine research receipt may resolve the existing finding, explicitly citing its finding id and the experiment evidence.
+- Changed/stale protocol, source, Workroom, installation, authority, tool scope, expiry, duplicate start, absent result, or conflicting evidence fails closed.
+- Existing small-fix source_verified + test_pass and normal record_initiative_evidence behavior remain unchanged.
+- Independent policy review, protected CI/merge and served deployment precede use by BI-B3DEC077.
+
 ## Scope, compatibility and rollback
 
 Initial source scope is initiative-readiness recovery/receipt validation, Workroom stage task configuration and their focused tests. Prefer pure modules over growing existing large files. No schema migration or new MCP writer is planned. Legacy tasks without a qualification binding behave exactly as before.
