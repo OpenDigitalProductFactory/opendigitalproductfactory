@@ -195,3 +195,15 @@ describe("parent-bound local inference transport", () => {
     });
   });
 });
+
+it("refuses an ordinary provider send inside a captured-only workflow before opening a socket", async () => {
+  const { withCapturedProviderTransportOnly, assertCapturedProviderTransportClean } = await import("../shared/captured-effect-store");
+  await withProvider(async (url, dispatched) => {
+    let sent = false; void dispatched.then(() => { sent = true; });
+    await withCapturedProviderTransportOnly(async () => {
+      await expect(providerInferenceFetch(url, { signal: AbortSignal.timeout(100) })).rejects.toThrow("capture-provider-transport-required");
+      expect(() => assertCapturedProviderTransportClean()).toThrow("capture-unmediated-provider-attempt");
+    });
+    await setImmediate(); expect(sent).toBe(false);
+  });
+});
