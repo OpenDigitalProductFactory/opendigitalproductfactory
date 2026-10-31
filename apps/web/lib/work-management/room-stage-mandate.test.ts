@@ -7,6 +7,7 @@ import {
 import { workroomDriveTaskId } from "./drive-resolution";
 import { loadScheduledRoomAuthority, loadScheduledRoomMandate, roomStageMandatedTools } from "./room-stage-mandate";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "./workroom-shape-claim";
+import { buildDispatchCheckpoint } from "./workroom-drive-checkpoint";
 import { createQualificationExperimentAdmission, qualificationBindingDigest,
   type QualificationExperimentBinding } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
@@ -25,6 +26,63 @@ function room(over: Record<string, unknown> = {}) {
     ...over,
   };
 }
+
+describe("standing stage dispatch source at execution", () => {
+  function fixture() {
+    const source = { repositoryFullName: "owner/repo", headSha: "a".repeat(40) };
+    const currentRoom = { ...room(), id: "room-row", ...source,
+      workspaceState: { workroomDispatchCheckpoint: { revision: 99, source: { repositoryFullName: "other/repo", headSha: "other" } } } };
+    const stage = { shapeKey: "acceptance-verification", shapeVersion: "1.1.0", stageKey: "verify", tools: [...ACCEPTANCE_VERIFIER_WRITES] };
+    const checkpoint = buildDispatchCheckpoint(null, { taskId: TASK, roomId: currentRoom.id, source,
+      objective: "Verify acceptance", stage, holderPrincipalId: null,
+      now: "2026-10-31T00:00:00Z", leaseExpiresAt: "2026-10-31T00:10:00Z" });
+    const run = { a2aMetadata: { trigger: "scheduled", sourceRef: { kind: "scheduled-task", id: TASK }, workroomDispatchCheckpoint: checkpoint } };
+    const task = { taskId: TASK, taskRunId: "TR-SCHED-SOURCE", agentId: "AGT-WS-PORTFOLIO",
+      taskConfig: { workroomStage: stage, workroomDispatchCheckpoint: structuredClone(checkpoint) } };
+    const db = { taskRun: { findUnique: vi.fn(async () => run) }, workroom: { findMany: vi.fn(async () => [currentRoom]) },
+      scheduledAgentTask: { findUnique: vi.fn(async () => task) } };
+    const input = { taskRunId: task.taskRunId, agentIds: [task.agentId], toolName: "record_workroom_evidence",
+      params: { capsuleId: CAPSULE, stageKey: "verify", kind: "acceptance-receipt", outcome: "completed", summary: "Acceptance verified" } };
+    return { room: currentRoom, task, run, db, input };
+  }
+  it("uses the task receipt when the room's latest receipt belongs to another branch", async () => {
+    const f = fixture();
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([...ACCEPTANCE_VERIFIER_WRITES].sort());
+  });
+  it.each(["repositoryFullName", "headSha"] as const)("withholds standing writes after the room changes %s", async field => {
+    const f = fixture(); f.room[field] = "changed";
+    expect((await loadScheduledRoomAuthority(f.db, f.input)).withheldBecause).toMatch(/source/i);
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([]);
+  });
+  it.each(["missing", "different", "malformed"])("withholds a %s run source stamp", async kind => {
+    const f = fixture(); const checkpoint = f.run.a2aMetadata.workroomDispatchCheckpoint;
+    if (kind === "missing") delete checkpoint.source;
+    else if (kind === "different") checkpoint.source!.headSha = "other";
+    else Object.assign(checkpoint, { source: { headSha: "a".repeat(40) } });
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([]);
+  });
+  it("does not invent source for legacy receipts in a repository-bound room", async () => {
+    const f = fixture();
+    delete f.run.a2aMetadata.workroomDispatchCheckpoint.source;
+    delete f.task.taskConfig.workroomDispatchCheckpoint.source;
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([]);
+  });
+  it("rejects a source receipt copied from another dispatch", async () => {
+    const f = fixture();
+    for (const checkpoint of [f.run.a2aMetadata.workroomDispatchCheckpoint, f.task.taskConfig.workroomDispatchCheckpoint]) {
+      checkpoint.confirmedEffect.taskId = "workroom-other-acceptance-verification";
+    }
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([]);
+  });
+  it("narrows a stale standing dispatch to its exact assigned blocked report", async () => {
+    const f = fixture(); f.room.headSha = "changed"; f.input.params.outcome = "blocked";
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual(["record_workroom_evidence"]);
+    f.input.params.kind = "note";
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([]);
+    f.input.params.kind = "acceptance-receipt"; f.input.params.capsuleId = "WC-OTHER";
+    expect(await loadScheduledRoomMandate(f.db, f.input)).toEqual([]);
+  });
+});
 
 describe("roomStageMandatedTools (BI-C1781121)", () => {
   it("lets the assigned release coworker report a blocked stage without asking a person", () => {

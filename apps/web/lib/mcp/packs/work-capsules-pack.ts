@@ -107,7 +107,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_workroom",
-    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Use activityMode:bounded for finite metadata pages or exact selected-value detail. Metadata defers payload evidence; it is not a complete receipt. Read-only.",
+    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Use activityMode:bounded for finite metadata pages or exact selected-value detail. Use continuationMode:bounded separately for one current assignment under fresh content admission; its facts grant no execution or replay authority. Metadata defers payload evidence; it is not a complete receipt. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -120,6 +120,10 @@ const definitions: ToolDefinition[] = [
         activityField: { type: "string", enum: ["payload", "summary"], description: "Detail field; defaults to payload. Large values are refused with a narrower-path instruction." },
         payloadPath: { type: "array", maxItems: 16, items: { type: "string", maxLength: 200 }, description: "Detail only: object keys or array indexes within payload. Empty selects the whole payload; a selected value is not a full activity receipt." },
         reviewTaskRunId: { type: "string", minLength: 1, maxLength: 512, description: "Optional exact native review task to recover. Returns bounded recovery only for the authenticated task owner and this exact room, including historical source versions. Does not authorize retry or approve the current source." },
+        continuationMode: { type: "string", enum: ["bounded"], description: "Read bounded current assignment facts separately from activity, review and cursor reads. Does not create an external session or authorize effects." },
+        continuationTaskId: { type: "string", minLength: 1, maxLength: 512, description: "Continuation only: exact scheduled task whose own checkpoint must match this current room, branch, source and lease." },
+        continuationStageKey: { type: "string", minLength: 1, maxLength: 512, description: "Continuation only: select a current manual branch instead of a task. Required when several stages are current; no task identity is invented." },
+        continuationVersion: { type: "string", pattern: "^[a-f0-9]{64}$", description: "Continuation only: prior digest. Changed facts or authenticated authority require a fresh read; this is not an execution permit." },
       },
       required: ["capsuleId"],
     },
