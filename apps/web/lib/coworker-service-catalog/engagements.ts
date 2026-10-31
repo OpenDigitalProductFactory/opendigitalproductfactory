@@ -67,8 +67,8 @@ export async function createCoworkerEngagement(
   input: CreateCoworkerEngagementInput,
   deps: { db?: DbClient; idFactory?: () => string } = {},
 ): Promise<CoworkerEngagementResult> {
-  if (["fulfillment", "result"].some(key => Object.hasOwn(record(input.metadata), key))) {
-    throw new Error("Engagement metadata fulfillment and result are reserved for server execution evidence.");
+  if (["fulfillment", "result", "presentAssessment"].some(key => Object.hasOwn(record(input.metadata), key))) {
+    throw new Error("Engagement metadata fulfillment, presentAssessment and result are reserved for server execution evidence.");
   }
   const db = deps.db ?? (prisma as unknown as DbClient);
   const offer = await db.coworkerOffer.findUnique({

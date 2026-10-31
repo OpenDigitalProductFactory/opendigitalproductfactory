@@ -310,3 +310,13 @@ describe("captured capacity preserves ordinary unknown telemetry policy", () => 
     expect(observations[0]).toMatchObject({ snapshot: null, parseStatus: "invalid", provenance: { errorCode: "ENOENT" } });
   });
 });
+
+it("reads only the published GPU observation without invoking a shell or native runner", async () => {
+  platform.readFile.mockResolvedValue(Buffer.from(JSON.stringify({ observedAtMs: 1000, memoryUsedMiB: 100, memoryTotalMiB: 24000, utilizationPercent: 2 })));
+  const { readPublishedHostGpuObservation } = await import("./host-gpu-admission");
+  const observation = await readPublishedHostGpuObservation({ nowMs: 1000 });
+  expect(observation.snapshot).toMatchObject({ memoryUsedMiB: 100 });
+  expect(observation.provenance).toMatchObject({ source: "published-file", readOutcome: "complete" });
+  expect(platform.spawnSync).not.toHaveBeenCalled();
+  expect(restricted.request).not.toHaveBeenCalled();
+});
