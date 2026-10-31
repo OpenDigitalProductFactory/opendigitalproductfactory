@@ -149,3 +149,14 @@ acceptance remain separate required evidence.
 
 See the design's source reconciliation for every currently unavailable metric.
 Do not close the item or claim the full acceptance criteria from source tests.
+
+## Attribution correction — 2026-10-31
+
+Current executor/chat identity does not establish exclusive historical run ownership.
+Usage qualifies through recorded direct build identities or descendant build identities
+reached from the Workroom's explicit TaskRun root. Buildless thread-only rows remain
+unattributed; no cost split or cohort-local uniqueness is inferred. Tool counts require
+explicit task ancestry. Potential attribution gaps, failed/truncated run sources, and
+failed/truncated descendant history withhold affected totals and mark coverage partial.
+Qualified run identities remain inspectable; unavailable totals do not become zero.
+The original acceptance criteria and pending architecture choice remain unchanged.

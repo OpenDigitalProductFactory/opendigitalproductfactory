@@ -10,6 +10,17 @@ function fixture() {
     return { db, canReadRoom: vi.fn(async (id: string) => id === "r1") };
 }
 describe("bounded delivery outcome reader", () => {
+    it("reads only explicit task roots and their descendants, retaining child build bindings", async () => {
+        const f = fixture();
+        f.db.workroom.findMany.mockResolvedValue([{ ...room, taskRunId: "root" }]);
+        f.db.taskRun.findMany.mockResolvedValueOnce([{ id: "root", parentTaskRunId: null, threadId: "thread1", buildId: "build-root" }]).mockResolvedValueOnce([{ id: "child", parentTaskRunId: "root", threadId: null, buildId: "build-child" }]).mockResolvedValue([]);
+        await loadDeliveryOutcomes({ ...f, now, userId: "user1" });
+        expect(f.db.taskRun.findMany.mock.calls[0][0].where).toEqual({ userId: "user1", id: { in: ["root"] } });
+        expect(f.db.taskRun.findMany.mock.calls[0][0].select.buildId).toBe(true);
+        const query = f.db.adapterRunTelemetry.findMany.mock.calls[0][0];
+        expect(query.where.OR).toContainEqual({ buildId: { in: expect.arrayContaining(["build-root", "build-child"]) } });
+        expect(JSON.stringify(f.db.taskRun.findMany.mock.calls[0][0].where)).not.toContain("thread1");
+    });
     it("authorizes each Workroom before querying facts or aggregating; hidden rooms never enter query scope", async () => {
         const f = fixture();
         const data = await loadDeliveryOutcomes({ ...f, now, userId: "user1" });

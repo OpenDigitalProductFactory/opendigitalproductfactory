@@ -6,7 +6,7 @@ export type OutcomeSource = {
     state: SourceState;
     count: number;
     observedAt: string;
-    note: "rowsLimited" | "roomsLimited" | "readUnavailable" | "visibilityUnavailable" | "descendantUnavailable" | "descendantLimited" | "prMissing" | "prUnavailable" | "verificationUnbound" | null;
+    note: "rowsLimited" | "roomsLimited" | "readUnavailable" | "visibilityUnavailable" | "descendantUnavailable" | "descendantLimited" | "prMissing" | "prUnavailable" | "verificationUnbound" | "attributionUnbound" | null;
 };
 export type OutcomeRoom = {
     id: string;
@@ -37,7 +37,13 @@ export type OutcomeActivity = {
     payload: unknown;
 };
 export type OutcomeVerification = {
-    sourceBinding?: {workCapsuleId:string;headSha:string;servedSha:string;completedAt:string;targetRef:string}|null;
+    sourceBinding?: {
+        workCapsuleId: string;
+        headSha: string;
+        servedSha: string;
+        completedAt: string;
+        targetRef: string;
+    } | null;
     id: string;
     workCapsuleId: string | null;
     kind: string;
@@ -67,6 +73,7 @@ export type OutcomeRun = {
     investmentInstallationRef: string | null;
 };
 export type OutcomeTask = {
+    buildId?: string | null;
     id: string;
     threadId: string | null;
     parentTaskRunId: string | null;
@@ -169,7 +176,11 @@ export type DurationSummary = {
     p90Ms: number | null;
 };
 export type DeliveryOutcomeScorecard = {
-    milestoneCounts:{key:Milestone;count:number;missing:number}[];
+    milestoneCounts: {
+        key: Milestone;
+        count: number;
+        missing: number;
+    }[];
     version: "DeliveryOutcomeObservation@1";
     observedAt: string;
     state: SourceState;
@@ -209,26 +220,24 @@ function total<T>(rows: readonly T[], read: (row: T) => number | null): number |
     const values = rows.map(read);
     return values.some(v => v === null) ? null : (values as number[]).reduce((a, b) => a + b, 0);
 }
-function economy(rows: readonly OutcomeRun[]): Economy {
+function economy(rows: readonly OutcomeRun[], attributionComplete = true): Economy {
     // Claude's adapter persists incremental uncached input separately from cache
     // reads/writes. Other adapters have different input semantics: leave unknown
     // rather than subtracting a cache estimate from provider cumulative input.
-    const inputTokens = total(rows, r => r.adapterKind === "claude-cli" ? number(r.inputTokens) : null);
-    const cachedInputTokens = total(rows, r => number(r.cachedInputTokens));
-    const cacheCreationInputTokens = total(rows, r => number(r.cacheCreationInputTokens));
-    const outputTokens = total(rows, r => number(r.outputTokens));
-    const reasoningTokens = total(rows, r => number(r.reasoningTokens));
-    const apiEquivalentUsd = total(rows, r => number(r.estimatedCostUsd));
+    const inputTokens = attributionComplete ? total(rows, r => r.adapterKind === "claude-cli" ? number(r.inputTokens) : null) : null;
+    const cachedInputTokens = attributionComplete ? total(rows, r => number(r.cachedInputTokens)) : null;
+    const cacheCreationInputTokens = attributionComplete ? total(rows, r => number(r.cacheCreationInputTokens)) : null;
+    const outputTokens = attributionComplete ? total(rows, r => number(r.outputTokens)) : null;
+    const reasoningTokens = attributionComplete ? total(rows, r => number(r.reasoningTokens)) : null;
+    const apiEquivalentUsd = attributionComplete ? total(rows, r => number(r.estimatedCostUsd)) : null;
     return { runCount: rows.length, inputTokens, cachedInputTokens, cacheCreationInputTokens, outputTokens, reasoningTokens,
         apiEquivalentUsd, subscriptionUsd: null, invoicedUsd: null,
         complete: [inputTokens, cachedInputTokens, cacheCreationInputTokens, outputTokens, reasoningTokens, apiEquivalentUsd].every(v => v !== null) };
 }
 function lineage(room: OutcomeRoom, tasks: readonly OutcomeTask[]) {
     const ids = new Set<string>(room.taskRunId ? [room.taskRunId] : []);
-    const threads = new Set<string>(room.executorRef ? [room.executorRef] : []);
-    for (const task of tasks)
-        if (task.threadId && threads.has(task.threadId))
-            ids.add(task.id);
+    // Only the explicit room task root establishes ancestry. A chat can serve many rooms.
+    const threads = new Set<string>();
     let grew = true;
     while (grew) {
         grew = false;
@@ -241,7 +250,8 @@ function lineage(room: OutcomeRoom, tasks: readonly OutcomeTask[]) {
     for (const task of tasks)
         if (ids.has(task.id) && task.threadId)
             threads.add(task.threadId);
-    return { ids, threads };
+    const builds = new Set(tasks.filter(t => ids.has(t.id)).flatMap(t => t.buildId ? [t.buildId] : []));
+    return { ids, threads, builds };
 }
 const healthy = (sources: OutcomeSource[], key: string) => !sources.some(s => s.key === key && ["failed", "partial"].includes(s.state));
 /** Pure, bounded-input projection. Never derives delivery success from room status. */
@@ -249,23 +259,48 @@ export function projectDeliveryOutcomes(input: OutcomeInput): DeliveryOutcomeSco
     const start = new Date(input.now.getTime() - 30 * DAY);
     const inWindow = (date: Date) => date >= start && date <= input.now;
     const rooms = unique(input.rooms).filter(r => inWindow(r.createdAt)).sort((a, b) => a.capsuleId.localeCompare(b.capsuleId));
+    const sources = input.sources.map(s => ({ ...s }));
+    const partialAttribution = (key: "runs" | "tasks" | "tools") => {
+        const existing = sources.find(s => s.key === key);
+        if (existing) {
+            if (existing.state === "failed" || existing.state === "partial")
+                return;
+            existing.state = "partial";
+            existing.note = "attributionUnbound";
+        }
+        else
+            sources.push({ key, state: "partial", count: input[key].length, observedAt: input.now.toISOString(), note: "attributionUnbound" });
+    };
+    const runs = unique(input.runs).filter(r => inWindow(r.startedAt));
     const allObservations = rooms.map((room): OutcomeObservation => {
         const activities = unique(input.activities).filter(a => a.workCapsuleId === room.id && a.recordedAt <= input.now);
         const pr = input.pullRequests.find(p => p.repositoryFullName === room.repositoryFullName && p.number === room.pullRequestNumber && p.headSha === room.headSha);
         const verification = input.verifications.filter(v => v.workCapsuleId === room.id && v.kind === "final-acceptance" && v.status === "passed"
             && v.completedAt && v.completedAt <= input.now && v.completedAt >= room.createdAt && v.evidenceUrl
-            && v.sourceBinding?.workCapsuleId===room.id && v.sourceBinding.headSha===room.headSha
-            && v.sourceBinding.completedAt===iso(v.completedAt) && v.sourceBinding.targetRef.length>0)
+            && v.sourceBinding?.workCapsuleId === room.id && v.sourceBinding.headSha === room.headSha
+            && v.sourceBinding.completedAt === iso(v.completedAt) && v.sourceBinding.targetRef.length > 0)
             .sort((a, b) => a.completedAt!.getTime() - b.completedAt!.getTime())[0];
         // The retained PR inventory has no first-commit/open/ready timestamps or
         // protected-check history. Its observedAt is not any of those milestones.
         const milestones = { claimed: iso(room.claimedAt), firstCommit: null, prOpen: null, reviewReady: null, merged: pr?.mergedAt ?? null, verified: iso(verification?.completedAt) };
         const relation = lineage(room, input.tasks);
-        const direct = (r: OutcomeRun) => (room.executorRef !== null && r.threadId === room.executorRef) || (room.featureBuildId !== null && r.buildId === room.featureBuildId);
-        const runs = unique(input.runs).filter(r => inWindow(r.startedAt));
-        const exclusive = runs.filter(direct);
-        const inclusive = runs.filter(r => direct(r) || (r.threadId !== null && relation.threads.has(r.threadId)));
-        const tools = unique(input.tools).filter(t => relation.threads.has(t.threadId) || (t.taskRunId !== null && relation.ids.has(t.taskRunId)));
+        const rootTask = input.tasks.find(t => t.id === room.taskRunId);
+        const directBuilds = new Set([room.featureBuildId, rootTask?.buildId].filter((id): id is string => !!id));
+        const inclusiveBuilds = new Set([...directBuilds, ...relation.builds]);
+        const exclusive = runs.filter(r => r.buildId !== null && directBuilds.has(r.buildId));
+        const inclusive = runs.filter(r => r.buildId !== null && inclusiveBuilds.has(r.buildId));
+        // Executor/thread identity detects potential missing attribution; it never assigns usage.
+        const relatedThread = (id: string | null) => id !== null && (id === room.executorRef || relation.threads.has(id));
+        const unboundRuns = runs.some(r => r.buildId === null && relatedThread(r.threadId));
+        const unboundTools = input.tools.some(t => t.taskRunId === null && relatedThread(t.threadId));
+        const missingRoot = room.taskRunId !== null && !rootTask;
+        if (unboundRuns)
+            partialAttribution("runs");
+        if (unboundTools)
+            partialAttribution("tools");
+        if (missingRoot)
+            partialAttribution("tasks");
+        const tools = unique(input.tools).filter(t => t.taskRunId !== null && relation.ids.has(t.taskRunId));
         const groups = new Map<string, QueueTelemetryRow[]>();
         for (const row of input.queue)
             if (row.itemKind === "workroom-stage" && row.itemId.startsWith(`${room.capsuleId}:`) && row.occurredAt <= input.now) {
@@ -279,7 +314,7 @@ export function projectDeliveryOutcomes(input: OutcomeInput): DeliveryOutcomeSco
         const durations = { cycle: pair(milestones.claimed, milestones.verified), claimedToPr: pair(milestones.claimed, milestones.prOpen), prToReady: pair(milestones.prOpen, milestones.reviewReady), readyToMerge: pair(milestones.reviewReady, milestones.merged), mergeToVerified: pair(milestones.merged, milestones.verified),
             wait: observedQueue ? total(spans, s => s.waitMs) : null, process: observedQueue ? total(spans, s => s.processMs) : null };
         const activityCount = (kind: string) => healthy(input.sources, "activities") && activities.length ? activities.filter(a => a.kind === kind).length : null;
-        const observedTools = healthy(input.sources, "tools") && healthy(input.sources, "tasks") && tools.length > 0;
+        const observedTools = !unboundTools && !missingRoot && healthy(input.sources, "tools") && healthy(input.sources, "tasks") && tools.length > 0;
         const evidence = [{ label: "Workroom", href: `/build/work/${encodeURIComponent(room.capsuleId)}` }];
         if (pr)
             evidence.push({ label: "Pull request", href: pr.url });
@@ -289,7 +324,7 @@ export function projectDeliveryOutcomes(input: OutcomeInput): DeliveryOutcomeSco
             models: [...new Set(inclusive.map(r => r.modelId))].sort(), installations: [...new Set(inclusive.flatMap(r => r.investmentInstallationRef ? [r.investmentInstallationRef] : []))].sort(), milestones, durations,
             quality: { firstPass: null, blockingFindingsPerKloc: null, postOpenCommits: null, regressions: null, reopens: null, abandoned: room.status === "abandoned", superseded: room.status === "superseded" },
             attention: { toolCalls: observedTools ? tools.length : null, failedToolCalls: observedTools ? tools.filter(t => !t.success).length : null, nonProgressCalls: null, approvals: observedTools ? new Set(tools.flatMap(t => t.envelopeId ? [t.envelopeId] : [])).size : null, takeovers: activityCount("executor-changed"), interventions: null, retries: null },
-            economy: { exclusive: economy(exclusive), inclusive: economy(inclusive), method: "Exact thread/build identity; unique descendant task threads. Retained adapter rows only; cumulative child transcript totals excluded.", runIds: exclusive.map(r => r.id), descendantRunIds: inclusive.map(r => r.id) }, evidence };
+            economy: { exclusive: economy(exclusive, !unboundRuns && healthy(input.sources, "runs")), inclusive: economy(inclusive, !unboundRuns && !missingRoot && healthy(input.sources, "runs") && healthy(input.sources, "tasks")), method: "Recorded direct build bindings and build identities reached from the explicit task root; unique retained runs. Thread-only attribution is withheld; estimates are not invoices.", runIds: exclusive.map(r => r.id), descendantRunIds: inclusive.map(r => r.id) }, evidence };
     });
     const query = input.filters?.query.trim().slice(0, 120).toLowerCase();
     const observations = !query ? allObservations : allObservations.filter(o => {
@@ -299,10 +334,10 @@ export function projectDeliveryOutcomes(input: OutcomeInput): DeliveryOutcomeSco
     });
     const keys: DurationSummary["key"][] = ["cycle", "claimedToPr", "prToReady", "readyToMerge", "mergeToVerified", "process", "wait"];
     const stages = keys.map(key => { const values = observations.flatMap(o => o.durations[key] === null ? [] : [o.durations[key]!]); return { key, sample: values.length, incomplete: observations.length - values.length, p50Ms: percentile(values, 0.5), p90Ms: percentile(values, 0.9) }; });
-    const degraded = input.sources.some(s => ["partial", "stale", "failed"].includes(s.state));
-    const milestoneKeys:Milestone[]=["claimed","firstCommit","prOpen","reviewReady","merged","verified"];
-    const milestoneCounts=milestoneKeys.map(key=>{const count=observations.filter(o=>o.milestones[key]!==null).length;return {key,count,missing:observations.length-count};});
-    return { milestoneCounts,version: "DeliveryOutcomeObservation@1", observedAt: input.now.toISOString(), state: input.sources.find(s => s.key === "rooms")?.state === "failed" ? "failed" : degraded ? "partial" : observations.length ? "ready" : "empty",
-        cohort: { start: start.toISOString(), end: input.now.toISOString(), definition: "Visible Workrooms created in this fixed 30-day window; one slice per Workroom. Campaigns are distinct recorded epic identities.", confidence: "Descriptive observations only. Incomplete pairs are excluded. Cohort and telemetry coverage must match before comparing periods; correlation does not establish improvement." }, sources: input.sources, observations, stages, verified: observations.filter(o => o.milestones.verified).length, campaigns: new Set(observations.flatMap(o => o.campaign ? [o.campaign] : [])).size,
+    const degraded = sources.some(s => ["partial", "stale", "failed"].includes(s.state));
+    const milestoneKeys: Milestone[] = ["claimed", "firstCommit", "prOpen", "reviewReady", "merged", "verified"];
+    const milestoneCounts = milestoneKeys.map(key => { const count = observations.filter(o => o.milestones[key] !== null).length; return { key, count, missing: observations.length - count }; });
+    return { milestoneCounts, version: "DeliveryOutcomeObservation@1", observedAt: input.now.toISOString(), state: sources.find(s => s.key === "rooms")?.state === "failed" ? "failed" : degraded ? "partial" : observations.length ? "ready" : "empty",
+        cohort: { start: start.toISOString(), end: input.now.toISOString(), definition: "Visible Workrooms created in this fixed 30-day window; one slice per Workroom. Campaigns are distinct recorded epic identities.", confidence: "Descriptive observations only. Incomplete pairs are excluded. Cohort and telemetry coverage must match before comparing periods; correlation does not establish improvement." }, sources, observations, stages, verified: observations.filter(o => o.milestones.verified).length, campaigns: new Set(observations.flatMap(o => o.campaign ? [o.campaign] : [])).size,
         quality: { firstPass: { numerator: 0, denominator: 0, unknown: observations.length } } };
 }

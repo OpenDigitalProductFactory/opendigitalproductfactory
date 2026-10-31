@@ -498,7 +498,8 @@
       "descendantLimited": "Descendant history limit reached",
       "prMissing": "No successful PR snapshot",
       "prUnavailable": "PR snapshot unavailable",
-      "verificationUnbound": "Some final checks lack immutable source and deployment binding"
+      "verificationUnbound": "Some final checks lack immutable source and deployment binding",
+      "attributionUnbound": "Some usage or task history lacks a qualified binding; affected totals are unavailable"
     },
     "evidence": {
       "workroom": "Workroom",

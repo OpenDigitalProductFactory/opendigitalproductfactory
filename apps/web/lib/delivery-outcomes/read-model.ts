@@ -69,7 +69,7 @@ export async function loadDeliveryOutcomes(args: {
         bounded("activities", () => db.workroomActivity.findMany({ where: { workCapsuleId: { in: ids }, recordedAt: window }, orderBy: [{ recordedAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { id: true, workCapsuleId: true, kind: true, recordedAt: true } })),
         bounded("verifications", () => db.runtimeVerification.findMany({ where: { workCapsuleId: { in: ids }, completedAt: window }, orderBy: [{ completedAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { id: true, workCapsuleId: true, kind: true, status: true, completedAt: true, evidenceUrl: true, result: true, runtimeTarget: { select: { targetId: true, acceptanceRole: true, servedCommitSha: true } } } })),
         bounded("queue", () => db.queueTelemetryEvent.findMany({ where: { itemKind: "workroom-stage", occurredAt: window, OR: rooms.map(r => ({ itemId: { startsWith: `${r.capsuleId}:` } })) }, orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: FACT_LIMIT + 1, select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true } })),
-        bounded("tasks", () => db.taskRun.findMany({ where: { userId, OR: [{ id: { in: rootIds } }, { threadId: { in: directThreads } }] }, take: FACT_LIMIT + 1, orderBy: { id: "asc" }, select: { id: true, parentTaskRunId: true, threadId: true } })),
+        bounded("tasks", () => db.taskRun.findMany({ where: { userId, id: { in: rootIds } }, take: FACT_LIMIT + 1, orderBy: { id: "asc" }, select: { id: true, parentTaskRunId: true, threadId: true, buildId: true } })),
     ]);
     // Reconstruct only explicit ancestry. No build-name or title guessing. A finite
     // depth/row budget is disclosed rather than silently dropping descendants.
@@ -79,7 +79,7 @@ export async function loadDeliveryOutcomes(args: {
     while (frontier.length && tasks.length < FACT_LIMIT && depth < 8) {
         let children;
         try {
-            children = await db.taskRun.findMany({ where: { userId, parentTaskRunId: { in: frontier } }, take: FACT_LIMIT - tasks.length + 1, orderBy: { id: "asc" }, select: { id: true, parentTaskRunId: true, threadId: true } });
+            children = await db.taskRun.findMany({ where: { userId, parentTaskRunId: { in: frontier } }, take: FACT_LIMIT - tasks.length + 1, orderBy: { id: "asc" }, select: { id: true, parentTaskRunId: true, threadId: true, buildId: true } });
         }
         catch {
             source("tasks", tasks.length, "failed", "descendantUnavailable");
@@ -97,8 +97,9 @@ export async function loadDeliveryOutcomes(args: {
     if (frontier.length || tasks.length > FACT_LIMIT)
         source("tasks", Math.min(tasks.length, FACT_LIMIT), "partial", "descendantLimited");
     const retainedTasks = tasks.slice(0, FACT_LIMIT), threads = [...new Set([...directThreads, ...retainedTasks.flatMap(t => t.threadId ? [t.threadId] : [])])];
+    const qualifiedBuildIds = [...new Set([...buildIds, ...retainedTasks.flatMap(t => t.buildId ? [t.buildId] : [])])];
     const [runs, tools, pullRequests] = await Promise.all([
-        bounded("runs", () => db.adapterRunTelemetry.findMany({ where: { startedAt: window, OR: [{ threadId: { in: threads } }, { buildId: { in: buildIds } }] }, take: FACT_LIMIT + 1, orderBy: [{ startedAt: "asc" }, { id: "asc" }], select: { id: true, threadId: true, buildId: true, startedAt: true, adapterKind: true, providerId: true, modelId: true, inputTokens: true, cachedInputTokens: true, cacheCreationInputTokens: true, outputTokens: true, reasoningTokens: true, estimatedCostUsd: true, investmentInstallationRef: true } })),
+        bounded("runs", () => db.adapterRunTelemetry.findMany({ where: { startedAt: window, OR: [{ threadId: { in: threads } }, { buildId: { in: qualifiedBuildIds } }] }, take: FACT_LIMIT + 1, orderBy: [{ startedAt: "asc" }, { id: "asc" }], select: { id: true, threadId: true, buildId: true, startedAt: true, adapterKind: true, providerId: true, modelId: true, inputTokens: true, cachedInputTokens: true, cacheCreationInputTokens: true, outputTokens: true, reasoningTokens: true, estimatedCostUsd: true, investmentInstallationRef: true } })),
         bounded("tools", () => db.toolExecution.findMany({ where: { userId, createdAt: window, OR: [{ threadId: { in: threads } }, { taskRunId: { in: retainedTasks.map(t => t.id) } }] }, take: FACT_LIMIT + 1, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, threadId: true, taskRunId: true, toolName: true, success: true, envelopeId: true } })),
         (async () => {
             try {
