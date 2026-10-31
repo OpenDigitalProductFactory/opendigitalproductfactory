@@ -58,4 +58,15 @@ Run affected tests and package typechecks, diff-scoped prose/style/docs/design g
 
 ## Research and proportionality
 
+Primary sources rechecked on 2026-10-31. These are comparison patterns, not added dependencies or authority for DPF actions.
+
+| Comparator | Recorded model and adopted pattern | Rejected for this repair |
+| --- | --- | --- |
+| [Argo CD resource health](https://argo-cd.readthedocs.io/en/stable/operator-manual/health/) (open source) | Resource observations roll up to application health. Preserve shared DPF health and retain child evidence rather than infer every child's remedy from a group. | A new Kubernetes health controller or replacement status vocabulary. |
+| [Grafana alert groups](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notifications/group-alert-notifications/) and [instance view](https://grafana.com/docs/grafana/latest/alerting/monitor-status/view-active-notifications/) (open source) | Exact label values group instances; group headers retain instance count and drill-in. Keep existing recovery keys and individual cases. | Inferring one shared remedy or one owner decision from group membership. |
+| [Linear assignment and delegation](https://linear.app/docs/assigning-issues) (commercial) | Human assignee retains responsibility while an agent does delegated work; assignee and agent are separate filters. Keep business accountability separate from immediate next actor. | A new assignment integration or automatic reassignment. |
+| [GitHub deployment review](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments) (commercial) | An actual review request identifies the environment/job to decide. Show a real decision context instead of treating a lifecycle label as an approval. | New approval or protection-bypass controls. |
+
+[W3C disclosure guidance](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/) defines keyboard activation and expanded-state semantics. Reuse native disclosures and existing report-kit controls, then verify keyboard and narrow rendering. No global priority or archetype stage order changes.
+
 This is a refactor of proven native read/projection and report-kit contracts, not a new feature architecture. Existing Atlas research and workroom-human-operations design supply overview/disclosure patterns; preserve their single health vocabulary. Alternatives rejected: infer founder decisions from attention counts; expose raw recovery packets; replace the pending Atlas renderer; create a parallel recovery state machine. The selected extension keeps authority at existing action gateways.
