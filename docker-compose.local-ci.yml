@@ -24,7 +24,7 @@ services:
       PUBLIC_URL: ${DPF_LOCAL_CI_URL:?DPF_LOCAL_CI_URL must come from the admitted local-CI slot manifest}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
-      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
+      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-}
       DPF_ENVIRONMENT: local-ci
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
