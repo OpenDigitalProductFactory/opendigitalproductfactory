@@ -1,3 +1,4 @@
+import { ok } from "@/lib/shared/action-result";
 import { prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
@@ -32,7 +33,7 @@ export async function resolveWorkroomReadSource(args: {
     const initial = await load();
     if (!initial) return denied;
     const fingerprint = canonicalJson(initial);
-    return { ok: true as const, source: initial.source, isCurrent: async () => {
+    return { ...ok(), source: initial.source, isCurrent: async () => {
       try { return canonicalJson(await load()) === fingerprint; } catch { return false; }
     } };
   } catch { return denied; }
