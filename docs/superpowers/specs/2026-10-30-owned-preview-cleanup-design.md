@@ -116,3 +116,8 @@ At first publication (a481a6235d7eb728c2299596ea3efc4b9a8d3c90), this was
 design only. Current planning receipts and implementation sequence are in the
 plan; current test, publication and runtime outcomes belong in the Workroom.
 This design document alone claims no live acceptance.
+
+The same existing local-CI proof is also rechecked for authenticated ordinary
+release. A binding changed before the initial execution read cannot select an
+unchecked legacy branch. Explicit executor-approved authority retains its
+separate controlled path; public parameters cannot supply that reserved context.

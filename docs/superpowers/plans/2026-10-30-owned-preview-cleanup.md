@@ -6,6 +6,8 @@ backlog: BI-31AC1F90
 
 # Owned preview cleanup implementation
 
+**Backlog item:** BI-31AC1F90
+
 For agentic workers: execute one independently reviewable backlog item at a
 time. Use dpf-tdd, dpf-local-merge-ci-before-push and dpf-pr-with-dco. Native
 coverage and implementation admission must exist before source implementation.
@@ -77,6 +79,13 @@ Missing/stale advice expands verification. Qualified exact-tree pregate and
 protected pr:ready/pr:health remain mandatory; never create a draft PR.
 
 ## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-31AC1F90
+- Receipt: cmvwzuck9041q01me31u9xrz2
+- Rationale: Trusted creation, durable ownership, consent and locked execution are internal phases of one safe preview cleanup repair; none is independently shippable.
+- Dependencies: none
+- Deliverable: PC -> BI-31AC1F90
 
 Atomic deliverable PC -> BI-31AC1F90. Dependencies: none outside its internal
 phases. References: R-PC-1, R-PC-2, R-PC-3, R-PC-4;

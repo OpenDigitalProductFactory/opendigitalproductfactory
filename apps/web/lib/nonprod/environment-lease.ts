@@ -28,7 +28,7 @@ import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lea
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { previewMustYieldSlot } from "./environment-lease-preview-yield";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits, settleNonprodLeaseWait } from "./durable-wait";
-import { bindFreshLeaseProvenance, assertPreviewReleaseOwnership, type PreviewReleaseContext } from "./environment-lease-provenance";
+import { bindFreshLeaseProvenance, assertOwnedLeaseRelease, type LeaseReleaseContext } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -539,7 +539,7 @@ export async function releaseNonprodEnvironmentLease(input: {
   leaseId: string;
   ownerSessionId?: string;
   now?: Date;
-} & PreviewReleaseContext) {
+} & LeaseReleaseContext) {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
   const result = await inLeaseTransaction(db, async (tx) => {
@@ -553,7 +553,7 @@ export async function releaseNonprodEnvironmentLease(input: {
     });
     if (!current) throw new Error("nonprod_lease_not_found");
     if (current.environmentKey !== beforeLock.environmentKey) throw new Error("nonprod_preview_ownership_changed");
-    await assertPreviewReleaseOwnership({ ...input, db: tx as never, lease: current });
+    await assertOwnedLeaseRelease({ ...input, db: tx as never, lease: current });
     if (
       isImmutableGateClaimKey(current.claimKey)
       && current.ownerSessionId !== input.ownerSessionId

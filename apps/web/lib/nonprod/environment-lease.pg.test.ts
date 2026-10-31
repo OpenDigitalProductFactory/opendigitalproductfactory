@@ -155,7 +155,7 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
       expect(await leaseCleanupConsequenceForCall(call, { db: prisma as never, loadStance }))
         .toMatchObject({ consequence: null });
       await expect(releaseNonprodEnvironmentLease({ db: prisma, ...call.params, authenticatedUserId: "foreign",
-        authenticatedAgentId: "AGT-EXT-CODEX", loadStance })).rejects.toThrow(/preview.*ownership/i);
+        authenticatedAgentId: "AGT-EXT-CODEX", loadStance })).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
     }
     const release = (result: typeof first) => releaseNonprodEnvironmentLease({ db: prisma,
       leaseId: result.lease.leaseId, ownerSessionId: result.lease.ownerSessionId,

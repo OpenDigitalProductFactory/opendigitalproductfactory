@@ -235,7 +235,7 @@ describe("preview actor and atomic wait dispatch", () => {
       lease: { leaseId: "NPEL-ATOMIC", environmentKey: "active-candidate", taskRunId: "TR-ATOMIC", ownerProvider: "codex" } });
     const result = await executeTool("claim_nonprod_environment_lease", { environmentKey: "active-candidate", ownerProvider: "codex",
       ownerSessionId: "own-session", purpose: "preview", url: "http://localhost:53601", ports: [53601],
-      expiresAt: "2026-11-01T18:00:00Z" }, "user-1", { agentId: "AGT-EXT-CODEX" });
+      expiresAt: new Date(Date.now() + 60_000).toISOString() }, "user-1", { agentId: "AGT-EXT-CODEX" });
     expect(result.success).toBe(true);
     expect(result.data?.admission).toMatchObject({ taskRunId: "TR-ATOMIC" });
     expect(mockCheckpointNonprodLeaseWait).not.toHaveBeenCalled();

@@ -169,18 +169,21 @@ describe("authenticated preview execution fence", () => {
     mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(current);
     await expect(releaseNonprodEnvironmentLease({ db: mockDb as never,
       leaseId: current.leaseId, ownerSessionId: "session-1", authenticatedUserId: "user-1",
-      authenticatedAgentId: "AGT-EXT-CODEX", now: NOW } as never)).rejects.toThrow(/preview.*ownership/i);
+      authenticatedAgentId: "AGT-EXT-CODEX", now: NOW } as never)).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
     expect(mockDb.$executeRaw).toHaveBeenCalled();
     expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 });
 
 
-async function ownedPreview(status: "active" | "queued" = "active") {
+async function ownedPreview(status: "active" | "queued" = "active", environmentKey = "active-candidate") {
   const mockDb = db();
-  let current: any = lease({ environmentKey: "active-candidate", claimKey: "preview:owned", status,
+  let current: any = lease({ environmentKey, claimKey: "preview:owned", status,
+    slotManifestVersion: environmentKey === "local-integration-ci" ? 1 : null,
+    worktreePath: environmentKey === "local-integration-ci" ? "D:/worktrees/existing-ci" : null,
+    branchName: environmentKey === "local-integration-ci" ? "fix/existing-ci" : null,
     slotKey: status === "active" ? "slot-0" : null,
-    activeKey: status === "active" ? "active-candidate:slot-0" : null });
+    activeKey: status === "active" ? `${environmentKey}:slot-0` : null });
   let task: any = null;
   const taskRun = {
     upsert: vi.fn(async ({ create, update }: any) => (task = task ? { ...task, ...update } : create)),
@@ -250,7 +253,32 @@ describe("shared preview consent and locked release proof", () => {
     expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
       .toMatchObject({ consequence: null });
     f.mockDb.$executeRaw.mockImplementation(async () => { mutate(f); return 1; });
-    await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/preview.*ownership/i);
+    await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
+    expect(f.mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a preview retargeted before execution's initial read", async () => {
+    const f = await ownedPreview();
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+      .toMatchObject({ consequence: null });
+    f.changeLease({ environmentKey: "local-integration-ci", status: "released", activeKey: null });
+    await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/ownership/i);
+    expect(f.mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("retains ordinary local-CI release using its existing authenticated user/wait proof", async () => {
+    const f = await ownedPreview("active", "local-integration-ci");
+    f.changeLease({ cleanupCommand: "existing-bound-ci-cleanup" });
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+      .toMatchObject({ consequence: null, reason: "owned-development-lease-cleanup" });
+    expect((await releaseNonprodEnvironmentLease(f.input)).status).toBe("released");
+  });
+  it("also refuses ordinary local-CI execution after its shared wait proof disappears", async () => {
+    const f = await ownedPreview("active", "local-integration-ci");
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+      .toMatchObject({ consequence: null });
+    f.changeTask({ progressPayload: {} });
+    await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/ownership/i);
     expect(f.mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 
@@ -258,7 +286,7 @@ describe("shared preview consent and locked release proof", () => {
     const f = await ownedPreview();
     const input = { ...f.input, ...(identity === "user" ? { authenticatedUserId: "foreign" }
       : { authenticatedAgentId: "AGT-EXT-CLAUDE" }) };
-    await expect(releaseNonprodEnvironmentLease(input)).rejects.toThrow(/preview.*ownership/i);
+    await expect(releaseNonprodEnvironmentLease(input)).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
     expect(f.mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 
