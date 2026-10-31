@@ -7,10 +7,18 @@ import { withForegroundWork } from "./foreground-work-context";
 import { createResourceWaitProjection, parseResourceWaitProjection, resourceWaitDue, RESOURCE_WAIT_MAX_ATTEMPTS } from "@/lib/mcp-task-capacity-contract";
 
 import { foregroundRequestDigest } from "./foreground-request-digest";
-import { FOREGROUND_WORK_EVENT } from "./foreground-work-contract";
+import { FOREGROUND_WORK_EVENT, FOREGROUND_BUILD_HANDOFF_BLOCKED } from "./foreground-work-contract";
 import { hasExecutionUncertainty } from "@/lib/shared/execution-uncertainty";
+import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { readForegroundPublication } from "./foreground-work-publication";
 
 const uncertain = () => ({ schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown", observedAt: new Date().toISOString() });
+function deliverPublication(threadId: string, taskRunId: string, saved: NonNullable<Awaited<ReturnType<typeof readForegroundPublication>>>) {
+  agentEventBus.emit(threadId, { type: "done", agentMessageId: saved.agentMessageId,
+    ...(saved.formAssistUpdate ? { formAssistUpdate: saved.formAssistUpdate, formAssistFormId: saved.formAssistFormId, taskRunId } : {}),
+    ...(saved.systemMessageId ? { systemMessageId: saved.systemMessageId } : {}),
+  });
+}
 
 async function retainNotice(run: { taskRunId: string; threadId: string | null; routeContext: string | null }, content: string) {
   if (!run.threadId) return;
@@ -29,6 +37,12 @@ export async function executeForegroundWork(taskRunId: string) {
   if (!run || run.source !== "coworker" || metadata?.trigger !== "interactive" || request?.schemaVersion !== 1) return { kind: "not-foreground" };
   if (run.archivedAt) return { kind: "not-due" };
   const progress = isRecord(run.progressPayload) ? run.progressPayload : {};
+  if (run.status === "completed") {
+    const published = await readForegroundPublication(taskRunId, captureTaskExecutionFence(progress, metadata?.requestDigest));
+    if (!published || !run.threadId) return { kind: "not-due" };
+    deliverPublication(run.threadId, taskRunId, published);
+    return { kind: published.kind };
+  }
   const wait = parseResourceWaitProjection(progress);
   if (run.status !== "submitted" && !(run.status === "input-required" && wait)) return { kind: "not-due" };
   const now = new Date();
@@ -72,6 +86,13 @@ export async function executeForegroundWork(taskRunId: string) {
   });
   agentEventBus.clearCancel(run.threadId);
   agentEventBus.markActive(run.threadId);
+  const executionFence = captureTaskExecutionFence(activeProgress, metadata?.requestDigest);
+  const acceptedPublication = async (messageId?: string) => {
+    const saved = await readForegroundPublication(taskRunId, executionFence, messageId);
+    if (!saved) return null;
+    deliverPublication(run.threadId!, taskRunId, saved);
+    return { kind: saved.kind };
+  };
   let turnStarted = false;
   try {
     const { sendMessage } = await import("@/lib/actions/agent-coworker");
@@ -82,10 +103,13 @@ export async function executeForegroundWork(taskRunId: string) {
       threadId: run.threadId!, routeContext: run.routeContext!, content: message.content,
       acceptedUserMessageId: message.id, coworkerMode,
       });
-    });
+    }, executionFence);
+    const published = await acceptedPublication("agentMessage" in result ? result.agentMessage.id : undefined);
+    if (published) return published;
     if ("error" in result) {
-      const summary = "The retained request could not execute under current authority. Review its conversation before retrying.";
-      const saved = await settle("input-required", { ...activeProgress, foregroundOutcome: "blocked", summary, nextActor: "owner" });
+      const buildHandoff = result.error === FOREGROUND_BUILD_HANDOFF_BLOCKED;
+      const summary = buildHandoff ? result.error : "The retained request could not execute under current authority. Review its conversation before retrying.";
+      const saved = await settle("input-required", { ...activeProgress, foregroundOutcome: "blocked", summary, nextActor: buildHandoff ? "platform" : "owner" });
       if (saved.count !== 1) return { kind: "superseded" };
       await retainNotice(run, summary);
       agentEventBus.emit(run.threadId, { type: "done", error: "The request is retained but could not execute." });
@@ -116,6 +140,8 @@ export async function executeForegroundWork(taskRunId: string) {
     });
     return { kind: pending ? "capacity-wait" : awaitingApproval ? "approval-required" : completed ? "responded" : "blocked" };
   } catch {
+    const published = await acceptedPublication().catch(() => null);
+    if (published) return published;
     const summary = turnStarted ? "Execution stopped without a confirmed outcome. The request is retained; reconcile existing results before retrying." : "Current execution authority is unavailable. The request remains saved.";
     const saved = await settle("input-required", { ...activeProgress, foregroundOutcome: turnStarted ? "execution-uncertain" : "blocked",
       ...(turnStarted ? { executionUncertainty: uncertain() } : {}),

@@ -48,9 +48,10 @@ a completed response records turn settlement, not business-result acceptance.
 - Specialist engagement: CE-E46D47D4, requested, not fulfilled or passed.
 - Recorded advisory DI-630E1BFBFE6B was low-confidence/all-options-opposed with
   incomplete feature coverage. It is not approval or a qualifying UX manifest.
-- The owner applied the approved critique_capture grant; effective authority was
-  verified on 2026-10-30. Discovery reports the writer callable, but this active
-  host has not exposed its function. No further consent or self-grant is needed.
+- The owner applied the approved critique_capture grant. The native writer and
+  image persistence/readback were actually verified on served capture repair
+  9efdf08 (DOC-86CDD5DC and the linked draft critique). This does not supply the
+  missing rendered prototype or passing specialist review. No new grant is needed.
 - Genuine rendered input remains missing. Native managed prototype DOC-DEE7B803
   preserves the published HTML; native PDF export returned converter-unavailable.
   A refused browser local-file route was not bypassed with an alternate server.
@@ -93,10 +94,56 @@ duplicate queue deliveries, one linked fixture-result readback, a possibly saved
 result followed by uncertainty, and authority revocation before capacity returns.
 No browser session is available to lend authority to the queue callback.
 
-All three cases passed. A temporary mutation that bypassed the real execution
+At the October 30 checkpoint, all three cases passed. A temporary mutation that bypassed the real execution
 context made all three fail; restoring the unchanged production implementation
 returned the four adapter suites to green (25 tests). The mutation is not part of
 the change. These results establish adapter composition against controlled
 doubles, not PostgreSQL durability, real Finance tool execution, expense/payment
 safety or served acceptance. Reuse the existing cross-boundary harness under
 BI-7DC3B91D for those checks rather than adding another execution engine.
+
+October 31 independent CLIENT review found that the retained source admitted
+the legacy specialist while execution used the default unified coworker,
+checked the deadline only before preparation, and published late responses
+before checking settlement ownership. Tests reproduced these failures against
+the production resolver and response path before correction. Admission now
+uses the same async resolver and saved flag as execution, including selected
+canonical/runtime identities. Context entry requires the worker's captured
+generation; it cannot borrow a replacement generation. The existing governed
+deadline contains preparation and provider admission/cancellation under current
+actor, thread and immutable request authority.
+
+A short transaction locks the existing TaskRun, rechecks the captured fence,
+actor/thread/agent/archive state and original deadline after the lock, and
+accepts the response, disposition and result identity together. Writes crossing
+the deadline roll back. Accepted output survives return interruption without
+repeating inference. Pending approvals keep their fence; explicit capacity waits
+keep the canonical retry projection and visible no-resend explanation. Ordinary
+completed-task redelivery can return the accepted payload without inference.
+Form suggestions retain the original form identity and registered field keys;
+the client applies a matching job/form/message once, including completion before
+HTTP acknowledgement. A new or unknown form/job cannot receive an old proposal.
+
+Special-command database changes share this boundary. Optional detached memory,
+fact, checkpoint and observer work is suppressed for retained foreground turns;
+the accepted message remains available for later governed derivation. Bounded
+response-artifact/evidence writes describe accepted output and cannot cause a
+new inference after interruption.
+
+The old programmatic orchestrator/scout/ideate calls do not carry an accountable
+parent TaskRun/fence into native child execution. This foreground path therefore
+retains and blocks those calls before dispatch, with the platform responsible;
+it does not silently route around the existing Build Studio engine or ask the
+owner to resend. Restoring that governed handoff is an unfinished capability
+boundary under the existing cross-boundary/recovery owners.
+
+Source verification includes genuine first-failing identity, deadline,
+late-publication, replacement-generation, lost-acknowledgement and original-form
+delivery cases. Controlled tests exercise the real worker/context/publication
+composition and production response path with persistence/provider doubles.
+Four PostgreSQL lock-order/expiry/rollback cases use the existing isolated-schema
+fixture and only an explicit governed SQL test URL. They remain unrun locally
+when that URL is absent; mocks are not database proof. Final exact gate,
+independent source reaffirmation and all owed UX/served business evidence remain
+required before delivery acceptance. The historical Finance request remains
+unbound and is not recovered by these new fixtures.

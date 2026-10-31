@@ -5,8 +5,9 @@ import { currentUserContext } from "@/lib/govern/current-user-context";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { isRecord } from "@/lib/shared/coerce";
 import { captureTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
-const execution = new AsyncLocalStorage<{ taskRunId: string; agentId: string | null; fence: TaskExecutionFence | null }>();
+const execution = new AsyncLocalStorage<{ taskRunId: string; agentId: string | null; fence: TaskExecutionFence | null; deadlineAt: string; userId: string; threadId: string }>();
 
 /** Queue callers supply only a retained job identity, never a user or role. */
 async function currentForegroundActor(taskRunId: string) {
@@ -18,7 +19,7 @@ async function currentForegroundActor(taskRunId: string) {
   const request = isRecord(metadata?.foregroundRequest) ? metadata.foregroundRequest : null;
   if (!run?.threadId || run.archivedAt || run.source !== "coworker" || run.status !== "working"
     || metadata?.trigger !== "interactive" || request?.schemaVersion !== 1
-    || typeof request.userMessageId !== "string") throw new Error("Foreground execution is not admissible.");
+    || typeof request.userMessageId !== "string" || typeof request.deadlineAt !== "string") throw new Error("Foreground execution is not admissible.");
   const [human, thread, message] = await Promise.all([
     currentUserContext(run.userId),
     prisma.agentThread.findUnique({ where: { id: run.threadId }, select: { userId: true } }),
@@ -31,13 +32,24 @@ async function currentForegroundActor(taskRunId: string) {
     actor: { id: run.userId, platformRole: human.platformRole ?? null, isSuperuser: human.isSuperuser ?? false },
     fence: captureTaskExecutionFence(run.progressPayload, metadata?.requestDigest ?? null),
     agentId: run.initiatingAgentId,
+    deadlineAt: request.deadlineAt,
+    threadId: run.threadId,
   };
 }
 
 /** Revalidation happens at entry and again when the turn resolves its actor. */
-export async function withForegroundWork<T>(taskRunId: string, action: () => Promise<T>): Promise<T> {
+export async function withForegroundWork<T>(taskRunId: string, action: () => Promise<T>, expectedFence?: TaskExecutionFence | null): Promise<T> {
   const current = await currentForegroundActor(taskRunId);
-  return execution.run({ taskRunId, fence: current.fence, agentId: current.agentId }, action);
+  if (expectedFence !== undefined && !sameTaskExecutionFence(expectedFence, current.fence)) throw new Error("Foreground executor was superseded before entry.");
+  return execution.run({ taskRunId, fence: current.fence, agentId: current.agentId, deadlineAt: current.deadlineAt,
+    userId: current.actor.id, threadId: current.threadId }, () => withGovernedInferenceDeadline({
+    deadlineAt: current.deadlineAt,
+    verifyAuthority: async () => {
+      const fresh = await currentForegroundActor(taskRunId);
+      return sameTaskExecutionFence(current.fence, fresh.fence) && current.agentId === fresh.agentId
+        && current.actor.id === fresh.actor.id && current.threadId === fresh.threadId && current.deadlineAt === fresh.deadlineAt;
+    },
+  }, action));
 }
 
 export async function requireForegroundUser() {
@@ -50,6 +62,10 @@ export async function requireForegroundUser() {
 
 export function foregroundExecutionFence(): TaskExecutionFence | null {
   return execution.getStore()?.fence ?? null;
+}
+
+export function foregroundExecutionContext() {
+  return execution.getStore() ?? null;
 }
 
 export function assertForegroundAgent(agentId: string | null | undefined): void {

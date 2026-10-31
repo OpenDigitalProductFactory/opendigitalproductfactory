@@ -49,7 +49,7 @@ export type AgentEvent =
   | { type: "plan:update"; goal: string; steps: Array<{ id: string; description: string; status: string }>; done: number; total: number }
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
-  | { type: "done"; agentMessageId?: string; systemMessageId?: string; formAssistUpdate?: Record<string, unknown>; providerInfo?: { providerId: string; modelId: string }; error?: string }
+  | { type: "done"; agentMessageId?: string; systemMessageId?: string; formAssistUpdate?: Record<string, unknown>; formAssistFormId?: string; taskRunId?: string; providerInfo?: { providerId: string; modelId: string }; error?: string }
   // EP-ASYNC-COWORKER-001: error event for background execution failures
   | { type: "error"; message: string }
   // Sandbox lifecycle events

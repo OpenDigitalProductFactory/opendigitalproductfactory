@@ -36,6 +36,7 @@ import {
 import {
   buildAgentFormAssistContext,
   getActiveFormAssist,
+  applyFormAssistDelivery, type FormAssistDeliveryState,
 } from "@/lib/agent-form-assist";
 import {
   createOptimisticUserMessage,
@@ -463,9 +464,7 @@ export function AgentCoworkerPanel({
           if (data.providerInfo) {
             setLastProviderInfo(data.providerInfo);
           }
-          if (data.formAssistUpdate && activeFormAssistRef.current) {
-            activeFormAssistRef.current.applyFieldUpdates(data.formAssistUpdate);
-          }
+          applyFormAssistDelivery(activeFormAssistRef.current, data, appliedFormDeliveries.current.applied, retainedRequestRef.current?.taskRunId ?? null, appliedFormDeliveries.current.pending);
 
           // Refresh messages from DB — authoritative source.
           // Fetch by threadId (which we already have as a prop) rather than
@@ -634,8 +633,8 @@ export function AgentCoworkerPanel({
     });
   }
 
-  // EP-ASYNC-COWORKER-001: activeFormAssist ref for SSE done handler
   const activeFormAssistRef = useRef<ReturnType<typeof getActiveFormAssist>>(null);
+  const appliedFormDeliveries = useRef<FormAssistDeliveryState>({ applied: new Set(), pending: new Map() });
   // EP-WORK-POSTURE 8.2: the page's form-assist DATA is always collected; whether
   // the coworker may fill the fields is decided server-side from the Workroom.
   activeFormAssistRef.current = getActiveFormAssist(pathname);
@@ -661,6 +660,7 @@ export function AgentCoworkerPanel({
       ? buildAgentFormAssistContext(activeFormAssistRef.current)
       : undefined;
     retainedRequestRef.current = { threadId, requestKey: optimisticMessage.id, taskRunId: null };
+    appliedFormDeliveries.current.pending.clear();
     if (appendOptimistic) {
       setMessages((prev) => [...prev, optimisticMessage]);
     }
@@ -711,7 +711,10 @@ export function AgentCoworkerPanel({
       } else {
         const acknowledged = await res.json().catch(() => null);
         if (typeof acknowledged?.taskRunId === "string" && retainedRequestRef.current?.requestKey === optimisticMessage.id
-          && retainedRequestRef.current.threadId === threadId) retainedRequestRef.current.taskRunId = acknowledged.taskRunId;
+          && retainedRequestRef.current.threadId === threadId) {
+          retainedRequestRef.current.taskRunId = acknowledged.taskRunId;
+          applyFormAssistDelivery(activeFormAssistRef.current, {}, appliedFormDeliveries.current.applied, acknowledged.taskRunId, appliedFormDeliveries.current.pending);
+        }
         // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
         completeJourney("message-ack", { serverTiming: res.headers.get("server-timing") }); // BI-BD0B0DCC
         setMessages(prev => acknowledgeRetainedMessage(prev, optimisticMessage.id, acknowledged?.receipt));

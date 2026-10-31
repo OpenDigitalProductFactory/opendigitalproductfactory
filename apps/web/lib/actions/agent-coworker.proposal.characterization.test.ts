@@ -8,6 +8,8 @@
 // The mock harness mirrors agent-coworker-external.test.ts (vitest mock
 // harnesses are per-file; that file is at the module-size ceiling).
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const foregroundBuild = vi.hoisted(() => ({ run: vi.fn() }));
+vi.mock("@/lib/build/build-orchestrator", () => ({ runBuildOrchestrator: foregroundBuild.run }));
 
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
@@ -163,6 +165,7 @@ vi.mock("@/lib/permissions", async () => {
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $queryRaw: vi.fn(),
     user: {
       findUnique: vi.fn(),
     },
@@ -172,6 +175,8 @@ vi.mock("@dpf/db", () => ({
     agentMessage: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
     },
     agentAttachment: {
       findMany: vi.fn(),
@@ -184,9 +189,13 @@ vi.mock("@dpf/db", () => ({
     },
     modelProvider: {
       findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(), update: vi.fn(),
     },
+    scheduledJob: { deleteMany: vi.fn() },
     taskRun: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
     },
     backlogItem: {
       findUnique: vi.fn(),
@@ -229,12 +238,15 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
+import { withForegroundWork } from "@/lib/agent/foreground-work-context";
 
 const mockPrisma = prisma as any;
 
 beforeEach(() => {
   setRoomAuthority({});
   vi.clearAllMocks();
+  mockPrisma.$transaction = vi.fn(async (write: (db: unknown) => Promise<unknown>) => write(mockPrisma));
+  mockPrisma.$queryRaw.mockResolvedValue([{ id: "run-record" }]);
   vi.mocked(auth).mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } } as never);
   vi.mocked(resolveAgentForRouteWithPrompts).mockResolvedValue({
     agentId: "admin-assistant", agentName: "Admin Assistant", agentDescription: "Admin help",
@@ -313,5 +325,86 @@ describe("S1 — chat ends a proposal-mode call on the approval request it raise
       }],
     });
     expect("agentMessage" in result && result.agentMessage.proposal).toBeUndefined();
+  });
+});
+
+describe("retained foreground production response publication", () => {
+  function retainedTurn(routeContext = "/admin") {
+    const run = { id: "run-record", taskRunId: "run-123", userId: "user-1", threadId: "thread-1", routeContext,
+      initiatingAgentId: "admin-assistant", source: "coworker", status: "working", archivedAt: null,
+      progressPayload: { dispatch: { claimedAt: "original" }, foregroundAttempt: 1 },
+      a2aMetadata: { trigger: "interactive", requestDigest: "a".repeat(64), foregroundRequest: {
+        schemaVersion: 1, userMessageId: "user-msg-1", deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      } },
+    };
+    mockPrisma.taskRun.findUnique.mockImplementation(async () => structuredClone(run));
+    mockPrisma.taskRun.updateMany.mockImplementation(async ({ data }: any) => {
+      if (run.status !== "working") return { count: 0 };
+      Object.assign(run, data);
+      return { count: 1 };
+    });
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1", isActive: true, isSuperuser: true, groups: [] });
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content: "Share it", taskRunId: "run-123", createdAt: new Date() });
+    const messages = new Map<string, any>();
+    mockPrisma.agentMessage.findUnique.mockImplementation(async ({ where }: any) => messages.get(where.id) ?? null);
+    mockPrisma.agentMessage.create.mockReset().mockImplementation(async ({ data }: any) => {
+      const message = { ...data, id: data.id ?? "late-response", createdAt: new Date() };
+      messages.set(message.id, message);
+      return message;
+    });
+    vi.mocked(getAvailableTools).mockResolvedValue([]);
+    return run;
+  }
+
+  it("retains a Build Studio request without starting an unbound native child", async () => {
+    retainedTurn("/build/FB-controlled");
+    mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-controlled", phase: "build", threadId: "thread-1", buildPlan: { tasks: [{ id: "fixture", title: "Synthetic work" }] }, taskResults: null });
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({ buildId: "FB-controlled", phase: "build", threadId: "thread-1" });
+    foregroundBuild.run.mockResolvedValue({ content: "Controlled native child result", totalInputTokens: 0, totalOutputTokens: 0 });
+    const result = await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/build/FB-controlled", acceptedUserMessageId: "user-msg-1" }));
+    expect(foregroundBuild.run).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ error: expect.stringContaining("Build Studio") });
+  });
+
+  it.each([true, false])("fences a retained special command's mutations and response together (%s)", async canceled => {
+    const run = retainedTurn();
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content: "re-enable", taskRunId: "run-123", createdAt: new Date() });
+    mockPrisma.modelProvider.findFirst.mockImplementation(async () => {
+      if (canceled) run.status = "canceled";
+      return { providerId: "fixture-provider", name: "Fixture provider" };
+    });
+    mockPrisma.modelProvider.update.mockResolvedValue({});
+    mockPrisma.scheduledJob.deleteMany.mockResolvedValue({ count: 0 });
+    let failure: unknown;
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "re-enable", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" })).catch(error => { failure = error; });
+    expect(mockPrisma.modelProvider.update).toHaveBeenCalledTimes(canceled ? 0 : 1);
+    expect(mockPrisma.scheduledJob.deleteMany).toHaveBeenCalledTimes(canceled ? 0 : 1);
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledTimes(canceled ? 0 : 1);
+    expect(run.status).toBe(canceled ? "canceled" : "completed");
+    if (!canceled) expect(failure).toBeUndefined();
+  });
+
+  it.each([true, false])("publishes the real production response only when cancellation has not won (%s)", async (canceled) => {
+    const run = retainedTurn();
+    vi.mocked(routeAndCall).mockImplementationOnce(async () => {
+      if (canceled) run.status = "canceled";
+      return { content: "A response that arrived after cancellation", providerId: "ollama-local", modelId: "fixture",
+        inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {} } as never;
+    });
+
+    let failure: unknown;
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" })).catch(error => { failure = error; });
+    expect(routeAndCall).toHaveBeenCalledOnce();
+    expect(mockPrisma.$queryRaw).toHaveBeenCalled();
+    const writes = mockPrisma.agentMessage.create.mock.calls.filter(([arg]: any[]) => arg.data.role === "assistant");
+    expect(writes).toHaveLength(canceled ? 0 : 1);
+    if (canceled) expect(failure).toBeInstanceOf(Error);
+    else {
+      expect(failure).toBeUndefined();
+      expect(run.status).toBe("completed");
+      expect((run.progressPayload as any).resultMessageId).toBe(writes[0][0].data.id);
+      expect((await import("@/lib/semantic-memory")).storeConversationMemory).not.toHaveBeenCalled();
+      expect((await import("@/lib/process-observer-hook")).observeConversation).not.toHaveBeenCalled();
+    }
   });
 });

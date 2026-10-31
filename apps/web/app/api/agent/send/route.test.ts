@@ -21,6 +21,7 @@ const {
     emit: vi.fn(),
   },
   mockPrisma: {
+    platformConfig: { findUnique: vi.fn() },
     agentMessage: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -52,6 +53,9 @@ vi.mock("@/lib/agent-event-bus", () => ({
 vi.mock("@/lib/agent-routing", () => ({
   resolveAgentForRoute: mockResolveAgentForRoute,
 }));
+vi.mock("@/lib/tak/agent-routing-server", () => ({
+  resolveAgentForRouteWithPrompts: (...args: unknown[]) => mockResolveAgentForRoute(...args),
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -65,6 +69,7 @@ describe("POST /api/agent/send", () => {
     mockAdmission.mockResolvedValue("TR-CHAT-test");
     mockWake.mockResolvedValue({});
     mockPrisma.agentMessage.findUnique.mockResolvedValue(null);
+    mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
 
     mockAuth.mockResolvedValue({
       user: {
@@ -140,6 +145,17 @@ describe("POST /api/agent/send", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(persistedBeforeTurn).toBe(true);
     expect(mockWake).toHaveBeenCalledWith({ name: "agent/foreground-work.run", data: { taskRunId: "TR-CHAT-test" } });
+  });
+
+  it.each([null, { value: { enabled: false } }])("binds admission to the same saved unified policy as production execution (%j)", async (config) => {
+    const routing = await vi.importActual<typeof import("@/lib/agent-routing")>("@/lib/agent-routing");
+    const flags = await vi.importActual<typeof import("@/lib/feature-flags")>("@/lib/feature-flags");
+    mockPrisma.platformConfig.findUnique.mockResolvedValue(config);
+    mockResolveAgentForRoute.mockImplementation(routing.resolveAgentForRoute);
+    const routeContext = "/finance/expense-claims";
+    const expected = routing.resolveAgentForRoute(routeContext, { platformRole: "HR-000", isSuperuser: true }, await flags.isUnifiedCoworkerEnabled());
+    expect((await POST(sendRequest({ routeContext }) as any)).status).toBe(200);
+    expect(mockAdmission).toHaveBeenCalledWith(expect.objectContaining({ agentId: expected.agentId, routeContext }));
   });
 
   it("answers with an error and starts no turn when the message cannot be saved", async () => {

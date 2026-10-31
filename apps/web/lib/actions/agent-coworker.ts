@@ -104,6 +104,9 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
 import { persistCoworkerResponseArtifact } from "@/lib/coworker/response-artifact";
 import { requireForegroundUser, foregroundExecutionFence, assertForegroundAgent } from "@/lib/agent/foreground-work-context";
+import { foregroundExecutionContext } from "@/lib/agent/foreground-work-context";
+import { publishForegroundMessage, withForegroundMutation } from "@/lib/agent/foreground-work-publication";
+import { FOREGROUND_BUILD_HANDOFF_BLOCKED } from "@/lib/agent/foreground-work-contract";
 import { preInferenceResourceWait, type ResourceWaitFailureKind } from "@/lib/mcp-task-capacity-contract";
 import {
   formatPortalContextPromptSection,
@@ -321,27 +324,30 @@ export async function sendMessage(input: {
       select: { providerId: true, name: true },
     });
     if (reEnabled) {
-      await prisma.modelProvider.update({
+      const sysMsg = await publishForegroundMessage(async db => {
+      await db.modelProvider.update({
         where: { providerId: reEnabled.providerId },
         data: { status: "active" },
       });
       // Cancel the re-enable scheduled job if it exists
-      await prisma.scheduledJob.deleteMany({
+      await db.scheduledJob.deleteMany({
         where: { jobId: `provider-reenable-${reEnabled.providerId}` },
       }).catch(() => {});
 
-      const sysMsg = await prisma.agentMessage.create({
+      return db.agentMessage.create({
         data: {
           threadId: input.threadId,
+          ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
           role: "system",
           content: `${reEnabled.name} has been re-enabled. It may have reduced quota — try sending your message again.`,
           routeContext: input.routeContext,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
+      }, { kind: "responded" });
 
       // Fire-and-forget: process observer
-      observeConversation(input.threadId, input.routeContext).catch((err) =>
+      if (!foregroundExecutionContext()) observeConversation(input.threadId, input.routeContext).catch((err) =>
         console.error("[process-observer]", err),
       );
 
@@ -369,10 +375,10 @@ export async function sendMessage(input: {
   // Link attachment to the user message if provided
   if (input.attachmentId) {
     if (!acceptedUserMsg) {
-      await prisma.agentAttachment.update({
+      await withForegroundMutation(db => db.agentAttachment.update({
         where: { id: input.attachmentId },
         data: { messageId: userMsg.id },
-      });
+      }));
     }
     // Re-fetch so the serialized response includes the attachment
     const linked = await prisma.agentAttachment.findMany({
@@ -1206,10 +1212,10 @@ export async function sendMessage(input: {
     // Link build to this chat thread so the BuildStudio UI can live-refresh
     // via SSE when the AI updates the build phase, sandbox, or evidence.
     if (activeBuild && !activeBuild.threadId && input.threadId) {
-      prisma.featureBuild.update({
+      withForegroundMutation(db => db.featureBuild.update({
         where: { buildId: activeBuild.buildId },
         data: { threadId: input.threadId },
-      }).catch(() => {});
+      })).catch(() => {});
     }
   }
 
@@ -1715,10 +1721,10 @@ export async function sendMessage(input: {
 
       // Auto-advance to review phase if still in build
       try {
-        await prisma.featureBuild.update({
+        await withForegroundMutation(db => db.featureBuild.update({
           where: { buildId: activeBuild!.buildId, phase: "build" },
           data: { phase: "review" },
-        });
+        }));
         const { revalidatePortalContextForBuild } = await import("@/lib/portal-context/invalidation");
         revalidatePortalContextForBuild(activeBuild!.buildId);
       } catch { /* already advanced or concurrent update — fine */ }
@@ -1752,6 +1758,7 @@ export async function sendMessage(input: {
     }
 
     if (activeBuild && buildPlan?.tasks?.length && !buildAlreadyComplete) {
+      if (foregroundExecutionContext()) return { error: FOREGROUND_BUILD_HANDOFF_BLOCKED };
       const { runBuildOrchestrator } = await import("@/lib/build/build-orchestrator");
 
       const orchestratorResult = await runBuildOrchestrator({
@@ -1902,7 +1909,7 @@ export async function sendMessage(input: {
     // BI-7BCC87BB (spec D2 S1): a declared-proposal call raised approval requests bound to the
     // exact call; the turn ends on them and the message lists them inline (no AgentActionProposal).
     if (agenticResult.pendingApproval) {
-      const agentMsg = await prisma.agentMessage.create({
+      const agentMsg = await publishForegroundMessage(db => db.agentMessage.create({
         data: {
           id: pendingAgentMessageId,
           threadId: input.threadId, role: "assistant",
@@ -1916,9 +1923,9 @@ export async function sendMessage(input: {
           contextTrace, // BI-3E218D80 — pending-approval path (see also the plain-response write)
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
+      }), { kind: "approval-required" });
       const approvalRequests = await loadInlineApprovalRequests([agentMsg]);
-      observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
+      if (!foregroundExecutionContext()) observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
       return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)), pendingApproval: true };
     }
 
@@ -1955,6 +1962,7 @@ export async function sendMessage(input: {
       const scoutState = buildForScout?.buildExecState as Record<string, unknown> | null;
 
       if (scoutState?.scoutResearchRequested) {
+        if (foregroundExecutionContext()) return { error: FOREGROUND_BUILD_HANDOFF_BLOCKED };
         console.log(`[coworker] Scout research requested — dispatching scout dispatch`);
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "scout_research", iteration: 0 });
@@ -1987,7 +1995,7 @@ export async function sendMessage(input: {
         }
 
         // Clear flag regardless of success
-        await prisma.featureBuild.update({
+        await withForegroundMutation(db => db.featureBuild.update({
           where: { buildId: resolvedBuildId },
           data: {
             buildExecState: {
@@ -1995,7 +2003,7 @@ export async function sendMessage(input: {
               scoutResearchRequested: false,
             },
           },
-        });
+        }));
 
         agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "scout_research", success: true });
       }
@@ -2010,6 +2018,7 @@ export async function sendMessage(input: {
       });
       const execState = buildForResearch?.buildExecState as Record<string, unknown> | null;
       if (execState?.ideateResearchRequested) {
+        if (foregroundExecutionContext()) return { error: FOREGROUND_BUILD_HANDOFF_BLOCKED };
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
 
@@ -2149,12 +2158,12 @@ export async function sendMessage(input: {
           }
 
           // Clear the research request
-          await prisma.featureBuild.update({
+          await withForegroundMutation(db => db.featureBuild.update({
             where: { buildId: resolvedBuildId },
             data: {
               buildExecState: { ideateResearchRequested: false },
             },
-          });
+          }));
         } catch (err) {
           console.error(`[coworker] Ideate research dispatch failed:`, err);
           agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: false });
@@ -2184,16 +2193,18 @@ export async function sendMessage(input: {
         },
       });
       if (!recentDowngrade) {
-        const sysMsg = await prisma.agentMessage.create({
+        const downgradeMessage = result.downgradeMessage;
+        const sysMsg = await publishForegroundMessage(db => db.agentMessage.create({
           data: {
             threadId: input.threadId,
+            ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
             role: "system",
-            content: result.downgradeMessage,
+            content: downgradeMessage,
             agentId: agent.agentId,
             routeContext: input.routeContext,
           },
           select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-        });
+        }));
         systemMessage = serializeMessage(sysMsg);
       }
     }
@@ -2201,9 +2212,10 @@ export async function sendMessage(input: {
     if (e instanceof NoEligibleEndpointsError || e instanceof NoAllowedProvidersForSensitivityError) {
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
-      const sysMsg = await prisma.agentMessage.create({
+      const sysMsg = await publishForegroundMessage(db => db.agentMessage.create({
         data: {
           threadId: input.threadId,
+          ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
           role: "system",
           content: e instanceof NoEligibleEndpointsError
             ? `No eligible AI endpoints for this task (${e.reason}). The coworker used a local fallback response.`
@@ -2212,7 +2224,7 @@ export async function sendMessage(input: {
           routeContext: input.routeContext,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
+      }));
       systemMessage = serializeMessage(sysMsg);
     } else if (e instanceof NoProvidersAvailableError) {
       const inactiveProviders = await prisma.modelProvider.findMany({
@@ -2228,16 +2240,17 @@ export async function sendMessage(input: {
         inactiveProviders,
       });
 
-      const sysMsg = await prisma.agentMessage.create({
+      const sysMsg = await publishForegroundMessage(db => db.agentMessage.create({
         data: {
           threadId: input.threadId,
+          ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
           role: "system",
           content: sysContent,
           agentId: agent.agentId,
           routeContext: input.routeContext,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
+      }));
       systemMessage = serializeMessage(sysMsg);
     } else {
       throw e;
@@ -2305,7 +2318,7 @@ export async function sendMessage(input: {
     }
   }
 
-  const agentMsg = await prisma.agentMessage.create({
+  const agentMsg = await publishForegroundMessage(db => db.agentMessage.create({
     data: {
       id: pendingAgentMessageId,
       threadId: input.threadId,
@@ -2328,6 +2341,9 @@ export async function sendMessage(input: {
       routeContext: true,
       createdAt: true,
     },
+  }), { kind: foregroundResourceWait ? "capacity-wait" : responseIsSystemFailure ? "blocked" : "responded",
+    ...(foregroundResourceWait ? { resourceWait: foregroundResourceWait } : {}),
+    ...(formAssistUpdate ? { formAssistUpdate } : {}), ...(systemMessage ? { systemMessageId: systemMessage.id } : {}),
   });
 
   await persistCoworkerResponseArtifact({
@@ -2343,6 +2359,9 @@ export async function sendMessage(input: {
     userId: user.id!,
   });
 
+  // Optional learning/observer work must not outlive a retained execution's
+  // authority. The accepted message remains the durable source for later work.
+  if (!foregroundExecutionContext()) {
   const { resolveAIDocForAgent } = await import("@/lib/identity/aidoc-resolver");
   const memoryOperatingProfileFingerprint = (
     await resolveAIDocForAgent(agent.agentId).catch(() => null)
@@ -2413,6 +2432,7 @@ export async function sendMessage(input: {
   observeConversation(input.threadId, input.routeContext, mainMeta).catch((err) =>
     console.error("[process-observer]", err),
   );
+  }
 
   return {
     userMessage: serializeMessage(userMsg),

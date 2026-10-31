@@ -6,14 +6,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
-import { resolveAgentForRoute } from "@/lib/agent-routing";
+import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { acceptUserMessage } from "@/lib/agent/accept-user-message";
 import { admitForegroundWork } from "@/lib/agent/foreground-work-admission";
 import { jobs } from "@/lib/jobs";
 import { FOREGROUND_WORK_EVENT, foregroundReceiptId } from "@/lib/agent/foreground-work-contract";
 import { prisma } from "@dpf/db";
 import { ApiError } from "@/lib/api/error";
-// Note: this route uses the sync version since it only needs agentId for message logging
 
 export const dynamic = "force-dynamic";
 
@@ -70,11 +70,11 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   let taskRunId: string;
   try {
-    const agent = resolveAgentForRoute(input.routeContext, {
+    const agent = await resolveAgentForRouteWithPrompts(input.routeContext, {
       userId: session.user.id,
       platformRole: session.user.platformRole ?? null,
       isSuperuser: session.user.isSuperuser ?? false,
-    });
+    }, await isUnifiedCoworkerEnabled());
     taskRunId = await admitForegroundWork({
       userId: session.user.id,
       agentId: agent.agentId,
