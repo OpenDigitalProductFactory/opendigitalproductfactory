@@ -34,13 +34,21 @@ Use report-kit, existing localization and theme tokens. Replace generic default 
 
 ## Acceptance
 
-- AC-1: Default page separates demonstrably working, waiting and attention from retained history; leases alone never imply progress. Counts label bounded reads honestly.
-- AC-2: Each actionable room names its recorded accountable person or honestly says unassigned, and gives a supported next step without inventing automatic recovery.
-- AC-3: Lease timers, UUIDs, branches and diagnostic metrics are hidden behind labelled disclosures; keyboard and narrow viewport remain usable.
-- AC-4: Repeated held causes are summarized once with affected room count and honest recovery guidance, preserving every case link and original evidence.
-- AC-5: One existing inventory/read model serves unscoped and portfolio views. Compact loading and deferred history/diagnostics reduce default payload or rendered content with measured before/after evidence; no per-room DB queries or timer refresh.
-- AC-6: Existing expiry grace/reaper safety and active holder protections remain unchanged and are tested; outcomes needing a person have an accountable recovery path.
-- AC-7: Affected tests, typechecks, proportional guards, protected PR/merge, canonical deployment and actual desktop/narrow browser happy path prove delivery.
+**OBJ-1:** The owner sees the recorded decision, immediate actor and concrete next action in the existing inventory and grouped recovery.
+
+**OBJ-2:** Canonical health, content authorization, uncertain recovery and accountable-person semantics remain truthful and unchanged.
+
+**OBJ-3:** Existing shared pages remain compact and usable, with technical detail disclosed and measured owner verification.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-1 | OBJ-1, OBJ-2 | Default page separates demonstrably working, waiting and attention from retained history; leases alone never imply progress. Counts label bounded reads honestly. |
+| AC-2 | OBJ-1, OBJ-2 | Each actionable room names its recorded accountable person or honestly says unassigned, and gives a supported next step without inventing automatic recovery. |
+| AC-3 | OBJ-3 | Lease timers, UUIDs, branches and diagnostic metrics are hidden behind labelled disclosures; keyboard and narrow viewport remain usable. |
+| AC-4 | OBJ-1, OBJ-2 | Repeated held causes are summarized once with affected room count and honest recovery guidance, preserving every case link and original evidence. |
+| AC-5 | OBJ-2, OBJ-3 | One existing inventory/read model serves unscoped and portfolio views. Compact loading and deferred history/diagnostics reduce default payload or rendered content with measured before/after evidence; no per-room DB queries or timer refresh. |
+| AC-6 | OBJ-2 | Existing expiry grace/reaper safety and active holder protections remain unchanged and are tested; outcomes needing a person have an accountable recovery path. |
+| AC-7 | OBJ-1, OBJ-2, OBJ-3 | Affected tests, typechecks, proportional guards, protected PR/merge, canonical deployment and actual desktop/narrow browser happy path prove delivery. |
 
 ## Verification and limits
 

@@ -12,7 +12,7 @@ Design: [Recorded next actions](../specs/2026-10-31-workrooms-recorded-next-acti
 
 - Decision: atomic
 - Parent: BI-E8542C82
-- Receipt: blocked-by: immutable plan is not yet published or provider-verified; source implementation must wait for the live coverage receipt and current implementation readiness.
+- Receipt: blocked-by: no initiative scope baseline exists for BI-E8542C82; the independent reviewer must approve the immutable canonical design before plan coverage and implementation can proceed.
 - Rationale: the safe projection, its grouped rendering and regression/served proof are one correction to the same existing owner read path; none independently delivers a trustworthy next action.
 - Dependencies: existing Atlas health and liveness/recovery projections; no takeover of BI-B3D87B06 or its A1/A2/A3 implementation.
 - Mapping: recorded-next-action -> BI-E8542C82
