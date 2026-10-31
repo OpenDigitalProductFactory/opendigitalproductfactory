@@ -88,3 +88,10 @@ installation rollback or host operation is part of this change.
 
 The four acceptance rows AC-MACCI1 through AC-MACCI4 form one atomic deliverable:
 label migration without preserved real-host verification is not independently useful.
+
+## Item-body acceptance contract
+
+- AC-MACCI1: The selected standard runner is supported and demonstrably Darwin arm64 with stock Bash 3.2.
+- AC-MACCI2: Both existing development and release dry-runs pass on the actual hosted target; unavailable execution remains unrun.
+- AC-MACCI3: Existing path filters, concurrency, ten-minute timeout, permissions and required-check protection remain effective.
+- AC-MACCI4: Source checks and ordinary independent review/protected publication qualify the exact change; no CI or review bypass is used.
