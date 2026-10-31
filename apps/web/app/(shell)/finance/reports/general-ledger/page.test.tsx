@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ auth: vi.fn(), can: vi.fn(), context: vi.fn(), report: vi.fn() }));
+const m = vi.hoisted(() => ({ auth: vi.fn(), can: vi.fn(), context: vi.fn(), report: vi.fn(), actor: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: m.auth }));
+vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: m.actor }));
 vi.mock("@/lib/permissions", () => ({ can: m.can }));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("@/lib/performance/performance-organization-context", () => ({ resolvePerformanceOrganizationContext: m.context }));
@@ -8,7 +9,7 @@ vi.mock("@/lib/finance/ledger-service", () => ({ getGeneralLedgerReport: m.repor
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); }, notFound: () => { throw new Error("not-found"); } }));
 import Page from "./page";
 beforeEach(() => {
-  vi.resetAllMocks(); m.auth.mockResolvedValue({ user: { id: "owner", platformRole: "HR-000" } }); m.can.mockReturnValue(true);
+  vi.resetAllMocks(); m.actor.mockResolvedValue({ userId: "owner", platformRole: "HR-000", platformRoles: ["HR-000"], isSuperuser: false }); m.auth.mockResolvedValue({ user: { id: "owner", platformRole: "HR-000" } }); m.can.mockReturnValue(true);
   m.context.mockResolvedValue({ status: "resolved", organizationId: "org-a", archetypeId: "software-platform" });
   m.report.mockResolvedValue({ availability: "unavailable", reason: "No recorded entries", periodKey: "2026-10", currency: null });
 });
@@ -54,5 +55,6 @@ it("labels available monthly records as movements rather than a verified positio
   const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ period: "2026-10" }) }));
   expect(html).toContain("Recorded movements"); expect(html).toContain("€200.00");
   expect(html).toContain("not a verified bank balance or as-of position");
+  expect(html).toMatch(/<details[^>]*>.*Account details.*<table/s);
   expect(html).not.toContain("Financial position"); expect(html).not.toContain("Books balance");
 });

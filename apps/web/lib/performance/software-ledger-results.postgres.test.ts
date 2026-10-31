@@ -62,6 +62,13 @@ describe.skipIf(!admitted)("software source to saved results in isolated migrate
     expect((await saved()).every(row => row.computedAt.getTime() === recoveredAt.getTime())).toBe(true);
     expect(await fixture.db.businessMetricRollup.count()).toBe(6);
     const recovered = await saved();
+    await fixture.db.journalLine.updateMany({ where: { journalEntryId: "results-org-a-cost" }, data: { currency: "USD" } });
+    await expect(run(new Date(at.getTime() + 180000))).rejects.toThrow(/retained/);
+    expect(await saved()).toEqual(recovered);
+    const retained = await fixture.db.businessMetricRollup.findMany({ where: { organizationId: "results-org-a", periodStart: new Date("2026-10-01T00:00:00Z") } });
+    expect(retained.every(row => (row.sourceLineage as any).refreshFailure?.kind === "source-unavailable")).toBe(true);
+    expect(retained.every(row => row.computedAt.getTime() === recoveredAt.getTime())).toBe(true);
+    await fixture.db.journalLine.updateMany({ where: { journalEntryId: "results-org-a-cost" }, data: { currency: "EUR" } });
     await fixture.pool.query(`ALTER TABLE "JournalLine" RENAME TO "JournalLine_fixture_unavailable"`);
     try { await expect(run(new Date(at.getTime() + 180000))).rejects.toThrow(); expect(await saved()).toEqual(recovered); }
     finally { await fixture.pool.query(`ALTER TABLE "JournalLine_fixture_unavailable" RENAME TO "JournalLine"`); }

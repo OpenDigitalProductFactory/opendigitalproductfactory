@@ -123,7 +123,7 @@ export function BusinessPerformanceDashboard({
           <h2 className="text-base font-semibold">{performance.periodLabel} · {performance.reportingCurrency}</h2>
           <p className="text-xs text-[var(--dpf-muted)]">Available ledger records · UTC · {performance.periodState === "in-progress" ? "Partial month" : "Recorded month"}</p>
         </div>
-        <StatusBadge intent={performance.freshness === "stale" ? "warning" : "neutral"} label={performance.freshness === "stale" ? "Snapshot delayed" : "Recorded snapshot"} />
+        <StatusBadge intent={performance.freshness === "stale" ? "warning" : "neutral"} label={performance.refreshFailure ? "Refresh failed" : performance.freshness === "stale" ? "Snapshot delayed" : "Recorded snapshot"} />
       </div>
       <section aria-label="Headline performance" className="grid gap-3 md:grid-cols-3">
         {performance.sections.headline.flatMap(key => {
@@ -134,6 +134,7 @@ export function BusinessPerformanceDashboard({
       <details className="rounded-lg border border-[var(--dpf-border)] p-3">
         <summary className="cursor-pointer text-sm font-medium">Explore results</summary>
         <div className="mt-3 space-y-4">
+          {performance.refreshFailure && <p className="text-xs text-[var(--dpf-muted)]">{performance.refreshFailure.reason}</p>}
           <p className="text-xs text-[var(--dpf-muted)]">Recorded income and expenses; not bank cash, tax profit or verified complete books. Last source check <LocalTime value={performance.asOf} mode="time" />.</p>
           <ExportButton rows={exportRows} filename="recorded-results.csv" label="Export this period" />
           <BusinessAnalysisWorkspace performance={performance} watches={watches} />

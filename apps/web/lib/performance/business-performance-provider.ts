@@ -1,3 +1,5 @@
+import { currentUserContextFromRecord } from "@/lib/govern/current-user-context";
+import { can } from "@/lib/permissions";
 import {
   getPerformanceMetricDefinition,
   resolvePerformanceMetricPack,
@@ -91,6 +93,7 @@ export interface ReadyBusinessPerformance {
   };
   source: "business-performance-read-model";
   reportingCurrency?: string | null;
+  refreshFailure?: { at: string; reason: string };
   nextAction?: PerformanceNextAction;
 }
 
@@ -119,6 +122,7 @@ type PersistedMetricDbRow = Omit<PersistedMetricRow, "value" | "availability"> &
 
 export interface BusinessPerformanceDataSource
   extends PerformanceOrganizationContextDataSource {
+  user?: { findUnique(args: unknown): Promise<Parameters<typeof currentUserContextFromRecord>[1]> };
   businessMetricRollup: {
     findMany(args: unknown): Promise<PersistedMetricDbRow[]>;
   };
@@ -292,7 +296,7 @@ export function buildBusinessPerformanceReadModel(input: {
     timezone: reference.timezone,
     asOf,
     freshness:
-      (!software && isFinalizedPeriod) || now.getTime() - asOf.getTime() <= 2 * 60 * 60 * 1000
+      (!software && isFinalizedPeriod) || (!(software && currentPack?.valid && currentPack.lineage.refreshFailure) && now.getTime() - asOf.getTime() <= 2 * 60 * 60 * 1000)
         ? "fresh"
         : "stale",
     periodState: isFinalizedPeriod ? "finalized" : "in-progress",
@@ -310,7 +314,8 @@ export function buildBusinessPerformanceReadModel(input: {
     trendPoints,
     sections: resolvePerformanceMetricPack(input.archetypeId),
     source: "business-performance-read-model",
-    ...(software && currentPack?.valid ? { reportingCurrency: currentPack.currency, nextAction: nextAction(keyFor(reference)) } : {}),
+    ...(software && currentPack?.valid ? { reportingCurrency: currentPack.currency, nextAction: nextAction(keyFor(reference)),
+      ...(currentPack.lineage.refreshFailure ? { refreshFailure: { at: currentPack.lineage.refreshFailure.at, reason: "Source validation failed; showing the last valid recorded result." } } : {}) } : {}),
   };
 }
 
@@ -332,6 +337,16 @@ export function createBusinessPerformanceProvider(
         );
       }
 
+      if (context.archetypeId === "software-platform") {
+        const record = await db.user?.findUnique({ where: { id: input.userId }, select: {
+          isActive: true, isSuperuser: true, automationExpiresAt: true,
+          groups: { include: { platformRole: true } },
+        } });
+        const actor = currentUserContextFromRecord(input.userId, record ?? null);
+        if (!actor || !can(actor, "view_finance") || !can(actor, "view_business_performance")) {
+          return unconfigured("Finance results are not available for your current access.", { applicable: false });
+        }
+      }
       const rows = await db.businessMetricRollup.findMany({
         where: { organizationId: context.organizationId, ...(context.archetypeId === "software-platform" ? {
           metricKey: { in: uniqueMetricKeys(context.archetypeId) }, definitionVersion: SOFTWARE_LEDGER_DEFINITION_VERSION,

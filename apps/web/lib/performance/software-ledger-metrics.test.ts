@@ -70,3 +70,11 @@ describe("software recorded-ledger metric contract", () => {
     expect(inspectSoftwareLedgerPack(rows)).toMatchObject({ valid: true, currency: null });
   });
 });
+
+it("refuses mixed failed-refresh markers and strips unrecognized nested metadata", () => {
+  const rows = pack();
+  rows.forEach(row => { row.sourceLineage = { ...(row.sourceLineage as object), refreshFailure: { at: "2026-11-01T12:15:00.000Z", kind: "source-unavailable", privateMemo: "secret-marker" } }; });
+  const valid = inspectSoftwareLedgerPack(rows); expect(valid.valid).toBe(true); expect(JSON.stringify(valid)).not.toContain("secret-marker");
+  rows[0]!.sourceLineage = { ...(rows[0]!.sourceLineage as object), refreshFailure: { at: "2026-11-01T12:16:00.000Z", kind: "source-unavailable" } };
+  expect(inspectSoftwareLedgerPack(rows).valid).toBe(false);
+});

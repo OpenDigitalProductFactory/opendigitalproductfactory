@@ -344,3 +344,33 @@ describe("loadBusinessPerformance", () => {
     }));
   });
 });
+
+function softwareProviderFixture(role: string | null = "HR-000", active = true) {
+  const db = {
+    user: { findUnique: vi.fn(async () => role === null ? null : ({ isActive: active, isSuperuser: false, automationExpiresAt: null, groups: [{ platformRole: { roleId: role } }] })) },
+    platformSetupProgress: { findUnique: vi.fn(async () => ({ organizationId: "org-a" })) },
+    storefrontConfig: { findUnique: vi.fn(async () => ({ organizationId: "org-a", archetype: { archetypeId: "software-platform" } })), findMany: vi.fn(async () => []) },
+    businessMetricRollup: { findMany: vi.fn(async () => softwareRows("2026-10", [1200, 200, 1000])) },
+  };
+  return db;
+}
+it.each([["HR-500", true], ["HR-200", true], [null, true], ["HR-000", false]] as const)("does not read software financial projections for denied actor %s active=%s", async (role, active) => {
+  const db = softwareProviderFixture(role, active);
+  const result = await createBusinessPerformanceProvider(db as never).load({ userId: "actor" });
+  expect(result).toMatchObject({ status: "not-configured", metricValues: [] });
+  expect(db.businessMetricRollup.findMany).not.toHaveBeenCalled();
+});
+it("reads the actual current owner membership and only its resolved organization's software pack", async () => {
+  const db = softwareProviderFixture();
+  const result = await createBusinessPerformanceProvider(db as never).load({ userId: "owner", organizationId: "org-b" } as { userId: string });
+  expect(result.status).toBe("ready");
+  expect(db.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "owner" } }));
+  expect(db.businessMetricRollup.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organizationId: "org-a" }) }));
+});
+it("immediately labels retained valid results stale after a failed validation attempt without advancing source age", () => {
+  const rows = softwareRows("2026-10", [1200, 200, 1000]);
+  rows.forEach(row => { row.sourceLineage = { ...(row.sourceLineage as object), refreshFailure: { at: "2026-10-15T12:15:00.000Z", kind: "source-unavailable" } }; });
+  const result = softwareModel(rows);
+  expect(result).toMatchObject({ status: "ready", freshness: "stale", asOf: new Date("2026-10-15T12:00:00Z"), refreshFailure: { at: "2026-10-15T12:15:00.000Z" } });
+  if (result.status === "ready") expect(result.metricValues.map(row => row.value)).toEqual([1200, 200, 1000]);
+});

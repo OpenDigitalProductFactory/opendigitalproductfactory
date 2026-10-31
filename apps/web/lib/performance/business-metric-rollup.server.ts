@@ -9,10 +9,10 @@ import { getScopedLedgerPeriodReport } from "@/lib/finance/ledger-service";
 import { inspectSoftwareLedgerPack } from "./software-ledger-metrics";
 import type { BusinessMetricRollupInput } from "./business-metric-rollup";
 
-function upsertMetric(row: BusinessMetricRollupInput, computedAt: Date) {
+function upsertMetric(row: BusinessMetricRollupInput, computedAt: Date, db: Pick<typeof prisma, "businessMetricRollup"> = prisma) {
   const { organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion, ...values } = row;
   const identity = { organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion };
-  return prisma.businessMetricRollup.upsert({
+  return db.businessMetricRollup.upsert({
     where: { organizationId_metricKey_periodStart_periodEnd_dimensionsHash_definitionVersion: identity },
     create: { ...identity, ...values, computedAt }, update: { ...values, computedAt },
   });
@@ -126,6 +126,30 @@ export function defaultBusinessMetricRollupDeps(): BusinessMetricRollupDeps {
         if (!first || rows.some(r => r.organizationId !== first.organizationId || r.dimensionsHash !== first.dimensionsHash)
           || !inspectSoftwareLedgerPack(rows.map(row => ({ ...row, computedAt }))).valid) {
           throw new Error("Refusing an incomplete or mixed software results pack.");
+        }
+        if (first.availability === "unavailable") {
+          const retained = await prisma.$transaction(async tx => {
+            const prior = await tx.businessMetricRollup.findMany({ where: {
+              organizationId: first.organizationId, dimensionsHash: first.dimensionsHash,
+              definitionVersion: first.definitionVersion, periodStart: first.periodStart, periodEnd: first.periodEnd,
+              metricKey: { in: rows.map(row => row.metricKey) },
+            }, take: 4 });
+            const pack = inspectSoftwareLedgerPack(prior.map(row => ({ ...row,
+              value: row.value === null ? null : Number(row.value),
+              availability: row.availability === "available" ? "available" : "unavailable",
+            })));
+            if (pack.valid && prior.every(row => row.availability === "available")) {
+              if (computedAt < prior[0]!.computedAt) return true;
+              const sourceLineage = { ...pack.lineage, refreshFailure: { at: computedAt.toISOString(), kind: "source-unavailable" } };
+              await Promise.all(prior.map(row => tx.businessMetricRollup.update({ where: { id: row.id }, data: { sourceLineage } })));
+              return true;
+            }
+            await Promise.all(rows.map(row => upsertMetric(row, computedAt, tx)));
+            return false;
+          }, { isolationLevel: "Serializable" });
+          // Commit only failure metadata; the values, generation and source age stay unchanged.
+          if (retained) throw new Error("Software results refresh unavailable; last valid snapshot retained.");
+          return;
         }
         await prisma.$transaction(rows.map(row => upsertMetric(row, computedAt)));
       },

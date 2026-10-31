@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   bookingFindMany: vi.fn(),
   rollupUpsert: vi.fn(),
   transaction: vi.fn(),
+  rollupFindMany: vi.fn(),
+  rollupUpdate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -130,4 +132,30 @@ it("software dispatch reads each scoped month and atomically submits each cohere
   expect(mocks.turnFindMany).not.toHaveBeenCalled();
   mocks.transaction.mockRejectedValueOnce(new Error("fixture second-write transaction failure"));
   await expect(aggregateBusinessMetrics({ ...deps, listRestaurantContexts: async () => [] })).rejects.toThrow(/second-write/);
+});
+
+it("retains a prior coherent pack and its original age when validation becomes unavailable", async () => {
+  vi.clearAllMocks();
+  const originalAt = new Date("2026-10-15T12:00:00Z"), attemptAt = new Date("2026-10-15T12:15:00Z");
+  const common = { organizationId: "org-a", periodStart: new Date("2026-10-01T00:00:00Z"), periodEnd: new Date("2026-11-01T00:00:00Z"),
+    timezone: "UTC", dimensionsHash: "org-a-sf", dimensions: { storefrontId: "sf-a" }, unit: "currency", definitionVersion: "software-ledger-v1" };
+  const prior = ["posted-ledger-income", "posted-ledger-expenses", "posted-ledger-net-result"].map((metricKey, index) => ({ ...common,
+    id: `row-${index}`, metricKey, value: [1200, 200, 1000][index], availability: "available", unavailableReason: null,
+    sourceWatermark: originalAt, computedAt: originalAt, sourceLineage: { sourceModels: ["LedgerAccount", "JournalEntry", "JournalLine"],
+      sourceRows: 10, currency: "EUR", generation: originalAt.toISOString(), coverage: "recorded-postings-only" } }));
+  const incoming = prior.map(({ id: _id, computedAt: _oldAt, ...row }) => ({ ...row, value: null,
+    availability: "unavailable" as const, unavailableReason: "Source exceeds supported size", sourceWatermark: attemptAt,
+    sourceLineage: { ...row.sourceLineage, sourceRows: null, currency: null, generation: attemptAt.toISOString() } }));
+  mocks.rollupFindMany.mockResolvedValue(prior);
+  mocks.rollupUpdate.mockResolvedValue({});
+  mocks.transaction.mockImplementation(async (work: any) => typeof work === "function" ? work({ businessMetricRollup: {
+    findMany: mocks.rollupFindMany, update: mocks.rollupUpdate, upsert: mocks.rollupUpsert,
+  } }) : Promise.all(work));
+  await expect(defaultBusinessMetricRollupDeps().software!.upsertPeriod(incoming as never, attemptAt)).rejects.toThrow(/retained/i);
+  expect(mocks.rollupUpsert).not.toHaveBeenCalled(); expect(mocks.rollupUpdate).toHaveBeenCalledTimes(3);
+  for (const [args] of mocks.rollupUpdate.mock.calls) {
+    expect(Object.keys(args.data)).toEqual(["sourceLineage"]);
+    expect(args.data.sourceLineage.generation).toBe(originalAt.toISOString());
+    expect(args.data.sourceLineage.refreshFailure).toEqual({ at: attemptAt.toISOString(), kind: "source-unavailable" });
+  }
 });

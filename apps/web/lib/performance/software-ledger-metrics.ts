@@ -9,6 +9,7 @@ export const SOFTWARE_LEDGER_DEFINITION_VERSION = "software-ledger-v1";
 type SoftwareLedgerLineage = {
   sourceModels: string[]; sourceRows: number | null; currency: string | null;
   generation: string; coverage: string;
+  refreshFailure?: { at: string; kind: "source-unavailable" };
 };
 
 /** One contract for atomic writes and persisted reads; extra source metadata never reaches the owner projection. */
@@ -29,6 +30,16 @@ export function inspectSoftwareLedgerPack(rows: readonly PersistedMetricRow[]):
   const base = metadata(first);
   if (!base || typeof base.generation !== "string" || base.generation !== first.computedAt.toISOString()
     || base.coverage !== "recorded-postings-only") return invalid();
+  const failure = base.refreshFailure;
+  let refreshFailure: { at: string; kind: "source-unavailable" } | undefined;
+  if (failure !== undefined) {
+    if (!failure || typeof failure !== "object" || Array.isArray(failure)) return invalid();
+    const marker = failure as Record<string, unknown>;
+    if (marker.kind !== "source-unavailable" || typeof marker.at !== "string"
+      || !Number.isFinite(Date.parse(marker.at)) || new Date(marker.at).toISOString() !== marker.at
+      || Date.parse(marker.at) < first.computedAt.getTime()) return invalid();
+    refreshFailure = { at: marker.at, kind: "source-unavailable" };
+  }
   const models = ["LedgerAccount", "JournalEntry", "JournalLine"];
   for (const row of rows) {
     const meta = metadata(row);
@@ -39,6 +50,7 @@ export function inspectSoftwareLedgerPack(rows: readonly PersistedMetricRow[]):
       || row.computedAt.getTime() !== first.computedAt.getTime() || row.sourceWatermark.getTime() !== first.sourceWatermark.getTime()
       || row.sourceWatermark.getTime() > row.computedAt.getTime() || row.availability !== first.availability
       || meta.generation !== base.generation || meta.currency !== base.currency || meta.sourceRows !== base.sourceRows
+      || JSON.stringify(meta.refreshFailure) !== JSON.stringify(base.refreshFailure)
       || meta.coverage !== base.coverage || JSON.stringify(meta.sourceModels) !== JSON.stringify(models)) return invalid();
     if (row.availability === "available") {
       if (typeof meta.currency !== "string" || !isSupportedLedgerCurrency(meta.currency)
@@ -55,7 +67,7 @@ export function inspectSoftwareLedgerPack(rows: readonly PersistedMetricRow[]):
   }
   return { valid: true, currency: base.currency as string | null, lineage: {
     sourceModels: models, sourceRows: base.sourceRows as number | null, currency: base.currency as string | null,
-    generation: base.generation, coverage: "recorded-postings-only",
+    generation: base.generation, coverage: "recorded-postings-only", ...(refreshFailure ? { refreshFailure } : {}),
   } };
 }
 

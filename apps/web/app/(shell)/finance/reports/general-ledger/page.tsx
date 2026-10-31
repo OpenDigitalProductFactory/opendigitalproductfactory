@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import { isLedgerMonth } from "@/lib/finance/ledger-period-report";
 import { deriveFinancialStatements } from "@/lib/finance/ledger";
 import { resolvePerformanceOrganizationContext, type PerformanceOrganizationContextDataSource } from "@/lib/performance/performance-organization-context";
@@ -21,7 +22,8 @@ export default async function GeneralLedgerReportPage({
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (!can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "view_finance")) notFound();
+  const actor = await currentUserContext(session.user.id);
+  if (!actor || !can(actor, "view_finance")) notFound();
   const params = await searchParams;
   const periodKey = params.period === undefined ? null : params.period;
   const unavailable = (reason: string, retry = false) => (
@@ -85,7 +87,10 @@ export default async function GeneralLedgerReportPage({
             />
           </div>
 
-          {/* Balance sheet */}
+          <details className="rounded-lg border border-[var(--dpf-border)] p-3">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Account details</summary>
+            <div className="mt-3">
+          {/* Recorded movements, not a verified position. */}
           <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Recorded movements</h2>
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard label="Asset movement" value={money(bs.assets)} intent="info" />
@@ -147,6 +152,8 @@ export default async function GeneralLedgerReportPage({
           <p className="mt-2 text-xs text-[var(--dpf-muted)]">
             Available ledger records only; not a verified bank balance or as-of position.
           </p>
+            </div>
+          </details>
       </>
     </div>
   );

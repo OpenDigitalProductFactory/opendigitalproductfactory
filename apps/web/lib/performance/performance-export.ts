@@ -9,6 +9,7 @@ export function buildPerformanceExportRows(performance: ReadyBusinessPerformance
     unit: metric.unit,
     ...(metric.currency ? { currency: metric.currency } : {}),
     availability: metric.availability,
+    ...(performance.refreshFailure ? { snapshot_state: "retained-after-failed-refresh", refresh_failed_at: performance.refreshFailure.at } : {}),
     unavailable_reason: metric.unavailableReason ?? "",
     prior_period_value: metric.comparisonValue,
     definition_version: metric.definitionVersion ?? "",

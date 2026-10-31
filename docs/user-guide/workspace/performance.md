@@ -18,7 +18,7 @@ These figures do not claim bank cash, tax profit, gross margin, customer outcome
 
 An available zero comes from validated eligible journal records. No eligible entries or an unconfigured chart show a reason and a native Finance action. They do not become zero income or zero cost. Follow the action to review Finance setup or source records; record only real business transactions through their supported workflows.
 
-A delayed snapshot retains the last saved result. Its age remains visible while refresh retries. A failed source read does not publish a fresh zero. Correct the underlying records or availability and let the existing refresh recover; do not duplicate transactions to force a result.
+A delayed snapshot retains the last saved result. Its age remains visible while refresh retries. A failed source read does not publish a fresh zero. If validation fails after a valid result exists, **Refresh failed** marks the retained result and its original source age; recovery replaces it only after a successful coherent refresh. Correct the underlying records or availability and let the existing refresh recover; do not duplicate transactions to force a result.
 
 Open **How this is calculated** for definitions and source information. **Explore results** retains trends, analysis and an aggregate export with the recorded currency. Missing historical values remain blank/unavailable. Partial-month versus full-month percentages and incompatible-currency comparisons are suppressed.
 
