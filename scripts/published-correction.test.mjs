@@ -209,7 +209,9 @@ test("an exact synthesized integration tree reconciles a rebased canonical publi
   const state = {
     branch, sha: recordedSha, gatePassed: true, skipped: false, status: "passed",
     evidenceRecordId: "canonical-evidence", leaseId: "canonical-lease",
-    recordedAt: new Date(now - 120_000).toISOString(), expiresAt: new Date(now + 3600_000).toISOString(),
+    // The anchor is evaluated at the original gate capture, not at this
+    // later correction. Its fresh correction proof has a separate TTL.
+    recordedAt: new Date(now - 120_000).toISOString(), expiresAt: new Date(now - 60_000).toISOString(),
   };
   const metadata = {
     candidateSha: recordedSha, runLeaseId: "canonical-lease", synthesizedTreeSha: integratedTree,

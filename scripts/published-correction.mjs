@@ -188,7 +188,9 @@ export function chooseInitialAnchor({ records, previous, pullRequest, treeAt, no
   for (const { state, metadata } of records) {
     if (state?.sha !== pullRequest.headRefOid) continue;
     const anchor = { ...expected, sha: state.sha, tree: publishedTree, state, metadata,
-      capturedAt: new Date(now).toISOString() };
+      // Initial publication is qualified at its canonical gate capture.  Its
+      // expiry must not erase the historical anchor for a later correction.
+      capturedAt: state.recordedAt };
     if (classifyInitialPublication(anchor, expected).ok) return anchor;
   }
   // Preserve the original record's SHA, lease and metadata.  A rebased commit
@@ -198,7 +200,7 @@ export function chooseInitialAnchor({ records, previous, pullRequest, treeAt, no
     if (!state || metadata?.candidateSha !== state.sha || metadata?.synthesizedTreeSha !== publishedTree) continue;
     const anchor = { ...expected, sha: pullRequest.headRefOid, tree: publishedTree, state, metadata,
       equivalentCandidate: { sha: state.sha, synthesizedTreeSha: metadata.synthesizedTreeSha },
-      capturedAt: new Date(now).toISOString() };
+      capturedAt: state.recordedAt };
     if (classifyInitialPublication(anchor, expected).ok) return anchor;
   }
   throw new Error("No accepted initial-publication anchor covers this published head. Reconcile its existing canonical evidence or permitted initial override; an open PR alone is insufficient.");
