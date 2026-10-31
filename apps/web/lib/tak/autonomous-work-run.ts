@@ -661,7 +661,7 @@ export async function executeAutonomousAgenticLoop(input: {
   // proposals and for Balanced/low postures. (The full multi-agent deliberation
   // engine — minutes-long, build-artifact-coupled — stays the build-phase mechanism;
   // this is the synchronous, output-revising leverage for coworker turns.)
-  if (result.content && !result.proposal) {
+  if (result.content && !result.proposal && !result.failure) {
     try {
       const pattern = await resolveCoworkerReviewPattern(input.agentId);
       if (pattern === "review" || pattern === "debate") {

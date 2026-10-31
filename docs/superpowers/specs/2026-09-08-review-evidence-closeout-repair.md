@@ -81,8 +81,17 @@ The ordered AC-REC-003 repair is:
 This is one bounded repair of the existing evidence outcome contract, not an
 implementation of intake-only BI-E9555B2D or an expansion of the parallel
 provider-quota branch. Draft retention, non-success classification and outward
-isolation must be verified together. All production edits and green/runtime
-claims remain pending at this reproduction checkpoint.
+isolation must be verified together. The implementation now preserves unknown tool settlement using the existing
+execution-uncertain outcome and does not write an auxiliary draft artifact for
+that path. Its first-failing regression expected execution-uncertain and got
+evidence-unavailable; the corrected focused cohort passed 57 tests. A broader
+source-local run passed 547 tests with six real-PostgreSQL cases explicitly
+skipped. Both web TypeScript programs passed. These are source checks on the
+uncommitted implementation, not canonical gate, deployment or live acceptance.
+The isolated database tests exercise real persistence, rollback, task ownership,
+generation and cancellation row locks; their actual shared-environment run is
+still owed. AC-REC-002 source/provenance controls remain separate and are not
+claimed complete by this reporting repair.
 
 The native semantic operation also reused an exact-tree automatic receipt after
 the caller requested high risk and high assurance. Fresh tree identity is
