@@ -6,6 +6,7 @@ import { sanitizeForLog } from "@/lib/security/safe-log";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { readEnabledRoutingProvider, ProviderRoutingDeferredError } from "./provider-routing-admission";
 import { providerInferenceFetch } from "./provider-inference-transport";
+import { getOllamaBaseUrl } from "./ollama-url";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -53,14 +54,6 @@ export function isOversizeRejection(status: number, body: string): boolean {
   return /too large to process|batch size|n_ubatch|exceeds the physical batch/i.test(body);
 }
 
-function getLlmBaseUrl(): string {
-  return (
-    process.env["LLM_BASE_URL"] ??
-    process.env["OLLAMA_INTERNAL_URL"] ??
-    "http://model-runner.docker.internal/v1"
-  );
-}
-
 /**
  * Generate a 768-dimensional embedding vector for the given text.
  * Returns null on failure (inference down, model not available, etc.)
@@ -97,7 +90,6 @@ export async function generateEmbeddingDetailed(
   opts: { timeoutMs?: number } = {},
 ): Promise<EmbeddingResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_EMBED_TIMEOUT_MS;
-  const baseUrl = getLlmBaseUrl();
   // Full-length attempt first, then shorter slices ONLY if the backend rejects
   // for size. Ordinary text still embeds at full fidelity; dense text degrades
   // to a shorter head instead of degrading to null.
@@ -115,8 +107,10 @@ export async function generateEmbeddingDetailed(
       const limit = lengths[attempt]!;
       const truncated = text.slice(0, limit);
 
-      // Each retry is a new dispatch: re-read operator intent immediately.
+      // Each retry is a new dispatch. Honor pause before resolving selection,
+      // and re-read its fence so a retry cannot use an unsettled old endpoint.
       await readEnabledRoutingProvider("local");
+      const baseUrl = getOllamaBaseUrl();
       const res = await providerInferenceFetch(`${baseUrl}/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -183,7 +177,7 @@ export async function generateEmbeddingDetailed(
  */
 export async function isEmbeddingAvailable(): Promise<boolean> {
   try {
-    const baseUrl = getLlmBaseUrl();
+    const baseUrl = getOllamaBaseUrl();
     const res = await providerInferenceFetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
     const data = (await res.json()) as { data?: Array<{ id: string }> };
