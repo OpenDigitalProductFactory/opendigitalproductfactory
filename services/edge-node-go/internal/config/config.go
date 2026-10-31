@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -126,7 +127,8 @@ func (c *Config) ManagedInferenceConfigured() bool {
 // its fixture under StateDir; container installs and platform overrides cannot
 // advertise or execute it.
 func (c *Config) QualificationWindowsEnabled() bool {
-	return runtime.GOOS == "windows" && c.Platform == "win32" && c.InstallMode == "native" && filepath.IsAbs(c.StateDir)
+	_, nodeErr := exec.LookPath("node")
+	return runtime.GOOS == "windows" && c.Platform == "win32" && c.InstallMode == "native" && filepath.IsAbs(c.StateDir) && nodeErr == nil
 }
 
 // HostUpkeepOnly reports whether the node runs only host upkeep: heartbeat and

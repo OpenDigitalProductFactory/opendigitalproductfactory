@@ -35,7 +35,7 @@ Choose a task, provider, data sensitivity and time window; the URL preserves tho
 
 Open **AI Coworker** from the header to discuss the current investigation. On narrower screens, use its robot icon. Opening the panel sends no message; close it to return to the same routing view. The launcher stays out of the routing content.
 
-The default view groups assignments on the left and providers on the right. Counts describe the recorded decisions in your scope. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. Provider search shows a result count and explains when nothing matches. Clearing the search keeps the provider filter in place. **Recent decisions** is a small preview; **View all** opens searchable traffic.
+The default view groups assignments on the left and providers on the right. Assignment badges count recorded decisions in your scope; provider cards show catalog model counts and the recorded provider status. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. Assignment and provider search show a result count and explain when nothing matches. Assignment search stays within the selected traffic scope; provider search covers the configured catalog. Clearing either search retains your filters. **Recent decisions** is a small preview; **View all** opens searchable traffic.
 
 On a narrow screen, traffic and evaluation rows keep their task and model together, with labeled outcome and cost values below. All four scope filters remain directly available.
 

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const admission = vi.hoisted(() => ({ provider: vi.fn(), connection: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: {
+  modelProvider: { findUnique: admission.provider },
+  aiProviderConnection: { findUnique: admission.connection },
+} }));
+
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("./provider-inference-transport", () => ({ providerInferenceFetch: transport.fetch }));
 
@@ -26,6 +32,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   transport.fetch.mockReset();
+  admission.provider.mockReset().mockResolvedValue({ status: "active" });
+  admission.connection.mockReset().mockResolvedValue({ status: "active" });
 });
 
 describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-7F674966B4B2)", () => {
@@ -191,5 +199,42 @@ describe("query-time callers can bound the wait (BI-MCP-EFF-4F823E5B)", () => {
 
     expect(timeout).toHaveBeenNthCalledWith(1, 15_000);
     expect(timeout).toHaveBeenNthCalledWith(2, 30_000);
+  });
+});
+
+
+describe("operator pause is authoritative for embedding inference", () => {
+  it.each(["paused", "inactive", "disabled"])("defers a %s account without contacting inference", async (status) => {
+    admission.connection.mockResolvedValue({ status });
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+  it("denies an inactive local lifecycle even if the account is active", async () => {
+    admission.provider.mockResolvedValue({ status: "inactive" });
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+  it("rechecks pause before an oversize retry", async () => {
+    transport.fetch.mockImplementation(async () => {
+      admission.connection.mockResolvedValue({ status: "paused" });
+      return new Response(OVERSIZE_BODY, { status: 500 });
+    });
+    await expect(generateEmbeddingDetailed("x".repeat(5000))).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("fails closed when eligibility cannot be read", async () => {
+    admission.provider.mockRejectedValue(new Error("database unavailable"));
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "failed" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+  it("allows model-list monitoring while paused without generating inference", async () => {
+    admission.connection.mockResolvedValue({ status: "paused" });
+    transport.fetch.mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "nomic-embed-text" }] })));
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+    expect(admission.connection).not.toHaveBeenCalled();
+    expect(transport.fetch).toHaveBeenCalledWith(expect.stringContaining("/models"), expect.not.objectContaining({ method: "POST" }));
   });
 });

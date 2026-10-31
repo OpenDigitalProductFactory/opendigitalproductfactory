@@ -19,12 +19,12 @@ function binding(phase: "prepare" | "verify"): QualificationExperimentBinding {
     protocol: { path: "docs/protocol.md", commitSha: protocolHead, providerBlobId: "c".repeat(40) },
     installationId: "install-dev", accountablePrincipalRef: "PRN-1", protocolReviewReceiptId: "review-protocol-1",
     shapeKey: "delivery-small-fix", shapeVersion: "1.0.0", stageKey: "reproduce", policyVersion: 1,
-    executorMode: phase === "verify" ? "native-edge" : "sandbox-build", requiredPlatform: "win32",
+    executorMode: phase === "verify" ? "workroom-host" : "sandbox-build", requiredPlatform: "win32",
     targetProductionPaths: ["scripts/lib/local-ci-gate-state.mjs"],
     targetProductionBlobIds: ["e".repeat(40)],
     permittedTools: phase === "prepare"
       ? ["write_sandbox_file", "record_workroom_evidence"]
-      : ["record_workroom_evidence"],
+      : ["record_execution_evidence", "record_workroom_evidence"],
     allowedPaths: ["apps/web/lib/example.test.ts"], issuedAt: "2025-06-18T11:00:00.000Z",
     expiresAt: "2025-06-18T13:00:00.000Z", maxStarts: 1, maxDurationMs: 600_000,
     ...(phase === "verify" ? { candidate: { headSha: candidateHead,
@@ -36,7 +36,7 @@ function binding(phase: "prepare" | "verify"): QualificationExperimentBinding {
 describe("qualificationStateForScopeClaim", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("advances a settled preparation to a separate native verification admission", () => {
+  it("advances a settled preparation to a separate governed host verification admission", () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "qualification-test-secret");
     const prepare = binding("prepare");
     const prepareToken = createQualificationExperimentAdmission(prepare);
