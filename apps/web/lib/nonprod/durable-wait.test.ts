@@ -393,3 +393,23 @@ describe("durable nonproduction lease wait", () => {
     expect(parseNonprodLeaseWait(mock.task()?.progressPayload)).toMatchObject({ state: "admitted" });
   });
 });
+
+
+describe("preview ownership through durable queue transitions", () => {
+  it("preserves original authenticated ownership across queued checkpoint and terminal settlement", async () => {
+    const mock = db();
+    const preview = lease({ environmentKey: "active-candidate" });
+    const first = await checkpointNonprodLeaseWait({ db: mock, lease: preview, userId: "user-1",
+      queuePosition: 2, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+    const owner = { schemaVersion: 1, userId: "user-1", agentId: "AGT-EXT-CODEX", binding: { leaseId: preview.leaseId } };
+    await mock.taskRun.update({ data: { progressPayload: { ...mock.task().progressPayload, nonprodPreviewOwner: owner } } });
+    await checkpointNonprodLeaseWait({ db: mock, lease: { ...preview, taskRunId: first.taskRunId }, userId: "user-1",
+      queuePosition: 1, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+    expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+    await settleNonprodLeaseWait({ db: mock, taskRunId: first.taskRunId, leaseId: preview.leaseId, state: "terminal", now: NOW });
+    expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+    await expect(checkpointNonprodLeaseWait({ db: mock, lease: { ...preview, taskRunId: first.taskRunId }, userId: "foreign",
+      queuePosition: 1, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW })).rejects.toThrow("nonprod_preview_ownership_conflict");
+    expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+  });
+});

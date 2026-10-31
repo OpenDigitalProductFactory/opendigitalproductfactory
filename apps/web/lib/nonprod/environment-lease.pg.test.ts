@@ -130,4 +130,63 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
       slotKey: "slot-0",
     });
   });
+
+  it("atomically binds immediate and queued preview owners, including automatic queue promotion", async () => {
+    // This Prisma client is schema-confined by createHandoffDependencyPostgresFixture.
+    await prisma.nonProductionEnvironmentLease.deleteMany({});
+    const { leaseCleanupConsequenceForCall } = await import("./lease-cleanup-consequence");
+    const loadStance = async () => ({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    const claim = (session: string) => claimNonprodEnvironmentLease({ db: prisma, environmentKey,
+      ownerProvider: "codex", ownerSessionId: session, claimKey: `${claimPrefix}:${session}`,
+      purpose: "Authenticated preview transaction contract", url: "http://localhost:3010", ports: [3010],
+      authenticatedUserId: "preview-user", authenticatedAgentId: "AGT-EXT-CODEX",
+      expiresAt: new Date(Date.now() + 60_000) });
+    const first = await claim("preview-first");
+    const second = await claim("preview-second");
+    expect(first.status).toBe("admitted");
+    expect(second.status).toBe("queued");
+    for (const result of [first, second]) {
+      expect(result.lease.taskRunId).toMatch(/^TR-NONPROD-/);
+      const task = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId: result.lease.taskRunId! } });
+      expect(task.initiatingAgentId).toBe("AGT-EXT-CODEX");
+      const call = { toolName: "release_nonprod_environment_lease", userId: "preview-user",
+        context: { agentId: "AGT-EXT-CODEX" },
+        params: { leaseId: result.lease.leaseId, ownerSessionId: result.lease.ownerSessionId } };
+      expect(await leaseCleanupConsequenceForCall(call, { db: prisma as never, loadStance }))
+        .toMatchObject({ consequence: null });
+      await expect(releaseNonprodEnvironmentLease({ db: prisma, ...call.params, authenticatedUserId: "foreign",
+        authenticatedAgentId: "AGT-EXT-CODEX", loadStance })).rejects.toThrow(/preview.*ownership/i);
+    }
+    const release = (result: typeof first) => releaseNonprodEnvironmentLease({ db: prisma,
+      leaseId: result.lease.leaseId, ownerSessionId: result.lease.ownerSessionId,
+      authenticatedUserId: "preview-user", authenticatedAgentId: "AGT-EXT-CODEX", loadStance });
+    await release(first);
+    const promoted = await prisma.nonProductionEnvironmentLease.findUniqueOrThrow({ where: { leaseId: second.lease.leaseId } });
+    expect(promoted.status).toBe("active");
+    const task = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId: promoted.taskRunId! } });
+    expect(task.progressPayload).toMatchObject({ nonprodLeaseWait: { state: "admitted" },
+      nonprodPreviewOwner: { userId: "preview-user", agentId: "AGT-EXT-CODEX" } });
+    expect((await release(second)).status).toBe("released");
+    expect((await release(second)).status).toBe("released");
+  });
+
+  it("rolls back preview reservation creation if the ownership Task cannot be persisted", async () => {
+    await prisma.nonProductionEnvironmentLease.deleteMany({});
+    const key = `${claimPrefix}:ownership-rollback`;
+    const database = { nonProductionEnvironmentLease: prisma.nonProductionEnvironmentLease,
+      platformConfig: prisma.platformConfig,
+      $transaction: (body: (tx: unknown) => Promise<unknown>, options: unknown) => prisma.$transaction(async tx => {
+        const wrapped = new Proxy(tx, { get(target, property) {
+          if (property === "taskRun") return { upsert: async () => { throw new Error("ownership-store-failure"); } };
+          return Reflect.get(target, property);
+        } });
+        return body(wrapped);
+      }, options as never) };
+    await expect(claimNonprodEnvironmentLease({ db: database as never, environmentKey,
+      ownerProvider: "codex", ownerSessionId: "rollback-preview", claimKey: key,
+      purpose: "Atomic rollback contract", url: "http://localhost:3010", ports: [3010],
+      authenticatedUserId: "preview-user", authenticatedAgentId: "AGT-EXT-CODEX",
+      expiresAt: new Date(Date.now() + 60_000) })).rejects.toThrow("ownership-store-failure");
+    expect(await prisma.nonProductionEnvironmentLease.findUnique({ where: { claimKey: key } })).toBeNull();
+  });
 });

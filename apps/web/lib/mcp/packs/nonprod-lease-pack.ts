@@ -345,7 +345,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
 
   const result = await claimNonprodEnvironmentLease({
-    authenticatedUserId: userId,
+    authenticatedUserId: userId, authenticatedAgentId: context?.agentId,
     resumeLeaseId: stringValue("resumeLeaseId") || undefined,
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
@@ -450,7 +450,11 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
   if (result.status === "queued") {
     const { checkpointNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
-    const durableWait = await checkpointNonprodLeaseWait({
+    // A fresh preview checkpoint is already atomic with admission. Repeating it
+    // outside the lock could revive a wait that a concurrent release settled.
+    const durableWait = result.lease.environmentKey === "active-candidate" && result.lease.taskRunId
+      ? { taskRunId: result.lease.taskRunId }
+      : await checkpointNonprodLeaseWait({
       db: (await import("@dpf/db")).prisma,
       userId,
       lease: result.lease,
@@ -491,7 +495,8 @@ async function claimNonprodEnvironmentLeaseHandler(
   };
 }
 
-async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
+async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unknown>, userId: string,
+  context?: { agentId?: string; approvedAuthorityEnvelopeId?: string | null }): Promise<ToolResult> {
   const { releaseNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
   const ownerSessionId = typeof params["ownerSessionId"] === "string"
@@ -510,7 +515,8 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
   }
   try {
     const lease = await releaseNonprodEnvironmentLease({
-      leaseId,
+      leaseId, authenticatedUserId: userId, authenticatedAgentId: context?.agentId,
+      approvedAuthorityEnvelopeId: context?.approvedAuthorityEnvelopeId,
       ...(ownerSessionId ? { ownerSessionId } : {}),
     });
     return {
@@ -606,7 +612,7 @@ const handlers: Record<string, ToolPackHandler> = {
   list_nonprod_environment_leases: (params) => listNonprodEnvironmentLeases(params),
   lookup_change_origin: (params) => lookupChangeOriginHandler(params),
   claim_nonprod_environment_lease: (params, userId, context) => claimNonprodEnvironmentLeaseHandler(params, userId, context),
-  release_nonprod_environment_lease: (params) => releaseNonprodEnvironmentLeaseHandler(params),
+  release_nonprod_environment_lease: (params, userId, context) => releaseNonprodEnvironmentLeaseHandler(params, userId, context),
   renew_nonprod_environment_lease: (params) => renewNonprodEnvironmentLeaseHandler(params),
 };
 

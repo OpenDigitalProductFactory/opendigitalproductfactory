@@ -27,8 +27,8 @@ import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { previewMustYieldSlot } from "./environment-lease-preview-yield";
-import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
-import { bindFreshImmediateLeaseProvenance } from "./environment-lease-provenance";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits, settleNonprodLeaseWait } from "./durable-wait";
+import { bindFreshLeaseProvenance, assertPreviewReleaseOwnership, type PreviewReleaseContext } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -218,6 +218,10 @@ async function reconcileEnvironmentInTransaction(input: {
         expiresAt: new Date(input.now.getTime() + ttlMs),
       },
     });
+    if (input.environmentKey === "active-candidate" && row?.taskRunId && input.tx.taskRun) {
+      await settleNonprodLeaseWait({ db: input.tx as never, taskRunId: row.taskRunId,
+        leaseId: row.leaseId, state: "admitted", now: input.now });
+    }
   }
 
   return {
@@ -247,6 +251,7 @@ export async function claimNonprodEnvironmentLease(input: {
   taskRunId?: string;
   /** Authenticated MCP actor; never read from claim parameters. */
   authenticatedUserId?: string;
+  authenticatedAgentId?: string;
   cleanupCommand?: string;
   slotManifestVersion?: 1;
   productionBuild?: "local" | "delegated"; // BI-3A14308C: "delegated" waives only the builder reserve
@@ -462,15 +467,14 @@ export async function claimNonprodEnvironmentLease(input: {
       where: { id: lease.id },
     });
     if (!current) throw new Error("nonprod_claim_disappeared");
-    const waitAgeMs = Math.max(
-      0,
-      now.getTime() - (current.queuedAt ?? current.createdAt).getTime(),
-    );
+    const waitAgeMs = Math.max(0,
+      now.getTime() - (current.queuedAt ?? current.createdAt).getTime());
     if (current.status === "active" && current.slotKey) {
       return {
         status: "admitted",
-        lease: await bindFreshImmediateLeaseProvenance({ db: tx, lease: current, created,
-          authenticatedUserId: input.authenticatedUserId, waitDeadlineAt: queueExpiresAt, now }),
+        lease: await bindFreshLeaseProvenance({ db: tx, lease: current, created,
+          authenticatedUserId: input.authenticatedUserId, authenticatedAgentId: input.authenticatedAgentId,
+          waitDeadlineAt: queueExpiresAt, now }),
         slotKey: current.slotKey,
         waitAgeMs,
         poolPolicy,
@@ -492,7 +496,9 @@ export async function claimNonprodEnvironmentLease(input: {
     });
     return {
       status: "queued",
-      lease: current,
+      lease: await bindFreshLeaseProvenance({ db: tx, lease: current, created,
+        authenticatedUserId: input.authenticatedUserId, authenticatedAgentId: input.authenticatedAgentId,
+        queuePosition: queue.findIndex((row) => row.id === current.id) + 1, waitDeadlineAt: queueExpiresAt, now }),
       queuePosition: queue.findIndex((row) => row.id === current.id) + 1,
       waitAgeMs,
       poolPolicy,
@@ -533,7 +539,7 @@ export async function releaseNonprodEnvironmentLease(input: {
   leaseId: string;
   ownerSessionId?: string;
   now?: Date;
-}) {
+} & PreviewReleaseContext) {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
   const result = await inLeaseTransaction(db, async (tx) => {
@@ -546,6 +552,8 @@ export async function releaseNonprodEnvironmentLease(input: {
       where: { leaseId: input.leaseId },
     });
     if (!current) throw new Error("nonprod_lease_not_found");
+    if (current.environmentKey !== beforeLock.environmentKey) throw new Error("nonprod_preview_ownership_changed");
+    await assertPreviewReleaseOwnership({ ...input, db: tx as never, lease: current });
     if (
       isImmutableGateClaimKey(current.claimKey)
       && current.ownerSessionId !== input.ownerSessionId

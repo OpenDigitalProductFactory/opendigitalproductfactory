@@ -83,8 +83,14 @@ phases. References: R-PC-1, R-PC-2, R-PC-3, R-PC-4;
 C-PC-PROVENANCE, C-PC-EXECUTION; F-PC-CLAIM-RELEASE;
 V-PC-REGRESSION, V-PC-LIVE. No phase is independently shippable because trusted
 creation, preserved ownership, consent and locked execution must agree before
-ordinary release is safe. Native immutable plan coverage is not yet recorded;
-this section is not a substitute for its receipt.
+ordinary release is safe. Native coverage receipt **cmvwzuck9041q01me31u9xrz2** (refresh after claiming
+the already-planned linked pack test; predecessor cmvwzj88500w401meed9obr9u)
+was recorded and checked current on October 31, bound to plan commit
+a481a6235d7eb728c2299596ea3efc4b9a8d3c90 and blob
+f0d3fafc21de8aaa149d021fe3ba8c4e754ab496. Parent and sole mapping:
+PC -> BI-31AC1F90; dependencies none. Author research receipt:
+initiative-738d4181-f54d-43ad-a30c-b9f67711e200. Implementation admission:
+IRD-7C59EC366804, allowed. These are planning/admission receipts, not delivery evidence.
 
 ## Completion, risk and rollback
 

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 export const NONPROD_WAIT_SCHEMA_VERSION = 1 as const;
 
@@ -59,6 +60,7 @@ type DurableWaitDb = {
 };
 
 type WaitLease = {
+  status?: string;
   id: string;
   leaseId: string;
   claimKey: string | null;
@@ -174,41 +176,50 @@ function leaseWaitProjection(input: {
   };
 }
 
-/** Only the fresh admission transaction may establish immediate owner provenance.
+/** Only the fresh admission transaction may establish immediate or queued owner provenance.
  * Never backfill an old active lease or overwrite a caller's existing Task. */
-export async function checkpointImmediateNonprodLeaseAdmission(input: {
+export async function checkpointFreshNonprodLeaseAdmission(input: {
   db: Pick<DurableWaitDb, "nonProductionEnvironmentLease"> & {
     taskRun: Pick<NonNullable<DurableWaitDb["taskRun"]>, "upsert">;
   };
   userId: string; lease: WaitLease; waitDeadlineAt: Date; now: Date;
+  previewOwner?: { schemaVersion: 1; userId: string; agentId: string; binding: Record<string, unknown> };
+  queuePosition?: number;
 }): Promise<string> {
   if (!input.userId.trim() || input.lease.taskRunId) throw new Error("nonprod_immediate_admission_identity_invalid");
   const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
-  const wait = leaseWaitProjection({ ...input, state: "admitted", queuePosition: null });
+  const queued = input.lease.status === "queued" && !!input.previewOwner;
+  const wait = leaseWaitProjection({ ...input, state: queued ? "waiting" : "admitted",
+    queuePosition: queued ? input.queuePosition ?? null : null });
   const task = record(await input.db.taskRun.upsert({
     where: { taskRunId },
     create: {
       taskRunId, userId: input.userId, title: `Admission to ${input.lease.environmentKey}`,
       objective: `Retain authenticated ownership of lease ${input.lease.leaseId}.`,
-      source: "proactive", status: "completed", completedAt: input.now,
-      initiatingAgentId: input.lease.ownerProvider,
+      source: "proactive", status: queued ? "submitted" : "completed", completedAt: queued ? null : input.now,
+      initiatingAgentId: input.previewOwner?.agentId ?? input.lease.ownerProvider,
       repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
       a2aMetadata: { kind: "nonprod-lease-wait", leaseId: input.lease.leaseId, claimKey: input.lease.claimKey },
-      progressPayload: waitPayload(null, wait), lastHeartbeatAt: null,
+      progressPayload: { ...waitPayload(null, wait),
+        ...(input.previewOwner ? { nonprodPreviewOwner: input.previewOwner } : {}) }, lastHeartbeatAt: null,
     },
     update: {},
   }));
   const storedWait = parseNonprodLeaseWait(task?.["progressPayload"]);
   if (!task || task["taskRunId"] !== taskRunId || task["userId"] !== input.userId
-    || !storedWait || Object.entries(wait).some(([key, value]) => storedWait[key as keyof NonprodLeaseWaitProjection] !== value)) {
+    || !storedWait || Object.entries(wait).some(([key, value]) => storedWait[key as keyof NonprodLeaseWaitProjection] !== value)
+    || (input.previewOwner && (task["initiatingAgentId"] !== input.previewOwner.agentId
+      || !isDeepStrictEqual(record(task["progressPayload"])?.["nonprodPreviewOwner"], input.previewOwner)))) {
     throw new Error("nonprod_immediate_admission_provenance_conflict");
   }
   const linked = record(await input.db.nonProductionEnvironmentLease.updateMany({
-    where: { id: input.lease.id, status: "active", taskRunId: null }, data: { taskRunId },
+    where: { id: input.lease.id, status: queued ? "queued" : "active", taskRunId: null }, data: { taskRunId },
   }));
   if (linked?.["count"] !== 1) throw new Error("nonprod_immediate_admission_link_conflict");
   return taskRunId;
 }
+
+export const checkpointImmediateNonprodLeaseAdmission = checkpointFreshNonprodLeaseAdmission;
 
 export async function checkpointNonprodLeaseWait(input: {
   db: DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> };
@@ -221,6 +232,10 @@ export async function checkpointNonprodLeaseWait(input: {
   const now = input.now ?? new Date();
   const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
   const wait = leaseWaitProjection({ ...input, now, state: "waiting" });
+  if (input.lease.environmentKey === "active-candidate" && input.lease.taskRunId
+    && input.lease.taskRunId !== taskRunId) throw new Error("nonprod_preview_ownership_conflict");
+  const existing = await input.db.taskRun.findUnique({ where: { taskRunId } });
+  const progressPayload = waitPayload(existing?.progressPayload, wait);
   await input.db.taskRun.upsert({
     where: { taskRunId },
     create: {
@@ -237,7 +252,7 @@ export async function checkpointNonprodLeaseWait(input: {
         leaseId: input.lease.leaseId,
         claimKey: input.lease.claimKey,
       },
-      progressPayload: waitPayload(null, wait),
+      progressPayload,
       lastHeartbeatAt: null,
     },
     update: {
@@ -245,7 +260,7 @@ export async function checkpointNonprodLeaseWait(input: {
       completedAt: null,
       lastHeartbeatAt: null,
       repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
-      progressPayload: waitPayload(null, wait),
+      progressPayload,
     },
   });
   await input.db.nonProductionEnvironmentLease.updateMany({

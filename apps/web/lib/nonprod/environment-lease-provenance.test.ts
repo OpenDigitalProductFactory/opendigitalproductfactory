@@ -1,3 +1,4 @@
+import { bindFreshLeaseProvenance } from "./environment-lease-provenance";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const recordQueueTransition = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
@@ -83,4 +84,69 @@ describe("authenticated immediate nonproduction admission", () => {
     expect(recordQueueTransition).not.toHaveBeenCalled();
   });
 
+});
+
+
+describe("fresh authenticated preview ownership", () => {
+  it.each(["active", "queued"])("records trusted owner for a fresh %s preview inside admission", async (status) => {
+    const mockDb = db();
+    let task: any = null;
+    const taskRun = {
+      upsert: vi.fn(async ({ create, update }: any) => (task = task ? { ...task, ...update } : create)),
+      findUnique: vi.fn(async () => task),
+      update: vi.fn(async ({ data }: any) => (task = { ...task, ...data })),
+    };
+    Object.assign(mockDb, { taskRun });
+    const queued = lease({ environmentKey: "active-candidate", claimKey: "preview:session-1",
+      worktreePath: "D:/worktrees/fix-x", branchName: "fix/x" });
+    const current = status === "active" ? admitted({ ...queued, status, slotKey: "slot-0",
+      activeKey: "active-candidate:slot-0" }) : queued;
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(current);
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValue([queued]);
+    mockDb.nonProductionEnvironmentLease.updateMany.mockResolvedValue({ count: 1 });
+    const result = await claim(mockDb, { environmentKey: "active-candidate",
+      authenticatedUserId: "user-1", authenticatedAgentId: "AGT-EXT-CODEX" });
+    expect(result.lease.taskRunId).toMatch(/^TR-NONPROD-/);
+    expect(task).toMatchObject({ userId: "user-1", initiatingAgentId: "AGT-EXT-CODEX",
+      progressPayload: { nonprodPreviewOwner: { schemaVersion: 1, userId: "user-1", agentId: "AGT-EXT-CODEX" } } });
+    const read = { nonProductionEnvironmentLease: { findUnique: async () => result.lease },
+      taskRun: { findUnique: async () => task } };
+    const loadStance = async () => ({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    const call = { toolName: "release_nonprod_environment_lease", userId: "user-1",
+      context: { agentId: "AGT-EXT-CODEX" },
+      params: { leaseId: result.lease.leaseId, ownerSessionId: "session-1" } };
+    expect(await leaseCleanupConsequenceForCall(call, { db: read, loadStance })).toMatchObject({ consequence: null });
+    for (const changed of [ { ...call, userId: "foreign-user" },
+      { ...call, context: { agentId: "AGT-EXT-CLAUDE" } }, { ...call, context: {} } ]) {
+      expect(await leaseCleanupConsequenceForCall(changed, { db: read, loadStance })).toMatchObject({ consequence: "authority" });
+    }
+  });
+});
+
+describe("preview creation provenance is never a backfill", () => {
+  it.each(["missing-user", "missing-assistant", "existing-task", "replay"])("does not invent ownership for %s", async kind => {
+    const mockDb = db();
+    const taskRun = { upsert: vi.fn() };
+    Object.assign(mockDb, { taskRun });
+    const current = admitted({ environmentKey: "active-candidate", activeKey: "active-candidate:slot-0",
+      taskRunId: kind === "existing-task" ? "caller-supplied-task" : null });
+    const result = await bindFreshLeaseProvenance({ db: mockDb as never, lease: current as never,
+      created: kind !== "replay", authenticatedUserId: kind === "missing-user" ? undefined : "user-1",
+      authenticatedAgentId: kind === "missing-assistant" ? undefined : "AGT-EXT-CODEX",
+      waitDeadlineAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS), now: NOW });
+    expect(result).toBe(current);
+    expect(taskRun.upsert).not.toHaveBeenCalled();
+  });
+  it("rolls back admission on a conflicting stored original assistant", async () => {
+    const mockDb = db();
+    const taskRun = { upsert: vi.fn(async ({ create }: any) => ({ ...create, initiatingAgentId: "AGT-EXT-CLAUDE" })) };
+    Object.assign(mockDb, { taskRun });
+    const current = admitted({ environmentKey: "active-candidate", activeKey: "active-candidate:slot-0" });
+    await expect(bindFreshLeaseProvenance({ db: mockDb as never, lease: current as never, created: true,
+      authenticatedUserId: "user-1", authenticatedAgentId: "AGT-EXT-CODEX",
+      waitDeadlineAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS), now: NOW }))
+      .rejects.toThrow("nonprod_immediate_admission_provenance_conflict");
+    expect(mockDb.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+  });
 });

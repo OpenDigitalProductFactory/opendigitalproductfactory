@@ -1,14 +1,9 @@
+import { ownsProcessFreePreview, type PreviewLease } from "./environment-lease-provenance";
 import type { ToolCallConsequence, ToolCallConsequenceInput } from "../tool-consequence";
 import { deterministicNonprodWaitTaskRunId, parseNonprodLeaseWait } from "./durable-wait";
 
-type Lease = {
-  leaseId: string; claimKey: string | null; environmentKey: string; status: string;
-  ownerProvider: string; ownerSessionId: string; worktreePath: string | null;
-  branchName: string | null; taskRunId: string | null; slotManifestVersion: number | null;
-  slotKey?: string | null; activeKey?: string | null;
-  ownerPid: number | null; ownerProcessIdentity: string | null;
-};
-type WaitTask = { taskRunId: string; userId: string; progressPayload: unknown };
+type Lease = PreviewLease & { slotManifestVersion: number | null };
+type WaitTask = { taskRunId: string; userId: string; initiatingAgentId?: string | null; progressPayload: unknown };
 type Reader = {
   nonProductionEnvironmentLease: { findUnique(args: unknown): Promise<Lease | null> };
   taskRun: { findUnique(args: unknown): Promise<WaitTask | null> };
@@ -45,8 +40,15 @@ export async function leaseCleanupConsequenceForCall(
     select: { leaseId: true, claimKey: true, environmentKey: true, status: true,
       ownerProvider: true, ownerSessionId: true, worktreePath: true, branchName: true,
       taskRunId: true, slotManifestVersion: true, slotKey: true, activeKey: true,
-      ownerPid: true, ownerProcessIdentity: true },
+      ownerPid: true, ownerProcessIdentity: true, cleanupCommand: true, resourceClass: true,
+      expectedMemoryBytes: true, buildId: true, url: true, ports: true },
   });
+  if (lease?.leaseId === leaseId && lease.environmentKey === "active-candidate") {
+    const owned = await ownsProcessFreePreview({ db, lease, userId: call.userId,
+      agentId: call.context?.agentId, ownerSessionId: session, loadStance: deps.loadStance ?? canonicalStance });
+    return owned ? { consequence: null, reason: "owned-development-preview-cleanup" }
+      : authority("preview-ownership-unproven");
+  }
   if (!lease || lease.leaseId !== leaseId || lease.ownerSessionId !== session
     || lease.environmentKey !== "local-integration-ci" || lease.slotManifestVersion !== 1
     || !lease.claimKey || !lease.taskRunId || !lease.worktreePath || !lease.branchName

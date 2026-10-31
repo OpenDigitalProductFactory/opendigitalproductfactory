@@ -112,5 +112,7 @@ Revert the caller/provenance/refiner integration together if needed; retained
 records remain historical and unrecognized proof returns to the controlled
 path. No destructive cleanup, TTL adjustment or policy override is rollback.
 
-Current state: design only. Implementation, repair tests, plan coverage and live
-acceptance are not yet claimed.
+At first publication (a481a6235d7eb728c2299596ea3efc4b9a8d3c90), this was
+design only. Current planning receipts and implementation sequence are in the
+plan; current test, publication and runtime outcomes belong in the Workroom.
+This design document alone claims no live acceptance.
