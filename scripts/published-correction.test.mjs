@@ -230,6 +230,17 @@ test("an interrupted push recovers only its historical anchor after both proofs 
     treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later }), anchor);
 });
 
+test("a verified correction keeps its recorded published predecessor while the next push is pending", () => {
+  const previous = historicalCanonicalCorrection();
+  const predecessor = "e".repeat(40);
+  previous.publicationCorrection.pullRequest.headRefOid = predecessor;
+  const pullRequest = { ...previous.publicationCorrection.pullRequest };
+  const anchor = chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000 });
+  assert.equal(anchor, previous.publicationCorrection.anchor);
+  assert.equal(classifyPublishedCorrection(previous, { now: now + 2 * 3600_000 }).ok, false);
+});
+
 test("historical anchor recovery refuses foreign or unqualified retained evidence", () => {
   const mutations = [
     value => { value.publicationCorrection.anchor.state.expiresAt = value.publicationCorrection.anchor.capturedAt; },

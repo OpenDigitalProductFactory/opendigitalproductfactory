@@ -183,7 +183,7 @@ export function chooseInitialAnchor({ records, previous, pullRequest, treeAt, no
     && classifyPublishedCorrection(previous, { ...expected, sha: previous.sha, now: completedAt }).ok
     && proof.pullRequest.number === pullRequest.number
     && Date.parse(proof.anchor.capturedAt) <= completedAt
-    && [previous.sha, proof.anchor.sha].includes(pullRequest.headRefOid)
+    && [previous.sha, proof.anchor.sha, proof.pullRequest.headRefOid].includes(pullRequest.headRefOid)
     && treeAt(previous.sha) === proof.tree && treeAt(proof.anchor.sha) === proof.anchor.tree) return proof.anchor;
   for (const { state, metadata } of records) {
     if (state?.sha !== pullRequest.headRefOid) continue;
