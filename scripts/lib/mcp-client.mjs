@@ -134,6 +134,8 @@ export async function mcpPost(method, params, {
   allowNonLoopbackEndpoint = false,
   accept,
   fetchImpl,
+  requestImpl,
+  connection,
   label,
   env = process.env,
 } = {}) {
@@ -202,8 +204,8 @@ export async function mcpPost(method, params, {
   }
 
   const url = new URL(mcpUrl);
-  const trust = url.protocol === "https:" ? resolveHostMcpTrust({ mcpUrl, env }) : null;
-  const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
+  const trust = url.protocol === "https:" ? resolveHostMcpTrust({ mcpUrl, env, connection }) : null;
+  const requestFn = requestImpl ?? (url.protocol === "https:" ? httpsRequest : httpRequest);
   return new Promise((resolve, reject) => {
     const timeoutError = () => Object.assign(
       new Error(`mcpCall: ${callLabel} timed out after ${timeoutMs}ms`), { code: "ETIMEDOUT" });

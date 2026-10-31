@@ -9,11 +9,19 @@ import assert from "node:assert/strict";
 
 import {
   parseActiveWorktreePaths,
-  loadActiveWorkroomPaths,
+  loadActiveWorkroomPaths as loadPaths,
   pathHasActiveClaim,
   normalizePath,
   ACTIVE_WORKROOM_STATUSES,
 } from "./worktree-liveness.mjs";
+
+// A real default client file must never turn fixture PATs into live exchanges.
+const loadActiveWorkroomPaths = async options => {
+  const { resolveMcpCredential } = await import("./mcp-credential.mjs");
+  return loadPaths({ ...options, resolveCredential: options.resolveCredential ?? (args => resolveMcpCredential({ ...args,
+    env: { ...args.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: new URL("./missing-fixture-credentials.json", import.meta.url).pathname },
+  })) });
+};
 
 const roomsPayload = (rooms) =>
   JSON.stringify({
@@ -473,4 +481,90 @@ describe("ownership traversal uses one saved connection configuration (BI-02C087
     assert.equal(requests, 0);
     assert.equal(credentials, 0);
   });
+});
+
+// Exercise native-request trust resolution rather than the early fetch seam.
+describe("prepared system trust reaches native paging transport", () => {
+  it("discovers once per observation across pages and details, including an empty CA selection", async () => {
+    const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+    const { EventEmitter } = await import("node:events");
+    const env = { DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only" };
+    let discoveries = 0, requests = 0;
+    const resolveTrust = options => resolveHostMcpTrust({ ...options, platform: "win32", installDir: ".",
+      spawnSyncImpl: () => { discoveries++; return { status: 0, stdout: JSON.stringify({ McpUrl: env.DPF_MCP_URL, CaBundle: "" }) }; },
+    });
+    const requestImpl = (_url, options, respond) => {
+      requests++;
+      assert.equal(options.ca, undefined, "system trust is preserved");
+      assert.equal(options.rejectUnauthorized, undefined, "TLS verification retains its secure default");
+      const request = new EventEmitter();
+      let body;
+      request.write = value => { body = JSON.parse(value); };
+      request.setTimeout = () => {};
+      request.destroy = error => { request.emit("error", error); request.emit("close"); };
+      request.end = () => queueMicrotask(() => {
+        const { name, arguments: args } = body.params;
+        const payload = name === "get_workroom"
+          ? JSON.stringify({ success: true, data: { capsule: room("two", "D:/wt/two") } })
+          : args.cursor ? pagePayload([{ capsuleId: "two", status: "working", detail: { toolName: "get_workroom", arguments: { capsuleId: "two" } } }], { populationCount: 2 })
+          : pagePayload([room("one", "D:/wt/one")], { populationCount: 2, nextCursor: "next", disposition: "more" });
+        const response = new EventEmitter();
+        response.statusCode = 200;
+        response.setEncoding = () => {};
+        respond(response);
+        response.emit("data", payload);
+        response.emit("end");
+        request.emit("close");
+      });
+      return request;
+    };
+    for (let observation = 1; observation <= 2; observation++) {
+      const result = await loadActiveWorkroomPaths({ env, resolveTrust, requestImpl });
+      assert.equal(result.available, true, result.reason);
+      assert.equal(result.activePaths.size, 2);
+      assert.equal(discoveries, observation, "fresh observations discover again, individual reads do not");
+      assert.equal(requests, observation * 3, "two native pages and one native detail read");
+    }
+    assert.deepEqual(env, { DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only" });
+  });
+});
+
+it("reuses a completed empty-CA selection without rediscovering host state", async () => {
+  const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+  let discoveries = 0;
+  const options = { mcpUrl: "https://127.0.0.1:1/api/mcp/v1", env: {}, platform: "win32", installDir: ".",
+    spawnSyncImpl: () => { discoveries++; return { status: 0, stdout: JSON.stringify({ McpUrl: "https://127.0.0.1:1/api/mcp/v1", CaBundle: "" }) }; },
+  };
+  const prepared = resolveHostMcpTrust(options);
+  for (let page = 0; page < 3; page++) resolveHostMcpTrust({ ...options, connection: prepared.connection });
+  assert.equal(discoveries, 1, "preparation plus three reads must discover once, not four times");
+});
+
+it("prepared connections remain endpoint-bound and reread their CA on every request", async () => {
+  const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+  const { getCACertificates } = await import("node:tls");
+  const { X509Certificate } = await import("node:crypto");
+  const { mkdtempSync, writeFileSync, unlinkSync, rmdirSync, existsSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = mkdtempSync(join(tmpdir(), "dpf-prepared-ca-"));
+  const bundle = join(directory, "fixture-ca.pem");
+  try {
+    const pem = getCACertificates("default").find(value => {
+      const certificate = new X509Certificate(value);
+      return certificate.ca && Date.parse(certificate.validFrom) <= Date.now() && Date.parse(certificate.validTo) > Date.now();
+    });
+    assert.ok(pem, "a valid bundled CA is available for the fixture");
+    writeFileSync(bundle, pem);
+    const mcpUrl = "https://127.0.0.1:1/api/mcp/v1";
+    const prepared = resolveHostMcpTrust({ mcpUrl, env: { NODE_EXTRA_CA_CERTS: bundle } });
+    assert.throws(() => resolveHostMcpTrust({ mcpUrl: "https://other.example/api/mcp/v1", env: {}, connection: prepared.connection }),
+      error => error.code === "mcp_connection_mismatch");
+    unlinkSync(bundle);
+    assert.throws(() => resolveHostMcpTrust({ mcpUrl, env: {}, connection: prepared.connection }),
+      error => error.code === "mcp_ca_unreadable", "preparation must never cache certificate bytes");
+  } finally {
+    if (existsSync(bundle)) unlinkSync(bundle);
+    rmdirSync(directory);
+  }
 });

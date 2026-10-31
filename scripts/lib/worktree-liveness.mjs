@@ -232,10 +232,11 @@ export async function loadActiveWorkroomPaths(options = {}) {
     // Otherwise each HTTPS page starts a host shell to rediscover the same CA.
     // The transport still rereads and validates that bundle on every request;
     // no certificate, credential or authority decision is cached here.
-    const transportEnv = new URL(url).protocol === "https:"
-      ? (options.resolveTrust ?? resolveHostMcpTrust)({ mcpUrl: url, env }).env : env;
-    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env: transportEnv });
     const deadline = Date.now() + READ_BUDGET_MS;
+    const trust = new URL(url).protocol === "https:"
+      ? (options.resolveTrust ?? resolveHostMcpTrust)({ mcpUrl: url, env }) : null;
+    const transportEnv = trust?.env ?? env;
+    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env: transportEnv });
     const callTool = async (name, args) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("workroom observation read budget exceeded");
@@ -246,6 +247,8 @@ export async function loadActiveWorkroomPaths(options = {}) {
         timeoutMs: Math.min(20_000, remaining),
         accept: "application/json, text/event-stream",
         fetchImpl: options.fetchImpl,
+        requestImpl: options.requestImpl,
+        connection: trust?.connection,
         // DPF_MCP_URL is operator intent; `env` may be an injected copy, so the
         // client's own process.env check cannot see it.
         allowNonLoopbackEndpoint: Boolean(env.DPF_MCP_URL),
