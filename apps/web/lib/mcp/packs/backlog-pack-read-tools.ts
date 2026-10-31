@@ -426,13 +426,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
-  const { resolveWorkroomReadSource } = await import("./backlog-workroom-read-source");
-  const selected = params["workroomId"] === undefined ? undefined : await resolveWorkroomReadSource({
-    workroomId: params["workroomId"], userId: currentUserId, agentId: currentAgentId,
-    itemId: item.itemId, itemRowId: item.id,
-  });
-  const selectionRefusal = { success: false as const, error: "workroom_source_unavailable",
-    message: "The exact Workroom source or actor admission could not be verified. No selected readiness or review request was delivered." };
+  const { selectWorkroomReadSource, selectionRefusal } = await import("../backlog-workroom-read-source");
+  const selected = await selectWorkroomReadSource({ workroomId: params["workroomId"],
+    userId: currentUserId, agentId: currentAgentId,
+    itemId: item.itemId, itemRowId: item.id });
   if (selected && !selected.ok) return selectionRefusal;
   const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
   const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);

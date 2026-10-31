@@ -37,3 +37,10 @@ export async function resolveWorkroomReadSource(args: {
     } };
   } catch { return denied; }
 }
+
+export const selectionRefusal = { success: false as const, error: "workroom_source_unavailable",
+  message: "The exact Workroom source or actor admission could not be verified. No selected readiness or review request was delivered." };
+
+export async function selectWorkroomReadSource(args: Parameters<typeof resolveWorkroomReadSource>[0]) {
+  return args.workroomId === undefined ? undefined : resolveWorkroomReadSource(args);
+}
