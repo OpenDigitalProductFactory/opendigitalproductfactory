@@ -19,6 +19,31 @@ function reviewQueries({ candidates = [], identities = [], failure = null }: {
 }
 
 describe("loadCapsuleLivenessInventory", () => {
+  it("loads genuine governed-decision descriptions in one batch without returning scope packets", async () => {
+    const now = new Date("2026-10-31T20:00:00Z");
+    const rows = ["WC-DECIDE-A", "WC-DECIDE-B"].map(capsuleId => ({ capsuleId, status: "working", updatedAt: now,
+      workspaceState: { workroomDrive: { action: "attention", reason: "governed_decision", stageKey: "decide",
+        pendingAttention: { stageKey: "decide", principalRef: "role:owner", reason: "governed_decision" } } } }));
+    const definitions = rows.map(room => ({ capsuleId: room.capsuleId, scopeClaims: [
+      { workShape: "obligation-assurance-watch@1.0.0", privatePacket: "private-shape-packet" },
+    ] }));
+    const findMany = vi.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce(definitions);
+    const result = await loadCapsuleLivenessInventory({ workroom: { findMany }, featureBuild: { findMany: vi.fn() }, $queryRaw: reviewQueries() },
+      { where: {}, take: 200, portalSummary: true }, now);
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany.mock.calls[1][0]).toMatchObject({ take: 2, select: { capsuleId: true, scopeClaims: true } });
+    for (const room of result.capsulesAll) expect(room.decisions).toMatchObject([{ title: "Decide the response to each finding" }]);
+    expect(JSON.stringify(result)).not.toContain("private-shape-packet");
+  });
+  it("retains attention when optional decision context cannot be read", async () => {
+    const now = new Date("2026-10-31T20:00:00Z");
+    const findMany = vi.fn().mockResolvedValueOnce([{ capsuleId: "WC-UNAVAILABLE", status: "working", updatedAt: now,
+      workspaceState: { workroomDrive: { action: "attention", reason: "governed_decision", stageKey: "decide",
+        pendingAttention: { stageKey: "decide", principalRef: "role:owner", reason: "governed_decision" } } } }]).mockRejectedValueOnce(new Error("context unavailable"));
+    const result = await loadCapsuleLivenessInventory({ workroom: { findMany }, featureBuild: { findMany: vi.fn() }, $queryRaw: reviewQueries() },
+      { where: {}, take: 200, portalSummary: true }, now);
+    expect(result.capsulesAll[0]).toMatchObject({ drive: { action: "attention", attentionRecorded: true }, decisions: [] });
+  });
   it.each([
     ["2026-10-26T01:59:59.900Z", "current", "Recorded prerequisite"],
     ["2026-10-26T02:00:00.000Z", "expired", null],

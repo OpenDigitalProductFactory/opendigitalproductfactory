@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "scope": { "files": [
+    "apps/web/components/ops/workrooms/HeldWorkroomsList.tsx",
+    "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
+  ] },
+  "decidedOption": "native-recorded-actions",
+  "decisionInteractionId": "DI-5A14F5497820",
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["native-recorded-actions", "wait-for-atlas"] },
+  "authority": "The operator explicitly requested current Workrooms next-actor/action clarity, native architecture and preserved grouping/progress; implementation admission IRD-2335B0F5E149. This is a bounded agent implementation choice under that existing instruction, not a newly granted human approval.",
+  "limitations": "DI-5A14F5497820 ranked native-recorded-actions first but returned low confidence, decline/all-options-opposed and autonomyEligible=false; cost estimates alone are not autonomous authority or UX approval. The actual agent choice and this limitation were recorded. Prototype DOC-0D77913C is illustrative, not rendered-approved. Native UX engagement CE-CAA092BD remains owed; served words/layout/keyboard, authorization fixtures and saved-result readback are unrun. Deterministic same-fixture payload: original0209 mapper180471 characters, current153071; this is not live latency or served acceptance. Protected checks and independent review remain required."
+}
