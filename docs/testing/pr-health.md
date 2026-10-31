@@ -128,6 +128,13 @@ canonical record or a previously allowed recorded override can anchor it. An
 open PR by itself, a new correction record or a prose trailer cannot. Initial
 publication keeps its existing requirements.
 
+After an interrupted push, a retained correction may recover its original
+anchor even when its affected-check proof has expired. The verifier qualifies
+that retained record at its original completion time, checks its repository,
+branch and PR, and rederives both Git trees. GitHub must still name either that
+record's candidate or its original anchor. Recovery preserves every timestamp
+and requires fresh affected checks; it does not renew the expired proof.
+
 Unchanged bytes or a commit-message correction execute no source suite. Changed
 bytes use the existing affected-test/package planner and execute its checks;
 full integration and broad source guards are delegated to protected GitHub.

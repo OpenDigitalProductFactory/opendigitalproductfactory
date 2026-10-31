@@ -201,6 +201,60 @@ test("an open PR without qualified initial evidence cannot bootstrap correction 
   assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest, treeAt: () => "d".repeat(40), now }), /initial-publication anchor/);
 });
 
+function historicalCanonicalCorrection() {
+  const previous = record();
+  const anchor = previous.publicationCorrection.anchor;
+  anchor.state = { branch, sha: original, gatePassed: true, status: "passed",
+    skipped: false, evidenceRecordId: "fixture-evidence", leaseId: "fixture-lease",
+    recordedAt: new Date(now - 120_000).toISOString(),
+    expiresAt: new Date(now + 120_000).toISOString() };
+  anchor.metadata = { candidateSha: original, runLeaseId: "fixture-lease",
+    execution: { status: "passed" } };
+  return previous;
+}
+
+test("an interrupted push recovers only its historical anchor after both proofs expire", () => {
+  const previous = historicalCanonicalCorrection();
+  const snapshot = JSON.stringify(previous);
+  const later = now + 2 * 3600_000;
+  const pullRequest = previous.publicationCorrection.pullRequest;
+  assert.equal(classifyPublishedCorrection(previous, { now: later }).ok, false);
+  const anchor = chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later });
+  assert.equal(anchor, previous.publicationCorrection.anchor);
+  assert.equal(JSON.stringify(previous), snapshot, "retained evidence is never rewritten");
+  assert.equal(classifyPublishedCorrection(previous, { now: later }).ok, false,
+    "anchor recovery does not renew affected-check proof");
+  const published = { ...pullRequest, headRefOid: previous.sha };
+  assert.equal(chooseInitialAnchor({ records: [], previous, pullRequest: published,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later }), anchor);
+});
+
+test("historical anchor recovery refuses foreign or unqualified retained evidence", () => {
+  const mutations = [
+    value => { value.publicationCorrection.anchor.state.expiresAt = value.publicationCorrection.anchor.capturedAt; },
+    value => { value.publicationCorrection.results[0].exitCode = 1; },
+    value => { value.publicationCorrection.results[0].skipped = true; },
+    value => { value.publicationCorrection.pullRequest.number = 8; },
+    value => { value.publicationCorrection.anchor.repositoryFullName = "foreign/repository"; },
+    value => { value.publicationCorrection.completedAt = new Date(now + 4 * 3600_000).toISOString(); },
+  ];
+  const pullRequest = record().publicationCorrection.pullRequest;
+  for (const mutate of mutations) {
+    const previous = historicalCanonicalCorrection(); mutate(previous);
+    assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest,
+      treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000 }), /initial-publication anchor/);
+  }
+  const previous = historicalCanonicalCorrection();
+  for (const options of [
+    { pullRequest: { ...pullRequest, number: 9 } },
+    { pullRequest: { ...pullRequest, headRefOid: "f".repeat(40) } },
+    { pullRequest: { ...pullRequest, repositoryFullName: "foreign/repository" } },
+    { treeAt: () => "f".repeat(40) },
+  ]) assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000, ...options }), /initial-publication anchor/);
+});
+
 test("an unmapped change cannot silently run zero affected checks", () => {
   assert.throws(() => buildCorrectionCommands({ affectedTests: [], fileDispositions: [{ path: "scripts/unknown.mjs", kind: "other", tests: [] }], affectedPackages: [], scope: {} }), /mapping unresolved/);
 });
