@@ -10,6 +10,7 @@ import {
   findUngovernedHeavyProcesses,
   parseHostResourceArgs,
   parseQualificationRunnerBinding,
+  qualificationCommandMatchesBinding,
   readMcpConnection,
   readProcessRows,
   claimHostResourceAdmission,
@@ -58,6 +59,24 @@ test("qualification runner derives only the non-secret claim projection from the
     testBlobIds: ["c".repeat(40)],
   });
   assert.equal(parseQualificationRunnerBinding("caller-json"), null);
+});
+
+test("qualification command runs exactly the bound test file through Node's test runner", () => {
+  const qualification = { allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"] };
+  assert.equal(qualificationCommandMatchesBinding({ command: process.execPath,
+    commandArgs: ["--test", "scripts/lib/local-ci-gate-state.test.mjs"], qualification }), true);
+  assert.equal(qualificationCommandMatchesBinding({ command: "node.exe",
+    commandArgs: ["--test", "scripts/lib/local-ci-gate-state.test.mjs"], qualification }), true);
+
+  for (const invocation of [
+    { command: "pnpm", commandArgs: ["exec", "vitest", "run", qualification.allowedPaths[0]] },
+    { command: "node", commandArgs: [qualification.allowedPaths[0]] },
+    { command: "node", commandArgs: ["--test", qualification.allowedPaths[0], "scripts/other.test.mjs"] },
+    { command: "node", commandArgs: ["--test", "scripts/other.test.mjs"] },
+  ]) {
+    assert.equal(qualificationCommandMatchesBinding({ ...invocation, qualification }), false,
+      `${invocation.command} ${invocation.commandArgs.join(" ")}`);
+  }
 });
 
 test("host claim carries the signed qualification binding on the existing lease substrate", () => {

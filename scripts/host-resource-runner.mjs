@@ -4,7 +4,7 @@ import { parseArgs as utilParseArgs } from "node:util";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname, totalmem } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
@@ -59,6 +59,17 @@ export function parseQualificationRunnerBinding(token) {
       requiredPlatform: binding.requiredPlatform, allowedPaths: binding.allowedPaths,
       testBlobIds: binding.candidate.testBlobIds };
   } catch { return null; }
+}
+
+export function qualificationCommandMatchesBinding({ command, commandArgs, qualification }) {
+  if (!qualification || !Array.isArray(qualification.allowedPaths)) return false;
+  const executable = basename(String(command)).toLowerCase();
+  if (executable !== "node" && executable !== "node.exe") return false;
+  const normalizedArgs = commandArgs.map(value => String(value).replaceAll("\\", "/"));
+  const expected = qualification.allowedPaths.map(value => String(value).replaceAll("\\", "/"));
+  return normalizedArgs.length === expected.length + 1
+    && normalizedArgs[0] === "--test"
+    && expected.every((path, index) => normalizedArgs[index + 1] === path);
 }
 
 export function parseHostResourceArgs(argv) {
@@ -434,8 +445,10 @@ async function main() {
       { code: "host_admission_refused", reason: "qualification-platform-mismatch", commandExecuted: false });
   }
   const commandText = [parsed.command, ...parsed.commandArgs].join(" ");
-  if (qualification && !qualification.allowedPaths.every(path => commandText.replaceAll("\\", "/").includes(path))) {
-    throw Object.assign(new Error("Qualification command does not include every bound test path."),
+  if (qualification && !qualificationCommandMatchesBinding({
+    command: parsed.command, commandArgs: parsed.commandArgs, qualification,
+  })) {
+    throw Object.assign(new Error("Qualification command must run exactly the bound test paths through node --test."),
       { code: "host_admission_refused", reason: "qualification-command-mismatch", commandExecuted: false });
   }
   const qualificationClaim = qualification ? { ...qualification, command: commandText } : null;

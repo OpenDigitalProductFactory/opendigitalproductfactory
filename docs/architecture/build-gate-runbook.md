@@ -281,6 +281,14 @@ reconciliation, while live/unmeasurable owners are not displaced.
 
 **Two failures only CI used to see now have local guards (BI-25EF1456).** A `"use client"` component that reaches `@dpf/db`, `server-only` or a Node built-in through a lib import passes vitest and tsc and fails only `next build` ("Module not found: fs"); `scripts/check-no-server-imports-in-client.mjs` (in the guard loop, `pnpm check:guards`) walks value imports from every affected client module and prints the exact chain in under a second — the fix is the `*-vocabulary.ts` split. And a route over its field budget is measured only by the CI sweep; `pnpm ux:sweep-touched -- --run --base-url <served portal>` maps the changed files to the page routes that render them (route manifest plus the same import walk, ancestor layouts included) and runs the existing `ux:sweep` ratchet on exactly those routes. The default feedback run covers static routes with a 40-route cap. Shared-layout acceptance uses the complete touched inventory: `--exhaustive --fixture-map <admitted-preview-map>` includes dynamic routes and requires concrete fixtures, source/lease binding and complete accounting. Desktop/mobile and normal/Simple contexts are selected explicitly; missing fixtures never lower the denominator.
 
+**Host preflight recovery is separate from the integration verdict.**
+`pnpm run pregate:status` reports the original host attempt, accountable owner,
+last progress and missing proof without changing it. Its explicit
+`--reconcile-host-receipt` option can retain an abandoned controller's outcome as
+inconclusive when strong receipt and lock ownership match. It preserves the
+original child uncertainty and execution lock, and grants no new admission.
+See [host receipt recovery](../testing/pre-pr-gate.md#reading-the-result--ask-the-record-not-the-run).
+
 ## Auto-merge armed is not auto-merge happening (BI-53BE1C77)
 
 Arming auto-merge (`gh pr merge <n> --squash --auto`) is a promise that fires only when every check is green. When a check stays red, GitHub sends no signal that the promise will never be kept, and the merge-queue churn watch only sees PRs that reached the queue — a PR blocked *before* the queue never does. PR #5333 sat six days like this, `BLOCKED` with auto-merge armed, and nobody was told.
