@@ -9,6 +9,8 @@ import {
   classifyHeavyProcess,
   findUngovernedHeavyProcesses,
   parseHostResourceArgs,
+  parseQualificationRunnerBinding,
+  qualificationCommandMatchesBinding,
   readMcpConnection,
   readProcessRows,
   claimHostResourceAdmission,
@@ -43,6 +45,55 @@ test("rejects invalid requested durations rather than silently changing approved
 });
 
 const GiB = 1024 ** 3;
+
+test("qualification runner derives only the non-secret claim projection from the signed payload", () => {
+  const admission = { schemaVersion: 1, purpose: "qualification-research-admission",
+    bindingDigest: `sha256:${"a".repeat(64)}`, binding: { phase: "verify", executorMode: "workroom-host",
+      requiredPlatform: "win32", itemId: "BI-B3DEC077", workroomId: "WC-7036EB63",
+      headSha: "b".repeat(40), allowedPaths: ["scripts/example.test.mjs"],
+      candidate: { testBlobIds: ["c".repeat(40)] } } };
+  const token = `${Buffer.from(JSON.stringify(admission)).toString("base64url")}.signature-not-trusted-locally`;
+  assert.deepEqual(parseQualificationRunnerBinding(token), {
+    token, digest: admission.bindingDigest, itemId: "BI-B3DEC077", workroomId: "WC-7036EB63",
+    headSha: "b".repeat(40), requiredPlatform: "win32", allowedPaths: ["scripts/example.test.mjs"],
+    testBlobIds: ["c".repeat(40)],
+  });
+  assert.equal(parseQualificationRunnerBinding("caller-json"), null);
+});
+
+test("qualification command runs exactly the bound test file through Node's test runner", () => {
+  const qualification = { allowedPaths: ["scripts/lib/local-ci-gate-state.test.mjs"] };
+  assert.equal(qualificationCommandMatchesBinding({ command: process.execPath,
+    commandArgs: ["--test", "scripts/lib/local-ci-gate-state.test.mjs"], qualification }), true);
+  assert.equal(qualificationCommandMatchesBinding({ command: "node.exe",
+    commandArgs: ["--test", "scripts/lib/local-ci-gate-state.test.mjs"], qualification }), true);
+
+  for (const invocation of [
+    { command: "pnpm", commandArgs: ["exec", "vitest", "run", qualification.allowedPaths[0]] },
+    { command: "node", commandArgs: [qualification.allowedPaths[0]] },
+    { command: "node", commandArgs: ["--test", qualification.allowedPaths[0], "scripts/other.test.mjs"] },
+    { command: "node", commandArgs: ["--test", "scripts/other.test.mjs"] },
+  ]) {
+    assert.equal(qualificationCommandMatchesBinding({ ...invocation, qualification }), false,
+      `${invocation.command} ${invocation.commandArgs.join(" ")}`);
+  }
+});
+
+test("host claim carries the signed qualification binding on the existing lease substrate", () => {
+  const qualification = { token: "opaque.signed", digest: `sha256:${"a".repeat(64)}`,
+    headSha: "b".repeat(40), workroomId: "WC-7036EB63", requiredPlatform: "win32",
+    command: "pnpm exec vitest run scripts/example.test.mjs" };
+  const claim = buildHostResourceClaim({ resourceClass: "vitest", ownerProvider: "codex",
+    ownerSessionId: "session", worktreePath: "D:/worktree", branchName: "fix/qualification",
+    pid: 42, processIdentity: "process-42", now: new Date("2026-01-01T00:00:00Z"),
+    totalMemoryBytes: 16 * GiB, availableMemoryBytes: 8 * GiB, inferenceResident: false,
+    ungovernedProcesses: [], attempt: { claimKey: "attempt-key" }, qualification });
+  assert.equal(claim.purpose, `host-resource:qualification:${qualification.digest}`);
+  assert.equal(claim.buildId, qualification.headSha);
+  assert.equal(claim.taskRunId, qualification.workroomId);
+  assert.equal(claim.qualificationAdmissionToken, qualification.token);
+  assert.equal(claim.qualificationCommand, qualification.command);
+});
 
 function admissionFixture() {
   const context = { fixture: "claim" };
@@ -306,7 +357,17 @@ syncBuiltinESMExports();
     child.once("error", reject);
     child.once("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
   });
-  return { calls, leases, run };
+  const runWithClosedStdout = command => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [...preloadArgs, fileURLToPath(new URL("./host-resource-runner.mjs", import.meta.url)),
+      "--class", "vitest", "--", ...command],
+    { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], timeout: 45000 });
+    let stderr = "";
+    child.stdout.destroy();
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal, stderr }));
+  });
+  return { calls, leases, run, runWithClosedStdout };
 }
 
 for (const [memoryProbe, availableGiB] of [["available", 42], ["unavailable", 4]]) {
@@ -343,6 +404,18 @@ test("real response-loss recovery reconciles one admitted mock row and executes 
   assert.equal(claims[1].arguments.resumeLeaseId, undefined);
   assert.equal(fixture.calls[1].name, "list_nonprod_environment_leases");
   assert.equal(fixture.calls.at(-1).name, "list_nonprod_environment_leases");
+});
+
+test("a closed output consumer does not replace the wrapped command outcome with EPIPE", { timeout: 60000 }, async t => {
+  const fixture = await createHostClaimFixture(t);
+  const result = await fixture.runWithClosedStdout([
+    process.execPath,
+    "-e",
+    "process.stdout.write('x'.repeat(1024 * 1024)); process.exit(7)",
+  ]);
+  assert.equal(result.signal, null);
+  assert.equal(result.code, 7, result.stderr);
+  assert.doesNotMatch(result.stderr, /EPIPE|unhandled/i);
 });
 
 test("real host claim tolerates a response beyond the generic ten-second probe budget", { timeout: 60000 }, async t => {

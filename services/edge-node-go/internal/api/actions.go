@@ -6,6 +6,14 @@ import (
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/action"
 )
 
+func (c *Client) ReadManagedInferenceAdmission(ctx context.Context, token string, original action.SignedEnvelope) (action.SignedEnvelope, error) {
+	var response struct {
+		Admission action.SignedEnvelope `json:"admission"`
+	}
+	err := c.post(ctx, "/api/v1/edge/actions/inference-admission", token, map[string]any{"envelope": original}, &response)
+	return response.Admission, err
+}
+
 type actionClaimResponse struct {
 	Claimed []action.SignedEnvelope `json:"claimed"`
 }

@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # RemoteAction Edge dispatch — authentication & channel design (EP-REMOTE-ACTION P2)
 
 - **Date:** 2026-06-26
@@ -44,6 +48,61 @@ The canonical deployment already assigns HTTPS termination to the Caddy sidecar.
 
 Governed consultation `DI-4D4877ED738F` selected this boundary with high confidence (composite 7.235, margin 2.390, no commandment conflict). This follows Caddy's documented `client_auth` `require_and_verify` trust-pool contract and its TLS client-certificate placeholders.
 
+### 3.2 Preserve injected identity after incoming-header scrubbing — BI-2A52F271
+
+The October 30 UTC live source `1f8c111c409a4e8cc3575d118a7a154134791ba9`
+rejects the newly repaired, enrolled host's registration with
+`machine_authentication_failed`. The channel is enabled, the new agent loads the
+valid certificate, and an exact generated-configuration reload succeeds. The
+registration route reaches its proxy-assertion check after bearer authorization
+and assertion-file loading; re-enrollment or widening grants is not indicated.
+
+Both PKI generators put deletion and insertion of the same identity headers in
+one `reverse_proxy` header operation. The pinned Caddy 2.10.2 adapter reproduces
+both operations with non-secret fixture values. Its
+[HeaderOps implementation](https://github.com/caddyserver/caddy/blob/v2.10.2/modules/caddyhttp/headers/headers.go#L220-L259)
+sets headers before specific/wildcard deletion. Textual directive order therefore
+does not preserve the generated assertion or certificate metadata.
+
+**OBJ-EPH1:** Let the existing application receive the proxy's verified machine
+identity while removing every caller-supplied identity assertion.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-EPH1 | OBJ-EPH1 | Separate incoming request-header scrubbing executes before reverse-proxy insertion; trusted assertion and verified certificate fields survive, while unknown caller certificate fields are removed. |
+| AC-EPH2 | OBJ-EPH1 | Bash and PowerShell generate the same header boundary; client-certificate verification, application authentication, node scopes and signed-action permissions remain enforced. |
+| AC-EPH3 | OBJ-EPH1 | A failing regression reproduces the original header-loss behavior; protected publication and canonical configuration convergence precede successful actual enrolled-host registration. |
+
+**CONTRACT-EPH:** Keep the listener, trust root, enrollment, signing, certificate
+placeholders and application checks from sections 3.1–5. Scrub untrusted headers
+in a distinct `request_header` middleware before `reverse_proxy`; perform only
+verified identity insertion in that proxy's upstream header operations. Do not
+remove spoof protection or accept caller-supplied transport evidence.
+
+**FLOW-EPH:** verified mTLS connection → remove caller identity headers → inject
+transport identity and existing proxy assertion → existing application checks.
+
+Ordered atomic fix plan:
+
+1. Record the named-source live failure, exact dummy adapter reproduction and
+   excluded certificate-expiry/channel/token causes; bind this design to
+   BI-2A52F271 and obtain implementation admission.
+2. Add a first-failing header-boundary regression, then correct both generators.
+   Check the generated configuration with the pinned adapter and exercise spoof
+   rejection and verified header survival through the actual proxy runtime.
+3. Run affected PKI contracts and required source/integration gates; publish a
+   DCO-signed PR through the protected queue. No generated private configuration
+   or credentials enter source or test evidence.
+4. Converge the published configuration through the existing PKI owner and
+   graceful proxy reload, preserving root, keys, enrollment and permissions.
+   Verify the existing agent's actual registration. Preserve failures and keep
+   native inference activation/rollback under their separate owner.
+
+This is one repair of the accepted proxy boundary, not a new channel or security
+policy. BI-AFDB58C8's delivered expired-certificate source remains closed;
+BI-CD4EB130 retains physical engine acceptance. Neither a successful reload nor
+source tests prove registration or engine activation.
+
 ## 4. Dispatch protocol (read-only pilot)
 
 - **`POST /api/v1/edge/actions/claim`** — authenticated by both the enrolled client certificate and the existing short-lived/rotatable Edge credential carrying `edge:actions:claim`. It returns `RemoteAction`s where status=`queued`, approval is valid, customer/site scope matches the enrolled node, and `actionType` is in `EdgeNode.scopePolicy.allowedActionTypes`. The pilot permits only `inventory.collect`.
@@ -61,6 +120,91 @@ Governed consultation `DI-4D4877ED738F` selected this boundary with high confide
 
 - **Validity** ≤ 90d; **rotation** by re-CSR before expiry (piggybacked on heartbeat) — keys re-generated on the device.
 - **Revocation** is a **server-side status check on every mTLS request** (`EdgeNodeCertificate.status`) — no long-lived CRL needed; revocation is instant. **Quarantine a node** = revoke its cert + set `capability.action.execute=disabled`.
+
+### 6.1 Expired authority-host client recovery — BI-AFDB58C8
+
+This is a bounded repair of the existing PKI owner, not a new enrollment or
+permission mechanism. Design work is recorded in WC-73B082A8. Implementation,
+publication and the physical repair have not yet run.
+
+On the October 29 source `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`,
+`bootstrap-organization-pki.sh` and its PowerShell counterpart renew an existing
+Edge client certificate solely because its certificate and key files exist.
+The observed authority-host client expired on October 18. The installed native
+agent still heartbeats through its separate enrolled bearer channel, but action
+certificate registration fails at the TLS boundary. The public root remains
+valid. Neither revocation nor enrollment conflict explains this observation.
+The actual bootstrap repair against the expired certificate remains unrun.
+
+**OBJ-ECR1:** Restore an expired authority-host Edge client through the existing
+restricted organization issuer while preserving device and CA authority.
+**OBJ-ECR2:** Leave failed repairs recoverable and existing explicit opt-outs
+unchanged, with no private material returned to an agent.
+
+The medium delivery plan quotes the recorded BI-AFDB58C8 acceptance criteria:
+
+- Deterministic fixture first reproduces the existing expired-certificate branch; fixed tests prove the existing restricted issuance route is used only when validity requires it, and renewed/reissued public metadata is verified before replacing usable prior state.
+- Valid existing credentials renew normally. Failed issuance, wrong identity/EKU/issuer, changed root or partial output leave prior state and explicit opt-outs intact; no expired certificate becomes authorization.
+- The published supported repair can restore actual certificate validity and machine registration on the enrolled host without a human command, private-key handling or TLS bypass by the agent.
+- Actual registration/identity observations and scoped rollback evidence are recorded; engine activation remains its own gated operation and is not implied by certificate repair.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-ECR1 | OBJ-ECR1 | Certificate validity selects renewal for a valid existing client and restricted reissuance for an expired authority-host client; missing or invalid identity is refused before replacing a usable credential. |
+| AC-ECR2 | OBJ-ECR1, OBJ-ECR2 | Before publication, verify the resulting certificate against the existing root and expected subject, client-auth usage and validity; preserve private-key custody and the enrolled node identity. |
+| AC-ECR3 | OBJ-ECR2 | Failed issuance or verification retains the previous client files and reports failure; an explicit disabled dispatch value, node quarantine, revocation and action allow-list remain unchanged. |
+| AC-ECR4 | OBJ-ECR1, OBJ-ECR2 | Bash and PowerShell contract tests cover valid renewal, expired recovery, partial failure and identity rejection; the published supported repair proves actual host registration without disabling TLS verification. |
+
+**CONTRACT-ECR-OWNER:** Extend only the authority-mode client portion of the
+existing organization PKI bootstrap. Keep the CA key and password with its
+existing isolated owner. Do not delete a certificate to force the first-issue
+branch, accept an expired certificate as authentication, enable CA renewal after
+expiry, add a general command endpoint or use a self-join package as recovery.
+Member-host recovery, continuous rotation and changing the channel rollout
+policy are outside this narrow correction; section 6 still owns their lifecycle
+requirement. No database or enrollment migration is needed.
+
+**FLOW-ECR-REPAIR:** inspect public identity and validity → select the existing
+issuer path → write a private temporary client pair → verify the public result
+and expected identity → publish through the existing custody owner → let the
+existing native agent register the new certificate → verify current registration.
+On error, retain the previous pair and the explicit failure. The source fix
+must not itself execute this flow on the live installation.
+
+**VERIFY-ECR:** Use deterministic subprocess fixtures before implementation to
+reproduce the existing expired-client path, then exercise the real bootstrap
+branch without a live CA, real credentials, host mutation or model workload.
+Keep source test results separate from actual certificate/registration evidence.
+The native inference activation and rollback remain separate operations under
+BI-CD4EB130; repairing PKI does not authorize or prove them.
+
+Ordered fix sequence:
+
+1. Commit this repair contract and capture the named-source reproduction and
+   rejected causes in the live research receipt.
+2. Bind this ordered design to BI-AFDB58C8 with normal plan coverage, then obtain
+   current implementation admission for the exact edit scope.
+3. Add the failing subprocess fixture; implement the smallest shared-policy
+   repair in the existing Bash and PowerShell bootstraps, preserving their
+   platform-specific execution adapters and existing caller contracts.
+4. Run affected fixture tests and the repository's applicable source gates;
+   publish through the DCO PR and protected merge queue. Document how existing
+   authority installs consume the verified repair assets.
+5. Invoke only the published supported recovery with actual current authority;
+   verify certificate identity, validity, root continuity and native registration.
+   Stop at any credential, trust or rollout authority refusal.
+
+This single deliverable is atomic: selecting a recovery branch without verified
+private publication, failure preservation and both supported host adapters is
+not a usable repair. Related completed BI-5727522F fixed the portal/LDAPS leaf
+duration, BI-D4F79CE2 fixed stale enrollment supersession, and BI-FFFEA4ED fixed
+required-container upgrade recovery; none supplies this client recovery path.
+
+Smallstep's [renewal authorization contract](https://pkg.go.dev/github.com/smallstep/certificates/authority/provisioner#DefaultAuthorizeRenew)
+rejects expired renewal when the CA has not allowed it. That describes the
+upstream boundary; this installation's live CA renewal-after-expiry policy has
+not been inspected. The repair uses the existing restricted issuance owner
+instead of weakening that boundary.
 
 ## 7. Threat-model coverage
 

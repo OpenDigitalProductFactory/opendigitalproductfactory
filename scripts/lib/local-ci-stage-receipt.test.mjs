@@ -20,6 +20,22 @@ const identity = {
   command: "pnpm --filter web exec vitest run --maxWorkers=4",
 };
 
+test("all receipt transitions use the supplied fenced persistence before changing memory", () => {
+  const calls = [];
+  let reject = false;
+  const writer = createStageReceiptWriter({ path: "fixture", stage: "guard", identity,
+    persistImpl(path, next, previous) { if (reject) throw new Error("ownership lost"); calls.push({ path, next, previous }); } });
+  writer.start(); writer.heartbeat({ phase: "running" });
+  const running = writer.snapshot();
+  reject = true;
+  assert.throws(() => writer.complete("passed"), /ownership lost/);
+  assert.equal(writer.snapshot(), running);
+  reject = false; writer.complete("inconclusive");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].previous, null);
+  assert.equal(calls[2].previous, running);
+});
+
 test("retries a transient Windows rename lock without losing the receipt", () => {
   const directory = mkdtempSync(join(tmpdir(), "dpf-stage-receipt-lock-"));
   const path = join(directory, "receipt.json");

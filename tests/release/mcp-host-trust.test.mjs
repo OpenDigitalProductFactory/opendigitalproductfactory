@@ -3,6 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { createServer } from "node:https";
+import { createServer as createHttpServer } from "node:http";
+import { gitText } from "../../scripts/lib/git.mjs";
 import { getCACertificates } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -305,4 +307,100 @@ test("Windows resolver preserves an explicit missing CA instead of silently trus
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).CaBundle, join(home, "missing.pem"));
   } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+// BI-95B102AA: real preflight entry-point regressions share the registered CI suite.
+const featureSha = gitText(["rev-parse", "HEAD"], { cwd: root });
+const priorSha = gitText(["rev-parse", "HEAD^"], { cwd: root });
+async function portal(t, { secure = true, status = 200, version = featureSha } = {}) {
+  const requests = [];
+  const handler = (request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    assert.equal(request.headers.authorization, undefined, "verification does not send credentials");
+    response.writeHead(status, { "content-type": "application/json" });
+    response.end(JSON.stringify({ present: true, version, source: "git-sha" }));
+  };
+  const server = secure ? createServer({ key: readFileSync(key), cert: readFileSync(cert) }, handler) : createHttpServer(handler);
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  return { origin: `${secure ? "https://localhost" : "http://127.0.0.1"}:${address.port}`, requests };
+}
+
+async function cli(origin, bundle = cert) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(DPF_|PUBLIC_URL$|NODE_EXTRA_CA_CERTS$|NODE_OPTIONS$)/i.test(key)));
+  Object.assign(env, {
+    NODE_EXTRA_CA_CERTS: "", DPF_MCP_CA_FILE: bundle,
+    // A requested portal must not accidentally probe this unrelated MCP address.
+    DPF_MCP_URL: "https://unrelated.invalid/api/mcp/v1",
+  });
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "scripts/dpf-verify-preflight.ts",
+      "--portal-url", origin, "--feature-sha", featureSha, "--json"], {
+      cwd: root, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "", stderr = "";
+    const deadline = setTimeout(() => child.kill(), 45_000);
+    child.stdout.on("data", chunk => { stdout += chunk; });
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.once("error", error => { clearTimeout(deadline); reject(error); });
+    child.once("close", status => { clearTimeout(deadline); resolve({ status, stdout, stderr }); });
+  });
+}
+
+test("normal launcher loads existing managed trust before its read-only image request", async t => {
+  const endpoint = await portal(t);
+  const result = await cli(endpoint.origin);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "CAN-TEST");
+  assert.match(result.stderr, /\[preflight\] CAN-TEST - /, "human summary uses readable separators");
+  assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
+});
+
+for (const kind of ["missing", "malformed"]) {
+  test(`selected ${kind} trust remains BLOCKED with its actual diagnostic`, async t => {
+    const endpoint = await portal(t);
+    const bundle = join(fixture, `${kind}.pem`);
+    if (kind === "malformed") writeFileSync(bundle, "not a certificate");
+    const result = await cli(endpoint.origin, bundle);
+    assert.equal(result.status, 20, result.stderr + result.stdout);
+    const verdict = JSON.parse(result.stdout);
+    assert.equal(verdict.verdict, "BLOCKED");
+    assert.match(verdict.reason, kind === "missing" ? /mcp_ca_unreadable/ : /mcp_ca_invalid/);
+    assert.deepEqual(endpoint.requests, []);
+  });
+}
+
+test("trusted issuer never waives certificate hostname verification", async t => {
+  const endpoint = await portal(t);
+  const result = await cli(endpoint.origin.replace("localhost", "127.0.0.1"));
+  assert.equal(result.status, 20, result.stderr + result.stdout);
+  assert.match(JSON.parse(result.stdout).reason, /ERR_TLS_CERT_ALTNAME_INVALID/);
+  assert.deepEqual(endpoint.requests, []);
+});
+
+test("explicit HTTP remains HTTP and ignores unrelated HTTPS trust and MCP destinations", async t => {
+  const endpoint = await portal(t, { secure: false });
+  const result = await cli(endpoint.origin, join(fixture, "absent-for-http.pem"));
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "CAN-TEST");
+  assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
+});
+
+test("source containment still requests the governed advance when runtime is behind", async t => {
+  const endpoint = await portal(t, { secure: false, version: priorSha });
+  const result = await cli(endpoint.origin);
+  assert.equal(result.status, 10, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "MUST-ADVANCE");
+  assert.equal(JSON.parse(result.stdout).nextAction.kind, "trigger-self-upgrade");
+});
+
+test("an HTTP error is not a testable image even when transport is healthy", async t => {
+  const endpoint = await portal(t, { secure: false, status: 503 });
+  const result = await cli(endpoint.origin);
+  assert.equal(result.status, 20, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "BLOCKED");
+  assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
 });

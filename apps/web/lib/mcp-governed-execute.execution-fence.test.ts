@@ -25,7 +25,7 @@ describe("trusted execution identity forwarding", () => {
       userContext: { platformRole: "ceo", isSuperuser: true }, source: "rest",
       context: { taskRunId: "task", agentId: "reviewer", taskExecutionFence } });
     expect(result).toMatchObject({ success: false, error: "review_execution_authority_refused" });
-    expect(db.task).toHaveBeenCalledTimes(2);
+    expect(db.task.mock.calls.filter(([args]) => args?.select?.progressPayload)).toHaveLength(2);
     expect(execute).not.toHaveBeenCalled();
   });
   it("refuses a legacy held review at the real dispatch guard without trusting a callback's current identity", async () => {

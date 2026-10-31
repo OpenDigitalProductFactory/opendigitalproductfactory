@@ -1,3 +1,4 @@
+import { capturedJsonValue } from "../shared/captured-effect-store";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
@@ -154,36 +155,8 @@ export function matchesPersistedReassessmentScope(metadata: unknown, taskRunId: 
 /** Capture is lossless JSON, never a projection or a truncation. Authentication
  * is performed outside this payload; tokens/headers must never enter it. */
 export function reassessmentCaptureValue(value: unknown): unknown {
-  const active = new Set<object>();
-  const visit = (entry: unknown): void => {
-    if (entry === null || typeof entry === "string" || typeof entry === "boolean") return;
-    if (typeof entry === "number" && Number.isFinite(entry)) return;
-    if (typeof entry !== "object" || active.has(entry)
-      || (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype && Object.getPrototypeOf(entry) !== null)) {
-      fail("reassessment-capture-invalid", "The complete capture is not losslessly serializable JSON.");
-    }
-    const arrayLength = Array.isArray(entry) ? entry.length : null;
-    const keys = Reflect.ownKeys(entry);
-    if (arrayLength !== null && keys.length !== arrayLength + 1) {
-      fail("reassessment-capture-invalid", "The complete capture is not losslessly serializable JSON.");
-    }
-    active.add(entry);
-    for (const key of keys) {
-      if (arrayLength !== null && key === "length") continue;
-      const property = Object.getOwnPropertyDescriptor(entry, key);
-      if (typeof key !== "string" || !property?.enumerable || !Object.prototype.hasOwnProperty.call(property, "value")
-        || (arrayLength !== null && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= arrayLength))) {
-        fail("reassessment-capture-invalid", "The complete capture is not losslessly serializable JSON.");
-      }
-      if (/^(authorization|proxy-authorization|cookie|set-cookie|api[-_]?key|access[-_]?token|refresh[-_]?token|client[-_]?secret|credential|credentials)$/i.test(key)) {
-        fail("reassessment-capture-secret", "Authentication secrets cannot enter reassessment capture.");
-      }
-      visit(property.value);
-    }
-    active.delete(entry);
-  };
-  visit(value);
-  return JSON.parse(JSON.stringify(value)) as unknown;
+  return capturedJsonValue(value, (code, message) => fail(`reassessment-capture-${code}`,
+    code === "secret" ? "Authentication secrets cannot enter reassessment capture." : message));
 }
 
 /** Seal the full ordered provider surface before adapter wire translation. */
