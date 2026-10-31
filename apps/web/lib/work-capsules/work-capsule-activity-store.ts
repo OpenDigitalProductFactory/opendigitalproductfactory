@@ -7,8 +7,6 @@ import { buildStageEvidenceBinding } from "@/lib/work-management/workroom-stage-
 import { isRecord } from "@/lib/shared/coerce";
 import {
   parseQualificationExperimentState,
-  parseQualificationVerificationEvidence,
-  qualificationExecutionActivitiesMatch,
   qualificationToolEffectAllowed,
   verifyQualificationExperimentAdmission,
 } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
@@ -108,23 +106,7 @@ export async function recordWorkCapsuleEvidence(args: {
         throw new Error("Host qualification evidence cannot borrow a scheduled TaskRun identity.");
       }
       if (admission.data.binding.executorMode === "workroom-host") {
-        const proof = parseQualificationVerificationEvidence(qualificationResult);
-        if (!proof?.executionEvidenceActivityIds || !tx.backlogItemActivity || !tx.nonProductionEnvironmentLease) {
-          throw new Error("Host qualification evidence requires exact recorded execution activities.");
-        }
-        const [rows, leases] = await Promise.all([
-          tx.backlogItemActivity.findMany({ where: { id: { in: proof.executionEvidenceActivityIds } },
-            select: { id: true, backlogItem: { select: { itemId: true } }, payload: true, recordedAt: true } }),
-          tx.nonProductionEnvironmentLease.findMany({ where: { evidenceRecordId: { in: proof.executionEvidenceActivityIds } },
-            select: { leaseId: true, environmentKey: true, status: true, claimKey: true, purpose: true,
-              ownerSessionId: true, ownerProvider: true, branchName: true, buildId: true, taskRunId: true,
-              ownerPid: true, ownerProcessIdentity: true, admittedAt: true, expiresAt: true, evidenceRecordId: true } }),
-        ]);
-        if (!qualificationExecutionActivitiesMatch({ binding: admission.data.binding, state: qualificationState,
-          itemId: admission.data.binding.itemId, activityIds: proof.executionEvidenceActivityIds, rows,
-          accountablePrincipalRef: args.actor.principalId, proof, leases })) {
-          throw new Error("Host qualification evidence activities do not match the signed execution binding.");
-        }
+        throw new Error("Host qualification evidence has no trusted child provenance; use the machine-authenticated native Edge result path.");
       }
     }
     const activity = await recordWorkCapsuleActivity(tx, {
