@@ -1,6 +1,9 @@
+---
+status: active
+---
+
 # Recorded host-preflight omission
 
-Status: active
 Backlog: BI-7FF02040. Workroom: WC-35D6C17D.
 Base: ea62f5fb890390bde854b618834f5e77fd3865ea.
 
