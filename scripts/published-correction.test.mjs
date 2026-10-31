@@ -612,7 +612,8 @@ test("a correction proof survives a distinct publish-hook process but not a rele
   try {
     const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
     assert.equal(executions, 1);
-    environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1" };
+    environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1",
+      PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${environment.PATH ?? ""}` };
     const inspection = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
     assert.equal(inspection.ok, true, inspection.reason);
     const reused = await verifyPublishedCorrection(options);
