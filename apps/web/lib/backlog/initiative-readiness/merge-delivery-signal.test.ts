@@ -16,6 +16,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { createRealGitFixture, REAL_GIT_SETUP_HOOK_MS, type RealGitFixture } from "@/lib/testing/real-git-fixture";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -24,36 +25,38 @@ import { refreshTrunkRef } from "@/lib/work-capsules/git-scanner";
 
 const execFileAsync = promisify(execFile);
 
-type Fixture = { root: string; mergedSha: string; unmergedSha: string };
+type Fixture = RealGitFixture & { mergedSha: string; unmergedSha: string };
 
 async function git(root: string, ...args: string[]) {
-  return execFileAsync("git", ["-C", root, ...args], { windowsHide: true });
+  return execFileAsync("git", ["-C", root, ...args], { windowsHide: true, timeout: 15_000, killSignal: "SIGKILL" });
 }
 
 /** A repository with one commit on the trunk and one commit that never landed. */
 async function makeRepo(): Promise<Fixture> {
-  const root = await mkdtemp(path.join(tmpdir(), "dpf-merge-signal-"));
-  await git(root, "init", "--initial-branch=main");
-  await git(root, "config", "user.email", "test@example.invalid");
-  await git(root, "config", "user.name", "Test");
-  await git(root, "config", "commit.gpgsign", "false");
+  const fixture = await createRealGitFixture("dpf-merge-signal-", async ({ root, git }) => {
+    await git("init", "--initial-branch=main");
+    await git("config", "user.email", "test@example.invalid");
+    await git("config", "user.name", "Test");
+    await git("config", "commit.gpgsign", "false");
 
-  await writeFile(path.join(root, "a.txt"), "one\n");
-  await git(root, "add", ".");
-  // The trunk subject carries the shape the merge queue writes, so the
-  // pull-request branch of the probe has something real to match.
-  await git(root, "commit", "-m", "feat: land the thing (#4242)");
-  const mergedSha = (await git(root, "rev-parse", "HEAD")).stdout.trim();
-  // origin/main is the ref the probe reads.
-  await git(root, "update-ref", "refs/remotes/origin/main", mergedSha);
+    await writeFile(path.join(root, "a.txt"), "one\n");
+    await git("add", ".");
+    // The trunk subject carries the shape the merge queue writes, so the
+    // pull-request branch of the probe has something real to match.
+    await git("commit", "-m", "feat: land the thing (#4242)");
+    const mergedSha = (await git("rev-parse", "HEAD")).stdout.trim();
+    // origin/main is the ref the probe reads.
+    await git("update-ref", "refs/remotes/origin/main", mergedSha);
 
-  await git(root, "checkout", "-q", "-b", "side");
-  await writeFile(path.join(root, "b.txt"), "two\n");
-  await git(root, "add", ".");
-  await git(root, "commit", "-m", "wip: never merged");
-  const unmergedSha = (await git(root, "rev-parse", "HEAD")).stdout.trim();
+    await git("checkout", "-q", "-b", "side");
+    await writeFile(path.join(root, "b.txt"), "two\n");
+    await git("add", ".");
+    await git("commit", "-m", "wip: never merged");
+    const unmergedSha = (await git("rev-parse", "HEAD")).stdout.trim();
 
-  return { root, mergedSha, unmergedSha };
+    return { mergedSha, unmergedSha };
+  });
+  return { ...fixture, ...fixture.value };
 }
 
 describe("merge-delivery signal against real repositories (BI-043946C5)", () => {
@@ -64,11 +67,10 @@ describe("merge-delivery signal against real repositories (BI-043946C5)", () => 
     repo = await makeRepo();
     notARepo = await mkdtemp(path.join(tmpdir(), "dpf-no-repo-"));
     await writeFile(path.join(notARepo, ".env"), "PORT=3000\n");
-  });
+  }, REAL_GIT_SETUP_HOOK_MS);
 
   afterAll(async () => {
-    await rm(repo.root, { recursive: true, force: true }).catch(() => {});
-    await rm(notARepo, { recursive: true, force: true }).catch(() => {});
+    await Promise.all([repo?.dispose(), notARepo ? rm(notARepo, { recursive: true, force: true }) : undefined]);
   });
 
   it("reports signal-unavailable when the only root is a directory but not a repository", async () => {
@@ -206,7 +208,7 @@ describe("merge-delivery signal against real repositories (BI-043946C5)", () => 
       await writeFile(path.join(upstream, "a.txt"), "one\n");
       await git(upstream, "add", ".");
       await git(upstream, "commit", "-m", "chore: base (#1)");
-      await execFileAsync("git", ["clone", "--quiet", upstream, clone], { windowsHide: true });
+      await execFileAsync("git", ["clone", "--quiet", upstream, clone], { windowsHide: true, timeout: 15_000, killSignal: "SIGKILL" });
 
       await writeFile(path.join(upstream, "b.txt"), "two\n");
       await git(upstream, "add", ".");
@@ -247,8 +249,8 @@ describe("merge-delivery signal against real repositories (BI-043946C5)", () => 
 describe("a negative is only trusted against a current trunk (BI-043946C5)", () => {
   let repo: Fixture;
 
-  beforeAll(async () => { repo = await makeRepo(); });
-  afterAll(async () => { await rm(repo.root, { recursive: true, force: true }).catch(() => {}); });
+  beforeAll(async () => { repo = await makeRepo(); }, REAL_GIT_SETUP_HOOK_MS);
+  afterAll(async () => { await repo?.dispose(); });
 
   const ELEVEN_DAYS_AGO = new Date(Date.now() + 11 * 24 * 60 * 60 * 1000);
 

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -119,6 +120,15 @@ func (c *Config) ManagedInferenceConfigured() bool {
 	return c.ManagedInferenceOptIn && runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" && c.Platform == "darwin" && c.InstallMode == "native" &&
 		hex(c.ManagedInferenceSource, 40) && hex(c.ManagedInferenceManifest, 64) && filepath.IsAbs(c.ManagedInferenceState) && filepath.IsAbs(c.ManagedInferenceBaseline) &&
 		c.ManagedInferenceRoot == filepath.Join(c.ManagedInferenceState, "native-inference-controller", c.ManagedInferenceSource) && c.StateDir == filepath.Join(c.ManagedInferenceState, "edge-node")
+}
+
+// QualificationWindowsEnabled reports whether this process is the supported
+// native Windows Edge agent. The qualification procedure is compiled and owns
+// its fixture under StateDir; container installs and platform overrides cannot
+// advertise or execute it.
+func (c *Config) QualificationWindowsEnabled() bool {
+	_, nodeErr := exec.LookPath("node")
+	return runtime.GOOS == "windows" && c.Platform == "win32" && c.InstallMode == "native" && filepath.IsAbs(c.StateDir) && nodeErr == nil
 }
 
 // HostUpkeepOnly reports whether the node runs only host upkeep: heartbeat and

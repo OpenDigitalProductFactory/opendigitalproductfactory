@@ -17,7 +17,9 @@ const QUALIFICATION_TOOLS = new Set([
   "record_workroom_evidence",
 ]);
 
-export type QualificationExecutorMode = "sandbox-build" | "workroom-host";
+/** `native-edge` remains readable for historical bindings created before the
+ * workroom-host correction; new terminal admission never issues it. */
+export type QualificationExecutorMode = "sandbox-build" | "workroom-host" | "native-edge";
 export type QualificationPlatform = "linux" | "win32";
 
 type ProtocolRef = { path: string; commitSha: string; providerBlobId: string };
@@ -47,6 +49,8 @@ export type QualificationExperimentBinding = {
   policyVersion: 1;
   executorMode: QualificationExecutorMode;
   requiredPlatform: QualificationPlatform;
+  /** Production bytes the qualification observes but may never modify. */
+  targetProductionPaths?: string[];
   targetProductionBlobIds: string[];
   permittedTools: string[];
   allowedPaths: string[];
@@ -136,7 +140,10 @@ export function advanceQualificationExperimentState(input: {
     && prior.protocolReviewReceiptId === next.protocolReviewReceiptId
     && prior.shapeKey === next.shapeKey && prior.shapeVersion === next.shapeVersion
     && prior.stageKey === next.stageKey && prior.policyVersion === next.policyVersion
-    && prior.executorMode === next.executorMode && prior.requiredPlatform === next.requiredPlatform
+    && ((prior.executorMode === next.executorMode)
+      || (prior.executorMode === "sandbox-build" && next.executorMode === "workroom-host" && next.requiredPlatform === "win32"))
+    && prior.requiredPlatform === next.requiredPlatform
+    && JSON.stringify(prior.targetProductionPaths ?? []) === JSON.stringify(next.targetProductionPaths ?? [])
     && JSON.stringify(prior.targetProductionBlobIds) === JSON.stringify(next.targetProductionBlobIds)
     && JSON.stringify(prior.allowedPaths) === JSON.stringify(next.allowedPaths);
   if (input.existing.status !== "settled" || prior.phase !== "prepare" || next.phase !== "verify"
@@ -252,11 +259,19 @@ function validTestPath(path: string): boolean {
     && /(?:\.test\.|\.spec\.|test-helper\.)/.test(normalized);
 }
 
+function validProductionPath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  return !normalized.startsWith("/") && !normalized.includes("../")
+    && !/(?:\.test\.|\.spec\.|test-helper\.)/.test(normalized);
+}
+
 export function parseQualificationExperimentBinding(value: unknown): ActionResult<QualificationExperimentBinding> {
   const raw = record(value);
   const protocol = record(raw?.protocol);
   const tools = exactStrings(raw?.permittedTools);
   const paths = exactStrings(raw?.allowedPaths);
+  const productionPaths = exactStrings(raw?.targetProductionPaths);
+  const productionBlobIds = exactStrings(raw?.targetProductionBlobIds);
   const issuedAt = text(raw?.issuedAt);
   const expiresAt = text(raw?.expiresAt);
   const phase = raw?.phase;
@@ -282,23 +297,27 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
   const datesValid = issuedAt && expiresAt && Number.isFinite(Date.parse(issuedAt)) && Number.isFinite(Date.parse(expiresAt))
     && Date.parse(issuedAt) < Date.parse(expiresAt);
   const phaseToolsValid = phase === "prepare"
-    ? tools?.includes("record_workroom_evidence") && !tools.includes("run_sandbox_tests")
-      && (executorMode === "sandbox-build" ? tools.includes("write_sandbox_file")
-        : executorMode === "workroom-host" && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file"))
+    ? executorMode === "sandbox-build" && tools?.includes("record_workroom_evidence")
+      && !tools.includes("run_sandbox_tests") && tools.includes("write_sandbox_file")
     : phase === "verify"
       ? tools?.includes("record_workroom_evidence")
         && (executorMode === "sandbox-build" ? tools.includes("run_sandbox_tests") && !tools.includes("record_execution_evidence")
-          : executorMode === "workroom-host" && tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
+          : executorMode === "workroom-host" ? tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests")
+            : executorMode === "native-edge" && !tools.includes("record_execution_evidence") && !tools.includes("run_sandbox_tests"))
         && !tools.includes("write_sandbox_file") && !tools.includes("edit_sandbox_file")
       : false;
   const valid = raw?.schemaVersion === 1 && (phase === "prepare" || phase === "verify")
-    && (executorMode === "sandbox-build" || executorMode === "workroom-host")
+    && (executorMode === "sandbox-build" || executorMode === "workroom-host" || executorMode === "native-edge")
     && (requiredPlatform === "linux" || requiredPlatform === "win32")
-    && (executorMode !== "sandbox-build" || requiredPlatform === "linux")
+    && (executorMode !== "native-edge" || (phase === "verify" && requiredPlatform === "win32"))
     && Object.values(scalar).every(Boolean) && FULL_SHA.test(scalar.baseSha!) && FULL_SHA.test(scalar.headSha!)
     && FULL_SHA.test(scalar.protocolCommit!) && FULL_SHA.test(scalar.protocolBlob!)
     && raw?.policyVersion === 1 && tools && tools.every((tool) => QUALIFICATION_TOOLS.has(tool)) && phaseToolsValid
-    && exactStrings(raw?.targetProductionBlobIds)?.every((blob) => FULL_SHA.test(blob))
+    && (executorMode !== "native-edge"
+      ? (!productionPaths || productionPaths.every(validProductionPath))
+      : Boolean(productionPaths?.length && productionPaths.every(validProductionPath)))
+    && productionBlobIds?.every((blob) => FULL_SHA.test(blob))
+    && (!productionPaths || productionPaths.length === productionBlobIds?.length)
     && paths && paths.every(validTestPath) && datesValid && raw?.maxStarts === 1
     && typeof raw?.maxDurationMs === "number" && raw.maxDurationMs > 0 && raw.maxDurationMs <= 3_600_000
     && (phase === "prepare" ? !candidateRaw && scalar.protocolCommit === scalar.headSha
@@ -313,7 +332,8 @@ export function parseQualificationExperimentBinding(value: unknown): ActionResul
     protocolReviewReceiptId: scalar.protocolReviewReceiptId!, permittedTools: tools, allowedPaths: paths,
     shapeKey: scalar.shapeKey!, shapeVersion: scalar.shapeVersion!, stageKey: scalar.stageKey!, policyVersion: 1,
     executorMode, requiredPlatform,
-    targetProductionBlobIds: exactStrings(raw?.targetProductionBlobIds)!,
+    ...(productionPaths ? { targetProductionPaths: productionPaths } : {}),
+    targetProductionBlobIds: productionBlobIds!,
     issuedAt: issuedAt!, expiresAt: expiresAt!, maxStarts: 1, maxDurationMs: raw.maxDurationMs as number,
     ...(candidate ? { candidate } : {}),
   });
@@ -389,14 +409,37 @@ export type QualificationVerificationEvidence = {
 };
 
 export type QualificationExecutionEvidence = {
-  workroomId: string; qualificationBindingDigest: string; executorMode: "workroom-host";
+  workroomId: string; leaseId: string; qualificationBindingDigest: string; executorMode: "workroom-host";
   platform: QualificationPlatform; headSha: string; testBlobIds: string[]; command: string;
   outputDigest: string; startedAt: string; completedAt: string; exitCode: number; skipped: false;
 };
 
+/** A lease proves admission, not child execution or output. Historical
+ * workroom-host receipts remain verifiable after their atomic write, but no
+ * caller-supplied host result is accepted as a new attestation. */
+export function qualificationExecutorAttestationAvailable(
+  _executorMode: QualificationExperimentBinding["executorMode"],
+): boolean {
+  return false;
+}
+
+function qualificationEvidenceCommandMatchesBinding(
+  command: string,
+  allowedPaths: string[],
+): boolean {
+  const parts = command.trim().split(/\s+/).map((part) => part.replaceAll("\\", "/"));
+  const executable = parts[0]?.split("/").at(-1)?.toLowerCase();
+  const expected = allowedPaths.map((path) => path.replaceAll("\\", "/"));
+  return (executable === "node" || executable === "node.exe")
+    && parts.length === expected.length + 2
+    && parts[1] === "--test"
+    && expected.every((path, index) => parts[index + 2] === path);
+}
+
 export function parseQualificationExecutionEvidence(value: unknown): QualificationExecutionEvidence | null {
   const raw = record(value);
   const workroomId = text(raw?.workroomId);
+  const leaseId = text(raw?.leaseId);
   const bindingDigest = text(raw?.qualificationBindingDigest);
   const platform = raw?.platform;
   const headSha = text(raw?.headSha);
@@ -405,14 +448,15 @@ export function parseQualificationExecutionEvidence(value: unknown): Qualificati
   const outputDigest = text(raw?.outputDigest);
   const startedAt = text(raw?.startedAt);
   const completedAt = text(raw?.completedAt);
-  if (!workroomId || !bindingDigest || !SHA256.test(bindingDigest)
+  if (!workroomId || !leaseId || !/^NPEL-[A-Za-z0-9-]{1,100}$/.test(leaseId)
+    || !bindingDigest || !SHA256.test(bindingDigest)
     || raw?.executorMode !== "workroom-host" || (platform !== "linux" && platform !== "win32")
     || !headSha || !FULL_SHA.test(headSha) || !testBlobIds?.every((blob) => FULL_SHA.test(blob))
     || !command || !outputDigest || !SHA256.test(outputDigest)
     || !startedAt || !completedAt || !Number.isFinite(Date.parse(startedAt))
     || !Number.isFinite(Date.parse(completedAt)) || Date.parse(startedAt) > Date.parse(completedAt)
     || raw?.exitCode !== 0 || raw?.skipped !== false) return null;
-  return { workroomId, qualificationBindingDigest: bindingDigest, executorMode: "workroom-host",
+  return { workroomId, leaseId, qualificationBindingDigest: bindingDigest, executorMode: "workroom-host",
     platform, headSha, testBlobIds, command, outputDigest, startedAt, completedAt,
     exitCode: 0, skipped: false };
 }
@@ -420,18 +464,50 @@ export function parseQualificationExecutionEvidence(value: unknown): Qualificati
 export function qualificationExecutionEvidenceAllowed(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   evidence: unknown; accountablePrincipalRef: string | null; now: Date;
+  lease?: {
+    leaseId: string; environmentKey: string; status: string; claimKey: string | null;
+    purpose: string; ownerSessionId: string; ownerProvider: string; branchName: string | null;
+    buildId: string | null; taskRunId: string | null; ownerPid: number | null;
+    ownerProcessIdentity: string | null; admittedAt: Date | null; expiresAt: Date;
+    evidenceRecordId: string | null;
+  };
 }): boolean {
-  // Authentication proves who submitted these fields, not that a process ran.
-  // Until the host runner emits its own exact source/test/platform receipt,
-  // even perfectly matching caller metadata is non-evidence.
-  void input;
-  return false;
+  const evidence = parseQualificationExecutionEvidence(input.evidence);
+  const lease = input.lease;
+  const digest = qualificationBindingDigest(input.binding);
+  // A process-bound lease authorizes a child but cannot prove the caller ran it
+  // or reported its output. New Windows evidence arrives only through the
+  // machine-authenticated native Edge result path.
+  if (!qualificationExecutorAttestationAvailable(input.binding.executorMode)
+    || !evidence || !lease || input.binding.phase !== "verify"
+    || input.binding.executorMode !== "workroom-host" || !input.binding.candidate
+    || input.state.status !== "started" || input.state.startCount !== 1 || !input.state.startedAt
+    || input.accountablePrincipalRef !== input.binding.accountablePrincipalRef
+    || evidence.workroomId !== input.binding.workroomId || evidence.leaseId !== lease.leaseId
+    || evidence.qualificationBindingDigest !== digest
+    || evidence.platform !== input.binding.requiredPlatform
+    || evidence.headSha.toLowerCase() !== input.binding.headSha.toLowerCase()
+    || canonicalJson(evidence.testBlobIds) !== canonicalJson(input.binding.candidate.testBlobIds)
+    || !qualificationEvidenceCommandMatchesBinding(evidence.command, input.binding.allowedPaths)
+    || lease.environmentKey !== "host-heavy-resource" || lease.status !== "active" || !lease.claimKey
+    || lease.purpose !== `host-resource:qualification:${digest}`
+    || lease.buildId?.toLowerCase() !== input.binding.headSha.toLowerCase()
+    || lease.taskRunId !== input.binding.workroomId || !lease.ownerPid || !lease.ownerProcessIdentity
+    || lease.evidenceRecordId !== null || !lease.admittedAt) return false;
+  const started = Date.parse(evidence.startedAt);
+  const completed = Date.parse(evidence.completedAt);
+  const stateStarted = Date.parse(input.state.startedAt);
+  return started >= lease.admittedAt.getTime() && started >= stateStarted
+    && completed <= lease.expiresAt.getTime()
+    && completed - stateStarted <= input.binding.maxDurationMs
+    && input.now.getTime() >= completed;
 }
 
 export function qualificationExecutionActivitiesMatch(input: {
   binding: QualificationExperimentBinding; state: QualificationExperimentState;
   itemId: string; activityIds: string[]; rows: unknown[]; accountablePrincipalRef: string | null;
   proof: QualificationVerificationEvidence;
+  leases: unknown[];
 }): boolean {
   if (input.activityIds.length === 0 || input.rows.length !== input.activityIds.length) return false;
   const expected = new Set(input.activityIds);
@@ -440,12 +516,35 @@ export function qualificationExecutionActivitiesMatch(input: {
     const payload = record(row?.payload);
     const backlogItem = record(row?.backlogItem);
     const qualification = parseQualificationExecutionEvidence(payload?.qualification);
+    const lease = qualification ? input.leases.map(record).find((candidate) =>
+      candidate?.leaseId === qualification.leaseId && candidate?.evidenceRecordId === row?.id) : null;
+    const admittedAt = lease?.admittedAt instanceof Date ? lease.admittedAt : new Date(String(lease?.admittedAt ?? ""));
+    const expiresAt = lease?.expiresAt instanceof Date ? lease.expiresAt : new Date(String(lease?.expiresAt ?? ""));
+    const recordedAt = row?.recordedAt instanceof Date ? row.recordedAt : new Date(String(row?.recordedAt ?? ""));
+    const startedAt = qualification ? new Date(qualification.startedAt) : new Date("");
+    const completedAt = qualification ? new Date(qualification.completedAt) : new Date("");
     return typeof row?.id === "string" && expected.delete(row.id)
       && backlogItem?.itemId === input.itemId && payload?.evidenceKind === "test_pass"
       && qualification !== null
-      && qualificationExecutionEvidenceAllowed({ binding: input.binding, state: input.state,
-        evidence: qualification, accountablePrincipalRef: input.accountablePrincipalRef,
-        now: new Date(qualification.completedAt) })
+      && input.binding.executorMode === "workroom-host" && input.binding.phase === "verify"
+      && input.state.status === "started" && input.state.startCount === 1
+      && input.accountablePrincipalRef === input.binding.accountablePrincipalRef
+      && qualification.workroomId === input.binding.workroomId
+      && qualification.qualificationBindingDigest === qualificationBindingDigest(input.binding)
+      && qualification.platform === input.binding.requiredPlatform
+      && qualification.headSha.toLowerCase() === input.binding.headSha.toLowerCase()
+      && canonicalJson(qualification.testBlobIds) === canonicalJson(input.binding.candidate?.testBlobIds)
+      && qualificationEvidenceCommandMatchesBinding(qualification.command, input.binding.allowedPaths)
+      && lease?.environmentKey === "host-heavy-resource"
+      && lease?.purpose === `host-resource:qualification:${qualificationBindingDigest(input.binding)}`
+      && typeof lease?.claimKey === "string" && lease.claimKey.length > 0
+      && String(lease?.buildId ?? "").toLowerCase() === input.binding.headSha.toLowerCase()
+      && lease?.taskRunId === input.binding.workroomId && Boolean(lease?.ownerPid)
+      && typeof lease?.ownerProcessIdentity === "string" && lease.ownerProcessIdentity.length > 0
+      && Number.isFinite(admittedAt.getTime()) && Number.isFinite(expiresAt.getTime())
+      && Number.isFinite(recordedAt.getTime()) && Number.isFinite(startedAt.getTime()) && Number.isFinite(completedAt.getTime())
+      && startedAt.getTime() >= admittedAt.getTime() && completedAt.getTime() <= expiresAt.getTime()
+      && recordedAt.getTime() >= completedAt.getTime()
       && qualification.command === input.proof.command
       && qualification.outputDigest.toLowerCase() === input.proof.outputDigest.toLowerCase()
       && qualification.startedAt === input.proof.startedAt

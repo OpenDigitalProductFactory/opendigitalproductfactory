@@ -167,7 +167,7 @@ describe("disposition correction", () => {
         success: false, error: "malformed-receipt", message: "A passing spec approval cannot introduce findings.",
       } });
     db.findEnvelope.mockResolvedValue(null);
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({ status: "working", userId: "user-1", currentAgentId: params.agentId, a2aMetadata: metadata });
     const outcome = await submit("PAT-DISPOSITION-RECOVERY");
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({

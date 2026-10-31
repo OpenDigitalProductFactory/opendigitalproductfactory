@@ -28,17 +28,11 @@ type QualificationAdmissionDb = Pick<typeof prisma,
   "backlogItem" | "workroom" | "workroomActivity" | "externalEvidenceRecord">;
 
 type QualificationProtocol = {
+  targetProductionPaths: string[];
   targetProductionBlobIds: string[];
   allowedPaths: string[];
-  executorMode: "sandbox-build" | "workroom-host";
   requiredPlatform: "linux" | "win32";
 };
-
-function qualificationExecutorAttestationAvailable(_protocol: QualificationProtocol): boolean {
-  // No current sandbox or Workroom host runner emits an independently observed
-  // receipt bound to the exact source, tests, platform and output.
-  return false;
-}
 
 function bodyMatch(body: string, expression: RegExp): string | null {
   return expression.exec(body)?.[1]?.trim() ?? null;
@@ -50,13 +44,14 @@ function bodyMatch(body: string, expression: RegExp): string | null {
 export function parseQualificationProtocol(bytes: Uint8Array, itemId: string): QualificationProtocol | null {
   const text = Buffer.from(bytes).toString("utf8");
   const productionBlob = bodyMatch(text, /(?:writer blob is|same blob,)\s*([a-f0-9]{40})/i);
+  const productionPath = bodyMatch(text, /\]\((?:\.\.\/)*((?:scripts\/)[A-Za-z0-9._/-]+\.mjs)\)/i);
   const allowedPath = bodyMatch(text, /(scripts\/[A-Za-z0-9._/-]+\.test\.[A-Za-z0-9]+)/i);
-  if (!text.includes(itemId) || !/qualification-only/i.test(text) || !productionBlob || !allowedPath) return null;
+  if (!text.includes(itemId) || !/qualification-only/i.test(text) || !productionBlob || !productionPath || !allowedPath) return null;
   const requiresWindows = /\bWindows\b/i.test(text);
   return {
+    targetProductionPaths: [productionPath],
     targetProductionBlobIds: [productionBlob],
     allowedPaths: [allowedPath],
-    executorMode: requiresWindows ? "workroom-host" : "sandbox-build",
     requiredPlatform: requiresWindows ? "win32" : "linux",
   };
 }
@@ -143,10 +138,6 @@ export async function resolveQualificationAdmission(args: {
   const shape = (ports.resolveShape ?? resolveWorkShapeClaim)(room.scopeClaims);
   const stage = shape?.stages.find((candidate) => candidate.key === "reproduce") ?? shape?.stages[0];
   if (!protocol || !shape || !stage) return null;
-  // Preserve protocol parsing for audit/recovery, but do not issue a new
-  // qualification until the responsible runner supplies exact provenance.
-  if (!qualificationExecutorAttestationAvailable(protocol)) return null;
-
   const receipts = await db.externalEvidenceRecord.findMany({ where: {
     workCapsuleId: room.id, operationType: "semantic-change-review.receipt",
   }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, details: true } });
@@ -185,8 +176,9 @@ export async function resolveQualificationAdmission(args: {
     const binding: QualificationExperimentBinding = {
       ...prior.data.binding, phase: "verify", headSha: candidate.data.headSha,
       protocolReviewReceiptId: protocolReview.id, stageKey: stage.key,
-      permittedTools: prior.data.binding.executorMode === "workroom-host"
-        ? ["read_source_at_version", "read_codebase_manifest", "record_execution_evidence", "record_workroom_evidence"]
+      executorMode: protocol.requiredPlatform === "win32" ? "native-edge" : "sandbox-build",
+      permittedTools: protocol.requiredPlatform === "win32"
+        ? ["read_source_at_version", "read_codebase_manifest", "record_workroom_evidence"]
         : ["read_source_at_version", "read_codebase_manifest", "run_sandbox_tests", "record_workroom_evidence"],
       issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(),
       candidate: { ...candidate.data, reviewReceiptId: review.id },
@@ -204,11 +196,10 @@ export async function resolveQualificationAdmission(args: {
     protocol: { path, commitSha, providerBlobId }, installationId: identity.installationId,
     accountablePrincipalRef: room.leaseHolderPrincipalId!, protocolReviewReceiptId: protocolReview.id,
     shapeKey: shape.key, shapeVersion: shape.version, stageKey: stage.key, policyVersion: 1,
+    targetProductionPaths: protocol.targetProductionPaths,
     targetProductionBlobIds: protocol.targetProductionBlobIds,
-    executorMode: protocol.executorMode, requiredPlatform: protocol.requiredPlatform,
-    permittedTools: protocol.executorMode === "workroom-host"
-      ? ["read_source_at_version", "read_codebase_manifest", "record_workroom_evidence"]
-      : ["read_source_at_version", "read_codebase_manifest", "write_sandbox_file", "edit_sandbox_file", "record_workroom_evidence"],
+    executorMode: "sandbox-build", requiredPlatform: protocol.requiredPlatform,
+    permittedTools: ["read_source_at_version", "read_codebase_manifest", "write_sandbox_file", "edit_sandbox_file", "record_workroom_evidence"],
     allowedPaths: protocol.allowedPaths, issuedAt: issuedAt.toISOString(),
     expiresAt: new Date(issuedAt.getTime() + 30 * 60_000).toISOString(), maxStarts: 1, maxDurationMs: 15 * 60_000,
   };
