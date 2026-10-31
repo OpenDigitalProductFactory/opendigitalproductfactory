@@ -40,6 +40,7 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
     const providerLabel = (id: string) => providers.find(p => p.providerId === id)?.label ?? id;
     const filteredProviders = providers.filter(p => (scope.provider === "all" || p.providerId === scope.provider) && `${p.label} ${p.providerId} ${data.models.filter(m => m.providerId === p.providerId).map(m => m.label + m.modelId).join(" ")}`.toLowerCase().includes(catalogQuery.toLowerCase()));
     const assignments = [...new Set(rows.map(r => r.actorId ?? "unattributed"))];
+    const filteredAssignments = assignments.filter(id => `${id} ${topology.coworkers.find(c => c.agentId === id)?.label}`.toLowerCase().includes(catalogQuery.toLowerCase()));
     const changeScope = (next: Partial<RoutingScope>) => {
         window.history.pushState(null, "", routingHref(`/platform/ai/operations-map?${params}`, { ...scope, ...next }));
     };
@@ -65,6 +66,12 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
             </details>
           </li>)}
         </ul>;
+    };
+    const renderAssignmentCatalog = () => {
+        if (!filteredAssignments.length) {
+            return <EmptyState size="sm" title={t("noMatchingAssignments")} description={t("clearSearchOrTryAssignment")}/>;
+        }
+        return <ul className="space-y-2">{filteredAssignments.map(id => <li key={id}><p className="font-medium">{topology.coworkers.find(c => c.agentId === id)?.label ?? id}</p><div className="mt-2 flex flex-wrap gap-2">{rows.filter(r => (r.actorId ?? "unattributed") === id).map(r => <button key={r.id} className={ROUTING_ACTION_CLASS} onClick={() => { setCatalog(null); setSelectedId(r.id); }}>{r.task} · {r.modelId ?? t("unknown")}</button>)}{id !== "unattributed" && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(id)}`}>{t("assignmentSettings")}</Link>}</div></li>)}</ul>;
     };
     const columns: Column<RoutingReceipt>[] = [
         { key: "task", header: t("taskAssignment"), mobileFullWidth: true, hideMobileLabel: true, cell: r => <button type="button" onClick={() => { setCatalog(null); setSelectedId(r.id); }} className="min-h-11 text-start text-[var(--dpf-accent)] underline underline-offset-2"><span className="block font-medium">{r.task}</span><span className="block text-xs text-[var(--dpf-muted)]">{r.actorId ?? t("unattributed")}</span></button> },
@@ -120,8 +127,8 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
     <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{". "}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
     {selected && <RoutingManagementInspector receipt={selected} scope={scope} onClose={() => setSelectedId(null)}/>}
     {catalog && <RoutingManagementOverlay title={catalog === "tuning" ? t("tuningProposalsAndAssignmentEvidence") : catalog === "providers" ? t("providerAndModelCatalog") : catalog === "assignments" ? t("assignments") : t("routingTraffic")} onClose={() => setCatalog(null)}>
-      {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} resultCount={catalog === "providers" ? filteredProviders.length : undefined} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
-      {catalog === "tuning" ? <><p className="text-sm text-[var(--dpf-muted)]">{t("platformTuningNote")}</p><ActivityRoutingWorkbench activityRouting={topology.activityRouting}/></> : catalog === "decisions" ? <DataTable responsive columns={columns} rows={filterRoutingReceipts(rows, scope, anchor, catalogQuery)} getRowKey={r => r.id} pageSize={10}/> : catalog === "assignments" ? <ul className="space-y-2">{assignments.filter(id => `${id} ${topology.coworkers.find(c => c.agentId === id)?.label}`.toLowerCase().includes(catalogQuery.toLowerCase())).map(id => <li key={id}><p className="font-medium">{topology.coworkers.find(c => c.agentId === id)?.label ?? id}</p><div className="mt-2 flex flex-wrap gap-2">{rows.filter(r => (r.actorId ?? "unattributed") === id).map(r => <button key={r.id} className={ROUTING_ACTION_CLASS} onClick={() => { setCatalog(null); setSelectedId(r.id); }}>{r.task} · {r.modelId ?? t("unknown")}</button>)}{id !== "unattributed" && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(id)}`}>{t("assignmentSettings")}</Link>}</div></li>)}</ul> : renderProviderCatalog()}
+      {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} resultCount={catalog === "providers" ? filteredProviders.length : catalog === "assignments" ? filteredAssignments.length : undefined} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
+      {catalog === "tuning" ? <><p className="text-sm text-[var(--dpf-muted)]">{t("platformTuningNote")}</p><ActivityRoutingWorkbench activityRouting={topology.activityRouting}/></> : catalog === "decisions" ? <DataTable responsive columns={columns} rows={filterRoutingReceipts(rows, scope, anchor, catalogQuery)} getRowKey={r => r.id} pageSize={10}/> : catalog === "assignments" ? renderAssignmentCatalog() : renderProviderCatalog()}
     </RoutingManagementOverlay>}
   </section>;
 }

@@ -2,23 +2,33 @@ package action
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"testing"
 	"time"
 )
 
 func qualificationParametersFixture(t *testing.T) json.RawMessage {
 	t.Helper()
+	production := []byte("export const value = 1;\n")
+	testSource := []byte("import test from 'node:test'; import assert from 'node:assert/strict'; import { value } from './file.mjs'; test('bound source executes', () => assert.equal(value, 1));\n")
+	support := []byte("export const support = true;\n")
 	value := map[string]any{
-		"version": 1, "backlogItemId": "BI-B3DEC077", "workroomId": "WC-A8C14CBE",
+		"version": 2, "backlogItemId": "BI-B3DEC077", "workroomId": "WC-A8C14CBE",
 		"repository": "OpenDigitalProductFactory/opendigitalproductfactory",
 		"baseSha":    repeatHex("a", 40), "headSha": repeatHex("b", 40),
 		"protocolPath": "docs/superpowers/specs/windows-handle-replacement.md", "protocolBlobSha": repeatHex("c", 40),
-		"productionBlobs":            []map[string]any{{"path": "apps/web/lib/file.ts", "blobSha": repeatHex("d", 40)}},
-		"testBlobs":                  []map[string]any{{"path": "apps/web/lib/file.test.ts", "blobSha": repeatHex("e", 40)}},
+		"productionBlobs":            []map[string]any{{"path": "scripts/lib/file.mjs", "blobSha": gitBlobSHA(production)}},
+		"testBlobs":                  []map[string]any{{"path": "scripts/lib/file.test.mjs", "blobSha": gitBlobSHA(testSource)}},
 		"qualificationBindingDigest": repeatHex("f", 64), "procedureId": WindowsHandleReplacementProcedureID,
-		"resultSchemaVersion": 1, "maxDurationSeconds": 300, "edgeNodeId": "edge_windows_1",
+		"resultSchemaVersion": 2, "maxDurationSeconds": 300, "edgeNodeId": "edge_windows_1",
+		"sourceFiles": []map[string]any{
+			{"path": "scripts/lib/file.mjs", "blobSha": gitBlobSHA(production), "contentBase64": base64.StdEncoding.EncodeToString(production)},
+			{"path": "scripts/lib/file.test.mjs", "blobSha": gitBlobSHA(testSource), "contentBase64": base64.StdEncoding.EncodeToString(testSource)},
+			{"path": qualificationSupportPath, "blobSha": gitBlobSHA(support), "contentBase64": base64.StdEncoding.EncodeToString(support)},
+		},
 	}
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -51,8 +61,12 @@ func TestQualificationParametersRejectWidening(t *testing.T) {
 }
 
 func TestQualificationHandlerUsesOnlyIsolatedFixture(t *testing.T) {
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable")
+	}
 	times := []time.Time{now, now.Add(time.Second)}
-	handler := QualificationWindowsHandler{Platform: "win32", StateDirectory: t.TempDir(), Now: func() time.Time {
+	handler := QualificationWindowsHandler{Platform: "win32", StateDirectory: t.TempDir(), NodePath: nodePath, Now: func() time.Time {
 		value := times[0]
 		if len(times) > 1 {
 			times = times[1:]
@@ -69,9 +83,21 @@ func TestQualificationHandlerUsesOnlyIsolatedFixture(t *testing.T) {
 	if output.Evidence["boundedOutputDigest"] == "" {
 		t.Fatalf("missing bounded output digest: %#v", output.Evidence)
 	}
-	observations := output.Evidence["observations"].(map[string]any)
-	if observations["secondReplacement"] != "replaced" || observations["cleanup"] != "removed" {
-		t.Fatalf("fixture did not settle cleanly: %#v", observations)
+	if output.Evidence["exitCode"] != 0 || output.Result["disposition"] != "passed" {
+		t.Fatalf("bound test did not pass: result=%#v evidence=%#v", output.Result, output.Evidence)
+	}
+}
+
+func TestQualificationHandlerRejectsChangedSourceBytes(t *testing.T) {
+	var value map[string]any
+	if err := json.Unmarshal(qualificationParametersFixture(t), &value); err != nil {
+		t.Fatal(err)
+	}
+	files := value["sourceFiles"].([]any)
+	files[0].(map[string]any)["contentBase64"] = base64.StdEncoding.EncodeToString([]byte("changed"))
+	raw, _ := json.Marshal(value)
+	if _, err := parseQualificationWindowsParameters(raw); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("got %v, want changed source refusal", err)
 	}
 }
 
