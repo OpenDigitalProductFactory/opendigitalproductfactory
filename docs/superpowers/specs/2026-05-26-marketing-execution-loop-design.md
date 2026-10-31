@@ -123,6 +123,23 @@ delivery. Internal fixtures and a rendered count alone do not establish the
 recurring acquisition loop. Required feature design/review/plan gates, recorded
 funding ownership and current implementation admission remain outstanding.
 
+Research refreshed 31 October 2026 against these primary sources:
+
+| Implementation | Observed contract | DPF adopts | DPF rejects or retains locally |
+| --- | --- | --- | --- |
+| [listmonk campaign API](https://listmonk.app/docs/apis/campaigns/) | Draft, scheduled, running, paused and cancelled have explicit transition rules. | Project recorded lifecycle state rather than treating a prepared item as a later-stage outcome. | Do not copy campaign-level sending transitions into DPF's per-draft owner approval contract. |
+| [Buffer All Channels](https://support.buffer.com/articles/how-to-use-the-all-channels-view-in-buffer-oqqE4Sdf3T) | Drafts, approvals, queued and sent posts have distinct views; scheduled drafts can occur in more than one view. | Label each count by its actual queue and preserve identity when views overlap. | Do not add overlapping lifecycle counts into a claimed total of owner decisions. |
+| [Customer.io automation concepts](https://docs.customer.io/messaging/send/automations/overview/) | Sending behavior distinguishes automatic sending, queued drafts and no send; reporting follows running work and respects selected filters. | Keep preparation, approved execution and measured outcomes distinct and scoped consistently. | Do not turn DPF internal preparation or a scheduled check into automatic publishing authority. |
+
+These are comparisons, not integrations or promises of feature parity. Existing
+DPF lifecycle, organization scope and approval contracts remain the controlling
+project-specific rules; importing another product's state names would create
+conflicting meanings without repairing the read model. Reusing the canonical
+snapshot is preferred over another queue aggregator because that snapshot already
+serves the strategist's decision context and exposes the actual draft queues.
+No new schema, provider account, recurring job or access grant follows from this
+design research. Source research does not satisfy independent design approval.
+
 ### 2.1 Strategy grounding had no write path (BI-06BB96F0, closed 2026-08-27)
 
 A defect this section's original inventory did not surface. `recordMarketingStrategistReview()` in `apps/web/lib/marketing.ts` is the only `prisma.marketingStrategy.update` call in the codebase, and its payload covers seven fields: `status`, `primaryChannels`, `secondaryChannels`, `reviewCadence`, `lastReviewedAt`, `nextReviewAt`, `specialistNotes`.
