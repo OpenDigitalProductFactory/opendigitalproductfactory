@@ -29,6 +29,8 @@ Design: [Recorded next actions](../specs/2026-10-31-workrooms-recorded-next-acti
 
 ## Ordered phases
 
+The current item's acceptance-section parser also retains this submission metadata (it is provenance, not an additional business outcome): Submitted by install `inst_5825a80201e7476e978622b78dcd04ba`
+
 1. Resolve impact and all affected tests before source edits. Exact paths: workroom-operator-summary.ts/test; liveness-inventory.ts/test; WorkroomActivitySection.tsx/test; WorkroomInventory.tsx/test; HeldWorkroomsList.tsx/test; held-workrooms.ts/test; workroom-drive-state.ts/test only if required for safe recorded attention. Keep all canonical health and reaper states unchanged.
 2. RED: fixtures for founder accountability versus actual requester, source prerequisite, unresolved review, executor missing-result, real recorded attention versus status-only, missing actor/action, lease waiting, heterogeneous grouped remedies, and omission of private recovery packet/tool/history fields.
 3. GREEN: extend the existing safe summary and bounded projection; expose only plain actor/action display. Reuse canonical recovery and existing case links. Group rendering may use a shared condition only when all members agree. Never replay a task or widen access.
