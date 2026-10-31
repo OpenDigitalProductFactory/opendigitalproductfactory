@@ -1,6 +1,9 @@
+---
+status: active
+---
+
 # Software-platform recorded results
 
-Status: draft
 Backlog: BI-A699AE2C, bounded implementation child of BI-2D0FDF9E.
 Workroom: WC-B9BF154E. Source baseline: ea62f5fb890390bde854b618834f5e77fd3865ea.
 

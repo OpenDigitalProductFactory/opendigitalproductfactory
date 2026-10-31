@@ -1,6 +1,9 @@
+---
+status: active
+---
+
 # Software-platform recorded-results implementation plan
 
-Status: draft
 Backlog: BI-A699AE2C · Workroom: WC-B9BF154E
 Design: ../specs/2026-10-31-software-platform-recorded-results.md
 Base: ea62f5fb890390bde854b618834f5e77fd3865ea.
