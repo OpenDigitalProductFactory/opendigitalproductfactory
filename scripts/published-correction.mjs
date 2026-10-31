@@ -184,9 +184,20 @@ export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = r
 export function chooseInitialAnchor({ records, previous, pullRequest, treeAt, now = Date.now() }) {
   const expected = { repositoryFullName: pullRequest.repositoryFullName, branch: pullRequest.headRefName, pullRequestNumber: pullRequest.number };
   if (previous?.sha === pullRequest.headRefOid && classifyPublishedCorrection(previous, { ...expected, sha: previous.sha, now }).ok) return previous.publicationCorrection.anchor;
+  const publishedTree = treeAt(pullRequest.headRefOid);
   for (const { state, metadata } of records) {
     if (state?.sha !== pullRequest.headRefOid) continue;
-    const anchor = { ...expected, sha: state.sha, tree: treeAt(state.sha), state, metadata,
+    const anchor = { ...expected, sha: state.sha, tree: publishedTree, state, metadata,
+      capturedAt: new Date(now).toISOString() };
+    if (classifyInitialPublication(anchor, expected).ok) return anchor;
+  }
+  // Preserve the original record's SHA, lease and metadata.  A rebased commit
+  // can only reconcile to it when the recorded *synthesized integration tree*
+  // is exactly the published tree, so changed bytes never inherit a PASS.
+  for (const { state, metadata } of records) {
+    if (!state || metadata?.candidateSha !== state.sha || metadata?.synthesizedTreeSha !== publishedTree) continue;
+    const anchor = { ...expected, sha: pullRequest.headRefOid, tree: publishedTree, state, metadata,
+      equivalentCandidate: { sha: state.sha, synthesizedTreeSha: metadata.synthesizedTreeSha },
       capturedAt: new Date(now).toISOString() };
     if (classifyInitialPublication(anchor, expected).ok) return anchor;
   }

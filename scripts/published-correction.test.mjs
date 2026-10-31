@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
-import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
+import { correctionPlanDigest, classifyInitialPublication, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
 import { verifyPublishedCorrection, reducedTierClassification, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute, readFreshTestReport } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
@@ -200,6 +200,27 @@ test("an open PR without qualified initial evidence cannot bootstrap correction 
   const previous = record();
   previous.publicationCorrection.anchor.state.skipReason = reason;
   assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest, treeAt: () => "d".repeat(40), now }), /initial-publication anchor/);
+});
+
+test("an exact synthesized integration tree reconciles a rebased canonical publication anchor", () => {
+  const pullRequest = record().publicationCorrection.pullRequest;
+  const recordedSha = "f".repeat(40);
+  const integratedTree = "d".repeat(40);
+  const state = {
+    branch, sha: recordedSha, gatePassed: true, skipped: false, status: "passed",
+    evidenceRecordId: "canonical-evidence", leaseId: "canonical-lease",
+    recordedAt: new Date(now - 120_000).toISOString(), expiresAt: new Date(now + 3600_000).toISOString(),
+  };
+  const metadata = {
+    candidateSha: recordedSha, runLeaseId: "canonical-lease", synthesizedTreeSha: integratedTree,
+    execution: { status: "passed" },
+  };
+  const anchor = chooseInitialAnchor({ records: [{ state, metadata }], previous: null, pullRequest,
+    treeAt: value => { assert.equal(value, original); return integratedTree; }, now });
+  assert.equal(anchor.sha, original);
+  assert.equal(anchor.state, state, "the original canonical gate record remains intact");
+  assert.deepEqual(anchor.equivalentCandidate, { sha: recordedSha, synthesizedTreeSha: integratedTree });
+  assert.equal(classifyInitialPublication(anchor, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, true);
 });
 
 test("an unmapped change cannot silently run zero affected checks", () => {
