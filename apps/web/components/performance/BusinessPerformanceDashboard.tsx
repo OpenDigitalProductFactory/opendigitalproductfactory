@@ -39,9 +39,9 @@ function MetricCard({ metric }: { metric: BusinessPerformanceMetricValue }) {
     <article className="space-y-2" data-metric-key={metric.key}>
       <StatCard
         label={metric.label}
-        value={formatMetricValue(metric.value, metric.unit)}
+        value={formatMetricValue(metric.value, metric.unit, metric.currency ?? undefined)}
         intent={metric.availability === "available" ? "info" : "neutral"}
-        hint={metric.unavailableReason ?? `Compared with the prior period${metric.comparisonValue === null ? " when available" : ""}.`}
+        hint={metric.unavailableReason ?? (metric.currency ? `Recorded ledger · ${metric.currency}` : `Compared with the prior period${metric.comparisonValue === null ? " when available" : ""}.`)}
         {...(metric.drilldownRoute ? { href: metric.drilldownRoute } : {})}
         {...(deltaLabel && delta !== null ? {
           delta: {
@@ -116,6 +116,33 @@ export function BusinessPerformanceDashboard({
   });
   const exportRows = buildPerformanceExportRows(performance);
 
+  if (performance.archetypeId === "software-platform") return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">{performance.periodLabel} · {performance.reportingCurrency}</h2>
+          <p className="text-xs text-[var(--dpf-muted)]">Available ledger records · UTC · {performance.periodState === "in-progress" ? "Partial month" : "Recorded month"}</p>
+        </div>
+        <StatusBadge intent={performance.freshness === "stale" ? "warning" : "neutral"} label={performance.freshness === "stale" ? "Snapshot delayed" : "Recorded snapshot"} />
+      </div>
+      <section aria-label="Headline performance" className="grid gap-3 md:grid-cols-3">
+        {performance.sections.headline.flatMap(key => {
+          const metric = metrics.get(key); return metric ? [<MetricCard key={key} metric={metric} />] : [];
+        })}
+      </section>
+      {performance.nextAction ? <Link href={performance.nextAction.href} data-dpf-primary-action data-owner-first-next-action className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-[var(--dpf-accent)]">{performance.nextAction.label}</Link> : null}
+      <details className="rounded-lg border border-[var(--dpf-border)] p-3">
+        <summary className="cursor-pointer text-sm font-medium">Explore results</summary>
+        <div className="mt-3 space-y-4">
+          <p className="text-xs text-[var(--dpf-muted)]">Recorded income and expenses; not bank cash, tax profit or verified complete books. Last source check <LocalTime value={performance.asOf} mode="time" />.</p>
+          <ExportButton rows={exportRows} filename="recorded-results.csv" label="Export this period" />
+          <BusinessAnalysisWorkspace performance={performance} watches={watches} />
+          <PerformanceTrendPanel points={performance.trendPoints} metrics={performance.metricValues.map(({ key, label, unit, currency }) => ({ key, label, unit, currency: currency ?? undefined }))} preferredKeys={performance.sections.headline} />
+        </div>
+      </details>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
@@ -163,7 +190,7 @@ export function BusinessPerformanceDashboard({
 
       {performance.freshness === "stale" ? (
         <Notice variant="warn" title="The latest valid snapshot is delayed">
-          The dashboard is preserving the last successful rollup. Operational work can continue while the next refresh retries.
+          Last successful snapshot retained; refresh will retry.
         </Notice>
       ) : null}
 
@@ -185,7 +212,7 @@ export function BusinessPerformanceDashboard({
               Owner brief
             </h2>
             <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              Observed facts with visible evidence limits.
+              Recorded facts and limits.
             </p>
           </div>
           <StatusBadge intent="neutral" label="Observation, not a recommendation" />
@@ -204,7 +231,7 @@ export function BusinessPerformanceDashboard({
               </ul>
             ) : (
               <p className="mt-2 text-sm text-[var(--dpf-text-secondary)]">
-                No comparable prior-period values are available yet.
+                No prior comparison yet.
               </p>
             )}
           </div>
@@ -214,7 +241,7 @@ export function BusinessPerformanceDashboard({
               {decisionSummary.driverEvidence.message}
             </p>
             <p className="mt-2 text-xs text-[var(--dpf-muted)]">
-              Open a metric’s calculation details to inspect its source lineage.
+              Calculation details show sources.
             </p>
           </div>
           <div className="lg:pl-4">
@@ -230,7 +257,7 @@ export function BusinessPerformanceDashboard({
               </ul>
             ) : (
               <p className="mt-2 text-sm text-[var(--dpf-text-secondary)]">
-                No headline gaps or comparable movements require review from this snapshot.
+                No recorded gaps need review.
               </p>
             )}
           </div>

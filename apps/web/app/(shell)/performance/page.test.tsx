@@ -73,3 +73,13 @@ describe("PerformancePage", () => {
     expect(html).not.toContain("data-component=\"app-rail\"");
   });
 });
+
+it("missing software history points to the supported month-specific Finance workflow without numeric results", async () => {
+  vi.mocked(auth).mockResolvedValue({ user: { id: "owner" } } as never);
+  vi.mocked(loadBusinessPerformance).mockResolvedValue({ status: "not-configured", applicable: true,
+    reason: "No eligible entries are recorded for this period.", asOf: null, metricValues: [], source: "business-performance-read-model",
+    nextAction: { href: "/finance/reports/general-ledger?period=2026-10", label: "Review finance records" } });
+  const html = renderToStaticMarkup(await PerformancePage());
+  expect(html).toContain('href="/finance/reports/general-ledger?period=2026-10"');
+  expect(html).toContain("Review finance records"); expect(html).not.toContain("$0");
+});

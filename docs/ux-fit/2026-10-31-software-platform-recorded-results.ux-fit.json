@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "scope": { "files": [
+    "apps/web/app/(shell)/finance/reports/general-ledger/page.tsx",
+    "apps/web/app/(shell)/performance/page.tsx",
+    "apps/web/components/performance/BusinessPerformanceDashboard.tsx",
+    "apps/web/components/performance/PerformanceTrendPanel.tsx"
+  ] },
+  "decidedOption": "compact-existing-performance",
+  "decisionInteractionId": "DI-B4319C8ABC21",
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["compact-existing-performance", "full-generic-dashboard"] },
+  "authority": "Bounded implementation choice under the operator's explicit request for native software-owner results and existing architecture; amended six-criterion implementation admission IRD-B9698FF1B0BD. This records the agent choice, not new human approval.",
+  "limitations": "DI-B4319C8ABC21 ranked compact-existing-performance first but returned low confidence, decline/all-options-opposed and autonomyEligible=false. It is not autonomous authority or UX acceptance. Source scope/currency/zero/unknown/controller tests and typechecks are separate executed evidence. Served words, layouts, keyboard, persisted source fixture and owner portal acceptance remain unrun. Existing arrival and accessibility ratchets remain mandatory."
+}

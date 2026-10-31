@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { can } from "@/lib/permissions";
 
 import {
   DEMO_REF_PREFIX,
@@ -219,4 +220,64 @@ export async function seedPerformanceAcceptanceFixture(
     taskId,
     fingerprint: planResult.fingerprint,
   };
+}
+
+/** Source-owned journals for the existing disposable-preview fixture lane; never operating books. */
+export async function seedSoftwarePerformanceAcceptanceFixture(input: {
+  database: typeof import("@dpf/db").prisma;
+  organizationId: string; storefrontId: string; ownerUserId: string;
+  target: { environmentClass: string; databaseHost: string; databaseName: string };
+  scenario?: "populated" | "zero" | "empty";
+  now?: Date;
+}) {
+  if (!["development", "test"].includes(input.target.environmentClass)
+    || input.target.databaseHost !== "dev-postgres" || input.target.databaseName !== "dpf") {
+    throw new Error("Software results fixture requires the canonical disposable preview database.");
+  }
+  const db = input.database, now = input.now ?? new Date();
+  const marker = "PerformanceAcceptanceFixture";
+  const prefix = `${DEMO_REF_PREFIX}results-${createHash("sha256").update(input.organizationId).digest("hex").slice(0, 12)}`;
+  return db.$transaction(async tx => {
+    const [storefront, owner, user, demos, realEntries, refs] = await Promise.all([
+      tx.storefrontConfig.findUnique({ where: { id: input.storefrontId }, select: { organizationId: true, archetype: { select: { archetypeId: true } } } }),
+      tx.platformSetupProgress.findUnique({ where: { userId: input.ownerUserId }, select: { organizationId: true } }),
+      tx.user.findUnique({ where: { id: input.ownerUserId }, select: { platformRole: true, isSuperuser: true } }),
+      tx.storefrontBooking.count({ where: { organizationId: input.organizationId, storefrontId: input.storefrontId, bookingRef: { startsWith: DEMO_REF_PREFIX } } }),
+      tx.journalEntry.count({ where: { organizationId: input.organizationId, OR: [{ sourceType: null }, { sourceType: { not: marker } }, { NOT: { entryRef: { startsWith: prefix } } }] } }),
+      tx.journalEntry.findMany({ where: { entryRef: { startsWith: prefix } }, take: 5, select: { organizationId: true, sourceType: true, sourceId: true } }),
+    ]);
+    if (storefront?.organizationId !== input.organizationId || storefront.archetype.archetypeId !== "software-platform"
+      || owner?.organizationId !== input.organizationId || !user || !can(user, "view_finance")
+      || demos < 1 || realEntries !== 0 || refs.length > 4
+      || refs.some(row => row.organizationId !== input.organizationId || row.sourceType !== marker || row.sourceId !== prefix)) {
+      throw new Error("Software results fixture requires an exact owner-scoped software demo with no operating journal entries.");
+    }
+    const accountIds = new Map<string, string>();
+    for (const [key, type, normalBalance] of [["ar", "asset", "debit"], ["income", "revenue", "credit"], ["expense", "expense", "debit"], ["ap", "liability", "credit"]] as const) {
+      const code = `demo-results-${key}`;
+      const account = await tx.ledgerAccount.upsert({ where: { organizationId_code: { organizationId: input.organizationId, code } },
+        create: { organizationId: input.organizationId, code, name: `Demo ${key}`, type, normalBalance, currency: "USD" }, update: {}, select: { id: true } });
+      accountIds.set(key, account.id);
+    }
+    const current = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const previous = new Date(current); previous.setUTCMonth(previous.getUTCMonth() - 1);
+    for (const month of [previous, current]) {
+      const periodKey = month.toISOString().slice(0, 7);
+      for (const [key, debitAccount, creditAccount, amount] of [
+        ["income", "ar", "income", input.scenario === "zero" ? 200 : 1200], ["expense", "expense", "ap", 200],
+      ] as const) {
+        const entryRef = `${prefix}-${periodKey}-${key}`;
+        const values = { periodKey, entryDate: month, status: input.scenario === "empty" ? "draft" : "posted", currency: "USD",
+          sourceType: marker, sourceId: prefix, memo: "Simulated nonproduction results fixture", postedAt: now };
+        await tx.journalEntry.upsert({ where: { entryRef }, create: { ...values, entryRef, organizationId: input.organizationId,
+          lines: { create: [{ accountId: accountIds.get(debitAccount)!, debit: amount, credit: 0, currency: "USD" },
+            { accountId: accountIds.get(creditAccount)!, debit: 0, credit: amount, currency: "USD" }] } },
+          update: { ...values, lines: { deleteMany: {}, create: [
+            { accountId: accountIds.get(debitAccount)!, debit: amount, credit: 0, currency: "USD" },
+            { accountId: accountIds.get(creditAccount)!, debit: 0, credit: amount, currency: "USD" },
+          ] } } });
+      }
+    }
+    return { fixture: prefix, scenario: input.scenario ?? "populated", organizationId: input.organizationId, periods: 2, journalEntries: 4 };
+  }, { isolationLevel: "Serializable", timeout: 15000 });
 }

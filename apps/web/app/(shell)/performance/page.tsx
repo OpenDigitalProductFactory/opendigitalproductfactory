@@ -60,12 +60,12 @@ export default async function PerformancePage({
           }
           action={
             <Link
-              href="/workspace"
+              href={performance.nextAction?.href ?? "/workspace"}
               data-dpf-primary-action
               data-owner-first-next-action
               className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
             >
-              Open Operations
+              {performance.nextAction?.label ?? "Open Operations"}
             </Link>
           }
         />

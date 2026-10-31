@@ -5,6 +5,18 @@ import type {
   RestaurantMetricContext,
 } from "./business-metric-rollup";
 import { PERFORMANCE_METRIC_ARCHETYPES } from "./performance-metric-support";
+import { getScopedLedgerPeriodReport } from "@/lib/finance/ledger-service";
+import { inspectSoftwareLedgerPack } from "./software-ledger-metrics";
+import type { BusinessMetricRollupInput } from "./business-metric-rollup";
+
+function upsertMetric(row: BusinessMetricRollupInput, computedAt: Date) {
+  const { organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion, ...values } = row;
+  const identity = { organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion };
+  return prisma.businessMetricRollup.upsert({
+    where: { organizationId_metricKey_periodStart_periodEnd_dimensionsHash_definitionVersion: identity },
+    create: { ...identity, ...values, computedAt }, update: { ...values, computedAt },
+  });
+}
 
 /** Prisma adapter kept separate from the deterministic projection math. */
 export function defaultBusinessMetricRollupDeps(): BusinessMetricRollupDeps {
@@ -16,7 +28,7 @@ export function defaultBusinessMetricRollupDeps(): BusinessMetricRollupDeps {
           // place so the surface's "not available for this business type" copy
           // and this scan can never disagree. BI-F359E1E9.
           where: {
-            archetype: { archetypeId: { in: [...PERFORMANCE_METRIC_ARCHETYPES] } },
+            archetype: { archetypeId: { in: PERFORMANCE_METRIC_ARCHETYPES.filter(id => id === "restaurant") } },
           },
           select: { id: true, organizationId: true, timezone: true },
         }),
@@ -98,32 +110,25 @@ export function defaultBusinessMetricRollupDeps(): BusinessMetricRollupDeps {
         })),
       };
     },
-    async upsert(row, computedAt) {
-      const {
-        organizationId,
-        metricKey,
-        periodStart,
-        periodEnd,
-        dimensionsHash,
-        definitionVersion,
-        ...values
-      } = row;
-      const identity = {
-        organizationId,
-        metricKey,
-        periodStart,
-        periodEnd,
-        dimensionsHash,
-        definitionVersion,
-      };
-      await prisma.businessMetricRollup.upsert({
-        where: {
-          organizationId_metricKey_periodStart_periodEnd_dimensionsHash_definitionVersion:
-            identity,
-        },
-        create: { ...identity, ...values, computedAt },
-        update: { ...values, computedAt },
-      });
+    async upsert(row, computedAt) { await upsertMetric(row, computedAt); },
+    software: {
+      async listContexts() {
+        const contexts = await prisma.storefrontConfig.findMany({
+          where: { archetype: { archetypeId: { in: PERFORMANCE_METRIC_ARCHETYPES.filter(id => id === "software-platform") } } },
+          select: { id: true, organizationId: true }, orderBy: { id: "asc" }, take: 1001,
+        });
+        if (contexts.length > 1000) throw new Error("Software results context scan exceeds its supported bound.");
+        return contexts.map(row => ({ organizationId: row.organizationId, storefrontId: row.id }));
+      },
+      loadReport: (context, window, checkedAt) => getScopedLedgerPeriodReport(context.organizationId, window.periodKey, checkedAt),
+      async upsertPeriod(rows, computedAt) {
+        const first = rows[0];
+        if (!first || rows.some(r => r.organizationId !== first.organizationId || r.dimensionsHash !== first.dimensionsHash)
+          || !inspectSoftwareLedgerPack(rows.map(row => ({ ...row, computedAt }))).valid) {
+          throw new Error("Refusing an incomplete or mixed software results pack.");
+        }
+        await prisma.$transaction(rows.map(row => upsertMetric(row, computedAt)));
+      },
     },
   };
 }

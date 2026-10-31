@@ -7,6 +7,7 @@ export function buildPerformanceExportRows(performance: ReadyBusinessPerformance
     metric: metric.label,
     value: metric.value,
     unit: metric.unit,
+    ...(metric.currency ? { currency: metric.currency } : {}),
     availability: metric.availability,
     unavailable_reason: metric.unavailableReason ?? "",
     prior_period_value: metric.comparisonValue,

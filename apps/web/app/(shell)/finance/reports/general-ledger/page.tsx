@@ -1,20 +1,17 @@
-// apps/web/app/(shell)/finance/reports/general-ledger/page.tsx
-//
-// The General Ledger report: a trial balance and the balance sheet + income
-// statement derived from it. This is the payoff of every sub-ledger posting to one
-// journal (EP-SAP-PARITY) — the owner sees a real book, derived from the ledger
-// rather than recomputed ad hoc from documents. Read-only; the numbers are computed
-// by getGeneralLedgerReport (which reuses the pure computeTrialBalance /
-// deriveFinancialStatements invariants).
-
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { prisma } from "@dpf/db";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
+import { isLedgerMonth } from "@/lib/finance/ledger-period-report";
+import { deriveFinancialStatements } from "@/lib/finance/ledger";
+import { resolvePerformanceOrganizationContext, type PerformanceOrganizationContextDataSource } from "@/lib/performance/performance-organization-context";
 
 import { getGeneralLedgerReport } from "@/lib/finance/ledger-service";
-import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { StatCard } from "@/components/ui/report-kit";
 
 interface SearchParams {
-  period?: string;
+  period?: string | string[];
 }
 
 export default async function GeneralLedgerReportPage({
@@ -22,18 +19,30 @@ export default async function GeneralLedgerReportPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+  if (!can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "view_finance")) notFound();
   const params = await searchParams;
-  const periodKey = params.period && /^\d{4}-\d{2}$/.test(params.period) ? params.period : undefined;
-
-  const report = await getGeneralLedgerReport(periodKey);
-  const sym = getCurrencySymbol(report.currency);
-  const money = (n: number) =>
-    `${n < 0 ? "-" : ""}${sym}${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
-
-  const {
-    trialBalance: tb,
-    statements: { incomeStatement: is, balanceSheet: bs },
-  } = report;
+  const periodKey = params.period === undefined ? null : params.period;
+  const unavailable = (reason: string, retry = false) => (
+    <main className="space-y-3">
+      <h1 className="text-xl font-semibold">General Ledger</h1>
+      <p>{reason}</p>
+      <Link href={retry ? `/finance/reports/general-ledger${typeof periodKey === "string" ? `?period=${periodKey}` : ""}` : "/finance"} data-dpf-primary-action>{retry ? "Try again" : "Open Finance"}</Link>
+    </main>
+  );
+  if (periodKey !== null && (typeof periodKey !== "string" || !isLedgerMonth(periodKey))) {
+    return unavailable("Choose one valid ledger month.");
+  }
+  const context = await resolvePerformanceOrganizationContext(prisma as unknown as PerformanceOrganizationContextDataSource, session.user.id);
+  if (context.status !== "resolved") return unavailable(context.reason);
+  let report;
+  try { report = await getGeneralLedgerReport(context.organizationId, periodKey); }
+  catch { return unavailable("Finance records could not be read.", true); }
+  if (report.availability !== "available") return unavailable(report.reason);
+  const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: report.currency }).format(value);
+  const tb = report.trialBalance;
+  const { incomeStatement: is, balanceSheet: bs } = deriveFinancialStatements(tb);
 
   return (
     <div>
@@ -56,29 +65,20 @@ export default async function GeneralLedgerReportPage({
       <div className="mb-6 flex items-baseline justify-between gap-3">
         <h1 className="text-xl font-semibold text-[var(--dpf-text)]">General Ledger</h1>
         <span className="text-xs text-[var(--dpf-muted)]">
-          {report.periodKey ? `Period ${report.periodKey}` : "All time"}
+          {report.periodKey ? `Period ${report.periodKey}` : "All recorded"}
           {" · "}
-          {tb.balanced ? "Books balance ✓" : "Out of balance — review"}
+          {tb.balanced ? report.currency : "Out of balance — review"}
         </span>
       </div>
 
-      {report.isEmpty ? (
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center">
-          <p className="text-[var(--dpf-text)]">No posted entries yet.</p>
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-            Send an invoice, record a payment, or approve a supplier bill and your books appear here
-            automatically — no journal entries required.
-          </p>
-        </div>
-      ) : (
-        <>
+      <>
           {/* Income statement */}
-          <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">This period</h2>
+          <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Recorded result</h2>
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="Revenue" value={money(is.revenue)} intent="info" />
+            <StatCard label="Income" value={money(is.revenue)} intent="info" />
             <StatCard label="Expenses" value={money(is.expenses)} intent="warning" />
             <StatCard
-              label="Net income"
+              label="Net result"
               value={money(is.netIncome)}
               intent={is.netIncome >= 0 ? "success" : "danger"}
               hint={is.netIncome >= 0 ? "Profit" : "Loss"}
@@ -86,12 +86,12 @@ export default async function GeneralLedgerReportPage({
           </div>
 
           {/* Balance sheet */}
-          <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Financial position</h2>
+          <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Recorded movements</h2>
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="Assets" value={money(bs.assets)} intent="info" />
-            <StatCard label="Liabilities" value={money(bs.liabilities)} intent="warning" />
+            <StatCard label="Asset movement" value={money(bs.assets)} intent="info" />
+            <StatCard label="Liability movement" value={money(bs.liabilities)} intent="warning" />
             <StatCard
-              label="Equity + retained"
+              label="Equity and result"
               value={money(bs.equity + bs.netIncome)}
               intent="neutral"
               hint={bs.balanced ? "Assets = Liabilities + Equity ✓" : "Does not balance"}
@@ -145,11 +145,9 @@ export default async function GeneralLedgerReportPage({
             </table>
           </div>
           <p className="mt-2 text-xs text-[var(--dpf-muted)]">
-            Derived from posted journal entries — every invoice, payment and bill posts here
-            automatically.
+            Available ledger records only; not a verified bank balance or as-of position.
           </p>
-        </>
-      )}
+      </>
     </div>
   );
 }

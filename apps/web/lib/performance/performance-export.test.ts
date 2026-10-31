@@ -41,3 +41,10 @@ describe("buildPerformanceExportRows", () => {
     expect(JSON.stringify(rows)).not.toContain("sf-sensitive");
   });
 });
+
+it("exports financial currency and keeps an unavailable value null", () => {
+  const performance = { periodLabel: "Oct 2026", metricValues: [{ label: "Posted income", value: null,
+    unit: "currency", currency: "EUR", availability: "unavailable", unavailableReason: "Missing source",
+    comparisonValue: null, definitionVersion: "software-ledger-v1", sourceWatermark: null }] } as unknown as ReadyBusinessPerformance;
+  expect(buildPerformanceExportRows(performance)[0]).toMatchObject({ currency: "EUR", value: null, prior_period_value: null });
+});

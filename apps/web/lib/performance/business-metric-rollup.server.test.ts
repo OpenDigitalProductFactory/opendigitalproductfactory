@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/finance/ledger-service", () => ({ getScopedLedgerPeriodReport: vi.fn() }));
 
 const mocks = vi.hoisted(() => ({
   storefrontFindMany: vi.fn(),
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   allocationFindMany: vi.fn(),
   bookingFindMany: vi.fn(),
   rollupUpsert: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -19,6 +21,7 @@ vi.mock("@dpf/db", () => ({
     hospitalityCapacityAllocation: { findMany: mocks.allocationFindMany },
     storefrontBooking: { findMany: mocks.bookingFindMany },
     businessMetricRollup: { upsert: mocks.rollupUpsert },
+    $transaction: mocks.transaction,
   },
 }));
 
@@ -100,4 +103,31 @@ describe("defaultBusinessMetricRollupDeps", () => {
       update: expect.objectContaining({ value: 42, computedAt }),
     }));
   });
+});
+
+import { aggregateBusinessMetrics } from "./business-metric-rollup";
+import { getScopedLedgerPeriodReport } from "@/lib/finance/ledger-service";
+it("software dispatch reads each scoped month and atomically submits each coherent three-row pack", async () => {
+  vi.clearAllMocks();
+  mocks.storefrontFindMany.mockResolvedValue([{ id: "software-sf", organizationId: "software-org" }]);
+  vi.mocked(getScopedLedgerPeriodReport).mockImplementation(async (organizationId, periodKey, checkedAt = new Date()) => ({
+    availability: "available", organizationId, periodKey, checkedAt, currency: "EUR",
+    trialBalance: { rows: [], totalDebit: 1400, totalCredit: 1400, balanced: true },
+    incomeStatement: { revenue: 1200, expenses: 200, netIncome: 1000 }, sourceRows: { accounts: 4, entries: 2, lines: 4 },
+  }));
+  mocks.rollupUpsert.mockImplementation(args => ({ operation: args }));
+  mocks.transaction.mockResolvedValue([]);
+  const deps = defaultBusinessMetricRollupDeps();
+  await aggregateBusinessMetrics({ ...deps, listRestaurantContexts: async () => [] }, new Date("2026-10-31T12:00:00Z"));
+  expect(mocks.storefrontFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { archetype: { archetypeId: { in: ["software-platform"] } } }, take: 1001 }));
+  expect(getScopedLedgerPeriodReport).toHaveBeenNthCalledWith(1, "software-org", "2026-09", expect.any(Date));
+  expect(getScopedLedgerPeriodReport).toHaveBeenNthCalledWith(2, "software-org", "2026-10", expect.any(Date));
+  expect(mocks.transaction).toHaveBeenCalledTimes(2);
+  expect(mocks.transaction.mock.calls.every(([rows]) => rows.length === 3)).toBe(true);
+  const rows = mocks.rollupUpsert.mock.calls.map(([args]) => args.create);
+  expect(rows.map(row => row.value)).toEqual([1200, 200, 1000, 1200, 200, 1000]);
+  expect(rows.every(row => row.organizationId === "software-org")).toBe(true);
+  expect(mocks.turnFindMany).not.toHaveBeenCalled();
+  mocks.transaction.mockRejectedValueOnce(new Error("fixture second-write transaction failure"));
+  await expect(aggregateBusinessMetrics({ ...deps, listRestaurantContexts: async () => [] })).rejects.toThrow(/second-write/);
 });
