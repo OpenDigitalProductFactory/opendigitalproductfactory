@@ -506,5 +506,25 @@
       "pullRequest": "Pull request",
       "finalAcceptance": "Final acceptance"
     }
+  },
+  "phaseCost": {
+    "title": "Phase cost breakdown",
+    "phase": "Phase",
+    "duration": "Duration",
+    "input": "Tokens in",
+    "output": "Tokens out",
+    "calls": "Calls",
+    "estimate": "Est. cost (USD)",
+    "active": "active",
+    "total": "Total",
+    "summary": "{$tokens} total tokens · {$calls} inference calls",
+    "note": "Estimates are not invoices. Model rates determine recorded estimates; subscription fees are tracked in Finance → AI Spend.",
+    "phases": {
+      "ideate": "Ideate",
+      "plan": "Plan",
+      "build": "Build",
+      "review": "Review",
+      "ship": "Ship"
+    }
   }
 }

@@ -13,6 +13,8 @@ import { createContext, useContext } from "react";
 
 export interface MessagesContextValue {
   locale: string;
+  /** Viewer numeric preferences can differ from the language of message text. */
+  formatLocale?: string;
   messages: Record<string, Record<string, string>>;
 }
 

@@ -160,3 +160,25 @@ explicit task ancestry. Potential attribution gaps, failed/truncated run sources
 failed/truncated descendant history withhold affected totals and mark coverage partial.
 Qualified run identities remain inspectable; unavailable totals do not become zero.
 The original acceptance criteria and pending architecture choice remain unchanged.
+
+## Phase-report convergence — 2026-10-31
+
+The bounded refactoring lane replaces the existing bespoke BuildPhaseCostCard
+with report-kit DataTable inside its sole BuildProgressOperationalPanel consumer.
+The old component is deleted; no feature is relocated to evade the budget.
+Preserve empty hiding, canonical phase order with unknown-phase fallback, active
+indication, seconds precision, input/output/call figures, and the conditional
+total row. Missing estimates stay unavailable; estimates remain separate from
+subscription fees and invoices. The existing message provider carries the viewer's
+optional numeric-format locale; /build supplies the workrooms namespace and the
+resolved locale. Shared formatDuration gains an opt-in seconds mode while its
+default behavior is unchanged. No BuildStudio prop forwarding is needed.
+
+Claimed source includes the old card, operational panel and its test, /build
+page, existing locale context/provider, and shared datetime helper/test. Behavior
+regressions first failed for the named table and seconds mode. Source measurement
+under the unchanged cap is 70 components and 16,294 lines, down from 16,296.
+Retightening may only lower that budget and must preserve owner and expiry.
+This measured convergence needs no budget increase; the previous exception
+question is not an approval. Independent review, served desktop/narrow behavior,
+UX capture and the protected build/release gates still apply to the final delta.

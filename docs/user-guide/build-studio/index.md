@@ -36,6 +36,11 @@ Open `/build/work` when you need the engineering context behind Build Studio. Th
 
 The hub refreshes through one live connection and retains confirmed cards while reconnecting. **Inspect** opens the canonical Workroom, while **Resume**, **Review**, **Handoff**, and pull-request links appear only when the recorded Workroom facts support them. Use **Load older tasks** for the next signed, bounded page. Completion, failure, expiry, approval, review, and takeover attention link back to the same Workroom and are deduplicated, so reading or dismissing a notification does not recreate it. Create/adopt controls remain below the hub. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.
 
+The phase-cost table in **Technical details** retains phase order, active-state
+labels, duration, input/output tokens, calls and estimated USD cost. It adapts to
+narrow screens. Missing estimates remain unavailable, including the total when
+any phase is missing an estimate; subscription fees and invoices stay separate.
+
 ## The operator workspace
 
 Open **Build Studio** under **Delivery**, then:

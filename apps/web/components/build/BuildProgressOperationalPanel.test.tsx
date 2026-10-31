@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import {DEFAULT_LOCALE,namespaceMessages} from "@dpf/i18n";
+import {MessagesProvider} from "@/components/i18n/MessagesProvider";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
@@ -190,5 +192,46 @@ describe("BuildProgressOperationalPanel — quiet-agent link dispatches open-las
       .map(([dispatched]) => dispatched)
       .filter((dispatched): dispatched is CustomEvent => dispatched instanceof CustomEvent);
     expect(customEvents.some((dispatched) => dispatched.type === "dpf:open-last-dispatch-attempt")).toBe(true);
+  });
+});
+
+describe("phase usage report convergence",()=>{
+  afterEach(cleanup);
+  const show=(projection:BuildProgressVisibility)=>{cleanup();return render(<MessagesProvider locale={DEFAULT_LOCALE} formatLocale="de-DE" messages={{workrooms:namespaceMessages(DEFAULT_LOCALE,"workrooms")}}><BuildProgressOperationalPanel projection={projection}/></MessagesProvider>);};
+  it("hides phase reporting when no recorded phase rows exist",()=>{
+    show(makeProjection());
+    expect(screen.queryByRole("table",{name:"Phase cost breakdown"})).not.toBeInTheDocument();
+    expect(screen.queryByText("Phase cost breakdown")).not.toBeInTheDocument();
+  });
+  it("retains phase order, active/unknown phases, seconds, all numeric fields and totals in a semantic report table",()=>{
+    const p=makeProjection();
+    const base={startedAt:"2026-05-18T12:00:00Z",completedAt:"2026-05-18T12:01:00Z",durationMs:45000,inputTokens:1000,outputTokens:20,inferenceCount:2,costUsd:"0.0001"};
+    p.phaseRuns=[{...base,phase:"custom-phase"},{...base,phase:"build",completedAt:null},{...base,phase:"ideate",durationMs:61000}];
+    show(p);
+    const table=screen.getByRole("table",{name:"Phase cost breakdown"});
+    const rows=within(table).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("Ideate");
+    expect(rows[2]).toHaveTextContent("Build");
+    expect(rows[2]).toHaveTextContent("active");
+    expect(rows[3]).toHaveTextContent("custom-phase");
+    expect(rows[4]).toHaveTextContent("Total");
+    expect(rows[1]).toHaveTextContent("1m 1s");
+    expect(rows[2]).toHaveTextContent("45s");
+    expect(rows[1]).toHaveTextContent("1.000");
+    expect(rows[1]).toHaveTextContent("0,0001");
+    expect(rows[4]).toHaveTextContent("3.000");
+    expect(rows[4]).toHaveTextContent("60");
+    expect(rows[4]).toHaveTextContent("6");
+  });
+  it("keeps missing estimates unavailable and never presents subscription estimates as invoiced spend",()=>{
+    const p=makeProjection();
+    const base={startedAt:"2026-05-18T12:00:00Z",completedAt:null,durationMs:null,inputTokens:0,outputTokens:0,inferenceCount:0};
+    p.phaseRuns=[{...base,phase:"plan",costUsd:"0"},{...base,phase:"build",costUsd:null}];
+    show(p);
+    const rows=within(screen.getByRole("table",{name:"Phase cost breakdown"})).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("0,00");
+    expect(rows[2]).toHaveTextContent("Unavailable");
+    expect(rows[3]).toHaveTextContent("Unavailable");
+    expect(screen.getByText(/Estimates are not invoices/)).toBeInTheDocument();
   });
 });
