@@ -30,7 +30,7 @@ export function classifyInitialPublication(anchor, { repositoryFullName, branch,
     // published SHA only when that full integration tree is identical.
     const candidateMatches = state.sha === anchor.sha || sameSynthesizedTree;
     if (!state.evidenceRecordId || !(Date.parse(state.expiresAt) > capturedAt)
-      || !state.leaseId || !candidateMatches || metadata.runLeaseId !== state.leaseId
+      || !state.leaseId || metadata?.candidateSha !== state.sha || !candidateMatches || metadata.runLeaseId !== state.leaseId
       || metadata.execution?.status !== "passed") return miss("initial canonical evidence is unbound or unqualified");
     return { ok: true, kind: "canonical" };
   }

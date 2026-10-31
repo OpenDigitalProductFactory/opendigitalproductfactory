@@ -223,6 +223,21 @@ test("an exact synthesized integration tree reconciles a rebased canonical publi
   assert.equal(anchor.state, state, "the original canonical gate record remains intact");
   assert.deepEqual(anchor.equivalentCandidate, { sha: recordedSha, synthesizedTreeSha: integratedTree });
   assert.equal(classifyInitialPublication(anchor, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, true);
+  for (const metadataCandidate of ["e".repeat(40), undefined]) {
+    const candidate = { ...anchor, metadata: { ...metadata } };
+    if (metadataCandidate === undefined) delete candidate.metadata.candidateSha;
+    else candidate.metadata.candidateSha = metadataCandidate;
+    assert.equal(classifyInitialPublication(candidate, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, false,
+      "canonical evidence must remain bound to its recorded candidate SHA");
+  }
+  const direct = { ...anchor, sha: recordedSha, equivalentCandidate: undefined };
+  for (const metadataCandidate of ["e".repeat(40), undefined]) {
+    const candidate = { ...direct, metadata: { ...metadata } };
+    if (metadataCandidate === undefined) delete candidate.metadata.candidateSha;
+    else candidate.metadata.candidateSha = metadataCandidate;
+    assert.equal(classifyInitialPublication(candidate, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, false,
+      "same-SHA canonical evidence also requires the recorded candidate metadata");
+  }
 });
 
 function historicalCanonicalCorrection() {
@@ -688,6 +703,12 @@ test("a correction proof survives a distinct publish-hook process but not a rele
     assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false,
       "a guard-relevant environment input must still invalidate the proof");
   } finally { fixture.remove(); }
+});
+
+test("guard-result identity retains the selected PowerShell test executable", () => {
+  const legacy = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "powershell" });
+  const pwsh = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "C:/Program Files/PowerShell/7/pwsh.exe" });
+  assert.notDeepEqual(pwsh, legacy);
 });
 
 test("a second unpushed correction retains the published head's receipt as its anchor", async () => {
