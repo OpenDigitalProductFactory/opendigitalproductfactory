@@ -413,3 +413,22 @@ describe("preview ownership through durable queue transitions", () => {
     expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
   });
 });
+
+it("keeps a caller's legacy Task separate from its ordinary durable preview wait", async () => {
+  const legacy = { taskRunId: "TR-CALLER", userId: "user-1", status: "working", progressPayload: { featureWork: "untouched" } };
+  const tasks = new Map<string, any>([[legacy.taskRunId, legacy]]);
+  const mock = { taskRun: {
+    findUnique: vi.fn(async ({ where }: any) => tasks.get(where.taskRunId) ?? null),
+    findMany: vi.fn(async () => []), update: vi.fn(),
+    upsert: vi.fn(async ({ where, create, update }: any) => {
+      const next = tasks.has(where.taskRunId) ? { ...tasks.get(where.taskRunId), ...update } : create;
+      tasks.set(where.taskRunId, next); return next;
+    }),
+  }, nonProductionEnvironmentLease: { updateMany: vi.fn(async () => ({ count: 1 })) } };
+  const result = await checkpointNonprodLeaseWait({ db: mock, userId: "user-1",
+    lease: lease({ environmentKey: "active-candidate", taskRunId: legacy.taskRunId }), queuePosition: 1,
+    waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+  expect(result.taskRunId).not.toBe(legacy.taskRunId);
+  expect(tasks.get(legacy.taskRunId)).toBe(legacy);
+  expect(tasks.get(result.taskRunId).progressPayload.nonprodPreviewOwner).toBeUndefined();
+});

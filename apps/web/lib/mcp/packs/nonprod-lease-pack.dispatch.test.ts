@@ -232,6 +232,7 @@ describe("preview actor and atomic wait dispatch", () => {
   it("uses the preview wait already persisted atomically by admission without re-checkpointing it", async () => {
     mockCheckpointNonprodLeaseWait.mockClear();
     mockClaimNonprodEnvironmentLease.mockResolvedValue({ status: "queued", queuePosition: 1, waitAgeMs: 0,
+      durableWaitTaskRunId: "TR-ATOMIC",
       lease: { leaseId: "NPEL-ATOMIC", environmentKey: "active-candidate", taskRunId: "TR-ATOMIC", ownerProvider: "codex" } });
     const result = await executeTool("claim_nonprod_environment_lease", { environmentKey: "active-candidate", ownerProvider: "codex",
       ownerSessionId: "own-session", purpose: "preview", url: "http://localhost:53601", ports: [53601],
@@ -242,4 +243,18 @@ describe("preview actor and atomic wait dispatch", () => {
     expect(mockClaimNonprodEnvironmentLease).toHaveBeenLastCalledWith(expect.objectContaining({ authenticatedUserId: "user-1",
       authenticatedAgentId: "AGT-EXT-CODEX" }));
   });
+});
+
+it("does not mistake a caller Task for the admission's trusted atomic wait", async () => {
+  mockCheckpointNonprodLeaseWait.mockClear();
+  mockCheckpointNonprodLeaseWait.mockResolvedValue({ taskRunId: "TR-NONPROD-WAIT" });
+  mockClaimNonprodEnvironmentLease.mockResolvedValue({ status: "queued", queuePosition: 1, waitAgeMs: 0,
+    lease: { leaseId: "NPEL-CALLER", environmentKey: "active-candidate", taskRunId: "TR-CALLER", ownerProvider: "codex" } });
+  const result = await executeTool("claim_nonprod_environment_lease", { environmentKey: "active-candidate", ownerProvider: "codex",
+    ownerSessionId: "own-session", purpose: "legacy caller Task preview", url: "http://localhost:53601", ports: [53601],
+    taskRunId: "TR-CALLER", durableWaitTaskRunId: "forged-atomic-wait",
+    expiresAt: new Date(Date.now() + 60_000).toISOString() }, "user-1", { agentId: "AGT-EXT-CODEX" });
+  expect(result.success).toBe(true);
+  expect(result.data?.admission).toMatchObject({ taskRunId: "TR-NONPROD-WAIT" });
+  expect(mockCheckpointNonprodLeaseWait).toHaveBeenCalledOnce();
 });

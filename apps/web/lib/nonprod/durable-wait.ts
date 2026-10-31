@@ -233,7 +233,12 @@ export async function checkpointNonprodLeaseWait(input: {
   const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
   const wait = leaseWaitProjection({ ...input, now, state: "waiting" });
   if (input.lease.environmentKey === "active-candidate" && input.lease.taskRunId
-    && input.lease.taskRunId !== taskRunId) throw new Error("nonprod_preview_ownership_conflict");
+    && input.lease.taskRunId !== taskRunId) {
+    const linked = await input.db.taskRun.findUnique({ where: { taskRunId: input.lease.taskRunId } });
+    if (record(linked?.progressPayload)?.["nonprodPreviewOwner"] !== undefined) {
+      throw new Error("nonprod_preview_ownership_conflict");
+    }
+  }
   const existing = await input.db.taskRun.findUnique({ where: { taskRunId } });
   const progressPayload = waitPayload(existing?.progressPayload, wait);
   await input.db.taskRun.upsert({

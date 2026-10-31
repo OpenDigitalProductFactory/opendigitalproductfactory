@@ -1,6 +1,6 @@
 import type { prisma } from "@dpf/db";
-import type { LeaseRow } from "./environment-lease-result";
-import { checkpointFreshNonprodLeaseAdmission, deterministicNonprodWaitTaskRunId, parseNonprodLeaseWait } from "./durable-wait";
+import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow } from "./environment-lease-result";
+import { checkpointFreshNonprodLeaseAdmission, checkpointNonprodLeaseWait, deterministicNonprodWaitTaskRunId, parseNonprodLeaseWait } from "./durable-wait";
 import { isRecord } from "../shared/coerce";
 
 export type CleanupLease = Pick<LeaseRow, "leaseId" | "claimKey" | "environmentKey" | "ownerProvider" | "ownerSessionId"
@@ -26,7 +26,7 @@ export async function loadLeaseCleanupStance(): Promise<LeaseCleanupStance> {
 }
 
 /** One predicate for consent and locked execution. No ownership is inferred or repaired here. */
-export async function ownsProcessFreePreview(input: {
+async function previewWaitMatchesOwner(input: {
   db: LeaseCleanupProofReader; lease: CleanupLease; userId?: string; agentId?: string; ownerSessionId?: string;
   loadStance?: () => Promise<LeaseCleanupStance>;
 }): Promise<boolean> {
@@ -54,6 +54,11 @@ export async function ownsProcessFreePreview(input: {
   if (lease.status === "queued" && (!["waiting", "capacity-available"].includes(wait.state)
     || lease.slotKey !== null || lease.activeKey !== null)) return false;
   if (["released", "cancelled", "expired"].includes(lease.status) && lease.activeKey !== null) return false;
+  return true;
+}
+
+async function ownsProcessFreePreview(input: Parameters<typeof previewWaitMatchesOwner>[0]): Promise<boolean> {
+  if (!await previewWaitMatchesOwner(input)) return false;
   const stance = await (input.loadStance ?? loadLeaseCleanupStance)();
   return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf";
 }
@@ -126,4 +131,32 @@ export async function bindFreshLeaseProvenance(input: {
       agentId: input.authenticatedAgentId!, binding: previewBinding(lease) }, queuePosition: input.queuePosition } : {}),
   });
   return { ...lease, taskRunId };
+}
+
+/** Called under the lease lock. This result is internal, never copied from tool parameters. */
+type QueuedCheckpoint = Pick<Extract<ClaimNonprodEnvironmentLeaseResult, { status: "queued" }>,
+  "lease" | "durableWaitTaskRunId">;
+
+export async function checkpointQueuedLeaseProvenance(
+  input: Parameters<typeof bindFreshLeaseProvenance>[0],
+): Promise<QueuedCheckpoint> {
+  const lease = await bindFreshLeaseProvenance(input);
+  const legacy = { lease };
+  if (lease.environmentKey !== "active-candidate" || !input.authenticatedUserId
+    || !input.authenticatedAgentId || !lease.taskRunId) return legacy;
+  if (input.created) {
+    return input.lease.taskRunId === null ? { lease, durableWaitTaskRunId: lease.taskRunId } : legacy;
+  }
+  if (!input.db.taskRun) throw new Error("nonprod_preview_ownership_store_unavailable");
+  const linked = await input.db.taskRun.findUnique({ where: { taskRunId: lease.taskRunId },
+    select: { progressPayload: true } });
+  const progress = isRecord(linked?.progressPayload) ? linked.progressPayload : null;
+  if (progress?.nonprodPreviewOwner === undefined) return legacy;
+  if (!await previewWaitMatchesOwner({ db: input.db as never, lease, userId: input.authenticatedUserId,
+    agentId: input.authenticatedAgentId, ownerSessionId: lease.ownerSessionId })) {
+    throw new Error("nonprod_preview_ownership_conflict");
+  }
+  const wait = await checkpointNonprodLeaseWait({ db: input.db as never, userId: input.authenticatedUserId,
+    lease, queuePosition: input.queuePosition!, waitDeadlineAt: input.waitDeadlineAt, now: input.now });
+  return { lease, durableWaitTaskRunId: wait.taskRunId };
 }

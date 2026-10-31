@@ -82,7 +82,7 @@ protected pr:ready/pr:health remain mandatory; never create a draft PR.
 
 - Decision: atomic
 - Parent: BI-31AC1F90
-- Receipt: cmvwzuck9041q01me31u9xrz2
+- Receipt: cmvx1ms5j0fhs01me71lwxiab
 - Rationale: Trusted creation, durable ownership, consent and locked execution are internal phases of one safe preview cleanup repair; none is independently shippable.
 - Dependencies: none
 - Deliverable: PC -> BI-31AC1F90
@@ -92,7 +92,7 @@ phases. References: R-PC-1, R-PC-2, R-PC-3, R-PC-4;
 C-PC-PROVENANCE, C-PC-EXECUTION; F-PC-CLAIM-RELEASE;
 V-PC-REGRESSION, V-PC-LIVE. No phase is independently shippable because trusted
 creation, preserved ownership, consent and locked execution must agree before
-ordinary release is safe. Native coverage receipt **cmvwzuck9041q01me31u9xrz2** (refresh after claiming
+ordinary release is safe. Native coverage receipt **cmvx1ms5j0fhs01me71lwxiab** (refresh after claiming
 the already-planned linked pack test; predecessor cmvwzj88500w401meed9obr9u)
 was recorded and checked current on October 31, bound to plan commit
 a481a6235d7eb728c2299596ea3efc4b9a8d3c90 and blob
@@ -115,3 +115,11 @@ exercise adversarial transitions and retain old records/envelopes unchanged.
 Rollback reverts the atomic integration; unknown/legacy proof keeps the
 controlled path and ordinary expiry. Do not delete history, rewrite credentials,
 change TTL, terminate a host process or weaken policy to make verification pass.
+
+The private queued-admission result in environment-lease-result.ts carries the
+server-created atomic wait identity. The MCP handler uses that internal result,
+never a caller Task or public parameter, to avoid a redundant outside-lock write.
+Authenticated owned queue reclaims refresh that same wait under the lease lock;
+legacy caller Tasks remain separate and gain no preview ownership proof.
+The type module had no graph-linked tests, so the complete nonprod suite and
+MCP pack suites remain required. Latest coverage refresh includes this type path.

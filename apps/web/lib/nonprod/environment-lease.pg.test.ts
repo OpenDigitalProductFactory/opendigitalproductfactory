@@ -145,6 +145,10 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
     const second = await claim("preview-second");
     expect(first.status).toBe("admitted");
     expect(second.status).toBe("queued");
+    expect(second).toMatchObject({ durableWaitTaskRunId: second.lease.taskRunId });
+    const repeatedQueue = await claim("preview-second");
+    expect(repeatedQueue).toMatchObject({ status: "queued", durableWaitTaskRunId: second.lease.taskRunId });
+
     for (const result of [first, second]) {
       expect(result.lease.taskRunId).toMatch(/^TR-NONPROD-/);
       const task = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId: result.lease.taskRunId! } });

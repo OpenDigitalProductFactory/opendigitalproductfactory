@@ -452,8 +452,8 @@ async function claimNonprodEnvironmentLeaseHandler(
     const { checkpointNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
     // A fresh preview checkpoint is already atomic with admission. Repeating it
     // outside the lock could revive a wait that a concurrent release settled.
-    const durableWait = result.lease.environmentKey === "active-candidate" && result.lease.taskRunId
-      ? { taskRunId: result.lease.taskRunId }
+    const durableWait = result.durableWaitTaskRunId
+      ? { taskRunId: result.durableWaitTaskRunId }
       : await checkpointNonprodLeaseWait({
       db: (await import("@dpf/db")).prisma,
       userId,

@@ -28,7 +28,7 @@ import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lea
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { previewMustYieldSlot } from "./environment-lease-preview-yield";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits, settleNonprodLeaseWait } from "./durable-wait";
-import { bindFreshLeaseProvenance, assertOwnedLeaseRelease, type LeaseReleaseContext } from "./environment-lease-provenance";
+import { bindFreshLeaseProvenance, checkpointQueuedLeaseProvenance, assertOwnedLeaseRelease, type LeaseReleaseContext } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -496,7 +496,7 @@ export async function claimNonprodEnvironmentLease(input: {
     });
     return {
       status: "queued",
-      lease: await bindFreshLeaseProvenance({ db: tx, lease: current, created,
+      ...await checkpointQueuedLeaseProvenance({ db: tx, lease: current, created,
         authenticatedUserId: input.authenticatedUserId, authenticatedAgentId: input.authenticatedAgentId,
         queuePosition: queue.findIndex((row) => row.id === current.id) + 1, waitDeadlineAt: queueExpiresAt, now }),
       queuePosition: queue.findIndex((row) => row.id === current.id) + 1,
