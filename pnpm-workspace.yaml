@@ -38,6 +38,8 @@ catalog:
   yaml: ^2.9.1
   zod: ^4.6.7
 overrides:
+  # GHSA-3f7j-7jwc-fxfj (Dependabot #241): patch the platform telemetry dependency.
+  'systeminformation@<5.33.16': '5.33.16'
   # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
   # studio-core would otherwise pull a second copy (19.3.0), a dual-package
   # hazard for anything that shares a React context. Not a CVE floor. The mobile

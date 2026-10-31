@@ -56,6 +56,7 @@ catalogs:
       version: 4.6.7
 
 overrides:
+  systeminformation@<5.33.16: 5.33.16
   react: 19.2.8
   react-dom: 19.2.8
   dotenv@<18: ^18.0.5
@@ -4364,8 +4365,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  systeminformation@5.33.1:
-    resolution: {integrity: sha512-DEN6ICHk3Tk0Uf/hrAHh7xlt7iL5CJFBtPZinA0H62DrGG/KPKqq/Nzj6lCXPS4Ay/sf/14zNnk9LpqKzBIc+w==}
+  systeminformation@5.33.16:
+    resolution: {integrity: sha512-R+Lh69IJXfJj6bfyH1In5cIR9FTr4hBS39YvlZHZjsK1p9cuELPq7hplZZIb56ZESMMb+DzdKqqE6Iomi01Mvg==}
     engines: {node: '>=10.0.0'}
     os: [darwin, linux, win32, freebsd, openbsd, netbsd, sunos, android]
     hasBin: true
@@ -5523,7 +5524,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/instrumentation': 0.221.0(@opentelemetry/api@1.9.1)
-      systeminformation: 5.33.1
+      systeminformation: 5.33.16
     transitivePeerDependencies:
       - supports-color
 
@@ -8559,7 +8560,7 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  systeminformation@5.33.1: {}
+  systeminformation@5.33.16: {}
 
   tabbable@6.5.0: {}
 

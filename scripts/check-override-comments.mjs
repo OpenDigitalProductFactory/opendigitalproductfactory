@@ -24,6 +24,11 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
+  // BI-7F3E4389: isolated mobile file: copies cannot resolve the source
+  // workspace:/catalog: protocols. These exact edges preserve that boundary.
+  "@dpf/validators>@dpf/integration-shared",
+  "@dpf/validators>zod",
+  "@dpf/integration-shared>undici",
   // react / react-dom are compat pins, not CVE floors. In apps/mobile they hold
   // the exact version React Native's embedded renderer needs (BI-E5E72FE3); at
   // the root they keep one React in the platform tree. Rationale lives beside

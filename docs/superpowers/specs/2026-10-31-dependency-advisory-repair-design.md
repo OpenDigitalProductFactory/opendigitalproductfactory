@@ -41,7 +41,7 @@ The node-forge vendoring pilot BI-0BD24E54 is outside this patch repair.
 | AC-1 | OBJ-1 | Neither lockfile resolves the affected vulnerable versions; online OSV scanning has no unaccepted high findings from this batch. | Before/after scanner and resolved-version audit |
 | AC-2 | OBJ-2 | Decoder CommonJS loading, query-string parsing and malformed-input behavior remain compatible. | Existing mobile decoder tests and bounded consumer probes |
 | AC-3 | OBJ-2 | node-forge certificate operations and the platform systeminformation consumer work on patched versions. | Actual consumer tests/probes and protected CI |
-| AC-4 | OBJ-3 | Lockfile regeneration changes only the declared packages and is stable on a second resolution. | Existing fresh-store regeneration helper |
+| AC-4 | OBJ-3 | Lockfile regeneration changes only the declared packages and required shared-package closure and is stable on a second resolution. | Existing fresh-store regeneration helper |
 | AC-5 | OBJ-3 | Provenance, SBOM, frozen dependency resolution and canonical integration checks pass before protected merge. | Guard, gate and PR evidence |
 
 ## Ordered fix and coverage
@@ -61,7 +61,7 @@ pass while any of the three package fixes is omitted.
 
 ## Boundaries, compatibility and rollback
 
-No new dependency or runtime substrate, grant, budget, schema or UI is introduced.
+No new runtime substrate, grant, investment budget, schema or UI is introduced.
 Release-age policy and installer build-script controls remain enforced. The decoder
 patch changes module format only; upstream owns the security algorithm. Consolidate
 its old patch reference when the replacement is verified. Do not edit the advisory
@@ -70,3 +70,22 @@ the containing canonical image and advances DEV. Paired production remains read-
 A demonstrated regression may require reverting the batch, which restores known
 exposure and therefore requires prompt forward repair. Passing source checks do
 not establish a published image or served-runtime acceptance.
+
+## Observed mobile resolution prerequisite
+
+Fresh resolution also exposed stale mobile closure on the same base: validators
+now imports integration-shared through workspace:, and its zod dependency uses
+catalog:. Neither protocol resolves from an external injected file: copy.
+Retain the established isolated mobile file-copy boundary. Map only validators'
+integration-shared edge to its local file: package and translate the two external
+catalog edges (validators/zod and integration-shared/undici) to the owning catalog
+ranges. These are compatibility mappings, not advisory waivers. Keep the guard's
+exceptions exact and tested; unrelated untagged floors must still fail. Include
+integration-shared changes in the existing mobile CI trigger. Frozen installation,
+mobile typecheck/tests and scoped second resolution verify the repaired closure.
+The expected mobile registry delta is decoder, node-forge, and the newly required
+undici closure. This prerequisite remains in the atomic batch because the mobile
+security lock cannot regenerate without resolving its first-party dependencies.
+The existing SBOM mechanism records one additional mobile component (undici),
+with no duplicate growth; this is the already-declared shared package closure,
+not an advisory acceptance. The vulnerability acceptance baseline stays unchanged.
