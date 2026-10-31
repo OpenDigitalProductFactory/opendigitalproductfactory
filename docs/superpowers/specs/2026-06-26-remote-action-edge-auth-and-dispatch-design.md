@@ -103,6 +103,94 @@ policy. BI-AFDB58C8's delivered expired-certificate source remains closed;
 BI-CD4EB130 retains physical engine acceptance. Neither a successful reload nor
 source tests prove registration or engine activation.
 
+**Verified serial encoding repair — BI-6B400D74**
+
+The existing registered certificate must pass the transport metadata check before
+the unchanged action admission rules can run. After protected PR6772 and normal
+proxy convergence, the native client's October 30 registration succeeded but its
+next ordinary action poll returned `machine_authentication_failed`. The served
+matcher compared serial strings after removing colons, case and leading zeros.
+Node's `X509Certificate.serialNumber`, stored by registration, is hexadecimal.
+The installed Caddy 2.10.2 placeholder exports a Go integer in decimal:
+[Caddy exporter](https://github.com/caddyserver/caddy/blob/v2.10.2/modules/caddyhttp/replacer.go),
+[Go integer string contract](https://pkg.go.dev/math/big#Int.String).
+
+On current source `ea62f5fb890390bde854b618834f5e77fd3865ea`, executing
+`resolveEdgeNodeMtls` with a fictional active/trusted matching row rejects wire
+`427` for registered `01AB`; the old hexadecimal control passes and incorrect
+decimal `428` fails. This repeats the prior current-public-certificate control
+without a live database, credentials, network or model request. The passing hex
+control rules out the other resolver predicates for this fixture; it does not
+claim that every production authorization predicate was audited.
+
+**OBJ-SER1:** An existing valid registered certificate authenticates its normal
+native action poll through the actual proxy encoding while all authority checks
+remain intact.
+
+**CONTRACT-SER-IDENTITY:** The existing trusted proxy serial is decimal; the
+registered X509 serial is hexadecimal. Compare their exact positive integer
+values using bounded `BigInt` parsing, without changing registry rows, certificate
+identity or the proxy protocol. Never guess the base of a digits-only value or
+use a floating-point conversion. Preserve stored hex case, colon and leading-zero
+normalization within a finite raw bound. Reject malformed, zero, negative,
+non-decimal wire or excessive values with the existing metadata-mismatch result.
+The bound accommodates positive serials up to 20 unsigned octets; the observed
+128-bit certificate fits. [RFC 5280 section 4.1.2.2](https://www.rfc-editor.org/rfc/rfc5280.html#section-4.1.2.2)
+defines certificate serial semantics. This comparison does not replace certificate
+validation or impose a new issuer or identity schema.
+
+**FLOW-SER-RESTORE:** existing registration → trusted fingerprint lookup → bounded
+exact serial comparison → unchanged certificate/node checks → unchanged action
+claim admission. The private proxy assertion, fingerprint, node binding, trust,
+revocation, validity, capability, allow-list and signed-action checks remain in
+their existing owners. No certificate renewal or PKI regeneration is needed for
+this consumer-only correction.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-SER1 | OBJ-SER1 | The production mTLS resolver accepts the actual Caddy decimal serial for the same registered X509 hexadecimal certificate serial using exact bounded arithmetic. |
+| AC-SER2 | OBJ-SER1 | Wrong, malformed, negative or excessive serials remain rejected; fingerprint, node binding, trust, revocation, validity and private proxy assertion checks retain their behavior. |
+| AC-SER3 | OBJ-SER1 | Preserve the existing registry schema and certificate identity without direct row edits, new enrollment, credential handling or action grants; define the exporter/consumer encoding contract in the existing design. |
+| AC-SER4 | OBJ-SER1 | Deliver affected first-red/green source tests, package typechecks, source guards, independent immutable-source assessment, canonical integration, DCO protected publication and a supported canonical app advance. |
+| AC-SER5 | OBJ-SER1 | Verify the existing native client's normal current-certificate registration and authenticated poll on the served repair; actual engine activation/workload/rollback and recurring AI Ops learning remain separate obligations. |
+
+**FLOW-SER-SOURCE — ordered atomic fix:**
+
+1. Bind this design and author reproduction to BI-6B400D74, record atomic plan
+   coverage and obtain implementation admission before editing the resolver.
+   The current impact contract resolves its colocated test; also retain
+   registration and affected action-route regressions. Missing graph advice
+   expands verification rather than exempting it.
+2. Observe first RED for real exporter-style decimal `427`, digits-only stored
+   hex `0010` versus wire `16` (reject `10`), and a fictional public certificate
+   with serial `0x20000000000001`. Parse that fixture with `X509Certificate` and
+   pin time inside its validity. Test exact adjacent values beyond 53 bits,
+   malformed/oversize inputs and the supported bound. No installation certificate
+   or private test key enters source.
+3. Change only the serial comparison and exporter-style test fixtures. Preserve
+   the registry, registration handler, proxy generation and action permissions.
+   **VERIFY-SER-UNIT:** run matcher, registration and related action-route tests,
+   the affected package typechecks and style guard. Recheck unchanged negative
+   authentication behavior and graceful malformed-data rejection.
+4. **VERIFY-SER-INTEGRATION:** run exact-source guards and canonical integration;
+   obtain independent immutable-source assessment, publish a DCO-signed PR and
+   follow protected checks/queue. Route the application advance through the
+   supported canonical upgrade, preserving uncertain original executions. Read
+   served source and observe the existing native client's normal poll. An
+   authenticated zero-claim poll proves the channel, not engine execution.
+
+**Backlog coverage:** atomic BI-6B400D74 maps OBJ-SER1, AC-SER1–AC-SER5,
+CONTRACT-SER-IDENTITY, FLOW-SER-RESTORE, FLOW-SER-SOURCE, VERIFY-SER-UNIT and
+VERIFY-SER-INTEGRATION to one metadata-contract correction. Parsing, fixture
+correction and negative controls are internal sequencing, not independently
+shippable work. Coverage and implementation admission must be recorded against
+this immutable design before code edits.
+
+Source rollback restores the prior matcher through protected delivery; it also
+restores the valid-Caddy rejection. It must never loosen authentication. The
+engine activation, useful workload, embedding retrieval, rollback/final engine
+selection and recurring AI Ops cycle remain under their existing owners.
+
 ## 4. Dispatch protocol (read-only pilot)
 
 - **`POST /api/v1/edge/actions/claim`** — authenticated by both the enrolled client certificate and the existing short-lived/rotatable Edge credential carrying `edge:actions:claim`. It returns `RemoteAction`s where status=`queued`, approval is valid, customer/site scope matches the enrolled node, and `actionType` is in `EdgeNode.scopePolicy.allowedActionTypes`. The pilot permits only `inventory.collect`.
