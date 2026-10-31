@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Local provider pause at execution boundaries
 
 Backlog: BI-CD3C1E50. Workroom: WC-7C284292. Delivery: small, bounded defect repair.
@@ -45,4 +48,8 @@ An admission read failure now prevents a model load or coding launch rather than
 
 Parent and sole deliverable: BI-CD3C1E50. Decision: atomic. Scope: the two execution adapters and their regression tests. Requirement reference OBJ-PAUSE; contract reference readEnabledRoutingProvider; flow reference local-load-and-launch-admission; verification references TEST-DMR-PAUSE and TEST-OPENCODE-PAUSE. There are no independent deliverables or dependency edges.
 
-The immutable plan will be submitted to record_plan_backlog_coverage before implementation; its returned receipt will be recorded here. Research receipt: initiative-e90e4c45-9361-4f27-bf3b-7fc4d8e4cfce. Change impact contract requires the related tests above, style-drift guard, doc-index regeneration, exact-tree pregate and pr:health.
+Current coverage receipt: cmvwzz6sh05n201meu60uz4q4 (scope refreshed for the existing typed error's eligibility-unavailable construction path; prior receipt cmvwzssro03xo01mehxejhye6), bound to immutable plan commit 825f4de2f61a00017c9d4c599c75d8c965753647 (blob c74fd058a2ffd73429aa6385357648d1ade0b671). Implementation admitted by IRD-E795B1310FA0. Research receipt: initiative-e90e4c45-9361-4f27-bf3b-7fc4d8e4cfce. Change impact contract requires the related tests above, style-drift guard, doc-index regeneration, exact-tree pregate and pr:health.
+
+## Source verification checkpoint
+
+The first regressions failed before each fix: 11 DMR/reconciler cases, 9 initial OpenCode/deferral cases, then 3 review regressions for empty-provider selection and truthful eligibility-read failures. After correction, 227 tests across eight affected/shared admission suites passed. Both web TypeScript programs completed successfully. Independent source review identified two issues and confirmed both resolved. These are source checks, not live-install verification; protected publication and canonical deployment remain separate obligations.
