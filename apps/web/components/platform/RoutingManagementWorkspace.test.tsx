@@ -85,6 +85,55 @@ describe("routing workspace investigation", () => {
     else expect(within(dialog).queryByRole("heading", { name: "Local" })).toBeNull();
     expect(window.location.href).toBe(originalUrl);
   });
+  it.each(["all", "cloud"])("explains no matching assignments and restores the %s investigation scope", provider => {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search + "&routingProvider=" + provider);
+    const originalUrl = window.location.href;
+    const assignmentTopology = { ...topology, coworkers: [...topology.coworkers,
+      { agentId: "cloud-worker", label: "Second reviewer", stationLabel: null },
+      { agentId: "local-worker", label: "Local reviewer", stationLabel: null },
+      { agentId: "other-task-worker", label: "Other task reviewer", stationLabel: null },
+      { agentId: "public-worker", label: "Public reviewer", stationLabel: null },
+      { agentId: "expired-worker", label: "Expired reviewer", stationLabel: null },
+    ], providers: [...topology.providers, { ...topology.providers[0], providerId: "local", label: "Local" }] };
+    const assignmentReceipts: RoutingReceipt[] = [receipt,
+      { ...receipt, id: "second-decision", actorId: "cloud-worker" },
+      { ...receipt, id: "local-decision", actorId: "local-worker", providerId: "local" },
+      { ...receipt, id: "other-task-decision", actorId: "other-task-worker", task: "analysis" },
+      { ...receipt, id: "public-decision", actorId: "public-worker", sensitivity: "public" },
+      { ...receipt, id: "expired-decision", actorId: "expired-worker", occurredAt: "2026-10-12T10:59:59Z" },
+    ];
+    mount({ ...data, receipts: assignmentReceipts }, assignmentTopology);
+    const assignments = within(screen.getByRole("region", { name: "Grouped routing flow" })).getByRole("heading", { name: "Assignments" });
+    fireEvent.click(within(assignments.parentElement!).getByRole("button", { name: provider === "all" ? "All 3" : "All 2" }));
+    const dialog = screen.getByRole("dialog", { name: "Assignments" });
+    const search = within(dialog).getByRole("searchbox", { name: "Search by name, task, model or identifier" });
+    fireEvent.change(search, { target: { value: "unmatched-assignment" } });
+    expect(within(dialog).getByRole("status").textContent).toContain("No matching assignments");
+    expect(within(dialog).getByText("Clear the search or try an assignment name or identifier.")).toBeTruthy();
+    expect(within(dialog).getByText("0 results")).toBeTruthy();
+    expect(within(dialog).queryByRole("link", { name: "Assignment settings" })).toBeNull();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(within(dialog).queryByText("No matching assignments")).toBeNull();
+    expect(within(dialog).getByText(provider === "all" ? "3 results" : "2 results")).toBeTruthy();
+    expect(within(dialog).getByText("Reviewer", { exact: true })).toBeTruthy();
+    expect(within(dialog).getByText("Second reviewer", { exact: true })).toBeTruthy();
+    expect(within(dialog).getAllByRole("link", { name: "Assignment settings" })).toHaveLength(provider === "all" ? 3 : 2);
+    if (provider === "all") expect(within(dialog).getByText("Local reviewer", { exact: true })).toBeTruthy();
+    else expect(within(dialog).queryByText("Local reviewer", { exact: true })).toBeNull();
+    for (const label of ["Other task reviewer", "Public reviewer", "Expired reviewer"]) {
+      expect(within(dialog).queryByText(label, { exact: true })).toBeNull();
+    }
+    for (const query of ["second REVIEWER", "cloud-worker"]) {
+      fireEvent.change(search, { target: { value: query } });
+      expect(within(dialog).getByText("1 result")).toBeTruthy();
+      expect(within(dialog).getByText("Second reviewer", { exact: true })).toBeTruthy();
+      expect(within(dialog).queryByText("Reviewer", { exact: true })).toBeNull();
+      expect(within(dialog).getByRole("link", { name: "Assignment settings" }).getAttribute("href")).toBe("/platform/ai/agent/cloud-worker");
+    }
+    fireEvent.change(search, { target: { value: "" } });
+    expect(within(dialog).getByText(provider === "all" ? "3 results" : "2 results")).toBeTruthy();
+    expect(window.location.href).toBe(originalUrl);
+  });
   it("opens the complete searchable provider catalog even without traffic", () => {
     mount({ ...data, receipts: [] });
     expect(screen.getByText("No routing evidence in this scope")).toBeTruthy();

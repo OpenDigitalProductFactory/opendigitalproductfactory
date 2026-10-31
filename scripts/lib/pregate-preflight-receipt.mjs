@@ -1,11 +1,12 @@
 // Local guard acceleration only: never canonical integration evidence.
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, openSync, fstatSync, closeSync, constants } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, openSync, fstatSync, closeSync, constants } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { gitText } from "./git.mjs";
-import { createStageReceiptWriter, readStageReceipt, reusablePassedStage, stageIdentityMatches } from "./local-ci-stage-receipt.mjs";
-import { acquireLocalConvergenceLock, releaseLocalConvergenceLock } from "./local-convergence-lock.mjs";
+import { atomicWriteJson, createStageReceiptWriter, readStageReceipt, reusablePassedStage, stageIdentityMatches } from "./local-ci-stage-receipt.mjs";
+import { acquireLocalConvergenceLock, readLocalConvergenceOwner, releaseLocalConvergenceLock, validLocalConvergenceOwner } from "./local-convergence-lock.mjs";
+import { inspectProcessIdentity } from "./local-sandbox-fence.mjs";
 
 const TTL_MS = 60 * 60 * 1000;
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -77,19 +78,94 @@ export function guardReceiptDirectory(cwd = process.cwd()) {
   return join(gitText(["rev-parse", "--absolute-git-dir"], { cwd }), "dpf-host-guard-receipts");
 }
 
+function guardPaths(directory, stage) {
+  const key = digest(stage);
+  return { path: join(directory, `${key}.json`), lock: join(directory, `${key}.lock`), mutationLock: join(directory, `${key}.write.lock`) };
+}
+
+const sameOwner = (left, right) => Boolean(validLocalConvergenceOwner(left) && validLocalConvergenceOwner(right) && left.token === right.token
+  && left.pid === right.pid && left.processIdentity && left.processIdentity === right.processIdentity);
+
+// Start, progress, completion and observer reconciliation share this lock.
+// An abandoned mutation lock stays unknown: an observer never removes it.
+function mutateGuardReceipt(paths, lockOptions, mutate) {
+  const claim = acquireLocalConvergenceLock({ ...lockOptions, path: paths.mutationLock, reconcileStale: false });
+  if (claim.status !== "acquired") throw new Error("Host receipt mutation ownership unknown; observe the original receipt writer.");
+  try {
+    return mutate(() => sameOwner(readLocalConvergenceOwner(paths.mutationLock), claim.owner), claim.owner);
+  } finally { releaseLocalConvergenceLock({ path: paths.mutationLock, token: claim.owner.token }); }
+}
+
+export function observeGuardReceipt({ directory, stage, probe = inspectProcessIdentity }) {
+  const paths = guardPaths(directory, stage);
+  const receipt = readStageReceipt(paths.path);
+  const common = { receipt, receiptPath: paths.path, attemptId: receipt?.owner?.token ?? null,
+    accountableOwner: receipt?.owner ?? { pid: receipt?.hostPid ?? null }, newAttemptAllowed: false };
+  if (!receipt) return existsSync(paths.path)
+    ? { ...common, status: "unknown", missingProof: ["readable-original-receipt"], nextAction: "Ask the accountable executor to establish the retained receipt; preserve its bytes and ownership." }
+    : { ...common, status: "absent", missingProof: [], nextAction: "Use normal preflight admission; this observation grants no execution." };
+  if (receipt.status !== "running") return { ...common, status: receipt.status,
+    missingProof: receipt.recovery ? ["original-child-outcome-and-descendant-ownership"] : [],
+    nextAction: receipt.recovery ? "Resolve original child outcome and descendant ownership through the accountable executor before seeking new admission."
+      : "Use normal preflight admission; a terminal receipt is not a new execution grant." };
+  const owner = readLocalConvergenceOwner(paths.lock);
+  if (receipt.schemaVersion !== 1 || receipt.stage !== stage || receipt.hostPid !== receipt.owner?.pid
+    || !sameOwner(receipt.owner, owner)) return { ...common, status: "unknown", missingProof: ["matching-original-receipt-and-lock-owner"], nextAction: "Ask the accountable executor to establish original receipt and lock ownership; preserve both records." };
+  let controller;
+  try { controller = probe(owner); } catch { controller = { status: "unknown", reason: "probe-threw" }; }
+  return { ...common, status: controller.status === "live" ? "running" : controller.status === "absent" ? "abandoned" : "unknown", controller,
+    missingProof: controller.status === "absent" ? ["original-child-outcome-and-descendant-ownership"] : controller.status === "live" ? [] : ["authoritative-controller-identity-or-absence"],
+    nextAction: controller.status === "absent" ? "Run pregate:status --reconcile-host-receipt to retain an inconclusive disposition; child outcome remains unknown."
+      : controller.status === "live" ? "Observe the original executor; do not start another preflight."
+        : "Ask the accountable executor to establish controller identity or absence; preserve the original receipt." };
+}
+
+export function reconcileGuardReceipt({ directory, stage, probe = inspectProcessIdentity, now = () => new Date(), lockOptions = {} }) {
+  const before = observeGuardReceipt({ directory, stage, probe });
+  if (before.status !== "abandoned") return before;
+  const paths = guardPaths(directory, stage);
+  try {
+    return mutateGuardReceipt(paths, lockOptions, (ownsMutation, observer) => {
+      const current = observeGuardReceipt({ directory, stage, probe });
+      if (current.status !== "abandoned" || !stageIdentityMatches(before.receipt, current.receipt)) return current;
+      const owner = readLocalConvergenceOwner(paths.lock);
+      // Revalidate after probing: a replaced owner/receipt is never overwritten.
+      if (!ownsMutation() || !sameOwner(current.receipt.owner, owner)
+        || !stageIdentityMatches(current.receipt, readStageReceipt(paths.path))) {
+        return { ...current, status: "unknown", nextAction: "Observe the replacement receipt or changed owner; reconciliation made no write." };
+      }
+      const receipt = { ...current.receipt, status: "inconclusive", completedAt: now().toISOString(),
+        recovery: { reason: "controller-absent-child-outcome-unknown", observedAt: now().toISOString(),
+          observer, controller: current.controller } };
+      atomicWriteJson(paths.path, receipt);
+      return observeGuardReceipt({ directory, stage, probe });
+    });
+  } catch (error) {
+    return { ...before, status: "unknown", missingProof: ["exclusive-receipt-mutation-ownership"], nextAction: "Observe the original receipt writer; no lock was reclaimed and no receipt was changed.", error: String(error.message ?? error) };
+  }
+}
+
 export async function runWithGuardReceipt({ directory, stage, identify, execute, passed, now = Date.now, lockOptions = {} }) {
+  const priorPath = guardPaths(directory, stage).path;
+  const prior = readStageReceipt(priorPath);
+  if (!prior && existsSync(priorPath)) throw new Error(`Original host receipt unreadable; preserve ${priorPath} and establish ownership before execution.`);
+  if (prior?.status === "running" || prior?.recovery) {
+    const observed = reconcileGuardReceipt({ directory, stage, now: () => new Date(now()), lockOptions });
+    throw new Error(`Equivalent host guard execution already running or original outcome unknown; receipt ${observed.receiptPath}; owner ${observed.attemptId ?? "unknown"}; ${observed.nextAction}`);
+  }
   const identity = identify();
   if (!identity) return { result: await execute({ progress: () => {} }), reused: false, executedAt: null, identityVerified: false };
   mkdirSync(directory, { recursive: true });
   // Bound disk use to one receipt/claim per stage in this worktree. Different
   // identities cannot share PASS, even though they replace the same local slot.
-  const key = digest(stage);
-  const path = join(directory, `${key}.json`);
+  const paths = guardPaths(directory, stage);
+  const { path, lock } = paths;
   const reusable = () => {
     const prior = readStageReceipt(path);
     const age = now() - Date.parse(prior?.completedAt);
     try {
-      if (age >= 0 && age < TTL_MS && reusablePassedStage({ receipt: prior, stage, identity }) && prior.result && passed(prior.result)
+      if (age >= 0 && age < TTL_MS && validLocalConvergenceOwner(prior?.owner) && prior.hostPid === prior.owner.pid
+        && !prior.recovery && reusablePassedStage({ receipt: prior, stage, identity }) && prior.result && passed(prior.result)
         && stageIdentityMatches(identity, identify())) {
         return { result: prior.result, reused: true, executedAt: prior.completedAt, identityVerified: true };
       }
@@ -98,15 +174,21 @@ export async function runWithGuardReceipt({ directory, stage, identify, execute,
   };
   const cached = reusable();
   if (cached) return cached;
-  const lock = join(directory, `${key}.lock`);
-  const claim = acquireLocalConvergenceLock({ ...lockOptions, path: lock });
+  const claim = acquireLocalConvergenceLock({ ...lockOptions, path: lock, reconcileStale: false });
   if (claim.status !== "acquired") throw new Error(`Equivalent host guard execution already running or ownership unmeasurable; receipt claim: ${lock}. Observe the original execution instead of starting another full gate.`);
-  const writer = createStageReceiptWriter({ path, stage, identity, now: () => new Date(now()) });
+  const writer = createStageReceiptWriter({ path, stage, identity, now: () => new Date(now()),
+    persistImpl: (receiptPath, next, previous) => mutateGuardReceipt(paths, lockOptions, ownsMutation => {
+      if (!ownsMutation() || !sameOwner(readLocalConvergenceOwner(lock), claim.owner)
+        || (previous && !stageIdentityMatches(previous, readStageReceipt(receiptPath)))) {
+        throw new Error("Original host receipt ownership changed; refusing late writer.");
+      }
+      atomicWriteJson(receiptPath, next);
+    }) });
   try {
     // Another executor may have finished between our read and claim acquisition.
     const completed = reusable();
     if (completed) return completed;
-    writer.start();
+    writer.start({ owner: claim.owner });
     const result = await execute({ progress: observation => writer.heartbeat(observation) });
     const eligible = passed(result) && stageIdentityMatches(identity, identify());
     writer.complete(eligible ? "passed" : "inconclusive", { result });

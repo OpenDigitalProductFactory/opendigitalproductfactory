@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-// dpf-verify-preflight — the executable step-zero of "functionally verify a
+// dpf-verify-preflight - the executable step-zero of "functionally verify a
 // feature on the live install."
 //
 // Spec: docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md
@@ -8,12 +8,13 @@
 // This is the thin IO shim over the pure verdict core
 // (apps/web/lib/verify/preflight.ts): it fetches the live install's served
 // identity, resolves the feature commit, computes ancestry via git, then prints
-// ONE verdict and ONE next action. It changes nothing — advancing the install
+// ONE verdict and ONE next action. It changes nothing - advancing the install
 // or filing a blocker BI is the skill's job (dpf-verify-on-live-install), not
 // this script's. tsx erases the core's `import type` at runtime, so the verdict
 // logic stays single-sourced with the app + the unit tests.
 
 import { execFileSync } from "node:child_process";
+import { resolveHostMcpTrust, runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 import {
   computePreflightVerdict,
   type PreflightInput,
@@ -127,13 +128,43 @@ async function main(): Promise<void> {
   };
   const result = computePreflightVerdict(input);
 
-  // JSON to stdout (machine-readable for the skill); summary to stderr (human).
-  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  process.stderr.write(
-    `\n[preflight] ${result.verdict} — ${result.reason}\n` +
-      `[preflight] next: ${result.nextAction.kind} — ${result.nextAction.detail}\n`,
-  );
+  report(result);
   process.exit(EXIT_CODE[result.verdict]);
 }
 
-void main();
+function report(result: PreflightResult): void {
+  // Keep the existing machine-readable verdict and human summary on every path.
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  process.stderr.write(
+    `\n[preflight] ${result.verdict} - ${result.reason}\n` +
+      `[preflight] next: ${result.nextAction.kind} - ${result.nextAction.detail}\n`,
+  );
+}
+
+// Saved trust must be loaded at Node startup before fetch. Reuse the existing
+// launcher rather than changing the trust store or disabling TLS validation.
+const requested = parseArgs(process.argv.slice(2));
+void runWithHostMcpTrust(main, {
+  resolveImpl: (options: Record<string, unknown> = {}) => resolveHostMcpTrust({
+    ...options,
+    // This command verifies the requested portal, not an ambient MCP endpoint.
+    mcpUrl: new URL("/api/mcp/v1", requested.portalUrl).href,
+  }),
+}).then((status: unknown) => {
+  if (typeof status === "number") process.exitCode = status;
+}).catch((error: unknown) => {
+  const failure = error as { message?: string; hostTrustPrerequisite?: boolean };
+  const result = computePreflightVerdict({
+    portalReachable: false, servedImage: null,
+    featureSha: requested.featureSha ?? git(["rev-parse", "HEAD"]) ?? "unknown",
+    featureContainedInServed: null, installHostKind: "source",
+  });
+  result.reason = failure.hostTrustPrerequisite
+    ? `Live verification transport prerequisite failed: ${failure.message ?? "unknown trust error"}`
+    : "Live verification execution outcome is unavailable; no passing verdict was recorded.";
+  result.nextAction.detail = failure.hostTrustPrerequisite
+    ? "Restore the selected authorized trust or endpoint using the diagnostic above, then rerun preflight. Do not disable certificate verification."
+    : "Preserve the execution diagnostic and investigate the launcher before retrying; do not infer runtime health.";
+  report(result);
+  process.exitCode = EXIT_CODE.BLOCKED;
+});
