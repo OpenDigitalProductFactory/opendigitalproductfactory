@@ -82,6 +82,47 @@ What exists today:
 - `IntegrationCredential` already exists as the encrypted polymorphic credential table for native integrations. It uses `fieldsEnc` and `tokenCacheEnc` encrypted by `apps/web/lib/govern/credential-crypto.ts` with `CREDENTIAL_ENCRYPTION_KEY`, not `AUTH_SECRET`.
 - `AgentActionProposal` and `ToolExecution` already exist. They should be reused for audit/proposal linkage where possible, but they do not by themselves provide a route-owned marketing approval queue.
 
+**31 October 2026 repair scope — BI-97222547 (design only).** The inventory above
+is historical. Current source includes the canonical operating snapshot shipped
+in PR #3701 (`ef16e317ce`) and the focused campaign tool contracts. Reuse
+`marketing/operating-snapshot.ts`, `getMarketingWorkspaceSnapshot()`,
+`marketing/strategy-grounding.ts` and the existing next-step resolver. The July
+evidence-to-outcome plan already assigns the recurring reducer, scheduler and
+measurement decisions to separate deliverables. Its original child identifiers
+cannot currently be resolved through this installation's governed backlog lookup;
+reconcile that coverage before creating replacement work or claiming the loop works.
+
+The fresh count defect is in `crm/revenue-cockpit.ts`: open briefs plus asset
+tasks are described as work waiting for review. Those are internal preparation
+records, not necessarily drafts awaiting the owner's decision. The repair must
+project the same organization-scoped pending drafts used by the existing owner
+approval queue. A campaign brief, its asset task and its draft are distinct stages,
+not three owner approvals. Keep preparation visible with its actual stage and
+accountable next actor; count owner approvals only from reviewable draft identities.
+The link accompanying an approval count must open that exact queue. Empty approval
+queues must not be described as waiting for owner review because preparation exists.
+
+Recommendations must carry the current saved strategy's audience and goal and
+the selected work's existing lineage. A recent strategy-review timestamp alone
+does not validate an older campaign's audience. Reuse recorded strategy/work
+relationships and the existing decision resolver; where their evidence cannot
+establish alignment, explain that alignment needs review rather than recommending
+the old audience as current. Preserve original work and its history. This repair
+does not retire campaigns, approve drafts, publish, spend, alter business grounding
+or manufacture customer-proof permission. A new lineage schema requires a separate
+grounded design decision if existing relations prove insufficient.
+
+Acceptance for this repair includes: preparation with zero pending drafts shows
+zero owner approvals; one draft contributes one approval even with several related
+work products; approved/published/rejected drafts leave the pending count; counts
+and linked queue agree for the same organization; another organization's work is
+excluded; an older SaaS audience is not presented as aligned with a current SMB/MSP
+strategy without supporting evidence; missing alignment remains explicit. Verify
+the actual served queue and recommendation after source tests and protected
+delivery. Internal fixtures and a rendered count alone do not establish the
+recurring acquisition loop. Required feature design/review/plan gates, recorded
+funding ownership and current implementation admission remain outstanding.
+
 ### 2.1 Strategy grounding had no write path (BI-06BB96F0, closed 2026-08-27)
 
 A defect this section's original inventory did not surface. `recordMarketingStrategistReview()` in `apps/web/lib/marketing.ts` is the only `prisma.marketingStrategy.update` call in the codebase, and its payload covers seven fields: `status`, `primaryChannels`, `secondaryChannels`, `reviewCadence`, `lastReviewedAt`, `nextReviewAt`, `specialistNotes`.
