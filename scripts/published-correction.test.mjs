@@ -682,6 +682,7 @@ function mappedCorrectionFixture() {
 test("a correction proof survives a distinct publish-hook process but not a relevant guard input change", async () => {
   const fixture = mappedCorrectionFixture();
   let environment = { ...process.env, CODEX_SESSION_ID: "direct-shell", DPF_GATE_OWNER_SESSION_ID: "direct-owner" };
+  const initialGuardEnvironment = guardResultEnvironment(environment);
   let executions = 0;
   const identify = () => ({ ...fixture.identify(), environment: createHash("sha256").update(JSON.stringify(guardResultEnvironment(environment))).digest("hex") });
   const run = () => {
@@ -693,7 +694,9 @@ test("a correction proof survives a distinct publish-hook process but not a rele
     const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
     assert.equal(executions, 1);
     environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1",
-      PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${environment.PATH ?? ""}` };
+      PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${environment.PATH ?? environment.Path ?? ""}` };
+    assert.deepEqual(guardResultEnvironment(environment), initialGuardEnvironment,
+      "the hook wrapper must preserve the executable search identity");
     const inspection = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
     assert.equal(inspection.ok, true, inspection.reason);
     const reused = await verifyPublishedCorrection(options);
@@ -709,6 +712,16 @@ test("guard-result identity retains the selected PowerShell test executable", ()
   const legacy = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "powershell" });
   const pwsh = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "C:/Program Files/PowerShell/7/pwsh.exe" });
   assert.notDeepEqual(pwsh, legacy);
+});
+
+test("guard-result identity ignores only the Git hook PATH prefix", () => {
+  const base = { CI: "true", PATH: "C:/toolchain/openssl-a;C:/toolchain/bash-a" };
+  const hook = { ...base, PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${base.PATH}` };
+  const changedTool = { ...base, PATH: "C:/toolchain/openssl-b;C:/toolchain/bash-a" };
+  assert.deepEqual(guardResultEnvironment(hook), guardResultEnvironment(base),
+    "the known hook wrapper does not change executable resolution");
+  assert.notDeepEqual(guardResultEnvironment(changedTool), guardResultEnvironment(base),
+    "a different OpenSSL/Bash search path must not inherit an affected-check proof");
 });
 
 test("a second unpushed correction retains the published head's receipt as its anchor", async () => {

@@ -41,11 +41,28 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
 // publish hook necessarily has a different session, tracing and provider
 // environment from the shell that recorded a correction proof.  Keep only
 // inputs that select an executable or can change Node/CI guard behaviour.
-const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:TEST_POWERSHELL|SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
+const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATH|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:TEST_POWERSHELL|SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
+const GIT_HOOK_PATH_PREFIX = /[\\/]Git[\\/]mingw64[\\/]libexec[\\/]git-core[\\/]*$/i;
+const PATH_DELIMITER = process.platform === "win32" ? ";" : ":";
+
+function guardPath(value) {
+  // Git prepends this directory while invoking hooks. It resolves Git's own
+  // helpers, not the OpenSSL/Bash/PowerShell tools executed by guard plans.
+  // Preserve every other PATH entry because those tools are selected from it.
+  return String(value).split(PATH_DELIMITER).filter(entry => !GIT_HOOK_PATH_PREFIX.test(entry)).join(PATH_DELIMITER);
+}
 
 export function guardResultEnvironment(env = process.env) {
-  return Object.entries(env)
-    .filter(([key]) => GUARD_RESULT_ENV.test(key))
+  const selected = new Map();
+  for (const [key, value] of Object.entries(env)) {
+    if (!GUARD_RESULT_ENV.test(key)) continue;
+    // Windows treats names case-insensitively, while object-spread test and
+    // hook environments can expose both Path and PATH. Canonicalize before
+    // hashing so the hook's real PATH overrides the inherited spelling.
+    selected.set(key.toUpperCase(), value);
+  }
+  return [...selected]
+    .map(([key, value]) => [key, key === "PATH" ? guardPath(value) : value])
     .sort(([left], [right]) => left.localeCompare(right));
 }
 
