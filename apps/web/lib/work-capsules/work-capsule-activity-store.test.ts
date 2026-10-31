@@ -150,7 +150,7 @@ describe("transactional Workroom activity", () => {
 
     await expect(recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
       actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
-      deferPublication: true })).rejects.toThrow(/activities do not match/i);
+      deferPublication: true })).rejects.toThrow(/requires exact recorded execution activities/i);
     expect(update).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });

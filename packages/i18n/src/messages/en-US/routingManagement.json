@@ -118,6 +118,8 @@
   "routingTraffic": "Routing traffic",
   "searchByNameTaskModelOrIdentifier": "Search by name, task, model or identifier",
   "noMatchingProviders": "No matching providers",
+  "noMatchingAssignments": "No matching assignments",
+  "clearSearchOrTryAssignment": "Clear the search or try an assignment name or identifier.",
   "clearSearchOrTryProviderOrModel": "Clear the search or try a provider or model name.",
   "settingsOverrides": "Settings & overrides",
   "eligibilityEvidenceUnavailable": "Eligibility evidence unavailable",

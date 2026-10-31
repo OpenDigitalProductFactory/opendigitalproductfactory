@@ -3,22 +3,25 @@ package action
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
+	"strings"
 	"time"
 )
 
 const (
 	QualificationWindowsVerifyActionType = "qualification.windows.verify-v1"
-	WindowsHandleReplacementProcedureID  = "windows-handle-replacement-v1"
+	WindowsHandleReplacementProcedureID  = "windows-bound-node-test-v2"
 )
 
 var (
@@ -34,6 +37,33 @@ var (
 type qualificationBlobIdentity struct {
 	Path    string `json:"path"`
 	BlobSHA string `json:"blobSha"`
+}
+
+type qualificationSourceFile struct {
+	Path          string `json:"path"`
+	BlobSHA       string `json:"blobSha"`
+	ContentBase64 string `json:"contentBase64"`
+}
+
+type boundedOutputBuffer struct {
+	bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *boundedOutputBuffer) Write(value []byte) (int, error) {
+	original := len(value)
+	remaining := b.limit - b.Len()
+	if remaining <= 0 {
+		b.truncated = b.truncated || original > 0
+		return original, nil
+	}
+	if len(value) > remaining {
+		value = value[:remaining]
+		b.truncated = true
+	}
+	_, err := b.Buffer.Write(value)
+	return original, err
 }
 
 type qualificationWindowsParameters struct {
@@ -52,6 +82,43 @@ type qualificationWindowsParameters struct {
 	ResultSchemaVersion        int                         `json:"resultSchemaVersion"`
 	MaxDurationSeconds         int                         `json:"maxDurationSeconds"`
 	EdgeNodeID                 string                      `json:"edgeNodeId"`
+	SourceFiles                []qualificationSourceFile   `json:"sourceFiles"`
+}
+
+const qualificationSupportPath = "scripts/lib/evidence-validity-policy.mjs"
+
+func gitBlobSHA(data []byte) string {
+	h := sha1.New()
+	_, _ = fmt.Fprintf(h, "blob %d\x00", len(data))
+	_, _ = h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func validateQualificationSources(p qualificationWindowsParameters) bool {
+	expected := make(map[string]string, len(p.ProductionBlobs)+len(p.TestBlobs)+1)
+	for _, value := range append(append([]qualificationBlobIdentity{}, p.ProductionBlobs...), p.TestBlobs...) {
+		if prior, exists := expected[value.Path]; exists && prior != value.BlobSHA {
+			return false
+		}
+		expected[value.Path] = value.BlobSHA
+	}
+	expected[qualificationSupportPath] = ""
+	if len(p.SourceFiles) != len(expected) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, source := range p.SourceFiles {
+		want, ok := expected[source.Path]
+		if !ok || seen[source.Path] || source.BlobSHA == "" || !sha40.MatchString(source.BlobSHA) || !safeRepositoryPath(source.Path) {
+			return false
+		}
+		data, err := base64.StdEncoding.DecodeString(source.ContentBase64)
+		if err != nil || len(data) > 1024*1024 || gitBlobSHA(data) != source.BlobSHA || (want != "" && want != source.BlobSHA) {
+			return false
+		}
+		seen[source.Path] = true
+	}
+	return true
 }
 
 func safeRepositoryPath(value string) bool {
@@ -84,13 +151,13 @@ func parseQualificationWindowsParameters(raw json.RawMessage) (qualificationWind
 	if decoder.Decode(&extra) == nil {
 		return p, ErrInvalidParameters
 	}
-	invalid := p.Version != 1 || p.ResultSchemaVersion != 1 || p.ProcedureID != WindowsHandleReplacementProcedureID ||
+	invalid := p.Version != 2 || p.ResultSchemaVersion != 2 || p.ProcedureID != WindowsHandleReplacementProcedureID ||
 		!backlogID.MatchString(p.BacklogItemID) || !workroomID.MatchString(p.WorkroomID) ||
 		!repositoryID.MatchString(p.Repository) || !sha40.MatchString(p.BaseSHA) || !sha40.MatchString(p.HeadSHA) ||
 		!sha40.MatchString(p.ProtocolBlobSHA) || !safeRepositoryPath(p.ProtocolPath) ||
 		!validBlobList(p.ProductionBlobs) || !validBlobList(p.TestBlobs) ||
 		!digest64.MatchString(p.QualificationBindingDigest) || p.MaxDurationSeconds < 1 || p.MaxDurationSeconds > 1800 ||
-		!edgeIDPattern.MatchString(p.EdgeNodeID)
+		!edgeIDPattern.MatchString(p.EdgeNodeID) || !validateQualificationSources(p)
 	if invalid {
 		return p, ErrInvalidParameters
 	}
@@ -107,6 +174,7 @@ type QualificationWindowsExecutor interface {
 type QualificationWindowsHandler struct {
 	Platform       string
 	StateDirectory string
+	NodePath       string
 	Now            func() time.Time
 }
 
@@ -130,58 +198,55 @@ func (h *QualificationWindowsHandler) Execute(ctx context.Context, raw json.RawM
 		return ExecutionOutput{}, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	target := filepath.Join(dir, "held.txt")
-	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
-		return ExecutionOutput{}, err
+	for _, source := range p.SourceFiles {
+		data, _ := base64.StdEncoding.DecodeString(source.ContentBase64)
+		destination := filepath.Join(dir, filepath.FromSlash(source.Path))
+		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+			return ExecutionOutput{}, err
+		}
+		if err := os.WriteFile(destination, data, 0o600); err != nil {
+			return ExecutionOutput{}, err
+		}
 	}
-	held, err := os.Open(target)
-	if err != nil {
-		return ExecutionOutput{}, err
+	nodePath := h.NodePath
+	if nodePath == "" {
+		nodePath, err = exec.LookPath("node")
 	}
-	firstSource := filepath.Join(dir, "replacement-one.txt")
-	if err := os.WriteFile(firstSource, []byte("replacement-one"), 0o600); err != nil {
-		_ = held.Close()
-		return ExecutionOutput{}, err
+	if err != nil || !filepath.IsAbs(nodePath) {
+		return ExecutionOutput{}, errors.New("qualified Node runtime is unavailable")
 	}
-	firstErr := replaceFile(firstSource, target)
-	_ = held.Close()
-	secondSource := filepath.Join(dir, "replacement-two.txt")
-	if err := os.WriteFile(secondSource, []byte("replacement-two"), 0o600); err != nil {
-		return ExecutionOutput{}, err
+	args := []string{"--test"}
+	for _, test := range p.TestBlobs {
+		args = append(args, filepath.FromSlash(test.Path))
 	}
-	secondErr := replaceFile(secondSource, target)
-	select {
-	case <-bounded.Done():
+	command := exec.CommandContext(bounded, nodePath, args...)
+	command.Dir = dir
+	output := &boundedOutputBuffer{limit: 2 * 1024 * 1024}
+	command.Stdout, command.Stderr = output, output
+	runErr := command.Run()
+	if errors.Is(bounded.Err(), context.DeadlineExceeded) {
 		return ExecutionOutput{}, bounded.Err()
-	default:
 	}
-	cleanup := "removed"
-	if cleanupErr := os.RemoveAll(dir); cleanupErr != nil {
-		cleanup = fmt.Sprintf("refused:%T", cleanupErr)
+	exitCode := 0
+	if runErr != nil {
+		var exitError *exec.ExitError
+		if !errors.As(runErr, &exitError) {
+			return ExecutionOutput{}, runErr
+		}
+		exitCode = exitError.ExitCode()
 	}
-	observations := map[string]any{"firstReplacement": outcome(firstErr), "secondReplacement": outcome(secondErr), "cleanup": cleanup}
-	encoded, _ := json.Marshal(observations)
-	digest := sha256.Sum256(encoded)
-	return ExecutionOutput{Result: map[string]any{"schemaVersion": 1, "disposition": "observed"}, Evidence: map[string]any{
-		"procedureId": p.ProcedureID, "procedureVersion": 1, "qualificationBindingDigest": p.QualificationBindingDigest,
-		"platform": runtime.GOOS, "architecture": runtime.GOARCH,
+	digest := sha256.Sum256(output.Bytes())
+	disposition := "passed"
+	if exitCode != 0 {
+		disposition = "failed"
+	}
+	return ExecutionOutput{Result: map[string]any{"schemaVersion": 2, "disposition": disposition}, Evidence: map[string]any{
+		"procedureId": p.ProcedureID, "procedureVersion": 2, "qualificationBindingDigest": p.QualificationBindingDigest,
 		"baseSha": p.BaseSHA, "headSha": p.HeadSHA, "protocolPath": p.ProtocolPath,
 		"protocolBlobSha": p.ProtocolBlobSHA, "productionBlobs": p.ProductionBlobs, "testBlobs": p.TestBlobs,
 		"startedAt": started.Format(time.RFC3339Nano), "finishedAt": now().Format(time.RFC3339Nano),
-		"observations": observations, "boundedOutputDigest": hex.EncodeToString(digest[:]),
+		"command": strings.Join(append([]string{"node"}, args...), " "), "exitCode": exitCode,
+		"sourceFileCount": len(p.SourceFiles), "boundedOutputDigest": hex.EncodeToString(digest[:]),
+		"outputTruncated": output.truncated,
 	}}, nil
-}
-
-func replaceFile(source, target string) error {
-	if err := os.Remove(target); err != nil {
-		return err
-	}
-	return os.Rename(source, target)
-}
-
-func outcome(err error) string {
-	if err == nil {
-		return "replaced"
-	}
-	return fmt.Sprintf("refused:%T", err)
 }
