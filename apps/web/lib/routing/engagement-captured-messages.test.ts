@@ -70,7 +70,6 @@ describe("captured Messages Critic output encoding", () => {
     expect(generate).toHaveBeenCalledExactlyOnceWith(prepared.bodyUtf8, { bodySha256: prepared.bodySha256, inputTokens: 100, maxOutputTokens: 2048, reservedTokens: 2148 });
   });
   it("holds an oversized or failed count before generation, with no recount or alternate wire", async () => {
-    const prepared = buildEngagementMessagesBody(input());
     for (const counted of ['{"input_tokens":19000}', '{"input_tokens":-1}', '{"error":"unavailable"}']) {
       const prepared = buildEngagementMessagesBody(input());
       const count = vi.fn(async () => counted), generate = vi.fn();
