@@ -135,6 +135,7 @@ export async function mcpPost(method, params, {
   accept,
   fetchImpl,
   requestImpl,
+  resolveTrust = resolveHostMcpTrust,
   connection,
   label,
   env = process.env,
@@ -144,7 +145,7 @@ export async function mcpPost(method, params, {
   // BI-78B653D5: `bearerToken` is a PAT string or a self-refreshing
   // client_credentials bearer (scripts/lib/mcp-credential.mjs). Materialize
   // it once per call so a long-running gate always sends a live token.
-  const bearerValue = await materializeBearer(bearerToken);
+
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("mcpCall: timeoutMs must be a positive number");
   }
@@ -173,6 +174,8 @@ export async function mcpPost(method, params, {
     );
   }
 
+  // A token refresh can send client credentials: authorize its endpoint first.
+  const bearerValue = await materializeBearer(bearerToken);
   const callLabel = label ?? (method === "tools/call" && params?.name ? params.name : method);
   const body = buildJsonRpcBody(method, params);
   const headers = {
@@ -204,7 +207,7 @@ export async function mcpPost(method, params, {
   }
 
   const url = new URL(mcpUrl);
-  const trust = url.protocol === "https:" ? resolveHostMcpTrust({ mcpUrl, env, connection }) : null;
+  const trust = url.protocol === "https:" ? resolveTrust({ mcpUrl, env, connection }) : null;
   const requestFn = requestImpl ?? (url.protocol === "https:" ? httpsRequest : httpRequest);
   return new Promise((resolve, reject) => {
     const timeoutError = () => Object.assign(

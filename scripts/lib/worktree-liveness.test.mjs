@@ -486,14 +486,39 @@ describe("ownership traversal uses one saved connection configuration (BI-02C087
 
 // Exercise native-request trust resolution rather than the early fetch seam.
 describe("prepared system trust reaches native paging transport", () => {
-  it("discovers once per observation across pages and details, including an empty CA selection", async () => {
+  for (const kind of ["pat", "client_credentials"]) it(`discovers once across native pages, detail and credential minting (${kind})`, async () => {
     const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+    const { resolveMcpCredential } = await import("./mcp-credential.mjs");
     const { EventEmitter } = await import("node:events");
-    const env = { DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only" };
-    let discoveries = 0, requests = 0;
-    const resolveTrust = options => resolveHostMcpTrust({ ...options, platform: "win32", installDir: ".",
-      spawnSyncImpl: () => { discoveries++; return { status: 0, stdout: JSON.stringify({ McpUrl: env.DPF_MCP_URL, CaBundle: "" }) }; },
-    });
+    const env = Object.freeze({ DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only",
+      ...(kind === "client_credentials" ? { DPF_MCP_CLIENT_ID: "fixture-client", DPF_MCP_CLIENT_SECRET: "fixture-secret" } : {}) });
+    let discoveries = 0, trustResolutions = 0, requests = 0, mints = 0, expectedEnv, expectedConnection;
+    const resolveTrust = options => {
+      trustResolutions++;
+      const trust = resolveHostMcpTrust({ ...options, platform: "win32", installDir: ".",
+        spawnSyncImpl: () => {
+          discoveries++;
+          assert.equal(discoveries, Math.floor(requests / 3) + 1, "unexpected rediscovery inside an observation");
+          return { status: 0, stdout: JSON.stringify({ McpUrl: env.DPF_MCP_URL, CaBundle: "" }) };
+        },
+      });
+      if (!options.connection) { expectedEnv = trust.env; expectedConnection = trust.connection; }
+      return trust;
+    };
+    const resolveCredential = options => {
+      assert.equal(options.env, expectedEnv);
+      assert.equal(options.connection, expectedConnection);
+      return resolveMcpCredential({ ...options,
+        env: { ...options.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: fileURLToPath(new URL("./missing-fixture-credentials.json", import.meta.url)) },
+        exchange: async config => {
+          assert.equal(config.env.DPF_MCP_URL, env.DPF_MCP_URL);
+          assert.equal(config.connection, expectedConnection);
+          resolveTrust(config); // real trust adapter, fixture token response only
+          mints++;
+          return { accessToken: "fixture-minted", expiresAt: Date.now() + 3600_000 };
+        },
+      });
+    };
     const requestImpl = (_url, options, respond) => {
       requests++;
       assert.equal(options.ca, undefined, "system trust is preserved");
@@ -520,16 +545,16 @@ describe("prepared system trust reaches native paging transport", () => {
       return request;
     };
     for (let observation = 1; observation <= 2; observation++) {
-      const result = await loadActiveWorkroomPaths({ env, resolveTrust, requestImpl });
+      const result = await loadActiveWorkroomPaths({ env, resolveTrust, resolveCredential, requestImpl });
       assert.equal(result.available, true, result.reason);
       assert.equal(result.activePaths.size, 2);
       assert.equal(discoveries, observation, "fresh observations discover again, individual reads do not");
+      assert.equal(trustResolutions, observation * (kind === "pat" ? 4 : 5), "instrument preparation, every native request and OAuth trust");
       assert.equal(requests, observation * 3, "two native pages and one native detail read");
+      assert.equal(mints, kind === "pat" ? 0 : observation);
     }
-    assert.deepEqual(env, { DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only" });
   });
 });
-
 it("reuses a completed empty-CA selection without rediscovering host state", async () => {
   const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
   let discoveries = 0;

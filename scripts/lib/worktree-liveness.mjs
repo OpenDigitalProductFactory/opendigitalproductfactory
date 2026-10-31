@@ -236,7 +236,7 @@ export async function loadActiveWorkroomPaths(options = {}) {
     const trust = new URL(url).protocol === "https:"
       ? (options.resolveTrust ?? resolveHostMcpTrust)({ mcpUrl: url, env }) : null;
     const transportEnv = trust?.env ?? env;
-    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env: transportEnv });
+    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env: transportEnv, connection: trust?.connection });
     const callTool = async (name, args) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("workroom observation read budget exceeded");
@@ -248,6 +248,7 @@ export async function loadActiveWorkroomPaths(options = {}) {
         accept: "application/json, text/event-stream",
         fetchImpl: options.fetchImpl,
         requestImpl: options.requestImpl,
+        resolveTrust: options.resolveTrust,
         connection: trust?.connection,
         // DPF_MCP_URL is operator intent; `env` may be an injected copy, so the
         // client's own process.env check cannot see it.
