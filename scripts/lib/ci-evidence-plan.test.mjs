@@ -101,6 +101,14 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.affectedTests, ["scripts/ci-policy-guards.test.mjs"]);
   });
 
+  it("maps the installed published-correction guard to its PR Health Logic test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/hooks/lib/published-correction.mjs"],
+      knownTests: ["scripts/published-correction.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/published-correction.test.mjs"]);
+  });
+
   it("does not claim a Python route, because .py files serve none", () => {
     const plan = createEvidencePlan(input({
       changedFiles: [
