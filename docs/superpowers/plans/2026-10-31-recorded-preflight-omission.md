@@ -12,7 +12,7 @@ Existing BI-10AD69D2 and mirrored BI-295A345C own abandoned-outcome reconciliati
 
 ## Ordered repair
 
-1. Add an isolated actual CLI regression using a disposable detached Git fixture, no inherited credentials, no guard execution and no external GitHub/MCP submission. Persist the fixture's own unknown/live/unreadable host receipt and execution lock. With a nonempty explicit skip reason, require an attributable skipped/inconclusive outcome, no guard/lease/lock claim or PASS and unchanged receipt/lock bytes. Without a reason, require the existing refusal. Observe the failing old behavior before changing code.
+1. Add an isolated actual CLI regression using a disposable named Git fixture (the existing outcome recorder requires branch attribution), no inherited credentials, no guard execution and no external GitHub/MCP submission. Persist the fixture's own unknown/live/unreadable host receipt and execution lock. With a nonempty explicit skip reason, require an attributable skipped/inconclusive outcome, no guard/lease/lock claim or PASS and unchanged receipt/lock bytes. Without a reason, require the existing refusal. Observe the failing old behavior before changing code.
 2. In the CLI alone, route the explicit reason through existing runPreflight's no-work branch and existing outcome recorder outside guard execution/reuse admission. Normal execution continues through unchanged runWithGuardReceipt and its conservative refusal. Do not change the helper, erase evidence, disable hooks, add an alternate worktree identity to the original work or infer consent from a nonempty arbitrary environment value; the existing audited operator-skip procedure still governs real publication.
 3. Run affected CLI, receipt, guard-outcome and pre-push contract tests plus proportional policy checks; freeze DCO commit and independently review exact delta. Publish only through normal gated protected delivery. Source fixtures prove this path; original Workrooms publication must separately exercise the approved omission and retain its unknown original record.
 
@@ -27,7 +27,7 @@ Contract reference: runPreflight.
 Flow reference: preflight-no-execution-omission.
 Verification reference: isolated-preflight-cli-regression.
 
-Atomic internal sequencing: one CLI correction, one regression and this ordered plan implement BI-7FF02040. No independent deliverable or new substrate. Coverage receipt requires immutable plan publication before implementation admission.
+Atomic internal sequencing: one CLI correction, one regression and this ordered plan implement BI-7FF02040. No independent deliverable or new substrate. Initial immutable plan30e713b coveragecmvx0fftg3yr401pn33a1191p, researchinitiative-b526bb74-80c0-479d-a499-29fc5eeea003 and small implementation admissionIRD-51022FB45BA4 accepted. The realCLI regression failed all3 old retained-receipt cases. Corrected CLI passes all3 and preserves byte-identical evidence; complete affected suite and protected delivery remain required.
 
 ## Risks and rollback
 
