@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,12 +11,11 @@ import { compileShapeDocument } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { defaultResolveSources, liveDirectExecuteSites } from "@/lib/gpp/shape-language/resolve-sources";
 import { gppShapeDocumentSchema } from "@dpf/validators/gpp/gpp-shape-schema";
 import { GATE_RATIFICATION } from "@/lib/gpp/shape-language/gate-ratification";
+import { GPP_BINDINGS } from "@/lib/gpp/bindings";
+import { GPP_BINDING_ENFORCEMENT } from "@/lib/gpp/binding-enforcement";
 import { listWorkShapes } from "@/lib/work-management/work-shapes";
-import registryKeys from "../__fixtures__/work-shape-keys.pre-migration.json";
-import currentBaseRegistry from "./build-studio.registry-keys.json";
 import document from "./build-studio.gpp.json";
 import transitions from "./build-studio.transitions.json";
-import baselineDigests from "./build-studio.registry-baseline.json";
 import { BUILD_STUDIO_EVIDENCE_MAP, BUILD_STUDIO_SANDBOX_STAGES, SANDBOX_TOOL_CLASS, planToBuildDivergences } from "./build-studio.realization";
 import { BUILD_STUDIO_ELEMENT_MAP } from "./build-studio.element-map";
 import { KNOWN_FINDINGS } from "./build-studio.known-findings";
@@ -120,18 +118,15 @@ describe("Build Studio declared flow conformance (offline; no runtime activation
     expect([...disclosed,"build"].sort()).toEqual([...BUILD_STUDIO_SANDBOX_STAGES].sort());
   });
 
-  it("P7/P8: no runtime imports or registry/binding changes activate the declaration", () => {
+  it("P7/P8: the declaration has no runtime imports, registration or active binding", () => {
     const runtimeImports = sources.filter((file) => !file.path.startsWith("lib/work-management/declared-flows/") && file.path !== "lib/work-management/generated/declared-flows.generated.ts")
       .filter((file) => /(?:from\s*|import\s*\()\s*["'][^"']*(?:declared-flows|build-studio\.flow\.generated)/.test(file.content));
     expect(runtimeImports.map((file) => file.path)).toEqual([]);
-    const keys = listWorkShapes().map((definition) => definition.key).sort();
-    // The migration fixture predates two independently merged shapes. Keep it
-    // untouched and prove both historical preservation and exact current-base equality.
-    expect(keys).toEqual(currentBaseRegistry.keys);
-    expect(registryKeys.every((key) => keys.includes(key))).toBe(true);
-    for (const [path,digest] of Object.entries(baselineDigests)) {
-      expect(createHash("sha256").update(readFileSync(resolve(web,path))).digest("hex"),path).toBe(digest);
-    }
+    // Baseline key/hash equality is publication evidence for this change,
+    // not a permanent freeze on unrelated registry and binding evolution.
+    expect(listWorkShapes().map((definition) => definition.key)).not.toContain(shape.key);
+    expect(GPP_BINDINGS.map((binding) => binding.bindingId)).not.toContain("build-studio-sandbox");
+    expect(GPP_BINDING_ENFORCEMENT).not.toHaveProperty("build-studio-sandbox");
   });
 
   it("maps each derived element to one existing runtime artifact", () => {

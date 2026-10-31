@@ -389,8 +389,11 @@ per property; each failure names the file and row to update.
 - **P5 containment.** Environment-bound stages plus known `C-7/SANDBOX-CONTAINMENT` entries equal
   `BUILD_STUDIO_SANDBOX_STAGES`.
 - **P7 inertness.** Import scan over `app/` and `lib/` excluding tests and `scripts/`.
-- **P8 registry unchanged.** `listWorkShapes()` keys equal
-  `__fixtures__/work-shape-keys.pre-migration.json`; `GENERATED_WORK_SHAPES` unchanged.
+- **P8 registry unchanged by this delivery.** Record the before/after current-base registry
+  keys and shared artifact digests as publication evidence; preserve the older migration fixture.
+  Permanent tests assert that `build-studio` remains absent from the runtime shape registry and
+  `build-studio-sandbox` remains absent from the runtime binding/enforcement tables. They must
+  allow unrelated, independently governed shape and binding changes.
 - **Element map.** Every compiled element id has exactly one row, and the reverse.
 - **Binding draft.** `emitBindingRecords` over the compiled document returns exactly one draft:
   binding `build-studio-sandbox@1`, owning gate `gate:plan` (WWMD, `build-studio`), tools

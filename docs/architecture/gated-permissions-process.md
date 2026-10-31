@@ -603,7 +603,9 @@ error may be listed. C-5 remains **not evaluated**, and C-9 reach warnings remai
 The minimal schema compatibility repair accepts existing registered camelCase names; names
 are not normalized and unresolved tools still fail compilation. Only one additional validator
 source path was founder-authorized. The four registry/binding artifacts and enforcement source
-remain byte-identical to the recorded current base; the historical migration fixture is retained.
+remain byte-identical to the recorded current base as this delivery's publication evidence;
+the historical migration fixture is retained. Permanent conformance checks guard this flow's
+non-registration and absence of an active binding, without freezing unrelated registry changes.
 
 
 
