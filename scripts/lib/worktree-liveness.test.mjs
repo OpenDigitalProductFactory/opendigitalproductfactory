@@ -6,6 +6,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 
 import {
   parseActiveWorktreePaths,
@@ -19,7 +20,7 @@ import {
 const loadActiveWorkroomPaths = async options => {
   const { resolveMcpCredential } = await import("./mcp-credential.mjs");
   return loadPaths({ ...options, resolveCredential: options.resolveCredential ?? (args => resolveMcpCredential({ ...args,
-    env: { ...args.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: new URL("./missing-fixture-credentials.json", import.meta.url).pathname },
+    env: { ...args.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: fileURLToPath(new URL("./missing-fixture-credentials.json", import.meta.url)) },
   })) });
 };
 
