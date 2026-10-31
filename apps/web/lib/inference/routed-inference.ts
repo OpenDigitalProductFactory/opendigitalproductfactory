@@ -8,6 +8,7 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
+import { assertOrdinaryProviderTransportAllowed } from "../shared/captured-effect-store";
 import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
 import { currentInferenceSignal } from "./inference-admission";
 import { transferLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
@@ -123,11 +124,6 @@ export interface RoutedInferenceResult {
    *  compaction + the context-pressure gauge to the real window (BI-9679EB1A). */
   resolvedMaxContextTokens?: number | null;
 }
-// ─── Error ──────────────────────────────────────────────────────────────────
-
-
-// ─── Options ────────────────────────────────────────────────────────────────
-
 // ─── Route preparation (shared by routeAndCall + previewRoute) ───────────────
 
 interface PreparedRoute {
@@ -366,6 +362,7 @@ export async function routeAndCall(
   sensitivity: RouteSensitivity = "internal",
   options?: RouteAndCallOptions,
 ): Promise<RoutedInferenceResult> {
+  assertOrdinaryProviderTransportAllowed();
   if (currentReassessmentExecution()) return routeAndCallAttempt(messages, systemPrompt, sensitivity, options, () => {});
   let reconciled = false;
   let dispatchStarted = false;

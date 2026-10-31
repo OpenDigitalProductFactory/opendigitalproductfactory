@@ -6,15 +6,219 @@ status: active
 Backlog: BI-BCBCA8D1. Workroom: WC-6CCF8DAB.
 Status: bounded repair design; implementation and acceptance are not complete.
 
-## Problem and verified boundary
+## Current recovery contract (October 26)
 
-On October 25, CE-1FE20783 and CE-724328D6 remain requested. Both have
+The original request-to-dispatch defect is repaired in protected PR 6606.
+CE-1FE20783 then actually ran as the registered UX Design Critic: original task
+ending D170F2F755AF performed 17 successful governed reads and received four
+immutable images at prototype d2364c71410d071bbe63ef48eedeebdc6570f8f6. Its
+8225-character reply failed contribution validation and was replaced with hold
+prose before persistence. The original response and precise first predicate are
+unavailable. The task remains held; the engagement has no accepted result or
+original Workroom contribution. No findings may be reconstructed.
+
+Protected PR 6617, merged as c17502c73e9ebdc35cfb3677f0a33b20da5cf192,
+repairs prospective diagnostic retention. One authoritative terminal inspection
+preserves its exact failure and bounded unvalidated reply in existing TaskMessage
+metadata; settlement consumes that inspection instead of inspecting hold prose.
+Known credential/image patterns withhold retained text while keeping digest and
+byte attribution. This does not recover the lost reply or authorize a replay.
+
+The following extension completes the original safe execution/recovery contract
+under AC-4, AC-6 and AC-7. It does not settle an uncertain historical execution.
+The original fulfillment.taskRunId, binding, input/request digests, attempt and
+unknown consumption remain immutable. CE-724328D6 remains pinned to f52 and held;
+a d236 assessment cannot silently satisfy that historical scope.
+
+### Existing authority, without an invented manual gate
+
+Use the original caller-owned engagement and the current native authority
+resolver. Issue the exact finite action/policy from canonical server records,
+not free-form metadata, contractContext, caller approval flags or an invented
+initiativeReviewBinding. Bind the original CE/task/request/input digests, current
+actor and original owner, immutable material association, room/stage, readers,
+limits, expiry and policy version into its authority snapshot.
+
+Reuse legitimate current delegated DEV scope, funding, grants and consent when
+the native decision permits it. The actual automated, delegated, propose,
+require-approval or deny verdict is authoritative. Do not force
+policyProjectionAllowed=false without an applicable operator policy. A valid
+policy-projected decision is not a human decision and must be labelled accurately.
+When the current contract requires an exact ActionEnvelope, preserve its real
+binding, conditions, expiry and current decision. A denial stops that action.
+No assistant self-issues policy, adds grants, borrows identities or fabricates a
+humanApproval marker. The unapproved v3 proposal's blanket fresh-human condition
+is withdrawn; it was not an established requirement for this advisory service.
+
+Development and operational authority remain separate. The existing owner made
+a normal design claim on the same BI/Workroom/branch; native decision
+IRD-5D293B449758 allowed it with the existing Medium fix classification. This
+permits this design amendment, not implementation or Critic execution. Refresh
+immutable plan coverage and claim implementation normally before code changes.
+Do not create a feature merely to manufacture a scope baseline, borrow BI-285EF102
+policy, or resume the E27 unknown spec-approval task.
+
+### One additive, bounded present assessment
+
+An explicit supported action may authorize one separately attributed present
+advisory assessment of the original need only when current authority and finite
+qualification permit coexistence with historical UNKNOWN. Preserve the old task
+and all earlier evidence. Store the typed candidate relation in existing
+engagement/task metadata and TaskArtifacts; do not replace original fulfillment
+or create another engagement, result ledger, scheduler or lifecycle.
+
+Before allocation, prove complete inventory and current authority, material,
+route and policy prerequisites through no-effect checks. Lock TaskRuns in the
+existing consistent order before subject/policy state; use current row/CAS fences
+and server-derived identity to join concurrent or lost-response requests. Count
+every accepted candidate, including failed qualification, across users, token
+families, aliases, revisions and policy versions. Changing a caller key or policy
+reference cannot replenish the allowance. Observing must never allocate or wake
+execution. Unknown effects never become zero consumption or safe replay.
+
+At preparation, every tool/provider effect and result publication, revalidate
+current original-owner authority, role/grants, access, funding, immutable policy,
+source/images, current generation, remaining counters and deadline. Missing or
+revoked authority, changed material, expired policy, incomplete capture or a
+transport-uncertain outcome holds with the exact missing predicate and supported
+owner action. No ordinary-loop, CLI or provider fallback may escape the scope.
+
+### Shared evidence preparation and strict transport
+
+Keep the registered AGT-906 identity, profession, runtime configuration and
+current authorized user. Reuse its normal coworker preparation and the existing
+finite-preload/governed-tool path. Evidence preparation within the real Critic
+TaskRun may use exactly read_source_at_version, wiki_query and
+search_ux_critique_corpus. It must record actual complete pinned reads and the
+actual calibration query under that coworker/task/fence, then prove which bytes
+reached its model. Engineering reads, supplied screenshots and mocks remain
+inputs or checks; only the actual coworker response is specialist participation.
+
+Use shared capture/reservation, fence/CAS, qualification and terminal-result
+ports with strict initiative and engagement adapters. Preserve initiative v1's
+policy, two-tool writer contract and text-only fixtures. Permit the controlled
+engagement reader policy together with a captured execution only through an
+explicit branded, qualified engagement context; retain all other mixed-scope
+refusals. Useful common extraction should take roughly 20% of implementation,
+with the owning funding policy respected. Do not copy the pipeline or relax its
+parsers to accept a false initiative binding.
+
+The original prototype is 86316 bytes plus five guidance artifacts and four
+images. Current observed AGT-906 limits are 20000 tokens/task, 8192 output tokens
+and 180 seconds; actual registry/execution configuration and recorded daily usage
+must be revalidated. Bytes are not tokens. Full input, reasoning/output, reader
+work and all provider starts must fit the actual prospective limits. No reset,
+silent truncation, arbitrary count padding or new allowance is permitted.
+
+The existing preload retains complete source. If a distinct model-facing source
+projection or explicitly bounded review basis is needed, define its exact
+transformation/ranges, digest, omissions and authorized relation to the original
+before generation. Preserve complete original read records and do not claim the
+model saw full raw source when it received a projection. Retain legacy full-source
+validation unchanged. Any changed coverage needs a current native-authorized
+association and complete proof of the declared evidence; a transport optimization
+must not silently change the requested scope.
+
+Pin the four actual immutable image bytes, hashes, MIME, dimensions and ordering.
+Match count and generation bodies and actual image delivery. Require an actually
+eligible strict wire and proven conservative whole-task bound before generation;
+source support or a model catalog is not qualification. Native Messages and
+native OpenAI chat/token-counting are candidate wire designs, not approvals.
+The first implementation must choose one proven composition. An estimated cloud
+count cannot be called an exact finite proof, and no automatic alternative may
+consume another candidate.
+
+Physical read-only inspection on this install found Docker Model Runner v1.2.9,
+llama.cpp b9879-cuda at engine source 72874f5, archive digest
+57130b8af4f80d754ee93e8855e74a9bc6c13e07f99b9becab720cce2658199e.
+The inspector reports model b9c79f8f56a90a86860d20d8025fde1ac0c03ef282b4f439b271abb7e8c72624,
+architecture qwen35 and context size 262144. These observations do not qualify
+pixels, tokenizer/template equivalence or model/engine effects. The local account
+is inactive; its fresh low-confidence profile lacks image and token bounds.
+The existing v1.2.8 Metal catalog cannot establish this install's compatibility.
+No count, generation, activation, context switch or candidate was performed in
+collecting those observations. Keep route/configuration and qualification
+prerequisites visible; do not consume a candidate to discover known absence.
+
+### First composition and qualification order
+
+Implement one wire: native Messages with real images, its same-body
+`messages/count_tokens` route and one forced response-only function carrying
+the contribution JSON schema. Parse the real function input as the Critic's
+answer; never dispatch it as a platform tool, grant or additional reader.
+The guarded platform readers remain exactly the existing three. Reject multiple,
+wrong or incomplete response calls and retain the first invalid reply/predicate.
+The pinned 72874f5 conversion preserves image blocks and function schemas for
+both count and generation. Installed forwarding and actual multimodal behavior
+still require captured qualification; no old Messages/Metal qualification is reused.
+
+The initially selected OpenAI count design was ruled out before any candidate
+or provider effect. DMR v1.2.9's actual scheduler routeHandlers registers
+Messages and Messages/count_tokens, but omits chat/completions/input_tokens,
+even though the underlying engine implements it. Source evidence:
+https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/scheduling/http_handler.go
+and https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-chat.cpp.
+This source finding changes the first implemented wire, not the original CE,
+artifact association or allowance. There is no runtime fallback between wires.
+The current local account is inactive. Restore a supported route configuration
+only through its actual native action and verify its eligible normal selection;
+configuration cannot create the absent CE recovery execution contract.
+
+Before counted allocation, validate all known source, account, access, limits,
+manifest and composition prerequisites without provider effects. The one counted
+candidate owns a bounded qualification phase; source compatibility is not falsely
+labelled runtime qualification before that phase. Freeze the registered persona,
+actual governed source/wiki/calibration evidence, exact source representation,
+four decoded images, schema and template options before its sole input count.
+Persist capture before count and generation. Count failure, excess input,
+changed evidence or runtime, expiry, uncertainty or unsupported images holds that
+candidate permanently. No projection fallback, recount, provider retry or new
+allowance follows a failed qualification.
+
+The first implementation may use a deterministic visual-source representation
+only when the server-issued policy explicitly authorizes and labels that basis.
+It must list omitted source spans/categories, preserve original complete read
+receipts and hashes, and identify the exact model-delivered digest. A source
+traversal by a preloader cannot masquerade as full raw-source model coverage.
+Retain the original full-source validator for ordinary engagements. The present
+assessment validator additionally checks the declared model basis and its exact
+relation to the original immutable artifact.
+
+### Actual result, honest failure and return
+
+Persist a result only from the real Critic's validated response and actual
+source/guidance/corpus/image input evidence. Preserve the first rejected reply
+and predicate through the shared retention path. A known-closed corrective turn
+may run only if explicitly allowed by the qualified finite policy and its
+remaining limits; uncertain execution never retries. Inspection must remain
+once per actual reply, never revalidate generated hold prose or reuse a rejected
+inspection as a different reply's result.
+
+The result names actual selected WSID criteria, consulted page revisions,
+reviewed artifacts and image states, findings, evidence coverage and limitations,
+provider/model/adapter and both original and current execution references.
+An empty calibrated corpus stays explicit and UNGROUNDED/advisory. It grants no
+founder/designer verdict, calibration promotion, gate approval or current-code
+acceptance. A single assessment is not a multi-evaluator usability study.
+
+Commit the accepted current result and its idempotent return to WC-9C02621A
+atomically; retain the original task's separate held history. Existing status
+projections and disclosure show original/current provenance, remaining allowance,
+precise failure and one actually available action. Do not expose a dead Resume,
+raw executable packet or unexplained identifiers as the primary UX. Return the
+actual persisted critique to the original routing chat for its author's real
+response and disposition. A passing unit/build/browser check or an unexecuted
+request cannot complete this work.
+
+## Original failure and verified boundary (October 25)
+
+On October 25, CE-1FE20783 and CE-724328D6 remained requested. Both had
 approvalContext.required=false, no accepted/completed timestamp, no linked
 Workroom, execution, proposal or envelope, and no fulfillment/result metadata.
-AGT-906 has no active room. createCoworkerEngagement only creates a database row;
-request_coworker_engagement exposes no continuation. Thus execution stops between
+AGT-906 had no active room. createCoworkerEngagement only created a database row;
+request_coworker_engagement exposed no continuation. Execution stopped between
 request persistence and authorized dispatch, before specialist participation.
-Generic delegation lacks effective thread_write and cannot repair the CE lifecycle.
+Generic delegation lacked effective thread_write and could not repair the CE lifecycle.
 
 The user authorizes DEV repair, execution and return to the routing chat. Existing
 E27 ownership released ten fulfillment paths through executed envelope
@@ -212,3 +416,71 @@ validated JSON after generic processing is insufficient: it cannot undo an extra
 provider call, and a held result must not initiate one. Unscoped conversations
 retain their normal posture-driven review/debate behavior. This does not attest
 which historical calls used that path or change native execution-proof ownership.
+
+## Same-call implementation and accounting boundary
+
+The present adapter finishes within its actual governed request. It reuses a real
+still-approved reserved envelope only while that same handler owns it, or uses
+the current native automated/delegated allow decision. It never changes an
+executed envelope back to approved. Every effect and publication rechecks current
+consent, grants, human capability, original material, task fence and deadline.
+A serialized policy cannot rebuild the live server context.
+
+TaskRun → CE locks and Serializable admission atomically commit the one candidate,
+server policy/start artifacts and immutable input. The mode is derived before
+dispatch projection. Submission, queueing, reconciliation and worker admission
+all suppress background execution for this mode. An interrupted caller observes
+the same engagement; an expired window becomes a visible hold without a replay.
+Cancellation remains cancellation.
+
+Ordinary provider transport and ordinary routed inference are refused inside
+this captured workflow. Refusals latch even if a library catches the exception.
+The registered tool preparation selects its three authorized readers before
+ambient runtime probes. The existing Postgres lexical wiki search is exposed
+through wiki_query's retrievalMode and selected explicitly, so corpus preparation
+does not invoke an embedding model. Vector/PPR defaults remain unchanged.
+
+The normal router receives current native capacity and a request-bound image
+observation through its existing server reader. The Critic adapter produces it
+only after validating the audited model, engine and template. The shared container
+enforces identity and lifetime, not independent capability proof. JSON copies, different models,
+closed or different capture frames and process caches cannot reuse it. Explicit
+negative model capability or operator overrides still win; no ModelProfile row
+is changed. Normal quality, account, clearance, role, pin and residency checks
+remain in force.
+
+Unresolved generation reservations count under the canonical coworker budget
+owner across aliases and UTC days. Reads are bounded and malformed or overflowing
+ledgers refuse. Reservation and settlement use the same Agent lock, after the
+TaskRun/CE locks. Actual metering is written only for validated observed usage;
+an upper bound is never fabricated as TokenUsage. These checks cover recorded
+usage and retained new reservations. Original D170 spend remains UNKNOWN, so
+they do not prove complete daily headroom. A current native decision permitting
+the separately bounded assessment is still required; a denial cannot be bypassed.
+
+The pinned DMR/llama.cpp source explains the response label: DMR forwards the
+request body unchanged, launches the selected content-addressed model bundle
+with --model and no --alias, and llama.cpp reports that model path. Reply
+validation accepts the exact requested digest or the same manifest's absolute
+bundles/sha256/<digest>/model/<GGUF> path. It rejects other digests, bare aliases,
+projectors, traversal and conflicting model identities. The qualified catalog,
+wire hash, actual reported label and identity relation remain separate evidence.
+
+Relevant primary source:
+- [DMR scheduling](https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/scheduling/http_handler.go)
+- [DMR native arguments](https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/backends/llamacpp/llamacpp_config.go)
+- [DMR bundle identity](https://github.com/docker/model-runner/blob/v1.2.9/pkg/distribution/internal/store/bundles.go)
+- [llama.cpp response model](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp)
+
+### Current runtime options, October 28
+
+The existing BI-0D208EBB runtime owner qualified the exact n-gram pair on the
+same pinned b9879 engine. The Critic catalog reuses its pure
+isQualifiedSpeculativeFlags predicate and LOCAL_RUNNER_KEEP_ALIVE constant.
+Only context-size, that exact optional pair and optional keep_alive=-1 are
+accepted; unknown keys, other flags and other residency values still refuse.
+The full observed configuration remains hashed and must match before generation.
+No setting is dropped, rewritten or activated by this adapter. Speculation can
+change numerical decoding behavior; this is not a bit-stable output claim.
+Model, engine archive/source, template, actual image/body count, native authority
+and budget checks remain separate and unchanged. This adds no execution grant.
