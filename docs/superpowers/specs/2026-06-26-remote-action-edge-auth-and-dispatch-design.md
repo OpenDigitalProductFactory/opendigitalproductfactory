@@ -48,6 +48,61 @@ The canonical deployment already assigns HTTPS termination to the Caddy sidecar.
 
 Governed consultation `DI-4D4877ED738F` selected this boundary with high confidence (composite 7.235, margin 2.390, no commandment conflict). This follows Caddy's documented `client_auth` `require_and_verify` trust-pool contract and its TLS client-certificate placeholders.
 
+### 3.2 Preserve injected identity after incoming-header scrubbing — BI-2A52F271
+
+The October 30 UTC live source `1f8c111c409a4e8cc3575d118a7a154134791ba9`
+rejects the newly repaired, enrolled host's registration with
+`machine_authentication_failed`. The channel is enabled, the new agent loads the
+valid certificate, and an exact generated-configuration reload succeeds. The
+registration route reaches its proxy-assertion check after bearer authorization
+and assertion-file loading; re-enrollment or widening grants is not indicated.
+
+Both PKI generators put deletion and insertion of the same identity headers in
+one `reverse_proxy` header operation. The pinned Caddy 2.10.2 adapter reproduces
+both operations with non-secret fixture values. Its
+[HeaderOps implementation](https://github.com/caddyserver/caddy/blob/v2.10.2/modules/caddyhttp/headers/headers.go#L220-L259)
+sets headers before specific/wildcard deletion. Textual directive order therefore
+does not preserve the generated assertion or certificate metadata.
+
+**OBJ-EPH1:** Let the existing application receive the proxy's verified machine
+identity while removing every caller-supplied identity assertion.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-EPH1 | OBJ-EPH1 | Separate incoming request-header scrubbing executes before reverse-proxy insertion; trusted assertion and verified certificate fields survive, while unknown caller certificate fields are removed. |
+| AC-EPH2 | OBJ-EPH1 | Bash and PowerShell generate the same header boundary; client-certificate verification, application authentication, node scopes and signed-action permissions remain enforced. |
+| AC-EPH3 | OBJ-EPH1 | A failing regression reproduces the original header-loss behavior; protected publication and canonical configuration convergence precede successful actual enrolled-host registration. |
+
+**CONTRACT-EPH:** Keep the listener, trust root, enrollment, signing, certificate
+placeholders and application checks from sections 3.1–5. Scrub untrusted headers
+in a distinct `request_header` middleware before `reverse_proxy`; perform only
+verified identity insertion in that proxy's upstream header operations. Do not
+remove spoof protection or accept caller-supplied transport evidence.
+
+**FLOW-EPH:** verified mTLS connection → remove caller identity headers → inject
+transport identity and existing proxy assertion → existing application checks.
+
+Ordered atomic fix plan:
+
+1. Record the named-source live failure, exact dummy adapter reproduction and
+   excluded certificate-expiry/channel/token causes; bind this design to
+   BI-2A52F271 and obtain implementation admission.
+2. Add a first-failing header-boundary regression, then correct both generators.
+   Check the generated configuration with the pinned adapter and exercise spoof
+   rejection and verified header survival through the actual proxy runtime.
+3. Run affected PKI contracts and required source/integration gates; publish a
+   DCO-signed PR through the protected queue. No generated private configuration
+   or credentials enter source or test evidence.
+4. Converge the published configuration through the existing PKI owner and
+   graceful proxy reload, preserving root, keys, enrollment and permissions.
+   Verify the existing agent's actual registration. Preserve failures and keep
+   native inference activation/rollback under their separate owner.
+
+This is one repair of the accepted proxy boundary, not a new channel or security
+policy. BI-AFDB58C8's delivered expired-certificate source remains closed;
+BI-CD4EB130 retains physical engine acceptance. Neither a successful reload nor
+source tests prove registration or engine activation.
+
 ## 4. Dispatch protocol (read-only pilot)
 
 - **`POST /api/v1/edge/actions/claim`** — authenticated by both the enrolled client certificate and the existing short-lived/rotatable Edge credential carrying `edge:actions:claim`. It returns `RemoteAction`s where status=`queued`, approval is valid, customer/site scope matches the enrolled node, and `actionType` is in `EdgeNode.scopePolicy.allowedActionTypes`. The pilot permits only `inventory.collect`.

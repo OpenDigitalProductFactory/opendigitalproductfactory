@@ -49,7 +49,6 @@ const D7_TABLE: Array<[string, "outward" | "authority" | null, number]> = [
   ["surface_act", null, DURABLE_APPROVAL_LIFETIME_MS],
   ["promote_to_build_studio", null, DURABLE_APPROVAL_LIFETIME_MS],
   ["analyze_mcp_call_efficiency", null, DURABLE_APPROVAL_LIFETIME_MS],
-  ["propose_skill_improvement", null, DURABLE_APPROVAL_LIFETIME_MS],
   ["wiki_ingest", null, DURABLE_APPROVAL_LIFETIME_MS],
   ["publish_wiki_overlay_pages", null, DURABLE_APPROVAL_LIFETIME_MS],
   ["start_deliberation", null, DURABLE_APPROVAL_LIFETIME_MS],
@@ -61,7 +60,6 @@ describe("approval convergence inventory — the live registry", () => {
       "contribute_finding_to_hive",
       "contribute_to_hive",
       "correct_workroom_sensitivity",
-      "propose_skill_improvement",
       "publish_wiki_overlay_pages",
       "start_deliberation",
       "wiki_ingest",
@@ -69,8 +67,8 @@ describe("approval convergence inventory — the live registry", () => {
     expect(PROPOSAL_REACHABLE.length).toBeGreaterThan(PROPOSAL_MODE.length);
   });
 
-  it("keeps internal learning recommendations out of generic proposals while retaining write authority checks", () => {
-    const tool = PLATFORM_TOOLS.find(candidate => candidate.name === "propose_improvement")!;
+  it.each(["propose_improvement", "propose_skill_improvement"])("keeps %s out of generic proposals while retaining write authority checks", name => {
+    const tool = PLATFORM_TOOLS.find(candidate => candidate.name === name)!;
     expect(tool).toMatchObject({ sideEffect: true, executionMode: "immediate", coworkerArtifact: true });
     expect(tool.consequence ?? null).toBeNull();
     expect(PROPOSAL_MODE).not.toContain(tool);
