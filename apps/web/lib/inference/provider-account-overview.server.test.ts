@@ -12,8 +12,8 @@ vi.mock("@/lib/routing/provider-suitability/provider-trust", () => ({ resolvePro
 vi.mock("@/lib/routing/provider-suitability/provider-connection-review", () => ({ projectProviderConnectionReview: mocks.review }));
 import { loadProviderAccountOverview } from "./provider-account-overview.server";
 
-const pw = { provider: { providerId: "codex", name: "Codex" }, credential: null } as ProviderWithCredential;
-const copy = { companyWork: "Company work", publicOnly: "Public only", workBlocked: "Blocked", notVerified: "Not verified", capacityUnknown: "Not reported", verifiedModels: "account models", catalogModels: "catalog models", paused: "Paused", degraded: "Needs attention", signIn: "Sign in to this account", sharedProviderLimits: "Provider-wide limits", reviewAccountBilling: "Review account billing", reviewConnectionSettings: "Review connection settings", tokenNeedsRenewal: "Token needs renewal", routingCheckUnavailable: "Routing restrictions could not be confirmed." };
+const pw = { provider: { providerId: "codex", name: "Codex", status: "active" }, credential: null } as ProviderWithCredential;
+const copy = { companyWork: "Company work", publicOnly: "Public only", workBlocked: "Blocked", notVerified: "Not verified", capacityUnknown: "Not reported", verifiedModels: "account models", catalogModels: "catalog models", paused: "Paused", degraded: "Needs attention", signIn: "Sign in to this account", sharedProviderLimits: "Provider-wide limits", reviewAccountBilling: "Review account billing", reviewConnectionSettings: "Review connection settings", tokenNeedsRenewal: "Token needs renewal", routingCheckUnavailable: "Routing restrictions could not be confirmed.", apiKeyMethod: "API key", workloadMethod: "Client credentials", oauthMethod: "Provider sign-in", readinessRestricted: "Routing paused", readinessUnverified: "Status unconfirmed" };
 const account = { id: "connection-db", connectionId: "provider-account-team", providerId: "codex", isDefault: false, label: "Team", status: "active", credential: null, accessibleModelIds: [], modelsVerifiedAt: null, lastReviewedAt: null, supplierContractId: null } as unknown as ProviderAccountRow;
 beforeEach(() => { vi.resetAllMocks(); mocks.capacity.mockResolvedValue(new Map()); mocks.accounts.mockResolvedValue([account]); mocks.business.mockResolvedValue({ businessContextConfigured: true }); mocks.connections.mockResolvedValue([{ ...account, provider: pw.provider, trustEvidence: [], supplierContract: null }]); mocks.evidence.mockReturnValue({ posture: { connectionId: account.connectionId } }); mocks.review.mockReturnValue({ scope: "public-only", headline: "Review terms" }); });
 describe("provider account presentation truth", () => {
@@ -80,12 +80,39 @@ describe("provider account presentation truth", () => {
 
 describe("readiness keeps account proof separate from provider aggregates", () => {
   it("uses account-owned success and keeps an additional account independent of default authentication", async () => {
-    mocks.accounts.mockResolvedValue([{ ...account, authMethod: "api_key", credential: { hasUsableMaterial: true } }]);
+    mocks.accounts.mockResolvedValue([{ ...account, authMethod: "api-key", credential: { hasUsableMaterial: true } }]);
     const now = new Date("2026-10-28T20:00:00Z");
     mocks.capacity.mockResolvedValue(new Map([[`codex:account:${account.connectionId}`, { state: "available", lastSuccessAtMs: now.getTime()-1000 }]]));
-    const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy, now });
+    const controls = new Map([["codex", { eligibility: { eligible: false, state: "needs_credentials" }, healthStatus: "needs_reauth",
+      restrictions: [{ key: "connection", summary: "Reconnect the default account", until: null }] }]]) as never;
+    const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy, now });
     expect(row.readiness?.state).toBe("working");
   });
+  it.each([false, true])("keeps an additional account unconfirmed without shared routing observations (recent success: %s)", async recentSuccess => {
+    const now = new Date("2026-10-28T20:00:00Z");
+    mocks.accounts.mockResolvedValue([{ ...account, authMethod: "api-key", credential: { hasUsableMaterial: true } }]);
+    mocks.capacity.mockResolvedValue(recentSuccess ? new Map([[`codex:account:${account.connectionId}`,
+      { state: "available", lastSuccessAtMs: now.getTime() - 1000 }]]) : new Map());
+    const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy, now });
+    expect(row.readiness).toMatchObject({ state: "unverified", summary: copy.routingCheckUnavailable });
+  });
+  it.each(["inactive", "disabled", "paused", "unconfigured"])("retains the provider's %s routing veto for an active additional account", async status => {
+    const now = new Date("2026-10-28T20:00:00Z");
+    mocks.accounts.mockResolvedValue([{ ...account, authMethod: "api-key", credential: { hasUsableMaterial: true } }]);
+    mocks.capacity.mockResolvedValue(new Map([[`codex:account:${account.connectionId}`,
+      { state: "available", lastSuccessAtMs: now.getTime() - 1000 }]]));
+    const controls = new Map([["codex", { eligibility: { eligible: false, state: "disabled" }, restrictions: [] }]]) as never;
+    const provider = { ...pw, provider: { ...pw.provider, status } };
+    const [row] = await loadProviderAccountOverview({ providers: [provider], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy, now });
+    expect(row.readiness).toMatchObject({ state: "paused", label: copy.readinessRestricted });
+  });
+  it.each([["api-key", "API key"], ["workload-identity", "Client credentials"], ["oauth", "Provider sign-in"]])(
+    "labels the persisted %s account contract", async (authMethod, label) => {
+      mocks.accounts.mockResolvedValue([{ ...account, authMethod, credential: { hasUsableMaterial: true } }]);
+      const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy });
+      expect(row.connectionSummary).toMatch(new RegExp(`^${label} ·`));
+    },
+  );
   it("does not borrow provider aggregate success as proof for the default account", async () => {
     const now = new Date("2026-10-28T20:00:00Z");
     mocks.accounts.mockResolvedValue([{ ...account, isDefault: true, credential: { hasUsableMaterial: true } }]);

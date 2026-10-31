@@ -106,3 +106,13 @@ These steps jointly deliver one status visibility contract. Hourly recovery, con
 - AC-5: Affected tests/typecheck and governed served UI evidence cover failure, recovery, themes, mobile and keyboard before done.
 
 Current atomic status coverage receipt: cmvssicjk0l4001my9kaf4hel, bound to published b0bf19165486ec0a5f61e5d6c11e261eddb2300f / cbe4f708b6a808179a467099f7c6d188d06fb7bb. Author research: initiative-62e6ca23-f250-41e1-9bc3-1540028c5723. These receipts authorize the described implementation slice, not specialist approval, served verification or delivery of the other parent criteria.
+
+## October 31 independent review corrections
+
+An owner-requested independent code reviewer found three P2 defects in the retained status slice: additional accounts could appear ready without shared routing evidence, a recent account success could hide a globally inactive provider, and saved authentication methods were compared with input-form identifiers. WC-80CD8A18 now requires the shared routing observation, preserves the router's active/degraded lifecycle eligibility, and labels canonical `api-key` and `workload-identity` methods. An additional account still does not inherit the default account's credential failure. No routing admission, recovery authority, credential scope or persistence policy changes.
+
+The existing quota-recovery executor WC-2CCBB706 confirmed this correction is separate from its `quotaRecovery` additions. Native approval cmvwzxeze3ueb01pns5p2w6g8 recorded the coordinated overview source/test claims; the executor released its finished read claim on this document before the normal edit claim. Preserve that executor's fields when the branches integrate.
+
+Tests were added before production edits: 12 failed while 17 controls passed. After correction, the readiness, overview and existing component suites passed 47 cases across three files, and both web TypeScript programs passed. Missing evidence, inactive/disabled/paused/unconfigured providers, active/degraded controls and canonical authentication labels are covered. These are source checks, not actual provider responses. The earlier exact-tree gate on retained 1b976bea does not qualify the new commit; fresh governed integration and independent re-review remain required.
+
+Served theme/mobile/keyboard measurements and the original UX engagement remain owed. A separate quota-executor capture reports a canonical account credential versus legacy provider-control mismatch; its cause is still under investigation, and these tests do not establish that path works. The parent readiness and business-email acceptance remain open.

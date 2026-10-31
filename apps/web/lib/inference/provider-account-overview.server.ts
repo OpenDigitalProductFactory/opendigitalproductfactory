@@ -52,7 +52,8 @@ export async function loadProviderAccountOverview(input: {
       records: source.trustEvidence, requiredClaims: [...PROVIDER_TRUST_CLAIM_KEYS], supplierContract: source.supplierContract ?? undefined, now }) : null;
     const review = source && resolved ? projectProviderConnectionReview({ ...business,
       facts: resolveProviderTrustFacts({ catalog: providerCatalogFacts(source.provider), connection: resolved.posture }) }) : null;
-    const control = account.isDefault ? input.controls.get(account.providerId) : undefined;
+    const providerControl = input.controls.get(account.providerId);
+    const control = account.isDefault ? providerControl : undefined;
     const ownedHealth = capacity?.get(accountRuntimeKey(account.providerId, account.connectionId));
     const ownedRestriction = capacityRoutingExclusionReason(ownedHealth, now.getTime());
     const providerLimit = capacity?.get(account.providerId);
@@ -60,7 +61,7 @@ export async function loadProviderAccountOverview(input: {
       && capacityRoutingExclusionReason(providerLimit, now.getTime()) ? providerLimit : null;
     const credentialNeedsRenewal = account.credential?.status === "expired"
       || Boolean(account.credential?.tokenExpiresAt && Date.parse(account.credential.tokenExpiresAt) <= now.getTime());
-    const additionalSharedControl = !account.isDefault ? input.controls.get(account.providerId) : undefined;
+    const additionalSharedControl = !account.isDefault ? providerControl : undefined;
     const sharedRestrictions = additionalSharedControl?.restrictions.filter(restriction =>
       ["quota", "quota-recovery", "local-only", "host-capacity"].includes(restriction.key)) ?? [];
     const recoveryAction = ownedHealth?.action === "reconnect" ? ["oauth", "oauth2_authorization_code"].includes(account.authMethod) ? input.copy.signIn : input.copy.reviewConnectionSettings
@@ -82,16 +83,16 @@ export async function loadProviderAccountOverview(input: {
       : catalogCount ? `${catalogCount} ${input.copy.catalogModels} · ${input.copy.notVerified}` : input.copy.notVerified;
     const readinessStatus = account.isDefault && account.status === "unconfigured"
       ? resolveRuntimeConnectionStatus(pw.provider.status, account.status) : account.status;
-    const readiness = projectAccountReadiness({ status: readinessStatus,
+    const readiness = projectAccountReadiness({ status: readinessStatus, providerStatus: pw.provider.status,
       requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
       hasCredential: Boolean(account.credential?.hasUsableMaterial || (account.isDefault && pw.credential?.hasUsableMaterial)),
       verifiedModelCount: account.modelsVerifiedAt ? accessible.length : undefined,
-      credentialNeedsRenewal, healthAvailable: capacity !== null && (!account.isDefault || Boolean(control)),
+      credentialNeedsRenewal, healthAvailable: capacity !== null && Boolean(providerControl),
       capacity: ownedHealth, sharedCapacity: account.isDefault ? providerLimit : sharedLimit ?? undefined,
       control, sharedRestrictions, now: now.getTime(), copy: input.copy });
     const authLabel = isLocalProviderId(account.providerId) ? input.copy.localConnection
-      : account.authMethod === "api_key" ? input.copy.apiKeyMethod
-        : account.authMethod === "oauth2_client_credentials" ? input.copy.workloadMethod : input.copy.oauthMethod;
+      : account.authMethod === "api-key" ? input.copy.apiKeyMethod
+        : account.authMethod === "workload-identity" ? input.copy.workloadMethod : input.copy.oauthMethod;
     return [{
       readiness,
       connectionSummary: `${authLabel} · ${isLocalProviderId(account.providerId) ? input.copy.localConnection

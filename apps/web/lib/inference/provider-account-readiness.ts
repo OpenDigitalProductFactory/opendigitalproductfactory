@@ -11,7 +11,7 @@ export type AccountReadiness = {
 
 /** Account configuration, current vetoes and observed success remain distinct. */
 export function projectAccountReadiness(input: {
-  status: string; requiresCredential: boolean; hasCredential: boolean;
+  status: string; providerStatus: string; requiresCredential: boolean; hasCredential: boolean;
   credentialNeedsRenewal: boolean; healthAvailable: boolean;
   capacity?: CapacitySnapshot; sharedCapacity?: CapacitySnapshot;
   control?: ProviderRoutingControlView; sharedRestrictions?: ProviderRoutingControlView["restrictions"];
@@ -32,6 +32,10 @@ export function projectAccountReadiness(input: {
   if (["disconnected", "disabled"].includes(input.status)) return result("blocked", copy.readinessConnection, copy.reviewConnectionSettings);
   if (input.status === "unconfigured" || (input.requiresCredential && !input.hasCredential)) {
     return result("blocked", copy.needsSetup, copy.reviewConnectionSettings);
+  }
+  // Account success cannot override the provider lifecycle gate used by routing.
+  if (!["active", "degraded"].includes(input.providerStatus)) {
+    return result("paused", copy.readinessRestricted, copy.reviewConnectionSettings);
   }
   const restrictions = [...(input.control?.restrictions ?? []), ...(input.sharedRestrictions ?? [])];
   if (input.status === "paused" || restrictions.some(r => r.key === "operator")) {

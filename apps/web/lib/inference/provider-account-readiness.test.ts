@@ -3,7 +3,7 @@ import { projectAccountReadiness } from "./provider-account-readiness";
 import copy from "../../../../packages/i18n/src/messages/en-US/providerAccounts.json";
 
 const now = Date.parse("2026-10-15T12:00:00Z");
-const base = { status: "active", requiresCredential: true, hasCredential: true,
+const base = { status: "active", providerStatus: "active", requiresCredential: true, hasCredential: true,
   credentialNeedsRenewal: false, healthAvailable: true, now, copy };
 describe("account readiness distinguishes configuration from current proof", () => {
   it("does not call a configured account working without successful inference", () => {
@@ -26,5 +26,13 @@ describe("account readiness distinguishes configuration from current proof", () 
     expect(projectAccountReadiness({ ...base, sharedRestrictions: [{ key: "local-only", summary: "Cloud traffic is blocked.", until: null }] })).toMatchObject({ state: "paused", summary: "Cloud traffic is blocked." });
     expect(projectAccountReadiness({ ...base, verifiedModelCount: 0 }).state).toBe("blocked");
     expect(projectAccountReadiness({ ...base, capacity: { state: "available", lastSuccessAtMs: now + 1000 } }).state).toBe("enabled");
+  });
+  it.each(["inactive", "disabled", "paused", "unconfigured"])("does not let account success override provider lifecycle %s", providerStatus => {
+    expect(projectAccountReadiness({ ...base, providerStatus,
+      capacity: { state: "available", lastSuccessAtMs: now - 1000 } })).toMatchObject({ state: "paused", label: copy.readinessRestricted });
+  });
+  it.each(["active", "degraded"])("allows an otherwise ready account under a %s provider", providerStatus => {
+    expect(projectAccountReadiness({ ...base, providerStatus,
+      capacity: { state: "available", lastSuccessAtMs: now - 1000 } }).state).toBe("working");
   });
 });
