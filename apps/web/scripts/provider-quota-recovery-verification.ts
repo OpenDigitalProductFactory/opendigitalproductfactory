@@ -93,6 +93,8 @@ export async function verifyProviderQuotaRecovery() {
           const section = page.getByRole("region", { name: copy.connection, exact: true });
           // The canonical record disclosure is closed and keyboard operable.
           const row = section.locator("tr, [data-testid='mobile-row']").filter({ has: page.getByRole("link", { name: "Recovery verification account", exact: true }) });
+          check(!/needs credentials|no credentials are connected yet/i.test(await row.innerText()),
+            "The synthetic default credential is unavailable to normal default routing");
           const card = row.locator("article[data-dpf-disclosure-trigger]");
           check(await card.count() === 1, "The fixture account does not have one recovery disclosure");
           const summary = card.getByRole("button", { name: copy.limitDetails, exact: true });

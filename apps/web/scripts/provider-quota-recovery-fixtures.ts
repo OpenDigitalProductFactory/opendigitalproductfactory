@@ -60,7 +60,9 @@ export async function prepareProviderQuotaFixtures(db: PrismaClient, baseUrl: st
       authMethod: true, executionChannel: true, credentialEntryId: true, capacityStatusId: true, quotaStatusId: true, updatedAt: true } });
     const credentialCount = await tx.credentialEntry.count({ where: { providerId: { in: ["chatgpt", "codex"] },
       OR: [{ cachedToken: { not: null } }, { refreshToken: { not: null } }, { secretRef: { not: null } }, { clientSecret: { not: null } }] } });
-    if (["active", "degraded"].includes(provider.status) || credentialCount || account && (account.organizationId !== null || account.credentialEntryId
+    if (["active", "degraded"].includes(provider.status) || credentialCount
+      || await tx.credentialEntry.count({ where: { providerId: "chatgpt" } })
+      || account && (account.organizationId !== null || account.credentialEntryId
       || account.capacityStatusId || account.quotaStatusId || account.status !== "unconfigured")
       || account && await tx.providerCapacityStatus.count({ where: { ownedAccountId: account.id } })
       || await tx.scheduledJob.count({ where: { jobId } }) || await tx.providerCapacityStatus.count({ where: { providerId: "codex" } })
@@ -72,7 +74,7 @@ export async function prepareProviderQuotaFixtures(db: PrismaClient, baseUrl: st
     // The page may create the catalog job on first render. Ensure it cannot discover remotely.
     if (!maintenance.some(row => row.jobId === "provider-catalog-reconciliation")) await tx.scheduledJob.create({
       data: { jobId: "provider-catalog-reconciliation", name: "CI catalog fixture", schedule: "disabled" } });
-    await tx.credentialEntry.create({ data: { id: credentialId, status: "ok", cachedToken: "synthetic-ui-token", tokenExpiresAt: new Date(Date.now() + 86400_000) } });
+    await tx.credentialEntry.create({ data: { id: credentialId, providerId: "chatgpt", status: "ok", cachedToken: "synthetic-ui-token", tokenExpiresAt: new Date(Date.now() + 86400_000) } });
     const data = { label: "Recovery verification account", status: "active", authMethod: "oauth", executionChannel: "direct-api", credentialEntryId: credentialId };
     const owned = account ? await tx.aiProviderConnection.update({ where: { connectionId }, data })
       : await tx.aiProviderConnection.create({ data: { connectionId, providerId: "chatgpt", ...data } });
