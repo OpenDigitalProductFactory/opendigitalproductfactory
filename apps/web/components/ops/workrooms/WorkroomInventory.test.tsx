@@ -6,6 +6,7 @@ import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkroomInventory, type WorkroomInventoryRow } from "./WorkroomInventory";
+import { projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 
 afterEach(cleanup);
 const renderInventory = (node: ReactNode) => render(<MessagesProvider locale="en-US"
@@ -18,6 +19,17 @@ const row = (capsuleId: string, liveness: string, title: string): WorkroomInvent
   liveness, isLive: liveness !== "lease-expired", accountableName: "Dana Reyes",
 });
 const rows = [row("WC-NOW", "live", "Prepare adoption event"), row("WC-WAIT", "paused", "Update user guide"), row("WC-OLD", "lease-expired", "Stopped review")];
+
+it("retains the owner-setup instruction when a worker is already assigned", () => {
+  const room = row("WC-OWNER-MISSING", "live", "Unowned work");
+  const operator = projectWorkroomOperatorSummary({ ...room, executorKind: "codex-desktop", accountability: {
+    state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null,
+  } });
+  renderInventory(<WorkroomInventory workrooms={[{ ...room, accountableName: null, operator }]} summary={summary} />);
+  expect(screen.getByText(/Assign an accountable person in the room/)).toBeVisible();
+  expect(screen.queryByText(/Check the worker's recorded result/)).toBeNull();
+  expect(screen.getByRole("link", { name: "Unowned work" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-OWNER-MISSING");
+});
 describe("operator Workrooms inventory", () => {
   it("shows actual progress first without mounting history or exposing diagnostic text", () => {
     renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);

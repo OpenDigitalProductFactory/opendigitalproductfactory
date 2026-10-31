@@ -14,7 +14,7 @@ import { driveDeviationCodes, readDriveHold } from "@dpf/validators/workroom-pol
 import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "./room-workforce.server";
 import { resolveDriveConclusion } from "./drive-conclusion";
 import { loadWorkroomDisplayTitles, workroomDisplayTitle } from "@/lib/work-capsules/workroom-display-titles.server";
-import { projectWorkroomNextAction, type WorkroomNextAction } from "@/lib/work-capsules/workroom-operator-summary";
+import { projectWorkroomOperatorSummary, type WorkroomNextAction } from "@/lib/work-capsules/workroom-operator-summary";
 
 type Db = Pick<typeof prisma, "workroom"> & Partial<RoomWorkforceDb> & Partial<Pick<typeof prisma, "backlogItem">>;
 
@@ -63,6 +63,9 @@ export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Pr
     const conclusion = owner ? resolveDriveConclusion({ action,
       reason: typeof drive.reason === "string" ? drive.reason : "unknown",
       accountability: owner.accountability }) : null;
+    const operator = projectWorkroomOperatorSummary({ capsuleId: room.capsuleId, status: room.status,
+      executorKind: room.executorKind, liveness: "recovery-required", isLive: true,
+      accountability: owner?.accountability, drive: { action, reason: typeof drive.reason === "string" ? drive.reason : "unknown" } });
     return [{
       capsuleId: room.capsuleId,
       title: workroomDisplayTitle(room, titles),
@@ -75,8 +78,7 @@ export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Pr
       notifiedAt: hold?.notifiedAt ?? null,
       accountableName: owner?.accountableDisplayName ?? null,
       recoveryCondition: conclusion?.blockage?.unblockedBy ?? null,
-      nextAction: projectWorkroomNextAction({ status: room.status, executorKind: room.executorKind, liveness: "recovery-required", drive: { action,
-        reason: typeof drive.reason === "string" ? drive.reason : "unknown" } }, conclusion?.blockage?.unblockedBy ?? null),
+      nextAction: operator.action ?? { actor: "inventory.actor.unknown", instruction: operator.nextAction, decisionRecorded: false },
     }];
   }).sort((a, b) => (a.since ?? "").localeCompare(b.since ?? ""));
 }

@@ -6,6 +6,11 @@ const owner: EffectiveHumanAccountability = { state: "resolved", principalId: "P
 const base = { capsuleId: "WC-1", status: "working", liveness: "live", isLive: true, accountability: owner, executorKind: "codex-desktop" };
 
 describe("recorded next actor and action", () => {
+  it("keeps missing accountability ahead of a known executor and recovery context", () => {
+    const accountability: EffectiveHumanAccountability = { state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null };
+    const room = { ...base, accountability, recovery: { prerequisite: { accountableRole: "artifact-resolver" } } };
+    expect(projectWorkroomOperatorSummary(room)).toMatchObject({ health: "needs-person", group: "attention", nextAction: "inventory.nextAction.owner", action: null });
+  });
   it("does not invent an assigned coworker when the executor is absent", () => {
     expect(projectWorkroomNextAction({ ...base, executorKind: null, drive: { action: "pause", reason: "executor_writeback_unavailable" } }))
       .toMatchObject({ actor: "inventory.actor.unknown", instruction: "inventory.action.recordResult" });

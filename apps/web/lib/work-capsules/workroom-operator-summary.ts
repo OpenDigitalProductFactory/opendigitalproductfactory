@@ -98,7 +98,9 @@ export function projectWorkroomOperatorSummary(room: {
     recoveryCondition: string | null = null): WorkroomOperatorSummary => {
     const health = classifyAtlasHealth({ ...NO_FACTS, [fact]: true });
     return { health, group: GROUP_BY_HEALTH[health], label, nextAction, recoveryCondition,
-      action: projectWorkroomNextAction(room, recoveryCondition) };
+      // Keep prerequisite priority in this canonical projection. A secondary
+      // action must not hide the existing supported owner-setup instruction.
+      action: nextAction === "inventory.nextAction.owner" ? null : projectWorkroomNextAction(room, recoveryCondition) };
   };
   const state = projectWorkCaseState({ capsule: { capsuleId: room.capsuleId, status: room.status } });
   if (room.status === "ready-for-promotion") return result("needsPerson", "inventory.status.closeout", "inventory.nextAction.closeout");
