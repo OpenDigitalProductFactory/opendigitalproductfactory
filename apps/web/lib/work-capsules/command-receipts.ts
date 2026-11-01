@@ -243,16 +243,23 @@ export async function runReceiptedCommand<T>(args: {
   }
 }
 
-/** Lookup-only recovery. No handler, receipt insertion, lease renewal or approval is accepted. */
-export async function lookupReceiptedCommand<T>(args: Omit<CommandReceiptIdentity, "beforeRoomLock" | "expectedRoomRowId"> & {
+type BoundCommandLookupArgs = Omit<CommandReceiptIdentity, "beforeRoomLock" | "expectedRoomRowId"> & {
   db: ReceiptDb; payloadBinding: CommandPayloadBinding; expectedRoomRowId: string;
-}): Promise<{ kind: "settled"; result: T } | { kind: "absent" }> {
+};
+
+function boundLookupIdentity(args: BoundCommandLookupArgs): CommandReceiptIdentity {
   if (!args.expectedRoomRowId || args.payloadBinding.version !== 1 || !/^[a-f0-9]{64}$/.test(args.payloadBinding.digest)) {
     throw new CommandReceiptUnavailableError("Lookup requires the exact original row and versioned payload binding.");
   }
-  const identity: CommandReceiptIdentity = { authorityScopeKey: args.authorityScopeKey, commandId: args.commandId,
+  return { authorityScopeKey: args.authorityScopeKey, commandId: args.commandId,
     commandType: args.commandType, target: args.target, payloadBinding: args.payloadBinding,
     expectedRoomRowId: args.expectedRoomRowId };
+}
+
+/** Lookup-only recovery. Call only after current result-access authority passed.
+ * No handler, receipt insertion, lease renewal or approval is accepted. */
+export async function lookupReceiptedCommand<T>(args: BoundCommandLookupArgs): Promise<{ kind: "settled"; result: T } | { kind: "absent" }> {
+  const identity = boundLookupIdentity(args);
   return inTransaction(args.db, async tx => {
     await lockCommandPrefix(tx, identity, true);
     const existing = await readReceipt(tx, args.authorityScopeKey, args.commandId);
@@ -260,7 +267,25 @@ export async function lookupReceiptedCommand<T>(args: Omit<CommandReceiptIdentit
     if (existing.kind !== COMMAND_ACCEPTED && existing.kind !== COMMAND_REJECTED) {
       throw new CommandReceiptUnavailableError("The command's recorded outcome cannot be classified.");
     }
-    return { kind: "settled", result: replay<T>(existing, args.commandId, args.commandType, args.target, args.payloadBinding) };
+    const result = replay<T>(existing, args.commandId, args.commandType, args.target, args.payloadBinding);
+    return { kind: "settled", result };
+  }, true);
+}
+
+/** Lifecycle-only absence proof under the SAME real command→room transaction.
+ * Any record blocks maintenance, including conflicting, legacy or unknown ones.
+ * Read metadata only: this is never authority to load a private original outcome.
+ * No command handler or receipt publication is accepted. */
+export async function withLockedCommandAbsence<R>(args: BoundCommandLookupArgs,
+  inspect: (tx: ReceiptDb) => Promise<R>): Promise<{ kind: "recorded" } | { kind: "absent"; result: R }> {
+  const identity = boundLookupIdentity(args);
+  return inTransaction(args.db, async tx => {
+    await lockCommandPrefix(tx, identity, true);
+    const exists = await tx.workroomActivity.findFirst!({
+      where: { commandScopeKey: args.authorityScopeKey, commandKey: args.commandId }, select: { kind: true },
+    });
+    if (exists) return { kind: "recorded" };
+    return { kind: "absent", result: await inspect(tx) };
   }, true);
 }
 
