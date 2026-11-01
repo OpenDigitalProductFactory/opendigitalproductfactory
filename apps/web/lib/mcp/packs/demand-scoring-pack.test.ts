@@ -6,7 +6,10 @@ const db = vi.hoisted(() => ({
   featureBuildCount: vi.fn(),
   backlogItemFindUnique: vi.fn(),
   backlogItemUpdate: vi.fn(),
+  backlogItemUpdateMany: vi.fn(),
   activityCreate: vi.fn(),
+  toolExecutionFindMany: vi.fn(),
+  envelopeUpdateMany: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -20,11 +23,20 @@ vi.mock("@dpf/db", () => ({
     backlogItem: {
       findUnique: (...a: unknown[]) => db.backlogItemFindUnique(...a),
       update: (...a: unknown[]) => db.backlogItemUpdate(...a),
+      updateMany: (...a: unknown[]) => db.backlogItemUpdateMany(...a),
     },
     backlogItemActivity: {
       create: (...a: unknown[]) => db.activityCreate(...a),
     },
-    $transaction: async (ops: unknown[]) => Promise.all(ops),
+    toolExecution: { findMany: (...a: unknown[]) => db.toolExecutionFindMany(...a) },
+    coworkerActionEnvelope: { updateMany: (...a: unknown[]) => db.envelopeUpdateMany(...a) },
+    $transaction: async (arg: unknown) => {
+      if (typeof arg === "function") {
+        const { prisma } = await import("@dpf/db");
+        return (arg as (tx: unknown) => Promise<unknown>)(prisma);
+      }
+      return Promise.all(arg as unknown[]);
+    },
   },
 }));
 vi.mock("@/lib/product-management/product-management-playbook-refresh", () => ({
@@ -283,10 +295,12 @@ describe("merge_backlog_items records what it changed (BI-EAFD2D09)", () => {
     const closedAt = new Date("2026-10-01T00:00:00Z");
     db.backlogItemFindUnique.mockImplementation(async ({ where }: { where: { itemId: string } }) =>
       where.itemId === "BI-C"
-        ? { id: "row-c", occurrenceCount: 3 }
+        ? { id: "row-c", occurrenceCount: 3, status: "open" }
         : { id: "row-d", occurrenceCount: 2, status: "triaging", triageOutcome: null, duplicateOfId: null, completedAt: closedAt },
     );
     db.backlogItemUpdate.mockResolvedValue({});
+    db.backlogItemUpdateMany.mockResolvedValue({ count: 1 });
+    db.toolExecutionFindMany.mockResolvedValue([]);
     db.activityCreate.mockResolvedValue({});
 
     const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", rationale: "same tool" }, "user-1", { agentId: "AGT-EXT-CLAUDE" });
@@ -313,5 +327,50 @@ describe("merge_backlog_items records what it changed (BI-EAFD2D09)", () => {
         recordedByAgentId: "AGT-EXT-CLAUDE",
       },
     });
+  });
+});
+
+describe("merge_backlog_items is idempotent (BI-8EC69BE0)", () => {
+  const merge = demandScoringPack.handlers["merge_backlog_items"]!;
+  const rows = (duplicate: Record<string, unknown>, canonicalStatus = "open") => async ({ where }: { where: { itemId: string } }) =>
+    where.itemId === "BI-C" ? { id: "row-c", occurrenceCount: 3, status: canonicalStatus } : { id: "row-d", occurrenceCount: 2, triageOutcome: null, completedAt: null, ...duplicate };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.toolExecutionFindMany.mockResolvedValue([{ envelopeId: "env-stale" }]);
+    db.envelopeUpdateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("changes nothing when the duplicate is already merged into the same item, and withdraws stale cards", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "retired", duplicateOfId: "row-c" }));
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D" }, "user-1", {});
+    expect(result).toMatchObject({ success: true, data: { alreadyMerged: true } });
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+    expect(db.toolExecutionFindMany).toHaveBeenCalledWith({
+      where: { toolName: "merge_backlog_items", envelopeId: { not: null }, parameters: { path: ["duplicateItemId"], equals: "BI-D" } },
+      select: { envelopeId: true },
+    });
+    expect(db.envelopeUpdateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["env-stale"] }, status: "proposed", resolvedAt: null },
+      data: { status: "cancelled", resolvedAt: expect.any(Date) },
+    });
+  });
+
+  it("refuses a duplicate that is closed some other way, and a closed canonical", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "done", duplicateOfId: null }));
+    expect(await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D" }, "user-1", {})).toMatchObject({ success: false, error: "already_closed" });
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "open", duplicateOfId: null }, "retired"));
+    expect(await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D" }, "user-1", {})).toMatchObject({ success: false, error: "canonical_closed" });
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+  });
+
+  it("adds no reach when a concurrent merge claimed the duplicate first", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "open", duplicateOfId: null }));
+    db.backlogItemUpdateMany.mockResolvedValue({ count: 0 });
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D" }, "user-1", {});
+    expect(result).toMatchObject({ success: false, error: "already_closed" });
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.activityCreate).not.toHaveBeenCalled();
   });
 });
