@@ -1,3 +1,4 @@
+import { assertOrdinaryProviderTransportAllowed } from "../shared/captured-effect-store";
 import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 import { LOCAL_INFERENCE_TIMEOUT_CEILING_MS } from "@/lib/routing/local-inference-runtime-policy";
 import { currentInferenceSignal } from "./inference-admission";
@@ -16,7 +17,8 @@ const providerInferenceTransport = createOffThreadpoolFetchTransport({
 
 /** Preserve the selected transport's parent policy while adding caller cancellation. */
 export function withInferenceCancellationFetch(fetchImpl: typeof fetch): typeof fetch {
-  return (input, init) => {
+  return async (input, init) => {
+    assertOrdinaryProviderTransportAllowed();
     const signal = currentInferenceSignal();
     const request = fetchImpl(input, signal ? { ...init,
       signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal,

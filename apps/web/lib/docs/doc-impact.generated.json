@@ -1654,6 +1654,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/workspace/finite-delivery-agreements.md"
     ],
+    "apps/web/lib/work-management/source-inquiry-shape.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/stage-dispatch-answered.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
@@ -2199,8 +2202,8 @@
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
-    "scripts/bind-worktree-cli.mjs": [
-      "docs/architecture/delivery-surfaces-runbook.md"
+    "scripts/branch-reaper.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
     ],
     "scripts/build-docs-staleness.mjs": [
       "docs/maintenance/README.md",
@@ -2634,6 +2637,10 @@
     "scripts/lib/resolve-capability-compose-profiles.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/operations/install.md"
+    ],
+    "scripts/lib/worktree-provision.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md",
+      "docs/architecture/delivery-surfaces-runbook.md"
     ],
     "scripts/local-ci-durable-wait-resumer.mjs": [
       "docs/architecture/dpf-patterns.md"
@@ -3237,8 +3244,10 @@
     "docs/architecture/branch-and-worktree-runbook.md": [
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
       "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
+      "scripts/branch-reaper.mjs",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
       "scripts/hooks/session-reaper.sh",
+      "scripts/lib/worktree-provision.mjs",
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
@@ -3380,9 +3389,9 @@
       "apps/web/lib/operate/db-continuity.ts",
       "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
-      "scripts/bind-worktree-cli.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
+      "scripts/lib/worktree-provision.mjs",
       "scripts/new-dev-worktree.sh"
     ],
     "docs/architecture/dependency-reduction-routine.md": [
@@ -3493,6 +3502,7 @@
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/drive-child-rooms.ts",
       "apps/web/lib/work-management/room-stage-mandate.ts",
+      "apps/web/lib/work-management/source-inquiry-shape.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
