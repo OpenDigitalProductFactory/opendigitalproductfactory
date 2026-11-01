@@ -7,6 +7,17 @@ export type AgentRenderableMessage = AgentMessageRow & {
   retryContent?: string;
 };
 
+export function pendingCoworkerLabel(input: {
+  agentName: string; clearing: boolean; status: string | null; tool: string | null;
+  elapsedSeconds: number; acknowledged: boolean;
+}): string {
+  if (input.clearing) return "Clearing conversation";
+  if (input.status) return input.status;
+  if (input.tool) return `${input.agentName} is using ${input.tool.replace(/_/g, " ")}...`;
+  // An acknowledgement or elapsed clock does not establish executor activity.
+  return input.acknowledged ? "Your request is saved. Waiting for an update." : "Waiting for an update.";
+}
+
 /** An acknowledgement settles delivery, never the requested business outcome. */
 export function acknowledgeRetainedMessage(messages: AgentRenderableMessage[], optimisticId: string, receipt: unknown): AgentRenderableMessage[] {
   const sent = messages.map(message => message.id === optimisticId ? { ...message, deliveryState: "sent" as const } : message);

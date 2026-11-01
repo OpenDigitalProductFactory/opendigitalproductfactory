@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "scope": {
+    "files": ["apps/web/components/agent/AgentMessageBubble.tsx"]
+  },
+  "decidedOption": "retain-job-reference-in-existing-conversation-disclosure",
+  "evidence": {
+    "kind": "sweep-measurement",
+    "measured": {
+      "/finance/spend": {
+        "defaultVisibleWords": 212,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 5,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 1
+      }
+    },
+    "sourceSha": "7aa31f6ea021a91ae93a9971135a8264398b77a6",
+    "leaseId": "NPEL-DA14C613EA",
+    "viewport": { "width": 1280, "height": 900 },
+    "capture": "CUA developer inspection using the canonical pruneInvisible and measureUxBudget functions and axe WCAG2A/2AA/2.2AA options",
+    "artifact": "WC-02CBE4C1 / foreground7aa-reload-keyboard-ux-actual; /tmp/foreground7aa-served-ux-evidence.json",
+    "artifactSha256": "e0924aaab4583a1f90565f5ffce4ba642dbb17e4eb59625c3f96cc3887639910"
+  },
+  "additionalVerification": "Actual mobile390x844 default166words/0primary/0fields/5sublegible/0buried/1axe. Expanded retained-job disclosure exercised with Enter/Space, same native job reference survived reload without resend. Expanded interactive states were captured separately and were not compared as default-arrival measurements. The measured disclosure implementation is unchanged.",
+  "limitations": "This is measured fit evidence, not a native specialist approval or business acceptance. Original CE-E46D47D4 remains unfulfilled because the original prototype document cannot render/export. Existing shell aria-label and expanded-panel contrast findings remain. The newly corrected pending-status wording has source regression coverage but has not yet been served. The real Finance job remained submitted because the preview lacked background transport; controlled provider-busy/automatic continuation and saved business result remain unrun. No budget baseline was changed."
+}
