@@ -271,8 +271,9 @@ export async function verifyApprovalDisclosure() {
     } finally { release(); }
     check(unexpectedDecisionPosts === 0, "An unexpected server decision was attempted during presentation checks");
     check(git("rev-parse", "HEAD") === runtime.sourceSha, "CI source changed during scenarios");
+    check(captures.length === cases.length * contexts.length, "Scenario captures do not cover every case, viewport and theme");
     execution = { status: "passed", sourceSha: runtime.sourceSha, runKey: runtime.runKey,
-      cases: 9, closedCaptures: captures.length, keyboardCaptures: 2, stateRetentionFaultInjection: "passed",
+      cases: cases.length, closedCaptures: captures.length, keyboardCaptures: 2, stateRetentionFaultInjection: "passed",
       interceptedDecisionPosts: interceptedPosts, serverAuthorizations: 0, fixtureCleanup: "completed", captures };
   } finally {
     try {
@@ -287,7 +288,7 @@ export async function verifyApprovalDisclosure() {
   check(execution, "No complete scenario result was produced");
   // A cleanup failure cannot leave a passing receipt or success message.
   writeFileSync(resolve(OUT, "execution.json"), JSON.stringify(execution, null, 2));
-  console.log("Approval scenarios passed: 9 cases, 36 viewport/theme captures, keyboard and retained-state checks; no server authorization.");
+  console.log(`Approval scenarios passed: ${execution.cases} cases, ${execution.closedCaptures} viewport/theme captures, keyboard and retained-state checks; no server authorization.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
