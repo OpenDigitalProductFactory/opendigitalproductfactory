@@ -201,3 +201,10 @@ regression loses the binding when the positional behavior is restored and
 passes with the stable marker. This preserves existing current-input tool
 authority and does not invent outcomes for excluded historical failure notices.
 Real model behavior and the full workflow still require served verification.
+
+The November 1 source32b preview retained one read-only saved request across a
+reload, but its ephemeral opening briefing then appeared after that unanswered
+request. A source regression reproduces this misleading reply position. Keep
+the briefing before an unanswered user turn; completed conversations retain the
+existing proactive overview at the end. The new ordering still needs served
+verification; source32b's retention check does not qualify the changed ordering.

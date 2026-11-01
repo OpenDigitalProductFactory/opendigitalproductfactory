@@ -13,6 +13,7 @@ import {
 } from "@/lib/feedback/feedback-event";
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
+import { withOpeningBriefing } from "./agent-message-state";
 import type { ThreadLoadState } from "./composer-state";
 import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
 import { useCoworkerJourneys } from "./use-coworker-journeys";
@@ -92,31 +93,6 @@ function cleanRouteContext(value: string | undefined): string | null {
 function getShellContentTop(): number {
   const shellContent = document.querySelector<HTMLElement>("[data-shell-content='true']");
   return shellContent?.getBoundingClientRect().top ?? 16;
-}
-
-// BI-DED493BA: proactive on-load briefing. Ephemeral assistant bubble appended
-// to the loaded history — server-composed from the attention read-model, never
-// persisted, so it is fresh on every open. Id is stable per thread context so a
-// load retry doesn't duplicate it.
-function withOpeningBriefing(
-  messages: AgentMessageRow[],
-  briefing: { content: string; agentId: string | null } | null | undefined,
-  threadContext: string,
-): AgentMessageRow[] {
-  if (!briefing?.content) return messages;
-  const id = `opening-briefing:${threadContext}`;
-  if (messages.some((message) => message.id === id)) return messages;
-  return [
-    ...messages,
-    {
-      id,
-      role: "assistant",
-      content: briefing.content,
-      createdAt: new Date().toISOString(),
-      agentId: briefing.agentId,
-      routeContext: threadContext,
-    },
-  ];
 }
 
 function withSupportWelcomeMessage(messages: AgentMessageRow[]): AgentMessageRow[] {

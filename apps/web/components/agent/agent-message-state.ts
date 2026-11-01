@@ -7,6 +7,28 @@ export type AgentRenderableMessage = AgentMessageRow & {
   retryContent?: string;
 };
 
+// Fresh server-composed overview, never persisted. Keep it before an unanswered
+// request so reloading cannot present it as that request's reply. Completed
+// conversations still receive the proactive overview at the end.
+export function withOpeningBriefing(
+  messages: AgentMessageRow[],
+  briefing: { content: string; agentId: string | null } | null | undefined,
+  threadContext: string,
+): AgentMessageRow[] {
+  if (!briefing?.content) return messages;
+  const id = `opening-briefing:${threadContext}`;
+  if (messages.some(message => message.id === id)) return messages;
+  const roles = messages.map(message => message.role);
+  const lastUser = roles.lastIndexOf("user");
+  const insertion = lastUser > roles.lastIndexOf("assistant") ? lastUser : messages.length;
+  return [
+    ...messages.slice(0, insertion),
+    { id, role: "assistant", content: briefing.content, createdAt: new Date().toISOString(),
+      agentId: briefing.agentId, routeContext: threadContext },
+    ...messages.slice(insertion),
+  ];
+}
+
 export function pendingCoworkerLabel(input: {
   agentName: string; clearing: boolean; status: string | null; tool: string | null;
   elapsedSeconds: number; acknowledged: boolean;

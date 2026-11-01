@@ -753,6 +753,24 @@ describe("AgentCoworkerShell opening briefing (BI-DED493BA)", () => {
     expect(briefingRows).toHaveLength(1);
   });
 
+  it.each([false, true])("keeps a briefing out of an unanswered request's reply position (answered=%s)", async (answered) => {
+    const base = { createdAt: "2026-01-01T00:00:00Z", agentId: null, routeContext: "/workspace" };
+    getOrCreateThreadSnapshotMock.mockResolvedValue({ threadId: "retained-thread", messages: [
+      { ...base, id: "saved-user", role: "user", content: "Check my saved work" },
+      { ...base, id: "foreground-receipt-job", role: "system", content: "Request saved" },
+      ...(answered ? [{ ...base, id: "actual-result", role: "assistant", content: "Verified result" }] : []),
+    ], openingBriefing: { content: "General work overview", agentId: null } });
+    renderShell();
+    fireEvent.click(screen.getByText("Open coworker"));
+    await settleShellThread();
+    const rows = (agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as {
+      initialMessages: Array<{ id: string }>;
+    }).initialMessages;
+    const briefing = rows.findIndex(row => row.id.startsWith("opening-briefing:"));
+    if (answered) expect(briefing).toBe(rows.length - 1);
+    else expect(briefing).toBeLessThan(rows.findIndex(row => row.id === "saved-user"));
+  });
+
   it("stays silent when the snapshot carries no briefing (quiet / nothing pending)", async () => {
     getOrCreateThreadSnapshotMock.mockResolvedValue({
       threadId: "thread-silent",
