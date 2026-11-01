@@ -105,7 +105,7 @@ its exact behavior remains unchanged; remeasure the named-account click path.
 The October 14 acceptance sweep marked the item done despite this amendment
 having no PR. Reopened the same item and resumed WC-D32E1140 through governed
 tools; restored the removed worktree from the preserved signed commits.
-Merged current main at 10da4ec877fd362f0455a0865c9e2a9f3b853cf7, resolving only
+Merged current origin/main at 1c5b5a013a7107809e9390fec0ba7d57a4eb8458, resolving only
 the account renderer conflict while retaining both newer account protections.
 The merge is db9aad50fb0533f0cf55da6a6bbedb2c05ae77f4.
 
