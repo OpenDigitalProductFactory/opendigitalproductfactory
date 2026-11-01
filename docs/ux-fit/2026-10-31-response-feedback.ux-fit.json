@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-617D89B8C594",
   "scope": {
     "files": [
-      "apps/web/components/agent/AgentMessageBubble.tsx",
       "apps/web/components/agent/ResponseFeedback.tsx",
       "apps/web/components/platform/RoutingManagementWorkspace.tsx",
       "apps/web/components/platform/RoutingManagementInspector.tsx",
