@@ -1,0 +1,17 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1248,7 +1248,12 @@
+ function getResizeObserver(target) {
+ 	const ownerWindow = target.ownerDocument.defaultView;
+ 	if (ownerWindow?.ResizeObserver == null) return null;
+-	return resizeObservers.getOrInsertComputed(ownerWindow, () => new ownerWindow.ResizeObserver(resizeObserverCallback));
++	let observer = resizeObservers.get(ownerWindow);
++	if (observer === undefined) {
++		observer = new ownerWindow.ResizeObserver(resizeObserverCallback);
++		resizeObservers.set(ownerWindow, observer);
++	}
++	return observer;
+ }
+ function resizeObserverCallback(entries) {
+ 	for (const entry of entries) {

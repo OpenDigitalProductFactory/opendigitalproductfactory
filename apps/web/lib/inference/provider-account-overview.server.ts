@@ -14,11 +14,13 @@ import { loadProviderCapacitySnapshots } from "@/lib/routing/provider-capacity/s
 import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-exclude";
 import { accountRuntimeKey } from "@/lib/routing/provider-account-candidates";
 import { isAccountCapacityState } from "@/lib/routing/provider-capacity/scopes";
+import { loadSubscriptionQuotaRecoveryViews } from "./subscription-quota-recovery";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 export async function getProviderAccountCopy(): Promise<Record<string, string>> {
-  const [t, setup] = await Promise.all([getT("providerAccounts"), getT("setup")]);
+  const [t, setup, locale] = await Promise.all([getT("providerAccounts"), getT("setup"), getLocaleContext()]);
   return { ...Object.fromEntries(Object.keys(SOURCE_CATALOG.providerAccounts).map(key => [key, t(key as keyof typeof SOURCE_CATALOG.providerAccounts)])),
-    modelsExecution: setup("providerConnection.modelsExecution") };
+    modelsExecution: setup("providerConnection.modelsExecution"), viewerTimeZone: locale.timeZone };
 }
 
 export async function loadProviderAccountOverview(input: {
@@ -37,6 +39,8 @@ export async function loadProviderAccountOverview(input: {
     loadProviderCapacitySnapshots({ includeInactiveAccountHealth: true }).catch(() => null),
   ]);
   const providers = new Map(input.providers.map(pw => [pw.provider.providerId, pw]));
+  const subscriptionIds = accounts.filter(account => account.isDefault && ["chatgpt", "codex"].includes(account.providerId)).map(account => account.connectionId);
+  const recovery = subscriptionIds.length ? await loadSubscriptionQuotaRecoveryViews(subscriptionIds).catch(() => null) : new Map();
   const evidenceById = new Map(evidence.map(connection => [connection.connectionId, connection]));
   const statusLabels: Record<string, string> = { active: input.copy.authenticated, disabled: input.copy.disabled,
     paused: input.copy.paused, disconnected: input.copy.disconnectedState, unconfigured: input.copy.needsSetup,
@@ -74,6 +78,10 @@ export async function loadProviderAccountOverview(input: {
     ].filter(Boolean);
     const accessible = Array.isArray(account.accessibleModelIds) ? account.accessibleModelIds.filter(value => typeof value === "string") : [];
     const summary = input.modelSummaries.get(account.providerId);
+    const quotaView = recovery?.get(account.connectionId);
+    const proof = ownedHealth?.executionProof;
+    const usageUrl = account.providerId === "anthropic-sub" ? "https://claude.ai/settings/usage"
+      : ["chatgpt", "codex"].includes(account.providerId) ? "https://chatgpt.com/codex/settings/usage" : null;
     const catalogCount = summary?.totalModels;
     const modelSummary = account.modelsVerifiedAt ? `${accessible.length} ${input.copy.verifiedModels}`
       : catalogCount ? `${catalogCount} ${input.copy.catalogModels} · ${input.copy.notVerified}` : input.copy.notVerified;
@@ -85,15 +93,34 @@ export async function loadProviderAccountOverview(input: {
       statusLabel: ["paused", "disabled", "disconnected"].includes(account.status) ? statusLabels[account.status]
         : credentialNeedsRenewal || ownedRestriction ? input.copy.degraded
           : control?.eligibility.label ?? (account.isDefault ? input.copy.routingUnknown : statusLabels[account.status] ?? input.copy.unavailable),
+      statusIntent: ["paused", "disabled"].includes(account.status) ? "warning" as const
+        : credentialNeedsRenewal || ownedRestriction && ownedHealth && isAccountCapacityState(ownedHealth.state) ? "danger" as const
+          : control?.eligibility.state === "rate_limited" ? "warning" as const
+            : control?.eligibility.eligible ? "success" as const : "neutral" as const,
       allowedWork: review?.scope === "company-work" ? input.copy.companyWork : review?.scope === "public-only" ? input.copy.publicOnly : input.copy.workBlocked,
       allowedWorkSummary: review?.headline ?? input.copy.notVerified,
       modelSummary,
       capabilitySummary: account.isDefault && summary?.routingScores && (!account.modelsVerifiedAt || accessible.includes(summary.representativeModelId ?? ""))
         ? `${input.copy.catalogCapability} ${input.copy.reasoning} ${summary.routingScores.reasoning} · ${input.copy.coding} ${summary.routingScores.codegen} · ${input.copy.tools} ${summary.routingScores.toolFidelity}`
         : input.copy.capabilityUnmeasured,
-      capacitySummary: ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
+      capacitySummary: proof ? `${input.copy.capacityProof}: ${proof.modelId}`
+        : ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
       resetSummary: [...new Set(resetParts)].join(" ") || (account.isDefault && !control ? input.copy.routingCheckUnavailable : null),
       resolvesPhases: account.isDefault ? input.resolvesPhases.get(account.providerId) ?? [] : [],
+      ...((subscriptionIds.includes(account.connectionId) || usageUrl) ? { quotaRecovery: {
+        models: quotaView?.models ?? [], selectedModelId: quotaView?.selectedModelId ?? summary?.representativeModelId ?? null,
+        hourly: quotaView?.hourly ?? false,
+        canCheck: account.isDefault && account.status === "active" && Boolean(account.credential?.hasUsableMaterial)
+          && Boolean(quotaView?.models.length) && !credentialNeedsRenewal && !(ownedHealth && isAccountCapacityState(ownedHealth.state)),
+        lastCheckAt: quotaView?.lastCheckAt ?? null, nextCheckAt: quotaView?.nextCheckAt ?? null, lastResult: quotaView?.lastResult ?? null,
+        checkedModelId: proof?.modelId ?? null, checkedAt: proof ? new Date(proof.observedAt).toISOString() : null,
+        proofExpiresAt: proof ? new Date(proof.expiresAt).toISOString() : null,
+        observedAt: providerLimit?.observedAtMs || ownedHealth?.observedAtMs ? new Date(providerLimit?.observedAtMs ?? ownedHealth!.observedAtMs!).toISOString() : null,
+        observationSource: providerLimit?.observationSource ?? ownedHealth?.observationSource ?? null,
+        limits: [...(control?.restrictions ?? []), ...(sharedRestrictions ?? []),
+          ...(ownedRestriction && ownedHealth?.safeSummary ? [{ summary: ownedHealth.safeSummary, until: ownedHealth.retryAtMs ? new Date(ownedHealth.retryAtMs).toISOString() : null }] : [])],
+        usageUrl, unavailable: recovery === null,
+      } } : {}),
     }];
   });
 }

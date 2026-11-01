@@ -94,7 +94,10 @@ const nonEmptyString = () => z.string().min(1);
 const slug = named("slug", z.string().regex(/^[a-z0-9][a-z0-9-]*$/));
 const semver = named("semver", z.string().regex(/^\d+\.\d+\.\d+$/));
 const principalRef = named("principalRef", z.string().regex(/^(agent|role|person):.+$/));
-const toolName = named("toolName", z.string().regex(/^[a-z][a-z0-9_]*$/));
+// Registered tool names include legacy camelCase (reviewDesignDoc,
+// saveBuildEvidence). Preserve their identity; resolution still requires a
+// real registered tool, and paths/separators remain invalid (BI-D37B2C13).
+const toolName = named("toolName", z.string().regex(/^[a-z][a-zA-Z0-9_]*$/));
 const authority = named("authority", z.enum(DECISION_SCOPES));
 const evidenceKind = named(
   "evidenceKind",

@@ -9,7 +9,7 @@
 // measuring column widths on mount).
 
 import type { ComponentProps } from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ColumnDefinition, GridRow, GridCapabilities } from "@/lib/workbooks/types";
 
@@ -37,10 +37,19 @@ vi.mock("next/navigation", () => ({
 import { WorkbookGrid } from "./Grid";
 import { updateCellsAction } from "@/lib/actions/workbooks";
 
+const weakMapInsertDescriptor = Object.getOwnPropertyDescriptor(WeakMap.prototype, "getOrInsertComputed");
+let observerConstructions = 0;
+const observedTargets = vi.fn();
+const unobservedTargets = vi.fn();
+
 beforeAll(() => {
+  // Node 24 and older supported browsers have ResizeObserver but lack this
+  // newer WeakMap method. Exercise the actual grid without a prototype shim.
+  Object.defineProperty(WeakMap.prototype, "getOrInsertComputed", { configurable: true, value: undefined });
   globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
+    constructor() { observerConstructions += 1; }
+    observe(target: Element) { observedTargets(target); }
+    unobserve(target: Element) { unobservedTargets(target); }
     disconnect() {}
   } as unknown as typeof ResizeObserver;
   // jsdom does not define global CSS; react-data-grid calls CSS.escape while
@@ -53,6 +62,11 @@ beforeAll(() => {
     value: () => ({ width: 800, height: 400, top: 0, left: 0, right: 800, bottom: 400, x: 0, y: 0, toJSON() {} }),
   });
   Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterAll(() => {
+  if (weakMapInsertDescriptor) Object.defineProperty(WeakMap.prototype, "getOrInsertComputed", weakMapInsertDescriptor);
+  else Reflect.deleteProperty(WeakMap.prototype, "getOrInsertComputed");
 });
 
 afterEach(() => {
@@ -177,4 +191,17 @@ describe("WorkbookGrid — Replace routes through the persist action", () => {
     // persistCell(rowId, columnId, value, prev) → updateCellsAction(tableId, rowId, { col: value })
     expect(updateCellsAction).toHaveBeenCalledWith("TBL-test", "r2", { name: "Bobby" });
   });
+});
+
+it("reuses the window observer and cleans up without WeakMap upsert support", () => {
+  const before = observerConstructions;
+  const first = renderGrid();
+  first.unmount();
+  const afterFirst = observerConstructions;
+  const second = renderGrid();
+  second.unmount();
+  expect(observerConstructions - before).toBeLessThanOrEqual(1);
+  expect(observerConstructions).toBe(afterFirst);
+  expect(observedTargets).toHaveBeenCalledTimes(2);
+  expect(unobservedTargets).toHaveBeenCalledTimes(2);
 });

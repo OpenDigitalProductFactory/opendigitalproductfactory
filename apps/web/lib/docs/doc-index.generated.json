@@ -1167,6 +1167,7 @@
         "merge-readiness",
         "merge-mechanics",
         "privatepublic-change-segregation-is-content-based",
+        "read-only-work-needs-no-worktree",
         "creating-a-worktree",
         "seeding-a-new-worktree",
         "routine-client-permissions",
@@ -1175,6 +1176,7 @@
         "freshness-a-stale-worktree-base-is-a-landmine",
         "root-clone-freshness-the-shared-root-must-stay-on-current-main",
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
+        "branches-left-without-a-worktree",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping",
         "when-a-worktree-is-removed",
@@ -2846,7 +2848,8 @@
         "workroom-cycle-continuity",
         "existing-persistence-and-bounded-reads",
         "recovery-integration-still-required",
-        "verification-and-rollback-boundary"
+        "verification-and-rollback-boundary",
+        "bounded-assignment-and-continuation-briefs"
       ]
     },
     "docs/architecture/workroom-ingestion-scale-qualification.md": {

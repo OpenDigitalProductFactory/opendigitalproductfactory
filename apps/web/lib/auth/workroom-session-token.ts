@@ -31,6 +31,7 @@ const IDLE_EXPIRY_MS = 24 * 60 * 60 * 1000;
 export const WORKROOM_SESSION_SCOPES = [
   "work_capsule_read",
   "work_capsule_write",
+  "worktree_provision",
   "workroom_evidence_write",
   "backlog_read",
   "spec_plan_read",
