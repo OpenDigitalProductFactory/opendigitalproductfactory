@@ -29,11 +29,11 @@ export default async function GeneralLedgerReportPage({
   const params = await searchParams;
   const periodKey = params.period === undefined ? null : params.period;
   const unavailable = (reason: string, retry = false) => (
-    <main className="space-y-3">
+    <div className="space-y-3">
       <h1 className="text-xl font-semibold">General Ledger</h1>
       <p>{reason}</p>
       <Link href={retry ? `/finance/reports/general-ledger${typeof periodKey === "string" ? `?period=${periodKey}` : ""}` : "/finance"} data-dpf-primary-action>{retry ? "Try again" : "Open Finance"}</Link>
-    </main>
+    </div>
   );
   if (periodKey !== null && (typeof periodKey !== "string" || !isLedgerMonth(periodKey))) {
     return unavailable("Choose one valid ledger month.");

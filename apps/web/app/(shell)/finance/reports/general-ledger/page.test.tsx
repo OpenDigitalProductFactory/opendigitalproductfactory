@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { DEFAULT_LOCALE, translate } from "@dpf/i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ auth: vi.fn(), can: vi.fn(), context: vi.fn(), report: vi.fn(), actor: vi.fn() }));
@@ -45,6 +46,15 @@ it("read failure keeps the selected month on an explicit retry", async () => {
   const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ period: "2026-10" }) }));
   expect(html).toContain("Try again"); expect(html).toContain('href="/finance/reports/general-ledger?period=2026-10"');
   expect(html).not.toContain("private database detail"); expect(html).not.toContain("$0");
+});
+it("keeps unavailable feedback within the workspace landmark and offers Finance setup", async () => {
+  const { render, screen, cleanup } = await import("@testing-library/react");
+  try {
+    render(<main aria-label="Workspace">{await Page({ searchParams: Promise.resolve({}) })}</main>);
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Open Finance" }).getAttribute("href")).toBe("/finance");
+    expect(screen.getByText("No recorded entries")).toBeTruthy();
+  } finally { cleanup(); }
 });
 it("labels available monthly records as movements rather than a verified position", async () => {
   const { computeTrialBalance } = await import("@/lib/finance/ledger");
