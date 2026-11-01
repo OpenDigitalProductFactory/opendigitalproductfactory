@@ -67,6 +67,8 @@ or automatic identity merge; existing addressed contacts remain compatible.
 | AC-ADD | OBJ-CONTACT, OBJ-SAFE | The owner adds a valid available email to the same contact id; account linkage, activities, role history and other fields are preserved and change provenance is recorded. |
 | AC-DUPLICATE | OBJ-CONTACT, OBJ-SAFE | Same-account name/phone candidates prompt an explicit same/different-person choice; blank emails never match; a conflicting real email cannot overwrite or silently merge another identity. Cross-account records are not disclosed or adopted without the existing relationship authority. |
 | AC-COMPAT | OBJ-SAFE | Existing contacts, sign-in, invites, imports, merges, notifications and API clients retain their addressed-contact behavior; migration preserves all rows and unique non-null email protection. |
+| AC-AUTHORITY | OBJ-SAFE | Anonymous callers, customer/partner portal callers and employees without operate_customer cannot create, select duplicates or add email through direct actions, REST or coworker tools. Authorized employee operations remain within the target account and never return cross-account duplicate details. |
+| AC-PRINCIPAL | OBJ-CONTACT, OBJ-SAFE | A no-email contact has only stable contact-id aliases and an inactive Principal; adding an email cannot adopt or re-kind another customer, partner or workforce Principal. Contact, primary account role, provenance and alias writes commit together or roll back. |
 
 Store unknown email as SQL NULL, not an empty string. Preserve the current
 non-null unique constraint semantics for known addresses; normalize and validate
@@ -79,28 +81,74 @@ relationship context. Contact creation and required provenance must commit
 atomically; a swallowed timeline error is not sufficient acceptance. Do not hide
 required identity state in optional JSON or account notes alone.
 
-The existing authorized contact update operation adds email to the same row.
-Check account scope and the unchanged email's uniqueness inside the write
-transaction; the database remains the concurrency backstop. On conflict return
-a decision-ready duplicate result without writing either identity or exposing
-another customer's private data. Reuse the existing identity/Principal merge
-workflow when an authorized person actually chooses a merge. Name equality is
-never sufficient to merge identities.
+### Server authority and account association
+
+The present create/update actions have no authorization preamble; REST only
+authenticates, and the coworker handler ignores its user argument. They are not
+safe boundaries to inherit. Reuse the shared server-action capability guard for
+`operate_customer`, REST's returned capabilities/effective auth context, and the
+governed coworker grant/capability intersection. Derive actor identity from those
+authenticated contexts, never caller-supplied account authority or a boolean.
+
+This CRM mutation is for an authorized employee acting on an existing account;
+customer/partner portal identities cannot use it to create or change another
+person. Enforce the actor's effective population/capability and target account
+association before duplicate reads as well as writes. The selected contact must
+belong to the target account or already have a valid authorized account role;
+an email found on an unrelated account is a non-disclosing conflict. A missing
+or unresolvable actor fails closed. Keep a shared authenticated domain operation
+for UI/API/tool adapters rather than wrapping a service-only coworker call in a
+browser-cookie requirement. No new capability or broadened access is introduced.
+
+Create the primary `ContactAccountRole` in the same transaction as the contact
+and required provenance for every entry point, matching the current REST
+invariant. A no-email create requires a meaningful name. Existing REST email-only
+creation remains valid when a usable email is supplied.
+
+### Principal identity and adding email
+
+Extend existing customer/partner Principal synchronization for absent email:
+resolve or create by stable `customer_contact`/`partner_contact` id aliases only,
+use the real contact name for display, omit an email alias entirely, and keep
+the no-email Principal inactive. Neither an empty alias nor a shared null lookup
+is permitted. This preserves the single existing Principal model without making
+the record a portal user or issuing a credential/session.
+
+The new add-email operation is strictly null-to-valid-email on the same contact
+id. Existing addressed or credentialed contacts retain their established
+address-change workflow; this operation cannot replace/clear their address.
+Inside the same contact/role/provenance transaction, first resolve the existing
+id-bound Principal. Before adding the normalized email alias, check all existing
+Principal alias owners, not only CustomerContact.email. If it belongs to any
+different Principal, return a non-disclosing identity conflict and roll back;
+do not call the broad email-first upsert that could adopt/re-kind an employee or
+another customer/partner. An alias already on the same Principal is compatible.
+Unique database constraints are the concurrency backstop, and conflicts roll
+back all contact/provenance/alias changes. Customer and partner sync must use
+the same rules for this transition. General Principal merges remain in their
+existing separately authorized workflow. Name equality never merges identity.
+
+Storing email grants no credential or new role. Any later session eligibility
+continues to require the existing account lifecycle and credential checks.
 
 UI: Email (optional), helper text You can add it later, and a visible Email not
 added state with an Add email action on the existing contact. Omit mailto/send
-controls without a usable address. The coworker reports saved contact id,
+controls without a usable address. Duplicate results offer both a scoped
+same-person selection and a different-person confirmation; the existing UI's
+different-person-only button is insufficient. The coworker reports saved contact id,
 account and missing-email state and offers the next useful capture step without
 inventing a recipient or demanding mailbox access.
 
 ## Migration and verification sequence
 
 1. Before product edits, enumerate nullable-email consumers, account-scope/auth
-   boundaries and canonical validators; resolve current workroom sensitivity and
+   boundaries, Principal synchronization and canonical validators; resolve current workroom sensitivity and
    obtain whatever data/architecture/UX gates its actual admission requires.
 2. Write failing behavior tests for no-email create, provenance persistence,
    add-email to the same id, name-only duplicates, conflicting email/concurrent
-   updates, unauthorized account association and absent-recipient/login refusal.
+   updates, anonymous/direct-action/API/tool mutation refusal, customer/partner
+   cross-account refusal, missing employee capability, customer/partner/workforce
+   alias collisions, transaction rollback and absent-recipient/login refusal.
 3. Make the existing schema email nullable while retaining unique non-null email.
    Generate/apply the forward migration through the governed test target. It
    relaxes requiredness and must not rewrite existing emails or remove rows.
@@ -118,4 +166,5 @@ inventing a recipient or demanding mailbox access.
 These steps form one compatible delivery: admitting null data without updating
 its readers/auth boundaries is not independently safe to ship. No product code,
 migration, source test or served scenario has been run by this design-only work.
-The current worktree is source-only; local compile dependencies are absent.
+The initial worktree was source-only. A subsequent managed dependency bootstrap
+reported compile-ready; that is dependency readiness, not a product test result.
