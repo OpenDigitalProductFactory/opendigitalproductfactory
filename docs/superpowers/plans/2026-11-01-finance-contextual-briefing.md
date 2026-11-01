@@ -11,6 +11,8 @@ Design: [Finance contextual opening briefing](../specs/2026-11-01-finance-contex
 
 `finance-contextual-opening` maps to `BI-9F118032`, objectives `OBJ-1` and `OBJ-2`, acceptance `AC-1` through `AC-6`. The composer, loader locale seam, regression coverage and user guidance are one behavior correction. None is an independent product deliverable. Dependencies: existing owner-attention projection, canonical attention urgency and native expense entry; no new dependency or separate runtime repair.
 
+Acceptance references: `AC-1`, `AC-2`, `AC-3`, `AC-4`, `AC-5`, `AC-6` in the linked design.
+
 ## Design grounding
 
 Read the linked design and its owner-attention convergence reference. Reuse the existing composer/loader, `isOverrideTier` and `overrideReason`, shell catalog, and `/finance/my-expenses/new`. Keep Finance domain presentation separate from the original owner-count and provider-recovery work. No new attention source, classifier, table, route, model call or grant.
