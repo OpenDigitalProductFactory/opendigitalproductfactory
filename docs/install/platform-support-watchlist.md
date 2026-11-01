@@ -1,5 +1,15 @@
 # Platform Support Watch-List (living document)
 
+**Preview loopback replacement (BI-4E94B021).** Preview-only generated Compose
+YAML uses the standard ports !override tag (Compose >=2.24.4). A loopback entry
+alone can retain inherited broad IPv4/IPv6 mappings because host IP participates
+in Compose port uniqueness. Unsupported Compose fails configuration before
+startup; never weaken the UX issuer or change the installation's host bind
+setting as a fallback. Real docker compose config regression covers replacement
+and preservation of an unrelated service. Actual preview serving remains a
+separate governed runtime verification.
+
+
 **Expired authority-host Edge action client (BI-AFDB58C8).**
 
 On October 29 an enrolled Mac still heartbeated while its separate mTLS action
