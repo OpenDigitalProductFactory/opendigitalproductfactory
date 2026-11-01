@@ -1,7 +1,8 @@
 /** Focused served regression in the disposable quota-verification runtime only. */
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Browser } from "@playwright/test";
 import type { PrismaClient } from "../../../packages/db/generated/client/client";
 import { NAV_MODE_COOKIE } from "../lib/navigation/nav-mode";
@@ -9,6 +10,26 @@ import { waitForRouteDomToSettle } from "./ux-route-sweep";
 import { assertProviderQuotaFixtureRuntime, resetProviderQuotaFixture, type ProviderQuotaFixture } from "./provider-quota-recovery-fixtures";
 
 function check(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
+
+/** Resolve only a public client action proxy; never read server bundles/manifests. */
+function publicActionReference(id: string | undefined) {
+  if (!id || !/^[a-f0-9]{40,64}$/.test(id)) return null;
+  const directory = resolve(dirname(fileURLToPath(import.meta.url)), "../.next/static/chunks");
+  try {
+    let bytes = 0;
+    for (const file of readdirSync(directory, { recursive: true }).filter((entry): entry is string => typeof entry === "string" && entry.endsWith(".js")).slice(0, 2000)) {
+      const path = resolve(directory, file), stat = lstatSync(path);
+      if (!stat.isFile() || stat.size > 8 * 1024 * 1024) continue;
+      bytes += stat.size;
+      if (bytes > 32 * 1024 * 1024) break;
+      const content = readFileSync(path, "utf8"), index = content.indexOf(id);
+      if (index < 0) continue;
+      const tail = content.slice(index + id.length, index + id.length + 240);
+      return { id, publicChunk: basename(file), candidateExportName: tail.match(/,\s*["']([A-Za-z_$][\w$]*)["']\s*\)/)?.[1] ?? null };
+    }
+  } catch { /* Missing public assets leave the diagnostic unknown, never permit a request. */ }
+  return { id, publicChunk: null, candidateExportName: null };
+}
 
 export async function verifySubscriptionCalibrationHistory({ browser, db, fixture, out, storageState, requestCount }: {
   browser: Browser; db: PrismaClient; fixture: ProviderQuotaFixture; out: string; storageState: string; requestCount: () => number;
@@ -41,28 +62,41 @@ export async function verifySubscriptionCalibrationHistory({ browser, db, fixtur
       for (const theme of ["light", "dark"] as const) {
         const context = await browser.newContext({ storageState, colorScheme: theme,
           viewport: layout === "mobile" ? { width: 320, height: 900 } : { width: 1440, height: 1000 } });
-        let blockedWrites = 0;
+        let blockedWrites = 0, phase = "initial-render";
+        const blockedRequests: unknown[] = [], slug = `${layout}-${mode}-${theme}`;
+        const diagnostics = () => ({ layout, mode, theme, phase, sourceSha: runtime.sourceSha, blockedWrites,
+          blockedRequests, providerRequests: requestCount() - before, synthetic: true, realQualityMeasurement: "unrun" });
         try {
           await context.addCookies([{ name: NAV_MODE_COOKIE, value: mode, url: runtime.origin }]);
           // Reading history and opening client disclosures must not issue a server action.
           await context.route("**/*", async route => {
-            if (!["GET", "HEAD", "OPTIONS"].includes(route.request().method())) { blockedWrites++; await route.abort("blockedbyclient"); }
+            const request = route.request();
+            if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) {
+              const arrivalPhase = phase;
+              blockedWrites++;
+              await route.abort("blockedbyclient");
+              // No body, query, cookies or credential headers enter diagnostics.
+              if (blockedRequests.length < 20) blockedRequests.push({ arrivalPhase, method: request.method(),
+                pathname: new URL(request.url()).pathname.slice(0, 240), resourceType: request.resourceType(),
+                action: publicActionReference(request.headers()["next-action"]) });
+            }
             else await route.continue();
           });
           const page = await context.newPage();
           await page.goto(runtime.origin + "/platform/ai/providers/chatgpt", { waitUntil: "domcontentloaded", timeout: 60_000 });
           await waitForRouteDomToSettle(page);
-          const diagnostics = page.locator("details").filter({ has: page.locator(":scope > summary").filter({ hasText: /^Diagnostics/ }) });
-          check(await diagnostics.count() === 1, "Provider diagnostics disclosure is missing or ambiguous");
-          await diagnostics.locator(":scope > summary").click();
-          await diagnostics.getByRole("button", { name: /^Test Runs(?:\s*\(\d+\))?$/ }).click();
-          const history = diagnostics.locator("div.p-3.rounded-lg").filter({ has: page.getByText(runId, { exact: true }) });
+          phase = "history-disclosure";
+          const disclosure = page.locator("details").filter({ has: page.locator(":scope > summary").filter({ hasText: /^Diagnostics/ }) });
+          check(await disclosure.count() === 1, "Provider diagnostics disclosure is missing or ambiguous");
+          await disclosure.locator(":scope > summary").click();
+          await disclosure.getByRole("button", { name: /^Test Runs(?:\s*\(\d+\))?$/ }).click();
+          const history = disclosure.locator("div.p-3.rounded-lg").filter({ has: page.getByText(runId, { exact: true }) });
           await history.waitFor({ state: "visible" });
           const text = await history.innerText();
           check(text.includes(summary) && text.includes("incomplete"), "Partial measurement history lost its truthful summary or state");
           check(!/Avg score:|Probes:|Scenarios:/.test(text), "Partial history invented an average or zero-count success");
-          const slug = `${layout}-${mode}-${theme}`;
           const historyBytes = await history.screenshot({ path: resolve(directory, slug + "-history.png") });
+          phase = "model-disclosure";
           await page.getByRole("button", { name: "Models and execution", exact: true }).click();
           const search = page.getByPlaceholder("Search models...", { exact: true });
           await search.fill(fixture.modelId);
@@ -70,6 +104,7 @@ export async function verifySubscriptionCalibrationHistory({ browser, db, fixtur
           check(await scores.count() === 1, "Synthetic model routing disclosure is missing or ambiguous");
           const label = page.getByText("Source: Measurements", { exact: true });
           await label.waitFor({ state: "visible" });
+          phase = "keyboard-close-open";
           await scores.focus(); await page.keyboard.press("Enter");
           await label.waitFor({ state: "hidden" });
           await page.keyboard.press("Enter");
@@ -78,12 +113,17 @@ export async function verifySubscriptionCalibrationHistory({ browser, db, fixtur
           check((await model.innerText()).includes(fixture.modelId), "Measurements label is not bound to the synthetic model");
           check(await model.getByRole("button", { name: /Run Eval/ }).count() === 0, "Retired fixture offers inference");
           const modelBytes = await model.screenshot({ path: resolve(directory, slug + "-model.png") });
-          check(blockedWrites === 0 && requestCount() === before, "Read-only calibration inspection attempted a write or inference");
+          write(slug + "-requests.json", { status: blockedWrites || requestCount() !== before ? "failed" : "passed", ...diagnostics() });
+          check(blockedWrites === 0 && requestCount() === before,
+            `Read-only calibration inspection blocked ${blockedWrites} writes; provider request delta ${requestCount() - before}; inspect request diagnostics`);
           const capture = { layout, mode, theme, sourceSha: runtime.sourceSha, status: "passed", text,
             history: { path: slug + "-history.png", sha256: createHash("sha256").update(historyBytes).digest("hex") },
             model: { path: slug + "-model.png", sha256: createHash("sha256").update(modelBytes).digest("hex"), ariaSnapshot: await model.ariaSnapshot() },
             checks: { partialSummary: true, noInventedAverage: true, noZeroCountSuccess: true, measurementsLabel: true, retiredNonRoutable: true, blockedWrites, providerRequests: requestCount() - before } };
           captures.push(capture); write(slug + ".json", capture);
+        } catch (error) {
+          write(slug + "-requests.json", { status: "failed", ...diagnostics() });
+          throw error;
         } finally { await context.close(); }
       }
   } catch (error) {
