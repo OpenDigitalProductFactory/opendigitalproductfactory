@@ -78,6 +78,11 @@ overrides:
 
 packageExtensionsChecksum: sha256-pFEExG4o57joHucsVi/dgGpp9BfdxYD7y4blLQUpCqI=
 
+patchedDependencies:
+  react-data-grid@7.0.0-beta.63:
+    hash: 035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18
+    path: patches/react-data-grid@7.0.0-beta.63.patch
+
 importers:
 
   .:
@@ -216,7 +221,7 @@ importers:
         version: 19.2.8
       react-data-grid:
         specifier: 7.0.0-beta.63
-        version: 7.0.0-beta.63(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 7.0.0-beta.63(patch_hash=035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-day-picker:
         specifier: ^10.0.2
         version: 10.0.2(@types/react@19.3.0)(react@19.2.8)
@@ -8209,7 +8214,7 @@ snapshots:
       defu: 6.1.7
       destr: 2.0.5
 
-  react-data-grid@7.0.0-beta.63(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  react-data-grid@7.0.0-beta.63(patch_hash=035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
