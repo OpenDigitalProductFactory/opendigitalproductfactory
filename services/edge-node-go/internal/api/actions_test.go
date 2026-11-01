@@ -3,10 +3,38 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/action"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestManagedInferenceAdmissionUsesTheExistingMachineActionClient(t *testing.T) {
+	original := action.SignedEnvelope{Envelope: action.Envelope{ActionKey: "RA-TEST", NodeID: "edge_1", ActionType: action.ManagedInferenceActionType}, Signature: "fixture-original"}
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.URL.Path != "/api/v1/edge/actions/inference-admission" || r.Header.Get("Authorization") != "Bearer dpfedge_test" {
+			t.Fatal("wrong machine action channel")
+		}
+		var body struct {
+			Envelope action.SignedEnvelope `json:"envelope"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body.Envelope.Signature != original.Signature {
+			t.Fatal("original signed request not forwarded")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "admission": map[string]any{"actionKey": original.ActionKey, "actionType": "inference.runtime.admission", "signature": "fixture-proof"}})
+	}))
+	defer server.Close()
+	client, err := New(Options{AuthorityURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, err := client.ReadManagedInferenceAdmission(context.Background(), "dpfedge_test", original)
+	if err != nil || !called || proof.ActionKey != original.ActionKey || proof.Signature != "fixture-proof" {
+		t.Fatalf("fresh admission read failed: %v %+v", err, proof)
+	}
+}
 
 func TestClaimAndReportActionsUseBearerAuthenticatedActionEndpoints(t *testing.T) {
 	requests := 0

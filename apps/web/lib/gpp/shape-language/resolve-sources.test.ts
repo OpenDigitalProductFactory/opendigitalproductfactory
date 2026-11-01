@@ -45,12 +45,12 @@ const connectSpies = [
 
 import type { WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import type { GppResolveSources } from "./resolve";
+import type { GppResolveSources } from "@dpf/validators/gpp/resolve";
 
 type Modules = {
   defaultResolveSources: typeof import("./resolve-sources").defaultResolveSources;
-  resolveShapeDocument: typeof import("./resolve").resolveShapeDocument;
-  decompile: typeof import("./decompile").decompile;
+  resolveShapeDocument: typeof import("@dpf/validators/gpp/resolve").resolveShapeDocument;
+  decompile: typeof import("@/lib/gpp/shape-language/dpf-toolkit").decompile;
   PLATFORM_TOOLS: typeof import("@/lib/mcp-tools").PLATFORM_TOOLS;
   classifyConsequentialTool: typeof import("@/lib/tak/consequential-tool-policy").classifyConsequentialTool;
   TOOL_TO_GRANTS: typeof import("@/lib/tak/agent-grants").TOOL_TO_GRANTS;
@@ -71,8 +71,8 @@ const REGISTRY = JSON.parse(readFileSync(join(__dirname, "../../../../../package
 beforeAll(async () => {
   const [resolveSources, resolve, decompileModule, mcpTools, policy, agentGrants, seed, bindings, workShapes, priors] = await Promise.all([
     import("./resolve-sources"),
-    import("./resolve"),
-    import("./decompile"),
+    import("@dpf/validators/gpp/resolve"),
+    import("@/lib/gpp/shape-language/dpf-toolkit"),
     import("@/lib/mcp-tools"),
     import("@/lib/tak/consequential-tool-policy"),
     import("@/lib/tak/agent-grants"),

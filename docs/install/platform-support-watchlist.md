@@ -1,5 +1,31 @@
 # Platform Support Watch-List (living document)
 
+**Expired authority-host Edge action client (BI-AFDB58C8).**
+
+On October 29 an enrolled Mac still heartbeated while its separate mTLS action
+client had expired on October 18. Existing certificate files and a live native
+service did not prove that the protected action channel worked. The root CA
+remained valid. Check actual certificate validity and registration separately.
+
+The existing authority PKI owner now distinguishes renewal from expired-client
+reissuance, validates the expected public identity and root, stages the pair
+privately, and retains prior credentials on a failed replacement. Bash and
+PowerShell consume one public-certificate validator; the normal release assets
+carry it and both bootstrap adapters. This does not enable an explicit disabled
+channel, alter node grants or permit expired authentication. Unknown interrupted
+repair checkpoints require reconciliation before another attempt. Native Windows
+execution, live certificate repair and inference activation remain separate
+evidence; passing source fixtures cannot establish them.
+
+Independent review also found that first issuance on PowerShell could suppress a
+rollback deletion error, then discard its checkpoint and lock with a partial key
+still published. Cleanup now requires confirmed removal, and retains recovery
+state on any uncertainty. A fixture executing the production PowerShell owner
+reproduced the failure and verified the correction under PowerShell 7.6.9 on
+macOS, with fake issuer and file-failure adapters. This is not native Windows or
+PowerShell 5.1 execution evidence. The fixture runs when a PowerShell runtime is
+available and explicitly reports a skip otherwise.
+
 **Windows foreground gate cancellation.**
 
 BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows
@@ -409,3 +435,10 @@ The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns relea
 and acceptance caveats. Confirm the selected release contains the changes;
 customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
 Historical root-owned directories are preserved and refused for scoped recovery.
+
+## Managed Mac inference qualification
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Qualified Apple M5 Max | A merged portal update is mistaken for a changed native engine; a package/report copied from another Mac is treated as local qualification. | Explicit native installer opt-in stages immutable source and a qualification bound to this enrolled host. A current signed action, owned drain and host inference reservation select it; verify actual mapped engine bytes and useful DPF results. Preserve Docker vendor files and the prior selection for owned rollback. |
+| Other macOS hardware, Windows and Linux | An unqualified acceleration package or native action is adopted automatically. | Native managed inference stays unregistered outside the qualified Apple Silicon procedure. Existing Windows, macOS and Linux native installer/host-upkeep behavior continues; no inference action is added to automatic host-upkeep policy. Qualify each additional hardware/runtime/model profile before offering activation. |

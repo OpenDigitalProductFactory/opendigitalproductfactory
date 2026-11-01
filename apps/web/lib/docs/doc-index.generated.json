@@ -1167,6 +1167,7 @@
         "merge-readiness",
         "merge-mechanics",
         "privatepublic-change-segregation-is-content-based",
+        "read-only-work-needs-no-worktree",
         "creating-a-worktree",
         "seeding-a-new-worktree",
         "routine-client-permissions",
@@ -1175,6 +1176,7 @@
         "freshness-a-stale-worktree-base-is-a-landmine",
         "root-clone-freshness-the-shared-root-must-stay-on-current-main",
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
+        "branches-left-without-a-worktree",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping",
         "when-a-worktree-is-removed",
@@ -1229,6 +1231,15 @@
         "product-operating-context-query-boundary",
         "direction-route-and-projection-boundary",
         "fleet-safe-evolution"
+      ]
+    },
+    "docs/architecture/business-operations-portability.md": {
+      "publicHref": "/architecture/business-operations-portability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-business-operations-read-models"
       ]
     },
     "docs/architecture/canonical-minimal-substrate.md": {
@@ -1993,6 +2004,7 @@
         "1243-dpf-status",
         "13-hazards",
         "14-security-and-privacy-considerations",
+        "qualification-research-narrows-a-stage-binding",
         "annex-a-informative-dpf-realization-status",
         "annex-b-informative-proposed-assertions",
         "annex-c-informative-build-studio-as-a-gpp-model",
@@ -2036,6 +2048,7 @@
         "approval-outcome-readback",
         "anti-patterns-observed",
         "original-review-recovery-across-connection-changes",
+        "bounded-qualification-research-admission",
         "a-present-assessment-authorized-by-an-approved-policy"
       ]
     },
@@ -2845,6 +2858,18 @@
       "publishedPortal": false,
       "anchors": [
         "workroom-ingestion-scale-qualification"
+      ]
+    },
+    "docs/architecture/workroom-policy-extraction.md": {
+      "publicHref": "/architecture/workroom-policy-extraction/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-workroom-policies",
+        "application-composition",
+        "compatibility-and-qualification",
+        "maintenance"
       ]
     },
     "docs/architecture/workroom-review-profile-contract.md": {
@@ -4946,6 +4971,20 @@
         "origin"
       ]
     },
+    "docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md": {
+      "publicHref": "/founder-kernel/wiki/principles/relations-are-typed-never-generic/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md": {
       "publicHref": "/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities/",
       "portalHref": null,
@@ -5241,6 +5280,8 @@
         "rule",
         "why",
         "outcomes-define-done-founder-direction-2026-10-27",
+        "the-outcome-is-an-aspect-of-the-item-founder-direction-2026-10-28",
+        "one-outcome-hierarchy-founder-direction-2026-10-28",
         "nothing-waits-on-a-person-indefinitely-operator-direction-2026-10-27",
         "how-to-apply",
         "related"
@@ -5808,7 +5849,8 @@
         "recurring-meta-pattern",
         "persisted-mcp-endpoint-recovery-bi-9f258707",
         "required-services-after-container-driven-upgrades-bi-fffea4ed",
-        "linux-pilot-startup-repairs-2026-10-03"
+        "linux-pilot-startup-repairs-2026-10-03",
+        "managed-mac-inference-qualification"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -6279,6 +6321,7 @@
         "dpf-install-operations",
         "quick-start",
         "linux-pilot-and-private-startup-state",
+        "qualified-mac-inference-opt-in",
         "capability-resolved-runtime-profiles",
         "consumer-release-assets",
         "fresh-install-runtime-and-recovery",
@@ -6359,12 +6402,14 @@
         "build-and-provenance",
         "qualification-and-maintenance-window",
         "activation-rollback-and-ai-ops",
+        "native-agent-source-rollout",
         "recorded-initial-candidate",
         "qualification-progress-on-october-25-2026-chicago",
         "fresh-model-control-result-2026-10-26-0326-utc",
         "managed-runner-candidate-october-26-2026",
         "managed-api-qualification-october-26-2026-1511-utc",
-        "review-correction-to-the-historical-api-report"
+        "review-correction-to-the-historical-api-report",
+        "qualification-profile-preservation-correction-october-29"
       ]
     },
     "docs/operations/mobile-privacy-policy-draft.md": {
@@ -11895,6 +11940,7 @@
       "anchors": [
         "overview",
         "accounts-and-provider-setup",
+        "managed-engine-on-a-qualified-mac",
         "routing-status-and-temporary-pauses",
         "when-the-platform-loses-ai-capacity",
         "authentication-methods",
@@ -11926,12 +11972,14 @@
         "the-levels",
         "the-two-hard-floors",
         "what-you-can-do",
+        "internal-learning-recommendations",
         "what-the-dial-actually-changes",
         "what-it-does",
         "coo-supervision-and-current-delivery-status",
         "which-installation-the-coo-coordinates",
         "when-it-runs",
         "how-it-stays-current",
+        "routine-observation-watches",
         "what-it-will-not-do",
         "what-you-must-do"
       ]
@@ -13108,7 +13156,8 @@
       "publishedPortal": true,
       "anchors": [
         "requesting-and-reading-a-coworker-contribution",
-        "native-reader-failures"
+        "native-reader-failures",
+        "a-held-original-ux-request"
       ]
     },
     "docs/user-guide/platform/deployment-country-sharing.md": {
@@ -13433,7 +13482,9 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "workroom-reports-and-approval-waits"
+        "workroom-reports-and-approval-waits",
+        "qualification-research-when-implementation-is-not-yet-admitted",
+        "ordinary-coworker-requests"
       ]
     },
     "docs/user-guide/workspace/attention-inbox.md": {
@@ -13482,6 +13533,8 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "before-you-decide",
+        "connecting-business-mail",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",

@@ -270,7 +270,7 @@ describe("resolveRoomActionBoundary in a gate-governed room", () => {
   });
 
   it("agrees with the displayed posture for the same room", async () => {
-    const { resolveWorkPosture } = await import("@/lib/work-posture");
+    const { resolveWorkPosture } = await import("@dpf/validators/workroom-policy/resolve");
     const shown = resolveWorkPosture({
       inherited: {
         proactivityPlan: {

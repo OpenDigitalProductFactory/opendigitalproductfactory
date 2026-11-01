@@ -6,8 +6,8 @@ description: "One pass end to end: the room a coworker works in, the shape that 
 relatedCode:
   - apps/web/lib/work-management/room-shapes.ts
   - apps/web/lib/work-management/room-posture.ts
-  - apps/web/lib/work-posture/derive.ts
-  - apps/web/lib/work-posture/temporal-band.ts
+  - packages/validators/src/workroom-policy/derive.ts
+  - packages/validators/src/workroom-policy/temporal-band.ts
   - apps/web/lib/tak/consequential-tool-policy.ts
   - apps/web/lib/mcp-governed-execute.ts
   - apps/web/lib/work-management/room-participant-invitation-preflight.server.ts

@@ -594,3 +594,28 @@ it("prepared connections remain endpoint-bound and reread their CA on every requ
     rmdirSync(directory);
   }
 });
+
+describe("branch ownership completeness for deletion", () => {
+  for (const fields of [{}, { headBranch: "fix/short", shortenedFields: ["headBranch"] }, { headBranch: "" }]) {
+    it(`refuses an unproven live branch ${JSON.stringify(fields)}`, async () => {
+      const result = await loadActiveWorkroomPaths({
+        env: { DPF_MCP_BEARER_TOKEN: "fixture" }, requireBranches: true, resolvePaths: false,
+        fetchImpl: async () => new Response(pagePayload([{ ...room("WC-HELD"), ...fields }])),
+      });
+      assert.equal(result.available, false);
+      assert.equal(result.activeBranches.size, 0);
+    });
+  }
+  it("accepts exact named and explicit null branches without detail reads", async () => {
+    let calls = 0;
+    const result = await loadActiveWorkroomPaths({
+      env: { DPF_MCP_BEARER_TOKEN: "fixture" }, requireBranches: true, resolvePaths: false,
+      fetchImpl: async () => { calls++; return new Response(pagePayload([
+        { ...room("WC-HELD"), headBranch: "fix/held" }, { ...room("WC-NO-BRANCH"), headBranch: null },
+      ])); },
+    });
+    assert.equal(result.available, true, result.reason);
+    assert.deepEqual([...result.activeBranches], ["fix/held"]);
+    assert.equal(calls, 1);
+  });
+});

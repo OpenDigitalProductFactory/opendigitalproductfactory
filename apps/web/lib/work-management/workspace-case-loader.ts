@@ -1,3 +1,4 @@
+import { loadRoomItemOutcome, roomOutcome, type RoomItemOutcomeClient } from "./room-item-outcome";
 import type {
   WorkCaseA2aStatus,
   WorkCaseSourceRef,
@@ -742,7 +743,10 @@ export async function loadWorkspaceWorkCaseDetail({
     boundary: projectDeclaredBoundary({
       claim: boundaryClaim,
       fallbackPurpose: item.description,
-      fallbackOutcome: anchoredCapsule?.objective ?? null,
+      fallbackOutcome: roomOutcome({
+        itemOutcome: await loadRoomItemOutcome(prismaClient as RoomItemOutcomeClient, anchoredCapsule?.backlogItemId),
+        objective: anchoredCapsule?.objective,
+      }),
       dueAt: iso(item.dueAt),
       sourceRefs,
     }),

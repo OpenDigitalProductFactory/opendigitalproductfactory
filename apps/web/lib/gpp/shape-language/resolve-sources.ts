@@ -56,8 +56,8 @@ import { getWorkShapeVersion } from "@/lib/work-management/work-shapes";
 import agentRegistryData from "../../../../../packages/db/data/agent_registry.json";
 import { readWebSourceFiles, WEB_ROOT } from "../source-files";
 import { findUnmediatedExecuteSites } from "../unmediated-execute-sites";
-import { GPP_SHAPE_REF_PATTERN } from "./gpp-shape-schema";
-import type { GppResolveSources } from "./resolve";
+import { GPP_SHAPE_REF_PATTERN } from "@dpf/validators/gpp/gpp-shape-schema";
+import type { GppResolveSources } from "@dpf/validators/gpp/resolve";
 
 /** A gate resolver module: web-root relative, under lib/, no extension, no traversal. */
 const RESOLVER_MODULE_PATTERN = /^lib\/[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/;

@@ -222,6 +222,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // were stale (they now read compose-chain.ps1).
       conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
+      conformanceTest("scripts/installer/edge-client-certificate.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
       // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
@@ -375,6 +376,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/derived-artifacts-registry.test.mjs",
         "scripts/derived-artifacts-gate.test.mjs",
+        "scripts/build-judgment-guard-runtime.test.mjs",
         "scripts/derived-artifacts-merged-base.test.mjs",
       ),
       // BI-78176241: reads scripts/pregate.mjs and the live evidence policy, so
@@ -906,6 +908,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
         // unreadable claim record must fail safe rather than reap on a guess.
         "scripts/lib/worktree-liveness.test.mjs",
+        "scripts/lib/branch-reaper-core.test.mjs",
         // CodeQL js/log-injection: one CR/LF strip for the janitor, the preview
         // runtime, and the auth-only bootstrap.
         "scripts/lib/safe-log.test.mjs",
@@ -959,6 +962,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // created, and the branches that predate that are reconciled. Binding
         // coverage was stuck at 65% for as long as the rule relied on memory.
         "scripts/lib/workroom-bind.test.mjs",
+        "scripts/lib/worktree-provision.test.mjs",
         "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",

@@ -17,7 +17,7 @@
 import { prisma } from "@dpf/db";
 import type { InferenceFailureKind } from "@/lib/build/inference-failure";
 import { classifyInferenceFailure } from "@/lib/build/inference-failure";
-import { readScheduledWorkTrigger } from "@/lib/scheduling/scheduled-work-trigger";
+import { readScheduledWorkTrigger } from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 import { isRecord } from "@/lib/shared/coerce";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 

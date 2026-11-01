@@ -18,8 +18,13 @@ import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { recordActionResult, type DispatchOrchestratorDb } from "@/lib/remote-action/dispatch-orchestrator";
 import { changeStepsForRestartReport } from "@/lib/remote-action/docker-vm-restart-action";
 import { driveChangeThrough } from "@/lib/change-management/register-change";
-import { DOCKER_VM_RESTART_ACTION_TYPE } from "@dpf/db/remote-action-dispatch";
+import { DOCKER_VM_RESTART_ACTION_TYPE, MANAGED_INFERENCE_ACTION_TYPE } from "@dpf/db/remote-action-dispatch";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { managedInferenceReportSettlement } from "@/lib/remote-action/managed-inference-action";
+import { settleQualificationWindowsResult } from "@/lib/remote-action/qualification-windows-result";
+import { parseManagedInferenceAdmissionBinding } from "@/lib/remote-action/managed-inference-admission";
+import { failQuiescenceSwap, signalSwapComplete } from "@/lib/self-upgrade/quiescence";
+import { isRecord } from "@/lib/shared/coerce";
 
 const BODY_SIZE_CAP_BYTES = 96 * 1024; // accommodates the bounded 64 KiB join package plus JSON framing
 const OUTCOMES = ["running", "succeeded", "failed"] as const;
@@ -105,8 +110,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: res.reason }, { status });
   }
 
+  if (!await recordNativeInferenceChange(actionKey, authz.edgeNodeRowId, outcome)) {
+    // The receipt is persisted, but acknowledgement waits for its own cleanup
+    // signal. The agent retains this SAME pending receipt, never re-executes.
+    return NextResponse.json({ ok: false, error: "native_receipt_cleanup_pending" }, { status: 503 });
+  }
+  if (!await settleQualificationWindowsResult({ db: prisma as never, actionKey,
+    edgeNodeRowId: authz.edgeNodeRowId, outcome })) {
+    return NextResponse.json({ ok: false, error: "qualification_evidence_settlement_pending" }, { status: 503 });
+  }
   await recordDockerVmRestartChange(actionKey, outcome, evidence);
   return NextResponse.json({ ok: true, actionKey, status: res.status }, { status: 200 });
+}
+
+async function recordNativeInferenceChange(actionKey: string, edgeNodeId: string, outcome: "running" | "succeeded" | "failed"): Promise<boolean> {
+  try {
+    const row = await prisma.remoteAction.findUnique({ where: { actionKey } });
+    if (row?.actionType !== MANAGED_INFERENCE_ACTION_TYPE || outcome === "running") return true;
+    if (row.edgeNodeId !== edgeNodeId || !row.changeRequestId || !isRecord(row.evidence)) return false;
+    const binding = parseManagedInferenceAdmissionBinding(row.evidence.nativeAdmission);
+    if (!binding) return false;
+    const settlement = managedInferenceReportSettlement(outcome, row.evidence);
+    if (settlement === "unknown") return true;
+    const [drain, fence] = await Promise.all([
+      prisma.quiescenceRun.findUnique({ where: { runId: binding.quiescenceRunId } }),
+      prisma.platformConfig.findUnique({ where: { key: "portal.quiescence" } }),
+    ]);
+    if (!drain || drain.trigger !== "manual" || drain.triggerRefId !== `inference-runtime:${actionKey}`) return false;
+    await driveChangeThrough({ id: row.changeRequestId }, [{ status: "scheduled" }, { status: "in-progress" }, {
+      status: "completed", extra: { outcome: settlement === "succeeded" ? "successful" : "unsuccessful",
+        outcomeNotes: settlement === "succeeded" ? "The owned native host procedure completed and verified its engine selection. Application and performance acceptance are separate."
+          : "The host confirmed that the change did not start or restored the prior engine. No performance improvement is claimed." },
+    }]);
+    if (drain.status === "completed" || (settlement === "failed-restored" && drain.status === "failed")) return true;
+    const current = isRecord(fence?.value) ? fence.value : {};
+    if (current.runId !== drain.runId || !["draining", "swapping"].includes(String(current.level))) return false;
+    if (settlement === "succeeded") await signalSwapComplete(drain.runId);
+    else await failQuiescenceSwap(drain.runId, "Native host confirmed no change or owned baseline restoration");
+    return true;
+  } catch { return false; }
 }
 
 /**

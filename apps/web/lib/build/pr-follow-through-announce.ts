@@ -7,11 +7,11 @@
  * classify, infrastructure that will not recover) also goes to the existing
  * escalation inbox — once per head, keyed by the record's attentionKey.
  */
-import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { resolveRoomActionBoundary } from "@/lib/work-management/room-turn-authority";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { shapeBiasFor } from "@/lib/work-posture/derive";
+import { shapeBiasFor } from "@dpf/validators/workroom-policy/derive";
 import { isGateGovernedExecutor } from "@/lib/work-posture/gate-governed";
 
 import {

@@ -479,9 +479,8 @@ export async function reconcileDeployedShipBuilds(
           continue;
         }
         if (!(await mayCompleteAutonomousBuild({ buildId: build.buildId, logger }))) continue;
-        // Merged code is live via self-upgrade → mark the build's still-open
-        // promotion(s) deployed so the promote fork is terminal. The platform
-        // self-upgrade IS the deploy here (the per-build promoter is not used).
+        // Live via self-upgrade (the deploy): the item owes acceptance (BI-729D9B27) and the promotion is deployed.
+        await (await import("@/lib/build/build-acceptance-entry")).enterAcceptanceOnDeployedBuild(build.buildId).catch(() => false);
         const pvs = await prisma.productVersion.findMany({
           where: { featureBuildId: build.id },
           select: { id: true },

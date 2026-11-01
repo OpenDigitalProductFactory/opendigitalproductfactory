@@ -18,7 +18,7 @@
 // A falling middle band with a rising reversal rate is a REGRESSION, and only
 // the second number can say so.
 
-import type { DecisionVerdict } from "./option-scoring";
+import type { DecisionVerdict } from "@dpf/validators/judgment/option-scoring";
 
 /** One recorded decision, as the ledger stores it. */
 export interface BandTelemetryRow {

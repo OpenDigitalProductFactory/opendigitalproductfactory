@@ -259,7 +259,7 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
   });
 }
 
-for (const probe of ["empty", "short-lived", "persistent", "query-failure", "identity-failure", "missing-job", "driver-failure"]) {
+for (const probe of ["empty", "short-lived", "persistent", "query-failure", "identity-failure", "identity-cleanup-failure", "exited-member", "missing-job", "driver-failure"]) {
   test("Windows owned Job drain " + probe, { skip: process.platform !== "win32", timeout: 30000 }, async t => {
     const evidence = mkdtempSync(join(tmpdir(), "dpf-job-drain-"));
     const configuration = join(evidence, "configuration.json");
@@ -270,7 +270,7 @@ for (const probe of ["empty", "short-lived", "persistent", "query-failure", "ide
       'import {appendFileSync,existsSync,writeFileSync} from "node:fs";',
       'writeFileSync(' + JSON.stringify(ready) + ',JSON.stringify({pid:process.pid}));',
       'const timer=setInterval(()=>{appendFileSync(' + JSON.stringify(heartbeat) + ',"x");',
-      ...(["short-lived", "driver-failure"].includes(probe) ? ['if(existsSync(' + JSON.stringify(release) + ')){clearInterval(timer);setTimeout(()=>process.exit(0),100);}'] : []),
+      ...(["short-lived", "driver-failure", "exited-member"].includes(probe) ? ['if(existsSync(' + JSON.stringify(release) + ')){clearInterval(timer);setTimeout(()=>process.exit(0),100);}'] : []),
       '},25);',
     ].join("\n"));
     writeFileSync(configuration, JSON.stringify({ worktree: evidence, evidenceDirectory: evidence,
@@ -312,14 +312,38 @@ for (const probe of ["empty", "short-lived", "persistent", "query-failure", "ide
         }
       } else {
         assert.notEqual(exitCode, 0, output + JSON.stringify(result));
-        assert.equal(result.emergencyCleanup, true, JSON.stringify(result));
+        assert.equal(result.emergencyCleanup, probe !== "exited-member", JSON.stringify(result));
         assert.equal(drain.outcome, probe === "persistent" ? "timed-out" : "observation-failed");
         assert.ok(result.failure);
         if (probe === "persistent") {
           assert.ok(drain.finalActiveCount > 0);
           assert.ok(drain.elapsedMs >= drain.budgetMs);
           assert.ok(drain.finalMembers.includes(json(join(evidence, "probe-identity.json")).identity));
-        } else assert.ok(drain.failure, JSON.stringify(drain));
+        } else {
+          assert.ok(drain.failure, JSON.stringify(drain));
+          if (probe === "exited-member") {
+            const snapshot = drain.snapshots.at(-1);
+            assert.equal(snapshot.failureOperation, "OpenProcess");
+            assert.equal(snapshot.failureNativeError, 87);
+            assert.equal(snapshot.failurePid, json(ready).pid);
+            assert.equal(snapshot.probeExitedIdentity, json(join(evidence, "probe-identity.json")).identity);
+            assert.equal(snapshot.cleanupFailure, null);
+          }
+          if (["query-failure", "identity-failure", "identity-cleanup-failure"].includes(probe)) {
+            const snapshot = drain.snapshots.at(-1);
+            assert.equal(snapshot.failureOperation, probe === "query-failure" ? "QueryInformationJobObject(membership)" : "GetProcessTimes");
+            assert.equal(snapshot.failureNativeError, 6);
+            assert.equal(drain.failureOperation, snapshot.failureOperation);
+            assert.equal(drain.failureNativeError, snapshot.failureNativeError);
+            if (probe === "identity-cleanup-failure") {
+              assert.equal(snapshot.cleanupNativeError, 6);
+              assert.ok(snapshot.cleanupFailure);
+              assert.equal(drain.cleanupNativeError, 6);
+            } else assert.equal(snapshot.cleanupFailure, null);
+            if (probe.startsWith("identity-")) assert.ok(snapshot.failurePid > 0);
+            else assert.equal(snapshot.failurePid, null);
+          }
+        }
       }
       if (probe !== "empty") {
         const stopped = readFileSync(heartbeat, "utf8"); await delay(100);

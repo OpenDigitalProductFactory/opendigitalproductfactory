@@ -1,42 +1,60 @@
-// BI-42399593: delivered platform work records whether it achieved its purpose.
+// BI-8DE5429B (reworks BI-42399593): every observation is about ONE backlog
+// item's own outcome.
 //
-// Founder direction 2026-10-27 (BI-B1B44777): a merge closes an item, and a
-// change that missed its purpose comes back as a reopen or a failure someone
-// reports. So "did it hold?" is measurable from facts the platform already
-// keeps, with no person in the loop:
+// Founder direction 2026-10-28: "The outcome is an aspect of the BI." So what
+// is measured is that item's stated (or derived) outcome, at the moments the
+// platform learns something about it (WWMD DI-19ED69C312FC):
 //
-//   held = still done, no done->other status change after delivery, and no
-//          failing evidence recorded after delivery.
+//   delivered         -> achieved      (delivery closes an item by default,
+//                                       founder direction 2026-10-27, BI-B1B44777)
+//   reopened from done -> regressed
+//   failing evidence recorded while the item is done -> not-achieved
 //
-// Kernel decisions: DI-9A293A1A31A3 (objectives derive from the epic, or one
-// standing platform-work objective), DI-321FE7AC7AA4 (record the matured hold
-// rate at delivery), DI-F3101AA957C7 (origin columns plus an explicit
-// designation of the business Product platform work serves; never inferred).
+// The epic-derived and standing platform-work objectives stay only as the
+// roll-up the observations hang on (DI-9A293A1A31A3, DI-F3101AA957C7). Their
+// rate is the mean of these per-item values, derived from the items; nothing
+// authors an aggregate any more (the cohort hold rate of DI-321FE7AC7AA4 is
+// superseded).
+
+import { createHash } from "node:crypto";
 
 import { evidenceKindMetadata, isExecutionEvidenceKind } from "@/lib/backlog/execution-evidence";
 
-export const DELIVERED_WORK_OUTCOME_METHOD = "delivered-work-hold-rate.v1";
-export const DELIVERED_WORK_DECISION_REFS = ["DI-9A293A1A31A3", "DI-321FE7AC7AA4", "DI-F3101AA957C7"] as const;
+export const ITEM_OUTCOME_METHOD = "item-outcome.v1";
+export const ITEM_OUTCOME_DECISION_REFS = ["DI-19ED69C312FC", "DI-342D45001EF5", "DI-9A293A1A31A3", "DI-F3101AA957C7"] as const;
 
 /** The origin of the standing objective, whose sourceRef is the designated Product's id. */
 export const PLATFORM_WORK_OBJECTIVE_SOURCE_KIND = "platform-work";
 /** The origin of an epic-derived objective, whose sourceRef is the epic's semantic id. */
 export const EPIC_OBJECTIVE_SOURCE_KIND = "epic";
-/** ProductOutcomeObservation.sourceKind for an observation recorded at delivery. */
+/** ProductOutcomeObservation.sourceKind for every observation in the delivery lifecycle. */
 export const DELIVERY_OBSERVATION_SOURCE_KIND = "delivery";
 
-/** A delivery is judged once it has had this long to come back. */
-export const HOLD_WINDOW_DAYS = 14;
-/** Deliveries older than this leave the cohort. */
-export const LOOKBACK_DAYS = 90;
+export const ITEM_OUTCOME_RESULTS = ["achieved", "not-achieved", "regressed"] as const;
+export type ItemOutcomeResult = (typeof ITEM_OUTCOME_RESULTS)[number];
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const ITEM_OUTCOME_EVENTS = ["delivered", "reopened", "failing-evidence"] as const;
+export type ItemOutcomeEvent = (typeof ITEM_OUTCOME_EVENTS)[number];
 
-export const DELIVERED_WORK_MEASURE_DEFINITION =
-  `Share of this objective's backlog items first delivered (moved to done) between ${LOOKBACK_DAYS} and `
-  + `${HOLD_WINDOW_DAYS} days before the observation that held: still done, never moved out of done after `
-  + "delivery, and no failing evidence recorded after delivery. Recorded by the platform each time an item "
-  + "of this objective is delivered.";
+export const ITEM_OUTCOME_RESULT_FOR_EVENT: Readonly<Record<ItemOutcomeEvent, ItemOutcomeResult>> = {
+  delivered: "achieved",
+  reopened: "regressed",
+  "failing-evidence": "not-achieved",
+};
+
+/**
+ * The objective's percentage measure, per observation: 100 when the item's
+ * outcome is achieved, 0 when it is not or has regressed. The mean over an
+ * objective's observations is the share of item outcomes that held.
+ */
+export function itemOutcomeValue(result: ItemOutcomeResult): number {
+  return result === "achieved" ? 100 : 0;
+}
+
+export const ITEM_OUTCOME_MEASURE_DEFINITION =
+  "Share of this objective's backlog item outcomes that held. Each observation is one item event, "
+  + "measured against that item's own outcome: delivered = achieved (100); reopened from done = regressed (0); "
+  + "failing evidence while done = not achieved (0). Recorded by the platform; nothing is authored as an aggregate.";
 
 const PLATFORM_WORK_SCOPES = new Set(["platform", "common", "unknown"]);
 
@@ -50,63 +68,40 @@ export function isPlatformWorkScope(item: { scopeKind: string | null; businessPr
   return item.scopeKind == null || PLATFORM_WORK_SCOPES.has(item.scopeKind);
 }
 
-export function deliveredWorkWindow(observedAt: Date): { from: Date; to: Date } {
-  return {
-    from: new Date(observedAt.getTime() - LOOKBACK_DAYS * DAY_MS),
-    to: new Date(observedAt.getTime() - HOLD_WINDOW_DAYS * DAY_MS),
-  };
+/** One observation per item event: the event and the fact that triggered it identify it. */
+export function itemOutcomeSourceRef(itemId: string, event: ItemOutcomeEvent, eventRef: string): string {
+  return `${itemId}:${event}:${eventRef}`;
 }
 
-/** One observation per delivery: a redelivery after a reopen is a new one. */
-export function deliveryObservationSourceRef(itemId: string, deliveredAt: Date): string {
-  return `${itemId}@${deliveredAt.toISOString()}`;
+/** A stable short digest of the outcome text, so a later edit is visible against what was measured. */
+export function outcomeDigest(outcome: string): string {
+  return `sha256:${createHash("sha256").update(outcome.trim()).digest("hex").slice(0, 16)}`;
 }
-
-export type DeliveredWorkFact = {
-  itemId: string;
-  status: string;
-  deliveredAt: Date;
-  /** Status changes and evidence rows on the item; only those after delivery count. */
-  laterActivities: readonly { kind: string; recordedAt: Date; payload: unknown }[];
-};
-
-export type NotHeldReason = "reopened" | "failing-evidence" | "no-longer-done";
-
-export type DeliveredWorkHoldRate = {
-  numerator: number;
-  denominator: number;
-  /** Percentage, 0-100, rounded to the column's six decimal places. */
-  value: number;
-  notHeld: { itemId: string; reason: NotHeldReason }[];
-};
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function notHeldReason(fact: DeliveredWorkFact): NotHeldReason | null {
-  const after = fact.laterActivities.filter((row) => row.recordedAt > fact.deliveredAt);
-  if (after.some((row) => row.kind === "status_change" && record(row.payload)?.from === "done")) return "reopened";
-  if (after.some((row) => {
-    const kind = record(row.payload)?.evidenceKind;
-    return row.kind === "evidence" && isExecutionEvidenceKind(kind) && evidenceKindMetadata(kind).polarity === "fail";
-  })) return "failing-evidence";
-  if (fact.status !== "done") return "no-longer-done";
-  return null;
+/** The execution-evidence kinds whose polarity is fail; a failing check after delivery. */
+export function isFailingEvidencePayload(payload: unknown): boolean {
+  const kind = record(payload)?.evidenceKind;
+  return isExecutionEvidenceKind(kind) && evidenceKindMetadata(kind).polarity === "fail";
 }
 
-/** The hold rate of a matured cohort, or null when nothing has matured yet. */
-export function computeDeliveredWorkHoldRate(facts: readonly DeliveredWorkFact[]): DeliveredWorkHoldRate | null {
-  if (facts.length === 0) return null;
-  const notHeld = facts.flatMap((fact) => {
-    const reason = notHeldReason(fact);
-    return reason ? [{ itemId: fact.itemId, reason }] : [];
-  });
-  const numerator = facts.length - notHeld.length;
-  return {
-    numerator,
-    denominator: facts.length,
-    value: Math.round((numerator / facts.length) * 100 * 1e6) / 1e6,
-    notHeld,
-  };
+/**
+ * Which item event an activity is, if any. A status change out of done is a
+ * reopen. Failing evidence counts only when it lands after the item was
+ * delivered and while it is still done; before delivery it is ordinary work.
+ */
+export function classifyItemOutcomeActivity(
+  activity: { kind: string; recordedAt: Date; payload: unknown },
+  item: { status: string; completedAt: Date | null },
+): ItemOutcomeEvent | null {
+  const payload = record(activity.payload);
+  if (activity.kind === "status_change" && payload?.from === "done" && payload.to !== "done") return "reopened";
+  if (activity.kind === "evidence" && isFailingEvidencePayload(activity.payload)
+    && item.status === "done" && item.completedAt && activity.recordedAt > item.completedAt) {
+    return "failing-evidence";
+  }
+  return null;
 }

@@ -2,6 +2,8 @@
 // (BI-02E5F2A1, DI-FC5699629694). Every side effect is injected: no host, no
 // portal, no credential file is touched.
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -18,7 +20,15 @@ import {
 } from "./pre-push-gate-infrastructure-probe.mjs";
 
 const MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
-const PAT_ENV = { DPF_MCP_BEARER_TOKEN: "pat-placeholder-not-a-real-token" };
+// BI-17DFD47E: with no credentials file named, the resolver falls back to the
+// host's ~/.dpf/mcp-client-credentials.json, and on any machine that has one
+// the real client credentials outrank the fixture. Every test env names a file
+// that does not exist, so the host's credentials are never read.
+const NO_CREDENTIALS_FILE = join(tmpdir(), `dpf-probe-test-no-credentials-${process.pid}.json`);
+const PAT_ENV = {
+  DPF_MCP_BEARER_TOKEN: "pat-placeholder-not-a-real-token",
+  DPF_MCP_CLIENT_CREDENTIALS_FILE: NO_CREDENTIALS_FILE,
+};
 
 function baseProbeInput(overrides = {}) {
   return {

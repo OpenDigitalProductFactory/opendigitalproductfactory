@@ -2,7 +2,7 @@ import { engagementVisualDeliveryRecorder, type EngagementVisualEvidence } from 
 import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
-import { captureTaskExecutionFence, sameTaskExecutionFence } from "./shared/task-execution-fence";
+import { captureTaskExecutionFence, sameTaskExecutionFence, taskExecutionEligible } from "./shared/task-execution-fence";
 import { withPersistedReassessmentExecution } from "./mcp-task-reassessment-capture";
 import { assertReassessmentOwnerSupport } from "./shared/reassessment-owner-versions";
 import { createReassessmentReceiptCheck } from "./mcp-task-review-receipt-stop";
@@ -23,6 +23,7 @@ import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import { prepareRemoteReviewAttempt } from "./mcp-task-reassessment-preparation";
 import {
   executeAutonomousAgenticLoop,
+  executeAutonomousWorkTool,
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
@@ -33,8 +34,7 @@ import {
   preInferenceResourceWait,
   RESOURCE_WAIT_MAX_ATTEMPTS,
 } from "./mcp-task-capacity-contract";
-import type { RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
-import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import type { RemoteTaskAttemptInput, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import {
   TERMINAL_WRITER_REJECTED_WAIT_REASON,
@@ -57,24 +57,22 @@ function approvalRequiredEnvelopeId(value: unknown): string | null {
   return optionalString((data as Record<string, unknown>)["envelopeId"]);
 }
 
-export async function executeRemoteTaskAttempt(input: {
-  run: { id: string; taskRunId: string; contextId: string | null };
-  threadId: string;
-  token: RemoteTaskSubmitAuth;
-  userContext: import("@/lib/permissions").UserContext;
-  parsed: RemoteTaskSubmitParams;
-  idempotentReplay: boolean;
-  resumeKind?: "capacity" | "terminal-writer";
-  terminalWriterContext?: string;
-  capacityAttempt: number;
-  terminalWriterAttempt?: number;
-  /** Identity acquired by the caller's reservation CAS; null denotes initial execution. */
-  expectedReservation?: string | null;
-  expectedDispatchClaim?: string | null;
-}): Promise<RemoteTaskSubmitOutcome> {
+export async function executeRemoteTaskAttempt(input: RemoteTaskAttemptInput): Promise<RemoteTaskSubmitOutcome> {
   const { run, token, userContext, parsed } = input;
+  if (parsed.engagementBinding?.presentAssessment) {
+    const { executeEngagementPresentAttempt } = await import("./coworker-service-catalog/engagement-present-worker");
+    return executeEngagementPresentAttempt(input, {
+      prepareTurn: (attempt, binding) => prepareRemoteReviewAttempt({ parsed: attempt.parsed, userContext: attempt.userContext, restricted: true }, {
+        resolveAgent: resolveAutonomousWorkAgent, resolveTools: requested => resolveAutonomousWorkTools({ ...requested, restrictedEngagementBinding: binding }),
+      }),
+      executeRead: ({ toolName, args, agentId, fence }, attempt) => executeAutonomousWorkTool({ toolName, args, agentId,
+        userId: attempt.token.userId, userContext: attempt.userContext, routeContext: attempt.parsed.routeContext,
+        threadId: attempt.threadId, taskRunId: attempt.run.taskRunId, taskExecutionFence: fence, apiTokenId: attempt.token.tokenId,
+        tokenScope: "read", externalAccessEnabled: true }),
+    });
+  }
   const admittedRun = await prisma.taskRun.findUnique({
-    where: { taskRunId: run.taskRunId }, select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
+    where: { taskRunId: run.taskRunId }, select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true, userId: true, currentAgentId: true },
   });
   if (!admittedRun || !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(admittedRun.status)) {
     return {
@@ -89,6 +87,12 @@ export async function executeRemoteTaskAttempt(input: {
       },
     };
   }
+  const persistedPresent = admittedRun.a2aMetadata && typeof admittedRun.a2aMetadata === "object"
+    && !Array.isArray(admittedRun.a2aMetadata) ? (admittedRun.a2aMetadata as Record<string, unknown>).engagementBinding : null;
+  if (persistedPresent && typeof persistedPresent === "object" && "presentAssessment" in persistedPresent) {
+    return { kind: "result", result: { taskRunId: run.taskRunId, status: admittedRun.status, resumable: false, requiresApproval: false,
+      isError: true, content: remoteTaskContent("This finite assessment requires its original live governed call; no execution was requested.") } };
+  }
   const reservation = input.expectedReservation !== undefined
     ? input.expectedReservation : reservationIdentity(admittedRun?.progressPayload);
   const dispatchClaim = input.expectedDispatchClaim !== undefined
@@ -97,9 +101,16 @@ export async function executeRemoteTaskAttempt(input: {
     || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
+  if (input.expectedExecutionFence && (admittedRun.userId !== token.userId || !admittedRun.currentAgentId
+    || resolveCanonicalAgentId(admittedRun.currentAgentId) !== resolveCanonicalAgentId(parsed.agentId)
+    || !taskExecutionEligible({ status: admittedRun.status, progressPayload: admittedRun.progressPayload,
+      requestDigest: (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest,
+      executionFence: input.expectedExecutionFence }))) {
+    return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
+  }
   const reassessmentExecution = hasPersistedReassessmentExecution(admittedRun.a2aMetadata);
-  const taskExecutionFence = parsed.initiativeReviewBinding || parsed.engagementBinding || reassessmentExecution ? captureTaskExecutionFence(admittedRun.progressPayload,
-    (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
+  const taskExecutionFence = input.expectedExecutionFence ?? (parsed.initiativeReviewBinding || parsed.engagementBinding || reassessmentExecution ? captureTaskExecutionFence(admittedRun.progressPayload,
+    (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined);
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim, parsed.initiativeReviewBinding || reassessmentExecution ? {
       executionFence: taskExecutionFence ?? null, userId: token.userId, agentId: parsed.agentId,

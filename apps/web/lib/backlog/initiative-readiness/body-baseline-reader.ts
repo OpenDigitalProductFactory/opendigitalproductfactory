@@ -8,7 +8,7 @@ import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import { bodyBaselineDigest } from "./body-baseline-version";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
-import { currentBaseline, parseBaselinePayloads } from "./terminal-recovery";
+import { currentBaseline, parseBaselinePayloads } from "./baseline-head";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import { isArchivedBodyAuthorRoom, isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reassessmentBudgetFixture } from "../test-support/reassessment-budget-fixture";
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: vi.fn(async () => ({
+  taskRunId: "TR-FIXTURE", userId: "user", a2aMetadata: {}, parentTaskRunId: null,
+})) } } }));
 vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: vi.fn(async () => null) }));
 import { _setGovernanceForTests, governedExecuteTool } from "./mcp-governed-execute";
 import * as authority from "./govern/authority/coworker-tool-authority-gate";
