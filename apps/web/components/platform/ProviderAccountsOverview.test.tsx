@@ -136,8 +136,8 @@ describe("provider readiness is visible before opening an account", () => {
     expect(screen.queryByRole("button", { name: SOURCE_CATALOG.providerAccounts.capacityCheck })).toBeNull();
   });
   it.each([
-    ["working", "success"], ["enabled", "success"], ["waiting", "warning"],
-    ["paused", "warning"], ["blocked", "danger"], ["unverified", "neutral"],
+    ["verified-success", "success"], ["enabled", "success"], ["temporary-wait", "warning"],
+    ["paused", "warning"], ["action-required", "danger"], ["unverified", "neutral"],
   ] as const)("shows %s using its shared semantic status", (state, intent) => {
     const account = { ...row, readiness: { state, label: `Account ${state}`, summary: "Current observation" } };
     render(<ProviderAccountsOverview rows={[account]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, status: "Status" }} />);
@@ -145,7 +145,7 @@ describe("provider readiness is visible before opening an account", () => {
   });
   it("shows a usage wait as the account status while keeping data permission separate", () => {
     const waitingAccount = { ...row, allowedWork: "Company work", allowedWorkSummary: "Approved for company work",
-      readiness: { state: "waiting" as const, label: "Waiting for usage reset", summary: "Usage limit reached" } };
+      readiness: { state: "temporary-wait" as const, label: "Waiting for usage reset", summary: "Usage limit reached" } };
     render(<ProviderAccountsOverview rows={[waitingAccount]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, status: "Status" }} />);
     expect(screen.getByRole("columnheader", { name: "Status" })).toBeTruthy();
     expect(screen.getByText("Waiting for usage reset")).toBeTruthy();

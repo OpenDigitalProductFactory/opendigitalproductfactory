@@ -109,11 +109,11 @@ export async function loadProviderAccountOverview(input: {
       lastSucceededAt: ownedHealth?.lastSuccessAtMs ? new Date(ownedHealth.lastSuccessAtMs).toISOString() : null,
       quotaRecheckAt: quotaView ? quotaView.nextCheckAt
         : control?.restrictions.find(restriction => restriction.key === "quota-recovery")?.until ?? null,
-      eligibilitySummary: control?.eligibility.reason ?? (["waiting", "paused", "blocked"].includes(readiness.state)
+      eligibilitySummary: control?.eligibility.reason ?? (["temporary-wait", "paused", "action-required"].includes(readiness.state)
         ? input.copy.notRouting : input.copy.accountEligibilityUnconfirmed),
-      nextActionLabel: recoveryAction ?? (control?.healthStatus === "billing" ? input.copy.reviewAccountBilling : readiness.state === "waiting" ? input.copy.reviewAvailability
+      nextActionLabel: recoveryAction ?? (control?.healthStatus === "billing" ? input.copy.reviewAccountBilling : readiness.state === "temporary-wait" ? input.copy.reviewAvailability
         : readiness.state === "paused" ? input.copy.reviewPause
-          : readiness.state === "blocked" ? input.copy.reviewConnectionSettings
+          : readiness.state === "action-required" ? input.copy.reviewConnectionSettings
             : readiness.state === "unverified" || !account.modelsVerifiedAt ? input.copy.reviewAndVerify : input.copy.viewAccount),
       connectionId: account.connectionId, providerId: account.providerId, isDefault: account.isDefault,
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,

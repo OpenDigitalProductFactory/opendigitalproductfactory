@@ -52,8 +52,8 @@ export function intentStyle(intent: Intent): IntentStyle {
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   providerAccountReadiness: {
-    working: "success", enabled: "success", waiting: "warning", paused: "warning",
-    blocked: "danger", unverified: "neutral",
+    "verified-success": "success", enabled: "success", "temporary-wait": "warning", paused: "warning",
+    "action-required": "danger", unverified: "neutral",
   },
   // Discovered external MCP tool review state (BI-8B7B2FE9). Waiting for
   // review is a warning, never neutral: the tool is unavailable until a person acts.

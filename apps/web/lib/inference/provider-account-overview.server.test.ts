@@ -108,7 +108,7 @@ describe("readiness keeps account proof separate from provider aggregates", () =
     const controls = new Map([["codex", { eligibility: { eligible: false, state: "needs_credentials" }, healthStatus: "needs_reauth",
       restrictions: [{ key: "connection", summary: "Reconnect the default account", until: null }] }]]) as never;
     const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy, now });
-    expect(row.readiness?.state).toBe("working");
+    expect(row.readiness?.state).toBe("verified-success");
   });
   it.each([false, true])("keeps an additional account unconfirmed without shared routing observations (recent success: %s)", async recentSuccess => {
     const now = new Date("2026-10-28T20:00:00Z");
@@ -152,7 +152,7 @@ describe("legacy default account activation", () => {
     mocks.accounts.mockResolvedValue([{ ...account, isDefault: true, status: "unconfigured" }, { ...account, status: "unconfigured" }]);
     const controls = new Map([["codex", { eligibility: { eligible: true, state: "routable" }, restrictions: [], healthSummary: "No hold" }]]) as never;
     const rows = await loadProviderAccountOverview({ providers: [configured], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy });
-    expect(rows.map(row => row.readiness?.state)).toEqual(["enabled", "blocked"]);
+    expect(rows.map(row => row.readiness?.state)).toEqual(["enabled", "action-required"]);
   });
 });
 
@@ -186,7 +186,7 @@ describe("readiness and quota recovery coexistence", () => {
     const controls = new Map([["codex", { eligibility: { eligible: false, state: "needs_credentials" }, healthStatus: "needs_reauth",
       restrictions: [{ key: "connection", summary: "Reconnect the default account", until: null }] }]]) as never;
     const [row] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy, now });
-    expect(row.readiness?.state).toBe("working");
+    expect(row.readiness?.state).toBe("verified-success");
     expect(row.connectionSummary).toMatch(/^API key/);
     expect(row.quotaRecovery).toMatchObject({ hourly: false, nextCheckAt: null, canCheck: false });
     expect(mocks.recovery).not.toHaveBeenCalled();
