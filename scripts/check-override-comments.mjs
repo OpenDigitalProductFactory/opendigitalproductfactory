@@ -24,6 +24,9 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
+  // BI-FCDCAE98: mobile receives the same private Workroom archive as validators;
+  // this exact first-party transport edge is a compat pin, not a security floor.
+  "@dpf/validators>@opendigitalproductfactory/dpf-workroom",
   // BI-7F3E4389: isolated mobile file: copies cannot resolve the source
   // workspace:/catalog: protocols. These exact edges preserve that boundary.
   "@dpf/validators>@dpf/integration-shared",

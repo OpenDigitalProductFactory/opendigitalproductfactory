@@ -20,6 +20,8 @@ RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 # after the deploy fails the build if that ever stops being true.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY patches ./patches
+# The workspace lock includes a private first-party file archive even in filtered installs.
+COPY packages/validators/vendor ./packages/validators/vendor
 COPY services/integration-test-harness/package.json services/integration-test-harness/tsconfig.json ./services/integration-test-harness/
 RUN pnpm install --filter dpf-integration-test-harness... --frozen-lockfile --ignore-scripts
 
