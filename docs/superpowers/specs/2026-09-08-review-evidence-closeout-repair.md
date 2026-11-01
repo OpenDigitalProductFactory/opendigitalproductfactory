@@ -93,6 +93,55 @@ generation and cancellation row locks; their actual shared-environment run is
 still owed. AC-REC-002 source/provenance controls remain separate and are not
 claimed complete by this reporting repair.
 
+### Current acceptance baseline and delivery trace
+
+The current medium fix uses the following acceptance criteria from the live
+BI-0C0669B5 body. These preserve its current safety constraints:
+
+- AC-REC-002: A bounded immutable-artifact review uses server-owned review context; artifact text or a claimed read cannot disable the guard for genuine live operational questions. Verify existing native-reader provenance and isolation controls on the current source.
+- AC-REC-003: Exhausted bounded evidence recovery returns a typed non-success outcome and preserves withheld final-answer drafts as explicitly unverified internal diagnostic artifacts. Drafts never become factual replies, outward progress summaries, positive evidence, semantic recall or review receipts. Failed retention or missing task binding remains explicit.
+- AC-REC-005: Safe loop observations distinguish no observed successful authoritative read from a proven provider or permission cause. Preserve current routing, model requirements, authority intersection, execution fencing, privacy and bounded nudge budget; report unknown provenance honestly.
+
+OBJ-REC-002 and OBJ-REC-003 retain the meanings below. OBJ-REC-005 covers
+AC-REC-005's safe observations and preserved boundaries. The existing INV-1,
+INV-4 and INV-5 remain the evidence-integrity contract; this repair does not
+relax them.
+
+The atomic delivery flow is:
+
+Loop evidence guard -> typed failure -> outward task result -> fenced diagnostic artifact
+
+Failure classification, isolation, exact-task retention and unknown-settlement
+precedence must agree in that flow. No phase is a separately shippable
+capability. AC-REC-002 verification remains explicit; this branch does not claim
+a completed native review or restoration of the original missing live tool call.
+
+Verification references for this delivery:
+
+- apps/web/lib/tak/agentic-loop-evidence.test.ts
+- apps/web/lib/tak/evidence-requirement.test.ts
+- apps/web/lib/tak/agentic-loop-native-mcp-tools.test.ts
+- apps/web/lib/mcp-task-execution.test.ts
+- apps/web/lib/tak/evidence-recovery-artifact.test.ts
+- apps/web/lib/tak/evidence-recovery-artifact.db.test.ts
+- apps/web/lib/mcp-task-evidence-failure.test.ts
+- apps/web/lib/tak/autonomous-evidence-failure.test.ts
+
+Current evidence, separate from the earlier reproduction checkpoint: the
+qualified canonical run for source 882ce9e95dc54351fb852cab88ce4c74302930e2
+passed 3,982 tests across 315 passing files, with 20 skips and five todo cases.
+All six new real PostgreSQL cases, both web TypeScript programs and migrations
+passed. The affected plan did not run a production build. Native evidence is
+cmvx39i2g0apa01pozut0rr4m; its lease was released. Independent client source
+assessment found no blocking finding on the exact unchanged repair files.
+
+The native semantic review for that source is execution-uncertain, with no
+verdict and no authorized retry. Existing shadow publication policy keeps that
+separate from the client assessment. This documentation reconciliation changes
+no runtime code; its final source identity and publication checks remain to be
+recorded. Deployment, fresh useful coworker acceptance and the separate routing
+repair remain open.
+
 The native semantic operation also reused an exact-tree automatic receipt after
 the caller requested high risk and high assurance. Fresh tree identity is
 necessary but insufficient: an automatic receipt does not prove independent review.
