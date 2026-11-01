@@ -21,7 +21,7 @@ minimumReleaseAge: 1440
 overrides:
   # BI-FCDCAE98: keep validators' shared Workroom artifact in this isolated
   # receiving lock; mobile must not rely on the platform's node_modules.
-  '@dpf/validators>@opendigitalproductfactory/dpf-workroom': 'file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz'
+  '@dpf/validators>@opendigitalproductfactory/dpf-workroom': 'file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz'
   # BI-7F3E4389: validators now imports integration-shared. Keep its transitive
   # copy inside this isolated workspace, using the existing file-copy boundary.
   '@dpf/validators>@dpf/integration-shared': 'file:../../packages/integration-shared'

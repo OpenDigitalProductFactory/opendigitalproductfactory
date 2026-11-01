@@ -1,13 +1,13 @@
 {
   "kind": "private-installed-component-candidate",
   "component": "@opendigitalproductfactory/dpf-workroom",
-  "version": "0.1.0-candidate.3",
-  "sourceCommit": "7374ef2478138b504e7a75af3ef2cc6fa770abc6",
+  "version": "0.1.0-candidate.4",
+  "sourceCommit": "ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9",
   "sourceRepository": "OpenDigitalProductFactory/dpf-workroom",
   "seedCommit": "b43be400326f8cc5777a9d40c1f058a8f0363dc8",
   "upstreamKernelRevision": "56f3a5d2d57d751eb3ac435dcca4133c5ff46686",
-  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz",
-  "sha256": "0f5769c59b39b3a2d85af26253b27b12b805aa95836e10eef780ab298ebee281",
+  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
+  "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44",
   "checks": {
     "originalSourceProvenanceFiles": 22,
     "sourceProtocolScenarios": 13,
@@ -29,21 +29,29 @@
   "realDpfConsumerMigration": false,
   "dpf2Migration": false,
   "nativeOrProductionQualification": false,
-  "independentReview": "No remaining findings, bound to 7374ef2478138b504e7a75af3ef2cc6fa770abc6. Same emitted domain bytes and provenance; require/import share identical functions; clarified product qualification limits.",
+  "independentReview": "No material findings bound to exact source, archive and dependency lock; emitted bytes/provenance unchanged. Both33group strict receiver matrices verified; tests not rerun by reviewer.",
   "supportedNodeVersions": [
     "24.16.0",
-    "24.22.0"
+    "24.22.0",
+    "24.22.1"
   ],
   "additionalReceivingMatrix": {
-    "node": "v24.22.0",
+    "nodeVersions": [
+      "24.22.0",
+      "24.22.1"
+    ],
     "typescript": "7.0.2",
-    "platform": "darwin",
-    "architecture": "arm64",
+    "platform": "darwin-arm64",
     "installationPolicy": "engine-strict",
     "result": "passed",
-    "evidence": "foundation-v4-node24.22-ts7-receiver-result.json",
+    "evidence": [
+      "foundation-v5-node24.22.0-ts7-receiver-result.json",
+      "foundation-v5-node24.22.1-ts7-receiver-result.json"
+    ],
+    "groups": 33,
     "actualProductAdoption": false,
     "osEnforcementQualification": false
   },
-  "builder": "External Codex source worktree on Darwin arm64; independent client review; no native product attestation"
+  "builder": "External Codex source worktree on Darwin arm64; independent client review; no native product attestation",
+  "emittedParity": "All dist files byte-identical to preceding immutable candidate; package/dependency/engine metadata only."
 }

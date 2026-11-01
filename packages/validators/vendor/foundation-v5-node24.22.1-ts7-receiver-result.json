@@ -1,30 +1,30 @@
 {
   "kind": "clean-installed-foundation-receiver-matrix",
-  "node": "v24.22.0",
+  "node": "v24.22.1",
   "typescript": "7.0.2",
   "platform": "darwin",
   "architecture": "arm64",
   "identities": [
     {
       "component": "@opendigitalproductfactory/dpf-workroom",
-      "version": "0.1.0-candidate.3",
-      "sourceCommit": "7374ef2478138b504e7a75af3ef2cc6fa770abc6",
-      "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz",
-      "sha256": "0f5769c59b39b3a2d85af26253b27b12b805aa95836e10eef780ab298ebee281"
+      "version": "0.1.0-candidate.4",
+      "sourceCommit": "ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9",
+      "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
+      "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44"
     },
     {
       "component": "@opendigitalproductfactory/dpf-scoped-judgment",
-      "version": "0.1.0-candidate.1",
-      "sourceCommit": "e799cfba16d7b2f12e1c026c979c8476e87ddd73",
-      "tarball": "opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.1.tgz",
-      "sha256": "bb6decede85399092056ef6894f362f3f7c4e21b3f93ac6e9ea368301cc2766b"
+      "version": "0.1.0-candidate.2",
+      "sourceCommit": "79bfff540fa8a11c5f725cf60d46764e600868fe",
+      "tarball": "opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.2.tgz",
+      "sha256": "cf79f4ee40c72706439af9e51155b2a12c9b14c5029a6253d14f8a6848a87af9"
     },
     {
       "component": "@opendigitalproductfactory/dpf-gpp",
-      "version": "0.1.0-candidate.3",
-      "sourceCommit": "e8315084ae46aed0feb153a295f688e540f6e93d",
-      "tarball": "opendigitalproductfactory-dpf-gpp-0.1.0-candidate.3.tgz",
-      "sha256": "eb0fd791b9440e5032c3f3cf7e089836cee90e5a4a8ef93bf9b8ab03cf477124"
+      "version": "0.1.0-candidate.4",
+      "sourceCommit": "4df0e60f8ee3705c93e5eb4ab3ac25dcbd9f655a",
+      "tarball": "opendigitalproductfactory-dpf-gpp-0.1.0-candidate.4.tgz",
+      "sha256": "ed8b36f6c96945248c857d7d7724e7fa45f09f3c8899a1e711cef09bff60bc2c"
     }
   ],
   "cases": {
