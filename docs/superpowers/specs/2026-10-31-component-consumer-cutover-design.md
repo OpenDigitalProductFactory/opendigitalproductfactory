@@ -267,7 +267,10 @@ registry, service, external account or spending allocation is selected here.
 ## Planning and unresolved gates
 
 See [the cutover plan](../plans/2026-10-31-component-consumer-cutover.md).
-Independent review, immutable plan coverage and publication checks are pending.
+Independent client review of commit 0ee3b4ee9e56c16cb75f89725ec09e43fcbd968d
+reported no material findings; it is not a native review receipt. Native plan
+coverage cmvx2e0xp022r01pohb0jt40p binds the immutable plan at that commit.
+Native semantic review and publication checks remain separate.
 The generated documentation index is shared with WC-2CCBB706 and WC-4EE49A76.
 Normal edit admission was refused; the operator then authorized that one shared
 file and native approval cmvwzem003obv01pny3o1tayq executed. The resulting exact

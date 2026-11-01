@@ -1,6 +1,6 @@
 # DPF component consumer-cutover planning
 
-Status: proposed; native review and immutable coverage pending.
+Status: proposed; independent client assessment clear; native review pending.
 Planning delivery: BI-66681CBB, WC-EB8D9B19.
 Design: [consumer cutover](../specs/2026-10-31-component-consumer-cutover-design.md).
 
@@ -96,13 +96,18 @@ seven pre-approved package installs or as a replacement for all validators.
 
 ## Backlog coverage
 
-Coverage state: UNRUN. No receipt is fabricated by this table.
+Coverage receipt: `cmvx2e0xp022r01pohb0jt40p`, recorded through the native
+record_plan_backlog_coverage tool with decision `atomic` for BI-66681CBB.
+It binds this plan at immutable commit
+`0ee3b4ee9e56c16cb75f89725ec09e43fcbd968d`, Git blob
+`d9d9dbea0141714cfbd8a84762e2721426598049`. This paragraph records that receipt;
+it does not change the covered delivery scope or grant successor implementation.
 Current plan subject: BI-66681CBB. Proposed decision: atomic, for the single
 documentation delivery only; acceptance references AC-CUT-01 through AC-CUT-05.
 Contract references: OBJ-OWNER, OBJ-DISTRIBUTION, OBJ-CONSUMER.
 Flow references: current delivery phases 1-5 and successor delivery graph.
 Verification references: VER-CLOSURE, VER-PARITY, VER-LOADER, VER-DPF, VER-ROLLBACK.
-The native server selects the applicable receipt schema and immutable binding.
+The native server selected the applicable receipt schema and immutable binding.
 Successor items remain triage intake, not covered implementation admission.
 
 ## Risks, rollback and stop conditions
