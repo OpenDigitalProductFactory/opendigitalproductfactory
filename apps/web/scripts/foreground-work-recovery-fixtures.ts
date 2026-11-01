@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { isRecord } from "../lib/shared/coerce";
 import { readWorkroomPostureClaim } from "../lib/work-management/workroom-posture-claim";
 import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
@@ -24,7 +25,7 @@ export function assertForegroundFixtureRuntime(env: Readonly<Record<string, stri
 
 /** Emit stable codes only; database errors may contain private connection data. */
 export function foregroundIsolationFailure(error: unknown): { reason: string; databaseCode?: string } {
-  const reasons: Record<string, string> = {
+  const reasons = new Map(Object.entries({
     "Foreground fixtures require the explicitly selected GitHub CI runtime": "runtime-not-admitted",
     "Foreground fixtures refuse targets outside isolated CI services": "target-not-isolated",
     "Foreground fixture refuses unrelated runnable tasks or retained work": "existing-runnable-work",
@@ -32,8 +33,9 @@ export function foregroundIsolationFailure(error: unknown): { reason: string; da
     "Foreground fixture refuses latent proactive work": "latent-proactive-work",
     "Foreground fixture refuses live room cadences": "live-room-cadence",
     "Existing queue work prevents isolated startup": "existing-queue-work",
-  };
-  const reason = error instanceof Error ? reasons[error.message] : undefined;
+    "Foreground fixture refuses seed configuration or execution history": "seed-state-not-pristine",
+  }));
+  const reason = error instanceof Error ? reasons.get(error.message) : undefined;
   const code = isRecord(error) && typeof error.code === "string" && /^P\d{4}$/.test(error.code) ? error.code : undefined;
   return { reason: reason ?? "unexpected-isolation-error", ...(code ? { databaseCode: code } : {}) };
 }
@@ -47,10 +49,14 @@ export function hasSuccessfulForegroundReconciliation(runs: ReadonlyArray<{ step
 type ScopeDb = Pick<PrismaClient, "scheduledAgentTask" | "taskRun" | "userFact" | "workroomParticipant">;
 export async function assertForegroundBackgroundQuiet(db: ScopeDb, allowedTaskRunIds: string[] = []) {
   assertForegroundFixtureRuntime(process.env);
-  const { PROACTIVITY_FACT_CATEGORY, PROACTIVITY_OVERRIDE_FACT_PREFIX } = await import("../lib/proactivity/proactivity-override-preferences");
   if (await db.scheduledAgentTask.count({ where: { isActive: true } })
     || await db.taskRun.count({ where: { archivedAt: null, taskRunId: { notIn: allowedTaskRunIds }, status: { notIn: [...TERMINAL_TASK_STATE_LIST] } } }))
     throw new Error("Foreground fixture refuses unrelated runnable tasks or retained work");
+  await assertForegroundLatentQuiet(db);
+}
+
+async function assertForegroundLatentQuiet(db: ScopeDb) {
+  const { PROACTIVITY_FACT_CATEGORY, PROACTIVITY_OVERRIDE_FACT_PREFIX } = await import("../lib/proactivity/proactivity-override-preferences");
   const facts = await db.userFact.findMany({ where: { category: PROACTIVITY_FACT_CATEGORY,
     key: { startsWith: `${PROACTIVITY_OVERRIDE_FACT_PREFIX}:agent:` }, supersededAt: null }, select: { value: true } });
   for (const fact of facts) {
@@ -65,6 +71,76 @@ export async function assertForegroundBackgroundQuiet(db: ScopeDb, allowedTaskRu
     const level = readWorkroomPostureClaim(member.workroom.scopeClaims)?.proactivityLevel;
     return level !== undefined && level !== "quiet";
   })) throw new Error("Foreground fixture refuses live room cadences");
+}
+
+type SeedScheduleDefinition = {
+  taskId: string; agentId: string; title: string; prompt: string; routeContext: string; schedule: string;
+  timezone: string; ownerUserId: string; taskKind: string | null; taskConfig: unknown;
+  organizationId: null; productLineId: null; businessProductId: null;
+};
+
+/** Reuse the definitions invoked by the standard seed, rather than duplicating task IDs/prompts. */
+export async function foregroundSeedScheduleDefinitions(ownerUserId: string): Promise<SeedScheduleDefinition[]> {
+  assertForegroundFixtureRuntime(process.env);
+  const definitions: Array<Record<string, unknown>> = await Promise.all([
+    import("../../../packages/db/src/discovery-triage-config"), import("../../../packages/db/src/data-model-mirror-config"),
+    import("../../../packages/db/src/bookkeeping-cycle-config"), import("../../../packages/db/src/decision-engine-review-config"),
+    import("../../../packages/db/src/acceptance-sweep-config"), import("../../../packages/db/src/demand-scoring-steward-config"),
+    import("../../../packages/db/src/client-capability-reverify-config"), import("../../../packages/db/src/harness-evolution-loop-config"),
+    import("../../../packages/db/src/sysml-projection-config"), import("../../../packages/db/src/self-optimization-sweep-config"),
+    import("../../../packages/db/src/hive-scout-config"),
+  ]);
+  return definitions.map(definition => {
+    const idKeys = Object.keys(definition).filter(key => key.endsWith("_TASK_ID"));
+    if (idKeys.length !== 1) throw new Error("Foreground fixture refuses seed configuration or execution history");
+    const prefix = idKeys[0]!.slice(0, -"_TASK_ID".length);
+    const value = (suffix: string) => {
+      const result = definition[`${prefix}_${suffix}`];
+      if (typeof result !== "string") throw new Error("Foreground fixture refuses seed configuration or execution history");
+      return result;
+    };
+    const builder = definition.buildDiscoveryTriageScheduledPrompt ?? definition.buildHiveScoutScheduledPrompt;
+    const prompt = typeof builder === "function" ? builder() as unknown : value("PROMPT");
+    if (typeof prompt !== "string") throw new Error("Foreground fixture refuses seed configuration or execution history");
+    return { taskId: value("TASK_ID"), agentId: value("AGENT_ID"), title: value("TASK_TITLE"), prompt,
+      routeContext: value("ROUTE_CONTEXT"), schedule: value("SCHEDULE"),
+      timezone: process.env.INSTALL_TIMEZONE ?? value("DEFAULT_TIMEZONE"), ownerUserId,
+      taskKind: typeof definition[`${prefix}_TASK_KIND`] === "string" ? definition[`${prefix}_TASK_KIND`] as string : null,
+      taskConfig: definition[`${prefix}_DEFAULT_CONFIG`] ?? null,
+      organizationId: null, productLineId: null, businessProductId: null };
+  });
+}
+
+/** Only this disposable CI seed is suspended; production seed behavior is untouched. */
+export async function prepareForegroundTarget(db: PrismaClient) {
+  assertForegroundFixtureRuntime(process.env);
+  const { findTaskOwnerUserId } = await import("../../../packages/db/src/install-work-owner");
+  return db.$transaction(async tx => {
+    await assertForegroundLatentQuiet(tx);
+    if (await tx.taskRun.count() || await tx.jobRun.count() || await tx.jobEvent.count()
+      || await tx.credentialEntry.count({ where: { OR: [{ cachedToken: { not: null } }, { refreshToken: { not: null } },
+        { secretRef: { not: null } }, { clientSecret: { not: null } }] } }))
+      throw new Error("Foreground fixture refuses seed configuration or execution history");
+    const owner = await findTaskOwnerUserId(tx);
+    if (!owner) throw new Error("Foreground fixture refuses seed configuration or execution history");
+    const expected = new Map((await foregroundSeedScheduleDefinitions(owner)).map(row => [row.taskId, row]));
+    const rows = await tx.scheduledAgentTask.findMany({ where: { isActive: true } });
+    for (const row of rows) {
+      const definition = expected.get(row.taskId);
+      if (!definition || Object.entries(definition).some(([key, value]) => !isDeepStrictEqual(row[key as keyof typeof row], value))
+        || row.lastRunAt !== null || row.lastStatus !== null || row.lastError !== null || row.lastThreadId !== null || row.taskRunId !== null || row.attempts !== 0)
+        throw new Error("Foreground fixture refuses seed configuration or execution history");
+    }
+    const original = rows.map(row => ({ id: row.id, taskId: row.taskId, isActive: row.isActive }));
+    for (const row of rows) {
+      const changed = await tx.scheduledAgentTask.updateMany({ where: { id: row.id, taskId: row.taskId,
+        ownerUserId: owner, updatedAt: row.updatedAt, isActive: true, lastRunAt: null, lastStatus: null,
+        lastError: null, lastThreadId: null, taskRunId: null, attempts: 0 }, data: { isActive: false } });
+      if (changed.count !== 1) throw new Error("Foreground fixture refuses seed configuration or execution history");
+    }
+    await assertForegroundBackgroundQuiet(tx);
+    return original;
+  }, { isolationLevel: "Serializable", timeout: 30_000 });
 }
 
 /** Read actual fanout and run settlement, rather than sleeping past an assumed delay. */
@@ -180,11 +256,19 @@ export async function prepareForegroundFixtures(db: PrismaClient, baseUrl: strin
   return { ...runtime, prefix, providerId, connectionId, modelId, credentialId, prior };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv.includes("--check-target")) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+  && (process.argv.includes("--check-target") || process.argv.includes("--prepare-target"))) {
   void (async () => {
     assertForegroundFixtureRuntime(process.env);
     const { prisma } = await import("@dpf/db");
     try {
+      if (process.argv.includes("--prepare-target")) {
+        const original = await prepareForegroundTarget(prisma);
+        const out = resolve("test-results/foreground-work-recovery");
+        mkdirSync(out, { recursive: true });
+        writeFileSync(resolve(out, "seed-schedule-fixture.json"), JSON.stringify({ ...assertForegroundFixtureRuntime(process.env),
+          original, cleanup: "Discard with the owned disposable CI database; never restore schedules while the worker lives." }, null, 2));
+      }
       await assertForegroundBackgroundQuiet(prisma);
       if (await prisma.jobRun.count({ where: { status: { notIn: ["completed", "failed", "cancelled"] } } })
         || await prisma.jobEvent.count({ where: { fannedOutAt: null } })) throw new Error("Existing queue work prevents isolated startup");

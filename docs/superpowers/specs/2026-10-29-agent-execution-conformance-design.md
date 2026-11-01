@@ -280,3 +280,21 @@ the business journey is unrun. Admission now runs directly after CI seed/setup,
 before the expensive build. Failure diagnostics emit known reason codes and a
 bounded Prisma error code only; raw exceptions and connection details stay out
 of CI output. Preserve all isolation checks while diagnosing the actual setup.
+
+The independent correction review requires a second read-only isolation check
+immediately before normal boot; it refreshes the admission record after build
+and backend preparation. A workflow-order contract and a newly introduced-work
+negative protect this boundary.
+
+The standard CI seed invokes eleven scheduled-task seeds, whose active default
+conflicts with this scenario's zero-active requirement (seed.ts2571–2582 and
+ScheduledAgentTask.isActive). A bounded preparation step runs before admission:
+reuse the existing exported task definitions and owner resolver, require exact
+configuration/ownership and no execution evidence, credentials, queued work or
+latent intent, then conditionally suspend only those pristine rows in one
+serializable transaction. Unknown or modified active rows refuse setup. The
+zero-active guard is unchanged. Original activation/identities are retained in
+the run artifact. Schedules stay suspended until disposable database teardown;
+they are never restored while the worker lives. Production seeds and schedules
+are untouched. This addresses a source-proven setup conflict without claiming
+the first generic exception's precise cause or a served acceptance pass.

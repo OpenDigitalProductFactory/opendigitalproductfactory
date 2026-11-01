@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
 import { assertForegroundFixtureRuntime, assertForegroundBackgroundQuiet, prepareForegroundFixtures,
-  cleanupForegroundFixtures, foregroundIsolationFailure, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
+  cleanupForegroundFixtures, foregroundIsolationFailure, foregroundSeedScheduleDefinitions, prepareForegroundTarget,
+  hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
 
 const admitted = {
   CI: "true", GITHUB_ACTIONS: "true", DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1",
@@ -150,4 +153,61 @@ it("reports isolation failures without leaking exception content or connection d
     .toEqual({ reason: "unexpected-isolation-error", databaseCode: "P2021" });
   expect(foregroundIsolationFailure(new Error("private-fixture-exception-content")))
     .toEqual({ reason: "unexpected-isolation-error" });
+  expect(foregroundIsolationFailure(new Error("constructor")))
+    .toEqual({ reason: "unexpected-isolation-error" });
+});
+
+it("checks isolation early and again immediately before normal boot", () => {
+  const workflow = parse(readFileSync(new URL("../../../.github/workflows/ux-route-sweep.yml", import.meta.url), "utf8"));
+  const steps = workflow.jobs.sweep.steps as Array<{ name: string; run?: string }>;
+  const checks = steps.flatMap((step, index) => step.run?.includes("foreground-work-recovery-fixtures.ts --check-target") ? [index] : []);
+  expect(checks.length).toBeGreaterThanOrEqual(2);
+  expect(checks[0]).toBeLessThan(steps.findIndex(step => step.name === "Build the portal"));
+  expect(checks.at(-1)).toBe(steps.findIndex(step => step.name === "Start the portal") - 1);
+});
+
+it("refuses work introduced after the initial isolation check", async () => {
+  enable();
+  const db = { scheduledAgentTask: { count: vi.fn().mockResolvedValue(0) }, taskRun: { count: vi.fn().mockResolvedValue(0) },
+    userFact: { findMany: vi.fn().mockResolvedValue([]) }, workroomParticipant: { findMany: vi.fn().mockResolvedValue([]) } };
+  await assertForegroundBackgroundQuiet(db as never);
+  db.taskRun.count.mockResolvedValue(1);
+  await expect(assertForegroundBackgroundQuiet(db as never)).rejects.toThrow("unrelated runnable tasks");
+});
+
+describe("disposable CI seed schedules", () => {
+  async function target() {
+    enable();
+    const definitions = await foregroundSeedScheduleDefinitions("fixture-owner");
+    let active = true;
+    const row = { ...definitions[0], id: "fixture-seed-row", isActive: true, updatedAt: new Date(),
+      lastRunAt: null, lastStatus: null, lastError: null, lastThreadId: null, taskRunId: null, attempts: 0 };
+    const tx = { scheduledAgentTask: { findMany: vi.fn(async () => active ? [row] : []), count: vi.fn(async () => Number(active)),
+      updateMany: vi.fn(async () => { active = false; return { count: 1 }; }) },
+      taskRun: { count: vi.fn().mockResolvedValue(0) }, jobRun: { count: vi.fn().mockResolvedValue(0) },
+      jobEvent: { count: vi.fn().mockResolvedValue(0) }, credentialEntry: { count: vi.fn().mockResolvedValue(0) },
+      userFact: { findMany: vi.fn().mockResolvedValue([]) }, workroomParticipant: { findMany: vi.fn().mockResolvedValue([]) },
+      user: { findFirst: vi.fn().mockResolvedValue({ id: "fixture-owner" }) }, portfolio: { findUnique: vi.fn().mockResolvedValue(null) },
+      organization: { findFirst: vi.fn().mockResolvedValue(null) }, principalAlias: { findFirst: vi.fn().mockResolvedValue(null) } };
+    return { row, tx, db: { $transaction: vi.fn(async (fn: (value: unknown) => unknown) => fn(tx)) } };
+  }
+  it("suspends only untouched canonical seed configuration and retains its original activation", async () => {
+    const { db, row, tx } = await target();
+    expect(await prepareForegroundTarget(db as never)).toEqual([{ id: row.id, taskId: row.taskId, isActive: true }]);
+    expect(tx.scheduledAgentTask.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: row.id, taskId: row.taskId, updatedAt: row.updatedAt, isActive: true }), data: { isActive: false },
+    }));
+  });
+  it.each(["unknown", "modified", "owner", "history", "run", "event", "credential"])("refuses %s state before any suspension", async kind => {
+    const { db, row, tx } = await target();
+    if (kind === "unknown") row.taskId = "unrelated-fixture-task";
+    if (kind === "modified") row.prompt += " modified";
+    if (kind === "owner") row.ownerUserId = "another-fixture-owner";
+    if (kind === "history") row.attempts = 1;
+    if (kind === "run") tx.taskRun.count.mockResolvedValue(1);
+    if (kind === "event") tx.jobEvent.count.mockResolvedValue(1);
+    if (kind === "credential") tx.credentialEntry.count.mockResolvedValue(1);
+    await expect(prepareForegroundTarget(db as never)).rejects.toThrow();
+    expect(tx.scheduledAgentTask.updateMany).not.toHaveBeenCalled();
+  });
 });

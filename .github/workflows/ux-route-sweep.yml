@@ -193,6 +193,12 @@ jobs:
       # Browser installation is independent of the portal build. Keep it ahead
       # of the artifact rendezvous so the build, fixture, and browser paths
       # overlap instead of extending the critical path serially.
+      - name: Prepare only untouched standard CI seed schedules
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --prepare-target
+
       - name: Verify retained-work runtime isolation
         if: ${{ inputs.scenario == 'foreground-recovery' }}
         env:
@@ -258,6 +264,12 @@ jobs:
             sleep 1
           done
           echo "The coexistence event backend did not become healthy"; exit 1
+
+      - name: Recheck retained-work isolation immediately before boot
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --check-target
 
       - name: Start the portal
         env:
