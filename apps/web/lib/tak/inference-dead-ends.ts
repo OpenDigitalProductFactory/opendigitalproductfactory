@@ -478,6 +478,7 @@ function describeToolRouteFailureMessage(
 }
 
 export type InferenceDeadEndKind =
+  | "evidence-unavailable"
   | "model-missing"
   | "credentials"
   | "capacity"

@@ -4,6 +4,7 @@ import { prepareCurrentDesignObservation } from "./canonical-artifact-discovery"
 import { prepareCurrentResearchObservation } from "./current-research-artifact";
 import { baseline, item, readyActivities, receipt, transitionObject } from "./entry-adapter.test-fixtures";
 import { projectBacklogItemReadiness } from "./entry-adapter";
+import { readRepositoryProviderBlob } from "./repository-artifact";
 
 const source = { repositoryFullName: "owner/repo", headBranch: "fix/child",
   baseSha: "a".repeat(40), headSha: "b".repeat(40) };
@@ -44,13 +45,34 @@ function fixture() {
 const verified = { state: "verified", receiptId: "research-current", digest };
 
 describe("current child research source observation", () => {
+  it("re-observes accepted public component research through the real immutable provider reader", async () => {
+    const f = fixture();
+    const providerDb = { platformDevConfig: { findUnique: vi.fn().mockResolvedValue({
+      upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git" }) },
+      credentialEntry: { findUnique: vi.fn() }, scheduledJob: { findUnique: vi.fn() } };
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).includes("/contents/")
+      ? new Response(JSON.stringify({ type: "file", sha: blobId, encoding: "base64", content: Buffer.from(bytes).toString("base64") }))
+      : new Response(JSON.stringify({ full_name: source.repositoryFullName, private: false, visibility: "public" })));
+    const result = await prepareCurrentResearchObservation({ itemId: "BI-CHILD", db: f.db as never, claimSource: source,
+      ports: { readBlob: args => readRepositoryProviderBlob({ ...args, db: providerDb as never, fetchImpl: fetchImpl as typeof fetch }) } });
+    expect(result.evidence).toEqual(verified);
+    expect(await result.admissionGuard(f.db as never)).toEqual(verified);
+    expect(providerDb.credentialEntry.findUnique).not.toHaveBeenCalled();
+    for (const [, options] of fetchImpl.mock.calls as unknown as Array<[unknown, RequestInit]>) {
+      expect(options.headers).not.toHaveProperty("Authorization");
+      expect(options.redirect).toBe("error");
+    }
+  });
   it("reads the child's recorded artifact at its real current head without selecting a parent design", async () => {
     const f = fixture();
     const result = await prepareCurrentDesignObservation({ itemId: "BI-CHILD", db: f.db as never,
       claimSource: source, ports: { research: { readBlob: f.readBlob } } });
     expect(result.evidence).toEqual({ state: "not-applicable", research: verified });
     expect(f.readBlob).toHaveBeenCalledWith({ repositoryFullName: source.repositoryFullName,
-      commitSha: source.headSha, path: f.research.payload.artifactRef.path, expectedBlobId: blobId });
+      commitSha: source.headSha, path: f.research.payload.artifactRef.path, expectedBlobId: blobId,
+      sourceAdmission: expect.objectContaining({ itemId: "BI-CHILD", workroomId: "WC-CHILD",
+        repositoryFullName: source.repositoryFullName, branchName: source.headBranch, headSha: source.headSha,
+        isCurrent: expect.any(Function) }) });
     expect(await result.admissionGuard(f.db as never)).toEqual(result.evidence);
     expect(f.readBlob).toHaveBeenCalledTimes(1);
     expect(f.db.$queryRaw).toHaveBeenCalledTimes(2);

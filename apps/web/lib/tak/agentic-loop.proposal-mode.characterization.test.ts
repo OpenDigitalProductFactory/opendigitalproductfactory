@@ -156,7 +156,7 @@ const AUTONOMOUS_CALLERS: Array<{ file: string; proposalReads: string[] }> = [
   { file: "lib/actions/agent-task-scheduler.ts", proposalReads: [] },
   { file: "lib/tak/child-thread-runtime.ts", proposalReads: [] },
   { file: "lib/mcp-task-execution.ts", proposalReads: [] },
-  { file: "lib/tak/autonomous-work-run.ts", proposalReads: ["if (result.content && !result.proposal) {"] },
+  { file: "lib/tak/autonomous-work-run.ts", proposalReads: ["if (result.content && !result.proposal && !result.failure) {"] },
   { file: "lib/coworker-lifecycle/certification-runner.ts", proposalReads: [] },
   { file: "lib/build/build-orchestrator.ts", proposalReads: [] },
   { file: "lib/build/build-pipeline.ts", proposalReads: [] },

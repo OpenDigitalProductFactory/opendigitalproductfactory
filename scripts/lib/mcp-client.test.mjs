@@ -279,3 +279,24 @@ test("mcpCall keeps its invalid-JSON error text, which retry classifiers match",
     /mcpCall: invalid JSON response from http:\/\/127\.0\.0\.1:3000\/api\/mcp\/v1 \(status 502\)/,
   );
 });
+
+
+test("MCP transport uses the caller-scoped endpoint environment without ambient changes", async () => {
+  const endpoint = "https://scoped-install.example/api/mcp/v1";
+  let requests = 0;
+  const options = { mcpUrl: endpoint, bearerToken: "fixture", env: { DPF_MCP_URL: endpoint },
+    fetchImpl: async () => { requests++; return new Response("{}"); } };
+  assert.equal((await mcpPost("tools/list", {}, options)).status, 200);
+  await assert.rejects(mcpPost("tools/list", {}, { ...options, env: {} }), /refusing to send/);
+  assert.equal(requests, 1);
+});
+
+test("an unapproved endpoint is refused before credential materialization", async () => {
+  let materializations = 0;
+  await assert.rejects(mcpPost("tools/call", { name: "fixture_read" }, {
+    mcpUrl: "https://unapproved.invalid/api/mcp/v1", env: {},
+    bearerToken: { get: async () => { materializations++; return "fixture-only"; } },
+    requestImpl: () => { throw new Error("must not request an unapproved endpoint"); },
+  }), /refusing to send a bearer token/);
+  assert.equal(materializations, 0, "OAuth exchange must not precede endpoint authorization");
+});
