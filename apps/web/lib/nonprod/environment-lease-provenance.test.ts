@@ -178,3 +178,36 @@ it("refreshes the owned preview wait under the admission transaction without tra
     created: false, authenticatedAgentId: "AGT-EXT-CLAUDE" })).rejects.toThrow("nonprod_preview_ownership_conflict");
   expect(taskRun.upsert).toHaveBeenCalledTimes(2);
 });
+
+
+describe("database birth clock on the actual fresh claim", () => {
+  function fresh() {
+    const mockDb = db(), queued = lease(), active = admitted();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(active);
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([queued]);
+    return mockDb;
+  }
+  it("uses the transaction clock instead of the caller clock for new row creation", async () => {
+    const mockDb = fresh(), createdAt = new Date(NOW.getTime() - 500);
+    const query = vi.fn().mockResolvedValue([{ createdAt }]);
+    Object.assign(mockDb, { $queryRaw: query });
+    await claim(mockDb);
+    expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdAt }) }));
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+  it("aborts creation when the real clock reader returns no valid timestamp", async () => {
+    const mockDb = fresh();
+    Object.assign(mockDb, { $queryRaw: vi.fn().mockResolvedValue([]) });
+    await expect(claim(mockDb)).rejects.toThrow("nonprod_lease_birth_clock_unavailable");
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+  });
+  it("does not regenerate birth facts when an existing claim is replayed", async () => {
+    const mockDb = db(), query = vi.fn();
+    Object.assign(mockDb, { $queryRaw: query });
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(admitted());
+    await claim(mockDb);
+    expect(query).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+  });
+});
