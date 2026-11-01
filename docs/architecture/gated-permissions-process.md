@@ -1,6 +1,6 @@
 # Gated Permissions Process (GPP)
 
-**Status:** working draft 0.19 · **Date:** 2026-10-16 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
+**Status:** working draft 0.20 · **Date:** 2026-10-31 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
 **Placement decision:** DI-5E0B3CA09D27 (WWMD, high confidence). GPP is the fourth member of the
 [standards family](agent-standards-family.md) and owns the binding semantic only.
 
@@ -234,6 +234,7 @@ The capability vocabulary is the contract between modeled bindings and enforceab
 | `read` | search, list, get | none |
 | `write-internal` | update a backlog item, record evidence | internal state |
 | `write-source` | edit or commit source in a governed worktree | internal state, reversible |
+| `worktree-provision` | plan a room's worktree, claim the paths it will edit | internal state, reversible |
 | `authority` | grant, revoke, change identity or approval | authority |
 | `outward` | send a message, publish, post | outward |
 | `irreversible` | delete, transfer money, deploy to production | irreversible |
@@ -569,6 +570,46 @@ people act on the picture.
 
 #### 12.4.3 DPF status
 
+**Build Studio, Phase 5 (2026-10-31).** Its source is now the inert declared flow
+`apps/web/lib/work-management/declared-flows/build-studio.gpp.json`, with the realization map,
+writer inventory, element map and conformance tests alongside it. The generator emits
+`generated/build-studio.flow.generated.ts` and an offline index. Neither enters the work-shape
+registry or the runtime drive. Founder DI-119FB3749D46 ratifies the existing plan gate and
+Option B, not a new executor, grant or approval policy. The declared cell is feature/medium
+under the default playbook mode `off`; tests record all 16 cells and five rightsizing variants.
+
+The following table is read from `PLAN_TO_BUILD_GATE_PROFILES` by
+`planToBuildDivergences()` (base `ea62f5fb`). `blocking-soft` blocks the transition but reports
+success to the caller; it has the same enforcement rank as `blocking`. `upstream` means
+checked earlier; `not-evaluated-recorded` is a recorded skip, never an approval.
+
+| Path | Readiness | Structural | Dependency | WWMD plan | Canonical caller checks absent |
+|---|---|---|---|---|---|
+| `advance-build-phase` | blocking | blocking | blocking | blocking | none |
+| `advance-phase-route` | not-evaluated | blocking | not-evaluated | blocking | build owner |
+| `perform-plan-to-build-transition` | blocking | blocking | blocking | autonomous-mode | build owner, Approve Start, canTransitionPhase |
+| `save-phase-handoff` | not-evaluated | blocking-soft | not-evaluated | not-evaluated-recorded | build owner |
+| `build-on-plan-approval` | upstream | not-evaluated | upstream | not-evaluated | build owner, Approve Start, canTransitionPhase |
+
+These are observed path differences, not new policy or proof that any alternate path is safe.
+The remaining `save-phase-handoff` WWMD gap is BI-5D59A982; its broader path contract is
+BI-BDB63485. A source scan pins 20 file/target groups (23 direct phase writes), including
+entry/terminal, reset, repair and source-refresh paths; it cannot prove FROM phases or gate dominance.
+
+The first real compile retains seven exact error findings: trigger/status entry (C-1/D-1,
+BI-6854C1F4), the missing exact-action checkpoint for `recover_sandbox` (D-3, BI-F7BADDA2),
+and ideate/review sandbox boundaries (C-7, BI-59900E8E). Their eligible-rule list can shrink
+but cannot silently absorb new tool sets. No schema, resolver, ratification or unknown-host
+error may be listed. C-5 remains **not evaluated**, and C-9 reach warnings remain visible.
+The minimal schema compatibility repair accepts existing registered camelCase names; names
+are not normalized and unresolved tools still fail compilation. Only one additional validator
+source path was founder-authorized. The four registry/binding artifacts and enforcement source
+remain byte-identical to the recorded current base as this delivery's publication evidence;
+the historical migration fixture is retained. Permanent conformance checks guard this flow's
+non-registration and absence of an active binding, without freezing unrelated registry changes.
+
+
+
 | Requirement | DPF substrate | Mode |
 |---|---|---|
 | Executable model | Work shapes are declared models: `WorkShapeDefinition` (stages, accountable principals, `governed-decision{decisionScope}` advances, stop conditions, `grants`, stage `tools`). The runtime reads the declared shape. One shape, `inquiry-response-watch@1.0.0`, is **document-compiled**: its source is the GPP shape document `apps/web/lib/work-management/shape-documents/inquiry-response-watch.gpp.json`, compiled by `pnpm --filter web build:gpp-shapes` into `generated/inquiry-response-watch.shape.generated.ts`, which `standing-operations-shapes.ts` registers in place of the hand-written literal. Its `send` advance carries the typed gate ratified in DI-BEEAF36D0244 (WWWD, enforced, blocking, accountable-human). Every other shape is **code-declared** in `work-shapes.ts`, `delivery-shapes.ts` and the other family files. Graph constructs (GPP Phase 3c, BI-8875C9DF): `CONSTRUCT_EXECUTABLE` (`packages/validators/src/gpp/executable-constructs.ts`) is the one switch read by both the compiler and the work-shape drive. **Parallel split/join** is executable since PR-3c-2: a shape that declares a `flow` with a split and its join runs one token per branch, one scheduled task per agent branch under the room's one lease, and the room view marks every current stage; `drive-parity-parallel.test.ts` proves the drive equal to the reference interpreter after every event. **Rework edges and refuse routes** are executable since PR-3c-3: an enforced, blocking gate that declares a refuse route (`onRefuse`, or the stage's single rework edge) holds its token for a verdict read off the stage's latest recorded decision; "Send back" routes it back (a bounded rework that starts a new iteration of the loop region, then the budget stop once the bound is spent) or to the declared stop, and `defer` holds it there (DI-0D9DFB0FC0EF); the stages left lose their permits through a revocation hook that has nothing to revoke until stage permits are minted. `drive-parity-rework.test.ts` proves it equal to the interpreter. **Stage deadlines** are executable since BI-086DC167 (implemented in PR-3c-4): the drive tick is the clock, and a token on a stage past its `afterDays` deadline never moves (the deadline is non-interrupting); the drive raises one notice per `<runKey>#<stageKey>#<iteration>`, tells the gate's escalation role (else the stage's accountable principal) through the room owner on the tick after it is committed, retries a send that failed and never repeats one that went out, and lists the stage in the attention inbox while it stays past its deadline. A graph room's marking is one **run** that crosses calendar boundaries: its key is the calendar cycle key of the day the run started, and a new run starts only after the previous one concluded, at most once per calendar day. So a deadline of any length, days included, comes due once, measured from the token's own entry. `drive-parity-deadline.test.ts` proves the deadline pass never changes the marking, as the interpreter's rule 8 says. **Sub-shapes** are executable since BI-086DC167 (implemented in PR-3c-5): a sub-shape runs its child as a separate, contained Workroom pinned to the declared `key@version`, created, completed and abandoned by the drive as system actor, with `child-completion` evidence advancing the parent and a child that stops any other way holding the parent with `sub_shape_stopped` (`drive-parity-sub-shape.test.ts`). A child is keyed by the parent's run, so a child still running across UTC midnight is neither abandoned nor created twice; only a concluded run's live children are abandoned when the next run starts. The compiler refuses a sub-shape that would widen its parent's grants or stage reach (D-9) or that does not resolve or forms a cycle (D-10). Every construct flag is on; setting one back to false is the kill switch: the compiler refuses new documents and a room whose shape uses it pauses with `construct_not_executable`. | **Implemented** for work shapes. The compiled shape is identical to the hand-written one under the legacy projection, and its binding diff is `unchanged` (GPP notation Phase 3b, PR-3b-6, BI-6DA17863). No runtime reader consumes the typed gate yet. Parallel split/join, rework/refuse, stage deadlines and sub-shapes are executable but no registered shape uses any of them yet; the first flow is the R2D reference room (BI-580A970A). Build Studio's flow is not yet one declared shape (Annex C). |
@@ -607,16 +648,17 @@ The binding is one-start and fail-closed across task creation, scheduling, stage
 
 The Workroom stores `issued → started → settled` with the token and binding digest. The scheduled TaskRun carries the same immutable phase binding. A stale, expired, widened, superseded, already-started, or cross-run binding is withheld. Positive Verify evidence must contain the exact binding digest, command, output digest, TaskRun, receipt ids, and ordered timestamps; other outcomes remain explicit and cannot satisfy readiness. The normal research writer remains independently governed and consumes only exact settled positive evidence.
 
-Host verification is currently unavailable. The host-resource lease proves
-admission and process ownership, but the host runner submits its terminal
-metadata with the same MCP credential available to the caller. The server
-therefore cannot distinguish a supervised result from a direct claim-and-forge
-call. `record_execution_evidence` refuses these qualification claims, and
-terminal recovery withholds both host and sandbox qualification tokens. The
-existing signed native Edge action channel is a distinct machine identity, but
-its closed action allow-list has no bounded qualification-test action; it must
-not be treated as a general remote shell. Qualification remains non-evidence
-until an existing trusted producer gains that explicit, reviewed capability.
+The host-resource lease proves admission and process ownership, but not child
+execution or output. Historical `workroom-host` rows are therefore audit-only:
+they cannot settle qualification even when their lease, binding, command and
+digests match. The machine-authenticated native Edge result path is the sole
+trusted producer for terminal qualification evidence. It validates the exact
+immutable action and phase binding before settlement and remains a closed
+capability rather than a general remote shell. Failed, unauthorized, foreign,
+expired, duplicate, sandbox-labelled or caller-authored results never
+contribute evidence. Even a valid native Edge result does not itself satisfy
+research; the normal governed research writer must still persist the research
+receipt.
 
 See [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts), [scheduled task runs](../../apps/web/lib/tak/scheduled-task-runs.ts), [stage mandate enforcement](../../apps/web/lib/work-management/room-stage-mandate.ts), and the [design](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
 
@@ -638,10 +680,13 @@ the compiler does not verify runtime mediation.
 
 | GPP element | DPF substrate | Mode today |
 |---|---|---|
+| Build Studio declared model source (Phase 5) | `declared-flows/build-studio.gpp.json`, realization/writer/element maps and conformance tests under `apps/web/lib/work-management/`; `generated/build-studio.flow.generated.ts`. Default feature/medium cell, 80 recorded policy variants; exact current capabilities. | Compiled offline, excluded from the runtime registry/drive. Known findings retain severity. |
+| Build Studio transition path inventory (Phase 5) | Five canonical plan profiles and computed caller/gate differences (§12.4.3); 20 file/target groups cover 23 direct phase writes on the recorded base. | Observed declarations, not proof of path equivalence or a C-8 repair. BI-5D59A982 remains open. |
 | Work shapes and stages | `apps/web/lib/work-management/work-shapes.ts`, `delivery-shapes.ts` — 47 work shapes; each stage has an accountable principal and an advance that is a status change or a `governed-decision{decisionScope}` | Defined |
 | Executable model source (GPP notation Phase 3b) | `inquiry-response-watch@1.0.0` is document-compiled: `apps/web/lib/work-management/shape-documents/inquiry-response-watch.gpp.json`, compiled by `apps/web/scripts/build-gpp-shapes.ts` (DRC, soundness and emit) into `generated/inquiry-response-watch.shape.generated.ts`. `check:gpp-shapes` and its vitest twin fail on a stale or hand-edited generated file. The other 46 current shapes and the 4 frozen prior versions are code-declared. The ratification table (`apps/web/lib/gpp/shape-language/gate-ratification.ts`) has one ratified scope, `outbound-customer-communication` (DI-BEEAF36D0244); the other scopes are proposed, so their shapes are not migrated. `migration-proof.test.ts` holds AC-NODISRUPT for the compiled shape: equal under the legacy projection, the typed gate the only added key, binding diff `unchanged`, registry order unchanged. PR-3b-R and PR-3b-6, BI-6DA17863. | **Document-compiled: one shape.** The typed gate is declared, not executed: the drive still advances on the recorded stage decision, as before. |
 | Graph constructs in the drive (GPP Phase 3c) | The work-shape drive runs a shape that declares a graph construct on a marking (`packages/validators/src/workroom/marking.ts`, `drive-resolution-graph.ts`), gated by `CONSTRUCT_EXECUTABLE`. Parallel split/join is enabled (PR-3c-2): per-branch task ids fixed on each token, a per-token writeback latch, plural pending decisions, and the room view's several current stages. Rework edges and refuse routes are enabled (PR-3c-3): gate verdicts from recorded decisions, the "Send back" choice offered only where a refuse route is declared, iteration-scoped receipts in place of clearing, `gate_refused` and `refused_to_stop` conclusions, and the stage-permit revocation hook (`apps/web/lib/gpp/stage-permit-revocation.ts`). `drive-parity-parallel.test.ts` (four fixtures including the R2D four-branch fork) and `drive-parity-rework.test.ts` (seven fixtures including a rework inside a parallel branch) hold the drive equal to the reference interpreter; `drive-sequential-identity.test.ts` holds every sequential room byte-identical. Stage deadlines are enabled (implemented in PR-3c-4, on since BI-086DC167, when a graph marking became one run that crosses calendar boundaries): a non-interrupting notice per stage pass in `marking.deadlines` (`packages/validators/src/workroom-policy/drive-deadlines.ts`), sent after commit with retry (`apps/web/lib/queue/functions/workroom-drive-deadlines.ts`, `apps/web/lib/work-management/workroom-deadline-notice.ts`), a `workroom-drive-deadline` activity, and the overdue stage in the workroom-stall attention source; `drive-parity-deadline.test.ts` holds the deadline pass equal to the interpreter's rule 8. Sub-shapes are enabled (implemented in PR-3c-5, on since BI-086DC167, a child keyed by the parent's run so it survives midnight): the child-room lifecycle (`apps/web/lib/work-management/drive-child-rooms.ts`, `apps/web/lib/queue/functions/workroom-drive-children.ts`), `child-completion` evidence, the `awaiting_sub_shape` and `sub_shape_stopped` conclusions, a rebind refused while a child is live, and the D-9 and D-10 design rules; `drive-parity-sub-shape.test.ts` holds the drive equal to the interpreter's rule 9. BI-8875C9DF. | **All four graph constructs executable; no shape adopts any of them yet** (the R2D room, BI-580A970A, is the first flow). |
 | Stage-level capability set (first slice) | `WorkShapeStage.tools` in `packages/validators/src/gpp/work-shape-contracts.ts`, re-exported by `work-shapes.ts` and read through `stageDeclaredTools` (`stage-briefing.ts`). Declared tools are pinned into each scheduled stage run by `scheduledToolsNeedingPin` (`apps/web/lib/tak/scheduled-task-runs.ts`). Parity test `apps/web/lib/work-management/stage-tool-parity.test.ts` asserts C-1 (GPP-001), C-2 (GPP-002) and the grant-held first condition of C-4. Stages that do not yet have the read tool they need are listed in the shrink-only `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`). BI-43C3E914, PR #5846, merge `a6557758ce41`. | **Declared and tested** for standing, coworker and orchestration stages. Pinning is used for scheduled runs. Delivery shapes are not yet covered. The declarations were added without shape version bumps, so §2.1.1 applies: C-6 must confirm they made existing reach explicit rather than widening it. |
+| Read-only source inquiry | `source-inquiry@1.0.0` in `apps/web/lib/work-management/source-inquiry-shape.ts` declares named-version source readers on both inquiry stages and `tool:read` only. A source change requires reshaping to delivery before worktree provisioning. BI-D1FB8C4D. | Declared; live verification pending. |
 | Shape-level capability set | Work-shape `grants` in the §7.1 vocabulary (`tool:read`, `tool:write-internal`, `tool:write-source`), resolved to enforceable grants by `WORK_SHAPE_CAPABILITY_GRANTS` in `roomGrantsFromWorkShape` (`room-turn-authority.ts`). The C-2 guard `apps/web/lib/work-management/work-shape-grants-resolve.test.ts` fails on any shape token that resolves to nothing, with a shrink-only list of the standing-shape tokens still dangling on 2026-10-01. Build Studio rooms admit their executing coworkers as contributors at attach and at resume (`build-studio-room-coworkers.ts`), so the room's participant term applies to them as members (BI-00588B51). | **Per shape, resolved and guarded** for the delivery shapes. Standing-shape tokens outside the vocabulary remain dangling until their owners resolve them; the guard stops new ones. |
 | Owning scope | `Workroom.decisionScope` enum `wwmd \| wwwd \| wsid`; gate tools `principle_decide` (WWMD), `evaluate_org_business_decision` (WWWD), `evaluate_profession_decision` (WSID) | Defined; scope per room, not per binding |
 | Envelope narrowing | `deriveRoomTurnAuthority` — agent grants ∩ user capability ∩ room grants; observers get the read baseline; room boundary `advise \| propose \| preauthorized` | Enforced |
@@ -738,6 +783,16 @@ repository source at `02aca6a234` on 2026-10-01. Each element states its mode. T
 exists and does not claim that the model is complete.
 
 ### C.1 The model
+
+Phase 5 now declares this existing flow offline (the source and checks are in §12.4.3).
+Under the default playbook mode `off`, neither the ideate-start nor autonomous ship WWMD
+gate is evaluated; the plan gate remains blocking. Ideate dispatches a coding CLI in the
+sandbox and review can act there. Current tagged tool counts are 52/42/50/52/46; the
+declaration names the tools exactly and does not equate tags with enforced reach on every surface.
+
+The diagram and original table below retain the October 1 record for comparison. Their
+ideate sandbox and ship-gate wording is superseded by the Phase 5 observations above;
+they do not describe current sandbox containment or the default `off` gate mode.
 
 ```mermaid
 flowchart TB
@@ -836,19 +891,20 @@ obvious. This is the practical argument for MBSE.
 
 ### C.4 Path to conformance
 
-| Step | What changes | Checks it satisfies |
-|---|---|---|
-| 1 | Express the Build Studio flow as one declared work shape: stages, per-stage `tools`, the gate set per transition with scope and mode | §12.4.1; C-1, C-2 |
-| 2 | Route every phase-changing path through one transition function. Plan → build done in GPP Phase 2 PR-F, with each path's gates unchanged; review → ship next | C-8 (BI-45F9CB7A) |
-| 3 | Bind each stage to one accountable agent identity that holds the stage's grants | C-4 |
-| 4 | Declare the build-engine sandbox as an environment-enforced binding | §7 element 11; C-7 |
-| 5 | Render bindings, gate modes and the envelope in the room's shape view | V-1, V-2 |
-| 6 | Reconcile tools actually called per stage against the declared set | C-6 |
+| Step | What changes | Checks it satisfies | Phase 5 status |
+|---|---|---|---|
+| 1 | Express the existing stages, tools and gate modes as one declared flow | §12.4.1; C-1, C-2 | Source compiled and conformance checked; seven known errors remain explicit, not repaired or waived. |
+| 2 | Centralize transition gate sets | C-8 (BI-45F9CB7A) | Five plan profiles and all direct writers recorded; actual gate-mode differences remain. BI-5D59A982 owns the handoff WWMD gap. |
+| 3 | Bind each stage to an accountable agent with its grants | C-4 | Open: the existing accountable role is `role:build-owner`, not an invented agent identity. |
+| 4 | Declare sandbox environment boundaries | §7 element 11; C-7 | Build is declared; ideate/review are known findings (BI-59900E8E). Network egress remains uncontained; shared `AUTH_SECRET` remains BI-F1C680C7. No binding is activated (BI-69415B68). |
+| 5 | Render the declared envelope and bindings | V-1, V-2 | Open for this inert flow: registry canvas/runtime behavior is unchanged. |
+| 6 | Reconcile actual calls with declared phase reach | C-6 | Tags are held equal by tests; actual call reconciliation remains open. Coworker, pipeline and external-MCP reach differ. |
 
 ## Revision history
 
 | Version | Date | Change |
 |---|---|---|
+| 0.20 | 2026-10-31 | Phase 5 describes Build Studio as an inert compiled flow, with current gate-profile divergences, writer inventory, lifecycle/rightsizing conformance, sandbox gaps and element traceability. Founder Option B and minimal registered-name compatibility amendment retained; no runtime activation or approval/grant change. |
 | 0.1 | 2026-09-30 | Initial working draft (BI-2C3B3AC9). |
 | 0.2 | 2026-10-01 | Added §2.1.1 binding revision versus shape version. Annex A now cites the first stage-level binding slice (BI-43C3E914, PR #5846). |
 | 0.3 | 2026-10-01 | Added the §7.3 pairing diagram and §12.3 model diagram. Added §12.4 model-to-running-system requirements (executability, V-1…V-4 visibility). Added check C-8 and assertions GPP-013/014. Added Annex C, Build Studio as a GPP model (BI-D0AB33B5). |

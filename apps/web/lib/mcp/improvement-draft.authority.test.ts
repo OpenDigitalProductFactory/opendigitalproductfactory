@@ -6,8 +6,7 @@ import { shouldProposeToolCall } from "@/lib/proactivity/propose-interception";
 import { buildCoworkerApprovalBinding, evaluateCoworkerAuthority, type CoworkerAuthorityInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { deriveCoworkerApprovalPolicy, proposeBoundaryAuthority, resolveSteering, resolveCoworkerToolAuthorityInput } from "@/lib/govern/authority/resolve-coworker-tool-authority";
 
-const tool = contributionHivePack.definitions.find(value => value.name === "propose_improvement")!;
-function authority(policy: string | null = null, candidateImmediate = false): CoworkerAuthorityInput {
+function authorityFor(tool: (typeof contributionHivePack.definitions)[number], policy: string | null = null, candidateImmediate = false): CoworkerAuthorityInput {
   return {
     authContext: {
       principalId: "human-principal", principalAliases: [], population: "workforce", platformRole: null,
@@ -31,7 +30,9 @@ function authority(policy: string | null = null, candidateImmediate = false): Co
   };
 }
 
-describe("real learning draft declaration through canonical authority", () => {
+describe.each(["propose_improvement", "propose_skill_improvement"])("real %s draft declaration through canonical authority", name => {
+  const tool = contributionHivePack.definitions.find(value => value.name === name)!;
+  const authority = (policy: string | null = null, candidateImmediate = false) => authorityFor(tool, policy, candidateImmediate);
   it("completes an internal recommendation under current recorded delegation without a proposal boundary", () => {
     expect(evaluateCoworkerAuthority(authority())).toMatchObject({ outcome: "allow" });
     expect(shouldProposeToolCall(tool, true)).toBe(false);
@@ -87,7 +88,7 @@ describe("real learning draft declaration through canonical authority", () => {
     }
     const harmful = authority(null, true); harmful.action.workCaseConsequential = true;
     expect(evaluateCoworkerAuthority(harmful)).toMatchObject({ outcome: "require-approval" });
-    for (const name of ["contribute_to_hive", "propose_skill_improvement"]) {
+    for (const name of ["contribute_to_hive"]) {
       expect(contributionHivePack.definitions.find(value => value.name === name)?.executionMode).toBe("proposal");
     }
   });

@@ -29,6 +29,11 @@ describe("local provider pause control", () => {
     actions.pauseProvider.mockResolvedValue({ resumeAt: null, warning: null });
     actions.resumeProvider.mockResolvedValue({ outcome: "resumed", status: "active" });
   });
+  it("can reuse the page routing badge without repeating status in its controls", () => {
+    render(<ProviderStatusToggle providerId="local" initialStatus="inactive" initialConnectionStatus="paused" initialPause={{ resumeAt: null }} hideStatus />);
+    expect(screen.queryByText("Paused")).toBeNull();
+    expect(screen.getByRole("button", { name: "Resume now" })).toBeTruthy();
+  });
   it("pauses immediately before asking for an optional duration", async () => {
     render(<ProviderStatusToggle providerId="local" initialStatus="active" />);
     fireEvent.click(screen.getByRole("button", { name: "Pause now" }));

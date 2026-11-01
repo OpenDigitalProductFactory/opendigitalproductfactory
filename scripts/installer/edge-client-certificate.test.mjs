@@ -10,7 +10,11 @@ import {resolveGuardBash} from '../lib/guard-bash.mjs';
 const subject = 'dpf-edge-localhost';
 const stamp = ms => new Date(ms).toISOString().replace(/[-:TZ]/g, '').slice(0, 14) + 'Z';
 const powershell = process.env.DPF_TEST_POWERSHELL || (process.platform === 'win32' ? 'powershell' : 'pwsh');
-const hasPowerShell = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], {timeout: 10000}).status === 0;
+// A PowerShell 7 host exports module paths Windows PowerShell cannot load.
+// Let the selected interpreter find its own built-ins for this isolated fixture.
+const powershellEnv = Object.fromEntries(Object.entries(process.env)
+  .filter(([key]) => key.toLowerCase() !== 'psmodulepath'));
+const hasPowerShell = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], {env: powershellEnv, timeout: 10000}).status === 0;
 
 test('PowerShell first issuance retains its checkpoint when rollback cannot remove a partial key', {skip: !hasPowerShell}, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dpf-client-rollback-test-'));
@@ -26,6 +30,12 @@ $RootCert = Join-Path $OutDir 'root_ca.crt'
 $EdgeClientCert = Join-Path $OutDir 'edge-client.crt'
 $EdgeClientKey = Join-Path $OutDir 'edge-client.key'
 function icacls { $global:LASTEXITCODE = 0 }
+function Get-FileHash {
+  param([string]$LiteralPath, [string]$Algorithm)
+  $bytes = [IO.File]::ReadAllBytes($LiteralPath)
+  $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+  [pscustomobject]@{ Hash = ([BitConverter]::ToString($hash) -replace '-', '') }
+}
 function node { $global:LASTEXITCODE = 0; 'issue fixture-root' }
 function Invoke-DpfPkiCompose { param($Arguments); 'FIXTURE-TOKEN' }
 function Invoke-DpfLocalStepClient {
@@ -59,7 +69,7 @@ try { Repair-DpfAuthorityEdgeClient -Subject 'dpf-edge-localhost' } catch { $fai
       const host = join(dir, failure);
       await mkdir(host);
       await writeFile(join(host, 'root_ca.crt'), 'fixture-public-root');
-      const child = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-File', script, host, failure], {encoding: 'utf8', timeout: 15000});
+      const child = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-File', script, host, failure], {env: powershellEnv, encoding: 'utf8', timeout: 15000});
       assert.equal(child.status, 0, child.stderr);
       const result = JSON.parse(child.stdout.trim());
       assert.equal(result.cert, false);

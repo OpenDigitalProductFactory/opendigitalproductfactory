@@ -1,4 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+const routingDb = vi.hoisted(() => ({
+  modelProvider: { findUnique: vi.fn() },
+  aiProviderConnection: { findUnique: vi.fn() },
+}));
+vi.mock("@dpf/db", () => ({ prisma: routingDb }));
+beforeEach(() => {
+  routingDb.modelProvider.findUnique.mockReset().mockResolvedValue({ providerId: "local", status: "active" });
+  routingDb.aiProviderConnection.findUnique.mockReset().mockResolvedValue({ status: "active" });
+});
 import { readFileSync } from "node:fs";
 import {
   getServedContextTokens,
@@ -218,5 +228,69 @@ describe("ensureLocalEmbedderOffGpu (BI-B60AFE7B)", () => {
     const res = await ensureLocalEmbedderOffGpu(API_ROOT, "nomic", r.fetchImpl);
     expect(res).toMatchObject({ status: "deferred" });
     expect(res.reason).toMatch(/runner already active/);
+  });
+});
+
+describe("local routing admission before model-loading configuration", () => {
+  function runtime(afterRequest?: (method: string) => void) {
+    const methods: string[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      methods.push(method);
+      afterRequest?.(method);
+      return { ok: true, status: 200, json: async () => [], text: async () => "" } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { methods, fetchImpl };
+  }
+
+  it.each([
+    { provider: "active", account: "paused" },
+    { provider: "active", account: "disabled" },
+    { provider: "inactive", account: "active" },
+    { provider: null, account: "active" },
+    { provider: "active", account: null },
+  ])("prevents generation and embedder loads for %j", async ({ provider, account }) => {
+    routingDb.modelProvider.findUnique.mockResolvedValue(provider ? { status: provider } : null);
+    routingDb.aiProviderConnection.findUnique.mockResolvedValue(account ? { status: account } : null);
+    const r = runtime();
+    const context = await setServedContextTokens(API_ROOT, "qwen", 40960, r.fetchImpl);
+    const embedder = await ensureLocalEmbedderOffGpu(API_ROOT, "nomic", r.fetchImpl);
+    expect(context).toMatchObject({ ok: false, contextTokens: null });
+    expect(embedder.status).toBe("deferred");
+    expect(context.reason).toMatch(account === "paused" ? /paused by an operator/ : /disabled or not configured/);
+    expect(embedder.reason).toBe(context.reason);
+    expect(r.methods).not.toContain("POST");
+    expect(r.methods).toContain("GET");
+  });
+
+  it("rereads eligibility after the context retention read", async () => {
+    const r = runtime(method => {
+      if (method === "GET") routingDb.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    });
+    expect(await setServedContextTokens(API_ROOT, "qwen", 40960, r.fetchImpl))
+      .toMatchObject({ ok: false, reason: expect.stringMatching(/paused by an operator/) });
+    expect(r.methods).toEqual(["GET"]);
+  });
+
+  it("rereads eligibility between embedder mode writes", async () => {
+    const r = runtime(method => {
+      if (method === "POST") routingDb.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    });
+    expect(await ensureLocalEmbedderOffGpu(API_ROOT, "nomic", r.fetchImpl))
+      .toMatchObject({ status: "deferred", reason: expect.stringMatching(/paused by an operator/) });
+    expect(r.methods).toEqual(["GET", "POST"]);
+  });
+
+  it("fails closed on an eligibility read error without blaming the configure endpoint", async () => {
+    routingDb.modelProvider.findUnique.mockRejectedValue(new Error("database unavailable"));
+    const r = runtime();
+    const context = await setServedContextTokens(API_ROOT, "qwen", 40960, r.fetchImpl);
+    const embedder = await ensureLocalEmbedderOffGpu(API_ROOT, "nomic", r.fetchImpl);
+    expect(context).toMatchObject({ ok: false, contextTokens: null });
+    expect(embedder.status).toBe("deferred");
+    expect(context.reason).toMatch(/routing eligibility.*unavailable/i);
+    expect(embedder.reason).toBe(context.reason);
+    expect(context.reason).not.toMatch(/configure endpoint/i);
+    expect(r.methods).not.toContain("POST");
   });
 });

@@ -37,6 +37,9 @@ const binding = {
   shapeVersion: "1.0.0",
   stageKey: "qualification-research",
   policyVersion: 1,
+  executorMode: "sandbox-build",
+  requiredPlatform: "win32",
+  targetProductionPaths: ["scripts/lib/local-ci-gate-state.mjs"],
   targetProductionBlobIds: ["d".repeat(40)],
   permittedTools: ["read_source_at_version", "write_sandbox_file", "record_workroom_evidence"],
   allowedPaths: ["apps/web/lib/example.test.ts", "apps/web/lib/example.test-helper.ts"],
@@ -194,7 +197,7 @@ describe("qualification research admission", () => {
       params: { ...evidence, result: { ...evidence.result, outputDigest: undefined } }, now: NOW })).toBe(false);
   });
 
-  it("refuses caller-shaped host success even when every public lease field matches", () => {
+  it("rejects caller-reported host output even when its admission lease is exact", () => {
     const parsed = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
       executorMode: "workroom-host", requiredPlatform: "win32",
       permittedTools: ["read_source_at_version", "record_execution_evidence", "record_workroom_evidence"],
@@ -208,7 +211,7 @@ describe("qualification research admission", () => {
     const evidence = { workroomId: binding.workroomId, leaseId,
       qualificationBindingDigest: qualificationBindingDigest(parsed.data), executorMode: "workroom-host",
       platform: "win32", headSha: "d".repeat(40), testBlobIds: ["f".repeat(40)],
-      command: "pnpm exec vitest run apps/web/lib/example.test.ts apps/web/lib/example.test-helper.ts",
+      command: "node --test apps/web/lib/example.test.ts apps/web/lib/example.test-helper.ts",
       outputDigest: `sha256:${"2".repeat(64)}`, startedAt: NOW.toISOString(),
       completedAt: new Date(NOW.getTime() + 1_000).toISOString(), exitCode: 0, skipped: false };
     const lease = { leaseId, environmentKey: "host-heavy-resource", status: "active",
@@ -224,9 +227,6 @@ describe("qualification research admission", () => {
         evidence: { ...evidence, ...change }, accountablePrincipalRef: principal,
         now: new Date(NOW.getTime() + 2_000), lease: { ...lease, ...leaseChange } });
 
-    // A caller holding the ordinary MCP credential can claim this lease and
-    // then submit every field below without ever starting the supervised
-    // child. Lease identity is admission evidence, not execution proof.
     expect(allowed()).toBe(false);
     expect(allowed({ platform: "linux" })).toBe(false);
     expect(allowed({ skipped: true })).toBe(false);
@@ -256,7 +256,8 @@ describe("qualification research admission", () => {
   it("advances only when immutable protocol review and scope constraints are unchanged", () => {
     const prepare = parseQualificationExperimentBinding(binding);
     const verify = parseQualificationExperimentBinding({ ...binding, phase: "verify", headSha: "d".repeat(40),
-      permittedTools: ["read_source_at_version", "run_sandbox_tests", "record_workroom_evidence"],
+      executorMode: "workroom-host", requiredPlatform: "win32",
+      permittedTools: ["read_source_at_version", "record_execution_evidence", "record_workroom_evidence"],
       candidate: { headSha: "d".repeat(40), diffDigest: `sha256:${"e".repeat(64)}`,
         testBlobIds: ["f".repeat(40)], productionBytesUnchanged: true, reviewReceiptId: "review-1" } });
     if (!prepare.ok || !verify.ok) throw new Error("fixture must parse");

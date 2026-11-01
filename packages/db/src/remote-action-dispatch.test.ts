@@ -3,16 +3,41 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CLAIM_TIMEOUT_MS,
   DOCKER_VM_RESTART_ACTION_TYPE,
+  QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
   canTransitionDispatch,
   claimTimeoutMsForActionType,
   claimableActionsForNode,
   isClaimableByNode,
   isDispatchActionType,
   isReadonlyDispatchActionType,
+  parseQualificationWindowsVerifyParameters,
   nodeScopeMatchesAction,
   type ClaimingNodeView,
   type DispatchableActionView,
 } from "./remote-action-dispatch";
+
+const qualificationParameters = {
+  version: 2,
+  backlogItemId: "BI-B3DEC077",
+  workroomId: "WC-A8C14CBE",
+  repository: "OpenDigitalProductFactory/opendigitalproductfactory",
+  baseSha: "a".repeat(40),
+  headSha: "b".repeat(40),
+  protocolPath: "docs/superpowers/specs/windows-handle-replacement.md",
+  protocolBlobSha: "c".repeat(40),
+  productionBlobs: [{ path: "apps/web/lib/file.ts", blobSha: "d".repeat(40) }],
+  testBlobs: [{ path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40) }],
+  qualificationBindingDigest: "f".repeat(64),
+  procedureId: "windows-bound-node-test-v2",
+  resultSchemaVersion: 2,
+  maxDurationSeconds: 300,
+  edgeNodeId: "edge_windows_1",
+  sourceFiles: [
+    { path: "apps/web/lib/file.ts", blobSha: "d".repeat(40), contentBase64: "ZXhwb3J0IHt9Ow==" },
+    { path: "apps/web/lib/file.test.ts", blobSha: "e".repeat(40), contentBase64: "dGVzdA==" },
+    { path: "scripts/lib/evidence-validity-policy.mjs", blobSha: "9".repeat(40), contentBase64: "ZXhwb3J0IHt9Ow==" },
+  ],
+} as const;
 
 function action(over: Partial<DispatchableActionView> = {}): DispatchableActionView {
   return {
@@ -133,6 +158,36 @@ describe("managed inference lifecycle dispatch", () => {
   it("cannot administer a customer-scoped estate through an otherwise permitted host", () => {
     const scoped = { customerAccountId: "customer", customerSiteId: "site" };
     expect(isClaimableByNode({ ...transition, ...scoped }, { ...host, ...scoped }).claimable).toBe(false);
+  });
+});
+
+describe("bounded Windows qualification dispatch", () => {
+  const actionRow = action({
+    actionType: QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
+    riskClass: "high",
+    edgeNodeId: "node_1",
+    changeRequestApproved: true,
+  });
+  const windowsNode = node({
+    allowedActionTypes: [QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE],
+    organizationTrustRole: null,
+  });
+
+  it("admits only the exact machine-bound privileged action", () => {
+    expect(QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE).toBe("qualification.windows.verify-v1");
+    expect(isDispatchActionType(QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE)).toBe(true);
+    expect(isReadonlyDispatchActionType(QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE)).toBe(false);
+    expect(isClaimableByNode(actionRow, windowsNode)).toEqual({ claimable: true });
+    expect(isClaimableByNode({ ...actionRow, edgeNodeId: null }, windowsNode).claimable).toBe(false);
+    expect(isClaimableByNode({ ...actionRow, changeRequestApproved: false }, windowsNode).claimable).toBe(false);
+  });
+
+  it("accepts the closed server-derived schema and rejects widening", () => {
+    expect(parseQualificationWindowsVerifyParameters(qualificationParameters)).toEqual(qualificationParameters);
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, command: "pwsh" })).toBeNull();
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, procedureId: "shell-v1" })).toBeNull();
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, protocolPath: "../secret" })).toBeNull();
+    expect(parseQualificationWindowsVerifyParameters({ ...qualificationParameters, productionBlobs: [] })).toBeNull();
   });
 });
 

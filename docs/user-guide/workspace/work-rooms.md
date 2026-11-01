@@ -38,6 +38,12 @@ Coworker service engagements can also appear as Work Cases. When a requested cow
 
 ## What You See First
 
+**Needs attention** includes coworker recovery as well as human decisions. It is not a count of choices the owner must make. The next step names the recorded actor separately from the person accountable for the outcome. Missing stage results remain with the stage executor; missing source or review evidence stays with the delivery or requesting coworker. An unavailable actor or action is stated rather than guessed.
+
+A human decision shows its recorded question and condition from the room's declared process. A delivery status alone does not mean the owner must approve something, and a waiting lease does not establish progress. Open the original room to review its evidence and use its supported decision controls.
+
+Shared recovery groups retain every room link. A shared action appears only when the rooms agree; different remedies remain on their own rows. **Technical evidence** links to the room's recorded evidence, while cycle and supervision details remain disclosed. The inventory does not preload branch, session and lease diagnostics for every row.
+
 For development work, a verified repository observation can update the room's
 pull request when it matches the room's current commit. The room journal retains
 the previous link. Reusing a branch name alone does not establish current

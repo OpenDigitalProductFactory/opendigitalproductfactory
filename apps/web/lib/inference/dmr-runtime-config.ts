@@ -28,6 +28,7 @@
 // `getOllamaApiRoot()`, which strips the OpenAI-compatible inference prefix.
 
 import { createHash } from "node:crypto";
+import { ProviderRoutingDeferredError, readEnabledRoutingProvider } from "./provider-routing-admission";
 import { canonicalLocalModelKey, validateLocalModelReference } from "./local-model-management";
 import type { LocalThinkingBudgetEvidence } from "@/lib/routing/types";
 
@@ -206,6 +207,20 @@ export async function getServedContextTokens(
 }
 
 /**
+ * Configure POSTs can preload a model. Reuse inference admission at each write,
+ * keeping routing-store failures distinct from runtime connectivity failures.
+ */
+async function readLocalRoutingHold(): Promise<string | null> {
+  try {
+    await readEnabledRoutingProvider("local");
+    return null;
+  } catch (err) {
+    if (err instanceof ProviderRoutingDeferredError) return err.reason;
+    return "Local routing eligibility is unavailable. Retry configuration when the routing store is available.";
+  }
+}
+
+/**
  * Set the served context window for a local model via DMR's configure API,
  * keeping the runner resident (`LOCAL_RUNNER_KEEP_ALIVE`).
  *
@@ -230,6 +245,8 @@ export async function setServedContextTokens(
   const url = configureUrl(apiRoot);
   try {
     retained ??= (await getServedContextTokens(apiRoot, model, fetchImpl)).retained ?? {};
+    const hold = await readLocalRoutingHold();
+    if (hold) return { ok: false, contextTokens: null, reason: hold };
     const res = await fetchImpl(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -296,6 +313,8 @@ export async function ensureLocalEmbedderOffGpu(
       const placed = Array.isArray(flags) && JSON.stringify(flags) === JSON.stringify(LOCAL_EMBEDDER_RUNTIME_FLAGS) &&
         (want.echoes as readonly string[]).includes(String(config?.keep_alive));
       if (placed) continue;
+      const hold = await readLocalRoutingHold();
+      if (hold) return { status: "deferred", reason: hold };
       const write = await fetchImpl(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

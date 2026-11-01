@@ -37,16 +37,22 @@ export async function scheduleWorkroomAgentTask(
       baseSha: true, headSha: true, leaseHolderPrincipalId: true,
     } });
     if (!room) return false;
+    // The brief was read before the lease-fenced transaction. A changed room
+    // source needs reconciliation, not dispatch using that stale instruction.
+    if (input.source !== undefined && (input.source.repositoryFullName !== (room.repositoryFullName ?? null)
+      || input.source.headSha !== (room.headSha ?? null))) return false;
     const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
     const qualificationState = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
     let qualificationBinding = null;
     if (qualificationState) {
       const external = verifyQualificationExperimentAdmission(qualificationState.token, { now: clock(), allowExpired: true });
-      // Host-specific qualification is deliberately executed by the accountable
-      // Workroom runtime, not by Build Studio's unrelated Linux sandbox.
       if (external.ok) {
-        if (external.data.binding.executorMode === "workroom-host") return false;
-        throw new Error("Sandbox qualification execution is unavailable until exact executor provenance is bound.");
+        // Native verification is dispatched through RemoteAction, never through
+        // an agent task. Historical host-attested verification remains disabled.
+        if (external.data.binding.executorMode !== "sandbox-build") return false;
+        if (external.data.binding.phase !== "prepare") {
+          throw new Error("Only qualification preparation may use the source-authoring task lane.");
+        }
       }
       if (qualificationState.status !== "issued" || qualificationState.startCount !== 0) {
         throw new Error("Qualification experiment was already started or settled.");
@@ -75,6 +81,7 @@ export async function scheduleWorkroomAgentTask(
       taskId: input.taskId, roomId: input.lease.roomId, objective: room.objective ?? null,
       stage: input.stage, now: input.now.toISOString(),
       dispatchScope: input.dispatchScope,
+      source: input.source,
       holderPrincipalId: input.lease.holderPrincipalId, leaseExpiresAt: input.lease.expiresAt.toISOString(),
     });
     // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
@@ -108,6 +115,10 @@ export async function scheduleWorkroomAgentTask(
         if (current.agentId !== input.agentId || !sameStage(prior.stage, input.stage)) {
           throw new Error("Recorded dispatch requires task identity reconciliation before replay");
         }
+        // A matching task/cycle cannot relabel an earlier source observation.
+        // Legacy receipts remain readable, but cannot prove a new source-bound retry.
+        if (prior.source?.repositoryFullName !== input.source?.repositoryFullName
+          || prior.source?.headSha !== input.source?.headSha) return false;
         return true;
       }
       // Legacy same-stage receipts cannot establish a new cycle boundary.

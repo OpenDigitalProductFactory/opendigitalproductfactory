@@ -82,6 +82,29 @@ const input = {
 };
 
 describe("executeGovernedTerminalTransition", () => {
+  it("publishes input context atomically with an input-required audit, never on a CAS failure", async () => {
+    const completionInputContext = { schemaVersion: 1 as const, bindingDigest: "sha256:scope",
+      manifest: { workClass: "implementation" as const, evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false } };
+    const pending = fakeDb();
+    await executeGovernedTerminalTransition({ ...input, db: pending.db,
+      resolve: async () => ({ governed: true, decision: decision("input-required"), factsDigest: "sha256:facts", completionInputContext }),
+      mutate: pending.mutate });
+    expect(pending.state.mutations).toBe(0);
+    expect(pending.state.decisions).toEqual([expect.objectContaining({ data: expect.objectContaining({
+      payload: expect.objectContaining({ completionInputContext, verdict: "input-required" }),
+    }) })]);
+    const stale = fakeDb({ casCount: 0 });
+    await executeGovernedTerminalTransition({ ...input, db: stale.db,
+      resolve: async () => ({ governed: true, decision: decision("allowed"), factsDigest: "sha256:facts", completionInputContext }),
+      mutate: stale.mutate });
+    expect(stale.state.decisions).toHaveLength(1);
+    expect(stale.state.decisions[0]).not.toHaveProperty("data.payload.completionInputContext");
+    const failed = fakeDb({ failDecisionWrite: true });
+    await expect(executeGovernedTerminalTransition({ ...input, db: failed.db,
+      resolve: async () => ({ governed: true, decision: decision("input-required"), factsDigest: "sha256:facts", completionInputContext }),
+      mutate: failed.mutate })).rejects.toThrow("audit unavailable");
+    expect(failed.state).toEqual({ authorization: [], decisions: [], mutations: 0 });
+  });
   it("records an input-required decision and leaves terminal state untouched", async () => {
     const fake = fakeDb();
     const result = await executeGovernedTerminalTransition({

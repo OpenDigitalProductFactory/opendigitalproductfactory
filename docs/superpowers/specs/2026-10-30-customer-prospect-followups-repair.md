@@ -65,3 +65,15 @@ All steps belong to this implementation parent; none is independently shippable.
 The current BI supplies the recorded served symptom. Pure regression fixtures
 are source evidence, not a claim to have read live private CRM data. Any live
 verification still requires its existing authorized DPF surface.
+
+## Current integration checkpoint — 1 November 2026 UTC
+
+Bring the existing follow-up repair forward onto current main, including the
+delivered preview cookie-isolation repair (PR #6789). The earlier preview's Save
+request had no session cookie and redirected to welcome; the original next-step
+date remained unchanged. Including the auth repair is preparation for a new
+Save/readback test, not proof that it resolves this workflow. Preserve the
+original prototype and requested CE-98CCD5DB; no retroactive pre-code prototype
+or UX approval is claimed. Prior 51-test and TypeScript results remain historical
+source evidence until qualification of this integration. No outreach, schema,
+credential or permission change is introduced by this integration.

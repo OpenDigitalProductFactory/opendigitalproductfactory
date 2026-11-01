@@ -55,8 +55,13 @@ function normalizeFingerprint(value: string | null): string | null {
   return /^[a-f0-9]{64}$/.test(normalized) ? normalized : null;
 }
 
-function normalizeSerial(value: string): string {
-  return value.replaceAll(":", "").trim().replace(/^0+(?=[a-fA-F0-9])/, "").toLowerCase();
+function certificateSerialMatches(registeredHex: string, proxyDecimal: string): boolean {
+  // Node X509 serials are hex; Caddy's big.Int placeholder is decimal.
+  // Bound normalization and parsing: 20 octets, up to 49 decimal digits.
+  if (registeredHex.length > 128 || !/^[0-9]{1,49}$/.test(proxyDecimal)) return false;
+  const hex = registeredHex.replaceAll(":", "").trim().replace(/^0+/, "");
+  // Removing all leading zeros also excludes the invalid zero serial.
+  return /^[a-fA-F0-9]{1,40}$/.test(hex) && BigInt(`0x${hex}`) === BigInt(proxyDecimal);
 }
 
 export async function resolveEdgeNodeMtls(
@@ -80,7 +85,7 @@ export async function resolveEdgeNodeMtls(
   if (!certificate) return { ok: false, error: "certificate_unknown" };
   if (certificate.status !== "active" || certificate.revokedAt) return { ok: false, error: "certificate_inactive" };
   if (certificate.edgeNodeId !== bearerEdgeNodeRowId) return { ok: false, error: "certificate_node_mismatch" };
-  if (normalizeSerial(certificate.serialNumber) !== normalizeSerial(serialNumber)) {
+  if (!certificateSerialMatches(certificate.serialNumber, serialNumber)) {
     return { ok: false, error: "certificate_metadata_mismatch" };
   }
   if (certificate.edgeNode.trustState === "revoked" || certificate.edgeNode.revokedAt) {
