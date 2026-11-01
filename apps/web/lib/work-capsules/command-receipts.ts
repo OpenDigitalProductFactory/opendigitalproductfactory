@@ -117,6 +117,32 @@ async function lockRoom(tx: ReceiptDb, capsuleId: string): Promise<string | null
   return rows[0]?.id ?? null;
 }
 
+type CommandReceiptIdentity = {
+  authorityScopeKey: string; commandId: string; commandType: string; target: CommandTarget;
+  payloadBinding?: CommandPayloadBinding; expectedRoomRowId?: string;
+  beforeRoomLock?: (tx: ReceiptDb) => Promise<void>;
+};
+
+/** Shared serialization for lookup, effect and rejected-outcome publication. */
+async function lockCommandPrefix(tx: ReceiptDb, args: CommandReceiptIdentity, bound: boolean): Promise<string | null> {
+    if (bound && (!tx.$queryRaw || !tx.$executeRaw || !tx.workroomActivity.findFirst)) {
+      throw new CommandReceiptUnavailableError("Bound commands require command and room locks and receipt reads.");
+    }
+    if (tx.$queryRaw) {
+      if (!tx.$executeRaw) throw new Error("Command receipt locking requires $executeRaw");
+      // Bound waits and statements must stop within the transaction budget.
+      if (bound) await tx.$executeRaw`SELECT set_config('lock_timeout', '10000ms', true), set_config('statement_timeout', '30000ms', true)`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`command:${args.authorityScopeKey}:${args.commandId}`}, 0))`;
+    }
+    await args.beforeRoomLock?.(tx);
+    const rowId = await lockRoom(tx, args.target.id);
+    if (bound && !rowId) throw new CommandReceiptUnavailableError("The bound command's Workroom could not be locked.");
+    if (args.expectedRoomRowId !== undefined && rowId !== args.expectedRoomRowId) {
+      throw new CommandReceiptUnavailableError("The original persistent Workroom no longer matches this command.");
+    }
+    return rowId;
+}
+
 /**
  * Run `run` once per (authorityScopeKey, commandId) on one Workroom. The receipt
  * is a row in that room's own log (WorkroomActivity), not a parallel ledger.
@@ -137,6 +163,8 @@ export async function runReceiptedCommand<T>(args: {
   target: CommandTarget;
   actor?: { userId: string | null; agentId: string | null };
   payloadBinding?: CommandPayloadBinding;
+  /** Supplied by an exact original-target command, never inferred from current state. */
+  expectedRoomRowId?: string;
   /** Server-owned DB-only dependency locks, before the Workroom row. */
   beforeRoomLock?: (tx: ReceiptDb) => Promise<void>;
   run: (tx: ReceiptDb) => Promise<T>;
@@ -151,21 +179,7 @@ export async function runReceiptedCommand<T>(args: {
   const payload = (fields: Pick<ReceiptPayload, "result" | "rejection">): ReceiptPayload => ({
     commandType: args.commandType, target: args.target, ...(binding ? { payloadBinding: binding } : {}), ...fields,
   });
-  const lockPrefix = async (tx: ReceiptDb): Promise<string | null> => {
-    if (bound && (!tx.$queryRaw || !tx.$executeRaw || !tx.workroomActivity.findFirst)) {
-      throw new CommandReceiptUnavailableError("Bound commands require command and room locks and receipt reads.");
-    }
-    if (tx.$queryRaw) {
-      if (!tx.$executeRaw) throw new Error("Command receipt locking requires $executeRaw");
-      // Bound waits and statements must stop within the transaction budget.
-      if (bound) await tx.$executeRaw`SELECT set_config('lock_timeout', '10000ms', true), set_config('statement_timeout', '30000ms', true)`;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`command:${scope}:${args.commandId}`}, 0))`;
-    }
-    await args.beforeRoomLock?.(tx);
-    const rowId = await lockRoom(tx, args.target.id);
-    if (bound && !rowId) throw new CommandReceiptUnavailableError("The bound command's Workroom could not be locked.");
-    return rowId;
-  };
+  const lockPrefix = (tx: ReceiptDb) => lockCommandPrefix(tx, args, bound);
   const write = (tx: ReceiptDb, workCapsuleId: string, accepted: boolean, payload: ReceiptPayload) =>
     tx.workroomActivity.create({
       data: {
@@ -227,6 +241,27 @@ export async function runReceiptedCommand<T>(args: {
     }
     throw error;
   }
+}
+
+/** Lookup-only recovery. No handler, receipt insertion, lease renewal or approval is accepted. */
+export async function lookupReceiptedCommand<T>(args: Omit<CommandReceiptIdentity, "beforeRoomLock" | "expectedRoomRowId"> & {
+  db: ReceiptDb; payloadBinding: CommandPayloadBinding; expectedRoomRowId: string;
+}): Promise<{ kind: "settled"; result: T } | { kind: "absent" }> {
+  if (!args.expectedRoomRowId || args.payloadBinding.version !== 1 || !/^[a-f0-9]{64}$/.test(args.payloadBinding.digest)) {
+    throw new CommandReceiptUnavailableError("Lookup requires the exact original row and versioned payload binding.");
+  }
+  const identity: CommandReceiptIdentity = { authorityScopeKey: args.authorityScopeKey, commandId: args.commandId,
+    commandType: args.commandType, target: args.target, payloadBinding: args.payloadBinding,
+    expectedRoomRowId: args.expectedRoomRowId };
+  return inTransaction(args.db, async tx => {
+    await lockCommandPrefix(tx, identity, true);
+    const existing = await readReceipt(tx, args.authorityScopeKey, args.commandId);
+    if (!existing) return { kind: "absent" };
+    if (existing.kind !== COMMAND_ACCEPTED && existing.kind !== COMMAND_REJECTED) {
+      throw new CommandReceiptUnavailableError("The command's recorded outcome cannot be classified.");
+    }
+    return { kind: "settled", result: replay<T>(existing, args.commandId, args.commandType, args.target, args.payloadBinding) };
+  }, true);
 }
 
 /** One principal's command ids never collide with another's. */

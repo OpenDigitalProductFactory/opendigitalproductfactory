@@ -1,6 +1,7 @@
 import { normalizeWorkCapsuleScopeInput, parseScopeClaims, type ScopeClaim, type WorkCapsuleScopeInput } from "@/lib/work-capsules";
 import { readWorkShapeClaim, readWorkroomShapeClaim, resolveCurrentWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { isScopeReleaseEpoch } from "./scope-release-targets";
 
 /** Persistence accepts only an executable, exact definition version. */
 export function normalizePersistedScope(input?: WorkCapsuleScopeInput | null) {
@@ -57,10 +58,21 @@ export function replaceOwnershipClaims(value: unknown, next: ScopeClaim[]): unkn
     if (!claim) { result.push(entry); continue; }
     const key = `${claim.kind}:${claim.value}`;
     const replacement = pending.get(key);
-    if (replacement) result.push({ ...(entry as object), ...replacement });
+    if (replacement) {
+      const hasEpoch = Object.prototype.hasOwnProperty.call(entry, "releaseEpoch");
+      const sameIdentity = claim.recordedByPrincipalId === replacement.recordedByPrincipalId
+        && claim.intent === replacement.intent;
+      if (hasEpoch && (!sameIdentity
+        ? (!isScopeReleaseEpoch(claim.releaseEpoch) || !isScopeReleaseEpoch(replacement.releaseEpoch)
+          || replacement.releaseEpoch === claim.releaseEpoch)
+        : Object.prototype.hasOwnProperty.call(replacement, "releaseEpoch") && replacement.releaseEpoch !== claim.releaseEpoch)) {
+        throw new Error("Protected ownership changes require a newly admitted epoch; existing metadata cannot be stripped or reused.");
+      }
+      result.push({ ...(entry as object), ...replacement });
+    }
     else {
       const rest = Object.fromEntries(Object.entries(entry as object).filter(([field]) =>
-        !["kind", "value", "intent", "recordedByPrincipalId"].includes(field),
+        !["kind", "value", "intent", "recordedByPrincipalId", "releaseEpoch"].includes(field),
       ));
       if (Object.keys(rest).some((field) => field !== "recordedAt")) result.push(rest);
     }

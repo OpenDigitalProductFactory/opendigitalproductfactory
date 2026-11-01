@@ -393,3 +393,15 @@ test("provisions no storefront when the seed carries no pet-rescue archetype, an
   assert.equal(fixture.calls.storefrontCreate.length, 0);
   assert.equal(fixture.calls.updateMany.length, 1);
 });
+
+
+test("fixture refresh preserves existing claim ownership and its epoch", async () => {
+  const fixture = fixtureDb({ setupComplete: true });
+  const claim = { kind: "path", value: "a.ts", intent: "edit", recordedByPrincipalId: "owner", releaseEpoch: "original" };
+  fixture.db.workroom.findFirst = async () => ({ id: "room-existing", scopeClaims: [claim], updatedAt: NOW });
+  await convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL });
+  const write = fixture.calls.workroomCreate[0];
+  assert.deepEqual(write.data.scopeClaims[0], claim);
+  assert.deepEqual(write.where.scopeClaims, { equals: [claim] });
+  assert.equal(write.where.updatedAt, NOW);
+});
