@@ -75,3 +75,22 @@ inconclusive and leaves the request unchanged. Rollback is a normal source rever
 
 Capture remains design-pending until named-source reproduction and canonical
 plan coverage are recorded. This document is not a passing test receipt.
+
+## Coverage of the recorded acceptance contract
+
+CT-OBS is the authority and data boundary above. FLOW-OBS is the ordered
+concierge cleanup and locked cancellation flow. V-OBS is the regression,
+negative/race checks, qualified integration and served verification in step 4.
+These criteria quote the live item's acceptance contract; the implementation
+retains the narrower taskless and never-admitted limits stated above.
+
+| Reference | Recorded acceptance criterion |
+| --- | --- |
+| AC-OBS-1 | Exact terminal reservation makes its unreserved release request visibly cancelled/obsolete, with no authorization or handler execution. |
+| AC-OBS-2 | Unrelated requests, active/queued reservations, missing rows, executing envelopes and unknown outcomes retain their controls. |
+| AC-OBS-3 | Compare-and-set races cannot overwrite an execution reservation or human decision. |
+| AC-OBS-4 | Tests reproduce current-source defect, demonstrate repair, and cover negative and race boundaries. |
+| AC-OBS-5 | Qualified integration and served checks are reported separately from source review. |
+
+All five map atomically to BI-3C0F7A92. Wider autonomy and task-run lifecycle
+repairs stay with their existing carriers and are not closed by this change.
