@@ -278,7 +278,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
     }
     finally { await prisma.$disconnect(); }
   })().catch(error => {
-    console.error("Foreground CI target isolation check failed; no fixture writes were attempted.", foregroundIsolationFailure(error));
+    console.error("Foreground CI target preparation/admission failed.", foregroundIsolationFailure(error));
     process.exitCode = 1;
   });
 }
