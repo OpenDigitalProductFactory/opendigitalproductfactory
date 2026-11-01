@@ -37,6 +37,11 @@ const GOVERNANCE_POLICIES = new Set([
   "always",
   "proposal_for_external_writes",
 ]);
+
+/** Shared recognition only; callers still enforce their own governing floor. */
+export function isRecognizedCoworkerGovernancePolicy(value: unknown): value is string {
+  return typeof value === "string" && GOVERNANCE_POLICIES.has(value);
+}
 const PROPOSAL_STATUSES = new Set([
   "proposed",
   "approve",
@@ -374,7 +379,7 @@ function collectGovernance(
     typeof evaluation.hitlPolicy === "string"
       ? evaluation.hitlPolicy
       : null;
-  const recognized = Boolean(policy && GOVERNANCE_POLICIES.has(policy));
+  const recognized = Boolean(policy && isRecognizedCoworkerGovernancePolicy(policy));
   let level: CoworkerAuthorityLevel | null = null;
   if (policy === "always") level = "approval-required";
   if (policy === "proposal_for_external_writes") level = "proposal-only";

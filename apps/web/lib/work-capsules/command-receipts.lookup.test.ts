@@ -67,3 +67,42 @@ describe("bound command outcome lookup has no mutation callback", () => {
     expect(f.create).not.toHaveBeenCalled();
   });
 });
+
+describe("lifecycle reconciliation shares the real lookup transaction", () => {
+  const withLookup = (args: Record<string, unknown>, inspect: (tx: unknown) => Promise<unknown>) => {
+    const fn = (receipts as unknown as { withLockedCommandAbsence?:
+      (args: Record<string, unknown>, inspect: (tx: unknown) => Promise<unknown>) => Promise<unknown> }).withLockedCommandAbsence;
+    expect(fn).toBeTypeOf("function");
+    return fn!(args, inspect);
+  };
+  it("passes the actual already-locked client without another transaction or receipt", async () => {
+    const f = fixture(null);
+    const transaction = vi.spyOn(f.db, "$transaction");
+    const inspect = vi.fn(async tx => {
+      expect(tx).toBe(f.tx);
+      expect(f.tx.$executeRaw).toHaveBeenCalled();
+      expect(f.tx.$queryRaw).toHaveBeenCalled();
+      return "lifecycle-checked";
+    });
+    await expect(withLookup(f.args, inspect)).resolves.toEqual({ kind: "absent", result: "lifecycle-checked" });
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+  it("blocks maintenance without loading or disclosing the original private outcome", async () => {
+    const f = fixture({ kind: receipts.COMMAND_ACCEPTED, get payload() { throw Error("private outcome must not be read"); } });
+    const inspect = vi.fn();
+    await expect(withLookup(f.args, inspect)).resolves.toEqual({ kind: "recorded" });
+    expect(f.read).toHaveBeenCalledWith(expect.objectContaining({ select: { kind: true } }));
+    expect(inspect).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+  it("never admits lifecycle reconciliation for any conflicting or unclassified record", async () => {
+    for (const row of [{ kind: "unknown", payload }, { kind: receipts.COMMAND_ACCEPTED, payload: { ...payload, payloadBinding: null } }]) {
+      const f = fixture(row);
+      const inspect = vi.fn();
+      await expect(withLookup(f.args, inspect)).resolves.toEqual({ kind: "recorded" });
+      expect(inspect).not.toHaveBeenCalled();
+      expect(f.create).not.toHaveBeenCalled();
+    }
+  });
+});

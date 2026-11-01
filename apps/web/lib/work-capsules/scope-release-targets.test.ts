@@ -53,6 +53,44 @@ function release(f: ReturnType<typeof fixture>, claims = [owned], expectedRoomId
 
 beforeEach(() => vi.clearAllMocks());
 
+describe("proof-sensitive original target classification", () => {
+  const classify = (entries: unknown[], originals = [owned], rowId = "original-room-row") => {
+    const fn = (targets as unknown as { classifyOriginalScopeReleaseTargets?:
+      (room: unknown, id: string, claims: unknown[]) => string }).classifyOriginalScopeReleaseTargets;
+    expect(fn).toBeTypeOf("function");
+    return fn!(fixture(entries).row, rowId, originals);
+  };
+  it("distinguishes an exact current target from a positively ended one", () => {
+    expect(classify([owned])).toBe("current");
+    expect(classify([{ workShape: "delivery-medium@1.0.0" }])).toBe("obsolete");
+  });
+  it("recognizes replacement only with a different valid epoch", () => {
+    expect(classify([{ ...owned, releaseEpoch: newerEpoch }])).toBe("obsolete");
+  });
+  it.each([{ recordedByPrincipalId: "different-owner" }, { intent: "read" }])(
+    "treats identity changes under the same epoch as unknown: %j", change => {
+      expect(classify([{ ...owned, ...change }])).toBe("unknown");
+    });
+  it("does not turn malformed, duplicate or legacy ownership into disappearance", () => {
+    for (const entries of [[{ ...owned, releaseEpoch: "bad" }], [owned, owned],
+      [{ kind: "path", value: owned.value, intent: "edit" }], [null], [{ kind: "unrecognized", value: owned.value }]]) {
+      expect(classify(entries)).toBe("unknown");
+    }
+  });
+  it("requires the original persistent room and a complete valid request", () => {
+    expect(classify([], [owned], "restored-room-row")).toBe("unknown");
+    expect(classify([], [])).toBe("unknown");
+  });
+  it("marks a mixed current and positively ended batch obsolete", () => {
+    const other = { ...owned, value: "second.ts" };
+    expect(classify([owned], [owned, other])).toBe("obsolete");
+  });
+  it("lets unknown defeat positive obsolescence in the same full batch", () => {
+    const other = { ...owned, value: "second.ts" };
+    expect(classify([{ ...owned, recordedByPrincipalId: "different-owner" }], [owned, other])).toBe("unknown");
+  });
+});
+
 describe("original scope-release target survives a deferred request", () => {
   it("preserves the caller's exact epoch, owner and intent at ingress", () => {
     expect(parseScopeReleaseClaims([owned])).toEqual([owned]);
