@@ -247,3 +247,29 @@ subscription. Existing Large business-review baselines remain unchanged.
 The installed Next.js Playwright guide and
 [official testing guide](https://nextjs.org/docs/app/guides/testing/playwright)
 support exercising the served production bundle.
+
+The first independent CLIENT review raised three harness blockers. Isolation
+must include latent proactivity facts and live room cadences, not just existing
+tasks. Duplicate submission must await its actual event fanout and queue run;
+a fixed delay does not prove processing. Cleanup must establish terminal task
+and queue state before restoring provider configuration. Uncertain submissions
+or unsettled execution preserve fixture rows and fail qualification. The normal
+owner cancellation endpoint is available for a known unfinished fixture; it
+does not authorize changing task status directly.
+
+The CI launch uses the existing DEPLOYED_SHA metadata only after the exact-source
+artifact is validated or that checkout's production build completes. The test
+also checks compiled route bytes and a served static asset. This is provenance
+for the controlled CI bundle, not proof of a deployed install or an image label
+by itself. An absent or mismatched served source fails qualification.
+
+Partial Postgres routing also delivers events to the existing Inngest adapter.
+This CI mode therefore starts the repository-pinned Inngest v1.36.0 backend
+inside the same disposable runner. Discovery, polling and portal self-sync are
+disabled; no Inngest apps are registered. Only the two selected Postgres
+functions execute. This reuses the existing coexistence engine rather than
+mocking the wake boundary or adding a platform service. The owned container is
+bounded to one CPU/1 GB, loopback-only and removed by the always cleanup step.
+The test rejects a completed cron whose reconciliation output is unavailable
+or inspected no retained work. See the [vendor Docker procedure](https://www.inngest.com/docs/local-development/docker)
+and [pinned CLI flags](https://github.com/inngest/inngest/blob/v1.36.0/cmd/devserver/cmd.go).

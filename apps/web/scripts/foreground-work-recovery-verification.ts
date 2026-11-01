@@ -6,8 +6,10 @@ import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext } from "@playwright/test";
 import { isRecord } from "../lib/shared/coerce";
+import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
+import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
 import { assertForegroundFixtureRuntime, prepareForegroundFixtures, cleanupForegroundFixtures,
-  startForegroundFixtureTransport, type ForegroundFixture } from "./foreground-work-recovery-fixtures";
+  assertForegroundBackgroundQuiet, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport, type ForegroundFixture } from "./foreground-work-recovery-fixtures";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/foreground-work-recovery");
@@ -27,6 +29,7 @@ export async function verifyForegroundRecovery() {
   const transport = await startForegroundFixtureTransport({ modelId, marker: runtime.runKey, answer });
   let browser: Browser | undefined, context: BrowserContext | undefined;
   let fixture: ForegroundFixture | undefined, taskRunId: string | undefined;
+  let unresolvedClientSubmissions = 0;
   let completed = false, failure: string | undefined, cleanup = "not-started";
   const evidence: Record<string, unknown> = { ...runtime, syntheticProvider: true, realProviderCapacity: "unrun", businessAcceptance: "unrun" };
   const snapshots: Array<Record<string, unknown>> = [];
@@ -35,6 +38,11 @@ export async function verifyForegroundRecovery() {
     providerRequests: transport.counts() }, null, 2));
   try {
     write();
+    const admission: unknown = JSON.parse(readFileSync(resolve(OUT, "target-admission.json"), "utf8"));
+    check(isRecord(admission) && admission.sourceSha === runtime.sourceSha && admission.runKey === runtime.runKey
+      && typeof admission.admittedAt === "string" && Number.isFinite(Date.parse(admission.admittedAt)), "Normal runtime has no matching isolation admission");
+    const admittedAt = new Date(admission.admittedAt);
+    evidence.targetAdmission = admission;
     browser = await chromium.launch({ headless: true });
     context = await browser.newContext({ storageState: resolve(ROOT, "e2e/.auth/state.json"), viewport: { width: 1440, height: 1000 } });
     const page = await context.newPage();
@@ -42,12 +50,12 @@ export async function verifyForegroundRecovery() {
     check(versionResponse.ok(), "The served runtime version is unavailable");
     const version: unknown = await versionResponse.json();
     check(isRecord(version), "The served version is not a version record");
-    if (version.gitSha !== null) check(version.gitSha === runtime.sourceSha, "Served source does not match this verification build");
+    check(version.gitSha === runtime.sourceSha, "Served source is absent or does not match this verification build");
     evidence.servedVersion = version;
     evidence.productionBuild = {
       buildId: readFileSync(resolve(ROOT, "apps/web/.next/BUILD_ID"), "utf8").trim(),
       sendRouteSha256: createHash("sha256").update(readFileSync(resolve(ROOT, "apps/web/.next/server/app/api/agent/send/route.js"))).digest("hex"),
-      sourceBinding: "canonical CI checkout, production build and observed matching served static bytes; an absent image SHA remains null",
+      sourceBinding: "reported CI deployment source plus canonical production build, compiled route hash and observed matching served static bytes; no live-install or baked-image claim",
     };
     fixture = await prepareForegroundFixtures(prisma, transport.baseUrl);
     await page.goto(runtime.origin + "/workspace", { waitUntil: "domcontentloaded", timeout: 60_000 });
@@ -68,13 +76,29 @@ export async function verifyForegroundRecovery() {
     const composer = page.locator("textarea:visible").last();
     await composer.fill(prompt, { timeout: 45_000 });
     const acceptedResponse = page.waitForResponse(response => response.url().endsWith("/api/agent/send") && response.request().method() === "POST", { timeout: 45_000 });
+    unresolvedClientSubmissions++;
     await page.getByRole("button", { name: "Send", exact: true }).last().click();
     const accepted = await acceptedResponse;
+    check(await accepted.finished() === null, "The initial submission response did not settle");
+    unresolvedClientSubmissions--;
     check(accepted.ok(), "The actual authenticated send route did not accept the fixture request");
     const receipt: unknown = await accepted.json(), requestData: unknown = accepted.request().postDataJSON();
     check(isRecord(receipt) && typeof receipt.taskRunId === "string" && typeof receipt.userMessageId === "string"
       && isRecord(requestData) && typeof requestData.threadId === "string" && typeof requestData.requestKey === "string", "Acceptance has no durable request/job identity");
     taskRunId = receipt.taskRunId;
+    const eventIds = async () => (await prisma.jobEvent.findMany({ where: { name: FOREGROUND_WORK_EVENT,
+      data: { path: ["taskRunId"], equals: taskRunId } }, select: { id: true } })).map(event => event.id);
+    const duplicateSubmission = async () => {
+      const beforeEventIds = await eventIds();
+      unresolvedClientSubmissions++;
+      const response = await context!.request.post(runtime.origin + "/api/agent/send", { data: requestData });
+      unresolvedClientSubmissions--;
+      check(response.ok(), "The authenticated duplicate request was refused unexpectedly");
+      const repeated: unknown = await response.json();
+      check(isRecord(repeated) && repeated.taskRunId === taskRunId && repeated.userMessageId === receipt.userMessageId,
+        "Duplicate submission did not return the original saved identities");
+      return waitForForegroundDelivery(prisma, { taskRunId: taskRunId!, beforeEventIds });
+    };
     evidence.acceptance = { taskRunId, userMessageId: receipt.userMessageId, threadId: requestData.threadId, requestKey: requestData.requestKey,
       coworkerMode: requestData.coworkerMode ?? "advise" };
     const read = async () => {
@@ -103,11 +127,7 @@ export async function verifyForegroundRecovery() {
     check(savedRequest.taskRunId === taskRunId && savedRequest.threadId === requestData.threadId && savedRequest.content === prompt,
       "The stored request is not associated with its acknowledged job");
     check(transport.counts().requests > 0, "No actual request reached the synthetic provider");
-    const duplicate = await context.request.post(runtime.origin + "/api/agent/send", { data: requestData });
-    check(duplicate.ok(), "The authenticated duplicate request was refused unexpectedly");
-    const duplicateReceipt: unknown = await duplicate.json();
-    check(isRecord(duplicateReceipt) && duplicateReceipt.taskRunId === taskRunId && duplicateReceipt.userMessageId === receipt.userMessageId,
-      "Duplicate submission created a different saved request or job");
+    evidence.waitingDuplicateDelivery = await duplicateSubmission();
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByText(prompt, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
     await page.screenshot({ path: resolve(OUT, "retained-capacity-wait.png"), fullPage: true });
@@ -130,31 +150,47 @@ export async function verifyForegroundRecovery() {
       select: { id: true, status: true, createdAt: true, finishedAt: true, output: true } });
     const reconciliation = await prisma.jobRun.findMany({ where: { functionKey: "agent/task-dispatch", createdAt: { gte: waitObservedAt }, status: "completed" },
       select: { id: true, status: true, steps: { where: { stepKey: "reconcile-retained-foreground-work" }, select: { stepKey: true, output: true } } } });
-    check(jobs.length >= 2 && jobs.some(job => job.status === "completed") && reconciliation.some(job => job.steps.length > 0),
+    check(jobs.length >= 2 && jobs.some(job => job.status === "completed") && hasSuccessfulForegroundReconciliation(reconciliation),
       "The result has no actual owned-queue and recurring reconciliation evidence");
     const countBefore = transport.counts().requests;
-    const terminalDuplicate = await context.request.post(runtime.origin + "/api/agent/send", { data: requestData });
-    check(terminalDuplicate.ok(), "The completed logical request could not be read again");
-    await pause(3000);
+    evidence.terminalDuplicateDelivery = await duplicateSubmission();
     check(transport.counts().requests === countBefore && await prisma.agentMessage.count({ where: { taskRunId, role: "assistant" } }) === 1,
       "Repeating a completed request executed inference or wrote another result");
+    await assertForegroundBackgroundQuiet(prisma, [taskRunId]);
+    check(await prisma.taskRun.count({ where: { createdAt: { gte: admittedAt }, taskRunId: { not: taskRunId } } }) === 0
+      && await prisma.jobRun.count({ where: { createdAt: { gte: admittedAt }, functionKey: { notIn: ["agent/foreground-work-run", "agent/task-dispatch"] } } }) === 0
+      && await prisma.jobEvent.count({ where: { name: FOREGROUND_WORK_EVENT, data: { path: ["taskRunId"], not: taskRunId } } }) === 0
+      && transport.counts().rejected === 0, "Unrelated work was dispatched during the isolated scenario");
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByText(answer, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
     await page.screenshot({ path: resolve(OUT, "recovered-result.png"), fullPage: true });
     evidence.result = { taskRunId, messageId: message.id, contentDigest: digest, responseAttemptId: message.responseAttemptId,
       responseScope: message.responseScope, jobs, reconciliation, noResubmissionAfterCapacityReturn: true, duplicateResultStable: true };
     evidence.panelPresent = await panel.count();
+    evidence.noUnrelatedDispatches = true;
     completed = true;
   } catch (error) { failure = safeError(error); throw error; }
   finally {
     try {
-      if (fixture) await cleanupForegroundFixtures(prisma, fixture);
-      cleanup = "completed";
-      if (taskRunId) {
-        const retained = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { status: true } });
-        if (retained && !["completed", "failed", "canceled", "cancelled"].includes(retained.status)) cleanup = "provider-restored-job-unsettled";
+      if (fixture) {
+        check(unresolvedClientSubmissions === 0, "Client submission outcome is unknown; preserve fixture state");
+        const messages = await prisma.agentMessage.findMany({ where: { role: "user", content: prompt },
+          select: { taskRunId: true, threadId: true }, take: 4 });
+        check(messages.length <= 3, "Ambiguous fixture request ownership; preserve fixture state");
+        const ownedIds = [...new Set([...(taskRunId ? [taskRunId] : []), ...messages.flatMap(message => message.taskRunId ? [message.taskRunId] : [])])];
+        await assertForegroundBackgroundQuiet(prisma, ownedIds);
+        const active = await prisma.taskRun.findMany({ where: { taskRunId: { in: ownedIds }, status: { notIn: [...TERMINAL_TASK_STATE_LIST] } },
+          select: { threadId: true } });
+        for (const threadId of new Set(active.flatMap(row => row.threadId ? [row.threadId] : []))) {
+          check(context, "No authenticated owner context can cancel the unfinished fixture");
+          const cancelled = await context.request.post(runtime.origin + "/api/agent/cancel", { data: { threadId } });
+          check(cancelled.ok(), "The native owner cancellation did not succeed; preserve fixture state");
+        }
+        for (const id of ownedIds) await waitForForegroundDelivery(prisma, { taskRunId: id, requireSuccess: false });
+        await cleanupForegroundFixtures(prisma, fixture, { taskRunIds: ownedIds, clientSubmissionsSettled: true });
       }
-    } catch (error) { cleanup = "failed"; failure = failure ?? safeError(error); }
+      cleanup = "completed";
+    } catch (error) { cleanup = "unsettled-fixture-preserved"; failure = failure ?? safeError(error); }
     finally {
       const closed = await Promise.allSettled([context?.close(), browser?.close(), transport.close(), prisma.$disconnect()]);
       if (closed.some(value => value.status === "rejected")) { cleanup = "failed"; failure ??= "Fixture runtime resource cleanup failed"; }

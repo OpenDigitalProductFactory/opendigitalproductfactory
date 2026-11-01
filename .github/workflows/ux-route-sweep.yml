@@ -244,6 +244,21 @@ jobs:
           DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
         run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --check-target
 
+      # Partial Postgres routing still delivers to the existing Inngest adapter.
+      # Keep that real event boundary available, without registering any apps.
+      - name: Start the existing coexistence event backend
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        run: |
+          docker run -d --name "dpf-foreground-inngest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --label "dpf.ci-run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --memory=1g --cpus=1 -p 127.0.0.1:8288:8288 \
+            inngest/inngest:v1.36.0 inngest dev --no-discovery --no-poll
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8288/health > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "The coexistence event backend did not become healthy"; exit 1
+
       - name: Start the portal
         env:
           DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
@@ -255,9 +270,21 @@ jobs:
           DPF_WORKFLOW_SCENARIO: ${{ inputs.scenario || 'route-sweep' }}
         run: |
           if [ "$DPF_WORKFLOW_SCENARIO" = "foreground-recovery" ]; then
+            # Prior steps either validate the exact-source build artifact or
+            # complete this checkout's canonical production build. Bind the
+            # existing deployment metadata only after those steps succeed.
+            runtime_source_sha="$(git rev-parse HEAD)"
+            if [ "$runtime_source_sha" != "$GITHUB_SHA" ] || [ ! -f apps/web/.next/BUILD_ID ]; then
+              echo "The foreground runtime has no matching production build"; exit 1
+            fi
+            export DEPLOYED_SHA="$runtime_source_sha"
             export DPF_JOBS_ENGINE=postgres
             export DPF_JOBS_POSTGRES_FUNCTIONS=agent/foreground-work-run,agent/task-dispatch
             export DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED=1
+            export DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED=0
+            export INNGEST_BASE_URL=http://127.0.0.1:8288
+            export INNGEST_DEV=1
+            export INNGEST_EVENT_KEY=synthetic-ci-event-key
           fi
           if [ "$DPF_REUSED_BUILD" = "true" ]; then
             (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js) &
@@ -337,6 +364,17 @@ jobs:
           name: ux-route-budget-baseline
           path: apps/web/lib/ux-budget/route-budget-baseline.json
           if-no-files-found: error
+
+      - name: Stop only this scenario's coexistence backend
+        if: ${{ always() && inputs.scenario == 'foreground-recovery' }}
+        run: |
+          backend_name="dpf-foreground-inngest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if docker inspect "$backend_name" > /dev/null 2>&1; then
+            mkdir -p apps/web/test-results/foreground-work-recovery
+            docker logs "$backend_name" > apps/web/test-results/foreground-work-recovery/event-backend.log 2>&1
+            docker stop --time 10 "$backend_name"
+            docker rm "$backend_name"
+          fi
 
       - name: Upload the budget report
         if: always()

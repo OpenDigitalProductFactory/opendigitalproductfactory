@@ -1,7 +1,12 @@
 import type { PrismaClient } from "../../../packages/db/generated/client/client";
 import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { isRecord } from "../lib/shared/coerce";
+import { readWorkroomPostureClaim } from "../lib/work-management/workroom-posture-claim";
+import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
+import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
 
 /** Explicit opt-in to the existing disposable GitHub runtime, before any I/O. */
 export function assertForegroundFixtureRuntime(env: Readonly<Record<string, string | undefined>>) {
@@ -17,11 +22,55 @@ export function assertForegroundFixtureRuntime(env: Readonly<Record<string, stri
   return { sourceSha, origin: target.origin, runKey: `foreground-recovery-${runId}-${attempt}` };
 }
 
-export async function assertForegroundQueueEmpty(db: PrismaClient) {
+/** A completed cron run can still contain an unavailable reconciliation step. */
+export function hasSuccessfulForegroundReconciliation(runs: ReadonlyArray<{ steps: ReadonlyArray<{ output: unknown }> }>) {
+  return runs.some(run => run.steps.some(step => isRecord(step.output)
+    && step.output.outcome !== "unavailable" && typeof step.output.inspected === "number" && step.output.inspected >= 1));
+}
+
+type ScopeDb = Pick<PrismaClient, "scheduledAgentTask" | "taskRun" | "userFact" | "workroomParticipant">;
+export async function assertForegroundBackgroundQuiet(db: ScopeDb, allowedTaskRunIds: string[] = []) {
   assertForegroundFixtureRuntime(process.env);
+  const { PROACTIVITY_FACT_CATEGORY, PROACTIVITY_OVERRIDE_FACT_PREFIX } = await import("../lib/proactivity/proactivity-override-preferences");
   if (await db.scheduledAgentTask.count({ where: { isActive: true } })
-    || await db.taskRun.count({ where: { source: "coworker", archivedAt: null, a2aMetadata: { path: ["foregroundRequest", "schemaVersion"], equals: 1 } } }))
+    || await db.taskRun.count({ where: { archivedAt: null, taskRunId: { notIn: allowedTaskRunIds }, status: { notIn: [...TERMINAL_TASK_STATE_LIST] } } }))
     throw new Error("Foreground fixture refuses unrelated runnable tasks or retained work");
+  const facts = await db.userFact.findMany({ where: { category: PROACTIVITY_FACT_CATEGORY,
+    key: { startsWith: `${PROACTIVITY_OVERRIDE_FACT_PREFIX}:agent:` }, supersededAt: null }, select: { value: true } });
+  for (const fact of facts) {
+    let value: unknown;
+    try { value = JSON.parse(fact.value); } catch { throw new Error("Foreground fixture refuses unreadable proactivity intent"); }
+    if (!isRecord(value) || value.level !== "quiet") throw new Error("Foreground fixture refuses latent proactive work");
+  }
+  const memberships = await db.workroomParticipant.findMany({ where: { lifecycle: "active",
+    principal: { aliases: { some: { aliasType: "agent" } } }, workroom: { status: { notIn: ["complete", "abandoned", "archived"] } } },
+    select: { workroom: { select: { scopeClaims: true } } } });
+  if (memberships.some(member => {
+    const level = readWorkroomPostureClaim(member.workroom.scopeClaims)?.proactivityLevel;
+    return level !== undefined && level !== "quiet";
+  })) throw new Error("Foreground fixture refuses live room cadences");
+}
+
+/** Read actual fanout and run settlement, rather than sleeping past an assumed delay. */
+export async function waitForForegroundDelivery(db: Pick<PrismaClient, "jobEvent" | "jobRun">, input: {
+  taskRunId: string; beforeEventIds?: string[]; timeoutMs?: number; intervalMs?: number; requireSuccess?: boolean;
+}) {
+  assertForegroundFixtureRuntime(process.env);
+  const before = new Set(input.beforeEventIds ?? []), deadline = Date.now() + (input.timeoutMs ?? 60_000);
+  while (Date.now() < deadline) {
+    const events = await db.jobEvent.findMany({ where: { name: FOREGROUND_WORK_EVENT, data: { path: ["taskRunId"], equals: input.taskRunId } },
+      select: { id: true, fannedOutAt: true } });
+    const selected = events.filter(event => !before.has(event.id));
+    const runs = await db.jobRun.findMany({ where: { functionKey: "agent/foreground-work-run", eventId: { in: selected.map(event => event.id) } },
+      select: { id: true, eventId: true, status: true, output: true } });
+    if (input.requireSuccess === false && events.length === 0) return { eventIds: [], runs: [] };
+    if (input.requireSuccess !== false && runs.some(run => run.status === "failed" || run.status === "cancelled")) throw new Error("The owned queue delivery did not complete successfully");
+    if (selected.length && selected.every(event => event.fannedOutAt && runs.some(run => run.eventId === event.id
+      && (input.requireSuccess === false ? ["completed", "failed", "cancelled"].includes(run.status) : run.status === "completed"))))
+      return { eventIds: selected.map(event => event.id), runs };
+    await new Promise(resolveWait => setTimeout(resolveWait, input.intervalMs ?? 1000));
+  }
+  throw new Error("Owned queue delivery remains unsettled; fixture state must be preserved");
 }
 
 /** Only the external provider is simulated; no upstream, training or charges. */
@@ -73,6 +122,7 @@ export async function prepareForegroundFixtures(db: PrismaClient, baseUrl: strin
   const prefix = runtime.runKey + "-", providerId = "openai", connectionId = "provider-default-openai";
   const modelId = prefix + "model", credentialId = prefix + "credential";
   const prior = await db.$transaction(async tx => {
+    await assertForegroundBackgroundQuiet(tx);
     const provider = await tx.modelProvider.findUniqueOrThrow({ where: { providerId }, select: {
       status: true, baseUrl: true, endpoint: true, authHeader: true, authMethod: true, endpointType: true,
       sensitivityClearance: true, supportsToolUse: true, supportsStreaming: true, updatedAt: true,
@@ -118,14 +168,32 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href &
   void (async () => {
     assertForegroundFixtureRuntime(process.env);
     const { prisma } = await import("@dpf/db");
-    try { await assertForegroundQueueEmpty(prisma); }
+    try {
+      await assertForegroundBackgroundQuiet(prisma);
+      if (await prisma.jobRun.count({ where: { status: { notIn: ["completed", "failed", "cancelled"] } } })
+        || await prisma.jobEvent.count({ where: { fannedOutAt: null } })) throw new Error("Existing queue work prevents isolated startup");
+      const out = resolve("test-results/foreground-work-recovery");
+      mkdirSync(out, { recursive: true });
+      writeFileSync(resolve(out, "target-admission.json"), JSON.stringify({ ...assertForegroundFixtureRuntime(process.env), admittedAt: new Date().toISOString() }, null, 2));
+    }
     finally { await prisma.$disconnect(); }
   })().catch(() => { console.error("Foreground CI target isolation check failed; no fixture writes were attempted."); process.exitCode = 1; });
 }
 export type ForegroundFixture = Awaited<ReturnType<typeof prepareForegroundFixtures>>;
 
-export async function cleanupForegroundFixtures(db: PrismaClient, fixture: ForegroundFixture) {
+export async function cleanupForegroundFixtures(db: PrismaClient, fixture: ForegroundFixture, settlement: {
+  taskRunIds: string[]; clientSubmissionsSettled: boolean;
+}) {
   assertForegroundFixtureRuntime(process.env);
+  if (!settlement.clientSubmissionsSettled) throw new Error("Uncertain client submission: preserve the fixture");
+  await assertForegroundBackgroundQuiet(db, settlement.taskRunIds);
+  if (await db.taskRun.count({ where: { taskRunId: { in: settlement.taskRunIds }, status: { notIn: [...TERMINAL_TASK_STATE_LIST] } } })
+    || await db.jobRun.count({ where: { functionKey: "agent/foreground-work-run",
+      OR: settlement.taskRunIds.map(taskRunId => ({ event: { path: ["data", "taskRunId"], equals: taskRunId } })),
+      status: { notIn: ["completed", "failed", "cancelled"] } } })
+    || await db.jobEvent.count({ where: { name: FOREGROUND_WORK_EVENT, fannedOutAt: null,
+      OR: settlement.taskRunIds.map(taskRunId => ({ data: { path: ["taskRunId"], equals: taskRunId } })) } }))
+    throw new Error("Execution is unsettled: preserve the fixture before restoring provider state");
   const { Prisma } = await import("@dpf/db");
   await db.$transaction(async tx => {
     const account = await tx.aiProviderConnection.findUniqueOrThrow({ where: { connectionId: fixture.connectionId } });

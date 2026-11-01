@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assertForegroundFixtureRuntime, prepareForegroundFixtures, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
+import { assertForegroundFixtureRuntime, assertForegroundBackgroundQuiet, prepareForegroundFixtures,
+  cleanupForegroundFixtures, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
 
 const admitted = {
   CI: "true", GITHUB_ACTIONS: "true", DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1",
@@ -7,7 +8,7 @@ const admitted = {
   DATABASE_URL: "postgresql://dpf:ci_test_password@localhost:5432/dpf",
   UX_SWEEP_BASE_URL: "http://localhost:3000",
 };
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 const enable = () => { for (const [key, value] of Object.entries(admitted)) vi.stubEnv(key, value); };
 
 describe("foreground workflow fixture target", () => {
@@ -42,11 +43,70 @@ describe("foreground fixture does not replace existing authority or provider sta
       providerCapacityStatus: { count: async () => collision === "health" ? 1 : 0 },
       scheduledAgentTask: { count: async () => collision === "scheduled-task" ? 1 : 0 },
       taskRun: { count: async () => collision === "retained-request" ? 1 : 0 },
+      userFact: { findMany: async () => [] },
+      workroomParticipant: { findMany: async () => [] },
       $transaction: async <T>(fn: (tx: unknown) => Promise<T>) => fn(db),
     };
     await expect(prepareForegroundFixtures(db as unknown as Parameters<typeof prepareForegroundFixtures>[0], "http://127.0.0.1:40000"))
-      .rejects.toThrow("refuses configured credentials");
+      .rejects.toThrow(/Foreground fixture refuses/);
     expect(write).not.toHaveBeenCalled();
+  });
+});
+
+function quietScope(facts: Array<{ value: string }> = [], claims: unknown[] = []) {
+  return { scheduledAgentTask: { count: async () => 0 }, taskRun: { count: async () => 0 },
+    userFact: { findMany: async () => facts },
+    workroomParticipant: { findMany: async () => claims.map(scopeClaims => ({ workroom: { scopeClaims } })) } };
+}
+describe("latent background work cannot enter the foreground fixture", () => {
+  it.each(["assertive", "balanced"])("refuses a %s fact even with no scheduled task", async level => {
+    enable();
+    const db = quietScope([{ value: JSON.stringify({ level }) }]);
+    await expect(assertForegroundBackgroundQuiet(db as unknown as Parameters<typeof assertForegroundBackgroundQuiet>[0])).rejects.toThrow("latent proactive work");
+  });
+  it("refuses an active room cadence and unreadable legacy intent", async () => {
+    enable();
+    const db = quietScope([], [[{ workroomPosture: { proactivityLevel: "balanced" } }]]);
+    await expect(assertForegroundBackgroundQuiet(db as unknown as Parameters<typeof assertForegroundBackgroundQuiet>[0])).rejects.toThrow("live room cadences");
+    const broken = quietScope([{ value: "not-json" }]);
+    await expect(assertForegroundBackgroundQuiet(broken as unknown as Parameters<typeof assertForegroundBackgroundQuiet>[0])).rejects.toThrow("unreadable proactivity");
+  });
+  it("allows quiet intent without writing any preference or scheduling a task", async () => {
+    enable();
+    const db = quietScope([{ value: '{"level":"quiet"}' }], [[{ workroomPosture: { proactivityLevel: "quiet" } }]]);
+    await expect(assertForegroundBackgroundQuiet(db as unknown as Parameters<typeof assertForegroundBackgroundQuiet>[0])).resolves.toBeUndefined();
+  });
+});
+
+it("does not call a delayed duplicate settled until fanout and the actual queue run complete", async () => {
+  enable(); vi.useFakeTimers();
+  let fannedOut = false, status = "queued", finished = false;
+  const db = { jobEvent: { findMany: async () => [{ id: "new-delivery", fannedOutAt: fannedOut ? new Date() : null }] },
+    jobRun: { findMany: async () => [{ id: "run", eventId: "new-delivery", status, output: { kind: "responded" } }] } };
+  const waiting = waitForForegroundDelivery(db as unknown as Parameters<typeof waitForForegroundDelivery>[0],
+    { taskRunId: "fixture", beforeEventIds: ["older-delivery"], intervalMs: 10, timeoutMs: 1000 }).then(value => { finished = true; return value; });
+  try {
+    await vi.advanceTimersByTimeAsync(100);
+    expect(finished).toBe(false);
+    fannedOut = true; status = "running";
+    await vi.advanceTimersByTimeAsync(100);
+    expect(finished).toBe(false);
+    status = "completed";
+    await vi.advanceTimersByTimeAsync(10);
+    expect((await waiting).eventIds).toEqual(["new-delivery"]);
+  } finally { fannedOut = true; status = "completed"; await vi.advanceTimersByTimeAsync(20); await waiting; }
+});
+
+describe("unsettled work preserves the provider fixture", () => {
+  it.each(["client", "request", "queue"])("performs no cleanup write when %s is unsettled", async boundary => {
+    enable();
+    const transaction = vi.fn();
+    const db = { ...quietScope(),
+      taskRun: { count: async ({ where }: { where: { taskRunId: { in?: string[] } } }) => where.taskRunId.in && boundary === "request" ? 1 : 0 },
+      jobRun: { count: async () => boundary === "queue" ? 1 : 0 }, jobEvent: { count: async () => 0 }, $transaction: transaction };
+    await expect(cleanupForegroundFixtures(db as unknown as Parameters<typeof cleanupForegroundFixtures>[0],
+      {} as Parameters<typeof cleanupForegroundFixtures>[1], { taskRunIds: ["owned"], clientSubmissionsSettled: boundary !== "client" })).rejects.toThrow(/preserve/i);
+    expect(transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -72,4 +132,12 @@ it("the loopback provider refuses unrelated requests and exposes a real temporar
     expect(await streamed.text()).toContain('"content":"fixture-result"');
     expect(transport.counts()).toEqual({ requests: 3, rejected: 3 });
   } finally { await transport.close(); }
+});
+
+
+it("requires a successful recurring reconciliation that inspected retained work", () => {
+  expect(hasSuccessfulForegroundReconciliation([{ steps: [{ output: { inspected: 1 } }] }])).toBe(true);
+  expect(hasSuccessfulForegroundReconciliation([{ steps: [{ output: { outcome: "unavailable" } }] }])).toBe(false);
+  expect(hasSuccessfulForegroundReconciliation([{ steps: [{ output: { inspected: 0 } }] }])).toBe(false);
+  expect(hasSuccessfulForegroundReconciliation([{ steps: [] }])).toBe(false);
 });
