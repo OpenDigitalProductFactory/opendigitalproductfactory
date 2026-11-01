@@ -40,6 +40,8 @@ Use the translator that matches where the code runs:
 
 A client component's namespace must be provided by a `MessagesProvider` (`apps/web/components/i18n/MessagesProvider.tsx`; its context lives in `apps/web/lib/i18n/messages-context.ts`) above it. The root layout provides `errors`, `setup`, `shell` and `backlog` (the backlog intake form's Outcome field), and a page can add a provider for its own subtree. For example, `/customer/footprint` wraps its client map in a provider for the `footprint` namespace (`namespaceMessages(locale, "footprint")`). Likewise, `/admin/settings` provides the `admin` namespace for its accountable-owner panel, and `/storefront/sections` provides `storefront` for its section text editor.
 
+The shell's global coworker is a sibling of route content. Its own provider supplies `approvals` for proposal cards and `routingManagement` for answer feedback; a provider inside a page does not cover it. Include a client component's namespace at that boundary when extending the coworker. BI-AB75B423 records the feedback wiring correction. The `layout.coworker-feedback.test.tsx` regression renders the actual shell provider with feedback so a page provider or all-catalog test wrapper cannot mask a missing namespace.
+
 **Message syntax** is a subset of Unicode MessageFormat 2.0:
 
 {% raw %}
