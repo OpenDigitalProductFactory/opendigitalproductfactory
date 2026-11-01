@@ -34,6 +34,7 @@ type CurrentDesignBinding = BoundDesign
   | { kind: "not-applicable"; mayInheritResearch?: true }
   | { kind: "unavailable" };
 type ClaimSource = {
+  workroomId?: string;
   repositoryFullName: string; headBranch: string;
   baseSha?: string | null; headSha?: string | null;
 };
@@ -61,6 +62,7 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, cla
   const rooms = await db.workroom.findMany({
     where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
       status: { notIn: ["abandoned", "archived", "superseded"] },
+      ...(claimSource?.workroomId ? { capsuleId: claimSource.workroomId } : {}),
       ...(claimSource ? { repositoryFullName: claimSource.repositoryFullName, headBranch: claimSource.headBranch,
         baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true },
@@ -127,7 +129,7 @@ export async function prepareCurrentDesignObservation(args: {
   const db = args.db ?? prisma;
   const load = args.ports?.loadBinding ?? loadCurrentDesignBinding;
   // Capture the selection once, including across the provider await and guard.
-  const claimSource = args.claimSource ? { repositoryFullName: args.claimSource.repositoryFullName,
+  const claimSource = args.claimSource ? { ...(args.claimSource.workroomId ? { workroomId: args.claimSource.workroomId } : {}), repositoryFullName: args.claimSource.repositoryFullName,
     headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
   const unavailable = { state: "unavailable" } as const;
