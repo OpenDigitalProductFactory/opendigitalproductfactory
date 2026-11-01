@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Capability-aware Anthropic thinking compatibility
 
 BI-773518CD / WC-7F8E275D. Small provider-protocol repair under the
