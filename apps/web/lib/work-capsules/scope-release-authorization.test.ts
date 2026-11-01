@@ -7,8 +7,8 @@ import type { CapsuleDb } from "./work-capsule-store-types";
 const now = new Date("2026-10-14T03:00:00Z");
 const actor = { userId: "user-a", agentId: "agent-a", principalId: "principal-a" };
 const claim = { kind: "path" as const, value: "file.ts", intent: "edit" as const,
-  recordedAt: now.toISOString(), recordedByPrincipalId: "principal-a" };
-const room = { id: "row-a", capsuleId: "WC-A", status: "working", archivedAt: null,
+  recordedAt: now.toISOString(), recordedByPrincipalId: "principal-a", releaseEpoch: "00000000-0000-4000-8000-000000000001" };
+const room = { id: "row-a", capsuleId: "WC-A", expectedRoomId: "row-a", status: "working", archivedAt: null,
   updatedAt: now, scopeClaims: [claim], leaseHolderPrincipalId: "principal-a",
   leaseExpiresAt: new Date("2026-10-14T03:30:00Z") };
 function store(row: Record<string, unknown>) {
@@ -27,17 +27,17 @@ describe("ordinary release is revalidated at mutation", () => {
       return write(base as unknown as CapsuleDb);
     } };
     try {
-      await expect(releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A",
+      await expect(releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A", expectedRoomId: "row-a",
         claims: [claim], actor, ownScopeOnly: true })).rejects.toThrow("Owned scope or lease changed");
       expect(base.workroom.update).not.toHaveBeenCalled();
       expect(base.workroomActivity.create).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
   });
   it("requires positive principal proof and rejects an entire mixed request", () => {
-    expect(classifyScopeRelease({ room, capsuleId: "WC-A", claims: [claim], callerPrincipalId: null, now }).consequence).toBe("authority");
+    expect(classifyScopeRelease({ room, capsuleId: "WC-A", expectedRoomId: "row-a", claims: [claim], callerPrincipalId: null, now }).consequence).toBe("authority");
     const foreign = { ...claim, value: "foreign.ts", recordedByPrincipalId: "principal-b" };
     expect(classifyScopeRelease({ room: { ...room, scopeClaims: [claim, foreign] },
-      capsuleId: "WC-A", claims: [claim, foreign], callerPrincipalId: "principal-a", now }).consequence).toBe("authority");
+      capsuleId: "WC-A", expectedRoomId: "row-a", claims: [claim, foreign], callerPrincipalId: "principal-a", now }).consequence).toBe("authority");
   });
   it.each([
     ["new claim owner", { scopeClaims: [{ ...claim, recordedByPrincipalId: "principal-b" }] }],
@@ -48,7 +48,7 @@ describe("ordinary release is revalidated at mutation", () => {
   ])("refuses %s before removing scope", async (_label, changes) => {
     const db = store({ ...room, ...changes });
     await expect(releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb,
-      capsuleId: "WC-A", claims: [claim], actor, ownScopeOnly: true, now })).rejects.toThrow();
+      capsuleId: "WC-A", expectedRoomId: "row-a", claims: [claim], actor, ownScopeOnly: true, now })).rejects.toThrow();
     expect(db.workroom.update).not.toHaveBeenCalled();
     expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
@@ -58,7 +58,7 @@ describe("ordinary release is revalidated at mutation", () => {
     const other = { ...claim, value: "file.tsx", recordedByPrincipalId: "principal-b" };
     const row = { ...room, scopeClaims: [extension, claim, other] };
     const db = store(row);
-    await releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A",
+    await releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A", expectedRoomId: "row-a",
       claims: [claim], actor, ownScopeOnly: true, now });
     expect(db.workroom.update).toHaveBeenCalledWith({ where: { capsuleId: "WC-A",
       scopeClaims: { equals: row.scopeClaims }, updatedAt: now }, data: { scopeClaims: [extension, other] } });
@@ -70,19 +70,19 @@ describe("ordinary release is revalidated at mutation", () => {
   it("does not record an effect after losing a concurrent snapshot comparison", async () => {
     const db = store(room);
     db.workroom.update.mockRejectedValueOnce(new Error("snapshot changed"));
-    await expect(releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A",
+    await expect(releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A", expectedRoomId: "row-a",
       claims: [claim], actor, ownScopeOnly: true, now })).rejects.toThrow("snapshot changed");
     expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
 
-  it("preserves an exact no-op retry on a live owned room and the established approved foreign release path", async () => {
+  it("refuses unkeyed missing targets and retains an exactly targeted approved foreign release", async () => {
     const empty = store({ ...room, scopeClaims: [] });
-    await releaseWorkCapsuleScope({ db: empty as unknown as CapsuleDb, capsuleId: "WC-A",
-      claims: [claim], actor, ownScopeOnly: true, now });
-    expect(empty.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payload: { released: [] } }) }));
+    await expect(releaseWorkCapsuleScope({ db: empty as unknown as CapsuleDb, capsuleId: "WC-A", expectedRoomId: "row-a",
+      claims: [claim], actor, ownScopeOnly: true, now })).rejects.toThrow("Original scope-release target");
+    expect(empty.workroomActivity.create).not.toHaveBeenCalled();
     const foreign = { ...claim, recordedByPrincipalId: "principal-b" };
     const approved = store({ ...room, scopeClaims: [foreign], leaseHolderPrincipalId: "principal-b" });
-    await releaseWorkCapsuleScope({ db: approved as unknown as CapsuleDb, capsuleId: "WC-A", claims: [claim], actor });
+    await releaseWorkCapsuleScope({ db: approved as unknown as CapsuleDb, capsuleId: "WC-A", expectedRoomId: "row-a", claims: [foreign], actor });
     expect(approved.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payload: { released: [foreign] } }) }));
   });
 });

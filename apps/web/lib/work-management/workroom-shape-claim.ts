@@ -1,3 +1,4 @@
+import { withoutScopeMetadataFields } from "../work-capsules/scope-metadata.mjs";
 // Workroom declared-shape claim (W14 — BI-E0BFFF77, EP-1C37C089).
 //
 // The room's declared collaboration shape is stored INSIDE the Workroom's
@@ -135,8 +136,7 @@ export function withWorkShapeClaim(
   now: Date = new Date(),
 ): unknown[] {
   const claim = buildWorkShapeClaim(ref, now);
-  const existing = Array.isArray(scopeClaims) ? scopeClaims : [];
-  const preserved = existing.filter((entry) => workShapeRefFrom(entry) === null);
+  const preserved = withoutScopeMetadataFields(scopeClaims, ["workShape", "workShapeKey", "workShapeVersion"]);
   return claim ? [...preserved, claim] : preserved;
 }
 

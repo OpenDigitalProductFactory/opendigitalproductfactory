@@ -24,6 +24,14 @@ function db(overrides: {
 }
 
 describe("declareBreakFix (BI-F2FEC1EB)", () => {
+  it("preserves a protected claim sharing the replaced shape record", async () => {
+    const claim = { kind: "path", value: "one.ts", intent: "edit", recordedByPrincipalId: "owner",
+      releaseEpoch: "00000000-0000-4000-8000-000000000001" };
+    const store = db({ room: { id: "r1", capsuleId: "WC-ONE", scopeClaims: [{ ...claim, workShape: "delivery-small@1.0.0" }] } });
+    await declareBreakFix({ db: store, itemId: "BI-ONE", reason: "urgent defect", actor: human, now });
+    expect(store.workroom.update.mock.calls[0][0].data.scopeClaims).toContainEqual(expect.objectContaining(claim));
+  });
+
   it("records the declaration, binds the break-fix shape on the room and sets the 48h PIR deadline", async () => {
     const store = db();
     const result = await declareBreakFix({ db: store, itemId: "BI-ONE", reason: "pregate hook never ran on main", actor: human, now });
@@ -103,4 +111,16 @@ describe("declareBreakFix (BI-F2FEC1EB)", () => {
     expect(store.workroom.update).not.toHaveBeenCalled();
     expect(store.backlogItemActivity.create).not.toHaveBeenCalled();
   });
+});
+
+
+it("does not overwrite a claim reacquired while a declaration was being prepared", async () => {
+  const room = { id: "r1", capsuleId: "WC-ONE", updatedAt: now, scopeClaims: [{ kind: "path", value: "a.ts", releaseEpoch: "original" }] };
+  const store = db({ room });
+  store.workroom.update.mockImplementation(async ({ where }) => {
+    if (!where.scopeClaims || !where.updatedAt) return {};
+    throw new Error("Concurrent claim changed");
+  });
+  await expect(declareBreakFix({ db: store, itemId: "BI-ONE", reason: "x", actor: human, now })).rejects.toThrow("Concurrent claim changed");
+  expect(store.backlogItemActivity.create).not.toHaveBeenCalled();
 });

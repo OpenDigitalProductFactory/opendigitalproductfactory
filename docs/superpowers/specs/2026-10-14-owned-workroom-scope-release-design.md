@@ -377,3 +377,56 @@ validation/fingerprinting. This is a design target, not measured capacity eviden
 ### Current Medium admission clarification
 
 Exact current plan claim IRD-D4849F86465C is effective Medium and returns research as a body design note (problem/options/chosen), with body objective baseline satisfied. The ratified active 2026-09-02 proportional-shape design §4 and executable shape precedence agree. The generic research escalation still repeats the Small failing-to-passing text; it is not an additional Medium requirement. Research receipt initiative-0b320be1-d650-4d32-9fac-17da42abd3e1 records completed Medium design investigation only; plan admission IRD-34EECC84669B is allowed. Repaired tests, PostgreSQL races and served/live acceptance remain UNRUN. Current ordered steps and all AC-SRG criteria are recorded in BI-B13239B1. Canonical documentation changes belong with the admitted atomic implementation, rather than a new spec committed solely to obtain a reviewer route. Existing current authority and any actually returned owed parent-scope amendment gate remain mandatory; none is assumed satisfied by this clarification.
+
+
+### Backlog coverage for BI-B13239B1
+
+Initial atomic coverage receipt: cmvxoewhs4ayl01tm2cty6nyj, bound to immutable plan commit 9f457425a641cd46162bfc629cd34a2d250b2c88 and blob 5b271b42b3b590ebf09c9c6db9d5afae97e12605. Deliverable SRG maps to BI-B13239B1 with no dependent or independently shippable children. Requirement references are OBJ-SRG-1 through OBJ-SRG-3; contracts are CommandPayloadBinding, AuthorizationDecisionLog and workCapsuleActor; flows are the exact replay ordering, concurrency/runtime prerequisites and ordered atomic implementation sequence; verification references are AC-SRG-1 through AC-SRG-8.
+
+The current Medium body has the same eight criteria as readable AC bullets. Research receipt initiative-0b320be1-d650-4d32-9fac-17da42abd3e1 proves design investigation only; implementation admission IRD-003F4BBA8528 is allowed. Refresh immutable coverage provenance to the final committed source before publication, preserving this initial receipt as history. These records do not constitute a native plan verdict, repaired test result, compatible canonical rollout or independent live acceptance.
+
+### Canonical compatibility implementation detail (BI-B13239B1)
+
+The existing promoter caller-protocol contract supplies the continuing version
+floor. Advance the portal caller to protocol 2; the corrected promoter accepts
+callers 1–2 for the initial N-1 install. A corrected caller rejects an old max-1
+artifact before privileged readiness or launch. Revalidate the actual immutable
+artifact in the central promoter launcher, including runtime-transition and
+recovery callers. The corrected promoter separately probes the actual produced
+portal image for the scope writer contract before launch/swap. Neither promoter
+protocol support nor the four reassessment owners substitutes for portal writer
+proof. No new capability, grant, table, operating mode or user control is added.
+
+Enrollment obtains current process/image packaged-writer proof and authenticates
+the existing final maintenance-retirement receipt outside the scope transaction.
+It freshly observes the canonical managed cohort, its daemon/project and full
+current portal identity; old retired IDs must remain absent. Unknown evidence
+keeps enrollment held. The sandbox is a separate database executor by the existing
+compose and sandbox-isolation contract; its production MCP calls re-enter the
+portal's current authorization/target checks. Do not treat its version as a grant
+to write the production database.
+
+Inside the acquisition transaction, before the room lock, take the existing
+runtime-capability-transition and self-upgrade-admission advisory locks in that
+order and refuse enrollment while either has active work. These existing durable
+admissions close the check-then-launch race without holding a database transaction
+across Docker or introducing a runtime freeze. A process-bound retained proof is
+checked before the mutation. Initial enrollment remains held through canonical
+retirement, including the existing early-boot success/fallback interval. Future
+updates retain protocol 2 and the actual portal contract check even when there are
+no currently held claims; zero current claims do not erase the compatibility floor.
+
+Verification must include max-1 artifact refusal, independent portal-probe failure,
+current-image/cohort/receipt mismatch, and both admission/enrollment race orders.
+These are implementation obligations, not claims of completed runtime evidence.
+
+
+The read-only probe lives with the Workroom source under
+`apps/web/lib/work-capsules/scope-epoch-writer-probe.mjs`. The existing canonical
+Dockerfile already ships that complete application source at `/app/apps/web-src`;
+its existing entry-module dependency is also packaged. This uses the feature's
+existing source closure and requires no shared Dockerfile change. The discarded
+root-script COPY proposal was never applied or published. Runtime observation
+uses the existing pure maintenance-epoch receipt module, already present in both
+the portal and N-1 promoter closure; it does not import promoter-only secret or
+migration operations into the web bundle.

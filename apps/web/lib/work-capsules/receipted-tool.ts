@@ -10,7 +10,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import { prisma } from "@dpf/db";
-import type { ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { isRecord } from "@/lib/shared/coerce";
 
 import {
@@ -45,18 +45,22 @@ class ToolRefusal extends Error {
   }
 }
 
-type Handler = (params: Record<string, unknown>, userId: string, context: { agentId?: string } | undefined) => Promise<ToolResult>;
+type Handler = (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise<ToolResult>;
 
 const MAX_COMMAND_ID = 200;
 
 export type BoundCommandPreparation = {
   params: Record<string, unknown>;
   payloadBinding: CommandPayloadBinding;
+  expectedRoomRowId?: string;
   beforeRoomLock?: (tx: ReceiptDb) => Promise<void>;
   /** Best-effort wake-up for the actual durable receipt, outside every transaction. */
   afterCommit?: (receipt: { id: string; workCapsuleId: string }, result: ToolResult) => void | Promise<void>;
 };
 export type ReceiptedWorkroomToolOptions = {
+  /** Establish bounded external proof before opening the receipt transaction. */
+  prepareAsync?: (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined)
+    => Promise<BoundCommandPreparation | { refusal: ToolResult } | undefined>;
   /** Validate and normalize before even a cached result is considered. Undefined retains legacy behavior. */
   prepare?: (params: Record<string, unknown>) => BoundCommandPreparation | { refusal: ToolResult } | undefined;
 };
@@ -64,7 +68,7 @@ export type ReceiptedWorkroomToolOptions = {
 /** Wrap a Workroom tool so a `commandId` makes it run once per caller. */
 export function receiptedWorkroomTool(commandType: string, handler: Handler, options: ReceiptedWorkroomToolOptions = {}): Handler {
   return async (params, userId, context) => {
-    const preparation = options.prepare?.(params);
+    const preparation = options.prepareAsync ? await options.prepareAsync(params, userId, context) : options.prepare?.(params);
     if (preparation && "refusal" in preparation) return preparation.refusal;
     const normalized = preparation?.params ?? params;
     const raw = normalized["commandId"];
@@ -89,6 +93,7 @@ export function receiptedWorkroomTool(commandType: string, handler: Handler, opt
         target: { kind: "workroom", id: capsuleId },
         actor: { userId, agentId: context?.agentId ?? null },
         payloadBinding: preparation?.payloadBinding,
+        expectedRoomRowId: preparation?.expectedRoomRowId,
         beforeRoomLock: preparation?.beforeRoomLock,
         run: (tx) => commandTransaction.run({ db: tx as unknown as CapsuleDb, bound: preparation?.payloadBinding !== undefined }, async () => {
           const result = await handler(normalized, userId, context);

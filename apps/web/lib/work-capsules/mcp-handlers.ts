@@ -1,3 +1,4 @@
+import { parseClaimInputs } from "./scope-claim-store";
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import { STAGE_EVIDENCE_OUTCOMES, type StageEvidenceOutcome } from "@/lib/work-management/stage-evidence-receipts";
 import { prisma } from "@dpf/db";
@@ -30,9 +31,7 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
-  SCOPE_KIND_SET,
   WORK_CAPSULE_WORKROOM_SHAPES,
-  type ScopeClaim,
   type WorkCapsuleEvidenceKind,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
@@ -63,7 +62,8 @@ import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
-import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { parseScopeReleaseRequest } from "./scope-release-targets";
 import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
 import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { isRecord } from "@/lib/shared/coerce";
@@ -123,27 +123,6 @@ async function runAutoRenewedCapsuleWrite(args: {
   return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
-const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
-
-function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
-  const claims = params.claims;
-  if (!Array.isArray(claims)) return null;
-
-  const parsed: Array<Pick<ScopeClaim, "kind" | "value" | "intent">> = [];
-  for (const claim of claims) {
-    if (!claim || typeof claim !== "object") return null;
-    const candidate = claim as Record<string, unknown>;
-    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
-    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
-    const intent = typeof candidate.intent === "string" ? candidate.intent : "";
-    if (!SCOPE_KIND_SET.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
-      return null;
-    }
-    parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });
-  }
-
-  return parsed.length > 0 ? parsed : null;
-}
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
   if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions") {
@@ -342,32 +321,13 @@ export async function releaseCapsuleScopeTool(
   userId: string,
   context: ToolExecutionContext | undefined,
 ): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
-  // looped on generic invalid_input — spell the contract and do not invite retry.
-  if (!Array.isArray(params.claims)) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message:
-        "release_capsule_scope requires claims as a non-empty array of {kind, value}. " +
-        "Example: { capsuleId: \"WC-…\", claims: [{ kind: \"path\", value: \"apps/web/lib/foo.ts\" }] }. " +
-        "Do NOT retry the same malformed payload (retryable: false).",
-      data: { retryable: false },
-    };
-  }
-  const claims = parseScopeReleaseClaims(params.claims);
-  if (!capsuleId || !claims) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message:
-        "capsuleId (WC-*) and at least one valid scope claim release are required " +
-        "(each claim needs kind in path|module|package|route|skill|prompt and a non-empty value). " +
-        "Do NOT retry without fixing the payload (retryable: false).",
-      data: { retryable: false },
-    };
-  }
+  const request = parseScopeReleaseRequest(params);
+  if (!request) return {
+    success: false, error: "invalid_input",
+    message: "Release requires expectedRoomId and the original complete claims (kind, value, intent, recordedByPrincipalId, releaseEpoch). Old requests cannot acquire today's targets; formulate a new intent from a committed owned claim. Do not retry this unchanged payload.",
+    data: { retryable: false },
+  };
+  const { capsuleId, claims, expectedRoomId } = request;
 
   const db = workCapsuleDb();
   try {
@@ -379,6 +339,7 @@ export async function releaseCapsuleScopeTool(
       write: (currentActor) => releaseWorkCapsuleScope({
         db,
         capsuleId,
+        expectedRoomId,
         claims,
         actor: currentActor,
         ownScopeOnly,
