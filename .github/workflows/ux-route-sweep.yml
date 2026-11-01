@@ -193,6 +193,12 @@ jobs:
       # Browser installation is independent of the portal build. Keep it ahead
       # of the artifact rendezvous so the build, fixture, and browser paths
       # overlap instead of extending the critical path serially.
+      - name: Verify retained-work runtime isolation
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --check-target
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
@@ -238,12 +244,6 @@ jobs:
 
       # Poll with curl rather than adding a wait-on dependency just for this job
       # (the New Dependency Gate exists to stop exactly that kind of drive-by).
-      - name: Verify retained-work runtime isolation
-        if: ${{ inputs.scenario == 'foreground-recovery' }}
-        env:
-          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
-        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --check-target
-
       # Partial Postgres routing still delivers to the existing Inngest adapter.
       # Keep that real event boundary available, without registering any apps.
       - name: Start the existing coexistence event backend

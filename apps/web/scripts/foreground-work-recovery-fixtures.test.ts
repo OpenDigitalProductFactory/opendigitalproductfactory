@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertForegroundFixtureRuntime, assertForegroundBackgroundQuiet, prepareForegroundFixtures,
-  cleanupForegroundFixtures, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
+  cleanupForegroundFixtures, foregroundIsolationFailure, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
 
 const admitted = {
   CI: "true", GITHUB_ACTIONS: "true", DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1",
@@ -140,4 +140,14 @@ it("requires a successful recurring reconciliation that inspected retained work"
   expect(hasSuccessfulForegroundReconciliation([{ steps: [{ output: { outcome: "unavailable" } }] }])).toBe(false);
   expect(hasSuccessfulForegroundReconciliation([{ steps: [{ output: { inspected: 0 } }] }])).toBe(false);
   expect(hasSuccessfulForegroundReconciliation([{ steps: [] }])).toBe(false);
+});
+
+
+it("reports isolation failures without leaking exception content or connection details", () => {
+  expect(foregroundIsolationFailure(new Error("Foreground fixture refuses latent proactive work")))
+    .toEqual({ reason: "latent-proactive-work" });
+  expect(foregroundIsolationFailure(Object.assign(new Error("postgresql://private-fixture-host/private-data"), { code: "P2021" })))
+    .toEqual({ reason: "unexpected-isolation-error", databaseCode: "P2021" });
+  expect(foregroundIsolationFailure(new Error("private-fixture-exception-content")))
+    .toEqual({ reason: "unexpected-isolation-error" });
 });

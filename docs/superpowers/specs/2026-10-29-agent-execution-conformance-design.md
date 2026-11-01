@@ -273,3 +273,10 @@ bounded to one CPU/1 GB, loopback-only and removed by the always cleanup step.
 The test rejects a completed cron whose reconciliation output is unavailable
 or inspected no retained work. See the [vendor Docker procedure](https://www.inngest.com/docs/local-development/docker)
 and [pinned CLI flags](https://github.com/inngest/inngest/blob/v1.36.0/cmd/devserver/cmd.go).
+
+The first served run41303117580 built the production bundle but refused the
+preboot isolation check. It did not start the app or modify provider fixtures;
+the business journey is unrun. Admission now runs directly after CI seed/setup,
+before the expensive build. Failure diagnostics emit known reason codes and a
+bounded Prisma error code only; raw exceptions and connection details stay out
+of CI output. Preserve all isolation checks while diagnosing the actual setup.

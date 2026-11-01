@@ -22,6 +22,22 @@ export function assertForegroundFixtureRuntime(env: Readonly<Record<string, stri
   return { sourceSha, origin: target.origin, runKey: `foreground-recovery-${runId}-${attempt}` };
 }
 
+/** Emit stable codes only; database errors may contain private connection data. */
+export function foregroundIsolationFailure(error: unknown): { reason: string; databaseCode?: string } {
+  const reasons: Record<string, string> = {
+    "Foreground fixtures require the explicitly selected GitHub CI runtime": "runtime-not-admitted",
+    "Foreground fixtures refuse targets outside isolated CI services": "target-not-isolated",
+    "Foreground fixture refuses unrelated runnable tasks or retained work": "existing-runnable-work",
+    "Foreground fixture refuses unreadable proactivity intent": "unreadable-proactivity",
+    "Foreground fixture refuses latent proactive work": "latent-proactive-work",
+    "Foreground fixture refuses live room cadences": "live-room-cadence",
+    "Existing queue work prevents isolated startup": "existing-queue-work",
+  };
+  const reason = error instanceof Error ? reasons[error.message] : undefined;
+  const code = isRecord(error) && typeof error.code === "string" && /^P\d{4}$/.test(error.code) ? error.code : undefined;
+  return { reason: reason ?? "unexpected-isolation-error", ...(code ? { databaseCode: code } : {}) };
+}
+
 /** A completed cron run can still contain an unavailable reconciliation step. */
 export function hasSuccessfulForegroundReconciliation(runs: ReadonlyArray<{ steps: ReadonlyArray<{ output: unknown }> }>) {
   return runs.some(run => run.steps.some(step => isRecord(step.output)
@@ -177,7 +193,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href &
       writeFileSync(resolve(out, "target-admission.json"), JSON.stringify({ ...assertForegroundFixtureRuntime(process.env), admittedAt: new Date().toISOString() }, null, 2));
     }
     finally { await prisma.$disconnect(); }
-  })().catch(() => { console.error("Foreground CI target isolation check failed; no fixture writes were attempted."); process.exitCode = 1; });
+  })().catch(error => {
+    console.error("Foreground CI target isolation check failed; no fixture writes were attempted.", foregroundIsolationFailure(error));
+    process.exitCode = 1;
+  });
 }
 export type ForegroundFixture = Awaited<ReturnType<typeof prepareForegroundFixtures>>;
 
