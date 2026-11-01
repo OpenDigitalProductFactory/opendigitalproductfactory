@@ -161,9 +161,14 @@ describe.skipIf(!url)("foreground publication on PostgreSQL", () => {
     await fixture.db.taskRun.create({ data: { ...exhausted,
       progressPayload: { foregroundOutcome: "capacity-wait", resourceWait: { ...createResourceWaitProjection("busy", 5, now), nextAttemptAt: future } },
     } });
+    const { nextAttemptAt: _due, ...legacyWait } = createResourceWaitProjection("busy", 1, now);
+    await fixture.db.taskRun.createMany({ data: [
+      { ...row("eligible-no-time", "input-required", future), progressPayload: { foregroundOutcome: "capacity-wait", resourceWait: legacyWait } },
+      row("eligible-invalid-time", "submitted", "not-a-time"),
+    ] });
     await reconcileForegroundWork();
     expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId).sort()).toEqual([
-      "eligible-due", "eligible-exhausted", "eligible-expired", "eligible-legacy", "eligible-new",
+      "eligible-due", "eligible-exhausted", "eligible-expired", "eligible-invalid-time", "eligible-legacy", "eligible-new", "eligible-no-time",
     ]);
   });
 });
