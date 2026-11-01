@@ -91,6 +91,10 @@ patchedDependencies:
 importers:
 
   .:
+    dependencies:
+      '@opendigitalproductfactory/dpf-workroom':
+        specifier: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
     devDependencies:
       '@axe-core/playwright':
         specifier: 'catalog:'

@@ -137,5 +137,8 @@
     "@playwright/test": "^1.64.0",
     "tsx": "catalog:",
     "typescript7": "npm:typescript@7.0.2"
+  },
+  "dependencies": {
+    "@opendigitalproductfactory/dpf-workroom": "file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz"
   }
 }

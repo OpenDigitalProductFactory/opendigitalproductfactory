@@ -250,5 +250,6 @@
   },
   "hostAuthority": "DPF retains actor identity, current admission/permits, transactions and effect/result custody.",
   "migration": "Move-only; no persisted-record rewrite.",
-  "rollback": "Protected revert restores prior artifact/dependency/import/body set together; component repository and other consumers stay independently owned."
+  "rollback": "Protected revert restores prior artifact/dependency/import/body set together; component repository and other consumers stay independently owned.",
+  "imageMaintenanceScripts": "The root direct file dependency installs the same archive into the existing filtered runtime dependency set, so /app/apps/web-src maintenance scripts can resolve the real conformance caller imports. Web and validators declarations point to the same lockfile artifact."
 }

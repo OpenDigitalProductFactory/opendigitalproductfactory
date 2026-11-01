@@ -1,5 +1,5 @@
 {
-  "note": "Acknowledged DIRECT dependencies. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds a direct dependency not listed here, so every acquired package is a deliberate, recorded decision. Add an entry ONLY after vetting: npm provenance attestation, package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and whether an existing dep already covers it — record the outcome in `note`. See docs/architecture/dependency-reduction-routine.md.",
+  "note": "Acknowledged DIRECT dependencies. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds a direct dependency not listed here, so every acquired package is a deliberate, recorded decision. Add an entry ONLY after vetting: npm provenance attestation, package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and whether an existing dep already covers it \u2014 record the outcome in `note`. See docs/architecture/dependency-reduction-routine.md.",
   "dependencies": {
     "@axe-core/playwright": {
       "added": "2026-06-21",
@@ -9,7 +9,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/api-client": {
       "added": "2026-06-21",
@@ -19,7 +19,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/db": {
       "added": "2026-06-21",
@@ -30,7 +30,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/finance-templates": {
       "added": "2026-06-21",
@@ -40,7 +40,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/i18n": {
       "added": "2026-09-26",
@@ -61,7 +61,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/storefront-templates": {
       "added": "2026-06-21",
@@ -72,7 +72,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/types": {
       "added": "2026-06-21",
@@ -84,7 +84,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@dpf/validators": {
       "added": "2026-06-21",
@@ -97,7 +97,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@expo/metro-runtime": {
       "added": "2026-06-21",
@@ -107,7 +107,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@expo/vector-icons": {
       "added": "2026-06-21",
@@ -117,7 +117,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@floating-ui/react": {
       "added": "2026-06-21",
@@ -127,7 +127,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@fullcalendar/core": {
       "added": "2026-06-21",
@@ -137,7 +137,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@fullcalendar/daygrid": {
       "added": "2026-06-21",
@@ -147,7 +147,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@fullcalendar/interaction": {
       "added": "2026-06-21",
@@ -157,7 +157,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@fullcalendar/react": {
       "added": "2026-06-21",
@@ -167,7 +167,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@fullcalendar/timegrid": {
       "added": "2026-06-21",
@@ -177,7 +177,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@jest/globals": {
       "added": "2026-09-25",
@@ -197,7 +197,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@playwright/test": {
       "added": "2026-06-21",
@@ -207,7 +207,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@prisma/adapter-pg": {
       "added": "2026-06-21",
@@ -217,7 +217,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@prisma/client": {
       "added": "2026-06-21",
@@ -227,7 +227,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@react-native/jest-preset": {
       "added": "2026-08-04",
@@ -237,7 +237,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "Official Meta/React Native package (@react-native scope, same publisher as react-native itself). Split out of react-native's own package in RN 0.85 / jest-expo 57 as an explicit peer dep — dev-only, test-config surface, no runtime code shipped to the app bundle. Pinned to 0.85.3 to match the workspace's react-native version (BI-91077E80)."
+      "note": "Official Meta/React Native package (@react-native scope, same publisher as react-native itself). Split out of react-native's own package in RN 0.85 / jest-expo 57 as an explicit peer dep \u2014 dev-only, test-config surface, no runtime code shipped to the app bundle. Pinned to 0.85.3 to match the workspace's react-native version (BI-91077E80)."
     },
     "@ricky0123/vad-web": {
       "added": "2026-06-21",
@@ -247,7 +247,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@tailwindcss/postcss": {
       "added": "2026-06-21",
@@ -257,7 +257,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@testing-library/jest-dom": {
       "added": "2026-06-21",
@@ -267,7 +267,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@testing-library/react": {
       "added": "2026-06-21",
@@ -277,7 +277,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@testing-library/react-native": {
       "added": "2026-06-21",
@@ -287,7 +287,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/jest": {
       "added": "2026-06-21",
@@ -297,7 +297,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/mailparser": {
       "added": "2026-09-09",
@@ -327,7 +327,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/node": {
       "added": "2026-06-21",
@@ -342,7 +342,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/papaparse": {
       "added": "2026-06-21",
@@ -352,7 +352,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/pg": {
       "added": "2026-06-21",
@@ -363,7 +363,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/picomatch": {
       "added": "2026-06-21",
@@ -373,7 +373,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/react": {
       "added": "2026-06-21",
@@ -384,7 +384,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@types/react-dom": {
       "added": "2026-06-21",
@@ -394,7 +394,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@vitejs/plugin-react": {
       "added": "2026-06-21",
@@ -404,7 +404,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "@vitest/coverage-v8": {
       "added": "2026-07-27",
@@ -425,7 +425,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "autoprefixer": {
       "added": "2026-06-21",
@@ -435,7 +435,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "axe-core": {
       "added": "2026-08-28",
@@ -456,7 +456,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "dotenv": {
       "added": "2026-06-21",
@@ -468,7 +468,7 @@
         "dev",
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "elkjs": {
       "added": "2026-06-21",
@@ -478,7 +478,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo": {
       "added": "2026-06-21",
@@ -488,7 +488,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-camera": {
       "added": "2026-06-21",
@@ -498,7 +498,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-linking": {
       "added": "2026-06-21",
@@ -508,7 +508,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-local-authentication": {
       "added": "2026-06-21",
@@ -518,7 +518,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-location": {
       "added": "2026-06-21",
@@ -528,7 +528,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-notifications": {
       "added": "2026-06-21",
@@ -538,7 +538,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-router": {
       "added": "2026-06-21",
@@ -548,7 +548,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-secure-store": {
       "added": "2026-06-21",
@@ -558,7 +558,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-sqlite": {
       "added": "2026-06-21",
@@ -568,7 +568,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "expo-status-bar": {
       "added": "2026-06-21",
@@ -578,7 +578,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "fast-xml-parser": {
       "added": "2026-06-21",
@@ -588,7 +588,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "fflate": {
       "added": "2026-06-21",
@@ -598,7 +598,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "fuse.js": {
       "added": "2026-06-21",
@@ -608,9 +608,8 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
-
     "i18n-iso-countries": {
       "added": "2026-06-21",
       "workspaces": [
@@ -619,7 +618,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "imapflow": {
       "added": "2026-09-09",
@@ -639,7 +638,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "jest": {
       "added": "2026-06-21",
@@ -649,7 +648,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "jest-expo": {
       "added": "2026-06-21",
@@ -659,7 +658,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "jose": {
       "added": "2026-06-21",
@@ -669,7 +668,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "jsdom": {
       "added": "2026-06-21",
@@ -679,7 +678,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "jsep": {
       "added": "2026-06-21",
@@ -689,7 +688,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "libphonenumber-js": {
       "added": "2026-06-21",
@@ -699,7 +698,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "lucide-react": {
       "added": "2026-06-21",
@@ -709,7 +708,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "mailparser": {
       "added": "2026-09-09",
@@ -739,7 +738,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "Plan 2026-09-08 M5: the one markdown renderer, lib/shared/markdown.ts renderMarkdown() with raw HTML off (founder decision 2026-09-26, WWMD DI-D9292D812CFF). Replaces react-markdown + remark-gfm (retired below; −87 resolved components). Vetted 2026-09-29: MIT; markdown-it org on GitHub, one npm maintainer; ~32M weekly downloads; 14.3.2 published 2026-09-12 (past the release-age floor); no npm provenance attestation; OSV clean. 14.x rather than 15.x because 14 reuses the linkify-it 5, uc.micro 2, entities 4 and punycode.js already in the tree (15 added two duplicated names). No network, native or runtime-exec surface."
+      "note": "Plan 2026-09-08 M5: the one markdown renderer, lib/shared/markdown.ts renderMarkdown() with raw HTML off (founder decision 2026-09-26, WWMD DI-D9292D812CFF). Replaces react-markdown + remark-gfm (retired below; \u221287 resolved components). Vetted 2026-09-29: MIT; markdown-it org on GitHub, one npm maintainer; ~32M weekly downloads; 14.3.2 published 2026-09-12 (past the release-age floor); no npm provenance attestation; OSV clean. 14.x rather than 15.x because 14 reuses the linkify-it 5, uc.micro 2, entities 4 and punycode.js already in the tree (15 added two duplicated names). No network, native or runtime-exec surface."
     },
     "msw": {
       "added": "2026-06-21",
@@ -749,7 +748,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "nativewind": {
       "added": "2026-06-21",
@@ -759,7 +758,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "net-snmp": {
       "added": "2026-06-21",
@@ -770,7 +769,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "next": {
       "added": "2026-06-21",
@@ -780,7 +779,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "next-auth": {
       "added": "2026-06-21",
@@ -790,7 +789,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "nodemailer": {
       "added": "2026-06-21",
@@ -810,7 +809,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "pg": {
       "added": "2026-06-21",
@@ -822,7 +821,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "picomatch": {
       "added": "2026-06-21",
@@ -832,7 +831,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "pmtiles": {
       "added": "2026-10-02",
@@ -842,7 +841,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "BI-814F86E1 single-file vector tile archives served by byte range from the install. Vetted 2026-10-01: BSD-3-Clause; Protomaps (1 npm maintainer, bdon) — a bus-factor risk accepted because the format is an open spec (PMTiles v3) and the client is small enough to absorb if abandoned; no npm provenance attestation; on npm since 2021-02; pnpm scan:deps (OSV) clean. No existing dependency covers it. Pinned exactly."
+      "note": "BI-814F86E1 single-file vector tile archives served by byte range from the install. Vetted 2026-10-01: BSD-3-Clause; Protomaps (1 npm maintainer, bdon) \u2014 a bus-factor risk accepted because the format is an open spec (PMTiles v3) and the client is small enough to absorb if abandoned; no npm provenance attestation; on npm since 2021-02; pnpm scan:deps (OSV) clean. No existing dependency covers it. Pinned exactly."
     },
     "postcss": {
       "added": "2026-06-21",
@@ -852,7 +851,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "prisma": {
       "added": "2026-06-21",
@@ -862,7 +861,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "prom-client": {
       "added": "2026-06-21",
@@ -873,7 +872,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react": {
       "added": "2026-06-21",
@@ -884,7 +883,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-data-grid": {
       "added": "2026-06-21",
@@ -894,7 +893,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-day-picker": {
       "added": "2026-06-21",
@@ -904,7 +903,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-dom": {
       "added": "2026-06-21",
@@ -914,7 +913,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-native": {
       "added": "2026-06-21",
@@ -924,7 +923,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-native-reanimated": {
       "added": "2026-08-06",
@@ -934,7 +933,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "Software Mansion (swmansion), MIT. Canonical RN animation lib, already present transitively (via nativewind/expo-router/react-native-screens/gesture-handler/drawer-layout) — promoted to direct + pinned to 4.3.1, the version Expo SDK 56 declares in bundledNativeModules.json. No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
+      "note": "Software Mansion (swmansion), MIT. Canonical RN animation lib, already present transitively (via nativewind/expo-router/react-native-screens/gesture-handler/drawer-layout) \u2014 promoted to direct + pinned to 4.3.1, the version Expo SDK 56 declares in bundledNativeModules.json. No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
     },
     "react-native-safe-area-context": {
       "added": "2026-06-21",
@@ -944,7 +943,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-native-screens": {
       "added": "2026-06-21",
@@ -954,7 +953,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-native-sse": {
       "added": "2026-06-21",
@@ -964,7 +963,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "react-native-worklets": {
       "added": "2026-08-06",
@@ -974,7 +973,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "Software Mansion (swmansion), MIT. Reanimated 4's worklets runtime companion, already present transitively — promoted to direct + pinned to 0.8.3, the version Expo SDK 56 declares in bundledNativeModules.json (ships worklets/Compat/StableApi.h that expo-modules-core requires). No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
+      "note": "Software Mansion (swmansion), MIT. Reanimated 4's worklets runtime companion, already present transitively \u2014 promoted to direct + pinned to 0.8.3, the version Expo SDK 56 declares in bundledNativeModules.json (ships worklets/Compat/StableApi.h that expo-modules-core requires). No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
     },
     "react-test-renderer": {
       "added": "2026-06-21",
@@ -984,7 +983,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "recharts": {
       "added": "2026-06-21",
@@ -994,7 +993,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "sharp": {
       "added": "2026-06-21",
@@ -1004,7 +1003,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "smol-toml": {
       "added": "2026-06-21",
@@ -1014,7 +1013,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "tailwindcss": {
       "added": "2026-06-21",
@@ -1025,7 +1024,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "tsx": {
       "added": "2026-06-21",
@@ -1039,7 +1038,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "typescript": {
       "added": "2026-06-21",
@@ -1062,7 +1061,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "typescript7": {
       "added": "2026-10-08",
@@ -1085,7 +1084,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "vite": {
       "added": "2026-06-21",
@@ -1096,7 +1095,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "vitest": {
       "added": "2026-06-21",
@@ -1115,7 +1114,7 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "yaml": {
       "added": "2026-09-25",
@@ -1139,7 +1138,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
     },
     "zustand": {
       "added": "2026-06-21",
@@ -1149,7 +1148,19 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap \u2014 pre-existing dependency, acknowledged in bulk"
+    },
+    "@opendigitalproductfactory/dpf-workroom": {
+      "added": "2026-10-31",
+      "workspaces": [
+        ".",
+        "apps/web",
+        "packages/validators"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "BI-FCDCAE98: first-party private immutable artifact0.1.0-candidate.2, source OpenDigitalProductFactory/dpf-workroom@e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97, SHA256 b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40. Apache-2.0 LICENSE/NOTICE verified in archive; zero runtime dependencies. Local file archive with lock integrity; no npm registry provenance/download-age claim is applicable to this unreleased private candidate. Original source provenance, installed conformance, strict receiving matrix and independent review passed. Reuses extracted DPF implementation and retires nine duplicate bodies. Root dependency makes maintenance-script imports available in the existing filtered image runtime set."
     }
   },
   "retired": {
