@@ -105,9 +105,14 @@ on `NonProductionEnvironmentLease`; no default or backfill for retained rows.
 
 The database owns both facts through one row trigger, following the existing
 database-owned Workroom sequence/preservation pattern. Reject supplied history
-on insertion. Stamp only the actual fresh producer shape: its creation time is
-the database transaction default, with either queued/no-admission/no-slot state
-or actual active admission. A fresh queued row receives version 1 with no first
+on insertion. Stamp only the actual fresh producer shape: its creation time equals
+the database transaction timestamp, with either queued/no-admission/no-slot
+state or actual active admission. The fresh claim must read and validate
+`CURRENT_TIMESTAMP::timestamp(3)` inside its existing database transaction and
+supply that value as `createdAt`; omitting the ORM field does not establish
+that database-clock contract. A missing or invalid real clock result aborts
+creation rather than inventing history. Legacy narrow domain ports without a
+clock reader keep their existing unknown-history behavior. A fresh queued row receives version 1 with no first
 admission; an active row receives version 1 and a database-clock first admission.
 A terminal or historical/backdated insertion remains unknown regardless of
 submitted values. A structural table copy has no trigger and cannot mint proof.
@@ -189,3 +194,35 @@ retains the narrower taskless and never-admitted limits stated above.
 
 All five map atomically to BI-3C0F7A92. Wider autonomy and task-run lifecycle
 repairs stay with their existing carriers and are not closed by this change.
+
+
+## Measured producer-clock correction
+
+Qualified afd attempt `cmvxfqq1a2m3d01tmjtqfoi0t` remained failed: the explicit
+waiting deadline was corrected, but the standalone fixture ignored its pressure
+setting and actual new rows did not reliably acquire positive birth history.
+Source inspection proves a missing pool configuration selects compatibility
+singleton admission before pressure is consulted. Configure the canonical
+private PlatformConfig row for pressure-based producer tests.
+
+A bounded private diagnostic under the still-admitted exact afd runtime
+(tree `0c8e91f119a0463e9b5d47c9b4376e4369e947f9`) measured three ORM inserts
+omitting createdAt: their saved times differed from the same transaction clock
+by 21/2/2 ms, with NULL history. Three counterfactual inserts supplying the
+validated database transaction timestamp yielded zero difference and version 1.
+The committed migration remains immutable. Its historical omitted-creation-time
+comment records the disproven assumption; the current producer supplies the
+database timestamp explicitly. The private schema was removed; this is diagnostic
+evidence, not a passing gate
+or proof that the actual producer is repaired (`cmvxfrmja2m6801tmykjxmp3p`).
+
+Within the admitted implementation, first add a failing actual-claim source test
+for database-clock use and invalid-clock refusal. Reuse the existing provenance
+module for a small validated birth-fields helper and move the existing lease-ID
+factory there without changing its format; compose it only at fresh
+creation, never existing-row refresh or revival. Keep the strict SQL comparison,
+first-admission preservation and legacy non-backfill rule unchanged. Make the
+private database race fixtures create with the same transaction clock, configure
+the real producer fixture's pool, and rerun real producer/revival/legacy/race
+cases plus ordinary independent review and canonical integration. No new stored
+fact, model, tool, grant or authority exception is introduced.

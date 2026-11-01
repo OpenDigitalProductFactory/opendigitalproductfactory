@@ -41,8 +41,11 @@ describe.skipIf(!url)("obsolete release settlement on isolated leased PostgreSQL
     await fixture.db.toolExecution.create({ data: { ...toolExecutions[0], parameters: toolExecutions[0].parameters as any,
       result: toolExecutions[0].result as any, threadId: "", executionMode: "external-jsonrpc" } });
     const { admissionHistoryVersion, firstAdmittedAt, ...target } = obsoleteTarget();
-    const fresh = await fixture.db.nonProductionEnvironmentLease.create({ data: { ...target, status: "queued", releasedAt: null,
-      ownerProvider: "codex", purpose: "synthetic isolated race test", url: "http://fixture.invalid", ports: [], expiresAt: now } });
+    const fresh = await fixture.db.$transaction(async tx => {
+      const [{ createdAt }] = await tx.$queryRaw<Array<{ createdAt: Date }>>`SELECT CURRENT_TIMESTAMP::timestamp(3) AS "createdAt"`;
+      return tx.nonProductionEnvironmentLease.create({ data: { ...target, createdAt, status: "queued", releasedAt: null,
+        ownerProvider: "codex", purpose: "synthetic isolated race test", url: "http://fixture.invalid", ports: [], expiresAt: now } });
+    });
     expect(fresh, "Fresh fixture must acquire database-owned birth history")
       .toMatchObject({ admissionHistoryVersion: 1, firstAdmittedAt: null });
     now = new Date();

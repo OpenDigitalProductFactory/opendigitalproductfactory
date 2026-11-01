@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { createReviewPostgresFixture } from "../../test-support/review-postgres-fixture";
 import { claimNonprodEnvironmentLease, releaseNonprodEnvironmentLease } from "./environment-lease";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
+import { derivedLocalCiPoolConfig, LOCAL_CI_POOL_CONFIG_KEY } from "./local-ci-pool-policy";
 import { settleObsoleteLeaseReleaseEnvelopes, type ObsoleteReleaseDb } from "../coworker/obsolete-lease-envelope";
 import { obsoleteEnvelope } from "../coworker/obsolete-lease-envelope.test-fixtures";
 
@@ -14,7 +15,7 @@ const configured = process.env.DATABASE_URL;
 const leased = (() => { try { return process.env.DPF_NONPROD_LEASE_ID && configured
   && /^\/dpf_local_ci_\d+$/.test(new URL(configured).pathname) ? configured : undefined; } catch { return undefined; } })();
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL ?? leased;
-const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun"];
+const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun", "PlatformConfig"];
 const schema = `review_admission_${randomUUID().replaceAll("-", "")}`;
 type Fixture = Awaited<ReturnType<typeof createReviewPostgresFixture>>;
 const attach = (f: Fixture) => f.pool.query(`CREATE TRIGGER "NonProductionEnvironmentLease_admission_history"
@@ -22,9 +23,9 @@ const attach = (f: Fixture) => f.pool.query(`CREATE TRIGGER "NonProductionEnviro
   FOR EACH ROW EXECUTE FUNCTION public.nonprod_lease_preserve_admission_history()`);
 
 function domainDb(f: Fixture) {
-  // Optional policy/ownership ports are deliberately absent: this tests the
-  // canonical producer's standalone singleton contract, not install settings.
-  return { nonProductionEnvironmentLease: f.db.nonProductionEnvironmentLease,
+  // The private canonical configuration makes pressure-based queuing real;
+  // the compatibility singleton intentionally ignores pressure without it.
+  return { nonProductionEnvironmentLease: f.db.nonProductionEnvironmentLease, platformConfig: f.db.platformConfig,
     $transaction: f.db.$transaction.bind(f.db) };
 }
 async function realClaim(f: Fixture, queued: boolean) {
@@ -52,7 +53,10 @@ async function parked(f: Fixture, leaseId: string) {
 describe.skipIf(!url)("forward-only reservation admission history — isolated PostgreSQL", () => {
   let f: Fixture;
   beforeAll(async () => { f = await createReviewPostgresFixture({ url: url!, schema, tables }); await attach(f); });
-  beforeEach(async () => { await f.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease", "TaskRun"`); });
+  beforeEach(async () => {
+    await f.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease", "TaskRun", "PlatformConfig"`);
+    await f.db.platformConfig.create({ data: { key: LOCAL_CI_POOL_CONFIG_KEY, value: derivedLocalCiPoolConfig(1) } });
+  });
   afterAll(async () => { await f?.close(); });
 
   it("the real queued claim and cancellation producer creates a genuinely eligible request", async () => {

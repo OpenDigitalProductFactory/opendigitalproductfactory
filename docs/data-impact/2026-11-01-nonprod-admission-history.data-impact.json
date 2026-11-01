@@ -11,13 +11,14 @@
   "migration": {
     "name": "20261101060000_nonprod_lease_admission_history",
     "backfill": "None. No existing-row UPDATE or history reconstruction. Legacy NULL version remains unknown, including through future requeue and revival.",
-    "rollback": "Forward-only database-owned invariant. Older source writers omit these fields; the trigger preserves or records them without caller changes. Source rollback retains history and never drops the invariant to reinterpret old rows."
+    "rollback": "Forward-only database-owned invariant. Older source writers omit these fields; the trigger preserves or records them without caller changes. Source rollback retains history and never drops the invariant to reinterpret old rows. Older source may create new rows with unknown birth history; retained first admission remains protected. Fresh current-source claims explicitly use the same database transaction timestamp for creation."
   },
   "tests": [
     "apps/web/lib/nonprod/environment-lease-admission-history.postgres.test.ts",
     "apps/web/lib/coworker/obsolete-lease-envelope.test.ts",
     "apps/web/lib/coworker/obsolete-lease-envelope.postgres.test.ts",
-    "apps/web/lib/decision/concierge-sweep-runner.test.ts"
+    "apps/web/lib/decision/concierge-sweep-runner.test.ts",
+    "apps/web/lib/nonprod/environment-lease-provenance.test.ts"
   ],
   "changes": [{
     "kind": "model",
