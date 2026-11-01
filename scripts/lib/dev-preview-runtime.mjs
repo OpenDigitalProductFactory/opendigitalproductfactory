@@ -14,8 +14,14 @@ import { validateComposeSafety } from './compose-safety.mjs';
 import { resolveMcpCredential } from './mcp-credential.mjs';
 import { mcpCall } from './mcp-client.mjs';
 import { superviseLeaseRun, admittedLeaseTtlMs } from './lease-supervisor.mjs';
+import { observePreviewReservation } from './host-reservation-observation.mjs';
 import { sampleLocalCiHostPressure } from './local-ci-host-pressure.mjs';
 import { sanitizeForLog } from './safe-log.mjs';
+
+export function supervisePreviewRun({ binding, call, ...options }) {
+  return superviseLeaseRun({ ...options, release: undefined,
+    observeReservation: () => observePreviewReservation({ binding, call }) });
+}
 
 export function assertToolReadiness(response) {
   const report = deliveryReadinessFromDiscovery(response);
@@ -145,6 +151,14 @@ export function commandRunner({ docker = 'docker', env = process.env } = {}) {
 
 /** Low-cardinality diagnostics: transport messages may contain secrets. */
 export function previewLeaseEventSummary(event) {
+  if (event.type === 'reservation-observed' || event.type === 'reservation-observation-unavailable') {
+    const observation = event.observation;
+    const reservationState = ['pending', 'settled', 'unknown'].includes(observation?.reservationState)
+      ? observation.reservationState : 'unknown';
+    const leaseStatus = ['active', 'queued', 'released', 'cancelled', 'expired'].includes(observation?.leaseStatus)
+      ? observation.leaseStatus : undefined;
+    return { type: event.type, reservationState, ...(leaseStatus ? { leaseStatus } : {}), processCleanupVerified: false };
+  }
   if (!['authority-deadline', 'heartbeat-lost', 'heartbeat-uncertain', 'fence-termination-failed', 'release-failed'].includes(event.type)) return null;
   const reason = typeof event.reason === 'string' ? event.reason : '';
   let category = 'unclassified';
@@ -306,10 +320,6 @@ async function runAdmittedPreview(env, cleanupState) {
   const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';
   const call = (tool, args) => callPreviewMcp(tool, args, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
 
-  const release = async () => {
-    const result = await call('release_nonprod_environment_lease', { leaseId, ownerSessionId });
-    if (!result.success) throw new Error(`Release ${leaseId} for owning session ${ownerSessionId}: ${result.message || result.error || 'approval required'}`);
-  };
   try {
     await assertPreviewDeclarationFile(declaration);
     await writeFile(overridePath, serializePreviewOverride(identity), { mode: 0o600, flag: 'wx' });
@@ -321,6 +331,7 @@ async function runAdmittedPreview(env, cleanupState) {
         || !(Date.parse(admitted.expiresAt) > Date.now())
         || admitted.url !== 'http://localhost:3001' || !admitted.purpose?.includes(`(${sha})`)) throw new Error('preview_admission_binding_mismatch');
     await assertAdmittedWorktreePath(admitted.worktreePath, worktree);
+    cleanupState.binding = admitted;
     const config = JSON.parse(await compose(['config', '--format', 'json']));
     assertPreviewConfig(config, identity);
     protectedBefore = await protectedSnapshot();
@@ -349,7 +360,8 @@ async function runAdmittedPreview(env, cleanupState) {
       const initRunning = async () => {
         try { return (await runner.run(['inspect', '--format', '{{.State.Running}}', initName])) === 'true'; } catch { return false; }
       };
-      const outcome = await superviseLeaseRun({
+      const outcome = await supervisePreviewRun({
+        binding: admitted, call,
         ttlMs: admittedLeaseTtlMs(expiresAt, 120000), expiresAt,
         run: () => runPreviewLifecycle({ compose, inspect, verifySource, stopOwned,
           ready: async () => {
@@ -385,7 +397,6 @@ async function runAdmittedPreview(env, cleanupState) {
           return call('renew_nonprod_environment_lease', { leaseId, ownerSessionId, ttlMinutes: 2,
             hostPressure: await sampleLocalCiHostPressure({ rootPath: worktree, evidenceIsolationHealthy: true }) });
         }, terminate,
-        release,
         onEvent: event => { const summary = previewLeaseEventSummary(event); if (summary) console.error(JSON.stringify(summary)); },
       });
       if (outcome.status !== 'completed') throw new Error(`preview_fenced:${outcome.reason}`);
@@ -411,15 +422,16 @@ export async function main(env = process.env) {
   const cleanupState = { supervised: false };
   try { return await runAdmittedPreview(env, cleanupState); }
   finally {
-    // Even prerequisite/source failures reconcile the admitted reservation.
+    // No generic release of a process-bearing reservation. Missing admission
+    // remains unknown, and neither readback nor natural expiry proves writer exit.
     if (!cleanupState.supervised && env.DPF_DEV_PORTAL_LEASE_ID && env.DPF_DEV_PORTAL_OWNER_SESSION_ID) {
       const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';
-      try {
-        const result = await mcpCall('release_nonprod_environment_lease', {
-          leaseId: env.DPF_DEV_PORTAL_LEASE_ID, ownerSessionId: env.DPF_DEV_PORTAL_OWNER_SESSION_ID,
-        }, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
-        if (!result.success) console.error(`Release ${env.DPF_DEV_PORTAL_LEASE_ID} for owning session ${env.DPF_DEV_PORTAL_OWNER_SESSION_ID}: ${result.message || result.error || 'approval required'}`);
-      } catch { console.error(`Release ${env.DPF_DEV_PORTAL_LEASE_ID}: cleanup could not be reconciled; platform expiry remains authoritative`); }
+      const observation = await observePreviewReservation({
+        binding: cleanupState.binding ?? { leaseId: env.DPF_DEV_PORTAL_LEASE_ID },
+        call: (tool, args) => mcpCall(tool, args, { mcpUrl,
+          bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer }),
+      });
+      console.error(JSON.stringify(previewLeaseEventSummary({ type: 'reservation-observed', observation })));
     }
   }
 }
