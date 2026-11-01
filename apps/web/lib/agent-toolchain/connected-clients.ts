@@ -117,3 +117,39 @@ export async function loadConnectedAgentClients(now: Date = new Date()): Promise
   const [{ prisma }, { getPublishedToolchain }] = await Promise.all([import("@dpf/db"), import("./served-toolchain")]);
   return buildConnectedClientsView(prisma as never, { published: getPublishedToolchain(), mcpEndpoint: configuredMcpEndpoint(), now });
 }
+
+/** Same current human view authority as the operations page; never a write grant. */
+export async function canViewConnectedClients(userId: string): Promise<boolean> {
+  const [{ currentUserContext }, { can }] = await Promise.all([
+    import("@/lib/govern/current-user-context"), import("@/lib/permissions"),
+  ]);
+  const user = await currentUserContext(userId);
+  return !!user && can(user, "view_operations");
+}
+
+/** Explicit allowlist for model context. Never serialize credential or host identities. */
+export function connectedClientsPromptFacts(view: ConnectedClientsView | null) {
+  if (!view?.release) return {
+    status: "unavailable",
+    reason: view ? "No published agent tool pack is available." : "Connected-client health could not be read.",
+    nextRoute: "/ops/self-upgrade",
+  };
+  return {
+    status: "available",
+    release: { packVersion: view.release.packVersion, fingerprint: view.release.fingerprint },
+    current: view.clients.filter((row) => row.standing === "current").length,
+    total: view.clients.length,
+    truncated: view.truncated,
+    scope: "One bounded page of observed clients; silent or undeclared clients are not confirmed current.",
+    clients: view.clients.map((row) => ({
+      name: clientDisplayName(row), standing: row.standing,
+      loadedVersion: row.loadedVersion, loadedFingerprint: row.loadedFingerprint,
+      lastSeen: row.lastSeen.toISOString(), authMode: row.authMode,
+      behind: row.behind, reasons: row.reasons,
+      hostAgentStatus: row.hostAgent?.status ?? null,
+      hostAgentSince: row.hostAgent?.since?.toISOString() ?? null,
+    })),
+    meaning: "Behind compares the loaded tool pack with the released version and fingerprint. It does not by itself establish an LLM provider, background-job, or security failure.",
+    nextRoute: "/ops/self-upgrade",
+  };
+}

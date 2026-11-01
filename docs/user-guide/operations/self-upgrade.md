@@ -186,6 +186,13 @@ Each client gets one of these labels:
 
 When a client is behind, a **Why** line says what differs, for example that the files it loaded differ from the released ones.
 
+You can ask the coworker on this page about these labels. It reads the same
+connected-client facts under your current operations view permission, including
+unknown versions and the reason a client is behind. If that read is unavailable,
+it says so. A Behind label compares agent tools with the released files; it does
+not by itself mean an AI provider or background job has failed. Asking about it
+does not update a client.
+
 Each computer that runs these tools also keeps them current on its own. A background job checks hourly and at login, and the card shows how that job last did:
 - it updates on its own;
 - it has been failing, and since when;

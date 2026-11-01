@@ -6,6 +6,8 @@ const {
   mockGetVocabulary,
   mockResolveOrgProfileId,
   mockGetSelfUpgradeConfig,
+  mockConnectedClients,
+  mockCurrentUser,
 } = vi.hoisted(() => ({
   mockPrisma: {
     organization: { findFirst: vi.fn() },
@@ -43,6 +45,8 @@ const {
   mockGetVocabulary: vi.fn(),
   mockResolveOrgProfileId: vi.fn(),
   mockGetSelfUpgradeConfig: vi.fn(),
+  mockConnectedClients: vi.fn(),
+  mockCurrentUser: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ Prisma: { DbNull: "DbNull" }, prisma: mockPrisma }));
@@ -53,10 +57,17 @@ vi.mock("@/lib/decision-perspective/material", () => ({ resolveOrgProfileId: moc
 // tak may not import the actions/queue contexts). Mock the config loader; the
 // job-engine + run signals come from the mocked prisma above.
 vi.mock("@/lib/self-upgrade/config", () => ({ getSelfUpgradeConfig: mockGetSelfUpgradeConfig }));
+vi.mock("@/lib/agent-toolchain/connected-clients", async (original) => ({
+  ...await original<typeof import("@/lib/agent-toolchain/connected-clients")>(),
+  loadConnectedAgentClients: mockConnectedClients,
+}));
+vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mockCurrentUser }));
 
 import { getRouteDataContext } from "./route-context";
 
 beforeEach(() => {
+  mockCurrentUser.mockResolvedValue({ userId: "user-1", isSuperuser: true, platformRole: "HR-000" });
+  mockConnectedClients.mockResolvedValue({ release: { packVersion: "0.2.19", fingerprint: "released1234" }, clients: [], truncated: false });
   mockPrisma.businessContext.findFirst.mockReset();
   mockPrisma.storefrontConfig.findFirst.mockReset();
   mockPrisma.organizationLicenseProfile.findFirst.mockReset();
@@ -422,6 +433,10 @@ describe("getRouteDataContext", () => {
     // Self-upgrade release status is present too.
     expect(context).toContain("Self-upgrade: enabled (channel: stable)");
     expect(context).toContain("SU-af60461f8");
+    expect(context).toContain("CONNECTED AGENT CLIENTS");
+    expect(context).toContain("0.2.19");
+    expect(context).toContain("released1234");
+    expect(mockConnectedClients).toHaveBeenCalled();
     // It must NOT have fallen back to the /ops backlog provider.
     expect(context).not.toContain("PAGE DATA — Operations Backlog:");
     expect(mockGetSelfUpgradeConfig).toHaveBeenCalled();

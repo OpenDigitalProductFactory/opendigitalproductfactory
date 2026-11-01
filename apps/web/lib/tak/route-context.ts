@@ -34,7 +34,7 @@ const PAGE_CONTEXT_PROVIDERS: PageContextProvider[] = [
   // /ops/promotions, /ops/security get the page-identity label, not the backlog.
   { route: "/ops", match: "exact", build: () => getOpsContext() },
   { route: "/ops/dev-loop", match: "exact", build: () => getDevLoopContext() },
-  { route: "/ops/self-upgrade", match: "exact", build: () => getSelfUpgradeContext() },
+  { route: "/ops/self-upgrade", match: "exact", build: ({ userId }) => getSelfUpgradeContext(userId) },
   { route: "/compliance/licensing", match: "prefix", build: () => getLicensingReadinessContext() },
   // /compliance parses a regulation/obligation/control id out of the route, so it
   // genuinely serves its subtree → `prefix`.

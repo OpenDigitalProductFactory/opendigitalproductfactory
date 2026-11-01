@@ -20,6 +20,7 @@
 
 import { prisma } from "@dpf/db";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { canViewConnectedClients, connectedClientsPromptFacts, loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
 
 // Mirror of INNGEST_REGISTRATION_CONFIG_KEY / INNGEST_WATCHDOG_CONFIG_KEY in
 // apps/web/lib/queue/job-engine-health.ts. They are duplicated as string
@@ -46,10 +47,11 @@ function minutesSince(iso: string | null, now: number): number | null {
   return Number.isFinite(parsed) ? Math.floor((now - parsed) / 60_000) : null;
 }
 
-export async function getSelfUpgradeContext(): Promise<string> {
+export async function getSelfUpgradeContext(userId: string): Promise<string> {
+  if (!await canViewConnectedClients(userId)) return "\nSelf-upgrade page data unavailable: operations view is not authorized.";
   const now = Date.now();
 
-  const [config, latestRun, registrationRow, watchdogRow] = await Promise.all([
+  const [config, latestRun, registrationRow, watchdogRow, clients] = await Promise.all([
     getSelfUpgradeConfig(),
     prisma.selfUpgradeRun.findFirst({
       orderBy: { createdAt: "desc" },
@@ -65,6 +67,7 @@ export async function getSelfUpgradeContext(): Promise<string> {
     }),
     prisma.platformConfig.findUnique({ where: { key: INNGEST_REGISTRATION_CONFIG_KEY } }),
     prisma.platformConfig.findUnique({ where: { key: INNGEST_WATCHDOG_CONFIG_KEY } }),
+    loadConnectedAgentClients(new Date(now)).catch(() => null),
   ]);
 
   const registration = asRecord(registrationRow?.value);
@@ -127,6 +130,10 @@ export async function getSelfUpgradeContext(): Promise<string> {
     "",
     `Self-upgrade: ${config.enabled ? "enabled" : "disabled"} (channel: ${config.channel})`,
     runLine,
+    "",
+    "CONNECTED AGENT CLIENTS (same read model as this page):",
+    JSON.stringify(connectedClientsPromptFacts(clients)),
+    "If client health is unavailable, say so; do not substitute upgrade or background-job facts. For details use the Connected agent clients section on /ops/self-upgrade. Reading this does not update or repair a client.",
     "",
     'BACKGROUND JOBS (the "Background jobs need attention" alert):',
     ...jobEngineLines,

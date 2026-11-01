@@ -31,5 +31,5 @@ Traceability: requirement OBJ-FACTS; contract authorized-surface-v1; flow /ops/s
 Risk: adding a surface could make unrelated upgrade questions appear grounded in client-only evidence. Label the section and limits explicitly; never claim background engine or upgrade health from client status. Permission revocation must close sessions before further reads. Shared read limits and truncation must survive projection. Roll back this one source change through a protected PR; no persistent state is changed.
 
 ## Backlog coverage
-One atomic deliverable maps to BI-7CE02DE9. Projection, permission, route context and trusted surface form one user-visible read contract and cannot independently satisfy it. No dependencies on the separate provider-status/foreground-recovery/grounding-failure implementations. Receipt will be recorded against the immutable committed plan before source implementation.
+One atomic deliverable maps to BI-7CE02DE9. Projection, permission, route context and trusted surface form one user-visible read contract and cannot independently satisfy it. No dependencies on the separate provider-status/foreground-recovery/grounding-failure implementations. Coverage receipt cmvx3qkjk0euw01poampo10z1 binds the immutable plan at e41eb5f71092d89d1dc95c8148bc93c802d2aeba; implementation admission IRD-9E72B6ACA425.
 

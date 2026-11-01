@@ -5,6 +5,8 @@ import type {
 
 import { getDiscoveryOperationsViewModel } from "@/lib/discovery-operations-view-model";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { canViewConnectedClients, loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
+import { SELF_UPGRADE_CLIENTS_LOADER_ID, SELF_UPGRADE_CLIENTS_SURFACE, projectSelfUpgradeClientsSurface } from "./surfaces/self-upgrade-clients-surface";
 
 import { compileSurfaceDefinitions, surfaceContractDigest } from "./authorized-surface-compiler";
 import { observeAuthorizedSurface } from "./authorized-surface-observability";
@@ -15,9 +17,11 @@ import {
   projectDiscoveryOperationsSurface,
 } from "./surfaces/discovery-operations-surface";
 
-export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE] as const;
+export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE, SELF_UPGRADE_CLIENTS_SURFACE] as const;
 
 const loaders = new Map([
+  [SELF_UPGRADE_CLIENTS_LOADER_ID, async (_context: SurfacePrincipalContext) =>
+    projectSelfUpgradeClientsSurface(await loadConnectedAgentClients().catch(() => null))],
   [DISCOVERY_OPERATIONS_LOADER_ID, async (context: SurfacePrincipalContext) => {
     const model = await getDiscoveryOperationsViewModel({
       includeConnections: serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("list_discovery_connections") ?? false,
@@ -87,7 +91,9 @@ function serverContext(context: SurfacePrincipalContext): ServerSurfaceContext {
 export const authorizedSurfaceRuntime = createAuthorizedSurfaceRuntime({
   catalog: AUTHORIZED_SURFACE_CATALOG,
   loaders,
-  authorizeSurface: async () => true,
+  authorizeSurface: async (context, definition) =>
+    definition.surfaceId !== SELF_UPGRADE_CLIENTS_SURFACE.surfaceId
+    || await canViewConnectedClients(context.delegatingUserId),
   authorizeAction: async (context, action) =>
     action.actionClass === "ui-local"
     || (!!action.tool && serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has(action.tool)),
