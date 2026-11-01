@@ -45,6 +45,6 @@ const record: ToolPackHandler = async (params, userId, context) => {
     || typeof params.expectedRevision !== "number" || !Number.isSafeInteger(params.expectedRevision) || params.expectedRevision < 0) return refused("unavailable");
   const { recordResponseFeedback } = await import("@/lib/routing/response-feedback");
   const result = await recordResponseFeedback({ messageId: params.messageId, value: params.value, expectedRevision: params.expectedRevision }, { ...who, surface: "mcp" });
-  return result.ok ? { success: true, message: result.changed ? "Response feedback saved." : "Response feedback unchanged.", data: { state: result.state, changed: result.changed } } : refused(result.error);
+  return result.ok ? { success: true, message: result.data.changed ? "Response feedback saved." : "Response feedback unchanged.", data: result.data } : refused(result.error);
 };
 export const responseFeedbackHandlers: Record<string, ToolPackHandler> = { get_response_feedback: get, record_response_feedback: record };

@@ -1,3 +1,4 @@
+import { ok } from "@/lib/shared/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -109,7 +110,7 @@ describe("thread MCP tools", () => {
     const context = { agentId: "AGT-1", governedSource: "jsonrpc" as const, tokenScope: "write" as const, tokenGrantScopes: ["thread_read", "thread_write"] };
     mocks.feedbackRead.mockResolvedValue({ available: true, revision: 0 });
     mocks.feedbackAnswer.mockResolvedValue({ content: "Saved answer", state: { available: true, revision: 0 } });
-    mocks.feedbackWrite.mockResolvedValue({ ok: true, changed: true, state: { value: false, source: "agent" } });
+    mocks.feedbackWrite.mockResolvedValue(ok({ changed: true, state: { value: false, source: "agent" } }));
     expect(await executeTool("get_response_feedback", { messageId: "m1" }, "u1", context)).toMatchObject({ success: true, data: { state: { available: true } } });
     expect(await executeTool("get_response_feedback", { messageId: "m1", includeAnswer: true, expectedAttemptId: "a1" }, "u1", context)).toMatchObject({ success: true, data: { answer: { content: "Saved answer" } } });
     expect(await executeTool("record_response_feedback", { messageId: "m1", value: false, expectedRevision: 0 }, "u1", context)).toMatchObject({ success: true, data: { state: { source: "agent" } } });

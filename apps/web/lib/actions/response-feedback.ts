@@ -17,7 +17,7 @@ export async function recordResponseFeedbackAction(input: ResponseFeedbackInput)
   try { userId = (await requireUser()).id; } catch { return err("forbidden"); }
   if (!input || typeof input !== "object") return err("unavailable");
   const result = await recordResponseFeedback({ messageId: input.messageId, value: input.value, expectedRevision: input.expectedRevision }, { userId, surface: "portal" });
-  return result.ok ? ok({ state: result.state, changed: result.changed }) : err(result.error);
+  return result;
 }
 
 export async function getResponseFeedbackAnswerAction(messageId: string, expectedAttemptId: string): Promise<ActionResult<ResponseFeedbackAnswer>> {

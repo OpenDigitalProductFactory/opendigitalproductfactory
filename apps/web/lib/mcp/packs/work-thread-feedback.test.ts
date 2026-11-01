@@ -1,3 +1,4 @@
+import { ok } from "@/lib/shared/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const domain = vi.hoisted(() => ({ read: vi.fn(), answer: vi.fn(), write: vi.fn() }));
 vi.mock("@/lib/routing/response-feedback", () => ({ getResponseFeedback: domain.read, getResponseFeedbackAnswer: domain.answer, recordResponseFeedback: domain.write }));
@@ -6,7 +7,7 @@ const context = { agentId: "AGT-1", governedSource: "jsonrpc" as const, tokenSco
 beforeEach(() => { vi.clearAllMocks(); });
 describe("work-thread exact response feedback adapters", () => {
   it("uses authenticated acting coworker and validates the real write scope", async () => {
-    domain.write.mockResolvedValue({ ok: true, state: { source: "agent" }, changed: true });
+    domain.write.mockResolvedValue(ok({ state: { source: "agent" }, changed: true }));
     expect(await responseFeedbackHandlers.record_response_feedback({ messageId: "m1", value: false, expectedRevision: 0, agentId: "forged", source: "human" }, "u1", context)).toMatchObject({ success: true, data: { state: { source: "agent" } } });
     expect(domain.write).toHaveBeenCalledWith({ messageId: "m1", value: false, expectedRevision: 0 }, { userId: "u1", agentId: "AGT-1", surface: "mcp" });
     expect(await responseFeedbackHandlers.record_response_feedback({ messageId: "m1", value: true, expectedRevision: 0 }, "u1", { ...context, tokenScope: "read" })).toMatchObject({ success: false, error: "forbidden" });

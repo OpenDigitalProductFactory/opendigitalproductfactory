@@ -1,3 +1,4 @@
+import { ok } from "@/lib/shared/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ user: vi.fn(), read: vi.fn(), answer: vi.fn(), write: vi.fn() }));
 vi.mock("./shared/guards", () => ({ requireUser: mocks.user }));
@@ -6,7 +7,7 @@ import { getResponseFeedbackAction, getResponseFeedbackAnswerAction, recordRespo
 beforeEach(() => { vi.clearAllMocks(); mocks.user.mockResolvedValue({ id: "u1" }); });
 describe("response feedback authenticated actions", () => {
   it("derives the human actor from the session, ignoring caller attribution", async () => {
-    mocks.write.mockResolvedValue({ ok: true, state: { value: true }, changed: true });
+    mocks.write.mockResolvedValue(ok({ state: { value: true }, changed: true }));
     expect(await recordResponseFeedbackAction({ messageId: "m1", value: true, expectedRevision: 0, agentId: "forged", source: "human" } as never)).toEqual({ ok: true, data: { state: { value: true }, changed: true } });
     expect(mocks.write).toHaveBeenCalledWith({ messageId: "m1", value: true, expectedRevision: 0 }, { userId: "u1", surface: "portal" });
   });

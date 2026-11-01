@@ -2,6 +2,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { isPlatformAutomationPersona } from "@/lib/govern/automation-persona-identity";
 import { resolveCanonicalWorkroomActorAccess } from "@/lib/work-management/workroom-agent-access.server";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { isRolledBackPostgresConflict } from "@/lib/shared/postgres-transaction-conflict";
 import { responseContentDigest } from "./response-producer";
 
@@ -19,9 +20,8 @@ export type ResponseFeedbackState = {
   canWrite: boolean;
 };
 export type ResponseFeedbackInput = { messageId: string; value: boolean | null; expectedRevision: number };
-export type ResponseFeedbackResult = { ok: true; state: ResponseFeedbackState; changed: boolean }
-  | { ok: false; error: "unavailable" | "forbidden" | "conflict" | "save-failed" };
-type FailureCode = Extract<ResponseFeedbackResult, { ok: false }>["error"];
+export type ResponseFeedbackResult = ActionResult<{ state: ResponseFeedbackState; changed: boolean }>;
+type FailureCode = "unavailable" | "forbidden" | "conflict" | "save-failed";
 class FeedbackRejected extends Error {
   constructor(readonly code: FailureCode) { super(code); }
 }
@@ -130,7 +130,7 @@ export async function recordResponseFeedback(input: ResponseFeedbackInput, actor
   db: typeof prisma = prisma): Promise<ResponseFeedbackResult> {
   if (!input || typeof input.messageId !== "string" || !input.messageId.trim()
     || (input.value !== null && typeof input.value !== "boolean")
-    || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) return { ok: false, error: "unavailable" };
+    || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) return err("unavailable");
   for (let retry = 0; retry < 2; retry++) {
     try {
       return await db.$transaction(async (tx) => {
@@ -142,7 +142,7 @@ export async function recordResponseFeedback(input: ResponseFeedbackInput, actor
         const unchanged = attempt.userAccepted === input.value && (
           (attempt.feedbackPrincipalId === who.principal.id && attempt.feedbackSource === who.source)
           || (input.value === null && attempt.feedbackSource === null && attempt.feedbackPrincipalId === null));
-        if (unchanged) return { ok: true as const, state: state(message.id, attempt, true), changed: false };
+        if (unchanged) return ok({ state: state(message.id, attempt, true), changed: false });
         const acceptedAt = input.value === null ? null : new Date();
         const updated = await tx.adapterRunTelemetry.updateMany({
           where: { id: attempt.id, feedbackRevision: input.expectedRevision },
@@ -161,21 +161,21 @@ export async function recordResponseFeedback(input: ResponseFeedbackInput, actor
             next: { value: input.value, source: who.source, revision: input.expectedRevision + 1, acceptedAt: acceptedAt?.toISOString() ?? null } },
           summary: input.value === null ? "Cleared response feedback." : input.value ? "Kept response." : "Response needs revision.",
         } });
-        return { ok: true as const, changed: true, state: state(message.id, { ...attempt,
+        return ok({ changed: true, state: state(message.id, { ...attempt,
           userAccepted: input.value, acceptedAt, feedbackPrincipalId: who.principal.id, feedbackSource: who.source,
-          feedbackRevision: input.expectedRevision + 1, feedbackPrincipal: { displayName: who.principal.displayName, kind: who.principal.kind } }, true) };
+          feedbackRevision: input.expectedRevision + 1, feedbackPrincipal: { displayName: who.principal.displayName, kind: who.principal.kind } }, true) });
       }, { isolationLevel: "Serializable" });
     } catch (error) {
-      if (error instanceof FeedbackRejected) return { ok: false, error: error.code };
+      if (error instanceof FeedbackRejected) return err(error.code);
       if (isRolledBackPostgresConflict(error)) {
         if (retry === 0) continue;
-        return { ok: false, error: "conflict" };
+        return err("conflict");
       }
       // An unconfirmed outcome is never automatically resubmitted.
-      return { ok: false, error: "save-failed" };
+      return err("save-failed");
     }
   }
-  return { ok: false, error: "conflict" };
+  return err("conflict");
 }
 
 export type ResponseFeedbackAnswer = { content: string; state: ResponseFeedbackState; attemptId: string; providerId: string; modelId: string };

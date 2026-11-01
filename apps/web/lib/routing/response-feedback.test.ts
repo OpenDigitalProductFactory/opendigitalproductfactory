@@ -41,7 +41,7 @@ describe("exact response feedback", () => {
   it("saves exact successful response disposition with canonical human provenance and atomic audit", async () => {
     const { db, attempt } = fixture();
     const result = await recordResponseFeedback({ messageId: "msg1", value: true, expectedRevision: 0 }, actor, db as never);
-    expect(result).toMatchObject({ ok: true, changed: true, state: { available: true, value: true, source: "human", revision: 1 } });
+    expect(result).toMatchObject({ ok: true, data: { changed: true, state: { available: true, value: true, source: "human", revision: 1 } } });
     expect(attempt.feedbackPrincipalId).toBe("principal-human");
     expect(attempt.acceptedAt).toBeInstanceOf(Date);
     expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
@@ -53,8 +53,8 @@ describe("exact response feedback", () => {
     const { db, attempt } = fixture();
     await recordResponseFeedback({ messageId: "msg1", value: false, expectedRevision: 0 }, actor, db as never);
     expect(attempt.acceptedAt).toBeInstanceOf(Date);
-    expect(await recordResponseFeedback({ messageId: "msg1", value: false, expectedRevision: 1 }, actor, db as never)).toMatchObject({ ok: true, changed: false });
-    expect(await recordResponseFeedback({ messageId: "msg1", value: null, expectedRevision: 1 }, actor, db as never)).toMatchObject({ ok: true, changed: true, state: { value: null, revision: 2 } });
+    expect(await recordResponseFeedback({ messageId: "msg1", value: false, expectedRevision: 1 }, actor, db as never)).toMatchObject({ ok: true, data: { changed: false } });
+    expect(await recordResponseFeedback({ messageId: "msg1", value: null, expectedRevision: 1 }, actor, db as never)).toMatchObject({ ok: true, data: { changed: true, state: { value: null, revision: 2 } } });
     expect(attempt.acceptedAt).toBeNull(); expect(attempt.feedbackPrincipalId).toBe("principal-human");
     expect(db.adminActivity.create).toHaveBeenCalledTimes(2);
   });
@@ -101,10 +101,10 @@ describe("exact response feedback", () => {
   });
   it("allows only an agent's own judgment, while a human owner can replace it", async () => {
     const { db, attempt } = fixture();
-    expect(await recordResponseFeedback({ messageId: "msg1", value: false, expectedRevision: 0 }, agentActor, db as never)).toMatchObject({ ok: true, state: { source: "agent" } });
+    expect(await recordResponseFeedback({ messageId: "msg1", value: false, expectedRevision: 0 }, agentActor, db as never)).toMatchObject({ ok: true, data: { state: { source: "agent" } } });
     attempt.feedbackPrincipalId = "other-agent";
     expect(await recordResponseFeedback({ messageId: "msg1", value: true, expectedRevision: 1 }, agentActor, db as never)).toEqual({ ok: false, error: "forbidden" });
-    expect(await recordResponseFeedback({ messageId: "msg1", value: true, expectedRevision: 1 }, actor, db as never)).toMatchObject({ ok: true, state: { source: "human" } });
+    expect(await recordResponseFeedback({ messageId: "msg1", value: true, expectedRevision: 1 }, actor, db as never)).toMatchObject({ ok: true, data: { state: { source: "human" } } });
   });
   it("rejects stale version and lost CAS without audit", async () => {
     const { db } = fixture();
