@@ -3,7 +3,7 @@
 // legacy PAT until retirement, an actionable refusal when neither is set.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -151,4 +151,36 @@ test("mcpCall puts the minted client_credentials token on the wire", async () =>
     assert.deepEqual(result, { success: true });
     assert.deepEqual(seenAuth, ["Bearer minted-token"]);
   });
+});
+
+test("OAuth uses caller-scoped and prepared trust before sending fixture credentials", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-oauth-trust-"));
+  const missing = join(directory, "missing-ca.pem");
+  const mcpUrl = "https://127.0.0.1:1/api/mcp/v1";
+  try {
+    for (const scope of [{ env: { NODE_EXTRA_CA_CERTS: missing } },
+      { env: {}, connection: Object.freeze({ McpUrl: mcpUrl, CaBundle: missing }) }]) {
+      await assert.rejects(async () => exchangeClientCredentials({ mcpUrl, clientId: "fixture", clientSecret: "fixture", ...scope }),
+        error => error.code === "mcp_ca_unreadable");
+    }
+  } finally { rmdirSync(directory); }
+});
+
+test("client credential refresh retains the same scoped trust selection", async () => {
+  const mcpUrl = "https://127.0.0.1:1/api/mcp/v1";
+  const env = Object.freeze({ DPF_MCP_CLIENT_ID: "fixture", DPF_MCP_CLIENT_SECRET: "fixture" });
+  const connection = Object.freeze({ McpUrl: mcpUrl, CaBundle: "" });
+  let clock = 0, mints = 0;
+  const { bearer } = resolveMcpCredential({ mcpUrl, env, connection,
+    exchange: async options => {
+      assert.equal(options.env, env);
+      assert.equal(options.connection, connection);
+      mints++;
+      return { accessToken: `fixture-${mints}`, expiresAt: clock + 120_000 };
+    },
+  });
+  assert.equal(await bearer.get(), "fixture-1");
+  bearer.invalidate();
+  assert.equal(await bearer.get(), "fixture-2");
+  assert.equal(mints, 2);
 });
