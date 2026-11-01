@@ -358,3 +358,14 @@ or launcher, opens the dock only if needed, then fills the composer. This uses
 the installed Playwright locator.or/first visibility contract, not a fixed sleep.
 The precise413078 metadata mismatch remains unproven; a new served run must
 exercise the corrected launcher wait and the reviewed observer boundary.
+
+The current required-case inventory also asserts that a valid platform-owned
+provider wait does not become Workspace owner review. The real served capture
+exposed the contradiction, and the product now reuses submitted for automatic
+waits while preserving legacy input-required readback and owner-facing
+approval/uncertainty/expiry. The updated journey requires submitted plus the
+capacity-wait projection and nextActor platform, retains it across reload, and
+rejects the erroneous AI work blocked strip. All12 inventory cases, including
+this assertion and settled cleanup, must actually execute before pass. Two
+additional real-PostgreSQL product controls cover attention at expiry and the
+50-row due-selection boundary; no passing count replaces those results.

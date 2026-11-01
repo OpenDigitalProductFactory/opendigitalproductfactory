@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "policyVersion": "2026-11-01.1",
+  "policyVersion": "2026-11-01.2",
   "plannerVersion": "1.2.0",
   "mode": "authoritative-docs",
   "selectionThresholdPercent": 70,
@@ -32,6 +32,7 @@
         "capacity-wait",
         "waiting-duplicate",
         "reload-retention",
+        "platform-wait-no-owner-review",
         "server-recovery",
         "request-authority-preserved",
         "stored-result-provenance",

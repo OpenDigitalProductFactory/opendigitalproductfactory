@@ -139,7 +139,8 @@ export async function verifyForegroundRecovery() {
       }
       throw new Error("The bounded retained-work verification window ended without its expected transition");
     };
-    const waiting = await until(({ row, progress }) => row.status === "input-required" && isRecord(progress.resourceWait), 90_000);
+    const waiting = await until(({ row, progress }) => row.status === "submitted" && isRecord(progress.resourceWait)
+      && progress.foregroundOutcome === "capacity-wait" && progress.nextActor === "platform", 90_000);
     const originalMetadata = waiting.row.a2aMetadata;
     // This isolated fixture contains only synthetic request/owner data. Retain both
     // observations before asserting so a failed invariant has inspectable evidence.
@@ -156,8 +157,10 @@ export async function verifyForegroundRecovery() {
     await page.getByText(prompt, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
     await page.screenshot({ path: resolve(OUT, "retained-capacity-wait.png"), fullPage: true });
     const reloaded = await read();
-    check(reloaded.row.taskRunId === taskRunId && reloaded.row.status === "input-required", "Reload did not retain the same waiting job");
+    check(reloaded.row.taskRunId === taskRunId && reloaded.row.status === "submitted", "Reload did not retain the same waiting job");
     executedCaseIds.push("reload-retention");
+    check(!await page.getByText("AI work blocked", { exact: true }).isVisible(), "A platform capacity wait is incorrectly presented as owner review");
+    executedCaseIds.push("platform-wait-no-owner-review");
     const waitObservedAt = new Date();
     evidence.wait = { observedAt: waitObservedAt.toISOString(), progress: reloaded.progress, reloadRetained: true, duplicateRetained: true };
     transport.recover(); // No further client submission until the saved result exists.
