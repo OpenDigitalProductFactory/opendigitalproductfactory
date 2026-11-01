@@ -29,6 +29,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs as utilParseArgs } from "node:util";
 
+import { parseFilePackages } from "../lib/pnpm-lock.mjs";
 import { baseKey, closureFromKeys, collectProdRoots, loadGraph } from "./runtime-surface.mjs";
 
 /**
@@ -78,6 +79,21 @@ export function allowedForImporter(root, importer) {
   const external = new Set(
     [...closureFromKeys(snapshots, collectProdRoots(importers, [importer]))].map(baseKey),
   );
+  // pnpm legacy deploy retains root production file archives in its physical
+  // store, like workspace packages. Admit only exact locked archive identities;
+  // root registry and development dependencies remain outside this allowance.
+  const archives = parseFilePackages(readFileSync(join(root, "pnpm-lock.yaml"), "utf8"));
+  const roots = collectProdRoots(importers, [importer, "."]);
+  const reachable = closureFromKeys(snapshots, roots);
+  for (const key of reachable) {
+    if (!key.includes("@file:")) continue;
+    const record = archives.get(key);
+    if (!record?.version || !record.integrity?.startsWith("sha512-")
+      || record.tarball !== key.slice(key.indexOf("@file:") + 1)) {
+      throw new Error(`File archive lacks matching locked version/resolution/integrity: ${key}`);
+    }
+    external.add(`${record.name}@${record.version}`);
+  }
   const workspace = new Map();
   for (const ws of Object.keys(importers)) {
     const manifest = join(root, ws, "package.json");
