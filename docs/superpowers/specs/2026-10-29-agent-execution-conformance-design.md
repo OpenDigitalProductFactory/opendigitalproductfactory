@@ -194,3 +194,21 @@ the five new PostgreSQL cases were collected but skipped without a governed SQL
 target. They are UNRUN, not passed or first-red evidence. Actual execution and a
 mutation control must precede a database qualification claim. This slice does
 not resolve the rest of P4–P6 or the original specialist-review obligations.
+
+The subsequent admitted SQL check ran source
+`58ca8fbd9f20e08c7ea3e540f3d3ab1ba4a5b682` against the disposable PostgreSQL
+target of `NPEL-DA14C613EA` on 1 November 2026, 04:12:48–04:12:50 UTC:
+five database cases and three target-selection controls passed, none skipped.
+The preview source was `7aa31f6ea021a91ae93a9971135a8264398b77a6`;
+the worker, context, publication, digest and complete Prisma schema were verified
+byte-identical to the test source. This qualifies that composition, not the
+entire served preview or a new runtime image.
+
+A test-only authority-lookup mutation then made the revoked-user case fail
+(`responded` instead of `blocked`). Restoring the exact test file produced
+eight passes again at 04:22:09 UTC. Both fixture runs completed teardown before
+the normal preview release at 04:24:20 UTC. The separate served Finance request
+remained submitted without a coworker result: that preview had no background
+wake transport. Controlled provider-busy recovery and full business acceptance
+remain unrun. Native Workroom evidence retains the commands and source/lease
+identities; these narrow SQL results do not establish actual provider execution.
