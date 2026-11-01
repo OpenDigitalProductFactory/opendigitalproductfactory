@@ -716,6 +716,15 @@ test("guard-result identity retains the selected PowerShell test executable", ()
   assert.notDeepEqual(pwsh, legacy);
 });
 
+test("guard-result identity retains Windows Bash fallback roots", () => {
+  const baseline = { CI: "true", ProgramFiles: "C:/Program Files", "ProgramFiles(x86)": "C:/Program Files (x86)", LOCALAPPDATA: "C:/Users/test/AppData/Local" };
+  const options = { platform: "win32" };
+  for (const key of ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]) {
+    assert.notDeepEqual(guardResultEnvironment({ ...baseline, [key]: `${baseline[key]}/alternate` }, options), guardResultEnvironment(baseline, options),
+      `${key} can select the Git for Windows Bash fallback executable`);
+  }
+});
+
 test("guard-result identity retains semantic base and guard-runner selectors", () => {
   const baseline = guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" });
   assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "b".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
