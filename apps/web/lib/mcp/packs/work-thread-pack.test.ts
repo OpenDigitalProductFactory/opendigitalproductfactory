@@ -41,8 +41,12 @@ describe("work-thread pack — registration", () => {
     }
   });
 
-  it("grants mirror agent-grants: read tools need thread_read, mutating tools need thread_write", () => {
-    expect(workThreadPack.grants.get_response_feedback).toEqual(["thread_read"]);
+  it("lets feedback writers inspect their authorized judgment without widening delegation reads", () => {
+    expect(isToolAllowedByGrants("get_response_feedback", ["thread_read"])).toBe(true);
+    expect(isToolAllowedByGrants("get_response_feedback", ["thread_write"])).toBe(true);
+    expect(isToolAllowedByGrants("get_response_feedback", [])).toBe(false);
+    expect(isToolAllowedByGrants("get_thread_result", ["thread_write"])).toBe(false);
+    expect(isToolAllowedByGrants("get_child_threads", ["thread_write"])).toBe(false);
     expect(workThreadPack.grants.record_response_feedback).toEqual(["thread_write"]);
     expect(isToolAllowedByGrants("record_response_feedback", ["thread_read"])).toBe(false);
     expect(isToolAllowedByGrants("record_response_feedback", ["thread_write"])).toBe(true);
