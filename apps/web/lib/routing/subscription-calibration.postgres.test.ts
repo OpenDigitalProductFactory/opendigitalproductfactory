@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../../../packages/db/generated/client/client";
+import type { Pool } from "pg";
+import type { PrismaClient } from "../../../../packages/db/generated/client/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createReviewPostgresFixture } from "../../test-support/review-postgres-fixture";
 const state = vi.hoisted(() => ({ db: undefined as unknown as PrismaClient, call: vi.fn() }));
 vi.mock("@dpf/db", async () => {
   const { Prisma } = await import("../../../../packages/db/generated/client/client");
@@ -19,19 +19,18 @@ import { assertGovernedInferenceAuthority } from "./governed-inference-deadline"
 const leased = process.env.DPF_NONPROD_LEASE_ID && process.env.DATABASE_URL
   && /^\/dpf_local_ci_\d+$/.test(new URL(process.env.DATABASE_URL).pathname) ? process.env.DATABASE_URL : undefined;
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL ?? leased;
-const schema = `calibration_test_${randomUUID().replaceAll("-", "")}`;
+const schema = `review_calibration_${randomUUID().replaceAll("-", "")}`;
 const tables = ["ModelProvider", "CredentialEntry", "AiProviderConnection", "ModelProfile", "ProviderCapacityStatus", "CliPoolStatus",
   "ScheduledJob", "EndpointTestRun", "User", "UserGroup", "PlatformRole", "Principal", "PrincipalAlias"];
 const modelId = "fixture-selected", connectionId = "provider-default-chatgpt", userId = "fixture-operator";
 
 describe.skipIf(!url)("owned calibration on isolated leased PostgreSQL", () => {
-  let admin: Pool, pool: Pool, db: PrismaClient;
+  let fixture: Awaited<ReturnType<typeof createReviewPostgresFixture>>;
+  let pool: Pool, db: PrismaClient;
   beforeAll(async () => {
-    admin = new Pool({ connectionString: url }); await admin.query(`CREATE SCHEMA "${schema}"`);
-    pool = new Pool({ connectionString: url, options: `-c search_path=${schema},public -c statement_timeout=10000`, max: 6 });
-    db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) }); state.db = db;
-    // Schema structure only; never copy install accounts, secrets, or business data.
-    for (const table of tables) await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
+    // Clone definitions, including enum arrays; never fall back to public rows.
+    fixture = await createReviewPostgresFixture({ url: url!, schema, tables });
+    pool = fixture.pool; db = fixture.db; state.db = db;
   });
   beforeEach(async () => {
     state.call.mockReset();
@@ -56,11 +55,7 @@ describe.skipIf(!url)("owned calibration on isolated leased PostgreSQL", () => {
         finishReason: support ? "max_output_tokens" : "completed", truncated: support, responseId: `response-${state.call.mock.calls.length}` };
     });
   });
-  afterAll(async () => {
-    await db?.$disconnect(); await pool?.end();
-    if (admin && /^calibration_test_[a-f0-9]{32}$/.test(schema)) await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await admin?.end();
-  });
+  afterAll(async () => { await fixture?.close(); });
   const commission = () => commissionSubscriptionCalibration(userId, "chatgpt", modelId);
   const execute = (runId: string) => runSubscriptionCalibration({ runId, endpointId: "chatgpt", modelId, userId });
 
