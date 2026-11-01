@@ -205,6 +205,7 @@ Real model behavior and the full workflow still require served verification.
 The November 1 source32b preview retained one read-only saved request across a
 reload, but its ephemeral opening briefing then appeared after that unanswered
 request. A source regression reproduces this misleading reply position. Keep
-the briefing before an unanswered user turn; completed conversations retain the
+the briefing before all unanswered requests after the last assistant response;
+completed conversations retain the
 existing proactive overview at the end. The new ordering still needs served
 verification; source32b's retention check does not qualify the changed ordering.

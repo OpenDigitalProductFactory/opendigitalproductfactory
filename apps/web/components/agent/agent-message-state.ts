@@ -19,8 +19,8 @@ export function withOpeningBriefing(
   const id = `opening-briefing:${threadContext}`;
   if (messages.some(message => message.id === id)) return messages;
   const roles = messages.map(message => message.role);
-  const lastUser = roles.lastIndexOf("user");
-  const insertion = lastUser > roles.lastIndexOf("assistant") ? lastUser : messages.length;
+  const firstUnanswered = roles.indexOf("user", roles.lastIndexOf("assistant") + 1);
+  const insertion = firstUnanswered < 0 ? messages.length : firstUnanswered;
   return [
     ...messages.slice(0, insertion),
     { id, role: "assistant", content: briefing.content, createdAt: new Date().toISOString(),
