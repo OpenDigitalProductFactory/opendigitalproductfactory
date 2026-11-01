@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { prisma } from "@dpf/db";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
@@ -8,7 +9,7 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import { prepareCurrentArtifactObservation, type ArtifactObservationDb } from "./current-artifact-observation";
 
 type Db = Pick<typeof prisma, "backlogItem" | "backlogItemActivity" | "workroom"> & ArtifactObservationDb;
-type ClaimSource = { repositoryFullName: string; headBranch: string; baseSha?: string | null; headSha?: string | null };
+type ClaimSource = { workroomId?: string; repositoryFullName: string; headBranch: string; baseSha?: string | null; headSha?: string | null };
 type Room = ClaimSource & { capsuleId: string; baseSha: string; headSha: string;
   leaseHolderPrincipalId: string | null; executorRef: string | null; leaseExpiresAt: string | null; status: string };
 type BoundResearch = {
@@ -44,6 +45,7 @@ async function loadBinding(itemId: string, db: Db, claimSource?: ClaimSource): P
   const rooms = await db.workroom.findMany({
     where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
       status: { notIn: ["abandoned", "archived", "superseded"] },
+      ...(claimSource?.workroomId ? { capsuleId: claimSource.workroomId } : {}),
       ...(claimSource ? { repositoryFullName: claimSource.repositoryFullName, headBranch: claimSource.headBranch,
         baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, headBranch: true, baseSha: true, headSha: true,
@@ -71,8 +73,15 @@ export async function prepareCurrentResearchObservation(args: {
       const readBlob = args.ports?.readBlob ?? (await import("./repository-artifact")).readRepositoryProviderBlob;
       // Verify the recorded blob at the real current head, permitting unchanged
       // research across unrelated commits without treating history as current.
+      // A valid persisted receipt scopes this internal public-byte observation;
+      // it supplies no actor admission and never authorizes a new receipt/read.
+      const fingerprint = canonicalJson(binding);
       const bytes = await readBlob({ repositoryFullName: binding.room.repositoryFullName,
-        commitSha: binding.room.headSha, path: binding.artifactRef.path, expectedBlobId: binding.artifactRef.providerBlobId });
+        commitSha: binding.room.headSha, path: binding.artifactRef.path, expectedBlobId: binding.artifactRef.providerBlobId,
+        sourceAdmission: { itemId: binding.itemId, workroomId: binding.room.capsuleId,
+          repositoryFullName: binding.room.repositoryFullName, branchName: binding.room.headBranch, headSha: binding.room.headSha,
+          isCurrent: async () => canonicalJson(await loadBinding(args.itemId, args.db, source)) === fingerprint },
+      });
       return bytes.ok ? { state: "verified", receiptId: binding.receiptId,
         digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}` } : unavailable;
     },

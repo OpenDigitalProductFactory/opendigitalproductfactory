@@ -5,7 +5,7 @@
 // bound to a column's field config. Keeps Grid.tsx declarative.
 
 import type { ReactNode } from "react";
-import type { RenderEditCellProps, RenderCellProps } from "react-data-grid";
+import type { RenderEditCellContentProps as RenderEditCellProps, RenderCellContentProps as RenderCellProps } from "react-data-grid";
 import type { CellValue, SelectOption, ReferenceValue, AttachmentValue } from "@/lib/workbooks/types";
 import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
 import { searchReferencesAction } from "@/lib/actions/workbooks";

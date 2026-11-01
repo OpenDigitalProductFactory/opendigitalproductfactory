@@ -24,6 +24,23 @@ describe("describeCapacityDeferral (BI-5098ECEC)", () => {
     expect(describeCapacityDeferral("string")).toBeNull();
   });
 
+  it("preserves an operator routing hold without inventing a capacity window", () => {
+    const reason = "Provider routing is paused by an operator. Resume the provider before retrying.";
+    const cause = Object.assign(new Error("Local provider is not enabled for routing"), {
+      name: "ProviderRoutingDeferredError",
+      reason,
+    });
+    expect(describeCapacityDeferral(new Error("Dispatch deferred", { cause }))).toEqual({
+      expectedFreeAt: null,
+      message: `Deferred: ${reason}`,
+    });
+  });
+
+  it("uses the routing error message when no structured reason is available", () => {
+    const err = Object.assign(new Error("Provider routing is unavailable."), { name: "ProviderRoutingDeferredError" });
+    expect(describeCapacityDeferral(err)).toEqual({ expectedFreeAt: null, message: "Deferred: Provider routing is unavailable." });
+  });
+
   it("names a busy host GPU without the local-CI sentence", () => {
     const err = Object.assign(new Error("Local provider dispatch deferred: host-gpu-busy"), {
       name: "LocalProviderCapacityDeferredError",

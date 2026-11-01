@@ -130,6 +130,9 @@
     "/finance/reports": [
       "docs/user-guide/finance/reporting-and-close.md"
     ],
+    "/finance/reports/general-ledger": [
+      "docs/user-guide/workspace/performance.md"
+    ],
     "/finance/revenue": [
       "docs/user-guide/finance/accounts-receivable.md"
     ],
@@ -150,6 +153,9 @@
     ],
     "/ops/self-upgrade": [
       "docs/user-guide/operations/self-upgrade.md"
+    ],
+    "/performance": [
+      "docs/user-guide/workspace/performance.md"
     ],
     "/platform": [
       "docs/user-guide/platform/index.md"
@@ -440,6 +446,9 @@
     ],
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
+    "apps/web/components/performance/BusinessPerformanceDashboard.tsx": [
+      "docs/user-guide/workspace/performance.md"
     ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -907,6 +916,9 @@
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
+    "apps/web/lib/finance/ledger-service.ts": [
+      "docs/user-guide/workspace/performance.md"
+    ],
     "apps/web/lib/founder-review/queue.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
@@ -1226,8 +1238,12 @@
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
+    "apps/web/lib/performance/business-metric-rollup.ts": [
+      "docs/user-guide/workspace/performance.md"
+    ],
     "apps/web/lib/performance/business-performance-provider.ts": [
-      "docs/architecture/operations-hot-path.md"
+      "docs/architecture/operations-hot-path.md",
+      "docs/user-guide/workspace/performance.md"
     ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
@@ -1653,6 +1669,9 @@
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/workspace/finite-delivery-agreements.md"
+    ],
+    "apps/web/lib/work-management/source-inquiry-shape.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/stage-dispatch-answered.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -2199,8 +2218,8 @@
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
-    "scripts/bind-worktree-cli.mjs": [
-      "docs/architecture/delivery-surfaces-runbook.md"
+    "scripts/branch-reaper.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
     ],
     "scripts/build-docs-staleness.mjs": [
       "docs/maintenance/README.md",
@@ -2635,6 +2654,10 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/operations/install.md"
     ],
+    "scripts/lib/worktree-provision.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md",
+      "docs/architecture/delivery-surfaces-runbook.md"
+    ],
     "scripts/local-ci-durable-wait-resumer.mjs": [
       "docs/architecture/dpf-patterns.md"
     ],
@@ -3021,6 +3044,10 @@
     ],
     "docs/user-guide/workspace/index.md": [
       "/workspace"
+    ],
+    "docs/user-guide/workspace/performance.md": [
+      "/finance/reports/general-ledger",
+      "/performance"
     ]
   },
   "docToCode": {
@@ -3237,8 +3264,10 @@
     "docs/architecture/branch-and-worktree-runbook.md": [
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
       "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
+      "scripts/branch-reaper.mjs",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
       "scripts/hooks/session-reaper.sh",
+      "scripts/lib/worktree-provision.mjs",
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
@@ -3380,9 +3409,9 @@
       "apps/web/lib/operate/db-continuity.ts",
       "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
-      "scripts/bind-worktree-cli.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
+      "scripts/lib/worktree-provision.mjs",
       "scripts/new-dev-worktree.sh"
     ],
     "docs/architecture/dependency-reduction-routine.md": [
@@ -3493,6 +3522,7 @@
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/drive-child-rooms.ts",
       "apps/web/lib/work-management/room-stage-mandate.ts",
+      "apps/web/lib/work-management/source-inquiry-shape.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
@@ -4348,6 +4378,12 @@
       "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx",
       "apps/web/lib/work-management/room-types.ts",
       "apps/web/lib/work-management/workspace-case-loader.ts"
+    ],
+    "docs/user-guide/workspace/performance.md": [
+      "apps/web/components/performance/BusinessPerformanceDashboard.tsx",
+      "apps/web/lib/finance/ledger-service.ts",
+      "apps/web/lib/performance/business-metric-rollup.ts",
+      "apps/web/lib/performance/business-performance-provider.ts"
     ],
     "docs/user-guide/workspace/supported-file-formats.md": [
       "apps/web/lib/shared/file-parsers.ts",

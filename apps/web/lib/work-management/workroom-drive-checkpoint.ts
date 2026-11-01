@@ -1,6 +1,7 @@
 import { isRecord } from "@/lib/shared/coerce";
 
 export type DispatchScope = { runKey: string; cycleKey: string; iteration: number };
+export type DispatchSource = { repositoryFullName: string | null; headSha: string | null };
 
 /** Phase 2 capture boundary: enqueue is a database effect, never task completion.
  * Stored with the task in its lease-fenced transaction. Unknown executor-owned
@@ -12,6 +13,8 @@ export type DispatchCheckpoint = {
   revision: number;
   /** Absent on legacy receipts: their dispatch boundary remains unknown. */
   dispatchScope?: DispatchScope;
+  /** Absent on legacy receipts: source provenance remains unknown. */
+  source?: DispatchSource;
   roomId: string;
   objective: string | null;
   remainingAcceptance: null;
@@ -36,6 +39,9 @@ export function readDispatchCheckpoint(value: unknown): DispatchCheckpoint | nul
   if (value.dispatchScope !== undefined && (!isRecord(value.dispatchScope)
     || !text(value.dispatchScope.runKey) || !text(value.dispatchScope.cycleKey)
     || !Number.isSafeInteger(value.dispatchScope.iteration) || (value.dispatchScope.iteration as number) < 0)) return null;
+  if (value.source !== undefined && (!isRecord(value.source)
+    || !(value.source.repositoryFullName === null || text(value.source.repositoryFullName))
+    || !(value.source.headSha === null || text(value.source.headSha)))) return null;
   const effect = value.confirmedEffect, stage = value.stage, authority = value.authority;
   if (!isRecord(effect) || effect.kind !== "scheduled-task-enqueued" || !text(effect.taskId)
     || !date(effect.recordedAt) || !isRecord(stage) || !text(stage.shapeKey) || !text(stage.shapeVersion)
@@ -48,6 +54,7 @@ export function readDispatchCheckpoint(value: unknown): DispatchCheckpoint | nul
 export function buildDispatchCheckpoint(previous: unknown, input: {
   taskId: string; roomId: string; objective: string | null;
   dispatchScope?: DispatchScope;
+  source?: DispatchSource;
   stage: DispatchCheckpoint["stage"];
   holderPrincipalId: string | null; leaseExpiresAt: string; now: string;
 }): DispatchCheckpoint {
@@ -56,6 +63,7 @@ export function buildDispatchCheckpoint(previous: unknown, input: {
   const next: DispatchCheckpoint = {
     version: 1, revision: (prior?.revision ?? 0) + 1, roomId: input.roomId, objective: input.objective,
     ...(input.dispatchScope ? { dispatchScope: { ...input.dispatchScope } } : {}),
+    ...(input.source !== undefined ? { source: { ...input.source } } : {}),
     remainingAcceptance: null, artifacts: null, dirtyOutputs: null, pendingIntent: null,
     confirmedEffect: { kind: "scheduled-task-enqueued", taskId: input.taskId, recordedAt: input.now },
     stage: { ...input.stage, tools: [...input.stage.tools] },

@@ -1167,6 +1167,7 @@
         "merge-readiness",
         "merge-mechanics",
         "privatepublic-change-segregation-is-content-based",
+        "read-only-work-needs-no-worktree",
         "creating-a-worktree",
         "seeding-a-new-worktree",
         "routine-client-permissions",
@@ -1175,6 +1176,7 @@
         "freshness-a-stale-worktree-base-is-a-landmine",
         "root-clone-freshness-the-shared-root-must-stay-on-current-main",
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
+        "branches-left-without-a-worktree",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping",
         "when-a-worktree-is-removed",
@@ -2846,7 +2848,8 @@
         "workroom-cycle-continuity",
         "existing-persistence-and-bounded-reads",
         "recovery-integration-still-required",
-        "verification-and-rollback-boundary"
+        "verification-and-rollback-boundary",
+        "bounded-assignment-and-continuation-briefs"
       ]
     },
     "docs/architecture/workroom-ingestion-scale-qualification.md": {
@@ -12840,7 +12843,8 @@
         "what-to-watch",
         "recovery-and-evidence",
         "ask-for-a-branded-report-workbook-or-letter",
-        "related-help"
+        "related-help",
+        "recorded-general-ledger-and-software-results"
       ]
     },
     "docs/user-guide/getting-started/ai-coworker.md": {
@@ -13154,7 +13158,8 @@
       "publishedPortal": true,
       "anchors": [
         "requesting-and-reading-a-coworker-contribution",
-        "native-reader-failures"
+        "native-reader-failures",
+        "a-held-original-ux-request"
       ]
     },
     "docs/user-guide/platform/deployment-country-sharing.md": {
@@ -13547,6 +13552,16 @@
         "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"
+      ]
+    },
+    "docs/user-guide/workspace/performance.md": {
+      "publicHref": "/user-guide/workspace/performance/",
+      "portalHref": "/docs/workspace/performance",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "review-recorded-results",
+        "missing-records-and-zero"
       ]
     },
     "docs/user-guide/workspace/supported-file-formats.md": {

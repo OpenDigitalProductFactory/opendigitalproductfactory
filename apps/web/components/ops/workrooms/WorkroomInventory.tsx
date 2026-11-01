@@ -5,7 +5,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
 import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
-import type { InvocationAttribution } from "@/lib/work-capsules/invocation-attribution";
 import { countOperatorAttention, projectWorkroomOperatorSummary, type OperatorWorkGroup, type WorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
@@ -37,10 +36,8 @@ export type CooSupervisionSummary = {
 
 export type WorkroomInventoryRow = {
   capsuleId: string; backlogItemId: string | null; title: string; status: string;
-  source: string; executorKind: string | null; attribution: InvocationAttribution;
-  portfolioRole: string | null; headBranch: string | null; pullRequestUrl: string | null;
-  updatedAt: string; liveness: string; isLive: boolean; isReapable: boolean;
-  livenessReason: string; trueLivenessAt: string | null;
+  portfolioRole: string | null; pullRequestUrl: string | null;
+  liveness: string; isLive: boolean;
   accountableName?: string | null; operator?: WorkroomOperatorSummary;
   coo?: WorkroomCooFields | null;
 };
@@ -61,13 +58,14 @@ const columns: Column<WorkroomInventoryRow>[] = [
   { key: "next", header: t("inventory.next"), cell: room => {
     const view = viewOf(room);
     return <div><StatusBadge intent={view.group === "attention" ? "warning" : view.group === "working" ? "success" : "neutral"}
-      label={t(view.label)} uppercase={false} /><p className="mt-1 text-dpf-caption text-dpf-muted">{t(view.nextAction)}</p></div>;
+      label={t(view.label)} uppercase={false} /><p className="mt-1 text-dpf-caption text-dpf-muted">
+        {view.action ? <>{t(view.action.actor)} · {view.action.detail ?? t(view.action.instruction)}</> : t(view.nextAction)}</p>
+      {(view.action?.decisionCount ?? 0) > 1 && <p className="text-dpf-caption text-dpf-muted">{t("inventory.decisionCount", { count: view.action!.decisionCount! })}</p>}</div>;
   } },
   { key: "detail", header: t("inventory.details"), cell: room => <details>
     <summary className="cursor-pointer text-dpf-accent">{t("inventory.technical")}</summary>
     <div className="mt-2 max-w-xs space-y-2 break-words text-dpf-caption text-dpf-muted">
-      <p>{room.livenessReason}</p><p>{room.attribution.executor} · {room.attribution.invocation}</p>
-      <p>{room.capsuleId}</p>{room.headBranch && <p>{room.headBranch}</p>}
+      <Link className="text-dpf-accent hover:underline" href={roomHref(room)}>{t("inventory.openEvidence")}</Link>
       {viewOf(room).recoveryCondition && <p>{t("inventory.recovery", { condition: viewOf(room).recoveryCondition ?? "" })}</p>}
       {room.pullRequestUrl && <Link className="text-dpf-accent hover:underline" href={room.pullRequestUrl}>{t("inventory.change")}</Link>}
       {room.coo && <CooRoomDetails room={room.coo} t={t} />}

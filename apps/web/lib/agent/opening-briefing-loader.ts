@@ -8,7 +8,8 @@ import { resolveAgentForRoute } from "@/lib/agent-routing";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
-import { composeOpeningBriefing, type OpeningBriefingPayload } from "./opening-briefing";
+import { composeOpeningBriefing, isFinanceBriefingRoute, type OpeningBriefingPayload } from "./opening-briefing";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 /**
  * Compose the ephemeral opening briefing for a panel load. Deterministic —
@@ -51,11 +52,16 @@ export async function loadOpeningBriefingPayload(
     audience: "operator",
   });
 
+  const ownerItems = projection.needsYouNow.map((entry) => entry.item);
+  const language = ownerItems.length > 0 && isFinanceBriefingRoute(routeContext)
+    ? (await getLocaleContext()).language
+    : undefined;
   const briefing = composeOpeningBriefing({
     routeContext,
     // Platform default: the composer treats null as balanced.
     proactivityLevel: null,
-    items: projection.needsYouNow.map((entry) => entry.item),
+    items: ownerItems,
+    language,
   });
   return briefing ? { content: briefing.content, agentId: agent.agentId ?? null } : null;
 }

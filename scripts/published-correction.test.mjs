@@ -8,10 +8,11 @@ import { createHash } from "node:crypto";
 import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
-import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
+import { correctionPlanDigest, classifyInitialPublication, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
 import { verifyPublishedCorrection, reducedTierClassification, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute, readFreshTestReport } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
+import { guardResultEnvironment } from "./lib/pregate-preflight-receipt.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
 
 const now = Date.parse("2026-10-16T05:30:00Z");
@@ -199,6 +200,109 @@ test("an open PR without qualified initial evidence cannot bootstrap correction 
   const previous = record();
   previous.publicationCorrection.anchor.state.skipReason = reason;
   assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest, treeAt: () => "d".repeat(40), now }), /initial-publication anchor/);
+});
+
+test("an exact synthesized integration tree reconciles a rebased canonical publication anchor", () => {
+  const pullRequest = record().publicationCorrection.pullRequest;
+  const recordedSha = "f".repeat(40);
+  const integratedTree = "d".repeat(40);
+  const state = {
+    branch, sha: recordedSha, gatePassed: true, skipped: false, status: "passed",
+    evidenceRecordId: "canonical-evidence", leaseId: "canonical-lease",
+    // The anchor is evaluated at the original gate capture, not at this
+    // later correction. Its fresh correction proof has a separate TTL.
+    recordedAt: new Date(now - 120_000).toISOString(), expiresAt: new Date(now - 60_000).toISOString(),
+  };
+  const metadata = {
+    candidateSha: recordedSha, runLeaseId: "canonical-lease", synthesizedTreeSha: integratedTree,
+    execution: { status: "passed" },
+  };
+  const anchor = chooseInitialAnchor({ records: [{ state, metadata }], previous: null, pullRequest,
+    treeAt: value => { assert.equal(value, original); return integratedTree; }, now });
+  assert.equal(anchor.sha, original);
+  assert.equal(anchor.state, state, "the original canonical gate record remains intact");
+  assert.deepEqual(anchor.equivalentCandidate, { sha: recordedSha, synthesizedTreeSha: integratedTree });
+  assert.equal(classifyInitialPublication(anchor, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, true);
+  for (const metadataCandidate of ["e".repeat(40), undefined]) {
+    const candidate = { ...anchor, metadata: { ...metadata } };
+    if (metadataCandidate === undefined) delete candidate.metadata.candidateSha;
+    else candidate.metadata.candidateSha = metadataCandidate;
+    assert.equal(classifyInitialPublication(candidate, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, false,
+      "canonical evidence must remain bound to its recorded candidate SHA");
+  }
+  const direct = { ...anchor, sha: recordedSha, equivalentCandidate: undefined };
+  for (const metadataCandidate of ["e".repeat(40), undefined]) {
+    const candidate = { ...direct, metadata: { ...metadata } };
+    if (metadataCandidate === undefined) delete candidate.metadata.candidateSha;
+    else candidate.metadata.candidateSha = metadataCandidate;
+    assert.equal(classifyInitialPublication(candidate, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, false,
+      "same-SHA canonical evidence also requires the recorded candidate metadata");
+  }
+});
+
+function historicalCanonicalCorrection() {
+  const previous = record();
+  const anchor = previous.publicationCorrection.anchor;
+  anchor.state = { branch, sha: original, gatePassed: true, status: "passed",
+    skipped: false, evidenceRecordId: "fixture-evidence", leaseId: "fixture-lease",
+    recordedAt: new Date(now - 120_000).toISOString(),
+    expiresAt: new Date(now + 120_000).toISOString() };
+  anchor.metadata = { candidateSha: original, runLeaseId: "fixture-lease",
+    execution: { status: "passed" } };
+  return previous;
+}
+
+test("an interrupted push recovers only its historical anchor after both proofs expire", () => {
+  const previous = historicalCanonicalCorrection();
+  const snapshot = JSON.stringify(previous);
+  const later = now + 2 * 3600_000;
+  const pullRequest = previous.publicationCorrection.pullRequest;
+  assert.equal(classifyPublishedCorrection(previous, { now: later }).ok, false);
+  const anchor = chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later });
+  assert.equal(anchor, previous.publicationCorrection.anchor);
+  assert.equal(JSON.stringify(previous), snapshot, "retained evidence is never rewritten");
+  assert.equal(classifyPublishedCorrection(previous, { now: later }).ok, false,
+    "anchor recovery does not renew affected-check proof");
+  const published = { ...pullRequest, headRefOid: previous.sha };
+  assert.equal(chooseInitialAnchor({ records: [], previous, pullRequest: published,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later }), anchor);
+});
+
+test("a verified correction keeps its recorded published predecessor while the next push is pending", () => {
+  const previous = historicalCanonicalCorrection();
+  const predecessor = "e".repeat(40);
+  previous.publicationCorrection.pullRequest.headRefOid = predecessor;
+  const pullRequest = { ...previous.publicationCorrection.pullRequest };
+  const anchor = chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000 });
+  assert.equal(anchor, previous.publicationCorrection.anchor);
+  assert.equal(classifyPublishedCorrection(previous, { now: now + 2 * 3600_000 }).ok, false);
+});
+
+test("historical anchor recovery refuses foreign or unqualified retained evidence", () => {
+  const mutations = [
+    value => { value.publicationCorrection.anchor.state.expiresAt = value.publicationCorrection.anchor.capturedAt; },
+    value => { value.publicationCorrection.results[0].exitCode = 1; },
+    value => { value.publicationCorrection.results[0].skipped = true; },
+    value => { value.publicationCorrection.pullRequest.number = 8; },
+    value => { value.publicationCorrection.anchor.repositoryFullName = "foreign/repository"; },
+    value => { value.publicationCorrection.completedAt = new Date(now + 4 * 3600_000).toISOString(); },
+  ];
+  const pullRequest = record().publicationCorrection.pullRequest;
+  for (const mutate of mutations) {
+    const previous = historicalCanonicalCorrection(); mutate(previous);
+    assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest,
+      treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000 }), /initial-publication anchor/);
+  }
+  const previous = historicalCanonicalCorrection();
+  for (const options of [
+    { pullRequest: { ...pullRequest, number: 9 } },
+    { pullRequest: { ...pullRequest, headRefOid: "f".repeat(40) } },
+    { pullRequest: { ...pullRequest, repositoryFullName: "foreign/repository" } },
+    { treeAt: () => "f".repeat(40) },
+  ]) assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000, ...options }), /initial-publication anchor/);
 });
 
 test("an unmapped change cannot silently run zero affected checks", () => {
@@ -575,32 +679,97 @@ function mappedCorrectionFixture() {
   return { ...fixture, source, target, mapping: { [source]: [target] } };
 }
 
-test("a wrapper identity miss retains only validated mapping and executes real current checks", async () => {
+test("a correction proof survives a distinct publish-hook process but not a relevant guard input change", async () => {
   const fixture = mappedCorrectionFixture();
-  let environment = "direct", executions = 0;
-  const identify = () => ({ ...fixture.identify(), environment });
-  const run = (command, args, options) => {
+  let environment = { ...process.env, CODEX_SESSION_ID: "direct-shell", DPF_GATE_OWNER_SESSION_ID: "direct-owner" };
+  const initialGuardEnvironment = guardResultEnvironment(environment);
+  let executions = 0;
+  const identify = () => ({ ...fixture.identify(), environment: createHash("sha256").update(JSON.stringify(guardResultEnvironment(environment))).digest("hex") });
+  const run = () => {
     executions++;
-    return execute(command, args, { ...options, env: { ...process.env, DPF_CORRECTION_TEST_CONTEXT: environment } });
+    return { exitCode: 0, stdout: "# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# cancelled 0\n# todo 0\n" };
   };
   const options = { ...fixture.options, persist: true, identify, run };
   try {
     const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
     assert.equal(executions, 1);
-    environment = "git-hook";
-    const missed = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
-    assert.equal(missed.ok, false, "changed environment must not reuse PASS");
-    const next = await verifyPublishedCorrection(options);
-    assert.equal(executions, 2, "the mapped command must actually execute again");
-    assert.deepEqual(next.publicationCorrection.relatedTestsBySource, fixture.mapping);
-    assert.equal(next.publicationCorrection.identity.environment, "git-hook");
-    assert.deepEqual(next.publicationCorrection.commands, first.publicationCorrection.commands);
-    assert.equal(next.gatePassed, false);
-    environment = "fail";
-    await assert.rejects(verifyPublishedCorrection(options), /Affected check failed/);
-    assert.equal(executions, 3, "real current command failure cannot borrow prior PASS");
-    assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false);
-    assert.equal(JSON.parse(readFileSync(correctionReceiptPath(fixture.cwd), "utf8")).status, "inconclusive");
+    const pathDelimiter = process.platform === "win32" ? ";" : ":";
+    const hookPrefix = process.platform === "win32" ? "C:/Program Files/Git/mingw64/libexec/git-core" : "/usr/lib/git-core";
+    environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1",
+      PATH: `${hookPrefix}${pathDelimiter}${environment.PATH ?? environment.Path ?? ""}` };
+    assert.deepEqual(guardResultEnvironment(environment), initialGuardEnvironment,
+      "the hook wrapper must preserve the executable search identity");
+    const inspection = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
+    assert.equal(inspection.ok, true, inspection.reason);
+    const reused = await verifyPublishedCorrection(options);
+    assert.equal(executions, 1, "a status read from the hook process must reuse the proof");
+    assert.equal(reused.sha, first.sha);
+    environment = { ...environment, CI: "changed-guard-input" };
+    assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false,
+      "a guard-relevant environment input must still invalidate the proof");
+  } finally { fixture.remove(); }
+});
+
+test("guard-result identity retains the selected PowerShell test executable", () => {
+  const legacy = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "powershell" });
+  const pwsh = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "C:/Program Files/PowerShell/7/pwsh.exe" });
+  assert.notDeepEqual(pwsh, legacy);
+});
+
+test("guard-result identity retains Windows Bash fallback roots", () => {
+  const baseline = { CI: "true", ProgramFiles: "C:/Program Files", "ProgramFiles(x86)": "C:/Program Files (x86)", LOCALAPPDATA: "C:/Users/test/AppData/Local" };
+  const options = { platform: "win32" };
+  for (const key of ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]) {
+    assert.notDeepEqual(guardResultEnvironment({ ...baseline, [key]: `${baseline[key]}/alternate` }, options), guardResultEnvironment(baseline, options),
+      `${key} can select the Git for Windows Bash fallback executable`);
+  }
+});
+
+test("guard-result identity retains semantic base and guard-runner selectors", () => {
+  const baseline = guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" });
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "b".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "BASE_SHA selects the diff scanned by registered guards");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/release", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "BASE_REF is a fallback diff selector");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/topic", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "DPF_PREPUSH_BASE_REF is a hook diff selector");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "0" }), baseline,
+    "runner retry policy changes which executed guard outcome can be reused");
+});
+
+test("guard-result identity ignores only the Git hook PATH prefix", () => {
+  for (const [platform, delimiter, prefix] of [["win32", ";", "C:/Program Files/Git/mingw64/libexec/git-core"], ["linux", ":", "/usr/lib/git-core"]]) {
+    const base = { CI: "true", PATH: `/toolchain/openssl-a${delimiter}/toolchain/bash-a` };
+    const hook = { ...base, PATH: `${prefix}${delimiter}${base.PATH}` };
+    const changedTool = { ...base, PATH: `/toolchain/openssl-b${delimiter}/toolchain/bash-a` };
+    const options = { platform };
+    assert.deepEqual(guardResultEnvironment(hook, options), guardResultEnvironment(base, options),
+      `${platform}: the known hook wrapper does not change executable resolution`);
+    assert.notDeepEqual(guardResultEnvironment(changedTool, options), guardResultEnvironment(base, options),
+      `${platform}: a different OpenSSL/Bash search path must not inherit an affected-check proof`);
+  }
+  assert.notDeepEqual(guardResultEnvironment({ PATH: "/bin", Path: "/alternate" }, { platform: "linux" }), guardResultEnvironment({ PATH: "/bin" }, { platform: "linux" }),
+    "POSIX keeps distinct case-sensitive environment names");
+});
+
+test("a second unpushed correction retains the published head's receipt as its anchor", async () => {
+  const fixture = mappedCorrectionFixture();
+  let publishedHead = fixture.originalSha;
+  const contextReader = () => {
+    const context = fixture.contextReader();
+    context.pullRequest.headRefOid = publishedHead;
+    return context;
+  };
+  const run = () => ({ exitCode: 0, stdout: "# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# cancelled 0\n# todo 0\n" });
+  const options = { ...fixture.options, persist: true, contextReader, relatedTestsBySource: fixture.mapping, run };
+  try {
+    const first = await verifyPublishedCorrection(options);
+    publishedHead = first.sha;
+    fixture.write(3); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "second local correction");
+    const second = await verifyPublishedCorrection(options);
+    assert.notEqual(correctionReceiptPath(fixture.cwd, first.sha), correctionReceiptPath(fixture.cwd, second.sha));
+    assert.equal(reducedTierClassification(fixture.cwd, { contextReader, recordsReader: () => [] }), "authored-correction",
+      "the pre-push eligibility read must find the published head's retained correction proof");
   } finally { fixture.remove(); }
 });
 

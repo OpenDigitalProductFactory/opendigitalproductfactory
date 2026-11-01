@@ -393,3 +393,42 @@ describe("durable nonproduction lease wait", () => {
     expect(parseNonprodLeaseWait(mock.task()?.progressPayload)).toMatchObject({ state: "admitted" });
   });
 });
+
+
+describe("preview ownership through durable queue transitions", () => {
+  it("preserves original authenticated ownership across queued checkpoint and terminal settlement", async () => {
+    const mock = db();
+    const preview = lease({ environmentKey: "active-candidate" });
+    const first = await checkpointNonprodLeaseWait({ db: mock, lease: preview, userId: "user-1",
+      queuePosition: 2, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+    const owner = { schemaVersion: 1, userId: "user-1", agentId: "AGT-EXT-CODEX", binding: { leaseId: preview.leaseId } };
+    await mock.taskRun.update({ data: { progressPayload: { ...mock.task().progressPayload, nonprodPreviewOwner: owner } } });
+    await checkpointNonprodLeaseWait({ db: mock, lease: { ...preview, taskRunId: first.taskRunId }, userId: "user-1",
+      queuePosition: 1, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+    expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+    await settleNonprodLeaseWait({ db: mock, taskRunId: first.taskRunId, leaseId: preview.leaseId, state: "terminal", now: NOW });
+    expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+    await expect(checkpointNonprodLeaseWait({ db: mock, lease: { ...preview, taskRunId: first.taskRunId }, userId: "foreign",
+      queuePosition: 1, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW })).rejects.toThrow("nonprod_preview_ownership_conflict");
+    expect(mock.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+  });
+});
+
+it("keeps a caller's legacy Task separate from its ordinary durable preview wait", async () => {
+  const legacy = { taskRunId: "TR-CALLER", userId: "user-1", status: "working", progressPayload: { featureWork: "untouched" } };
+  const tasks = new Map<string, any>([[legacy.taskRunId, legacy]]);
+  const mock = { taskRun: {
+    findUnique: vi.fn(async ({ where }: any) => tasks.get(where.taskRunId) ?? null),
+    findMany: vi.fn(async () => []), update: vi.fn(),
+    upsert: vi.fn(async ({ where, create, update }: any) => {
+      const next = tasks.has(where.taskRunId) ? { ...tasks.get(where.taskRunId), ...update } : create;
+      tasks.set(where.taskRunId, next); return next;
+    }),
+  }, nonProductionEnvironmentLease: { updateMany: vi.fn(async () => ({ count: 1 })) } };
+  const result = await checkpointNonprodLeaseWait({ db: mock, userId: "user-1",
+    lease: lease({ environmentKey: "active-candidate", taskRunId: legacy.taskRunId }), queuePosition: 1,
+    waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+  expect(result.taskRunId).not.toBe(legacy.taskRunId);
+  expect(tasks.get(legacy.taskRunId)).toBe(legacy);
+  expect(tasks.get(result.taskRunId).progressPayload.nonprodPreviewOwner).toBeUndefined();
+});
