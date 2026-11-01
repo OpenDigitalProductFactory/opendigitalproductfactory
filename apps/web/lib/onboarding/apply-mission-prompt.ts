@@ -23,7 +23,7 @@ function directionLines(direction: MissionPromptDirection | undefined): string[]
   if (!direction) return [];
   const lines: string[] = [];
   const vision = direction.vision?.trim();
-  if (vision) lines.push(`Vision: ${vision}`);
+  lines.push(`Vision: ${vision || "not recorded yet"}`);
   if (direction.outcomes.length === 0) {
     lines.push("Top-level outcomes: not recorded yet");
   } else {
@@ -42,7 +42,7 @@ export function renderMissionPromptContent(mission: string, direction?: MissionP
     "",
     "This section defines the overarching mission that governs all work — whether performed by humans or AI coworkers. Every action, recommendation, and decision should align with this mission.",
     "",
-    `Mission: ${mission.trim()}`,
+    `Mission: ${mission.trim() || "not recorded yet"}`,
     ...directionLines(direction),
     "",
     "Values:",
@@ -75,14 +75,14 @@ export type ApplyMissionPromptInput = {
 export type ApplyMissionPromptResult = { applied: boolean };
 
 /**
- * Upsert the company-mission prompt from the captured mission. No-op when the
- * mission is blank (we never overwrite the editable default with emptiness).
+ * Upsert the captured direction, including explicit missing values after an
+ * owner clears it. Legacy setup calls without direction keep their blank no-op.
  */
 export async function applyMissionPrompt(
   input: ApplyMissionPromptInput,
 ): Promise<ApplyMissionPromptResult> {
   const mission = (input.mission ?? "").trim();
-  if (mission.length === 0) return { applied: false };
+  if (mission.length === 0 && !input.direction) return { applied: false };
 
   const db = input.db ?? (prisma as unknown as ApplyMissionPromptClient);
   const content = renderMissionPromptContent(mission, input.direction);

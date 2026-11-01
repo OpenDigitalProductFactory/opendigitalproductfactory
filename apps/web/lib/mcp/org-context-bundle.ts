@@ -180,7 +180,7 @@ export function formatOrgContextInstructions(
     (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
   const block = [
     `ORGANIZATION CONTEXT: ${brief(bundle.organizationName, 80) || "this organization"}.`,
-    `Mission: ${brief(bundle.mission || bundle.businessProfile.missionTheme, 140)}`,
+    `Mission: ${brief(bundle.mission, 140) || "not recorded yet"}`,
     // The owner's direction (BI-8AB6B4F7). Bounded so the routes below always
     // fit; "not recorded yet" rather than a stand-in, so nothing is invented.
     `Vision: ${brief(bundle.vision, 80) || "not recorded yet"}`,

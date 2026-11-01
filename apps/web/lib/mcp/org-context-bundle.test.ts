@@ -190,6 +190,14 @@ describe("instance direction in the organization context (BI-8AB6B4F7)", () => {
     expect(out).toContain("Outcomes: Same-week appointments; Patients come back");
   });
 
+
+  it("does not replace a missing owner mission with an archetype suggestion", async () => {
+    const bundle = await buildOrgContextBundle(mockClient({ ...base, businessContext: { mission: "", industry: null } }));
+    const out = formatOrgContextInstructions(BASE, bundle);
+    expect(out).toContain("Mission: not recorded yet");
+    expect(out).not.toContain(`Mission: ${bundle!.businessProfile.missionTheme}`);
+  });
+
   it("says the direction is not recorded rather than inventing one", async () => {
     const bundle = await buildOrgContextBundle(mockClient({ ...base, businessContext: { mission: "M", industry: null } }));
     const out = formatOrgContextInstructions(BASE, bundle);
