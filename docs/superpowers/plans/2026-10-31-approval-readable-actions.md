@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implementation-admitted
 ---
 
 # Readable requested actions — BI-038AA4BC
@@ -42,9 +42,10 @@ scenarios qualify copy, keyboard and viewport behavior separately from source te
 
 1. Preserve the observed baseline and existing research/design. Publish this
    signed design/plan/prototype through the normal documentation lane. Re-sync
-   exact author/source and obtain the canonical design, independent spec and
-   architecture receipts, objective baseline, plan review and immutable live
-   coverage. Stop before runtime edits while readiness is not allowed.
+   exact author/source, record immutable live coverage and obtain implementation
+   admission. Follow the current server-issued medium-work obligations; do not
+   manufacture independent spec/architecture/plan receipts that it does not owe.
+   Stop before runtime edits while readiness is not allowed.
 2. Add the behavioral first-failing tests to the existing projection/component
    suites: known update/merge/reservation questions appear in the initial view;
    unsupported effects retain their hold, names are never guessed, and critical
@@ -88,7 +89,20 @@ protection, mapped to BI-038AA4BC. requirementRefs: RQ-ACTION, RQ-UNCERTAINTY,
 RQ-SCOPE, RQ-FACTS, RQ-STATE, RQ-FIT. contractRefs: CT-QUESTION, CT-UNCERTAINTY,
 CT-BINDING, CT-FIT. flowRefs: FLOW-NAMED, FLOW-UNKNOWN. verificationRefs:
 VERIFY-QUESTION, VERIFY-INTEGRITY, VERIFY-SERVED. No dependency or child item is
-introduced. The immutable coverage receipt is still owed after publication.
+introduced.
+
+## Backlog coverage
+
+Receipt cmvx6ihpq06xg01tm0cfemvsq recorded atomic coverage for BI-038AA4BC,
+bound to plan blob 9d639a73adf3a58930619d2d93c7f8cfd5e3908a at published
+24914009dcaf7094db9f1e13b4fdeaea08ff71ac. No child or dependency was created.
+Implementation was admitted by IRD-9803B3A7DD28 on 2026-11-01 under the existing
+medium shape, feature profile and body acceptance criteria. The refreshed native
+readiness reports independent live acceptance and delivery evidence at completion;
+spec/architecture/plan reviews are not prerequisites for this current medium shape.
+This corrects the pre-publication draft's inferred obligations without inventing
+receipts or changing classification. Rebind coverage to this updated plan blob
+after publication. It does not establish completion or live acceptance.
 
 Unknown work names and unproven consequences remain limitations, not permission
 to expose private names or authorize a request. Other technical notice producers

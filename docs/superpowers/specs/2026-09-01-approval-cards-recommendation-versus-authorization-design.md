@@ -341,6 +341,8 @@ new permission mechanism is outside this repair.
 The inert [copy prototype](2026-10-31-approval-readable-actions-prototype.html)
 and [ordered plan](../plans/2026-10-31-approval-readable-actions.md) distinguish
 named operations from unresolved effects. The prototype is proposed copy, not a
-live implementation or a passing UI result. Current canonical design, independent
-spec/architecture/plan review, objective baseline and live coverage remain owed
-before implementation; no source or runtime receipt is synthesized here.
+live implementation or a passing UI result. After the initial design-only commit
+was published, current native medium-work readiness admitted implementation
+(`IRD-9803B3A7DD28`) and atomic plan coverage was recorded. Its current obligations
+are delivery evidence and independent live acceptance; no spec/architecture/plan
+review receipt is synthesized or required by that medium-work admission.
