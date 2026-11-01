@@ -72,10 +72,16 @@ After admission, run the affected shared-writer suite on Windows and preserve co
 
 Rollback removes this isolated test through normal protected source delivery. Production behavior remains unchanged.
 
-## Research-definition disposition required
+## Governed research-definition disposition
 
 Current source maps chore to the fix profile, while binding Small leaves a research requirement. Fix research guidance asks for a confirmed defect and failing-then-passing reproduction. This qualification has neither, and its purpose is to produce bounded observations without presupposing a defect.
 
-Source inspection and the historical failure are available research inputs. They are not a passing qualification result or experimental exclusion of the original causes. Do not exploit a permissive receipt schema to record a false passing research gate, reclassify the work to avoid its requirements, or borrow another item's baseline. Seek the supported governed disposition of this mismatch and retain the exact issuer response if it cannot express qualification-only work.
+BI-2664971A and protected merge `75d723d34416e18c9bf1e0aede8fea6d1dace25d` provide the governed disposition: a refused Workroom with this immutable protocol may receive one signed, server-bound two-phase qualification admission. Prepare may change only the named test path and may not run the experiment. A separate independent semantic review must approve the exact candidate head, diff and test blob while confirming the production writer blob is unchanged. Verify receives a fresh one-start native-Windows binding and may run only the exact qualification. Failed, expired, mismatched or incomplete evidence fails closed. This exception admits evidence production only; it does not satisfy research or authorize ordinary implementation.
+
+Source inspection and the historical failure remain inputs, not a passing qualification result or experimental exclusion of the original causes. After Verify, the design author must record a normal research receipt that resolves `IF-91E987DA433B0C82` only when the paired native observations actually support it. Do not exploit a permissive receipt schema, reclassify the work, borrow another item's baseline, splice attempts, or infer the original holder from the controlled result.
+
+## Independent failure-analysis challenge
+
+The review must challenge at least these failure modes before Prepare: a fabricated or setup-layer EPERM mistaken for the replacement boundary; helper acquisition not proved before the held attempt; helper release caused by watchdog or early exit rather than the explicit release signal; production writer bytes or unclaimed paths changed during preparation; partial or cross-attempt evidence treated as a complete pair; and a controlled result overstated as the cause of the historical incident. Any of these makes the qualification inconclusive or refused. The only positive outcome is a complete, same-attempt pair from the real writer: preserved ADMITTED bytes while the proven handle is held, followed after acknowledged closure by complete RUNNING bytes, with bounded cleanup and no false gate PASS.
 
 Design capture, scope and impact are recorded. Implementation admission, the controlled experiment, product repair, canonical runtime verification and original cancellation acceptance are **UNRUN**.
