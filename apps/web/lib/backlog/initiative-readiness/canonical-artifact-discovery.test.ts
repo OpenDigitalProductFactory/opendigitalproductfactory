@@ -77,7 +77,7 @@ describe("current canonical design observation", () => {
       return rooms.filter(room =>
       where.backlogItemId.in.includes(room.backlogItemId) && room.archivedAt === null
       && !where.status.notIn.includes(room.status)
-      && ["repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
+      && ["capsuleId", "repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
         where[key] === undefined || where[key] === room[key as keyof typeof room]))
       .map(({ backlogItemId, archivedAt, status, ...room }) => room);
     });
@@ -95,6 +95,17 @@ describe("current canonical design observation", () => {
     expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ repositoryFullName: "org/repo", headBranch: "fix/x",
         baseSha: BASE_SHA, headSha: HEAD_SHA, backlogItemId: { in: ["item-row", "BI-X"] }, archivedAt: null }) }));
+  });
+  it("selects the exact room even when another preserved room has the identical source tuple", async () => {
+    const { store, rooms } = multipleRooms();
+    rooms[1]!.headBranch = rooms[0]!.headBranch;
+    const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new" });
+    expect((await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never,
+      claimSource: { ...snapshot().room, workroomId: "WC-X" }, ports: { readCurrentArtifact } })).evidence)
+      .toEqual({ state: "verified", digest: "sha256:new" });
+    expect(readCurrentArtifact).toHaveBeenCalledWith(snapshot());
+    expect((await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never,
+      claimSource: snapshot().room, ports: { readCurrentArtifact } })).evidence).toEqual({ state: "unavailable" });
   });
   it("keeps an unscoped read ambiguous with the same multiple rooms", async () => {
     const { store } = multipleRooms(); const readCurrentArtifact = vi.fn();

@@ -7,6 +7,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
+import { getT } from "@/lib/i18n/t.server";
 import { ExpenseClaimsTable, type ExpenseClaimRow } from "./ExpenseClaimsTable";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -22,6 +23,7 @@ const ALL_STATUSES = ["draft", "submitted", "approved", "rejected", "paid"];
 type Props = { searchParams: Promise<{ status?: string; view?: string }> };
 
 export default async function ExpenseClaimsPage({ searchParams }: Props) {
+  const t = await getT("shell");
   const sp = await searchParams;
   const { status } = sp;
   const view = parseSurfaceView(sp.view);
@@ -59,7 +61,11 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Expense Claims</h1>
+        <div>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Expense Claims</h1>
+          <p className="mt-1 text-sm text-[var(--dpf-muted)]">{t("finance.expenseReviewDescription")}</p>
+        </div>
+        <Link href="/finance/my-expenses" className="text-sm text-[var(--dpf-accent)] hover:underline">{t("finance.ownExpensesLink")}</Link>
       </div>
 
       <FinanceTabNav />
