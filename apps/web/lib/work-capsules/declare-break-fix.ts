@@ -1,3 +1,4 @@
+import { withoutScopeMetadataFields } from "./scope-metadata.mjs";
 /**
  * The break-fix expedite lane (BI-F2FEC1EB, design §4 and §5 rulings 1–2).
  *
@@ -13,6 +14,7 @@
  *     bound Workroom takes `delivery-break-fix@1.0.0` as its declared shape.
  */
 
+import { workroomBoundaryWriteWhere } from "@/lib/work-management/workroom-boundary-write.server";
 import { DELIVERY_BREAK_FIX_SHAPE_KEY, DELIVERY_SHAPE_VERSION } from "@/lib/work-management/delivery-shapes";
 
 
@@ -42,7 +44,7 @@ export type DeclareBreakFixDb = {
     create(args: unknown): Promise<{ id: string }>;
   };
   workroom: {
-    findFirst(args: unknown): Promise<{ id: string; capsuleId: string; scopeClaims: unknown } | null>;
+    findFirst(args: unknown): Promise<{ id: string; capsuleId: string; scopeClaims: unknown; updatedAt: Date } | null>;
     findMany(args: unknown): Promise<Array<{ capsuleId: string; backlogItemId: string | null; scopeClaims: unknown }>>;
     update(args: unknown): Promise<unknown>;
   };
@@ -112,7 +114,7 @@ export async function declareBreakFix(args: {
   const room = await args.db.workroom.findFirst({
     where: { backlogItemId: item.itemId, archivedAt: null, status: { notIn: TERMINAL_ROOM_STATUSES } },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, capsuleId: true, scopeClaims: true },
+    select: { id: true, capsuleId: true, scopeClaims: true, updatedAt: true },
   });
   if (!room) return { ok: false, error: "workroom_required", message: `Claim ${item.itemId} into a Workroom first (claim_backlog_item_for_work), then declare the break-fix on it.` };
   // A shape claim is not a declaration. Check the exact receipt separately:
@@ -156,10 +158,9 @@ export async function declareBreakFix(args: {
     declaredAt: now.toISOString(),
     pirDueAt: new Date(now.getTime() + BREAK_FIX_PIR_WINDOW_MS).toISOString(),
   };
-  const existing = Array.isArray(room.scopeClaims) ? room.scopeClaims as unknown[] : [];
-  const preserved = existing.filter((entry) => !(entry && typeof entry === "object" && "workShape" in (entry as Record<string, unknown>)));
+  const preserved = withoutScopeMetadataFields(room.scopeClaims, ["workShape", "workShapeKey", "workShapeVersion"]);
   await args.db.workroom.update({
-    where: { capsuleId: room.capsuleId },
+    where: { ...workroomBoundaryWriteWhere(room), capsuleId: room.capsuleId },
     data: { scopeClaims: [...preserved, { workShape: BREAK_FIX_SHAPE_REF, recordedAt: payload.declaredAt, source: "declared", declaredByUserId: args.actor.userId }] },
   });
   const activity = await args.db.backlogItemActivity.create({

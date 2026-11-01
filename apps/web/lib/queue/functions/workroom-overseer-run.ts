@@ -11,7 +11,8 @@
 // observation, then positive local trunk reachability. Unknown never closes.
 
 import { isRecord } from "@/lib/shared/coerce";
-import { parseScopeClaims } from "@/lib/work-capsules";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { parseOriginalScopeReleaseTargets } from "@/lib/work-capsules/scope-release-targets";
 import { authoredHeadSha } from "@/lib/work-capsules/authored-head";
 import type { CapsuleDb, WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
 import type { ReaperCapsuleRow } from "@/lib/work-capsules/work-capsule-reaper";
@@ -108,6 +109,7 @@ export function toOverseerRoom(row: RoomRow, item: ItemRow | null, merge: Pick<R
   const drive = isRecord(row.workspaceState) && isRecord(row.workspaceState.workroomDrive) ? row.workspaceState.workroomDrive : null;
   return {
     id: row.id, capsuleId: row.capsuleId, status: row.status, idempotencyKey: row.idempotencyKey,
+    scopeSnapshot: { scopeClaims: row.scopeClaims, updatedAt: row.updatedAt },
     shapeKey: readDeclaredWorkShapeKey(row.scopeClaims),
     itemKey: item?.itemId ?? row.backlogItemId, itemStatus: item?.status ?? null, itemEffortSize: item?.effortSize ?? null,
     leaseExpiresAt: row.leaseExpiresAt,
@@ -163,15 +165,28 @@ export function createOverseerEffects(loadDb: () => Promise<OverseerDb>): Overse
   return {
     async close(action, now) {
       const db = await loadDb();
-      const current = await db.workroom.findUnique({ where: { id: action.room.id } });
-      if (!current || TERMINAL_ROOM_STATUSES.includes(current.status)) return false;
-      const claims = parseScopeClaims(current.scopeClaims).map(({ kind, value }) => ({ kind, value }));
-      const { releaseWorkCapsuleScope, updateWorkCapsuleStatus } = await import("@/lib/work-capsules/work-capsule-store");
-      if (claims.length > 0) {
-        await releaseWorkCapsuleScope({ db, capsuleId: action.room.capsuleId, claims, actor: OVERSEER_ACTOR, now });
-      }
-      await updateWorkCapsuleStatus({ db, capsuleId: action.room.capsuleId, status: "archived", reason: action.summary, actor: OVERSEER_ACTOR, now });
-      publish(action.room.id, await writeTrailRow(db, action, { ...action.facts, releasedClaims: claims.length, status: "archived" }));
+      const snapshot = action.room.scopeSnapshot;
+      if (!snapshot || !(snapshot.updatedAt instanceof Date) || !Array.isArray(snapshot.scopeClaims)) return false;
+      const ownership = snapshot.scopeClaims.filter(entry => isRecord(entry) && ("kind" in entry || "value" in entry));
+      const claims = ownership.length ? parseOriginalScopeReleaseTargets(ownership) : [];
+      if (!claims) return false;
+      const written = await db.$transaction(async raw => {
+        const tx = raw as OverseerDb;
+        if (tx.$queryRaw) await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${action.room.id} FOR UPDATE`;
+        const current = await tx.workroom.findUnique({ where: { id: action.room.id } });
+        if (!current || current.id !== action.room.id || TERMINAL_ROOM_STATUSES.includes(current.status)
+          || !(current.updatedAt instanceof Date) || current.updatedAt.getTime() !== snapshot.updatedAt.getTime()
+          || canonicalJson(current.scopeClaims) !== canonicalJson(snapshot.scopeClaims)) return null;
+        const { releaseWorkCapsuleScope, updateWorkCapsuleStatus } = await import("@/lib/work-capsules/work-capsule-store");
+        if (claims.length > 0) {
+          await releaseWorkCapsuleScope({ db: tx, capsuleId: action.room.capsuleId, expectedRoomId: action.room.id,
+            claims, actor: OVERSEER_ACTOR, now });
+        }
+        await updateWorkCapsuleStatus({ db: tx, capsuleId: action.room.capsuleId, status: "archived", reason: action.summary, actor: OVERSEER_ACTOR, now });
+        return { activityId: await writeTrailRow(tx, action, { ...action.facts, releasedClaims: claims.length, status: "archived" }) };
+      });
+      if (!written) return false;
+      publish(action.room.id, written.activityId);
       return true;
     },
     async record(action) {

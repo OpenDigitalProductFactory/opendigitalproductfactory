@@ -3,6 +3,8 @@
 // lease, still is. The gate and the store read the same rule.
 import { describe, expect, it, vi } from "vitest";
 
+// This lease unit fixture represents an already qualified writer cohort; real enrollment refusal is tested separately.
+vi.mock("./scope-epoch-enrollment.server", () => ({ assertScopeEpochEnrollmentReady: async () => ({ assertCurrent() {} }) }));
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 
 import { resolveEscalation } from "@/lib/govern/authority/escalation-gate";
