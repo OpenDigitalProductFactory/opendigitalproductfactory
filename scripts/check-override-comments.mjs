@@ -24,6 +24,11 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
+  // BI-7F3E4389: isolated mobile file: copies cannot resolve the source
+  // workspace:/catalog: protocols. These exact edges preserve that boundary.
+  "@dpf/validators>@dpf/integration-shared",
+  "@dpf/validators>zod",
+  "@dpf/integration-shared>undici",
   // Inngest's supported-range telemetry alignment pin, documented beside the
   // override. This exact parent-scoped compat pin is not an advisory floor.
   "vitest>@opentelemetry/api",
