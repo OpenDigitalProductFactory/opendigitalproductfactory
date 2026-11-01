@@ -161,3 +161,33 @@ Roll out one entry path at a time on its existing routing/switch seam. Reconcile
 - Shared preview startup/session isolation and authenticated owner readback.
 - Funding scope is unresolved on this design Workroom; no budget allocation or paid provider expansion was inferred.
 - Independent design/architecture approval and executable plan coverage are pending. This draft and its planning decision provide no runtime pass.
+
+## 8. Finance worker persistence slice
+
+BI-7DC3B91D / WC-74FD2A42 extends P4 with
+`apps/web/lib/agent/foreground-work-finance.postgres.test.ts`. The conformance
+branch inherits the frozen foreground implementation7aa through a normal merge;
+BI-D0D2FF0D retains that implementation and its UI/publication obligations.
+This inheritance is a source dependency, not delivery or acceptance of that repair.
+
+The five new cases use the existing isolated PostgreSQL fixture, real retained
+worker, request digest, publication transaction and current membership lookup.
+They cover capacity wait followed by competing deliveries and one stored result,
+user deactivation, changed thread ownership, committed publication followed by
+acknowledgement loss, and changed request content. Only explicit governed test
+database URLs enable them; no install DATABASE_URL fallback is permitted.
+Fixture teardown removes its unique schema, never public rows.
+
+The coworker turn, job wake transport and event bus remain controlled doubles.
+These cases can establish worker/database composition only. They cannot earn a
+portal-authentication, actual queue, provider, Finance-tool or full business
+acceptance pass. The exact Finance Spend served scenario remains required:
+one fresh read-only request, controlled provider busy, retained original job,
+server continuation without owner resend, no duplicated effects and genuine
+stored-result reload. Historical uncertain jobs are not replayed.
+
+At the initial source checkpoint,32 existing worker/context/adapter cases passed;
+the five new PostgreSQL cases were collected but skipped without a governed SQL
+target. They are UNRUN, not passed or first-red evidence. Actual execution and a
+mutation control must precede a database qualification claim. This slice does
+not resolve the rest of P4–P6 or the original specialist-review obligations.
