@@ -99,7 +99,14 @@ export function assertPreviewContainer(container, { worktree, sha, leaseId, dock
       || !container.Config?.Env?.includes(`DPF_PREVIEW_LEASE_ID=${leaseId}`)) throw new Error('preview_actual_environment_mismatch');
   if (container.Config?.Labels?.['dpf.preview.sha'] !== sha
       || container.Config?.Labels?.['dpf.preview.lease'] !== leaseId) throw new Error('preview_actual_identity_mismatch');
-  assertPreviewPorts(container.NetworkSettings?.Ports?.['3000/tcp'], true);
+  const ports = container.NetworkSettings?.Ports;
+  // Exposed but unpublished ports are null. No other published target may
+  // evade the preview-only loopback mapping verified by the rendered config.
+  if (Object.entries(ports ?? {}).some(([key, bindings]) => key !== '3000/tcp'
+      && bindings !== null && !(Array.isArray(bindings) && bindings.length === 0))) {
+    throw new Error('preview_actual_port_binding_mismatch');
+  }
+  assertPreviewPorts(ports?.['3000/tcp'], true);
   assertPreviewDeclarationMount(container.Mounts, { declarationPath, dockerOperatingSystem }, true);
 }
 

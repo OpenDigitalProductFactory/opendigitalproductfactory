@@ -69,3 +69,16 @@ for (const actual of [false, true]) {
     }
   });
 }
+
+test('actual inspection rejects an additional published port key, while allowing unbound exposed ports', () => {
+  const identity = { worktree: resolve('/preview-fixture'), sha: 'a'.repeat(40), leaseId: 'NPEL-PORT-FIXTURE' };
+  const container = {
+    Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' }],
+    Config: { Labels: preview.previewOverride(identity).services['dev-portal'].labels,
+      Env: ['DPF_ENVIRONMENT_CLASS=development', 'DPF_PREVIEW_SOURCE_SHA=' + identity.sha, 'DPF_PREVIEW_LEASE_ID=' + identity.leaseId] },
+    NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }], '9229/tcp': null } },
+  };
+  preview.assertPreviewContainer(container, identity);
+  container.NetworkSettings.Ports['9229/tcp'] = [{ HostIp: '0.0.0.0', HostPort: '9229' }];
+  assert.throws(() => preview.assertPreviewContainer(container, identity), /actual_port_binding_mismatch/);
+});
