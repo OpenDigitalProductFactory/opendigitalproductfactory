@@ -908,6 +908,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
         // unreadable claim record must fail safe rather than reap on a guess.
         "scripts/lib/worktree-liveness.test.mjs",
+        "scripts/lib/branch-reaper-core.test.mjs",
         // CodeQL js/log-injection: one CR/LF strip for the janitor, the preview
         // runtime, and the auth-only bootstrap.
         "scripts/lib/safe-log.test.mjs",
@@ -961,6 +962,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // created, and the branches that predate that are reconciled. Binding
         // coverage was stuck at 65% for as long as the rule relied on memory.
         "scripts/lib/workroom-bind.test.mjs",
+        "scripts/lib/worktree-provision.test.mjs",
         "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",

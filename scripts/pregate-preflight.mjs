@@ -205,7 +205,13 @@ export async function main() {
     ? "[pregate-preflight] included the open pull request body so convergence-impact sees the same text CI does\n"
     : `[pregate-preflight] skipped pull request body (${prBody.reason}); convergence-impact sees commit messages only\n`);
   let execution;
-  try { execution = await runWithGuardReceipt({
+  // An explicit omission executes nothing. Keep the original uncertain receipt
+  // and lock untouched; normal execution still requires their admission fence.
+  try { execution = guardEnv[PREFLIGHT_SKIP_ENV] ? {
+    result: await runPreflight({ plan: planned.entries, env: guardEnv,
+      execute() { throw new Error("Recorded omission cannot execute guards."); } }),
+    reused: false, executedAt: null, identityVerified: false,
+  } : await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pregate-preflight",
     identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries, env: guardEnv }),

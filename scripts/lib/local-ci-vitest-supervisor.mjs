@@ -1,4 +1,28 @@
-const FAILED_TEST_SUMMARY_RE = /(?:Test Files|Tests)\s+[^\r\n]*\b[1-9]\d* failed\b/i;
+// Vitest colours its summary: the count follows an SGR code directly
+// (`\x1b[31m1 failed`), so a `\b` before the digit never matched and every
+// coloured real failure was graded runner-termination (BI-E3B7C1AB). Match on
+// ANSI-stripped text, anchored to the summary line.
+const FAILED_TEST_SUMMARY_RE = /^\s*(?:Test Files|Tests)\s+(?:[^\r\n]*\D)?[1-9]\d* failed\b/im;
+const FAILED_TEST_FILE_RE = /^\s*(?:[×✕✖]\s+)?FAIL\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\b/gm;
+// eslint-disable-next-line no-control-regex
+const ANSI_SGR_RE = /\x1B\[[0-9;]*m/g;
+
+function stripAnsi(text) {
+  return String(text ?? "").replace(ANSI_SGR_RE, "");
+}
+
+export function hasFailedTestSummary(outputTail) {
+  return FAILED_TEST_SUMMARY_RE.test(stripAnsi(outputTail));
+}
+
+/** Distinct failing test files named by Vitest's `FAIL <path>` lines, first seen first. */
+export function failedTestFilesFromOutput(outputTail) {
+  const files = [];
+  for (const match of stripAnsi(outputTail).matchAll(FAILED_TEST_FILE_RE)) {
+    if (!files.includes(match[1])) files.push(match[1]);
+  }
+  return files;
+}
 
 export { BoundedTextTail } from "./bounded-text-tail.mjs";
 
@@ -12,7 +36,7 @@ export function classifyVitestAttempt({
 }) {
   if (deadlineExceeded || closeTimedOut) return "runner-termination";
   if (status === 0 && !signal && !error) return "passed";
-  if (FAILED_TEST_SUMMARY_RE.test(outputTail)) return "test-failure";
+  if (hasFailedTestSummary(outputTail)) return "test-failure";
   if (
     status === null
     || status === undefined
@@ -61,6 +85,7 @@ function normalizeAttempt(raw, { attempt, workers }) {
     forceResult: raw.forceResult ?? null,
     closeTimedOutAt: raw.closeTimedOutAt ?? null,
     closeTimedOut: raw.closeTimedOut === true,
+    failedTestFiles: classification === "test-failure" ? failedTestFilesFromOutput(raw.outputTail) : [],
   };
 }
 
@@ -100,6 +125,7 @@ export async function runVitestWithRecovery({
             : (normalized.status ?? 1),
         classification: normalized.classification,
         recovered: attempt > 1 && normalized.classification === "passed",
+        failedTestFiles: normalized.failedTestFiles,
         attempts,
       };
     }

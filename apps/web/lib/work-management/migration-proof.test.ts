@@ -53,8 +53,8 @@ function readJson<T>(path: string): T {
 
 const PRE_MIGRATION = readJson<WorkShapeDefinition>(join(FIXTURES, "inquiry-response-watch@1.0.0.pre-migration.json"));
 const PRE_MIGRATION_KEYS = readJson<string[]>(join(FIXTURES, "work-shape-keys.pre-migration.json"));
-/** Shapes registered after PR-3b-R/6, in registry order (BI-C1781121: acceptance-verification; BI-AA47C672: platform-post-implementation-review). */
-const REGISTERED_AFTER_MIGRATION: readonly string[] = ["acceptance-verification", "platform-post-implementation-review"];
+/** Shapes registered after PR-3b-R/6, preserving main registry order before the new source inquiry. */
+const REGISTERED_AFTER_MIGRATION: readonly string[] = ["acceptance-verification", "platform-post-implementation-review", "source-inquiry"];
 
 function migrated(): WorkShapeDefinition {
   const definition = getWorkShape(INQUIRY_RESPONSE_WATCH_SHAPE_KEY);
