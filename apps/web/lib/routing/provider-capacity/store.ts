@@ -1,6 +1,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 
 import type { ProviderCapacityClassification, ProviderQuotaObservation, ProviderQuotaReconciliation } from "./types";
+import { isProviderQuotaState } from "./types";
 import { accountCapacityScope, capacityCredentialRevision, isAccountCapacityState } from "./scopes";
 import { accountRuntimeKey } from "../provider-account-candidates";
 import { capacityRoutingExclusionReason, type CapacitySnapshot } from "../capacity-routing-exclude";
@@ -37,6 +38,8 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 export async function loadProviderCapacitySnapshots(options: { includeInactiveAccountHealth?: boolean } = {}): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
     select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
+      executionProof: true,
+      source: true,
       safeSummary: true, action: true, isHumanActionRequired: true,
       ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
@@ -51,6 +54,12 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
       && row.scopeKey === accountCapacityScope(account.providerId, account.id)
       && row.observedCredentialRevision === capacityCredentialRevision(account.credentialEntry)) {
       map.set(accountRuntimeKey(account.providerId, account.connectionId), snapshot);
+      if (row.state === "available" && row.executionProof && typeof row.executionProof === "object" && !Array.isArray(row.executionProof)
+        && typeof row.executionProof.modelId === "string") {
+        const { readCurrentExecutionProof } = await import("./execution-proof.server");
+        const proof = await readCurrentExecutionProof(account.connectionId, row.executionProof.modelId, row.executionProof).catch(() => null);
+        if (proof) snapshot.executionProof = proof;
+      }
     }
   }
   return map;
@@ -58,15 +67,19 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
 
 /** Explicit safe fields only: raw snippets and credential storage stay server-side. */
 function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt: Date | null;
-  safeSummary: string | null; action: string; isHumanActionRequired: boolean }): CapacitySnapshot {
+  safeSummary: string | null; action: string; isHumanActionRequired: boolean; source?: string }): CapacitySnapshot {
   return { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null,
     observedAtMs: row.lastObservedAt?.getTime() ?? null, safeSummary: row.safeSummary,
-    action: row.action, isHumanActionRequired: row.isHumanActionRequired };
+    action: row.action, isHumanActionRequired: row.isHumanActionRequired,
+    ...(row.source ? { observationSource: ["api", "cli", "oauth", "opencode", "manual"].includes(row.source) ? row.source : "unknown" } : {}) };
 }
 
 async function persistScopedCapacity(input: {
   providerId: string; account?: CapacityAccountIdentity;
 }, data: Omit<Prisma.ProviderCapacityStatusUncheckedCreateInput, "providerId" | "scopeKey">): Promise<void> {
+  // A failure invalidates exact proof. Ordinary success never renews its TTL or
+  // bindings; the reader still rejects stale/changed proof independently.
+  if (data.state !== "available") data = { ...data, executionProof: {} };
   if (!input.account) {
     await prisma.providerCapacityStatus.upsert({ where: { providerId: input.providerId }, create: { providerId: input.providerId, ...data }, update: data });
     return;
@@ -191,4 +204,40 @@ export async function reconcileProviderQuotaObservation(
     await tx.$executeRaw`RELEASE SAVEPOINT dpf_provider_quota_reconciliation`;
     return "write-failed";
   }
+}
+
+type SelectedAccount = {
+  connectionId: string;
+  providerId: string;
+  credentialEntryId: string | null;
+};
+
+/** Capture only quota evidence owned by this explicitly selected account. */
+export async function captureProviderQuotaObservation(
+  account: SelectedAccount,
+): Promise<ProviderQuotaObservation | null> {
+  if (!account.credentialEntryId) return null;
+  const capacity = await prisma.providerCapacityStatus.findUnique({
+    where: { providerId: account.providerId },
+    select: {
+      id: true, providerId: true, state: true, updatedAt: true,
+      providerConnection: { select: { connectionId: true } },
+    },
+  });
+  if (!capacity || capacity.providerId !== account.providerId || !isProviderQuotaState(capacity.state)) return null;
+  const ownerConnectionId = capacity.providerConnection?.connectionId ?? null;
+  if (ownerConnectionId !== null) {
+    if (ownerConnectionId !== account.connectionId) return null;
+  } else {
+    // Legacy capacity can predate its connection link. The default's name alone
+    // is not proof: require the same canonical credential owner as well.
+    if (account.connectionId !== `provider-default-${account.providerId}`) return null;
+    const credential = await prisma.credentialEntry.findUnique({
+      where: { providerId: account.providerId },
+      select: { id: true, providerConnection: { select: { connectionId: true } } },
+    });
+    if (!credential || credential.id !== account.credentialEntryId
+      || (credential.providerConnection && credential.providerConnection.connectionId !== account.connectionId)) return null;
+  }
+  return { id: capacity.id, providerId: capacity.providerId, state: capacity.state, updatedAt: capacity.updatedAt, ownerConnectionId };
 }

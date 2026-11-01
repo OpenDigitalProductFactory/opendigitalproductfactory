@@ -651,6 +651,8 @@ model ProviderCapacityStatus {
   scopeKey              String?               @unique
   ownedAccountId        String?               @unique
   observedCredentialRevision String?
+  /// Exact account/model/Responses observation; null or invalid grants nothing.
+  executionProof        Json?
   state                 String
   action                String
   retryAt               DateTime?

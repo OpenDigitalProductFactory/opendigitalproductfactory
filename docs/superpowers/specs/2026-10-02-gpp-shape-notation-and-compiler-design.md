@@ -241,7 +241,7 @@ fields (§4.4).
     "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "semver": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
     "principalRef": { "type": "string", "pattern": "^(agent|role|person):.+$" },
-    "toolName": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "toolName": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" },
     "authority": { "enum": ["wwmd", "wwwd", "wsid"] },
     "evidenceKind": {
       "$comment": "Generated from WORK_SHAPE_EVIDENCE_KINDS (work-shape-evidence-kinds.ts).",

@@ -6,7 +6,8 @@
 // gate times out when every slot is busy. BI-0B95D268 already keeps a killed
 // engine from counting as a failed design/plan round; this names the other
 // infrastructure class so the repair budgets stop being spent on a busy host
-// (BI-5098ECEC). Pure: no DB, no clock.
+// (BI-5098ECEC). Operator routing holds use the same wait path, with their own
+// reason rather than a capacity claim. Pure: no DB, no clock.
 
 import { isAdmissionTimeout } from "@/lib/inference/inference-admission";
 
@@ -23,6 +24,13 @@ const LOCAL_RUNNER_BUSY_MESSAGE =
   "Deferred: another local model request already holds the GPU — capacity backpressure, not a model verdict.";
 
 function describeCapacityError(err: Error): CapacityDeferral | null {
+  if (err.name === "ProviderRoutingDeferredError") {
+    const reason = (err as { reason?: unknown }).reason;
+    return {
+      expectedFreeAt: null,
+      message: `Deferred: ${typeof reason === "string" && reason.trim() ? reason : err.message}`,
+    };
+  }
   if (err.name === "LocalProviderCapacityDeferredError") {
     const reason = (err as { reason?: unknown }).reason;
     if (reason === "host-gpu-busy") return { expectedFreeAt: null, message: HOST_GPU_BUSY_MESSAGE };

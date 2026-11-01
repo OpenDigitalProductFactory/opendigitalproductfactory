@@ -33,6 +33,7 @@ import {
 } from "./sandbox/agent-cli-runtime";
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
 import { getServedContextTokens } from "@/lib/inference/dmr-runtime-config";
+import { readEnabledRoutingProvider, ProviderRoutingDeferredError } from "@/lib/inference/provider-routing-admission";
 import { NON_CHAT_MODEL_RE, isEmbeddingModelId } from "@/lib/inference/local-model-policy";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { KNOWN_PROVIDER_MODELS } from "@/lib/routing/known-provider-models";
@@ -40,6 +41,7 @@ import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
 import { classifyProviderCapacity } from "@/lib/routing/provider-capacity";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { recordProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
 import { formatTrimProgressMessage, trimTaskPromptToContext } from "./opencode-task-context-budget";
@@ -374,7 +376,7 @@ async function resolveOpencodeDispatchTarget(params: {
   requestedModel: string;
   fetchImpl: typeof fetch;
 }): Promise<{ ok: true; target: OpencodeDispatchTarget } | { ok: false; reason: string }> {
-  const providerId = params.providerId || "local";
+  const providerId = params.providerId;
   const requestedModel = params.requestedModel.trim();
 
   if (providerId === "local" || providerId === "ollama") {
@@ -459,6 +461,18 @@ export function buildOpencodeInstructions(
   });
 }
 
+async function assertLocalOpencodeRouting(providerId: string): Promise<void> {
+  if (!isLocalProviderId(providerId)) return;
+  try {
+    await readEnabledRoutingProvider(providerId);
+  } catch (error) {
+    if (error instanceof ProviderRoutingDeferredError) throw error;
+    // Admission storage failed before any provider dispatch. Preserve retryable
+    // deferral without claiming an operator pause or recording provider failure.
+    throw new ProviderRoutingDeferredError(providerId, true, undefined, { cause: error });
+  }
+}
+
 /**
  * Dispatch a single build task to OpenCode running inside the sandbox, pointed
  * at the install's local OpenAI-compatible endpoint.
@@ -480,7 +494,8 @@ export async function dispatchOpencodeTask(params: {
   fetchImpl?: typeof fetch;
 }): Promise<OpencodeResult> {
   const { task, buildContext, priorResults } = params;
-  const providerId = params.providerId ?? "local";
+  const providerId = params.providerId || "local";
+  await assertLocalOpencodeRouting(providerId);
   const role = task.specialist;
   const containerId = params.containerId ?? DEFAULT_SANDBOX_CONTAINER;
   // Per-build working dir: the build's own worktree when isolation is ON, else
@@ -589,8 +604,10 @@ export async function dispatchOpencodeTask(params: {
     //
     // BI-98572A51: hold the shared local-GPU lane for the whole CLI run.
     // A busy card defers before the model starts; the lane only serializes this process.
-    const { stdout, durationMs: elapsed } = await withLocalInferenceLock(() =>
-      runSandboxAgentCli({
+    const { stdout, durationMs: elapsed } = await withLocalInferenceLock(async () => {
+      // A selection made before the lane wait cannot outlive an operator pause.
+      await assertLocalOpencodeRouting(providerId);
+      return runSandboxAgentCli({
         containerId,
         runnerScript,
         timeoutMs,
@@ -602,7 +619,8 @@ export async function dispatchOpencodeTask(params: {
             if (msg) params.onProgress?.(msg);
           }
         },
-      }),
+      });
+    },
       { modelId: model, origin: "autonomous" },
     );
 
@@ -678,6 +696,7 @@ export async function dispatchOpencodeTask(params: {
       durationMs: elapsed,
     };
   } catch (err) {
+    if (err instanceof ProviderRoutingDeferredError) throw err;
     if (err instanceof Error && err.name === "LocalProviderCapacityDeferredError") throw err;
     const durationMs = Date.now() - startMs;
     const execErr = err as { stdout?: string; stderr?: string; message?: string; killed?: boolean; code?: number | null };
