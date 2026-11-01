@@ -94,3 +94,53 @@ describe("seedPerformanceAcceptanceFixture", () => {
     expect(wrongOwner.db.businessMetricRollup.upsert).not.toHaveBeenCalled();
   });
 });
+
+import { seedSoftwarePerformanceAcceptanceFixture } from "./performance-acceptance-fixture";
+function softwareFixture() {
+  const tx: any = {
+    storefrontConfig: { findUnique: vi.fn(async () => ({ organizationId: "org-1", archetype: { archetypeId: "software-platform" } })) },
+    platformSetupProgress: { findUnique: vi.fn(async () => ({ organizationId: "org-1" })) },
+    user: { findUnique: vi.fn(async () => ({ platformRole: "HR-000", isSuperuser: false })) },
+    storefrontBooking: { count: vi.fn(async () => 1) },
+    journalEntry: { count: vi.fn(async () => 0), findMany: vi.fn(async () => []), upsert: vi.fn(async () => ({})) },
+    ledgerAccount: { upsert: vi.fn(async (args: any) => ({ id: args.create.code })) },
+  };
+  const database: any = { $transaction: vi.fn(async (work: any) => work(tx)) };
+  const input = { database, organizationId: "org-1", storefrontId: "sf-1", ownerUserId: "owner-1",
+    target: { environmentClass: "development", databaseHost: "dev-postgres", databaseName: "dpf" }, now: new Date("2026-10-31T12:00:00Z") };
+  return { tx, database, input };
+}
+it.each(["production", "undeclared"])("refuses %s fixture targets before any data read or write", async environmentClass => {
+  const { input, database } = softwareFixture();
+  await expect(seedSoftwarePerformanceAcceptanceFixture({ ...input, target: { ...input.target, environmentClass } })).rejects.toThrow(/disposable preview/);
+  expect(database.$transaction).not.toHaveBeenCalled();
+});
+it("refuses a production database address even when environment says development", async () => {
+  const { input, database } = softwareFixture();
+  await expect(seedSoftwarePerformanceAcceptanceFixture({ ...input, target: { ...input.target, databaseHost: "postgres" } })).rejects.toThrow(/disposable preview/);
+  expect(database.$transaction).not.toHaveBeenCalled();
+});
+it.each(["operating-journal", "foreign-owner", "no-demo", "worker", "foreign-ref"])("refuses %s before financial writes", async scenario => {
+  const { input, tx } = softwareFixture();
+  if (scenario === "operating-journal") tx.journalEntry.count.mockResolvedValue(1);
+  if (scenario === "foreign-owner") tx.platformSetupProgress.findUnique.mockResolvedValue({ organizationId: "org-2" });
+  if (scenario === "no-demo") tx.storefrontBooking.count.mockResolvedValue(0);
+  if (scenario === "worker") tx.user.findUnique.mockResolvedValue({ platformRole: "HR-500", isSuperuser: false });
+  if (scenario === "foreign-ref") tx.journalEntry.findMany.mockResolvedValue([{ organizationId: "org-2", sourceType: "PerformanceAcceptanceFixture" }]);
+  await expect(seedSoftwarePerformanceAcceptanceFixture(input)).rejects.toThrow(/fixture|demo|owner|scope/i);
+  expect(tx.ledgerAccount.upsert).not.toHaveBeenCalled(); expect(tx.journalEntry.upsert).not.toHaveBeenCalled();
+});
+it("writes balanced source journals with stable fixture refs for populated, zero and empty scenarios", async () => {
+  const { input, tx } = softwareFixture();
+  await seedSoftwarePerformanceAcceptanceFixture(input);
+  const originalRefs = tx.journalEntry.upsert.mock.calls.map(([args]: any) => args.where.entryRef);
+  expect(originalRefs).toHaveLength(4);
+  expect(tx.journalEntry.upsert.mock.calls[0][0].create.lines.create[0].debit).toBe(1200);
+  tx.journalEntry.upsert.mockClear();
+  await seedSoftwarePerformanceAcceptanceFixture({ ...input, scenario: "zero" });
+  expect(tx.journalEntry.upsert.mock.calls.map(([args]: any) => args.where.entryRef)).toEqual(originalRefs);
+  expect(tx.journalEntry.upsert.mock.calls[0][0].create.lines.create[0].debit).toBe(200);
+  tx.journalEntry.upsert.mockClear();
+  await seedSoftwarePerformanceAcceptanceFixture({ ...input, scenario: "empty" });
+  expect(tx.journalEntry.upsert.mock.calls.every(([args]: any) => args.update.status === "draft")).toBe(true);
+});

@@ -251,7 +251,7 @@ export function DataTable<T>({
           <span className="flex gap-1">
             <button
               type="button"
-              className="rounded border border-[var(--dpf-border)] px-2 py-0.5 disabled:opacity-40"
+              className="min-h-11 min-w-11 rounded border border-[var(--dpf-border)] px-2 py-0.5 disabled:opacity-40"
               disabled={clampedPage <= 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
@@ -259,7 +259,7 @@ export function DataTable<T>({
             </button>
             <button
               type="button"
-              className="rounded border border-[var(--dpf-border)] px-2 py-0.5 disabled:opacity-40"
+              className="min-h-11 min-w-11 rounded border border-[var(--dpf-border)] px-2 py-0.5 disabled:opacity-40"
               disabled={clampedPage >= pages - 1}
               onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
             >

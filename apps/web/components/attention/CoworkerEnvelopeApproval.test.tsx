@@ -293,6 +293,23 @@ describe("CoworkerEnvelopeApproval", () => {
 });
 
 describe("OwnerDecisionCards routing", () => {
+  it.each([
+    ["request_self_upgrade", { reason: "Ready release batch" }, "Request an update for this app?"],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
+    ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?"],
+  ])("shows the %s question before opening technical evidence", (toolName, proposedParameters, title) => {
+    const entry = entryFor({ manifestActionId: toolName, proposedParameters, taskRun: null });
+    const { container } = render(<OwnerDecisionCards entries={[entry]} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).toContain(title);
+    expect(visible).toContain("Keep this on hold until its effect is clear.");
+    expect(visible).not.toContain("BI-KEEP");
+    expect(visible).not.toContain("NPEL-TEST");
+    expect(container.querySelector("pre")?.closest("details")?.open).toBe(false);
+    expect(screen.getByRole("button", { name: "Authorize" }).closest("details")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   function entryFor(over = {}) {
     const item = coworkerEnvelopeToAttentionItem(
       {
