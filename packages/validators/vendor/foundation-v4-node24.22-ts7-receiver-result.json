@@ -7,10 +7,10 @@
   "identities": [
     {
       "component": "@opendigitalproductfactory/dpf-workroom",
-      "version": "0.1.0-candidate.2",
-      "sourceCommit": "e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97",
-      "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz",
-      "sha256": "b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40"
+      "version": "0.1.0-candidate.3",
+      "sourceCommit": "7374ef2478138b504e7a75af3ef2cc6fa770abc6",
+      "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz",
+      "sha256": "0f5769c59b39b3a2d85af26253b27b12b805aa95836e10eef780ab298ebee281"
     },
     {
       "component": "@opendigitalproductfactory/dpf-scoped-judgment",
@@ -21,10 +21,10 @@
     },
     {
       "component": "@opendigitalproductfactory/dpf-gpp",
-      "version": "0.1.0-candidate.1",
-      "sourceCommit": "2114cd83264f4d817287edeedc2c844b028fa5a9",
-      "tarball": "opendigitalproductfactory-dpf-gpp-0.1.0-candidate.1.tgz",
-      "sha256": "fc865302f6b8a41ee6904fd4aee6f7767ca81ebd2133e7426bd7f93e4cfb4af8"
+      "version": "0.1.0-candidate.3",
+      "sourceCommit": "e8315084ae46aed0feb153a295f688e540f6e93d",
+      "tarball": "opendigitalproductfactory-dpf-gpp-0.1.0-candidate.3.tgz",
+      "sha256": "eb0fd791b9440e5032c3f3cf7e089836cee90e5a4a8ef93bf9b8ab03cf477124"
     }
   ],
   "cases": {

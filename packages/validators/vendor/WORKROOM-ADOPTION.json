@@ -2,9 +2,9 @@
   "backlogItem": "BI-FCDCAE98",
   "artifact": {
     "component": "@opendigitalproductfactory/dpf-workroom",
-    "version": "0.1.0-candidate.2",
-    "sourceCommit": "e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97",
-    "sha256": "b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40"
+    "version": "0.1.0-candidate.3",
+    "sourceCommit": "7374ef2478138b504e7a75af3ef2cc6fa770abc6",
+    "sha256": "0f5769c59b39b3a2d85af26253b27b12b805aa95836e10eef780ab298ebee281"
   },
   "realCaller": "apps/web/lib/work-management/workroom-shape-conformance.ts",
   "callerDisposition": "Graph, receipt and process-identity imports directly use public artifact exports.",
@@ -251,5 +251,11 @@
   "hostAuthority": "DPF retains actor identity, current admission/permits, transactions and effect/result custody.",
   "migration": "Move-only; no persisted-record rewrite.",
   "rollback": "Protected revert restores prior artifact/dependency/import/body set together; component repository and other consumers stay independently owned.",
-  "imageMaintenanceScripts": "The root direct file dependency installs the same archive into the existing filtered runtime dependency set, so /app/apps/web-src maintenance scripts can resolve the real conformance caller imports. Web and validators declarations point to the same lockfile artifact."
+  "imageMaintenanceScripts": "The root direct file dependency installs the same archive into the existing filtered runtime dependency set, so /app/apps/web-src maintenance scripts can resolve the real conformance caller imports. Web and validators declarations point to the same lockfile artifact.",
+  "implementationCorrection": {
+    "reason": "Actual governed integration cmvxc3gyq1oji01tmy3aoqwm1 failed five Next CommonJS source-loader cases;45841other tests passed. Candidate.2 exposed import-only conditions.",
+    "change": "Candidate.3 adds require conditions to exactly the same emitted ESM files; every export and function identity matches native import. No domain/provenance/API semantic change.",
+    "plan": "The original pilot plan and five AC-PILOT criteria remain unchanged. This version correction implements its existing source-loader acceptance requirement; the original candidate.2 design pin is retained as historical intent.",
+    "verification": "Component RED/GREEN, standalone original/installed13groups and strict24.22TS7matrix passed. Actual DPF source-loader and merged integration must rerun before acceptance."
+  }
 }

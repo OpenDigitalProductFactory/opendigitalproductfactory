@@ -93,8 +93,8 @@ importers:
   .:
     dependencies:
       '@opendigitalproductfactory/dpf-workroom':
-        specifier: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
-        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
+        specifier: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz
     devDependencies:
       '@axe-core/playwright':
         specifier: 'catalog:'
@@ -154,8 +154,8 @@ importers:
         specifier: ^6.1.22
         version: 6.1.22(@fullcalendar/core@6.1.22)
       '@opendigitalproductfactory/dpf-workroom':
-        specifier: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
-        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
+        specifier: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -488,8 +488,8 @@ importers:
         specifier: workspace:*
         version: link:../integration-shared
       '@opendigitalproductfactory/dpf-workroom':
-        specifier: file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
-        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz
+        specifier: file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -1270,9 +1270,9 @@ packages:
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
 
-  '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz':
-    resolution: {integrity: sha512-gQW1zXZTcl++4E7IFM0744MlfRThimU43LHUo8X/Wr4p0TIuGfH8N+hdNSgJHilz+IYaMKR6BBSP/F31yochHw==, tarball: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz}
-    version: 0.1.0-candidate.2
+  '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz':
+    resolution: {integrity: sha512-5Q0fOra5t3C+KG20v3/n6Iy1cDJ1cuA7bwzBiH9PDGLw6CQO9/LZ116tzZSyoKfUZ9POhBvsnBruxRK4VD83XQ==, tarball: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz}
+    version: 0.1.0-candidate.3
     engines: {node: 24.16.0 || 24.22.0}
 
   '@opentelemetry/api-logs@0.203.0':
@@ -5242,7 +5242,7 @@ snapshots:
   '@open-draft/until@2.1.0':
     optional: true
 
-  '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz': {}
+  '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz': {}
 
   '@opentelemetry/api-logs@0.203.0':
     dependencies:

@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
-    "@opendigitalproductfactory/dpf-workroom": "file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz",
+    "@opendigitalproductfactory/dpf-workroom": "file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz",
     "zod": "catalog:"
   },
   "devDependencies": {

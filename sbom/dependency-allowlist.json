@@ -1160,7 +1160,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "BI-FCDCAE98: first-party private immutable artifact0.1.0-candidate.2, source OpenDigitalProductFactory/dpf-workroom@e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97, SHA256 b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40. Apache-2.0 LICENSE/NOTICE verified in archive; zero runtime dependencies. Local file archive with lock integrity; no npm registry provenance/download-age claim is applicable to this unreleased private candidate. Original source provenance, installed conformance, strict receiving matrix and independent review passed. Reuses extracted DPF implementation and retires nine duplicate bodies. Root dependency makes maintenance-script imports available in the existing filtered image runtime set."
+      "note": "BI-FCDCAE98: first-party private immutable artifact0.1.0-candidate.3, source OpenDigitalProductFactory/dpf-workroom@7374ef2478138b504e7a75af3ef2cc6fa770abc6, SHA256 0f5769c59b39b3a2d85af26253b27b12b805aa95836e10eef780ab298ebee281. Apache-2.0 LICENSE/NOTICE verified in archive; zero runtime dependencies. Local file archive with lock integrity; no npm registry provenance/download-age claim is applicable to this unreleased private candidate. Original source provenance, installed conformance, strict receiving matrix and independent review passed. Reuses extracted DPF implementation and retires nine duplicate bodies. Root dependency makes maintenance-script imports available in the existing filtered image runtime set."
     }
   },
   "retired": {

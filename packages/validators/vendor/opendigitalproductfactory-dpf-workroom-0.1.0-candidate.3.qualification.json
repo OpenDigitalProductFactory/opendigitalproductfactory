@@ -1,13 +1,13 @@
 {
   "kind": "private-installed-component-candidate",
   "component": "@opendigitalproductfactory/dpf-workroom",
-  "version": "0.1.0-candidate.2",
-  "sourceCommit": "e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97",
+  "version": "0.1.0-candidate.3",
+  "sourceCommit": "7374ef2478138b504e7a75af3ef2cc6fa770abc6",
   "sourceRepository": "OpenDigitalProductFactory/dpf-workroom",
   "seedCommit": "b43be400326f8cc5777a9d40c1f058a8f0363dc8",
   "upstreamKernelRevision": "56f3a5d2d57d751eb3ac435dcca4133c5ff46686",
-  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz",
-  "sha256": "b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40",
+  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.3.tgz",
+  "sha256": "0f5769c59b39b3a2d85af26253b27b12b805aa95836e10eef780ab298ebee281",
   "checks": {
     "originalSourceProvenanceFiles": 22,
     "sourceProtocolScenarios": 13,
@@ -16,7 +16,8 @@
     "emittedImportClosure": "passed",
     "unownedGppAnalysisExcluded": "passed",
     "outcomeDispositionNormalAdverse": "passed",
-    "strictEngineBuildRuntime": "passed on24.16.0"
+    "strictEngineBuildRuntime": "passed on24.16.0",
+    "allPublicCommonJsExportsMatchEsmIdentity": "passed on Node24.16.0; reproduced failure before explicit require condition"
   },
   "toolchain": {
     "node": "24.16.0",
@@ -28,7 +29,7 @@
   "realDpfConsumerMigration": false,
   "dpf2Migration": false,
   "nativeOrProductionQualification": false,
-  "independentReview": "No material findings, bound to e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97. Exported APIs and emitted bytes unchanged; exact engine declarations and dependency archive/lock integrities verified. Independent client assessment, not native/host acceptance.",
+  "independentReview": "No remaining findings, bound to 7374ef2478138b504e7a75af3ef2cc6fa770abc6. Same emitted domain bytes and provenance; require/import share identical functions; clarified product qualification limits.",
   "supportedNodeVersions": [
     "24.16.0",
     "24.22.0"
@@ -40,7 +41,7 @@
     "architecture": "arm64",
     "installationPolicy": "engine-strict",
     "result": "passed",
-    "evidence": "foundation-v2-node24.22-ts7-receiver-result.json",
+    "evidence": "foundation-v4-node24.22-ts7-receiver-result.json",
     "actualProductAdoption": false,
     "osEnforcementQualification": false
   },
