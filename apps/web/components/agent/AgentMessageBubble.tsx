@@ -20,6 +20,7 @@ import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-prop
 import { LeaveDecisionProposalCard } from "./LeaveDecisionProposalCard";
 import { ProposalNoLongerRunnable } from "./ProposalNoLongerRunnable";
 import { InlineEnvelopeApprovals } from "./InlineEnvelopeApprovals";
+import { ResponseFeedback } from "./ResponseFeedback";
 
 /**
  * Format the per-turn provider/model attribution badge shown on assistant
@@ -734,6 +735,7 @@ export function AgentMessageBubble({
           </div>
         )}
       </div>
+      {!isUser && <ResponseFeedback messageId={message.id} eligible={message.responseFeedbackEligible === true} />}
       {!isUser && decision && onDecision && (
         <DecisionButtons decision={decision} onDecision={onDecision} />
       )}

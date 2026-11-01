@@ -210,13 +210,14 @@ const definitions: ToolDefinition[] = [
   {
     name: "merge_backlog_items",
     description:
-      "Merge a duplicate backlog item into a canonical one: the duplicate's reach (occurrenceCount) is added to the canonical item so signal concentrates rather than fragments, and the duplicate is retired (status=retired, duplicateOfId set to the canonical item). Audited.",
+      "Merge a duplicate backlog item into a canonical one: the duplicate's reach (occurrenceCount) is added to the canonical item so signal concentrates rather than fragments, and the duplicate is retired (status=retired, duplicateOfId set to the canonical item). Audited. Set reconcileOnly=true to check an already-completed merge and clear its superseded proposed requests without merging an open item.",
     inputSchema: {
       type: "object",
       properties: {
         canonicalItemId: { type: "string", description: "The surviving item that absorbs the duplicate." },
         duplicateItemId: { type: "string", description: "The item to retire into the canonical one." },
         rationale: { type: "string", description: "Short reason for the merge." },
+        reconcileOnly: { type: "boolean", default: false, description: "Only reconcile an already-completed merge and its superseded proposed requests. Never fold an open duplicate or change demand counts." },
       },
       required: ["canonicalItemId", "duplicateItemId"],
     },

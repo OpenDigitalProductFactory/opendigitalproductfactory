@@ -144,6 +144,76 @@ describe("responsesAdapter", () => {
     vi.restoreAllMocks();
   });
 
+  it("preserves a required subscription calibration output cap without an unconstrained retry", async () => {
+    mockFetch.mockResolvedValueOnce(new Response('{"detail":"Unsupported parameter: max_output_tokens"}', { status: 400 }));
+    const request = makeRequest({ providerId: "chatgpt",
+      provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} },
+      plan: makePlan({ maxTokens: 32, responsePolicy: { requireOutputBound: true } }) });
+    await expect(responsesAdapter.execute(request)).rejects.toMatchObject({ statusCode: 400 });
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toHaveProperty("max_output_tokens", 32);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, 0, -1, Infinity, NaN])("refuses an invalid mandatory output allowance before dispatch (%s)", async maxTokens => {
+    stubFetchText('data: {"type":"response.completed","response":{"status":"completed","output_text":"OK","usage":{"input_tokens":1,"output_tokens":1}}}\n\ndata: [DONE]\n');
+    const request = makeRequest({ providerId: "chatgpt",
+      provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} },
+      plan: makePlan({ providerId: "chatgpt", maxTokens, responsePolicy: { requireOutputBound: true } }) });
+    await expect(responsesAdapter.execute(request)).rejects.toThrow(/output.*(bound|limit|allowance)/i);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["response.completed", "completed", undefined, "completed", false],
+    ["response.incomplete", "incomplete", "max_output_tokens", "max_output_tokens", true],
+    ["response.failed", "failed", undefined, "failed", false],
+  ] as const)("preserves actual subscription terminal evidence (%s)", async (type, status, reason, finishReason, truncated) => {
+    stubFetchText(`data: ${JSON.stringify({ type, response: { id: "resp-terminal-fixture", status,
+      ...(reason ? { incomplete_details: { reason } } : {}),
+      output: [{ type: "message", content: [{ type: "output_text", text: "partial or complete" }] }],
+      usage: { input_tokens: 4, output_tokens: 8 } } })}\n\ndata: [DONE]\n`);
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt",
+      provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result).toMatchObject({ responseId: "resp-terminal-fixture", finishReason, truncated,
+      usage: { inputTokens: 4, outputTokens: 8 }, raw: { status } });
+  });
+
+  it.each([
+    [{ type: "response.incomplete", response: { id: "r1", status: "completed" } }],
+    [{ type: "response.completed", response: { id: "r1", status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }],
+    [{ type: "response.completed", response: { id: "r1", status: "completed", incomplete_details: { reason: "max_output_tokens" } } }],
+    [{ type: "response.completed", response: { id: "r1", status: "completed" } }, { type: "response.completed", response: { id: "r2", status: "completed" } }],
+    [{ type: "response.incomplete", response: { id: "r1", status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }, { type: "response.completed", response: { id: "r1", status: "completed" } }],
+    [{ type: "response.created", response: { id: "other" } }, { type: "response.completed", response: { id: "r1", status: "completed" } }],
+    [{ type: "response.completed", response: { id: "r1", status: "completed" } }, { type: "response.completed", response: { id: "r1", status: "completed", usage: { output_tokens: 99 } } }],
+  ])("leaves contradictory terminal evidence unverified (%j)", async (...events) => {
+    stubFetchText(events.map(event => `data: ${JSON.stringify({ ...event, response: {
+      output: [{ type: "message", content: [{ type: "output_text", text: "matching answer" }] }],
+      usage: { input_tokens: 4, output_tokens: 8 }, ...event.response } })}`).join("\n") + "\ndata: [DONE]\n");
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt",
+      provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result.finishReason).toBeUndefined();
+    expect(result.truncated).toBeUndefined();
+  });
+
+  it.each(["malformed", "header-conflict", "missing-terminal-payload", "late-delta"])("does not certify a %s stream", async kind => {
+    const terminal = 'data: {"type":"response.completed","response":{"id":"r1","status":"completed","output_text":"answer","usage":{"output_tokens":8}}}\n\n';
+    const stream = kind === "malformed" ? 'data: {broken\n\n' + terminal
+      : kind === "header-conflict" ? 'event: response.incomplete\n' + terminal
+      : kind === "missing-terminal-payload" ? 'data: {"type":"response.completed"}\n\n' + terminal
+      : terminal + 'data: {"type":"response.output_text.delta","delta":"extra"}\n\n';
+    stubFetchText(stream + "data: [DONE]\n");
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt", provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result.finishReason).toBeUndefined(); expect(result.truncated).toBeUndefined();
+  });
+
+  it("accepts consistent repeated terminal evidence and CRLF without inventing missing metadata", async () => {
+    const terminal = { type: "response.completed", response: { id: "r1", output_text: "answer", usage: { input_tokens: 1, output_tokens: 8 } } };
+    stubFetchText([`event: response.completed\r\ndata: ${JSON.stringify(terminal)}`, `event: response.completed\r\ndata: ${JSON.stringify(terminal)}`, "data: [DONE]"].join("\r\n\r\n") + "\r\n");
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt", provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result).toMatchObject({ finishReason: "completed", truncated: false, responseId: "r1", usage: { outputTokens: 8 } });
+  });
+
   it("uses the OpenAI Responses API for codex providers", async () => {
     stubFetchOk({
       output: [

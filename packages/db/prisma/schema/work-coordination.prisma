@@ -389,6 +389,7 @@ enum WorkroomParticipantAssignmentSource {
 /// physical move, the `capsuleId` semantic key and the workCapsuleId/capsule
 /// FIELD vocabulary are separate phases — this phase renames model identity only.
 model Workroom {
+  responseFeedbackMessages AgentMessage[]           @relation("ResponseFeedbackWorkroom")
   id                      String                   @id @default(cuid())
   capsuleId               String                   @unique
   title                   String
@@ -508,12 +509,12 @@ model WorkroomActivity {
   sequence          Int?
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
+  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
+  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
-  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
-  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@map("WorkCapsuleActivity")
 }
 

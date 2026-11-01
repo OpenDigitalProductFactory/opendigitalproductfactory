@@ -3,6 +3,7 @@ import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
+    endpointTestRun: { findUnique: vi.fn() },
     scheduledJob: {
       updateMany: vi.fn(),
       findUnique: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   },
   handlers: new Map<string, (input: any) => Promise<unknown>>(),
   eval: vi.fn(),
+  owned: vi.fn(),
   probe: vi.fn(),
   gate: vi.fn(),
 }));
@@ -24,6 +26,7 @@ vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (config: { id: string }, 
 } } }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: mocks.gate }));
 vi.mock("@/lib/routing/eval-runner", () => ({ runDimensionEval: mocks.eval }));
+vi.mock("@/lib/routing/subscription-calibration-execution", () => ({ runSubscriptionCalibration: mocks.owned }));
 vi.mock("@/lib/operate/endpoint-test-runner", () => ({ runEndpointTests: mocks.probe }));
 
 import { claimEvalSlot } from "./eval-background";
@@ -90,6 +93,26 @@ describe("claimEvalSlot (BI-C8164664)", () => {
 
 describe("background inference priority", () => {
   const step = { run: async (_name: string, fn: () => unknown) => fn() };
+
+  it("sends a bound commission through its durable runner without the legacy force/reaper path", async () => {
+    mocks.owned.mockResolvedValue({ testRunId: "DE-commission" });
+    await mocks.handlers.get("ai/eval-background")!({ event: { data: { endpointId: "chatgpt", modelId: "selected", userId: "operator", force: true, calibrationRunId: "DE-commission" } }, step });
+    expect(mocks.owned).toHaveBeenCalledExactlyOnceWith({ endpointId: "chatgpt", modelId: "selected", userId: "operator", runId: "DE-commission" });
+    expect(mocks.eval).not.toHaveBeenCalled(); expect(mocks.prisma.scheduledJob.upsert).not.toHaveBeenCalled();
+  });
+
+  it.each(["incomplete", "completed", "failed"])("records the exact canonical %s result, rather than promise completion", async status => {
+    mocks.eval.mockResolvedValue({ testRunId: "DE-result" });
+    mocks.prisma.endpointTestRun.findUnique.mockResolvedValue({ endpointId: "ep", modelId: "selected", status });
+    await mocks.handlers.get("ai/eval-background")!({ event: { data: { endpointId: "ep", modelId: "selected", userId: "operator", force: true } }, step });
+    expect(mocks.prisma.scheduledJob.upsert.mock.calls[0][0]).toMatchObject({ create: { lastStatus: status }, update: { lastStatus: status } });
+  });
+
+  it.each([null, { endpointId: "foreign", modelId: "selected", status: "completed" }, { endpointId: "ep", modelId: "selected", status: "running" }])("does not project an absent, foreign or unfinished result %j", async actual => {
+    mocks.eval.mockResolvedValue({ testRunId: "DE-result" }); mocks.prisma.endpointTestRun.findUnique.mockResolvedValue(actual);
+    await mocks.handlers.get("ai/eval-background")!({ event: { data: { endpointId: "ep", modelId: "selected", userId: "operator", force: true } }, step });
+    expect(mocks.prisma.scheduledJob.upsert).not.toHaveBeenCalled();
+  });
 
   it("runs evaluations in the autonomous lane and restores the caller origin", async () => {
     mocks.eval.mockImplementation(async () => {

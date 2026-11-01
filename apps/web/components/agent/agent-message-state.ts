@@ -7,6 +7,39 @@ export type AgentRenderableMessage = AgentMessageRow & {
   retryContent?: string;
 };
 
+// Fresh server-composed overview, never persisted. Keep it before an unanswered
+// request so reloading cannot present it as that request's reply. Completed
+// conversations still receive the proactive overview at the end.
+export function withOpeningBriefing(
+  messages: AgentMessageRow[],
+  briefing: { content: string; agentId: string | null } | null | undefined,
+  threadContext: string,
+): AgentMessageRow[] {
+  if (!briefing?.content) return messages;
+  const id = `opening-briefing:${threadContext}`;
+  if (messages.some(message => message.id === id)) return messages;
+  const roles = messages.map(message => message.role);
+  const firstUnanswered = roles.indexOf("user", roles.lastIndexOf("assistant") + 1);
+  const insertion = firstUnanswered < 0 ? messages.length : firstUnanswered;
+  return [
+    ...messages.slice(0, insertion),
+    { id, role: "assistant", content: briefing.content, createdAt: new Date().toISOString(),
+      agentId: briefing.agentId, routeContext: threadContext },
+    ...messages.slice(insertion),
+  ];
+}
+
+export function pendingCoworkerLabel(input: {
+  agentName: string; clearing: boolean; status: string | null; tool: string | null;
+  elapsedSeconds: number; acknowledged: boolean;
+}): string {
+  if (input.clearing) return "Clearing conversation";
+  if (input.status) return input.status;
+  if (input.tool) return `${input.agentName} is using ${input.tool.replace(/_/g, " ")}...`;
+  // An acknowledgement or elapsed clock does not establish executor activity.
+  return input.acknowledged ? "Your request is saved. Waiting for an update." : "Waiting for an update.";
+}
+
 /** An acknowledgement settles delivery, never the requested business outcome. */
 export function acknowledgeRetainedMessage(messages: AgentRenderableMessage[], optimisticId: string, receipt: unknown): AgentRenderableMessage[] {
   const sent = messages.map(message => message.id === optimisticId ? { ...message, deliveryState: "sent" as const } : message);

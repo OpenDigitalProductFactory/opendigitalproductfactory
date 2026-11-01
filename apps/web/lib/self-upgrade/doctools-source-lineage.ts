@@ -13,6 +13,8 @@
 // HEAD descends from, the commit distance, and the commit. publish-image.yml
 // publishes dpf-doctools under every `v*` tag, so that tag names a published,
 // digest-recorded image the install can pin exactly as a release install does.
+// A build may instead stamp only its source commit. Resolve that exact commit
+// through the mounted clone, never the clone's mutable HEAD or a guessed tag.
 //
 // A source upgrade re-stamps the version (promote.sh), so the next boot sees
 // the new lineage and re-resolves the pin: the setting survives upgrade.
@@ -76,6 +78,7 @@ export async function loadSourceLineageContext(input: {
   hostSourcePath: string;
   readPlatformVersion: () => Promise<string | null>;
   env?: Record<string, string | undefined>;
+  runGit?: GitRunner;
 }): Promise<SourceLineageContext | null> {
   const env = input.env ?? process.env;
   const ghcrOwner = env.GHCR_OWNER?.trim();
@@ -86,9 +89,20 @@ export async function loadSourceLineageContext(input: {
   } catch {
     return null;
   }
-  const imageTag = releaseTagFromPlatformVersion(version);
+  const sourceRoot = input.hostSourcePath.replace(/\/$/, "");
+  const stamp = version?.trim() ?? "";
+  let imageTag = releaseTagFromPlatformVersion(stamp);
+  if (!imageTag && /^[a-f0-9]{7,40}$/i.test(stamp)) {
+    const lineage = await describeSourceLineage({
+      sourcePath: sourceRoot,
+      targetSha: stamp,
+      ghcrOwner,
+      runGit: input.runGit ?? runGitSync,
+    });
+    imageTag = lineage?.imageTag ?? null;
+  }
   if (!imageTag) return null;
-  return Object.freeze({ imageTag, ghcrOwner, sourceRoot: input.hostSourcePath.replace(/\/$/, "") });
+  return Object.freeze({ imageTag, ghcrOwner, sourceRoot });
 }
 
 async function exists(path: string): Promise<boolean> {

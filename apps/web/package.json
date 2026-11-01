@@ -45,6 +45,7 @@
     "@fullcalendar/interaction": "^6.1.22",
     "@fullcalendar/react": "^6.1.22",
     "@fullcalendar/timegrid": "^6.1.22",
+    "@opendigitalproductfactory/dpf-workroom": "file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
     "@opentelemetry/api": "1.9.1",
     "@ricky0123/vad-web": "^0.0.31",
     "@xyflow/react": "^12.12.0",

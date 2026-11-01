@@ -233,7 +233,7 @@ describe("ProviderDetailForm", () => {
   // status="ok", rendered green "Connected", and hid the working sign-in
   // button while the OAuth card above said "Token expired".
   const HOUR = 60 * 60 * 1000;
-  const oauthFixture = (tokenExpiresAt: string, hasRefreshToken: boolean): ProviderWithCredential => ({
+  const subscriptionStatusFixture = (tokenExpiresAt: string, hasRefreshToken: boolean): ProviderWithCredential => ({
     provider: {
       ...providerFixture.provider,
       providerId: "anthropic-sub",
@@ -256,7 +256,7 @@ describe("ProviderDetailForm", () => {
   it("treats a timestamp-expired token as expired even when the status enum still says ok", () => {
     const html = renderToStaticMarkup(
       <ProviderDetailForm
-        pw={oauthFixture(new Date(Date.now() - 2 * HOUR).toISOString(), true)}
+        pw={subscriptionStatusFixture(new Date(Date.now() - 2 * HOUR).toISOString(), true)}
         canWrite={true}
         models={[]}
         profiles={[]}
@@ -272,7 +272,7 @@ describe("ProviderDetailForm", () => {
   it("shows saved sign-in and reconnect for an unexpired OAuth token", () => {
     const html = renderToStaticMarkup(
       <ProviderDetailForm
-        pw={oauthFixture(new Date(Date.now() + 24 * HOUR).toISOString(), true)}
+        pw={subscriptionStatusFixture(new Date(Date.now() + 24 * HOUR).toISOString(), true)}
         canWrite={true}
         models={[]}
         profiles={[]}

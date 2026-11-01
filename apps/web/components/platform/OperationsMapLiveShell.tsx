@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { AiOperationsMap } from "./AiOperationsMap";
+import { OperationsMapRefreshProvider } from "./operations-map-refresh-context";
 import type { OperationsMapData } from "@/lib/ai-operations-map/load-map-data";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 import { useSearchParams } from "next/navigation";
@@ -193,6 +194,7 @@ export function OperationsMapLiveShell({
         error={refreshError}
         onRefresh={refreshNow}
       />
+      <OperationsMapRefreshProvider value={refreshNow}>
       <AiOperationsMap
         routingManagement={data.routingManagement}
         initialTechnicalOpen={initialTechnicalOpen}
@@ -207,6 +209,7 @@ export function OperationsMapLiveShell({
         evidenceRange={data.evidenceRange}
         onReplayWindowChange={handleReplayWindowChange}
       />
+      </OperationsMapRefreshProvider>
     </div>
   );
 }

@@ -2,13 +2,14 @@
 import { useT } from "@/lib/i18n/use-t";
 import { useMessagesContext } from "@/lib/i18n/messages-context";
 import { formatMoney } from "@/lib/org-locale/org-locale";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Surface } from "@/components/ui/Surface";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge, EmptyState } from "@/components/ui/report-kit";
 import { routingHref, type RoutingScope } from "@/lib/ai-operations-map/routing-management-scope";
 import { type RoutingReceipt } from "@/lib/ai-operations-map/routing-management-types";
+import { RoutingResponseReview } from "./RoutingResponseReview";
 export const ROUTING_ACTION_CLASS = "inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]";
 export const formatRoutingCost = (value: number | null, locale: string, unavailable: string) => value === null ? unavailable : formatMoney(value, "USD", locale, { maximumFractionDigits: 4 });
 /** Native in-DOM modal owns inertness, keyboard focus containment and Escape; theme is DPF tokens. */
@@ -42,7 +43,15 @@ export function RoutingManagementInspector({ receipt: r, scope, onClose }: {
     const t = useT("routingManagement");
     const { locale } = useMessagesContext();
     const money = (value: number | null) => formatRoutingCost(value, locale, t("notRecorded"));
-    return <RoutingManagementOverlay title={t("routingDecision")} onClose={onClose}>
+    const [answer, setAnswer] = useState<{messageId:string;attemptId:string}|null>(null);
+    const answerButtons = useRef(new Map<string,HTMLButtonElement>());
+    const focusAttempt = useRef<string|null>(null);
+    useEffect(() => {
+      if (!answer && focusAttempt.current) { answerButtons.current.get(focusAttempt.current)?.focus(); focusAttempt.current = null; }
+    }, [answer]);
+    useEffect(() => { setAnswer(null); focusAttempt.current = null; }, [r.id]);
+    return <RoutingManagementOverlay title={answer ? t("savedAnswer") : t("routingDecision")} onClose={onClose}>
+    {answer ? <RoutingResponseReview messageId={answer.messageId} expectedAttemptId={answer.attemptId} onBack={() => { focusAttempt.current = answer.attemptId; setAnswer(null); }}/> : <>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><p className="text-lg font-semibold break-words">{r.task} → {r.providerId ?? t("unresolvedProvider")}</p><p className="text-sm text-[var(--dpf-muted)]">{r.modelId ?? t("modelNotRecorded")} · <LocalTime value={r.occurredAt}/></p></div>
       <StatusBadge intent={r.execution === "success" ? "success" : r.execution === "error" ? "danger" : r.execution === "blocked" ? "warning" : "neutral"} label={r.execution}/>
@@ -68,8 +77,9 @@ export function RoutingManagementInspector({ receipt: r, scope, onClose }: {
         <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{i + 1}. {a.providerId} · {a.modelId}</p><StatusBadge intent={a.status === "success" ? "success" : "warning"} label={a.status}/></div>
         <p className="mt-1 text-[var(--dpf-muted)]">{t("channel")}{a.channel} · <LocalTime value={a.startedAt}/> · {a.durationMs === null ? t("durationUnknown") : t("ms", { p0: a.durationMs })}</p>
         <p className="mt-1 text-[var(--dpf-muted)]">{t("attemptEstimate")}{money(a.estimatedCostUsd)}{t("input")}{a.inputTokens ?? "unknown"}{t("output")}{a.outputTokens ?? "unknown"}{t("tokens")}</p>
+        {a.agentMessageId && <button ref={node => { if(node)answerButtons.current.set(a.id,node);else answerButtons.current.delete(a.id); }} type="button" data-surface-node-id="feedback.review-answer" className={`${ROUTING_ACTION_CLASS} mt-2`} onClick={() => setAnswer({messageId:a.agentMessageId!,attemptId:a.id})}>{t("reviewAnswer")}</button>}
         {a.hold && <p className="mt-1 text-sm">{t(`holds.${a.hold}`)}</p>}
-        <p className="mt-1">{t("operatorFeedback")}{a.feedback === null ? t("notRecorded") : a.feedback ? t("accepted") : t("retriedDiscarded")}</p>
+        <p className="mt-1">{a.feedback === null ? t("noFeedbackYet") : t("feedbackDisposition", { source: a.feedbackSource === "human" ? t("humanFeedback") : a.feedbackSource === "agent" ? t("agentFeedback") : t("unattributedFeedback"), choice: a.feedback ? t("kept") : t("needsRevision") })}</p>
       </li>)}</ol> : <EmptyState size="sm" title={t("noCorrelatedAttemptEvidence")}/>}
     </section>
     <section><h3 className="mb-2 font-semibold">{t("taskQuality")}</h3><p className="text-sm text-[var(--dpf-muted)]">{r.quality === null ? t("noDecisionLinkedEvaluatorScoreExecutionSuccessAnd") : t("evaluatorScore", { p0: r.quality })}</p><p className="mt-1 break-words text-sm">{t("recipe")}{r.recipeKey ?? t("notRecorded")}{t("evaluator")}{r.evaluator ?? t("notRecorded")}</p></section>
@@ -78,6 +88,7 @@ export function RoutingManagementInspector({ receipt: r, scope, onClose }: {
       {r.providerId && <Link className={ROUTING_ACTION_CLASS} href={routingHref(`/platform/ai/providers/${encodeURIComponent(r.providerId)}`, { ...scope, provider: r.providerId })}>{t("providerSettingsOverrides")}</Link>}
       {r.actorId && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(r.actorId)}`}>{t("assignmentSettings")}</Link>}
     </footer>
+    </>}
   </RoutingManagementOverlay>;
 }
 function Fact({ label, value }: {

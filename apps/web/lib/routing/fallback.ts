@@ -1,3 +1,4 @@
+import { preserveResponseProducer, type ResponseProducer } from "./response-producer";
 /**
  * EP-INF-001: Dispatch HTTP calls using the RouteDecision's endpoint selection
  * and fallback chain. Replaces callWithFailover's dispatch loop.
@@ -79,6 +80,7 @@ type RouteOutcomeAttribution = {
 };
 
 export interface FallbackResult {
+  responseProducer?: ResponseProducer;
   providerId: string;
   providerConnectionId?: string;
   quotaScopeKey?: string;
@@ -406,6 +408,7 @@ export async function callWithFallbackChain(
         ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, quotaScopeKey: conservativeQuotaScope(entry.providerId) } : {}),
         modelId: entry.modelId,
         content: result.content,
+        responseProducer: preserveResponseProducer(result.responseProducer, result.content, entry),
         toolCalls: result.toolCalls ?? [],
         tokenUsage:
           result.inputTokens !== undefined || result.outputTokens !== undefined

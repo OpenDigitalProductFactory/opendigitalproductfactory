@@ -1,3 +1,4 @@
+import { installWorkroomArtifact } from "../_shared/install-workroom-artifact.mjs";
 import { readRegularFile } from "../_shared/read-regular-file.mjs";
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -81,6 +82,7 @@ async function runtimeDependencies(outDir, zodDirectory) {
 }
 
 try {
+  const workroomArtifact = await installWorkroomArtifact({ root, destination: temp, artifact: manifest.componentArtifact, node });
   for (const name of ["LICENSE", "NOTICE"]) await cp(join(here, name), join(temp, name));
   const dependencies = { zod: manifest.dependencies.zod, "@dpf/integration-shared": "0.0.1" };
   await writeFile(join(temp, "package.json"), JSON.stringify({ name: "gpp-toolkit-isolated-consumer", version: "0.0.0", private: true, type: "module", dependencies,
@@ -101,7 +103,7 @@ try {
     if (!path.startsWith(base + sep)) throw new Error(`Invalid regular closure source: ${source}`);
     const contents = await readRegularFile(path, "utf8"); sourceDigests[source] = digest(contents);
     for (const specifier of moduleImports(contents, source)) {
-      if (specifier !== "zod" && specifier !== "@dpf/integration-shared/canonical-json" && specifier !== "node:crypto"
+      if (!workroomArtifact.acceptsImport(specifier) && specifier !== "zod" && specifier !== "@dpf/integration-shared/canonical-json" && specifier !== "node:crypto"
         && (!specifier.startsWith(".") || !specifier.endsWith(".ts"))) throw new Error(`Nonportable import in ${source}: ${specifier}`);
     }
     const target = resolve(temp, "kernel", relative(base, path));
@@ -129,7 +131,7 @@ try {
     const contents = sourceByTarget.get(path); if (contents === undefined) throw new Error(`Browser closure omitted source: ${path}`);
     for (const specifier of moduleImports(contents, path)) {
       if (specifier.startsWith("node:")) throw new Error(`Browser entry reaches Node builtin: ${specifier}`);
-      if (specifier === "zod" || specifier === "@dpf/integration-shared/canonical-json") continue;
+      if (workroomArtifact.acceptsImport(specifier) || specifier === "zod" || specifier === "@dpf/integration-shared/canonical-json") continue;
       browserClosure(resolve(dirname(path), specifier));
     }
   }
@@ -146,7 +148,7 @@ try {
   delete result.generatedModule;
   process.stdout.write(JSON.stringify({ browser: { sourceFiles: seen.size, compilation: "ES2022+DOM/types[]; no Node builtin imports", execution: "contract smoke under Node, not real browser/CSP acceptance", passed: browser },
     nodeCompiler: { ...result, generatedModule: "TypeScript compiled and emitted JavaScript imported" },
-    toolchain: { node: version.stdout.trim(), typescript: compilerPackage.version }, distributions,
+    toolchain: { node: version.stdout.trim(), typescript: compilerPackage.version }, distributions, workroomArtifact: workroomArtifact.evidence,
     canonicalJson: "one copied exact source; parent package undici runtime is neither copied nor evaluated", copiedSourceSha256: sourceDigests }, null, 2) + "\n");
 } finally {
   await rm(temp, { recursive: true, force: true });

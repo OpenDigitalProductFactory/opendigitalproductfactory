@@ -43,6 +43,7 @@ import {
   failOptimisticMessage,
   retryOptimisticMessage,
   acknowledgeRetainedMessage,
+  pendingCoworkerLabel,
   type AgentRenderableMessage,
 } from "./agent-message-state";
 import { FOREGROUND_RECEIPT_PREFIX } from "@/lib/agent/foreground-work-contract";
@@ -1012,17 +1013,9 @@ export function AgentCoworkerPanel({
               {(isBusy || isClearing) && (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 11 }}>
-                {isClearing
-                  ? "Clearing conversation"
-                  : orchestratorStatus
-                    ? orchestratorStatus
-                    : currentTool
-                      ? `${agentIdentity.primaryName} is using ${currentTool.replace(/_/g, " ")}...`
-                      : thinkingSeconds < 5
-                        ? `${agentIdentity.primaryName} is thinking`
-                        : thinkingSeconds < 15
-                          ? `${agentIdentity.primaryName} is working on it`
-                          : `${agentIdentity.primaryName} is still working (${thinkingSeconds}s)`}
+                {pendingCoworkerLabel({ agentName: agentIdentity.primaryName, clearing: isClearing,
+                  status: orchestratorStatus, tool: currentTool, elapsedSeconds: thinkingSeconds,
+                  acknowledged: Boolean(retainedRequestRef.current?.taskRunId) })}
               </span>
               {/* Animated bouncing dots */}
               <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>

@@ -175,7 +175,12 @@ describe("POST /api/agent/send", () => {
     expect(response.status).toBe(503);
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(mockAgentEventBus.markActive).not.toHaveBeenCalled();
-    expect(await response.json()).toMatchObject({ userMessageId: "user-msg-1" });
+    expect(await response.json()).toEqual({
+      code: "FOREGROUND_ADMISSION_UNAVAILABLE",
+      message: "Your message is saved, but its coworker job could not be admitted. Nothing has started.",
+      details: { userMessageId: "user-msg-1" },
+    });
+    expect(mockWake).not.toHaveBeenCalled();
   });
 
   it("refuses a conversation the caller does not own without writing anything", async () => {

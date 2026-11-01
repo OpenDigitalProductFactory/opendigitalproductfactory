@@ -753,6 +753,32 @@ describe("AgentCoworkerShell opening briefing (BI-DED493BA)", () => {
     expect(briefingRows).toHaveLength(1);
   });
 
+  it.each([
+    { answered: false, repeat: false, prior: false }, { answered: true, repeat: false, prior: false },
+    { answered: false, repeat: true, prior: false }, { answered: false, repeat: true, prior: true },
+  ])("keeps a briefing before unanswered requests (answered=$answered repeat=$repeat prior=$prior)", async ({ answered, repeat, prior }) => {
+    const base = { createdAt: "2026-01-01T00:00:00Z", agentId: null, routeContext: "/workspace" };
+    getOrCreateThreadSnapshotMock.mockResolvedValue({ threadId: "retained-thread", messages: [
+      ...(prior ? [{ ...base, id: "old-user", role: "user", content: "Previous work" },
+        { ...base, id: "old-answer", role: "assistant", content: "Previous result" }] : []),
+      { ...base, id: "saved-user", role: "user", content: "Check my saved work" },
+      { ...base, id: "foreground-receipt-job", role: "system", content: "Request saved" },
+      ...(repeat ? [{ ...base, id: "second-user", role: "user", content: "Second saved request" },
+        { ...base, id: "foreground-receipt-second", role: "system", content: "Second request saved" }] : []),
+      ...(answered ? [{ ...base, id: "actual-result", role: "assistant", content: "Verified result" }] : []),
+    ], openingBriefing: { content: "General work overview", agentId: null } });
+    renderShell();
+    fireEvent.click(screen.getByText("Open coworker"));
+    await settleShellThread();
+    const rows = (agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as {
+      initialMessages: Array<{ id: string }>;
+    }).initialMessages;
+    const briefing = rows.findIndex(row => row.id.startsWith("opening-briefing:"));
+    if (answered) expect(briefing).toBe(rows.length - 1);
+    else expect(briefing).toBeLessThan(rows.findIndex(row => row.id === "saved-user"));
+    if (prior) expect(rows[0]!.id).toBe("old-user");
+  });
+
   it("stays silent when the snapshot carries no briefing (quiet / nothing pending)", async () => {
     getOrCreateThreadSnapshotMock.mockResolvedValue({
       threadId: "thread-silent",

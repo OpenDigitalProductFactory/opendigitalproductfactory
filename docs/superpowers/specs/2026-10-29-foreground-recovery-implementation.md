@@ -4,6 +4,41 @@ status: active
 
 # Retained foreground coworker requests
 
+## Verified progress wording and measured disclosure
+
+A governed preview of source7aa retained one fresh read-only Finance Spend
+request and its original job reference across reload without resubmission.
+It did not produce a coworker result: the preview had no configured background
+delivery transport, and the saved job remained submitted with no execution
+heartbeat. This is inconclusive for provider-busy recovery and business
+acceptance. It is not a production-provider diagnosis.
+
+That check did reproduce a presentation defect: the panel described the job as
+thinking or working solely because time had elapsed. The pending-label helper
+now preserves actual server-status and tool updates, but otherwise says it is
+waiting for an update. Only a server acknowledgement permits a saved-request
+claim. Five regression cases failed against the extracted original expression;
+the corrected helper and surrounding four UI suites pass72 tests. The new
+wording still requires served verification.
+
+The unchanged retained-reference disclosure was exercised on the actual
+desktop1280x900 and mobile390x844 preview, including Enter/Space operation and
+reload readback. Canonical default-arrival measurement on `/finance/spend`
+recorded212 visible words,1 primary action,0 fields,5 sub-legible controls,
+0 buried actions and1 serious axe finding, within its frozen numeric budgets.
+Mobile recorded166 words,0 primary actions,0 fields,5 sub-legible controls,
+0 buried actions and1 serious finding. Expanded interactive states were
+captured separately; their additional text and field were not treated as
+default-arrival regressions or used to relax the baseline.
+
+The measured manifest covers the added disclosure control only. Original
+prototype engagement CE-E46D47D4 remains unfulfilled: its managed HTML document
+still displays source text and cannot export through the converter. Measured
+fit evidence does not fulfill that engagement or certify accessibility.
+Existing shell naming and expanded-panel contrast findings remain recorded.
+No prototype image, specialist approval or completed business outcome is
+fabricated from the implementation captures.
+
 BI-D0D2FF0D · WC-02CBE4C1 · CEO dogfooding repair
 
 ## Outcome and scope
@@ -166,3 +201,19 @@ regression loses the binding when the positional behavior is restored and
 passes with the stable marker. This preserves existing current-input tool
 authority and does not invent outcomes for excluded historical failure notices.
 Real model behavior and the full workflow still require served verification.
+
+The November 1 source32b preview retained one read-only saved request across a
+reload, but its ephemeral opening briefing then appeared after that unanswered
+request. A source regression reproduces this misleading reply position. Keep
+the briefing before all unanswered requests after the last assistant response;
+completed conversations retain the
+existing proactive overview at the end. The new ordering still needs served
+verification; source32b's retention check does not qualify the changed ordering.
+
+## Integration with scoped response persistence
+
+The later source51 served check retained one synthetic saved request across reload and verified the briefing-before-pending order, keyboard disclosure and mobile width. It produced no coworker answer or real provider-continuation result. That historical evidence does not qualify a new merged tree.
+
+Delivered main4de adds exact response-producer attribution and scoped persistence. Preserve its shared finalization and content digest while executing the final save inside the existing foreground publication transaction. That transaction still owns the TaskRun row lock, current authority, deadline, result-message linkage and cancellation ordering. Pass the same transaction client to the shared persistence helper; do not write the response or resolve its scope through an unrelated client. Operational research summaries still clear producer evidence, and retained foreground work still refuses unsupported build handoffs.
+
+The reconciled source passes 177 affected tests across 16 suites and both local web TypeScript programs. Fresh exact-tree canonical qualification, the real-PostgreSQL publication cases, current served verification and original critique remain owed. A saved response's producer binding is separate from verified business-result acceptance.
