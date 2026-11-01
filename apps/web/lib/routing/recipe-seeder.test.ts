@@ -45,6 +45,24 @@ function baseContract(overrides: Partial<{
 // ── Anthropic provider settings ──────────────────────────────────────────────
 
 describe("buildSeedRecipe – Anthropic", () => {
+  it.each(["minimal", "low"])("keeps %s depth free of thinking configuration", (reasoningDepth) => {
+    const result = buildSeedRecipe("anthropic", "capability-selected-model", "sync.review",
+      baseModelCard({ capabilities: caps({ thinking: true, adaptiveThinking: true }) }),
+      baseContract({ reasoningDepth }));
+    expect(result.providerSettings).not.toHaveProperty("thinking");
+    expect(result.providerSettings).not.toHaveProperty("output_config");
+  });
+
+  it.each(["medium", "high"])("preserves adaptive %s effort without increasing the output allowance", (reasoningDepth) => {
+    const result = buildSeedRecipe("anthropic", "capability-selected-model", "sync.review",
+      baseModelCard({ capabilities: caps({ thinking: true, adaptiveThinking: true }) }),
+      baseContract({ reasoningDepth }));
+    expect(result.providerSettings).toMatchObject({
+      thinking: { type: "adaptive" }, output_config: { effort: reasoningDepth }, max_tokens: 4000,
+    });
+    expect(result.providerSettings.thinking).not.toHaveProperty("budget_tokens");
+  });
+
   it("high reasoning + thinking capable → thinking enabled with 8192 budget, max_tokens includes budget", () => {
     const result = buildSeedRecipe(
       "anthropic",

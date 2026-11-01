@@ -258,6 +258,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       }
+      if ((body.thinking as { type?: string } | undefined)?.type === "adaptive" && plan.providerSettings?.output_config) {
+        body.output_config = plan.providerSettings.output_config;
+      }
 
       // Apply temperature (only when thinking is NOT enabled — handled above)
       if (plan.temperature !== undefined && !(body as Record<string, unknown>).thinking) {
