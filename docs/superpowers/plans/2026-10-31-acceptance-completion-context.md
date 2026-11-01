@@ -36,4 +36,4 @@ Design-path impact resolved to docs index generation/check; implementation impac
 Stale context falsely authorizing current work is the primary risk. Current baseline/source/scope binding, newest-attempt selection, evidence revalidation and unchanged authority checks fail closed. Legacy absent context stays missing; a fresh authorized completion submission repairs it. One PR rollback removes reuse without making old decisions authoritative.
 
 ## Backlog coverage
-Pending governed record_plan_backlog_coverage against this immutable plan. Parent and sole deliverable: BI-5B0CD1BC; decision atomic for the inseparable persistence/evaluation/admission contract. No implementation admission claimed yet.
+Coverage receipt cmvx3yce60xch01mex4kzsmg2 binds plan blob 729f048b584c2aba6169b0b102cda86e3142889d at f88f584c7c79f3b6348e1bffbe3844c1bc867728. Parent and sole deliverable: BI-5B0CD1BC; decision atomic for the inseparable persistence/evaluation/admission contract. Implementation admission IRD-048D522F8A3E allowed the medium, low-risk scope on 2026-11-01. This receipt update does not change that scope or sequencing.

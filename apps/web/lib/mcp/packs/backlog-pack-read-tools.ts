@@ -1,4 +1,5 @@
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { publicCompletionActivityPayload } from "@/lib/backlog/initiative-readiness/completion-input-context";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
@@ -658,7 +659,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
         kind: a.kind,
         summary: a.summary,
         recordedAt: a.recordedAt.toISOString(),
-        payload: a.payload,
+        payload: publicCompletionActivityPayload(a.payload),
       })),
     },
   };
