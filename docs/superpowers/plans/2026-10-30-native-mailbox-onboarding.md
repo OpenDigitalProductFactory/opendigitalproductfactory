@@ -40,7 +40,9 @@ room is not duplicated. Provider readiness remains with its retained executor.
    existing integration catalog; surface missing setup accurately.
 3. MAIL-ADAPTER: Extend the canonical provider enum/maps/registry with a
    forward migration. Normalize scoped Gmail reads into existing intake, with
-   bounded resumable pagination and no attachment bytes or send capability.
+   bounded resumable pagination, attachment-metadata-only persistence and no
+   send capability. Full MIME responses can contain inline attachment bytes;
+   bound and discard those rather than promising no transfer.
 4. GUIDED-CONNECT: Connect the prototype's Google journey to real server
    actions. Preserve advanced providers and the successful-first-read setup
    completion contract. UX specialist review needs actual governed captures.
@@ -52,6 +54,27 @@ room is not duplicated. Provider readiness remains with its retained executor.
    canonical release and verify served identity before business acceptance.
 
 ## Verification references
+
+Before further implementation, recover the required Large feature admission;
+the original independent review remains unknown. CLIENT review DOC-4247B8BD is
+an assessment, not a replacement approval. Preserve the retained source and
+original request identity. Then address these concrete regressions:
+
+1. AC-2/AC-5: first fail a deferred-provider test that narrows consent while a
+   poll is active. Fence subsequent reads, ingestion/dispatch and cursor/status
+   publication against the current saved consent, including the failure path.
+   A stale error must not overwrite the replacement connection either.
+2. AC-5: first fail an adapter-to-intake A → B → C test, then extend the existing
+   thread continuity contract. Include duplicate delivery and customer/mailbox
+   separation controls; do not merge solely by subject or unscoped headers.
+3. AC-1/AC-2: guide selection with authorized recorded business candidates and
+   explicit owner review before consent/reads. Unknown addresses remain unknown.
+   Cover no candidates, unavailable permission and retained coworker progress;
+   no extra grant, mailbox discovery or technical-label knowledge is assumed.
+4. AC-3/AC-4: rerun affected source checks, obtain current independent and UX
+   evidence, apply the migration through the governed target, then prove the
+   real permitted email chain. Prior 192 source tests do not cover these new
+   race/thread/guidance requirements or establish served acceptance.
 
 - TEST-SCOPE: malicious or broad input never reaches Gmail, and changed scope
   cannot reuse an old cursor.
@@ -84,5 +107,7 @@ outcome is claimed for those pieces. Canonical coverage receipt is recorded
 against this immutable plan; its receipt id belongs in Workroom evidence so the
 plan blob need not mutate merely to cite its own digest.
 
-Current state: plan/prototype only; implementation, secure provider setup,
-required UX capture, exact gate, deployment and real-email acceptance unrun.
+Current state: native source implementation and source regression checks are in
+progress. Plan coverage receipt cmvubgfdr3a4u01o2rjqmttos binds the initial immutable
+plan9105745d5677bb9827a175095b1f6d7d1bc97a26. Secure provider setup, measured UX
+review, exact runtime gate, deployment and real-email acceptance remain unrun.

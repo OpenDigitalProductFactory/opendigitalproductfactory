@@ -493,9 +493,42 @@ DPF enforces this narrower selection. No whole-inbox permission is inferred.
 Initial import is limited to 30 days; default recurring checking is hourly.
 Scope is persisted, validated on every poll and bound into the cursor.
 
+Business selection must be guided in DPF. Offer eligible recorded business
+contacts using the current actor's existing read permissions, with a plain
+explanation of the proposed selection. The owner reviews and explicitly chooses
+the permitted correspondents before Google consent or mail reads. Do not require
+knowledge of labels, query syntax or a manually assembled list. If no permitted
+candidate has a verified address, explain the missing information and let the
+owner enter one business contact on the secure DPF form. Do not guess an address,
+read the mailbox to discover contacts, broaden selection, or add access grants.
+
+A changed selection must fence an already active poll, not only its next cursor.
+Bind reads, intake publication, dispatch and cursor/status writes to the current
+saved consent identity. Reuse existing mailbox/consent versioning and effect
+guards where adequate; establish any missing primitive through architecture
+review. Recheck before each new body read and atomically at persistence/effect
+boundaries. Discard stale results after a scope change. An already admitted
+network request may finish; its response must not become new work under revoked
+selection. A stale poll must not overwrite the replacement connection's cursor,
+status or error. Narrowing consent never requires the owner to resubmit a job.
+
 **OBJ-GMAIL-RETAIN:** Provider outage preserves the connection and cursor.
 Setup completes only after a successful permitted read, including an empty
 result; OAuth return, a queued check or a rendered screen is insufficient.
+
+Reply chains retain one stable conversation identity within their organization
+and mailbox. Preserve a provider's stable thread identity where supplied; for
+header-based fallback, a three-message A → B → C chain must retain its root
+instead of replacing it with C's immediate parent. Do not merge customers by
+subject text or an unscoped header alone. Extend existing normalized mail and
+room continuity contracts, not another conversation ledger.
+
+| Acceptance | Objectives | Required evidence |
+| --- | --- | --- |
+| AC-GMAIL-GUIDED | OBJ-GMAIL-BOUNDARY | DPF proposes only already authorized business contacts; the owner reviews the exact selection before consent or reads, with a clear empty state when addresses are unknown. |
+| AC-GMAIL-CURRENT-CONSENT | OBJ-GMAIL-CONSENT, OBJ-GMAIL-BOUNDARY | A deferred poll whose selection is narrowed cannot start another stale body read, publish or dispatch stale mail, or overwrite the new connection's cursor/status. |
+| AC-GMAIL-THREAD-CHAIN | OBJ-GMAIL-RETAIN, OBJ-GMAIL-BOUNDARY | Adapter-to-intake A → B → C remains one correctly scoped conversation; duplicate delivery and another customer's messages remain separate. |
+| AC-GMAIL-REAL-EMAIL | OBJ-GMAIL-RETAIN | The permitted real-email chain in DOC-C48C5EAB is demonstrated through native DPF, including accountable work, verified coworker result and an accurate approval-held reply draft. |
 
 ### Design grounding and alternatives
 
@@ -525,8 +558,11 @@ Google callback must recheck the current authenticated principal, organization
 and permission, bound browser nonce, expiration, single-use flow and mailbox
 profile identity. No mail may be read before the selected scope is validated.
 Use fixed Google API endpoints; do not follow caller-supplied URLs. Message
-normalization retains provider identity and RFC reply/thread headers, with no
-attachment-body download. Poll pagination must be resumable and bounded; a
+normalization retains provider identity and RFC reply/thread headers. Gmail
+full MIME responses may contain inline attachment data; DPF bounds the entire
+response to two million bytes, never requests attachment endpoints, discards
+attachment data and persists only attachment metadata. This does not promise
+that Google never transfers an inline attachment with a full message. Poll pagination must be resumable and bounded; a
 failed page must not advance the durable cursor. Changed scope invalidates
 an old cursor. No send, delete or modify permission is requested.
 
@@ -535,3 +571,19 @@ The interactive prototype is
 It is example-only and has not connected an account or passed UX review.
 The implementation sequence and acceptance evidence are tracked in the
 [native onboarding plan](../plans/2026-10-30-native-mailbox-onboarding.md).
+
+Implementation checkpoint: native scope and consent helpers, pending-flow
+connection lifecycle, fixed Google endpoints, bounded Gmail adapter, encrypted
+app/mailbox custody and guided form/callback are implemented in the governed
+branch. Source tests do not prove provider consent, recurring live intake or the
+real email milestone. Required measured UX review, exact runtime gate, deployment
+and all live acceptance remain outstanding. OAuthPendingFlow's existing legacy
+data-governance baseline is not claimed globally repaired: this provider owns
+only its encrypted, single-use ten-minute context and scoped expiry cleanup.
+
+Independent CLIENT review DOC-4247B8BD found the missing concurrent-consent
+fence, inherited three-reply split and unguided address entry in that prepared
+source. These amendments specify the repairs; they do not claim implementation
+or native independent approval. The original reviewer task F8D64A8E19F3 retains
+its immutable source, uncertainty and limits. Schema scope makes this a Large
+feature: do not treat the earlier Medium coverage receipt as current admission.
