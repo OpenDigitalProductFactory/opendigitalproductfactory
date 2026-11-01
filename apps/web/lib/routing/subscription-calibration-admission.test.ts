@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 const m = vi.hoisted(() => ({ capture: vi.fn(), proof: vi.fn(), db: {} as any }));
 vi.mock("@dpf/db", () => ({ prisma: new Proxy({}, { get: (_, key) => m.db[key] }), Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } } }));
 vi.mock("./provider-capacity/execution-proof.server", () => ({ captureExecutionProofBinding: m.capture, readCurrentExecutionProof: m.proof }));
-import { calibrationCorpus, calibrationCorpusHash, calibrationJobId, commissionSubscriptionCalibration, validateCalibrationCommission } from "./subscription-calibration-admission";
+import { calibrationCorpus, calibrationCorpusHash, calibrationJobId, commissionSubscriptionCalibration, validateCalibrationCommission, lockCalibration } from "./subscription-calibration-admission";
 const proof = () => ({ version: 1, providerId: "chatgpt", connectionId: "provider-default-chatgpt", modelId: "selected", adapter: "responses",
   accountVersion: "a".repeat(64), credentialRevision: "b".repeat(64), modelRevision: "c".repeat(64), endpointRevision: "d".repeat(64), quotaRevision: "e".repeat(64),
   observedAt: Date.now(), expiresAt: Date.now() + 3600_000 });
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   vi.resetAllMocks();
-  m.db = { $queryRaw: vi.fn().mockResolvedValue([]), $transaction: (fn: any) => fn(m.db),
+  m.db = { $queryRaw: vi.fn().mockResolvedValue([]), $executeRaw: vi.fn().mockResolvedValue(1), $transaction: (fn: any) => fn(m.db),
     user: { findUnique: vi.fn().mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] }) },
     principal: { findFirst: vi.fn().mockResolvedValue({ id: "principal" }) },
     modelProfile: { findUnique: vi.fn().mockResolvedValue({ modelClass: "chat", outputModalities: ["text"] }) },
@@ -21,6 +23,16 @@ beforeEach(() => {
   const p = proof(); m.proof.mockResolvedValue(p);
 });
 describe("current owned calibration commissioning", () => {
+  it("acquires the void-returning advisory lock through the installed driver without deserializing its result", async () => {
+    // Exercise the real installed adapter's type handling, with synthetic wire rows and no connection.
+    const pool = new Pool();
+    vi.spyOn(pool, "query").mockResolvedValue({ fields: [{ name: "pg_advisory_xact_lock", dataTypeID: 2278 }], rows: [[""]], rowCount: 1 } as never);
+    const adapter = await new PrismaPg(pool).connect();
+    const query = { sql: "SELECT pg_advisory_xact_lock(1)", args: [], argTypes: [] };
+    const db = { $queryRaw: () => adapter.queryRaw(query), $executeRaw: () => adapter.executeRaw(query) };
+    try { await expect(lockCalibration(db as never, "fixture-lock")).resolves.toBeUndefined(); }
+    finally { await adapter.dispose(); await pool.end(); }
+  });
   it("captures one immutable ten-minute allowance when the clock advances between reads", async () => {
     const now = Date.now(); let elapsed = 0;
     vi.spyOn(Date, "now").mockImplementation(() => now + elapsed++);

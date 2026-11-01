@@ -21,7 +21,7 @@ beforeEach(() => {
   m.job = { enabled: true, runCursor: c.runId, metadata: { commission: c, state: "queued", attempts: [] } };
   m.profile = { id: "profile", evalCount: 7, profileConfidence: "high", conversational: 77, capabilityOverrides: {}, capabilities: { streaming: true },
     reasoning: 70, codegen: 70, toolFidelity: 70, instructionFollowingScore: 70, structuredOutputScore: 70, contextRetention: 70 };
-  m.db = { $transaction: (fn: any) => fn(m.db), $queryRaw: vi.fn().mockResolvedValue([]),
+  m.db = { $transaction: (fn: any) => fn(m.db), $queryRaw: vi.fn().mockResolvedValue([]), $executeRaw: vi.fn().mockResolvedValue(1),
     scheduledJob: { findUnique: vi.fn(async () => structuredClone(m.job)), update: vi.fn(async ({ data }) => { Object.assign(m.job, structuredClone(data)); return m.job; }) },
     modelProfile: { findUniqueOrThrow: vi.fn(async () => structuredClone(m.profile)), update: vi.fn(async ({ data }) => { m.saved.push(data); return data; }) },
     endpointTestRun: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ endpointId: "chatgpt", modelId: "selected", triggeredBy: "operator", status: "running", taskType: "dimension-eval" }) } };

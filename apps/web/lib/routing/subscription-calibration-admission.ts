@@ -63,7 +63,7 @@ export async function validateCalibrationCommission(c: CalibrationCommission, db
 
 /** One lock owner for admissions, attempt reservations, and final projection. No network here. */
 export async function lockCalibration(db: Db, jobId: string) {
-  await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${jobId}, 0))`;
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${jobId}, 0))`;
 }
 export async function lockCalibrationIdentity(db: Db, c: CalibrationCommission) {
   await db.$queryRaw`SELECT a.id FROM "AiProviderConnection" a JOIN "CredentialEntry" c ON c.id=a."credentialEntryId"
