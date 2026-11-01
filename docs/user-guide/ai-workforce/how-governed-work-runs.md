@@ -60,6 +60,13 @@ work left unresolved, each item with an explicit disposition.
 
 → [My Work and Workrooms](../workspace/work-rooms.md) is the full operator guide.
 
+A coworker releasing its own current file claims can use its existing authority
+when its lease and ownership still qualify. The release names the original
+acquisition: an old request cannot release a newer claim on the same file.
+Changed or unknown claims stop before another approval is created. Permissions
+and any required human decision still apply. Automatic retirement of older
+approval cards is separate work; this protection does not clear those cards.
+
 ## 2. The shape bounds what may happen
 
 A room is convened with a **collaboration shape**. The shape is the answer to "what kind of

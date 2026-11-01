@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
 import { canonicalTransitionPayload, signTransitionPayload, prepareRuntimeReconciliationIntent } from "./lib/transition-signing.mjs";
+import { inspectScopeEpochWriterImage } from "./promoter-epoch-evidence.mjs";
 import { computeCapabilityStateVersion } from "./lib/capability-state-hash.mjs";
 
 // strict: false keeps the old tolerance for flags this script does not read.
@@ -233,7 +234,30 @@ try {
     baseArgs.push("-f", overridePath);
   }
 } catch { await fail("runtime_compose_mount_preflight_failed"); }
-const reconcile = (from, to) => {
+let scopeWriterOverride = null;
+const reconcile = async (from, to) => {
+  // Apply, journal resume and compensation all share this launch boundary.
+  // Inspect the actual rendered image and pin its verified immutable bytes.
+  try {
+    const profiles = to.profiles.flatMap(profile => ["--profile", profile]);
+    const rendered = compose([...profiles, "config", "--format", "json"], 30_000);
+    if (rendered.status !== 0) throw new Error();
+    const image = JSON.parse(rendered.stdout).services?.portal?.image;
+    if (typeof image !== "string" || !image.trim()) throw new Error();
+    const digest = await inspectScopeEpochWriterImage({ image, runDocker: async args => {
+      const result = spawnSync(process.env.DPF_DOCKER_BIN ?? "docker", [...dockerPrefix, ...args],
+        { encoding: "utf8", timeout: 60_000, maxBuffer: 8192 });
+      if (result.status !== 0) throw new Error("scope_writer_probe_unavailable");
+      return result.stdout;
+    } });
+    if (!scopeWriterOverride) {
+      scopeWriterOverride = join(receiptDir, `${envelope.transitionId}.scope-writer.json`);
+      baseArgs.push("-f", scopeWriterOverride);
+      process.on("exit", () => { try { rmSync(scopeWriterOverride); } catch {} });
+    }
+    await atomicJson(scopeWriterOverride, { services: { portal: { image: digest, pull_policy: "never" } } });
+  } catch { return { status: 78, stderr: "runtime_scope_writer_compatibility_unproven" }; }
+
   const disabled = from.required.filter((service) => !to.required.includes(service));
   if (disabled.length) { const stopped = compose(["stop", ...disabled]); if (stopped.status !== 0) return stopped; const removed = compose(["rm", "-f", ...disabled]); if (removed.status !== 0) return removed; }
   // Detached startup is not readiness. Bound each readiness wait, leaving room
@@ -300,13 +324,13 @@ const assertOwnedInstallState = async () => {
 const rollbackOwnedInstallState = async (reason) => {
   await assertOwnedInstallState();
   await atomicJson(statePath, before);
-  const rolled = reconcile(desired, previous), observed = observe();
+  const rolled = await reconcile(desired, previous), observed = observe();
   await rm(claim, { recursive: true, force: true });
   const restored = rolled.status === 0 && observed.ps.status === 0 && exact(previous, observed.services, observed.health);
   if (restored) await rm(journalPath, { force: true });
   await fail(reason + (restored ? "_rolled_back" : "_rollback_failed"), restored ? "rolled_back" : "rollback_failed");
 };
-const applied = reconcile(previous, desired);
+const applied = await reconcile(previous, desired);
 if (applied.status !== 0) await rollbackOwnedInstallState("compose_reconcile_failed");
 if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "runtime-mutated") process.exit(86);
 if (journal.phase !== "runtime-reconciled") { const { signature: _stateSignature, ...stateJournal } = journal; journal = { ...stateJournal, phase: "runtime-reconciled" }; journal.signature = createHmac("sha256", secret).update(JSON.stringify(stable(journal))).digest("hex"); await atomicJson(journalPath, journal); }

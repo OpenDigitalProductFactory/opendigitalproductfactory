@@ -14,6 +14,20 @@ const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
 const secret = "s".repeat(32);
 function envelope(now = Date.now()) { return { version: 1, transitionId: "RCT-test", issuedAt: new Date(now - 100).toISOString(), expiresAt: new Date(now + 60_000).toISOString(), catalogHash: "a".repeat(64), previousStateHash: "b".repeat(64), desiredStateHash: "c".repeat(64), previousKeys: ["runtime:core"], desiredKeys: ["runtime:build", "runtime:core"], previousProfiles: [], desiredProfiles: ["build"], previousServices: ["portal", "postgres"], desiredServices: ["build", "portal", "postgres"] }; }
 function run(env, id = "RCT-test") { return spawnSync(process.execPath, [script, "--runtime-capability-transition", id], { env: { ...process.env, ...env }, encoding: "utf8" }); }
+// Existing functional fixtures represent a qualified immutable portal image.
+// The negative case below changes only the probe's compatibility declaration.
+async function writeDockerFixture(path, source, { scopeVersion = 1 } = {}) {
+  const proof = { schemaVersion: 1, version: scopeVersion, sourceSha: "a".repeat(40), sourceContentHash: "b".repeat(64),
+    contractSha256: "c".repeat(64), writers: { "scope-release-store.ts": "d".repeat(64) } };
+  const prelude = `const scopeArgs = process.argv.slice(2);
+if(scopeArgs[0]==='image'&&scopeArgs[1]==='inspect'){process.stdout.write('sha256:${"e".repeat(64)}');process.exit(0)}
+if(scopeArgs[0]==='run'&&scopeArgs.includes('/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs')){process.stdout.write(${JSON.stringify(JSON.stringify(proof))});process.exit(0)}
+`;
+  const config = `process.stdout.write('${JSON.stringify({ services: { portal: { image: "fixture-portal-current" } } })}')`;
+  source = source.replaceAll("process.stdout.write('{}')", config).replaceAll('process.stdout.write("{}")', config);
+  return writeFile(path, prelude + source);
+}
+
 async function secretFile(dir) { const path = join(dir, "secret"); await writeFile(path, secret, { mode: 0o600 }); return path; }
 
 test("protocol probe reports packaged support without reading secrets or creating host state", async () => {
@@ -86,7 +100,7 @@ async function validTransition(dir, health = "healthy", version = 1, { previousR
   await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: previous.keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: previous.hash, ...stateExtras }));
   const fakeDocker = join(dir, "fake-docker.mjs");
   const psRows = desired.required.map((Service) => ({ Service, State: "running", Health: health }));
-  await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("config --format json")) process.stdout.write('{}');\nelse if (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
+  await writeDockerFixture(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("config --format json")) process.stdout.write('{}');\nelse if (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
   return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
 }
 
@@ -95,7 +109,7 @@ test("daemon-visible mount preflight refuses before state mutation when a requir
   const fixture = await validTransition(dir);
   const calls = join(dir, "docker-calls.jsonl");
   const fakeDocker = join(dir, "mount-docker.mjs");
-  await writeFile(fakeDocker, `import { appendFileSync } from 'node:fs';
+  await writeDockerFixture(fakeDocker, `import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
 if (args.includes('config')) process.stdout.write(JSON.stringify({services:{loki:{volumes:[{type:'bind',source:'/host-source/monitoring/loki/loki-config.yml',target:'/etc/loki/local-config.yaml',read_only:true}]}}}));
@@ -115,7 +129,7 @@ else process.exitCode = 43;
 for (const hostRoot of ['D:\\My $DPF', '/opt/My $DPF']) test(`signed actuator maps bind sources like the canonical mount mapper: ${hostRoot}`, async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-mapped-bind-"));
   const fixture = await validTransition(dir);
-  const config = { services: { loki: { volumes: [
+  const config = { services: { portal: { image: "fixture-portal-current" }, loki: { volumes: [
     { type: 'bind', source: '/host-source/monitoring/$$config.yml', target: '/etc/config', read_only: true, bind: { create_host_path: false } },
     { type: 'volume', source: 'existing-data', target: '/data' },
     { type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock' },
@@ -125,13 +139,13 @@ for (const hostRoot of ['D:\\My $DPF', '/opt/My $DPF']) test(`signed actuator ma
   const captured = join(dir, 'observed-mounts.json');
   const fakeDocker = join(dir, 'mapped-docker.mjs');
   const psRows = fixture.desired.required.map(Service => ({ Service, State: 'running', Health: 'healthy' }));
-  await writeFile(fakeDocker, `import { readFileSync, writeFileSync } from 'node:fs';
+  await writeDockerFixture(fakeDocker, `import { readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (args.includes('config')) process.stdout.write(${JSON.stringify(JSON.stringify(config))});
 else if (args.includes('inspect')) process.stdout.write(${JSON.stringify(JSON.stringify(mounts))});
 else if (args.includes('up')) {
   if (!args.includes('--wait') || args[args.indexOf('--wait-timeout') + 1] !== '180') process.exit(44);
-  const override = args[args.lastIndexOf('-f') + 1];
+  const override = args.find(value => value.endsWith('.compose-mounts.json'));
   writeFileSync(${JSON.stringify(captured)}, readFileSync(override));
 } else if (args.includes('ps')) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});
 `);
@@ -254,7 +268,7 @@ test("failed reconciliation never restores over a subsequent host writer", async
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-reconciliation-writer-"));
   const fixture = await reconciliationFixture(dir);
   const actuator = join(dir, "intervening-writer.mjs"), calls = join(dir, "calls.jsonl"), statePath = join(dir, "install-state.json");
-  await writeFile(actuator, `import fs from 'node:fs';
+  await writeDockerFixture(actuator, `import fs from 'node:fs';
 const args = process.argv.slice(2); fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args)+'\\n');
 if(args.includes('config')) process.stdout.write('{}');
 if(args.includes('up')) { const state=JSON.parse(fs.readFileSync(${JSON.stringify(statePath)},'utf8')); state.capabilityStateVersion=${JSON.stringify("f".repeat(64))}; fs.writeFileSync(${JSON.stringify(statePath)},JSON.stringify(state)); process.exit(1); }
@@ -436,4 +450,20 @@ for (const crashPoint of ["prepared", "state-written", "runtime-reconciled"]) te
   assert.equal(recovered.status, 0, recovered.stderr);
   const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
   assert.deepEqual(state.runtimeCapabilityDecisions[MONITORING], { decision: "enabled", source: "portal", decidedAt: fixture.value.issuedAt });
+});
+
+
+test("capability apply refuses an incompatible rendered portal before any compose up", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-old-writer-"));
+  try {
+    const fixture = await validTransition(dir), calls = join(dir, "launches"), actor = join(dir, "incompatible-docker.mjs");
+    await writeDockerFixture(actor, `import fs from 'node:fs';const args=process.argv.slice(2);
+if(args.includes('config'))process.stdout.write('{}');
+if(args.includes('up'))fs.appendFileSync(${JSON.stringify(calls)},'launched');
+if(args.includes('ps'))process.stdout.write(${JSON.stringify(JSON.stringify(fixture.desired.required.map(Service=>({Service,State:'running',Health:'healthy'}))))});
+`, { scopeVersion: 0 });
+    const result = run({ ...fixture.env, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([actor]) });
+    assert.equal(result.status, 78, result.stderr);
+    assert.equal(await readFile(calls, 'utf8').catch(() => ''), '');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

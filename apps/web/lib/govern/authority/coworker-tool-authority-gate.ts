@@ -8,6 +8,7 @@ import type {
   GovernedExecuteArgs,
   GovernedExecuteRejection,
 } from "@/lib/mcp-governed-execute-types";
+import type { ScopeReleasePreflightResult } from "@/lib/work-capsules/scope-release-preflight";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import {
@@ -103,6 +104,7 @@ export type AuthorityExecutedOutcome = (
 ) => Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null>;
 
 export type CoworkerToolAuthorityGateResult =
+  | Exclude<ScopeReleasePreflightResult, { outcome: "reject" }>
   | {
       /** The identical call already ran once on a person's approval. */
       outcome: "settled";
@@ -121,6 +123,7 @@ export type CoworkerToolAuthorityGateResult =
       outcome: "reject";
       rejection: Extract<
         GovernedExecuteRejection,
+        | "precondition_denied"
         | "authority_denied"
         | "approval_required"
         | "authority_evidence_unavailable"
@@ -476,6 +479,12 @@ export async function enforceCoworkerToolAuthority(
   }
 
   let decision = evaluateCoworkerAuthority(input);
+  if (decision.outcome !== "deny" && ["release_workroom_scope", "release_capsule_scope"].includes(execution.toolName)) {
+    const { preflightOriginalScopeRelease } = await import("@/lib/work-capsules/scope-release-preflight");
+    const precondition = await preflightOriginalScopeRelease(execution,
+      () => executedOutcome(buildCoworkerApprovalBinding(input)));
+    if (precondition) return precondition;
+  }
   let projectedDecisionId: string | null = null;
   if (decision.outcome === "require-approval") {
     const projected = await attemptPolicyAuthorityProjection({

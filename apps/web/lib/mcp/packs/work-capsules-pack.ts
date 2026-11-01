@@ -409,31 +409,33 @@ const definitions: ToolDefinition[] = [
   {
     name: "release_workroom_scope",
     description:
-      "Release previously claimed Workroom scope items by kind and value. " +
-      "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
-      "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
-      "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
-      "Do NOT call for an abandoned/unknown workroom (retryable: false). " +
-      "If nothing matched, success still returns (idempotent no-op on empty released set).",
+      "Release the complete original Workroom claim targets in one call. " +
+      "Requires the semantic capsuleId, original persistent expectedRoomId and claims with kind, value, intent, recordedByPrincipalId and releaseEpoch returned by the claim. " +
+      "Never replace an old request's targets with current claims. Invalid or stale requests are refused; a new release intent needs fresh original targets. " +
+      "An optional commandId replays only its exact bound stored outcome.",
     inputSchema: {
       type: "object",
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        expectedRoomId: { type: "string", description: "Original persistent Workroom row id returned with the claim." },
         claims: {
           type: "array",
           items: {
             type: "object",
             properties: {
               kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
-              value: { type: "string", description: "Scope value to release (exact match to the prior claim)." },
+              value: { type: "string", description: "Original exact scope value." },
+              intent: { type: "string", enum: ["read", "edit"] },
+              recordedByPrincipalId: { type: "string", description: "Original claim owner principal." },
+              releaseEpoch: { type: "string", description: "Original server-issued claim epoch." },
             },
-            required: ["kind", "value"],
+            required: ["kind", "value", "intent", "recordedByPrincipalId", "releaseEpoch"],
           },
           description: "Scope claims to release — array required, not a single object.",
         },
       },
-      required: ["capsuleId", "claims"],
+      required: ["capsuleId", "expectedRoomId", "claims"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -566,6 +568,16 @@ const receipted = (commandType: string, pick: (m: WorkroomHandlers) => WorkroomH
   (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise.all([HANDLERS(), import("@/lib/work-capsules/receipted-tool")])
     .then(([m, r]) => r.receiptedWorkroomTool(commandType, pick(m) as never)(params, userId, context as never));
 
+const releaseScope: WorkroomHandler = (params, userId, context) => Promise.all([
+      HANDLERS(), import("@/lib/work-capsules/receipted-tool"), import("@/lib/work-capsules/scope-release-targets"),
+    ]).then(([m, r, targets]) => r.receiptedWorkroomTool("release-scope", m.releaseCapsuleScopeTool as never,
+      { prepare: targets.prepareScopeRelease })(params, userId, context as never));
+
+const claimScope: WorkroomHandler = (params, userId, context) => Promise.all([
+  HANDLERS(), import("@/lib/work-capsules/receipted-tool"), import("@/lib/work-capsules/scope-claim-store"),
+]).then(([m, r, claim]) => r.receiptedWorkroomTool("claim-scope", m.claimCapsuleScopeTool as never,
+  { prepareAsync: claim.prepareScopeClaim })(params, userId, context));
+
 export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
@@ -580,10 +592,10 @@ export const workCapsulesPack: ToolPack = {
     claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
     declare_break_fix: (params, userId, context) =>
       import("@/lib/work-capsules/declare-break-fix-tool").then((m) => m.declareBreakFixTool(params, userId, context)),
-    claim_workroom_scope: (params, userId, context) => receipted("claim-scope", (m) => m.claimCapsuleScopeTool)(params, userId, context),
+    claim_workroom_scope: claimScope,
     heartbeat_workroom: (params, userId, context) => receipted("heartbeat", (m) => m.heartbeatCapsuleTool)(params, userId, context),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
-    release_workroom_scope: (params, userId, context) => receipted("release-scope", (m) => m.releaseCapsuleScopeTool)(params, userId, context),
+    release_workroom_scope: releaseScope,
     drive_workroom_runtime: (params, userId, context) =>
       import("@/lib/workroom-runtime/runtime-tools").then((m) => m.driveWorkroomRuntimeTool(params, userId, context)),
     approve_runtime_permission: (params, userId, context) =>
@@ -605,10 +617,10 @@ export const workCapsulesPack: ToolPack = {
     get_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
-    claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
+    claim_capsule_scope: claimScope,
     heartbeat_capsule: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
     update_work_capsule_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
-    release_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
+    release_capsule_scope: releaseScope,
     record_capsule_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
   },
