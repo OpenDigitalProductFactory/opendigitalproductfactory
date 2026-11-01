@@ -19,6 +19,7 @@ import baseline from "../lib/ux-budget/route-budget-baseline.json";
 import { waitForRouteDomToSettle, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
 import { assertProviderQuotaFixtureRuntime, startQuotaFixtureTransport, prepareProviderQuotaFixtures,
   resetProviderQuotaFixture, cleanupProviderQuotaFixtures, type ProviderQuotaFixture } from "./provider-quota-recovery-fixtures";
+import { verifySubscriptionCalibrationHistory } from "./subscription-calibration-verification";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/ux-route-sweep/provider-quota-recovery");
@@ -158,8 +159,10 @@ export async function verifyProviderQuotaRecovery() {
         }
       } finally { await context.close(); }
     }
+    const calibrationHistory = await verifySubscriptionCalibrationHistory({ browser, db: prisma, fixture, out: OUT,
+      storageState: resolve(ROOT, "e2e/.auth/state.json"), requestCount: () => transport.counts().requests });
     check(transport.counts().rejected === 0, "The synthetic provider received a request outside the fixed contract");
-    completed = { status: "passed", ...runtime, captures, counts: transport.counts(), syntheticTransport: true, realSubscriptionCapacity: "unrun" };
+    completed = { status: "passed", ...runtime, captures, calibrationHistory, counts: transport.counts(), syntheticTransport: true, realSubscriptionCapacity: "unrun" };
   } catch (error) {
     write("execution.json", { status: "failed", ...runtime, completedCaptures: captures.length, error: safeError(error) });
     throw error;
