@@ -7,6 +7,18 @@ export type AgentRenderableMessage = AgentMessageRow & {
   retryContent?: string;
 };
 
+/** An acknowledgement settles delivery, never the requested business outcome. */
+export function acknowledgeRetainedMessage(messages: AgentRenderableMessage[], optimisticId: string, receipt: unknown): AgentRenderableMessage[] {
+  const sent = messages.map(message => message.id === optimisticId ? { ...message, deliveryState: "sent" as const } : message);
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return sent;
+  const row = receipt as Record<string, unknown>;
+  if (row.role !== "system" || typeof row.id !== "string" || typeof row.content !== "string"
+    || typeof row.createdAt !== "string" || sent.some(message => message.id === row.id)) return sent;
+  return [...sent, { id: row.id, role: "system", content: row.content, createdAt: row.createdAt,
+    agentId: typeof row.agentId === "string" ? row.agentId : null,
+    routeContext: typeof row.routeContext === "string" ? row.routeContext : null }];
+}
+
 export function createOptimisticUserMessage(
   content: string,
   routeContext: string,

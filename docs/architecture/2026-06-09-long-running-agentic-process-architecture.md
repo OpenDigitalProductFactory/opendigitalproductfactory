@@ -1,5 +1,13 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Retained foreground requests:** interactive turns use the existing TaskRun and
+queue with an immutable message binding and bounded pre-inference capacity wait.
+The existing dispatcher repairs lost wakes. Unknown effects and expired interrupted
+executors are held for reconciliation, not replayed. Approval proposals remain
+pending; a response is not business-result acceptance. See the
+[implementation record](../superpowers/specs/2026-10-29-foreground-recovery-implementation.md)
+for source and unrun served-verification boundaries.
+
 **Operator provider pauses:** optional expiry runs through the existing jobs
 facade, with `ScheduledJob` holding the operation identity and resume time.
 A five-minute reconciliation job repairs overdue timers after restart or event

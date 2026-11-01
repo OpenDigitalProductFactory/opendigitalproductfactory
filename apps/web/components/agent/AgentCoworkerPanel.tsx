@@ -36,13 +36,16 @@ import {
 import {
   buildAgentFormAssistContext,
   getActiveFormAssist,
+  applyFormAssistDelivery, type FormAssistDeliveryState,
 } from "@/lib/agent-form-assist";
 import {
   createOptimisticUserMessage,
   failOptimisticMessage,
   retryOptimisticMessage,
+  acknowledgeRetainedMessage,
   type AgentRenderableMessage,
 } from "./agent-message-state";
+import { FOREGROUND_RECEIPT_PREFIX } from "@/lib/agent/foreground-work-contract";
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
 import { deriveComposerState, isClearDisabled, type ThreadLoadState } from "./composer-state";
 import { resolvePanelRouteContextLabel } from "@/lib/agent/panel-route-context";
@@ -139,6 +142,7 @@ export function AgentCoworkerPanel({
   // BI-2750EB6F: last sign of SERVER life (any SSE data frame OR the 15s liveness
   // heartbeat), driving the turn-completion watchdog effect below.
   const lastServerActivityRef = useRef<number>(0);
+  const retainedRequestRef = useRef<{ threadId: string; requestKey: string; taskRunId: string | null } | null>(null);
   const [isClearing, startClearing] = useTransition();
   // Embedders that don't thread load state through (e.g. tests rendering the
   // panel directly) get the legacy inference: no threadId means still loading.
@@ -460,9 +464,7 @@ export function AgentCoworkerPanel({
           if (data.providerInfo) {
             setLastProviderInfo(data.providerInfo);
           }
-          if (data.formAssistUpdate && activeFormAssistRef.current) {
-            activeFormAssistRef.current.applyFieldUpdates(data.formAssistUpdate);
-          }
+          applyFormAssistDelivery(activeFormAssistRef.current, data, appliedFormDeliveries.current.applied, retainedRequestRef.current?.taskRunId ?? null, appliedFormDeliveries.current.pending);
 
           // Refresh messages from DB — authoritative source.
           // Fetch by threadId (which we already have as a prop) rather than
@@ -528,6 +530,10 @@ export function AgentCoworkerPanel({
       getThreadSnapshotById({ threadId }).then((snapshot) => {
         if (!snapshot) return;
         const latestMsg = snapshot.messages[snapshot.messages.length - 1];
+        if (latestMsg?.id.startsWith(FOREGROUND_RECEIPT_PREFIX)) {
+          setMessages(filterMessages(snapshot.messages));
+          return;
+        }
         if (latestMsg && (latestMsg.role === "assistant" || latestMsg.role === "system")) {
           setMessages(filterMessages(snapshot.messages));
           setIsBusy(false);
@@ -541,11 +547,7 @@ export function AgentCoworkerPanel({
 
   // BI-2750EB6F: turn-completion watchdog. Purely client-side — the ONLY clearer
   // that keeps working when the portal event loop itself is saturated (the SSE
-  // `done`, the DB recovery poll, and the transport reconnect all need the loop
-  // to make progress). If no server life (data frame OR liveness heartbeat) has
-  // been observed for TURN_STALL_LIMIT_MS while busy, the turn is presumed lost:
-  // surface a failure system message so the user isn't left staring at a silent
-  // spinner, clear isBusy so the composer is usable again, and reset the chips.
+  // Missing live progress does not establish whether retained work settled.
   useEffect(() => {
     if (!isBusy) return;
     const watchdog = setInterval(() => {
@@ -556,7 +558,9 @@ export function AgentCoworkerPanel({
           id: `local-turn-timeout-${Date.now()}`,
           role: "system" as const,
           content:
-            "The coworker didn't respond — the server may be overloaded right now. Your message was sent; try again in a moment.",
+            retainedRequestRef.current?.threadId === threadId && retainedRequestRef.current.taskRunId
+              ? "Your request is saved. Live progress is unavailable; its progress and outcome will stay in this conversation. You do not need to resend."
+              : "Live progress is unavailable. This does not establish that the request failed; its saved state must be reconciled before another attempt.",
           agentId: agent.agentId,
           routeContext: effectiveRoute,
           createdAt: new Date().toISOString(),
@@ -567,7 +571,7 @@ export function AgentCoworkerPanel({
       setOrchestratorStatus(null);
     }, TURN_WATCHDOG_TICK_MS);
     return () => clearInterval(watchdog);
-  }, [isBusy, agent.agentId, effectiveRoute]);
+  }, [isBusy, agent.agentId, effectiveRoute, threadId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -629,8 +633,8 @@ export function AgentCoworkerPanel({
     });
   }
 
-  // EP-ASYNC-COWORKER-001: activeFormAssist ref for SSE done handler
   const activeFormAssistRef = useRef<ReturnType<typeof getActiveFormAssist>>(null);
+  const appliedFormDeliveries = useRef<FormAssistDeliveryState>({ applied: new Set(), pending: new Map() });
   // EP-WORK-POSTURE 8.2: the page's form-assist DATA is always collected; whether
   // the coworker may fill the fields is decided server-side from the Workroom.
   activeFormAssistRef.current = getActiveFormAssist(pathname);
@@ -655,6 +659,8 @@ export function AgentCoworkerPanel({
     const formAssistContext = activeFormAssistRef.current
       ? buildAgentFormAssistContext(activeFormAssistRef.current)
       : undefined;
+    retainedRequestRef.current = { threadId, requestKey: optimisticMessage.id, taskRunId: null };
+    appliedFormDeliveries.current.pending.clear();
     if (appendOptimistic) {
       setMessages((prev) => [...prev, optimisticMessage]);
     }
@@ -683,6 +689,7 @@ export function AgentCoworkerPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         threadId,
+        requestKey: optimisticMessage.id,
         content,
         routeContext: effectiveRoute,
         coworkerMode: runtimeMode.coworkerMode,
@@ -702,13 +709,15 @@ export function AgentCoworkerPanel({
         );
         setIsBusy(false);
       } else {
+        const acknowledged = await res.json().catch(() => null);
+        if (typeof acknowledged?.taskRunId === "string" && retainedRequestRef.current?.requestKey === optimisticMessage.id
+          && retainedRequestRef.current.threadId === threadId) {
+          retainedRequestRef.current.taskRunId = acknowledged.taskRunId;
+          applyFormAssistDelivery(activeFormAssistRef.current, {}, appliedFormDeliveries.current.applied, acknowledged.taskRunId, appliedFormDeliveries.current.pending);
+        }
         // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
         completeJourney("message-ack", { serverTiming: res.headers.get("server-timing") }); // BI-BD0B0DCC
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,
-          ),
-        );
+        setMessages(prev => acknowledgeRetainedMessage(prev, optimisticMessage.id, acknowledged?.receipt));
         // Notify BuildStudio of the threadId so it can connect SSE as a fallback.
         // The server writes threadId to the build on first message (fire-and-forget),
         // so by the time the response arrives, the link exists in the DB.

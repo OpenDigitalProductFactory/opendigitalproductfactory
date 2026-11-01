@@ -4,53 +4,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { sendMessage } from "@/lib/actions/agent-coworker";
-import { agentEventBus } from "@/lib/agent-event-bus";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
-import { resolveAgentForRoute } from "@/lib/agent-routing";
+import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { acceptUserMessage } from "@/lib/agent/accept-user-message";
-import { ApiError } from "@/lib/api/error";
-// Note: this route uses the sync version since it only needs agentId for message logging
+import { admitForegroundWork } from "@/lib/agent/foreground-work-admission";
+import { jobs } from "@/lib/jobs";
+import { FOREGROUND_WORK_EVENT, foregroundReceiptId } from "@/lib/agent/foreground-work-contract";
 import { prisma } from "@dpf/db";
+import { ApiError } from "@/lib/api/error";
 
 export const dynamic = "force-dynamic";
-
-async function persistBackgroundFailureMessage(input: {
-  threadId: string;
-  routeContext: string;
-  message: string;
-  sessionUser: { id: string; platformRole?: string | null; isSuperuser?: boolean | null };
-}): Promise<string | null> {
-  try {
-    const agent = resolveAgentForRoute(input.routeContext, {
-      userId: input.sessionUser.id,
-      platformRole: input.sessionUser.platformRole ?? null,
-      isSuperuser: input.sessionUser.isSuperuser ?? false,
-    });
-    const sysMsg = await prisma.agentMessage.create({
-      data: {
-        threadId: input.threadId,
-        role: "system",
-        content: input.message,
-        agentId: agent.agentId,
-        routeContext: input.routeContext,
-      },
-      select: {
-        id: true,
-        role: true,
-        content: true,
-        agentId: true,
-        routeContext: true,
-        createdAt: true,
-      },
-    });
-    return sysMsg.id;
-  } catch (persistErr) {
-    console.error("[api/agent/send] failed to persist background error message:", persistErr);
-    return null;
-  }
-}
 
 export async function POST(request: NextRequest): Promise<Response> {
   const startedAt = performance.now();
@@ -68,6 +33,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     buildId?: string;
     attachmentId?: string;
     questionPacket?: QuestionPacket | null;
+    requestKey?: string;
   };
 
   try {
@@ -95,77 +61,51 @@ export async function POST(request: NextRequest): Promise<Response> {
       content: input.content,
       routeContext: input.routeContext,
       attachmentId: input.attachmentId,
+      requestKey: input.requestKey,
     });
   } catch (err) {
     if (err instanceof ApiError) return err.toResponse();
     throw err;
   }
 
-  // Clear any stale cancellation for this thread
-  agentEventBus.clearCancel(input.threadId);
-
-  // Track this thread as actively executing
-  agentEventBus.markActive(input.threadId);
+  let taskRunId: string;
+  try {
+    const agent = await resolveAgentForRouteWithPrompts(input.routeContext, {
+      userId: session.user.id,
+      platformRole: session.user.platformRole ?? null,
+      isSuperuser: session.user.isSuperuser ?? false,
+    }, await isUnifiedCoworkerEnabled());
+    taskRunId = await admitForegroundWork({
+      userId: session.user.id,
+      agentId: agent.agentId,
+      userMessageId,
+      threadId: input.threadId,
+      routeContext: input.routeContext,
+      content: input.content.trim(),
+      coworkerMode: input.coworkerMode,
+      requestExtras: { formAssistContext: input.formAssistContext, buildId: input.buildId, attachmentId: input.attachmentId, questionPacket: input.questionPacket },
+    });
+  } catch {
+    return NextResponse.json({ error: "Your message is saved, but its coworker job could not be admitted. Nothing has started.", userMessageId }, { status: 503 });
+  }
 
   // Return immediately — agent execution runs in background
   // BI-BD0B0DCC: the server's share of the message-ack journey (W3C Server-Timing).
+  const receipt = await prisma.agentMessage.findUnique({ where: { id: foregroundReceiptId(taskRunId) },
+    select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+  }).catch(() => null);
   const response = NextResponse.json(
-    { status: "processing", userMessageId },
+    { status: "processing", userMessageId, taskRunId, ...(receipt ? { receipt } : {}) },
     { headers: { "Server-Timing": `app;dur=${(performance.now() - startedAt).toFixed(1)}` } },
   );
 
-  // Fire-and-forget: run sendMessage in background and emit enriched "done" on completion
-  (async () => {
-    try {
-      const result = await sendMessage({ ...input, acceptedUserMessageId: userMessageId });
-
-      agentEventBus.markIdle(input.threadId);
-
-      if ("error" in result) {
-        agentEventBus.emit(input.threadId, {
-          type: "error",
-          message: result.error,
-        });
-        agentEventBus.emit(input.threadId, { type: "done", error: result.error });
-        return;
-      }
-
-      // Emit enriched done with all data the client needs
-      agentEventBus.emit(input.threadId, {
-        type: "done",
-        agentMessageId: result.agentMessage.id,
-        ...(result.systemMessage ? { systemMessageId: result.systemMessage.id } : {}),
-        ...(result.formAssistUpdate ? { formAssistUpdate: result.formAssistUpdate } : {}),
-        ...("providerInfo" in result && result.providerInfo
-          ? { providerInfo: result.providerInfo as { providerId: string; modelId: string } }
-          : {}),
-      });
-    } catch (err) {
-      agentEventBus.markIdle(input.threadId);
-      console.error("[api/agent/send] background execution failed: %s",
-        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
-      const errorMessage = err instanceof Error ? err.message : "Agent execution failed";
-      const systemMessageId = await persistBackgroundFailureMessage({
-        threadId: input.threadId,
-        routeContext: input.routeContext,
-        message: `The AI coworker hit a background error and could not finish this request: ${errorMessage}`,
-        sessionUser: {
-          id: session.user.id,
-          platformRole: session.user.platformRole ?? null,
-          isSuperuser: session.user.isSuperuser ?? false,
-        },
-      });
-      agentEventBus.emit(input.threadId, {
-        type: "error",
-        message: errorMessage,
-      });
-      agentEventBus.emit(input.threadId, {
-        type: "done",
-        ...(systemMessageId ? { systemMessageId } : {}),
-        error: "Agent execution failed",
-      });
-    }
-  })();
+  // The saved TaskRun is authoritative. A lost wake is repaired by the
+  // existing task-dispatch reconciliation, independently of this HTTP request.
+  try {
+    await jobs.send({ name: FOREGROUND_WORK_EVENT, data: { taskRunId } });
+  } catch {
+    console.warn("[api/agent/send] foreground wake delayed; retained request awaits reconciliation");
+  }
 
   return response;
 }

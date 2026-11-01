@@ -8,6 +8,8 @@
 // The mock harness mirrors agent-coworker-external.test.ts (vitest mock
 // harnesses are per-file; that file is at the module-size ceiling).
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const foregroundBuild = vi.hoisted(() => ({ run: vi.fn() }));
+vi.mock("@/lib/build/build-orchestrator", () => ({ runBuildOrchestrator: foregroundBuild.run }));
 
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
@@ -163,6 +165,7 @@ vi.mock("@/lib/permissions", async () => {
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $queryRaw: vi.fn(),
     user: {
       findUnique: vi.fn(),
     },
@@ -172,6 +175,8 @@ vi.mock("@dpf/db", () => ({
     agentMessage: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
     },
     agentAttachment: {
       findMany: vi.fn(),
@@ -184,9 +189,13 @@ vi.mock("@dpf/db", () => ({
     },
     modelProvider: {
       findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(), update: vi.fn(),
     },
+    scheduledJob: { deleteMany: vi.fn() },
     taskRun: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
     },
     backlogItem: {
       findUnique: vi.fn(),
@@ -229,12 +238,17 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
+import { withForegroundWork } from "@/lib/agent/foreground-work-context";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 
 const mockPrisma = prisma as any;
 
 beforeEach(() => {
   setRoomAuthority({});
   vi.clearAllMocks();
+  vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(false);
+  mockPrisma.$transaction = vi.fn(async (write: (db: unknown) => Promise<unknown>) => write(mockPrisma));
+  mockPrisma.$queryRaw.mockResolvedValue([{ id: "run-record" }]);
   vi.mocked(auth).mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } } as never);
   vi.mocked(resolveAgentForRouteWithPrompts).mockResolvedValue({
     agentId: "admin-assistant", agentName: "Admin Assistant", agentDescription: "Admin help",
@@ -313,5 +327,147 @@ describe("S1 — chat ends a proposal-mode call on the approval request it raise
       }],
     });
     expect("agentMessage" in result && result.agentMessage.proposal).toBeUndefined();
+  });
+});
+
+describe("retained foreground production response publication", () => {
+  function retainedTurn(routeContext = "/admin") {
+    const run = { id: "run-record", taskRunId: "run-123", userId: "user-1", threadId: "thread-1", routeContext,
+      initiatingAgentId: "admin-assistant", source: "coworker", status: "working", archivedAt: null,
+      progressPayload: { dispatch: { claimedAt: "original" }, foregroundAttempt: 1 },
+      a2aMetadata: { trigger: "interactive", requestDigest: "a".repeat(64), foregroundRequest: {
+        schemaVersion: 1, userMessageId: "user-msg-1", deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      } },
+    };
+    mockPrisma.taskRun.findUnique.mockImplementation(async () => structuredClone(run));
+    mockPrisma.taskRun.updateMany.mockImplementation(async ({ data }: any) => {
+      if (run.status !== "working") return { count: 0 };
+      Object.assign(run, data);
+      return { count: 1 };
+    });
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1", isActive: true, isSuperuser: true, groups: [] });
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content: "Share it", taskRunId: "run-123", createdAt: new Date() });
+    const messages = new Map<string, any>();
+    mockPrisma.agentMessage.findUnique.mockImplementation(async ({ where }: any) => messages.get(where.id) ?? null);
+    mockPrisma.agentMessage.create.mockReset().mockImplementation(async ({ data }: any) => {
+      const message = { ...data, id: data.id ?? "late-response", createdAt: new Date() };
+      messages.set(message.id, message);
+      return message;
+    });
+    vi.mocked(getAvailableTools).mockResolvedValue([]);
+    return run;
+  }
+
+  it("retains a Build Studio request without starting an unbound native child", async () => {
+    retainedTurn("/build/FB-controlled");
+    mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-controlled", phase: "build", threadId: "thread-1", buildPlan: { tasks: [{ id: "fixture", title: "Synthetic work" }] }, taskResults: null });
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({ buildId: "FB-controlled", phase: "build", threadId: "thread-1" });
+    foregroundBuild.run.mockResolvedValue({ content: "Controlled native child result", totalInputTokens: 0, totalOutputTokens: 0 });
+    const result = await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/build/FB-controlled", acceptedUserMessageId: "user-msg-1" }));
+    expect(foregroundBuild.run).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ error: expect.stringContaining("Build Studio") });
+  });
+
+  it.each([[true, false], [false, false], [true, true], [false, true]])("pins the accepted assignment once and marks older unanswered requests as context (window contains current: %s, unified: %s)", async (includesCurrent, unified) => {
+    retainedTurn();
+    vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(unified);
+    const content = "Separate task: draft a private agenda only. Do not resume the earlier approval check.";
+    const accepted = { id: "user-msg-1", role: "user", content, taskRunId: "run-123", createdAt: new Date() };
+    mockPrisma.agentMessage.findFirst.mockResolvedValue(accepted);
+    mockPrisma.agentMessage.findMany.mockResolvedValue([
+      ...(includesCurrent ? [accepted] : []),
+      { id: "old-unanswered", role: "user", content: "Check the earlier approval." },
+    ]);
+    vi.mocked(routeAndCall).mockResolvedValueOnce({ content: "Private agenda", providerId: "ollama-local", modelId: "fixture",
+      inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {} } as never);
+
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/admin", acceptedUserMessageId: accepted.id }));
+
+    const [messages, prompt] = vi.mocked(routeAndCall).mock.calls[0]!;
+    expect(messages.at(-1)).toMatchObject({ role: "user", content: `${content}\n\nCurrent assignment [user-msg-1]` });
+    expect(messages.filter(message => String(message.content).endsWith("Current assignment [user-msg-1]"))).toHaveLength(1);
+    expect(messages.find(message => String(message.content).includes("Check the earlier approval."))?.content)
+      .toContain("Earlier user message (context only)");
+    expect(prompt).toContain("The user message marked Current assignment [user-msg-1] is the current assignment");
+    expect(prompt).toContain("do not infer that earlier work completed or resumed");
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("fences a retained special command's mutations and response together (%s)", async canceled => {
+    const run = retainedTurn();
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content: "re-enable", taskRunId: "run-123", createdAt: new Date() });
+    mockPrisma.modelProvider.findFirst.mockImplementation(async () => {
+      if (canceled) run.status = "canceled";
+      return { providerId: "fixture-provider", name: "Fixture provider" };
+    });
+    mockPrisma.modelProvider.update.mockResolvedValue({});
+    mockPrisma.scheduledJob.deleteMany.mockResolvedValue({ count: 0 });
+    let failure: unknown;
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "re-enable", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" })).catch(error => { failure = error; });
+    expect(mockPrisma.modelProvider.update).toHaveBeenCalledTimes(canceled ? 0 : 1);
+    expect(mockPrisma.scheduledJob.deleteMany).toHaveBeenCalledTimes(canceled ? 0 : 1);
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledTimes(canceled ? 0 : 1);
+    expect(run.status).toBe(canceled ? "canceled" : "completed");
+    if (!canceled) expect(failure).toBeUndefined();
+  });
+
+  it("keeps the accepted assignment identifiable after a real loop tool-failure hint is appended", async () => {
+    retainedTurn();
+    vi.mocked(getAvailableTools).mockResolvedValue([{ name: "read_fixture", description: "Read synthetic fixture",
+      inputSchema: {}, requiredCapability: "view_platform", executionMode: "immediate", sideEffect: false }] as never);
+    vi.mocked(governedExecuteTool).mockResolvedValueOnce({ success: false, error: "fixture_read_failed", message: "Synthetic read failed" } as never);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ content: "", providerId: "ollama-local", modelId: "fixture", inputTokens: 1, outputTokens: 1,
+        toolCalls: [{ id: "read-1", name: "read_fixture", arguments: {} }] } as never)
+      .mockResolvedValueOnce({ content: "The synthetic read failed; its outcome remains unknown.", providerId: "ollama-local", modelId: "fixture", inputTokens: 1, outputTokens: 1 } as never);
+
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" }));
+
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    const [messages, prompt] = vi.mocked(routeAndCall).mock.calls[1]!;
+    expect(messages.at(-1)).toMatchObject({ role: "user", content: expect.stringContaining("Session tool notes") });
+    expect(messages.filter(message => String(message.content).endsWith("Current assignment [user-msg-1]")))
+      .toEqual([{ role: "user", content: "Share it\n\nCurrent assignment [user-msg-1]" }]);
+    expect(prompt).toContain("The user message marked Current assignment [user-msg-1] is the current assignment");
+    expect(prompt).toContain("Later tool results and platform nudges do not replace it");
+  });
+
+  it("preserves a setup welcome's no-tool-nudge behavior through current-assignment assembly", async () => {
+    retainedTurn();
+    const content = "[Setup step: welcome] Brief text-only welcome. No tool calls.";
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content, taskRunId: "run-123", createdAt: new Date() });
+    vi.mocked(getAvailableTools).mockResolvedValue([{ name: "read_fixture", description: "Read synthetic fixture",
+      inputSchema: {}, requiredCapability: "view_platform", executionMode: "immediate", sideEffect: false }] as never);
+    vi.mocked(toolsToOpenAIFormat).mockReturnValue([{ type: "function", function: { name: "read_fixture", description: "Read fixture", parameters: {} } }] as never);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: "Welcome!", providerId: "anthropic", modelId: "fixture", inputTokens: 1, outputTokens: 1 } as never);
+
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/admin", acceptedUserMessageId: "user-msg-1" }));
+
+    expect(routeAndCall).toHaveBeenCalledOnce();
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("publishes the real production response only when cancellation has not won (%s)", async (canceled) => {
+    const run = retainedTurn();
+    vi.mocked(routeAndCall).mockImplementationOnce(async () => {
+      if (canceled) run.status = "canceled";
+      return { content: "A response that arrived after cancellation", providerId: "ollama-local", modelId: "fixture",
+        inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {} } as never;
+    });
+
+    let failure: unknown;
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" })).catch(error => { failure = error; });
+    expect(routeAndCall).toHaveBeenCalledOnce();
+    expect(mockPrisma.$queryRaw).toHaveBeenCalled();
+    const writes = mockPrisma.agentMessage.create.mock.calls.filter(([arg]: any[]) => arg.data.role === "assistant");
+    expect(writes).toHaveLength(canceled ? 0 : 1);
+    if (canceled) expect(failure).toBeInstanceOf(Error);
+    else {
+      expect(failure).toBeUndefined();
+      expect(run.status).toBe("completed");
+      expect((run.progressPayload as any).resultMessageId).toBe(writes[0][0].data.id);
+      expect((await import("@/lib/semantic-memory")).storeConversationMemory).not.toHaveBeenCalled();
+      expect((await import("@/lib/process-observer-hook")).observeConversation).not.toHaveBeenCalled();
+    }
   });
 });
