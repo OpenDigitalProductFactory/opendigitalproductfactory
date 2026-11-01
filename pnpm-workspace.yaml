@@ -178,3 +178,9 @@ packageExtensions:
   '@testing-library/jest-dom':
     peerDependencies:
       vitest: '*'
+
+# beta.63 uses a WeakMap API absent from Node 24 and older portal browsers.
+# Keep lazy per-window ResizeObserver caching with ordinary WeakMap operations.
+# Remove when upstream supports these hosts without the compatibility patch.
+patchedDependencies:
+  react-data-grid@7.0.0-beta.63: patches/react-data-grid@7.0.0-beta.63.patch
