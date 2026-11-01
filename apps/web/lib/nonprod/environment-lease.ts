@@ -2,7 +2,6 @@ import { isTerminalLeaseStatus, lockNonprodEnvironment, type NonprodEnvironmentK
 export { NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "./environment-lease-lock";
 import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow, ResolvedNonprodPoolPolicy } from "./environment-lease-result";
 export type { ClaimNonprodEnvironmentLeaseResult } from "./environment-lease-result";
-import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import {
   ABANDONED_QUEUE_ROW_AFTER_MS,
@@ -28,7 +27,7 @@ import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lea
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { previewMustYieldSlot } from "./environment-lease-preview-yield";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits, settleNonprodLeaseWait } from "./durable-wait";
-import { bindFreshLeaseProvenance, checkpointQueuedLeaseProvenance, assertOwnedLeaseRelease, type LeaseReleaseContext } from "./environment-lease-provenance";
+import { bindFreshLeaseProvenance, checkpointQueuedLeaseProvenance, assertOwnedLeaseRelease, freshLeaseBirthFields, type LeaseReleaseContext } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -49,15 +48,11 @@ export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.
 
 type LeaseTx = Pick<
   typeof prisma,
-  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
+  "$executeRaw" | "$queryRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
 > & Partial<Pick<typeof prisma, "taskRun">>;
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
   typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom" | "taskRun"
 >>;
-
-function createLeaseId() {
-  return `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
-}
 
 async function inLeaseTransaction<T>(
   db: LeaseDb,
@@ -409,7 +404,7 @@ export async function claimNonprodEnvironmentLease(input: {
     } else {
       lease = await tx.nonProductionEnvironmentLease.create({
         data: {
-          leaseId: createLeaseId(),
+          ...await freshLeaseBirthFields(tx),
           claimKey: input.claimKey,
           environmentKey: input.environmentKey,
           activeKey: null,
