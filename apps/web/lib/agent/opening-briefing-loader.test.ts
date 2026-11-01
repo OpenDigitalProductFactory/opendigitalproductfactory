@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AttentionItem, AttentionSource } from "@/lib/attention/types";
+import { translate } from "@dpf/i18n";
 
 const mocks = vi.hoisted(() => ({
   loadAttentionItems: vi.fn(),
+  getLocaleContext: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: mocks.getLocaleContext }));
 vi.mock("@/lib/agent-routing", () => ({
   resolveAgentForRoute: vi.fn(() => ({ agentId: "AGT-COO" })),
 }));
@@ -44,6 +47,7 @@ function item(source: AttentionSource, index: number): AttentionItem {
 describe("loadOpeningBriefingPayload", () => {
   beforeEach(() => {
     mocks.loadAttentionItems.mockReset();
+    mocks.getLocaleContext.mockReset().mockResolvedValue({ language: "en-XA" });
   });
 
   it("stays silent when every visible item belongs to the digital team", async () => {
@@ -74,5 +78,24 @@ describe("loadOpeningBriefingPayload", () => {
     expect(result?.content).toContain("Launch email awaits your approval");
     expect(result?.content).not.toContain("more items");
     expect(result?.content).not.toContain("platform-health item");
+    expect(mocks.getLocaleContext).not.toHaveBeenCalled();
+  });
+
+  it("reuses the viewer's catalog locale for native expense guidance after owner projection", async () => {
+    mocks.loadAttentionItems.mockResolvedValue({
+      items: [item("approval-outbound", 1), ...Array.from({ length: 50 }, (_, i) => item("platform-health", i + 1))],
+      failedSources: [],
+    });
+    const result = await loadOpeningBriefingPayload({ id: "user-1" }, "/finance/spend?view=all");
+    expect(result?.content).toContain(translate("en-XA", "shell", "finance.expenseEntryDetails"));
+    expect(result?.content).toContain("1 owner decision is");
+    expect(result?.content).not.toContain("platform-health item");
+    expect(mocks.getLocaleContext).toHaveBeenCalledOnce();
+  });
+
+  it("retains zero-owner Finance silence without loading optional guidance", async () => {
+    mocks.loadAttentionItems.mockResolvedValue({ items: [item("platform-health", 1)], failedSources: [] });
+    await expect(loadOpeningBriefingPayload({ id: "user-1" }, "/finance/spend")).resolves.toBeNull();
+    expect(mocks.getLocaleContext).not.toHaveBeenCalled();
   });
 });
