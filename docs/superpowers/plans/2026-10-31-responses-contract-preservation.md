@@ -44,7 +44,7 @@ requirementRefs: AC-CONTRACT, AC-OPTIONAL, AC-CHATGPT, AC-DELIVERY.
 contractRefs: CT-REQUEST-SEMANTICS, CT-OPTIONAL-RETRY.
 flowRefs: FLOW-REJECT, FLOW-OPTIONAL.
 verificationRefs: VERIFY-REGRESSION, VERIFY-CONTROL, VERIFY-INTEGRATION.
-Native immutable coverage is pending publication of this plan; this prepared artifact is not coverage or implementation authorization.
+Initial immutable plan coverage: cmvx5aikp0w5h01pozwsved82 (atomic), bound to published a3a9a8451a98bb1f6427fcae267248f48a713d73 / plan blob79954169a85ef83a1fa06935686d1bc717bc9518. It maps this single deliverable to BI-E78253FF with no dependencies. The current exact-source receipt is the canonical coverage record, refreshed after this historical receipt annotation is published and before implementation. Research receipt: initiative-e103eb48-aef2-4d62-8085-3deb0f308e09; it establishes the observed defect, not a repaired-product pass.
 
 ## Start-of-work verification impact
 
