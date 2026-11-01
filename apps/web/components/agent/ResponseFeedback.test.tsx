@@ -74,3 +74,13 @@ it("reuses authorized answer state without an extra read and keeps the captured 
  expect(actions.read).not.toHaveBeenCalled();fireEvent.click(kept);await screen.findByText("Feedback saved.");
  expect(actions.write).toHaveBeenCalledExactlyOnceWith({messageId:"answer",value:true,expectedRevision:4});
 });
+
+
+it.each(["agent",null] as const)("records an explicit human confirmation even when the %s choice already matches",async source=>{
+ actions.read.mockResolvedValue({ok:true,data:{...state,value:true,source,actorLabel:source?"Coworker":null,revision:4}});
+ actions.write.mockResolvedValue({ok:true,data:{state:{...state,value:true,source:"human",actorLabel:"Owner",revision:5},changed:true}});
+ mount();const kept=await screen.findByRole("button",{name:"Kept"});await waitFor(()=>expect(kept.getAttribute("aria-disabled")).toBe("false"));
+ if(source===null)expect(screen.getByText("Unattributed feedback")).toBeTruthy();
+ fireEvent.click(kept);await waitFor(()=>expect(actions.write).toHaveBeenCalledExactlyOnceWith({messageId:"answer",value:true,expectedRevision:4}));
+ await screen.findByText("Human feedback");
+});

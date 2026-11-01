@@ -66,8 +66,9 @@ export function ResponseFeedback({ messageId, eligible, initialState }: { messag
     }
   }
 
+  // The server owns idempotence: the same choice may be a new human judgment over an agent choice.
   async function save(value: boolean | null) {
-    if (busyRef.current || error || !state?.available || !state.canWrite || value === state.value) return;
+    if (busyRef.current || error || !state?.available || !state.canWrite) return;
     const current = generation.current;
     busyRef.current = true; setBusy(true); setNotice("savingFeedback");
     try {
@@ -102,6 +103,6 @@ export function ResponseFeedback({ messageId, eligible, initialState }: { messag
       {error && <button data-surface-node-id="feedback.reload" type="button" className={BUTTON} aria-disabled={busy} onClick={() => void checkCurrent()}>{t("checkFeedback")}</button>}
     </div>
     <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="mt-1 text-xs text-[var(--dpf-muted)]">{t(notice)}</p>
-    {state?.source && <p className="mt-1 text-xs text-[var(--dpf-muted)]">{state.source === "human" ? t("humanFeedback") : t("agentFeedback")}</p>}
+    {state && (state.source || state.value !== null) && <p className="mt-1 text-xs text-[var(--dpf-muted)]">{state.source === "human" ? t("humanFeedback") : state.source === "agent" ? t("agentFeedback") : t("unattributedFeedback")}</p>}
   </section>;
 }
