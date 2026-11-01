@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { SOFTWARE_LEDGER_DEFINITION_VERSION } from "./software-ledger-metrics";
+import { ledgerMonthWindow } from "@/lib/finance/ledger-period-report";
 
 import {
   buildBusinessPerformanceReadModel,
@@ -113,6 +115,77 @@ describe("buildBusinessPerformanceReadModel", () => {
   });
 });
 
+function softwareRows(period: string, values: [number, number, number] | null, checked = "2026-10-15T12:00:00Z", currency = "EUR") {
+  const window = ledgerMonthWindow(new Date(`${period}-01T00:00:00Z`));
+  return ["posted-ledger-income", "posted-ledger-expenses", "posted-ledger-net-result"].map((key, index) =>
+    row(key, window.start.toISOString(), values?.[index] ?? null, values ? "available" : "unavailable", {
+      periodEnd: window.end, timezone: "UTC", unit: "currency", definitionVersion: SOFTWARE_LEDGER_DEFINITION_VERSION,
+      sourceWatermark: new Date(checked), computedAt: new Date(checked),
+      sourceLineage: { sourceModels: ["LedgerAccount", "JournalEntry", "JournalLine"], sourceRows: values ? 16 : null,
+        currency: values ? currency : null, generation: new Date(checked).toISOString(), coverage: "recorded-postings-only" },
+    }));
+}
+const softwareModel = (rows: PersistedMetricRow[], extra: { selectedPeriod?: string; now?: Date } = {}) =>
+  buildBusinessPerformanceReadModel({ organizationId: "org-a", archetypeId: "software-platform", rows,
+    now: new Date("2026-10-15T12:30:00Z"), ...extra });
+
+describe("software recorded results read model", () => {
+  it("uses explicit UTC ledger months and actual currency, suppressing partial/full percentage comparison", () => {
+    const model = softwareModel([...softwareRows("2026-09", [1000, 100, 900]), softwareRows("2026-10", [1200, 200, 1000])].flat());
+    expect(model).toMatchObject({ status: "ready", periodLabel: "Oct 2026", reportingCurrency: "EUR", periodState: "in-progress" });
+    if (model.status !== "ready") return;
+    expect(model.availablePeriods.map(p => p.key)).toEqual(["2026-10", "2026-09"]);
+    expect(model.metricValues.every(m => m.comparisonDelta === null)).toBe(true);
+    expect(model.metricValues.find(m => m.key === "posted-ledger-income")).toMatchObject({ value: 1200, comparisonValue: 1000, currency: "EUR" });
+  });
+
+  it("retains past source age instead of treating an ended month as forever fresh", () => {
+    expect(softwareModel(softwareRows("2026-09", [1200, 200, 1000], "2026-10-01T01:00:00Z"))).toMatchObject({ status: "ready", freshness: "stale" });
+  });
+
+  it("preserves recorded zero separately from an explicitly unavailable period", () => {
+    const zero = softwareModel(softwareRows("2026-10", [0, 200, -200]));
+    expect(zero.status).toBe("ready");
+    if (zero.status === "ready") expect(zero.metricValues[0]).toMatchObject({ value: 0, availability: "available" });
+    const missing = softwareModel(softwareRows("2026-10", null));
+    expect(missing).toMatchObject({ status: "ready", reportingCurrency: null });
+    if (missing.status === "ready") expect(missing.metricValues.every(m => m.value === null && m.availability === "unavailable")).toBe(true);
+  });
+
+  it("refuses incomplete or mixed saved packs without displaying a partial financial result", () => {
+    const rows = softwareRows("2026-10", [1200, 200, 1000]);
+    expect(softwareModel(rows.slice(0, 2))).toMatchObject({ status: "not-configured", reason: expect.stringMatching(/incomplete|inconsistent/i) });
+    rows[0]!.computedAt = new Date("2026-10-15T13:00:00Z");
+    expect(softwareModel(rows)).toMatchObject({ status: "not-configured", metricValues: [] });
+  });
+
+  it("uses only this pack's history and strips raw extra lineage", () => {
+    const rows = softwareRows("2026-10", [1200, 200, 1000]);
+    rows.forEach(r => { r.sourceLineage = { ...(r.sourceLineage as object), privateMemo: "secret-fixture", sourceId: "private-id" }; });
+    const model = softwareModel([...rows, row("covers", "2028-01-01T00:00:00Z", 20)]);
+    expect(model).toMatchObject({ status: "ready", periodLabel: "Oct 2026" });
+    expect(JSON.stringify(model)).not.toMatch(/secret-fixture|private-id|privateMemo/);
+  });
+
+  it("does not fall back to another period on a malformed software month", () => {
+    expect(softwareModel(softwareRows("2026-10", [1200, 200, 1000]), { selectedPeriod: "2026-13" }))
+      .toMatchObject({ status: "not-configured", metricValues: [] });
+  });
+
+  it("never compares unlike currencies or invents conversion", () => {
+    const rows = [...softwareRows("2026-08", [1000, 100, 900], "2026-10-15T12:00:00Z", "USD"),
+      ...softwareRows("2026-09", [1200, 200, 1000])];
+    const model = softwareModel(rows);
+    expect(model.status).toBe("ready");
+    if (model.status === "ready") expect(model.metricValues.every(m => m.comparisonValue === null && m.comparisonDelta === null)).toBe(true);
+  });
+
+  it("offers the native scoped finance next action when software history is missing", () => {
+    expect(softwareModel([])).toMatchObject({ status: "not-configured", applicable: true,
+      nextAction: { href: "/finance/reports/general-ledger?period=2026-10", label: "Review finance records" } });
+  });
+});
+
 describe("loadBusinessPerformance", () => {
   it("returns an attributed setup state without fabricated metric values", async () => {
     await expect(
@@ -178,7 +251,7 @@ describe("loadBusinessPerformance", () => {
       storefrontConfig: {
         findUnique: vi.fn(async () => ({
           organizationId: "org-platform",
-          archetype: { archetypeId: "software-platform" },
+          archetype: { archetypeId: "hair-salon" },
         })),
         findMany: vi.fn(),
       },
@@ -270,4 +343,34 @@ describe("loadBusinessPerformance", () => {
       where: { organizationId: "org-only" },
     }));
   });
+});
+
+function softwareProviderFixture(role: string | null = "HR-000", active = true) {
+  const db = {
+    user: { findUnique: vi.fn(async () => role === null ? null : ({ isActive: active, isSuperuser: false, automationExpiresAt: null, groups: [{ platformRole: { roleId: role } }] })) },
+    platformSetupProgress: { findUnique: vi.fn(async () => ({ organizationId: "org-a" })) },
+    storefrontConfig: { findUnique: vi.fn(async () => ({ organizationId: "org-a", archetype: { archetypeId: "software-platform" } })), findMany: vi.fn(async () => []) },
+    businessMetricRollup: { findMany: vi.fn(async () => softwareRows("2026-10", [1200, 200, 1000])) },
+  };
+  return db;
+}
+it.each([["HR-500", true], ["HR-200", true], [null, true], ["HR-000", false]] as const)("does not read software financial projections for denied actor %s active=%s", async (role, active) => {
+  const db = softwareProviderFixture(role, active);
+  const result = await createBusinessPerformanceProvider(db as never).load({ userId: "actor" });
+  expect(result).toMatchObject({ status: "not-configured", metricValues: [] });
+  expect(db.businessMetricRollup.findMany).not.toHaveBeenCalled();
+});
+it("reads the actual current owner membership and only its resolved organization's software pack", async () => {
+  const db = softwareProviderFixture();
+  const result = await createBusinessPerformanceProvider(db as never).load({ userId: "owner", organizationId: "org-b" } as { userId: string });
+  expect(result.status).toBe("ready");
+  expect(db.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "owner" } }));
+  expect(db.businessMetricRollup.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organizationId: "org-a" }) }));
+});
+it("immediately labels retained valid results stale after a failed validation attempt without advancing source age", () => {
+  const rows = softwareRows("2026-10", [1200, 200, 1000]);
+  rows.forEach(row => { row.sourceLineage = { ...(row.sourceLineage as object), refreshFailure: { at: "2026-10-15T12:15:00.000Z", kind: "source-unavailable" } }; });
+  const result = softwareModel(rows);
+  expect(result).toMatchObject({ status: "ready", freshness: "stale", asOf: new Date("2026-10-15T12:00:00Z"), refreshFailure: { at: "2026-10-15T12:15:00.000Z" } });
+  if (result.status === "ready") expect(result.metricValues.map(row => row.value)).toEqual([1200, 200, 1000]);
 });

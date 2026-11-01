@@ -1,9 +1,10 @@
 // Single source of truth for which business archetypes the performance-metrics
 // engine can actually produce snapshots for.
 //
-// The engine only has a source loader for hospitality today (loadRestaurantSource
-// in business-metric-rollup.server.ts reads HospitalityResource / ServiceTurn /
-// CapacityAllocation / StorefrontBooking). An install on any other archetype has
+// The engine has restaurant operational and software management-ledger loaders.
+// Keep source families separate in business-metric-rollup.server.ts: the combined
+// applicability set must never feed software contexts to hospitality queries.
+// An install on any other archetype has
 // no rows to read, so the hourly aggregator would scan nothing and the
 // /performance surface would sit at "not computed yet" forever.
 //
@@ -15,7 +16,7 @@
 // BI-F359E1E9: before this, the aggregator was hardcoded to "restaurant" and the
 // surface always implied a snapshot was pending, on installs that would never
 // produce one.
-export const PERFORMANCE_METRIC_ARCHETYPES = ["restaurant"] as const;
+export const PERFORMANCE_METRIC_ARCHETYPES = ["restaurant", "software-platform"] as const;
 
 export type PerformanceMetricArchetype =
   (typeof PERFORMANCE_METRIC_ARCHETYPES)[number];

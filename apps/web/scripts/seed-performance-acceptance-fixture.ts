@@ -2,8 +2,13 @@ import { prisma } from "@dpf/db";
 
 import {
   seedPerformanceAcceptanceFixture,
+  seedSoftwarePerformanceAcceptanceFixture,
   type PerformanceAcceptanceFixtureDatabase,
 } from "../lib/demo/performance-acceptance-fixture";
+
+import { loadEnvironmentClassResolution } from "../lib/install/environment-class";
+import { aggregateBusinessMetrics } from "../lib/performance/business-metric-rollup";
+import { defaultBusinessMetricRollupDeps } from "../lib/performance/business-metric-rollup.server";
 
 function option(name: string): string | null {
   const index = process.argv.indexOf(name);
@@ -26,10 +31,11 @@ async function main() {
   if (!owner || !organizationId) {
     throw new Error("The named owner does not have an authenticated current organization.");
   }
+  const software = process.argv.includes("--software");
   const storefronts = await prisma.storefrontConfig.findMany({
     where: {
       organizationId,
-      archetype: { archetypeId: "restaurant" },
+      archetype: { archetypeId: software ? "software-platform" : "restaurant" },
     },
     select: { id: true },
     take: 2,
@@ -41,6 +47,25 @@ async function main() {
     throw new Error("The owner's current organization has multiple restaurant storefronts; refusing an ambiguous fixture target.");
   }
 
+  if (software) {
+    const scenario = option("--scenario") ?? "populated";
+    if (!["populated", "zero", "empty"].includes(scenario)) throw new Error("Unknown software fixture scenario.");
+    const environment = await loadEnvironmentClassResolution({ readConfig: async key =>
+      (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null });
+    const destination = new URL(process.env.DATABASE_URL ?? "invalid:");
+    const result = await seedSoftwarePerformanceAcceptanceFixture({ database: prisma,
+      organizationId, storefrontId: storefronts[0]!.id, ownerUserId: owner.id,
+      target: { environmentClass: environment.environmentClass, databaseHost: destination.hostname, databaseName: destination.pathname.slice(1) },
+      scenario: scenario as "populated" | "zero" | "empty" });
+    // Persist through the real source reader and existing atomic rollup writer.
+    const deps = defaultBusinessMetricRollupDeps();
+    const aggregation = await aggregateBusinessMetrics({ ...deps, listRestaurantContexts: async () => [],
+      software: { ...deps.software!, listContexts: async () => [{ organizationId, storefrontId: storefronts[0]!.id }] } });
+    const saved = await prisma.businessMetricRollup.findMany({ where: { organizationId,
+      definitionVersion: "software-ledger-v1" }, select: { metricKey: true, value: true, availability: true, computedAt: true }, take: 7 });
+    process.stdout.write(`${JSON.stringify({ ...result, aggregation, saved }, null, 2)}\n`);
+    return;
+  }
   const result = await seedPerformanceAcceptanceFixture({
     database: prisma as unknown as PerformanceAcceptanceFixtureDatabase,
     organizationId,
