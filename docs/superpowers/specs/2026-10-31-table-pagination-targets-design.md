@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Shared table pagination targets
 
 Status: Approved direction; verification pending
