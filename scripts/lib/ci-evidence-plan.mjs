@@ -330,7 +330,7 @@ export function createEvidencePlan(input) {
         tests,
         routes,
       });
-    } else if (kind === "production" && tests.length > 0) {
+    } else if (tests.length > 0) {
       fileDispositions.push({
         path,
         kind,

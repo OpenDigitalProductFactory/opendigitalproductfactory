@@ -95,7 +95,7 @@ export function resolveEffort(input: {
   if (level === "none") return { level, budgetTokens: null, adaptive: false };
 
   const caps = input.capabilities;
-  const adaptive = level === "medium" && caps?.adaptiveThinking === true;
+  const adaptive = caps?.adaptiveThinking === true;
   if (adaptive) return { level, budgetTokens: null, adaptive: true };
 
   return {
@@ -150,7 +150,7 @@ export function expressEffort(
   if (isAnthropic(providerId)) {
     if (decision.adaptive && capabilities?.adaptiveThinking === true) {
       return {
-        settings: { thinking: { type: "adaptive" } },
+        settings: { thinking: { type: "adaptive" }, output_config: { effort: decision.level } },
         extraMaxTokens: 0,
         thinking: true,
         effortUnexpressed: false,

@@ -10,7 +10,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { checkAgentBudget, writeBudgetEvent } from "./budget-gate";
+import { checkAgentBudget, checkAgentBudgetFromRegistry, writeBudgetEvent } from "./budget-gate";
 import { prisma } from "@dpf/db";
 
 function mockTokenUsage(input: number, output: number) {
@@ -51,6 +51,13 @@ describe("checkAgentBudget", () => {
     expect(result.actualTokens).toBe(105_000);
   });
 
+  it("enforces the real registered Critic daily limit instead of silently treating a missing runtime module as unlimited", async () => {
+    mockTokenUsage(200001, 0);
+    expect(await checkAgentBudgetFromRegistry("ux-design-critic")).toMatchObject({
+      status: "rejected", actualTokens: 200001, limitTokens: 200000,
+    });
+    expect(prisma.tokenUsage.aggregate).toHaveBeenCalledOnce();
+  });
   it("returns ok immediately when dailyLimit is 0 (unlimited)", async () => {
     const result = await checkAgentBudget("build-architect", 0);
     expect(result.status).toBe("ok");
