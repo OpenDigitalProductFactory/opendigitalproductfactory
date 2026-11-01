@@ -1,7 +1,8 @@
 import { prisma } from "@dpf/db";
 import { decryptSecret } from "@/lib/credential-crypto";
+import { isActiveDefaultSubscription } from "@/lib/routing/provider-account-candidates";
+export { isActiveDefaultSubscription, isDefaultSubscriptionIdentity } from "@/lib/routing/provider-account-candidates";
 
-type Account = { connectionId: string; providerId: string; organizationId: string | null; authMethod: string; status: string; credentialEntryId: string | null };
 export type ActiveAccountSnapshot = { connectionId: string; providerId: string; credentialEntryId: string; updatedAt: Date;
   credentialRevision: { updatedAt: Date; cachedToken: string | null; refreshToken: string | null } };
 export const ACCOUNT_CHANGED = "Account changed during verification — retry with its current credentials";
@@ -10,17 +11,6 @@ export function matchesCredentialRevision(snapshot: Pick<ActiveAccountSnapshot, 
   return !!credential && credential.id === snapshot.credentialEntryId
     && credential.updatedAt.getTime() === snapshot.credentialRevision.updatedAt.getTime()
     && credential.cachedToken === snapshot.credentialRevision.cachedToken && credential.refreshToken === snapshot.credentialRevision.refreshToken;
-}
-
-export function isDefaultSubscriptionIdentity(providerId: string, connectionId?: string) {
-  return (providerId === "chatgpt" || providerId === "codex") && connectionId === `provider-default-${providerId}`;
-}
-
-/** One eligibility predicate for classification and execution; never grants authority. */
-export function isActiveDefaultSubscription(account: Account | null): account is Account & { credentialEntryId: string } {
-  return !!account && isDefaultSubscriptionIdentity(account.providerId, account.connectionId)
-    && account.organizationId === null && account.status === "active"
-    && ["oauth", "oauth2_authorization_code"].includes(account.authMethod) && !!account.credentialEntryId;
 }
 
 export async function assertActiveAccountSnapshot(snapshot: ActiveAccountSnapshot) {

@@ -21,6 +21,19 @@ export type ProviderAccountCandidateFacts = {
   lastReviewedAt?: Date | null;
 };
 
+type SubscriptionAccount = { connectionId: string; providerId: string; organizationId: string | null; authMethod: string; status: string; credentialEntryId: string | null };
+
+export function isDefaultSubscriptionIdentity(providerId: string, connectionId?: string) {
+  return (providerId === "chatgpt" || providerId === "codex") && connectionId === `provider-default-${providerId}`;
+}
+
+/** Shared account eligibility belongs at the inner routing boundary; it grants no authority. */
+export function isActiveDefaultSubscription(account: SubscriptionAccount | null): account is SubscriptionAccount & { credentialEntryId: string } {
+  return !!account && isDefaultSubscriptionIdentity(account.providerId, account.connectionId)
+    && account.organizationId === null && account.status === "active"
+    && ["oauth", "oauth2_authorization_code"].includes(account.authMethod) && !!account.credentialEntryId;
+}
+
 export class ProviderAccountSelectionChangedError extends Error {
   constructor(public readonly providerId: string, message: string) {
     super(message);
