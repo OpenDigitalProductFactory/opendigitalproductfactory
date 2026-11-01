@@ -53,6 +53,8 @@ COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
+# The integrity-pinned first-party artifact is an install input, not source to rebuild.
+COPY packages/validators/vendor/ ./packages/validators/vendor/
 # pnpm-workspace.yaml `patchedDependencies` names patch files by repo-relative
 # path. pnpm resolves them against the workspace root, so every stage that runs
 # `pnpm install` needs them in the build context — without this COPY the install
@@ -371,6 +373,8 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
 # its devDependencies (prisma CLI, tsx) are runtime executables here, so the
 # install is deliberately NOT --prod. --offline: the pnpm store in this stage
 # already holds every package from the full install above.
+# The root importer also supplies the pinned shared Workroom package to
+# maintenance scripts under /app/apps/web-src that reach shape conformance.
 RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules && \
     pnpm install --frozen-lockfile --offline --filter "@dpf/db..." --config.confirmModulesPurge=false && \
     pnpm --filter @dpf/db exec prisma generate && \
