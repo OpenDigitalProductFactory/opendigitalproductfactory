@@ -74,6 +74,15 @@ describe("golden-test provenance", () => {
     expect(result.traceId).toBe(dispatch.mock.calls[0]![8].traceId);
   });
 
+  it.each(["failed", "incomplete", "content_filter", "max_output_tokens", "length"])("does not score explicitly unfinished output (%s)", async finishReason => {
+    dispatch.mockResolvedValue({ content: "OK", finishReason, truncated: false });
+    expect((await runGoldenTest("local", "selected", fixture)).score).toBeNull();
+  });
+  it("requires verified completion on a Responses calibration even without an owned dispatcher", async () => {
+    dispatch.mockResolvedValue({ content: "OK" });
+    expect((await runGoldenTest("chatgpt", "selected", fixture)).score).toBeNull();
+  });
+
   it.each([false, true])("correlates both bounded retry attempts with the stored result (terminal error=%s)", async terminalError => {
     vi.useFakeTimers();
     dispatch.mockRejectedValueOnce(new InferenceError("limited", "rate_limit", "local"));

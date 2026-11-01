@@ -530,7 +530,7 @@ export async function runDimensionEval(
 
   // BI-91F0E312: an inconclusive cycle measured nothing — bumping evalCount /
   // profileConfidence would dampen the next REAL measurement. lastEvalAt stamps.
-  if (!unsupportedOnly) await prisma.modelProfile.update({
+  if (!unsupportedOnly && !generationIncomplete) await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,

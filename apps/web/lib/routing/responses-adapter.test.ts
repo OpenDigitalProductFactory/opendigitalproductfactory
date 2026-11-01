@@ -178,6 +178,42 @@ describe("responsesAdapter", () => {
       usage: { inputTokens: 4, outputTokens: 8 }, raw: { status } });
   });
 
+  it.each([
+    [{ type: "response.incomplete", response: { id: "r1", status: "completed" } }],
+    [{ type: "response.completed", response: { id: "r1", status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }],
+    [{ type: "response.completed", response: { id: "r1", status: "completed", incomplete_details: { reason: "max_output_tokens" } } }],
+    [{ type: "response.completed", response: { id: "r1", status: "completed" } }, { type: "response.completed", response: { id: "r2", status: "completed" } }],
+    [{ type: "response.incomplete", response: { id: "r1", status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }, { type: "response.completed", response: { id: "r1", status: "completed" } }],
+    [{ type: "response.created", response: { id: "other" } }, { type: "response.completed", response: { id: "r1", status: "completed" } }],
+    [{ type: "response.completed", response: { id: "r1", status: "completed" } }, { type: "response.completed", response: { id: "r1", status: "completed", usage: { output_tokens: 99 } } }],
+  ])("leaves contradictory terminal evidence unverified (%j)", async (...events) => {
+    stubFetchText(events.map(event => `data: ${JSON.stringify({ ...event, response: {
+      output: [{ type: "message", content: [{ type: "output_text", text: "matching answer" }] }],
+      usage: { input_tokens: 4, output_tokens: 8 }, ...event.response } })}`).join("\n") + "\ndata: [DONE]\n");
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt",
+      provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result.finishReason).toBeUndefined();
+    expect(result.truncated).toBeUndefined();
+  });
+
+  it.each(["malformed", "header-conflict", "missing-terminal-payload", "late-delta"])("does not certify a %s stream", async kind => {
+    const terminal = 'data: {"type":"response.completed","response":{"id":"r1","status":"completed","output_text":"answer","usage":{"output_tokens":8}}}\n\n';
+    const stream = kind === "malformed" ? 'data: {broken\n\n' + terminal
+      : kind === "header-conflict" ? 'event: response.incomplete\n' + terminal
+      : kind === "missing-terminal-payload" ? 'data: {"type":"response.completed"}\n\n' + terminal
+      : terminal + 'data: {"type":"response.output_text.delta","delta":"extra"}\n\n';
+    stubFetchText(stream + "data: [DONE]\n");
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt", provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result.finishReason).toBeUndefined(); expect(result.truncated).toBeUndefined();
+  });
+
+  it("accepts consistent repeated terminal evidence and CRLF without inventing missing metadata", async () => {
+    const terminal = { type: "response.completed", response: { id: "r1", output_text: "answer", usage: { input_tokens: 1, output_tokens: 8 } } };
+    stubFetchText([`event: response.completed\r\ndata: ${JSON.stringify(terminal)}`, `event: response.completed\r\ndata: ${JSON.stringify(terminal)}`, "data: [DONE]"].join("\r\n\r\n") + "\r\n");
+    const result = await responsesAdapter.execute(makeRequest({ providerId: "chatgpt", provider: { baseUrl: "https://chatgpt.com/backend-api", headers: {} } }));
+    expect(result).toMatchObject({ finishReason: "completed", truncated: false, responseId: "r1", usage: { outputTokens: 8 } });
+  });
+
   it("uses the OpenAI Responses API for codex providers", async () => {
     stubFetchOk({
       output: [

@@ -53,6 +53,8 @@ export async function runGoldenTest(
       score: null, response: "", error: "No grader is configured; quality is unverified." };
   }
   const traceId = createRoutingTraceId();
+  const executionAdapter = resolveDefaultExecutionAdapter(endpointId);
+  const requireComplete = opts.requireComplete || executionAdapter === "responses";
   const attempt = async (): Promise<TestResult> => {
     const messages = [{ role: "user" as const, content: test.prompt }];
     const result = await (opts.dispatch ?? callProvider)(
@@ -66,7 +68,7 @@ export async function runGoldenTest(
         modelId,
         recipeId: null,
         contractFamily: "model-calibration.dimension",
-        executionAdapter: resolveDefaultExecutionAdapter(endpointId),
+        executionAdapter,
         maxTokens: test.maxTokens ?? 512,
         providerSettings: {},
         toolPolicy: test.tools?.length ? { toolChoice: "auto" } : {},
@@ -76,7 +78,8 @@ export async function runGoldenTest(
       undefined,
       { traceId },
     );
-    if (result.truncated === true || opts.requireComplete && result.finishReason !== "completed") {
+    const explicitlyUnfinished = ["failed", "incomplete", "content_filter", "max_output_tokens", "length"].includes(result.finishReason ?? "");
+    if (result.truncated === true || explicitlyUnfinished || requireComplete && result.finishReason !== "completed") {
       return { testId: test.id, version: test.version, scoring: test.scoring,
         score: null, response: result.content.slice(0, 500), traceId,
         ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
@@ -107,7 +110,7 @@ export async function runGoldenTest(
       } catch (e2) {
         const msg = e2 instanceof Error ? e2.message : String(e2);
         console.error(`[eval-runner] test ${test.id} failed after retry on ${endpointId}/${modelId}: ${msg}`);
-        return { testId: test.id, version: test.version, scoring: test.scoring, score: opts.requireComplete ? null : 0, response: "", error: msg || "unknown error", traceId };
+        return { testId: test.id, version: test.version, scoring: test.scoring, score: requireComplete ? null : 0, response: "", error: msg || "unknown error", traceId };
       }
     }
 
@@ -117,7 +120,7 @@ export async function runGoldenTest(
       testId: test.id,
       version: test.version,
       scoring: test.scoring,
-      score: opts.requireComplete ? null : 0,
+      score: requireComplete ? null : 0,
       response: "",
       error: errorMessage || "unknown error",
       traceId,

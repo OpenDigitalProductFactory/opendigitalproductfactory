@@ -410,7 +410,7 @@ describe("known-incomplete golden calibration", () => {
     expect(result.dimensions.every(d => d.newScore === d.previousScore)).toBe(true);
     const qualityFields = ["reasoning", "codegen", "toolFidelity", "instructionFollowingScore", "structuredOutputScore",
       "conversational", "contextRetention", "supportsToolUse", "capabilities", "profileSource", "profileConfidence",
-      "evalCount", "modelStatus", "retiredAt", "retiredReason"];
+      "evalCount", "lastEvalAt", "modelStatus", "retiredAt", "retiredReason"];
     for (const update of evalState.profileUpdates) {
       for (const field of qualityFields) expect(update).not.toHaveProperty(field);
     }

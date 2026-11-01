@@ -10,6 +10,7 @@ import { formatMessageForResponses } from "./provider-message-format";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { buildResponsesUrl, isChatGptBackend } from "./responses-contract";
 import { isReassessmentExecutionError } from "./reassessment-execution-scope";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 type ResponsesOutputItem =
   | {
@@ -100,26 +101,51 @@ async function readResponsesPayload(
   res: Response,
   providerId: string,
   baseUrl: string,
-): Promise<ResponsesPayload> {
+): Promise<{ data: ResponsesPayload; terminalEvidenceValid: boolean }> {
   if (!isChatGptBackend(providerId, baseUrl)) {
-    return await res.json() as ResponsesPayload;
+    return { data: await res.json() as ResponsesPayload, terminalEvidenceValid: true };
   }
 
   const rawText = await res.text();
   const lines = rawText.split("\n");
   let lastTerminal: Record<string, unknown> | null = null;
   let lastDelta = "";
+  let terminalEvidenceValid = true;
+  let terminalFingerprint: string | undefined;
+  let responseId: string | undefined;
+  let declaredEvent: string | undefined;
   // Collect function call argument deltas keyed by output_index
   const funcCallDeltas = new Map<string, { callId: string; name: string; args: string }>();
 
-  for (const line of lines) {
-    if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line) { declaredEvent = undefined; continue; }
+    if (line.startsWith("event:")) { declaredEvent = line.slice(6).trim(); continue; }
+    if (!line.startsWith("data:")) continue;
+    const eventData = line.slice(5).trimStart();
+    if (!eventData || eventData === "[DONE]") continue;
     try {
-      const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
-      if (["response.completed", "response.incomplete", "response.failed"].includes(String(parsed.type)) && parsed.response) {
-        const terminal = parsed.response as Record<string, unknown>;
-        lastTerminal = { ...terminal, status: typeof terminal.status === "string"
-          ? terminal.status : String(parsed.type).slice("response.".length) };
+      const parsed = JSON.parse(eventData) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) { terminalEvidenceValid = false; continue; }
+      if (declaredEvent && declaredEvent !== parsed.type) terminalEvidenceValid = false;
+      const response = parsed.response && typeof parsed.response === "object" && !Array.isArray(parsed.response)
+        ? parsed.response as Record<string, unknown> : undefined;
+      const eventResponseId = response?.id ?? parsed.response_id;
+      if (typeof eventResponseId === "string" && eventResponseId) {
+        if (responseId && responseId !== eventResponseId) terminalEvidenceValid = false;
+        responseId ??= eventResponseId;
+      }
+      const terminalEvent = ["response.completed", "response.incomplete", "response.failed"].includes(String(parsed.type));
+      if (lastTerminal && !terminalEvent && String(parsed.type).endsWith(".delta")) terminalEvidenceValid = false;
+      if (terminalEvent) {
+        if (!response) { terminalEvidenceValid = false; continue; }
+        const status = String(parsed.type).slice("response.".length);
+        if (response.status !== undefined && response.status !== status) terminalEvidenceValid = false;
+        const terminal = { ...response, status: response.status ?? status };
+        const fingerprint = canonicalJson(terminal);
+        if (terminalFingerprint && terminalFingerprint !== fingerprint) terminalEvidenceValid = false;
+        terminalFingerprint ??= fingerprint;
+        lastTerminal = terminal;
       }
       if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
         lastDelta += parsed.delta;
@@ -138,7 +164,8 @@ async function readResponsesPayload(
         if (existing) existing.args += parsed.delta;
       }
     } catch {
-      // Ignore malformed SSE lines and keep scanning for the completed payload.
+      // Retain readable output, but malformed protocol data cannot prove completion.
+      terminalEvidenceValid = false;
     }
   }
 
@@ -189,12 +216,12 @@ async function readResponsesPayload(
       return false;
     });
     const useCompleted = hasRealContent;
-    return {
+    return { terminalEvidenceValid, data: {
       ...lastTerminal,
       output: useCompleted ? completedOutput : syntheticOutput,
       output_text: useCompleted ? (lastTerminal as { output_text?: string }).output_text : (lastDelta || undefined),
       usage: (lastTerminal as ResponsesPayload).usage,
-    } as ResponsesPayload;
+    } as ResponsesPayload };
   }
 
   // No completed event — return synthetic output only
@@ -205,10 +232,10 @@ async function readResponsesPayload(
     } as unknown as ResponsesOutputItem);
   }
 
-  return {
+  return { terminalEvidenceValid: false, data: {
     output: syntheticOutput,
     output_text: lastDelta || undefined,
-  } as ResponsesPayload;
+  } as ResponsesPayload };
 }
 
 export const responsesAdapter: ExecutionAdapterHandler = {
@@ -317,11 +344,13 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     }
     const inferenceMs = Date.now() - startMs;
 
-    const data = await readResponsesPayload(res, providerId, provider.baseUrl);
+    const { data, terminalEvidenceValid } = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
     const status = typeof data.status === "string" ? data.status : undefined;
     const incompleteReason = typeof data.incomplete_details?.reason === "string" ? data.incomplete_details.reason : undefined;
-    const termination = status ? { finishReason: status === "incomplete" ? incompleteReason ?? status : status,
+    const contradictoryCompletion = status === "completed" && (data.incomplete_details != null
+      || (data as Record<string, unknown>).error != null);
+    const termination = terminalEvidenceValid && !contradictoryCompletion && status ? { finishReason: status === "incomplete" ? incompleteReason ?? status : status,
       truncated: status === "incomplete" && incompleteReason === "max_output_tokens" } : {};
 
     // Log all responses to diagnose tool call issues
