@@ -84,3 +84,14 @@ it.each(["agent",null] as const)("records an explicit human confirmation even wh
  fireEvent.click(kept);await waitFor(()=>expect(actions.write).toHaveBeenCalledExactlyOnceWith({messageId:"answer",value:true,expectedRevision:4}));
  await screen.findByText("Human feedback");
 });
+
+
+it("does not submit an empty clear when that control advertises disabled",async()=>{
+ mount();const clear=await screen.findByRole("button",{name:"Clear feedback"});await waitFor(()=>expect(screen.getByRole("button",{name:"Kept"}).getAttribute("aria-disabled")).toBe("false"));
+ expect(clear.getAttribute("aria-disabled")).toBe("true");fireEvent.click(clear);expect(actions.write).not.toHaveBeenCalled();
+});
+it("allows an explicit availability recheck when asynchronous telemetry has not arrived yet",async()=>{
+ actions.read.mockResolvedValueOnce({ok:true,data:{...state,available:false,canWrite:false,unavailableReason:"unavailable"}}).mockResolvedValue({ok:true,data:state});
+ mount();await screen.findByText("Feedback unavailable for this answer.");fireEvent.click(screen.getByRole("button",{name:"Check again"}));
+ await waitFor(()=>expect(screen.getByRole("button",{name:"Kept"}).getAttribute("aria-disabled")).toBe("false"));expect(actions.read).toHaveBeenCalledTimes(2);expect(actions.write).not.toHaveBeenCalled();
+});

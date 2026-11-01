@@ -68,7 +68,7 @@ export function ResponseFeedback({ messageId, eligible, initialState }: { messag
 
   // The server owns idempotence: the same choice may be a new human judgment over an agent choice.
   async function save(value: boolean | null) {
-    if (busyRef.current || error || !state?.available || !state.canWrite) return;
+    if (busyRef.current || error || !state?.available || !state.canWrite || (value === null && state.value === null)) return;
     const current = generation.current;
     busyRef.current = true; setBusy(true); setNotice("savingFeedback");
     try {
@@ -100,7 +100,7 @@ export function ResponseFeedback({ messageId, eligible, initialState }: { messag
       <button ref={keptRef} data-surface-node-id="feedback.keep" type="button" className={BUTTON} aria-pressed={state?.value === true} aria-disabled={blocked} onClick={() => void save(true)}>{t("kept")}</button>
       <button data-surface-node-id="feedback.revise" type="button" className={BUTTON} aria-pressed={state?.value === false} aria-disabled={blocked} onClick={() => void save(false)}>{t("needsRevision")}</button>
       <button data-surface-node-id="feedback.clear" type="button" className={BUTTON} aria-disabled={blocked || state?.value == null} onClick={() => void save(null)}>{t("clearFeedback")}</button>
-      {error && <button data-surface-node-id="feedback.reload" type="button" className={BUTTON} aria-disabled={busy} onClick={() => void checkCurrent()}>{t("checkFeedback")}</button>}
+      {(error || state?.available === false) && <button data-surface-node-id="feedback.reload" type="button" className={BUTTON} aria-disabled={busy} onClick={() => void checkCurrent()}>{t("checkFeedback")}</button>}
     </div>
     <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="mt-1 text-xs text-[var(--dpf-muted)]">{t(notice)}</p>
     {state && (state.source || state.value !== null) && <p className="mt-1 text-xs text-[var(--dpf-muted)]">{state.source === "human" ? t("humanFeedback") : state.source === "agent" ? t("agentFeedback") : t("unattributedFeedback")}</p>}
