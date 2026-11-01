@@ -1,6 +1,6 @@
 /** Focused served regression in the disposable quota-verification runtime only. */
 import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, mkdirSync, openSync, readSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser } from "@playwright/test";
@@ -12,18 +12,37 @@ import { publicClientActionExport } from "./public-client-action-reference";
 
 function check(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
+/** Inspect and read one descriptor; a changed pathname cannot substitute its contents. */
+function readPublicClientFile(path: string, budget: { remaining: number }): string | null {
+  if (constants.O_NOFOLLOW === undefined || budget.remaining <= 0) return null;
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || !Number.isSafeInteger(stat.size) || stat.size < 0
+      || stat.size > Math.min(8 * 1024 * 1024, budget.remaining)) return null;
+    const buffer = Buffer.alloc(Math.min(stat.size + 1, budget.remaining));
+    let offset = 0;
+    while (offset < buffer.length) {
+      const count = readSync(fd, buffer, offset, buffer.length - offset, null);
+      if (count === 0) return buffer.subarray(0, offset).toString("utf8");
+      offset += count; budget.remaining -= count;
+    }
+    // Growth or an exhausted budget leaves completeness unknown; do not parse a prefix.
+    return null;
+  } finally { closeSync(fd); }
+}
+
 /** Resolve only a public client action proxy; never read server bundles/manifests. */
-function publicActionReference(id: string | undefined) {
+export function publicActionReference(id: string | undefined) {
   if (!id || !/^[a-f0-9]{40,64}$/.test(id)) return null;
   const directory = resolve(dirname(fileURLToPath(import.meta.url)), "../.next/static/chunks");
   try {
-    let bytes = 0;
+    const budget = { remaining: 32 * 1024 * 1024 };
     for (const file of readdirSync(directory, { recursive: true }).filter((entry): entry is string => typeof entry === "string" && entry.endsWith(".js")).slice(0, 2000)) {
-      const path = resolve(directory, file), stat = lstatSync(path);
-      if (!stat.isFile() || stat.size > 8 * 1024 * 1024) continue;
-      bytes += stat.size;
-      if (bytes > 32 * 1024 * 1024) break;
-      const content = readFileSync(path, "utf8"), index = content.indexOf(id);
+      if (budget.remaining <= 0) break;
+      const content = readPublicClientFile(resolve(directory, file), budget);
+      if (content === null) continue;
+      const index = content.indexOf(id);
       if (index < 0) continue;
       const tail = content.slice(index + id.length, index + id.length + 240);
       return { id, publicChunk: basename(file), publicProxyExportName: publicClientActionExport(content, id),
