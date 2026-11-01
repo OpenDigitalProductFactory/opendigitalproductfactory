@@ -108,6 +108,17 @@ review of its pins. Mailparser and ImapFlow also pin shared MIME dependencies
 exactly, so update them together when a parser bump would retain both versions.
 Check the resulting graph against the existing SBOM budgets before publication.
 
+Inngest 4.26 allows auto-instrumentation `>=0.75 <1` while retaining SDK 2 and
+exporters below 0.300. Its parent-scoped pin to auto-instrumentation 0.81.2
+keeps those supported ranges on one telemetry generation. Narrow child pins
+resolve its declared SDK-2 peer and retain the existing module-lexer generation
+within the import hook's supported range. API 1.9.1 stays until the SDK peers
+support API 1.10. Remove these compatibility pins when
+Inngest migrates its telemetry dependencies together; do not flatten SDK 2 and
+SDK 3 with a global override or raise the budget to hide the split.
+Vitest's telemetry peer also stays on 1.9.1 within its declared `^1.9.0` range,
+so test instrumentation shares the runtime API. Track removal with BI-5262A49E.
+
 The catalog is safe for the service images because every image that installs from
 this workspace copies `pnpm-workspace.yaml` beside the lockfile before
 `pnpm install --frozen-lockfile` (root `Dockerfile`, `services/adp`,
