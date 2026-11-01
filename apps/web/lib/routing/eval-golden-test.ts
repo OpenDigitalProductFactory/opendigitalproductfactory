@@ -19,7 +19,7 @@ function scoreResponse(
   test: GoldenTest,
   content: string,
   toolCalls: Array<{ name: string; arguments: Record<string, unknown> }>,
-): number {
+): number | null {
   switch (test.scoring) {
     case "exact":
       return scoreExact(content, test.expectedOutput ?? "");
@@ -34,16 +34,9 @@ function scoreResponse(
     case "retrieval":
       return scoreRetrieval(content, test.expectedOutput ?? "");
     case "orchestrator":
-      // KNOWN GAP: Orchestrator scoring requires a separate grading call to a different
-      // endpoint (to avoid self-evaluation). This is not implemented in Phase 6 — the
-      // conversational dimension will score neutral (5/10 = 50/100) until orchestrator
-      // grading is added. This is acceptable because:
-      // 1. Conversational quality is the least routing-critical dimension
-      // 2. Production observations will nudge the score over time
-      // 3. The infrastructure for cross-endpoint grading needs the eval runner itself to be stable first
-      return 5;
+      return null;
     default:
-      return 0;
+      return null;
   }
 }
 
@@ -52,11 +45,19 @@ export async function runGoldenTest(
   endpointId: string,
   modelId: string,
   test: GoldenTest,
+  opts: { dispatch?: typeof callProvider; requireComplete?: boolean } = {},
 ): Promise<TestResult> {
+  // No grader means no observation to score and no reason to spend inference.
+  if (test.scoring === "orchestrator") {
+    return { testId: test.id, version: test.version, scoring: test.scoring,
+      score: null, response: "", error: "No grader is configured; quality is unverified." };
+  }
   const traceId = createRoutingTraceId();
+  const executionAdapter = resolveDefaultExecutionAdapter(endpointId);
+  const requireComplete = opts.requireComplete || executionAdapter === "responses";
   const attempt = async (): Promise<TestResult> => {
     const messages = [{ role: "user" as const, content: test.prompt }];
-    const result = await callProvider(
+    const result = await (opts.dispatch ?? callProvider)(
       endpointId,
       modelId,
       messages,
@@ -67,7 +68,7 @@ export async function runGoldenTest(
         modelId,
         recipeId: null,
         contractFamily: "model-calibration.dimension",
-        executionAdapter: resolveDefaultExecutionAdapter(endpointId),
+        executionAdapter,
         maxTokens: test.maxTokens ?? 512,
         providerSettings: {},
         toolPolicy: test.tools?.length ? { toolChoice: "auto" } : {},
@@ -77,10 +78,12 @@ export async function runGoldenTest(
       undefined,
       { traceId },
     );
-    if (result.truncated === true) {
+    const explicitlyUnfinished = ["failed", "incomplete", "content_filter", "max_output_tokens", "length"].includes(result.finishReason ?? "");
+    if (result.truncated === true || explicitlyUnfinished || requireComplete && result.finishReason !== "completed") {
       return { testId: test.id, version: test.version, scoring: test.scoring,
-        score: null, response: result.content.slice(0, 500), traceId, truncated: true,
-        error: "Golden test output was truncated; quality is unverified." };
+        score: null, response: result.content.slice(0, 500), traceId,
+        ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
+        error: "Golden test output was truncated or completion is unverified; quality is unverified." };
     }
     const score = scoreResponse(test, result.content, result.toolCalls ?? []);
     return {
@@ -88,6 +91,7 @@ export async function runGoldenTest(
       version: test.version,
       scoring: test.scoring,
       score,
+      ...(score === null ? { error: "No implemented grader; quality is unverified." } : {}),
       response: result.content.slice(0, 500),
       traceId,
       ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
@@ -106,7 +110,7 @@ export async function runGoldenTest(
       } catch (e2) {
         const msg = e2 instanceof Error ? e2.message : String(e2);
         console.error(`[eval-runner] test ${test.id} failed after retry on ${endpointId}/${modelId}: ${msg}`);
-        return { testId: test.id, version: test.version, scoring: test.scoring, score: 0, response: "", error: msg || "unknown error", traceId };
+        return { testId: test.id, version: test.version, scoring: test.scoring, score: requireComplete ? null : 0, response: "", error: msg || "unknown error", traceId };
       }
     }
 
@@ -116,7 +120,7 @@ export async function runGoldenTest(
       testId: test.id,
       version: test.version,
       scoring: test.scoring,
-      score: 0,
+      score: requireComplete ? null : 0,
       response: "",
       error: errorMessage || "unknown error",
       traceId,

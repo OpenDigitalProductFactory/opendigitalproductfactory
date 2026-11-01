@@ -38,6 +38,8 @@ type TestRun = {
   scenariosFailed: number;
   avgScore: number | null;
   results: {
+    /** Canonical run explanation, including partial measurement or unknown disposition. */
+    summary?: string;
     /** Dimension evaluations record scores on the model quality 0–100 scale. */
     dimensions?: unknown[];
     modelId?: string;
@@ -309,6 +311,10 @@ export default function EndpointPerformancePanel({
                       </span>
                     )}
                   </div>
+
+                  {typeof tr.results?.summary === "string" && tr.results.summary && (
+                    <p className="mt-2 text-xs text-[var(--dpf-muted)]">{tr.results.summary}</p>
+                  )}
 
                   {/* Probe details */}
                   {probes.length > 0 && (

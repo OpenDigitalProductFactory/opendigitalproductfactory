@@ -159,7 +159,7 @@ const DIMENSIONS: Array<{ key: keyof RoutingProfileData; label: string }> = [
 
 const SOURCE_LABELS: Record<string, string> = {
   seed:       "Seed data",
-  evaluated:  "Evaluated",
+  evaluated:  "Measurements",
   production: "Production observations",
 };
 
