@@ -130,6 +130,9 @@
     "/finance/reports": [
       "docs/user-guide/finance/reporting-and-close.md"
     ],
+    "/finance/reports/general-ledger": [
+      "docs/user-guide/workspace/performance.md"
+    ],
     "/finance/revenue": [
       "docs/user-guide/finance/accounts-receivable.md"
     ],
@@ -150,6 +153,9 @@
     ],
     "/ops/self-upgrade": [
       "docs/user-guide/operations/self-upgrade.md"
+    ],
+    "/performance": [
+      "docs/user-guide/workspace/performance.md"
     ],
     "/platform": [
       "docs/user-guide/platform/index.md"
@@ -440,6 +446,9 @@
     ],
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
+    "apps/web/components/performance/BusinessPerformanceDashboard.tsx": [
+      "docs/user-guide/workspace/performance.md"
     ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -907,6 +916,9 @@
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
+    "apps/web/lib/finance/ledger-service.ts": [
+      "docs/user-guide/workspace/performance.md"
+    ],
     "apps/web/lib/founder-review/queue.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
@@ -1226,8 +1238,12 @@
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
+    "apps/web/lib/performance/business-metric-rollup.ts": [
+      "docs/user-guide/workspace/performance.md"
+    ],
     "apps/web/lib/performance/business-performance-provider.ts": [
-      "docs/architecture/operations-hot-path.md"
+      "docs/architecture/operations-hot-path.md",
+      "docs/user-guide/workspace/performance.md"
     ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
@@ -3028,6 +3044,10 @@
     ],
     "docs/user-guide/workspace/index.md": [
       "/workspace"
+    ],
+    "docs/user-guide/workspace/performance.md": [
+      "/finance/reports/general-ledger",
+      "/performance"
     ]
   },
   "docToCode": {
@@ -4358,6 +4378,12 @@
       "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx",
       "apps/web/lib/work-management/room-types.ts",
       "apps/web/lib/work-management/workspace-case-loader.ts"
+    ],
+    "docs/user-guide/workspace/performance.md": [
+      "apps/web/components/performance/BusinessPerformanceDashboard.tsx",
+      "apps/web/lib/finance/ledger-service.ts",
+      "apps/web/lib/performance/business-metric-rollup.ts",
+      "apps/web/lib/performance/business-performance-provider.ts"
     ],
     "docs/user-guide/workspace/supported-file-formats.md": [
       "apps/web/lib/shared/file-parsers.ts",
