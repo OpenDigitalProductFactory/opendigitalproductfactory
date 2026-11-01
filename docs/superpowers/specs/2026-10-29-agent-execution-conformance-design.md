@@ -320,3 +320,12 @@ public/internal negative and refuses an external target before another write.
 This remains synthetic test input, never evidence that a real provider may
 receive confidential business mail. Cleanup in413065 completed with verified
 provider settlement and no secondary resource errors.
+
+Run41307884215 reached the synthetic provider, retained its capacity wait through
+a duplicate delivery and reload, then saved the expected answer on the same job.
+It failed the original-metadata equality assertion before result provenance,
+recurring-run, terminal-duplicate and final isolation assertions completed.
+Four provider requests, zero rejected requests and completed fixture/resource
+cleanup are recorded; this is not an acceptance pass. Preserve the full equality
+assertion and retain both synthetic metadata observations before it on the next
+run so the changed fields can be diagnosed without guessing or relaxing scope.

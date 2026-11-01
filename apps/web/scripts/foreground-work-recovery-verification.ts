@@ -133,6 +133,10 @@ export async function verifyForegroundRecovery() {
     };
     const waiting = await until(({ row, progress }) => row.status === "input-required" && isRecord(progress.resourceWait), 90_000);
     const originalMetadata = waiting.row.a2aMetadata;
+    // This isolated fixture contains only synthetic request/owner data. Retain both
+    // observations before asserting so a failed invariant has inspectable evidence.
+    evidence.requestMetadataBeforeRecovery = originalMetadata;
+    write();
     const savedRequest = await prisma.agentMessage.findUniqueOrThrow({ where: { id: receipt.userMessageId } });
     check(savedRequest.taskRunId === taskRunId && savedRequest.threadId === requestData.threadId && savedRequest.content === prompt,
       "The stored request is not associated with its acknowledged job");
@@ -147,6 +151,8 @@ export async function verifyForegroundRecovery() {
     evidence.wait = { observedAt: waitObservedAt.toISOString(), progress: reloaded.progress, reloadRetained: true, duplicateRetained: true };
     transport.recover(); // No further client submission until the saved result exists.
     const result = await until(({ row, progress }) => row.status === "completed" && typeof progress.resultMessageId === "string", 7 * 60_000);
+    evidence.requestMetadataAfterRecovery = result.row.a2aMetadata;
+    write();
     check(JSON.stringify(result.row.a2aMetadata) === JSON.stringify(originalMetadata), "Recovery changed the original request authority or deadline");
     const message = await prisma.agentMessage.findUniqueOrThrow({ where: { id: String(result.progress.resultMessageId) } });
     const digest = createHash("sha256").update(message.content).digest("hex");
