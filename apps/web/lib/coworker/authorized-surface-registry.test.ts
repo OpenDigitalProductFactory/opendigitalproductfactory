@@ -1,6 +1,6 @@
+import { describe, expect, it, vi } from "vitest";
 const feedback = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock("@/lib/routing/response-feedback", () => ({ getResponseFeedback: feedback.read }));
-import { describe, expect, it, vi } from "vitest";
 
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
