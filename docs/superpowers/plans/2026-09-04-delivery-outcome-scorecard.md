@@ -42,6 +42,38 @@ status: draft
 |---|---|---|---|---|---|---|
 | Outcome projection, bounded adapter, and Build Work scorecard | BI-69803ACC | OBJ-DOS-001..004; AC-DOS-001..008 | design §§Projection contract, UI contract | raw facts → observation → cohort → report-kit view | focused unit/UI tests, typecheck, prose/style guards, route sweep, protected CI | No — one integrated operator outcome |
 
+## Traceability correction checkpoint — 2026-10-31
+
+The native writer resolved the published plan at 89b08f33c6063dba8154c435650625ccc57c417d
+then refused `traceability-incomplete`. The quotations and explicit references
+below correct that content omission. The historical blocked receipt above is
+retained; a current coverage receipt must still be recorded against the newly
+published immutable plan. No coverage or acceptance pass is claimed here.
+
+## Original item acceptance (verbatim)
+
+The current medium-item body is the acceptance source. These seven statements
+are quoted without narrowing the original request. Source limitations in the
+retained design remain explicit and require independent acceptance; a coverage
+receipt does not certify measured telemetry or successful delivery.
+
+- Report campaign and slice counts for claimed→first commit→PR open→review-ready→merge→verified, including p50/p90 cycle and wait time.
+- Report first-pass protected-check rate, blocking findings per kLOC, post-open commits, superseded/abandoned work, reopen/regression rate, and verified outcome completion.
+- Report model/tool tokens and cost where providers expose them, tool calls, non-progress calls, lease wait, retries, human interventions, takeovers, and install/resource-lane utilization.
+- Provide normalized views by model, effort/profile, work kind, risk tier, repository/package breadth, installation, and campaign; never rank on LOC or PR count alone.
+- Every number links to its cohort definition and underlying Workrooms/PRs; missing telemetry is explicit.
+- Before/after investment decisions use fixed cohorts and confidence notes; Theo's transcript numbers remain an external anecdotal benchmark, not a DPF baseline.
+- The UI uses report-kit, plain labels, bounded filters/searchable pickers, accessible charts/tables, and explicit loading/partial/stale/error states.
+
+## Explicit four-way references
+
+| Leg | References |
+|---|---|
+| Requirements | OBJ-DOS-001, OBJ-DOS-002, OBJ-DOS-003, OBJ-DOS-004 |
+| Contract | DeliveryOutcomeObservation@1; Projection contract; UI contract |
+| Flow | raw facts → observation → cohort → report-kit view |
+| Verification | AC-DOS-001, AC-DOS-002, AC-DOS-003, AC-DOS-004, AC-DOS-005, AC-DOS-006, AC-DOS-007, AC-DOS-008; Phase 5 — functional and protected verification |
+
 ## Change-impact contract
 
 The Workroom contract is resolved for 12 claimed paths. Before implementation:
