@@ -32,6 +32,7 @@ import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-cap
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
 import { loadMailroomItemAttentionItems } from "./sources/mailroom-item";
 import { loadContributionSetupItems } from "./sources/contribution-setup";
+import { loadOrganizationDirectionItems } from "./sources/organization-direction";
 import { loadBusinessJourneyItems } from "./sources/business-journey";
 import {
   loadOutboundItems,
@@ -148,6 +149,7 @@ export function attentionSourceLoaders(
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     { source: "mailroom-item", load: () => loadMailroomItemAttentionItems(db) },
     { source: "contribution-setup", load: () => loadContributionSetupItems(db) },
+    { source: "organization-direction", load: () => loadOrganizationDirectionItems(db) },
     {
       // Pure registry arithmetic — no query, so it costs nothing per load. The
       // clock is the measurement clock: real time in production, the pinned

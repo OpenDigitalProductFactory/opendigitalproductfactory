@@ -159,8 +159,22 @@ async function evaluateProfessionDecision(
       })
     : null;
 
+  // The instance's direction is the prime context a craft decision serves
+  // (BI-8AB6B4F7): record which version it read, or that none is recorded.
+  const { directionLedgerFields, loadOrganizationDirection } = await import(
+    "@/lib/organization-direction/direction"
+  );
+  const directionOrg = await prisma.organization.findFirst({ select: { id: true } }).catch(() => null);
+  const direction = directionOrg
+    ? await loadOrganizationDirection(
+        prisma as unknown as Parameters<typeof loadOrganizationDirection>[0],
+        directionOrg.id,
+      ).catch(() => null)
+    : null;
+
   const decision = await evaluateProfessionDecisionGate({
     db: prisma,
+    outcomePayloadExtra: directionLedgerFields(direction),
     agentIdentity: {
       agentId: agent?.agentId ?? context?.agentId ?? null,
       agentName: agent?.name ?? null,
