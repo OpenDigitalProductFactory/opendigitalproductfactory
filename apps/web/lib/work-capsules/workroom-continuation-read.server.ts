@@ -4,8 +4,8 @@ import { iterationOf, markedStageKeys, readStoredDriveMarking, stageToken } from
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { isRecord } from "@/lib/shared/coerce";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
-import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
-import { buildContinuationBrief, stageBriefInputFromDefinition, type ContinuationBriefInput,
+import { countTokens } from "@/lib/tak/context-arbitrator";
+import { buildContinuationBrief, CONTINUATION_BRIEF_MAX_TOKENS, stageBriefInputFromDefinition, type ContinuationBriefInput,
   type ContinuationBriefResult, type ContinuationAdvisoryCheckpoint } from "@/lib/work-management/stage-briefing";
 import { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
@@ -175,7 +175,9 @@ export async function readWorkroomContinuation(
           reconciliationRequired: Boolean(checkpoint) || reconcileCheckpoint, deferred: rendered.deferred, activities: rows,
           activityCoverage: { complete: false, windowLimit: 8, returned: rows.length,
             lookup: { toolName: "get_workroom", arguments: { capsuleId, activityMode: "bounded" } } } } });
-      const fits = () => !clampToolResultForModel(result(), { toolName: "get_workroom" }).truncated;
+      // Budget the complete response independently of a consumer's model window.
+      // A smaller actual consumer cap must refuse the assignment as a whole.
+      const fits = () => countTokens(JSON.stringify(result())) <= CONTINUATION_BRIEF_MAX_TOKENS;
       // Whole optional metadata records are deferred to the existing bounded reader.
       while (rows.length && !fits()) rows.pop();
       if (!fits() && rendered.brief.shapeDescription) {

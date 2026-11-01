@@ -60,6 +60,11 @@ billing usage. An optional shape description can be deferred to its versioned
 reference. Mandatory overflow refuses dispatch without advancing the stage or
 claiming an execution result; unaffected graph branches may still proceed.
 
+The external reader applies the same estimate to its complete response. A
+consumer can have a smaller output allowance; its output guard then returns a
+whole-response refusal without a partial assignment or continuation version.
+The reader does not inherit the generic unknown-window allowance.
+
 The existing `get_workroom` tool accepts `continuationMode: "bounded"` for a fresh
 external session. An exact `continuationTaskId` selects that task's checkpoint;
 `continuationStageKey` selects a current manual branch when no scheduled task is

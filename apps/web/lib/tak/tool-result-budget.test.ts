@@ -29,6 +29,93 @@ describe("resolveToolResultCharCap", () => {
 });
 
 describe("clampToolResultForModel", () => {
+  const continuationResult = (objective = "Retain this complete assignment") => ({
+    success: true,
+    message: "Recorded facts only; revalidate before effects.",
+    data: {
+      continuationVersion: "a".repeat(64),
+      continuation: {
+        capsuleId: "WC-CONTINUATION",
+        roomObjective: objective,
+        identity: { taskId: null, runKey: null, cycleKey: null, iteration: null },
+        source: { repositoryFullName: "example/platform", headSha: "b".repeat(40) },
+        state: { status: "active", nextAction: "Verify the recorded outcome before repeating work." },
+        outcome: "unknown",
+        replay: "not-authorized-by-brief",
+      },
+      sourceState: "current",
+      reconciliationRequired: false,
+    },
+  });
+
+  it.each([
+    { name: "default", maxChars: undefined, objectiveChars: 4_000 },
+    { name: "window-limited", maxChars: resolveToolResultCharCap(24_576), objectiveChars: 10_000 },
+  ])("refuses the whole continuation under the $name consumer cap without a tool name", ({ maxChars, objectiveChars }) => {
+    const out = clampToolResultForModel(continuationResult("x".repeat(objectiveChars)), { maxChars });
+    expect(out.truncated).toBe(true);
+    expect(out.text.length).toBeLessThanOrEqual(maxChars ?? DEFAULT_TOOL_RESULT_CHAR_CAP);
+    expect(JSON.parse(out.text)).toMatchObject({ success: false, error: "continuation_budget_exceeded" });
+    expect(out.text).not.toContain("continuationVersion");
+    expect(out.text).not.toContain("WC-CONTINUATION");
+    expect(out.text).not.toContain("nextAction");
+  });
+
+  it("preserves the complete continuation and its version when the explicit cap fits", () => {
+    const result = continuationResult("x".repeat(5_000));
+    const full = `${result.message}\n${JSON.stringify(result.data)}`;
+    const out = clampToolResultForModel(result, { maxChars: full.length });
+    expect(out.text).toBe(full);
+    expect(out.truncated).toBe(false);
+    expect(out.originalChars).toBe(full.length);
+  });
+
+  it.each(["provenance", "mask", "provenance-and-mask"] as const)("counts %s overhead before accepting a complete continuation", (overhead) => {
+    const result = continuationResult(`${"x".repeat(600)} ada@example.com`);
+    const full = `${result.message}\n${JSON.stringify(result.data)}`;
+    const decision: DataPolicyDecision = {
+      decisionId: "decision-continuation-mask", organizationId: "org-test", inputHash: "input",
+      effect: "allow-with-obligations", obligations: [{ kind: "mask", profileId: "default-confidential" }],
+      matchedPolicyVersions: ["confidential-projection-mask@1"], assetVersion: "a1",
+      classificationVersion: "c1", authorityVersion: "auth1",
+      explanationCode: "confidential-masked-before-projection", replay: "single-use",
+    };
+    const labelled = overhead !== "mask";
+    const masked = overhead !== "provenance";
+    const out = clampToolResultForModel(result, {
+      maxChars: full.length,
+      ...(labelled ? { provenance: { trust: "untrusted" as const, source: "authored" as const } } : {}),
+      ...(masked ? { contextMask: { decision, detailUse: "replaceable" as const, matches: [{
+        dataClass: "customer-records" as const, path: "data.continuation.roomObjective",
+        reason: "contact-detail", confidence: "deterministic" as const,
+      }] } } : {}),
+    });
+    expect(out.truncated).toBe(true);
+    expect(out.text.length).toBeLessThanOrEqual(full.length);
+    const refusal = labelled ? out.text.slice(out.text.indexOf("\n") + 1) : out.text;
+    expect(JSON.parse(refusal)).toMatchObject({ success: false, error: "continuation_budget_exceeded" });
+    expect(out.text).not.toContain("continuationVersion");
+    expect(out.text).not.toContain("WC-CONTINUATION");
+    expect(out.text).not.toContain("ada@example.com");
+    if (masked) expect(out.rehydrationHandle).toMatch(/^rehydration_/);
+  });
+
+  it.each([0, 1, 2, 20])("never leaks a partial continuation into a %i-character cap", (maxChars) => {
+    const out = clampToolResultForModel(continuationResult(), { maxChars });
+    expect(out.truncated).toBe(true);
+    expect(out.text).toBe(maxChars >= 2 ? "{}" : "");
+    expect(out.text.length).toBeLessThanOrEqual(maxChars);
+  });
+
+  it("does not treat unrelated data with only a continuation version as an atomic continuation", () => {
+    const out = clampToolResultForModel({ success: true, data: {
+      continuationVersion: "a".repeat(64), blob: "x".repeat(5_000),
+    } });
+    expect(out.truncated).toBe(true);
+    expect(out.text).toContain("truncated");
+    expect(out.text).not.toContain("continuation_budget_exceeded");
+  });
+
   it("refuses an oversized typed activity page instead of emitting a successful JSON prefix", () => {
     const result = clampToolResultForModel({ success: true, data: {
       page: { version: 1, readKind: "workroom-activity", disposition: "more" },
