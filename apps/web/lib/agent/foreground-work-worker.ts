@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 import { randomUUID } from "node:crypto";
 import { isRecord } from "@/lib/shared/coerce";
 import { agentEventBus } from "@/lib/agent-event-bus";
@@ -54,13 +54,14 @@ export async function executeForegroundWork(taskRunId: string) {
     if (saved.count === 1) await retainNotice(run, `Your request is retained. ${summary}`);
     return { kind: "blocked" };
   };
+  if ("resourceWait" in progress && !wait) return block("The retained capacity state needs reconciliation before another attempt.");
   if (hasExecutionUncertainty(progress)) return block("The existing execution needs reconciliation before another attempt.");
   if (!run.threadId || !run.routeContext || !run.initiatingAgentId) return block("The retained request has incomplete execution identity. Reconcile its original conversation.");
-  if (wait && !resourceWaitDue(wait, now)) return { kind: "not-due" };
   const deadline = typeof request.deadlineAt === "string" ? Date.parse(request.deadlineAt) : NaN;
   if (!Number.isFinite(deadline) || deadline <= now.getTime() || (wait?.attempt ?? 0) >= RESOURCE_WAIT_MAX_ATTEMPTS) {
     return block("The recovery window ended. Your request is retained; a provider recovery decision is needed.");
   }
+  if (wait && !resourceWaitDue(wait, now)) return { kind: "not-due" };
   const message = await prisma.agentMessage.findFirst({
     where: { id: String(request.userMessageId), threadId: run.threadId, taskRunId, role: "user" },
     select: { id: true, content: true },
@@ -122,7 +123,7 @@ export async function executeForegroundWork(taskRunId: string) {
       ? "Your request is retained. DPF will retry when provider capacity permits, within its original recovery window. You do not need to resend."
       : awaitingApproval ? "The proposed action is waiting for your approval in this conversation."
       : completed ? "Coworker response saved. Business-result acceptance is separate." : "Your request is retained but needs attention before it can continue.";
-    const saved = await settle(completed ? "completed" : "input-required", {
+    const saved = await settle(completed ? "completed" : pending ? "submitted" : "input-required", {
       ...activeProgress,
       ...(pending ? { resourceWait: pending } : {}),
       foregroundOutcome: pending ? "capacity-wait" : awaitingApproval ? "approval-required" : completed ? "responded" : "blocked",
@@ -170,16 +171,28 @@ export async function reconcileForegroundWork() {
     if (result.count === 1) await retainNotice(row, "Your request is retained, but execution ended without a confirmed outcome. Existing results must be checked before another attempt.");
   }
   const rows = await prisma.taskRun.findMany({ where: { source: "coworker",
-    OR: [ { status: "submitted" }, { status: "input-required", AND: [
+    // Admission leaves progress SQL NULL. Claimed/parked work has a projection,
+    // so future waits cannot occupy the fresh-submission batch after a restart.
+    OR: [ { status: "submitted", progressPayload: { equals: Prisma.DbNull } }, { status: { in: ["submitted", "input-required"] }, AND: [
       { progressPayload: { path: ["resourceWait", "kind"], equals: "provider-capacity" } },
-      { progressPayload: { path: ["resourceWait", "nextAttemptAt"], lte: new Date().toISOString() } },
+      { OR: [
+        { progressPayload: { path: ["resourceWait", "nextAttemptAt"], lte: new Date().toISOString() } },
+        { a2aMetadata: { path: ["foregroundRequest", "deadlineAt"], lte: new Date().toISOString() } },
+        { progressPayload: { path: ["resourceWait", "attempt"], gte: RESOURCE_WAIT_MAX_ATTEMPTS } },
+      ] },
     ] } ],
-    a2aMetadata: { path: ["foregroundRequest", "schemaVersion"], equals: 1 }, archivedAt: null },
-    orderBy: { createdAt: "asc" }, take: 50, select: { taskRunId: true, status: true, progressPayload: true },
+    AND: [ { a2aMetadata: { path: ["foregroundRequest", "schemaVersion"], equals: 1 } },
+      { a2aMetadata: { path: ["trigger"], equals: "interactive" } } ], archivedAt: null },
+    orderBy: { createdAt: "asc" }, take: 50, select: { taskRunId: true, status: true, progressPayload: true, a2aMetadata: true },
   });
   for (const row of rows) {
     const wait = parseResourceWaitProjection(row.progressPayload);
-    if (row.status !== "submitted" && (!wait || !resourceWaitDue(wait, new Date()))) continue;
+    if (row.status !== "submitted" && !wait) continue;
+    const metadata = isRecord(row.a2aMetadata) ? row.a2aMetadata : {};
+    const request = isRecord(metadata.foregroundRequest) ? metadata.foregroundRequest : {};
+    const deadline = typeof request.deadlineAt === "string" ? Date.parse(request.deadlineAt) : NaN;
+    if (wait && !resourceWaitDue(wait, new Date()) && wait.attempt < RESOURCE_WAIT_MAX_ATTEMPTS
+      && Number.isFinite(deadline) && deadline > Date.now()) continue;
     await jobs.send({ name: FOREGROUND_WORK_EVENT, data: { taskRunId: row.taskRunId } });
   }
   return { inspected: rows.length };

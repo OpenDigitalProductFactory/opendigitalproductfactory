@@ -10,7 +10,7 @@ const fixture = vi.hoisted(() => ({
   lock: vi.fn(), transaction: vi.fn(), readMessage: vi.fn(), createMessage: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
-vi.mock("@dpf/db", () => ({ prisma: {
+vi.mock("@dpf/db", () => ({ Prisma: { DbNull: null }, prisma: {
   $queryRaw: fixture.lock, $transaction: fixture.transaction,
   taskRun: { findUnique: fixture.load, updateMany: fixture.update, findMany: fixture.list },
   agentThread: { findUnique: fixture.thread },
@@ -92,7 +92,7 @@ describe("Finance retained-request adapter integration", () => {
     });
     fixture.human.mockResolvedValue({ platformRole: "employee", isSuperuser: false });
     fixture.session.mockRejectedValue(new Error("No browser session exists in this queue fixture"));
-    fixture.list.mockImplementation(async ({ where }) => where.OR && row.status === "input-required"
+    fixture.list.mockImplementation(async ({ where }) => where.OR && ["submitted", "input-required"].includes(row.status)
       && row.progressPayload?.resourceWait ? [structuredClone(row)] : []);
     fixture.turn.mockImplementation(async (input) => {
       expect(await requireForegroundUser()).toMatchObject({ id: "fixture-owner", isSuperuser: false });
@@ -213,7 +213,7 @@ describe("Finance retained-request adapter integration", () => {
       return { agentMessage, ...(kind === "capacity-wait" ? { resourceWait: "capacity" } : { pendingApproval: true }) };
     });
     expect(await executeForegroundWork(taskRunId)).toEqual({ kind });
-    expect(row.status).toBe("input-required");
+    expect(row.status).toBe(kind === "capacity-wait" ? "submitted" : "input-required");
     expect(row.progressPayload.foregroundOutcome).toBe(kind);
     expect(messages.has(row.progressPayload.resultMessageId)).toBe(true);
     expect(row.progressPayload.executionUncertainty).toBeUndefined();

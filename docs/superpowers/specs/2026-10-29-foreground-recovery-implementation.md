@@ -244,3 +244,22 @@ in foreground-work-context. The autonomous runner imports only its read
 projection. No guard, runtime dependency set, grant or authority check is
 weakened. The unchanged dependency guard passes, as do45 focused tests across6
 files including real-context isolation and deadline/authority controls.
+
+The served capacity-wait capture exposed contradictory owner attention: the
+conversation promised automatic retry while Workspace counted the same
+input-required row as critical owner review. New valid provider waits now reuse
+the existing external-MCP submitted state; approvals, unknown execution and
+expired/exhausted recovery remain input-required. Existing input-required wait
+publications are still readable only with a valid resource-wait projection and
+the original publication fence. Both atomic publication and fallback settlement
+use the same distinction; no new lifecycle state or workspace classifier exists.
+
+Reconciliation selects untouched submissions (the SQL NULL progress left by
+admission) and due, expired or exhausted waits before its50-row limit. Future
+waits cannot crowd out runnable work. A second due check guards stale readback;
+the worker checks original deadline and attempt limits before a future retry
+timestamp. New/legacy waits, publication acknowledgement loss, cancellation,
+approval/uncertainty and expired-future controls retain the original authority.
+Two added actual-PostgreSQL cases cover owner-attention absence/presence and52
+older future waits alongside fresh/due/legacy/expired/exhausted jobs. Those new
+database cases require their canonical run before they can be claimed passed.
