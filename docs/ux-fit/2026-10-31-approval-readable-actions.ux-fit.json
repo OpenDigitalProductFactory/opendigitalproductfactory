@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "purpose-first-compact-list",
+  "decisionInteractionId": "DI-09A133C4952C",
+  "scope": { "files": ["apps/web/lib/attention/coworker-envelope-decision.ts", "packages/i18n/src/messages/en-US/approvals.json"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["purpose-first-compact-list", "shorten-grid-only", "collapse-whole-card"]
+  },
+  "verification": {
+    "designDecision": "Existing recorded selective-disclosure choice; this extension names three existing operations without establishing their effects.",
+    "owningArea": "Workspace /workspace/inbox; operator deciding one saved request; contextual actions only, no navigation change.",
+    "sourceTruth": "Saved CoworkerActionEnvelope and existing pure primary projection; current-viewer names, material facts and original authorization binding remain unchanged.",
+    "fit": "fits-with-guardrails: existing renderer, theme tokens and disclosure; unknown scope/effects stay explicit, no inference or new permission.",
+    "servedChecks": "Protected source-bound approval scenarios are required at 320px/desktop in light/dark. Three new operation cases augment existing unknown/material-fact, handover, keyboard and state cases; fixture submissions remain blocked.",
+    "baseline": "Existing committed route budget remains frozen. No new measured-word, accessibility, runtime or deployment pass is asserted here."
+  }
+}
