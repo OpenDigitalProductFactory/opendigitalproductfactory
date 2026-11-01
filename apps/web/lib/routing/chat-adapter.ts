@@ -233,10 +233,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
           .map((m) => formatMessageForAnthropic(m)),
       };
 
-      // EP-INF-013: Map effort → extended thinking for Anthropic.
-      // effort="low" (or absent) → no thinking parameter (default, fast).
-      // effort="medium/high/max" → enable thinking with a token budget.
-      // Explicit providerSettings.thinking takes precedence over effort.
+      // Capability-aware explicit thinking takes precedence over generic caller effort.
+      // Legacy effort-only plans retain their manual budget behavior.
       const effortBudgets: Record<string, number> = { medium: 8_000, high: 32_000, max: 64_000 };
       const effort = plan.providerSettings?.effort as string | undefined;
       if (plan.providerSettings?.thinking) {
