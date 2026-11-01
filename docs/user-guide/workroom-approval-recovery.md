@@ -19,6 +19,18 @@ An author stage admitted under the existing standing authorization and funding c
 
 If that completion authority expires, is revoked, or is replaced by a later dispatch, the run can still report a blocker. It can reuse an exact approval that is already valid, and a retry returns an existing recorded outcome. It does not create another approval request for the withheld dispatch.
 
+If the repository or source revision changes, the coworker cannot use its old
+assignment as permission to continue. It may still report the blocker for its
+assigned room and stage under the reporting rules above, without a new approval
+request. Before starting a fresh assignment, reconcile what the previous attempt
+actually did. Being queued or approved is not proof that it ran, and an unknown
+outcome is not permission to repeat the action. The
+[continuation brief](../architecture/workroom-cycle-continuity.md#bounded-assignment-and-continuation-briefs)
+helps the coworker recover its assignment; it does not replace that check.
+For a manual handoff, the brief also carries the saved next step and remaining
+work when the recorded revision matches. The coworker checks the current status
+before repeating that work.
+
 Other actions still pass through the existing permission and approval checks. Requests for external-provider consent, new spending authority, changed ownership, or consequential actions retain their existing controls.
 
 When a scheduled Workroom-stage task requests approval for a required action, its next periodic run is parked. The Workroom also waits on that run's recorded approval outcome, including across a new day. It does not create another request simply because no completing evidence has arrived.

@@ -43,7 +43,8 @@ import type { DriveReasonFor } from "@/lib/work-management/drive-conclusion";
 import { graphTaskEffects, withUndispatchedTokensRestored } from "@/lib/work-management/drive-graph-tick";
 import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
-import { buildStageBrief, stageBriefInputFromDefinition } from "@/lib/work-management/stage-briefing";
+import { buildContinuationBrief, stageBriefInputFromDefinition } from "@/lib/work-management/stage-briefing";
+import type { DispatchScope } from "@/lib/work-management/workroom-drive-checkpoint";
 import {
   WORKROOM_DRIVE_ACTIVITY_KIND,
   WORKROOM_DRIVE_ATTENTION_KIND,
@@ -61,6 +62,42 @@ function outcomeOf(action: DrivePlan["action"]): Outcome {
   if (action === "attention") return "attention";
   if (action === "stop") return "stopped";
   return "skipped";
+}
+
+/** Both native dispatch paths project their prompt, tools and binding from the same facts. */
+export function buildNativeContinuationDispatch(input: {
+  room: WorkroomDriveRoom; plan: DrivePlan; stageKey: string; taskId: string; agentId: string;
+  expiresAt: Date; dispatchScope?: DispatchScope;
+}) {
+  const { room, plan, dispatchScope } = input;
+  const result = buildContinuationBrief({
+    brief: stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
+      shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: input.stageKey }),
+    identity: { taskId: input.taskId, runKey: dispatchScope?.runKey ?? null, cycleKey: dispatchScope?.cycleKey ?? null, iteration: dispatchScope?.iteration ?? null },
+    source: { repositoryFullName: room.repositoryFullName ?? null, headSha: room.headSha ?? null },
+    owner: { principalId: room.leaseHolderPrincipalId, agentId: input.agentId },
+    state: { status: "scheduled", roomStatus: room.status ?? null, leaseExpiresAt: input.expiresAt.toISOString(), stopReasons: room.stopConditionHits, budgetUsage: room.budgetUsage, nextAction: "reconcile-scheduled-task" },
+  });
+  if (!result.success) return result;
+  const { brief } = result;
+  const identity = brief.identity;
+  return { success: true as const, fields: {
+    prompt: result.prompt, source: brief.source,
+    stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...brief.stageTools] },
+    ...(identity.runKey !== null && identity.cycleKey !== null && identity.iteration !== null
+      ? { dispatchScope: { runKey: identity.runKey, cycleKey: identity.cycleKey, iteration: identity.iteration } } : {}),
+  } };
+}
+
+/** Observation only: a refused brief must not create a dispatch latch or advance a branch. */
+export async function recordContinuationRefusal(input: {
+  room: WorkroomDriveRoom; taskId: string; stageKey: string; snapshot: Record<string, unknown>;
+  persist: WorkroomDriveEffects["persist"]; message: string;
+}) {
+  await input.persist({ roomId: input.room.id, snapshot: input.snapshot, observationOnly: true,
+    activityKind: WORKROOM_DRIVE_ACTIVITY_KIND, summary: `Stage ${input.stageKey} not queued: ${input.message}`,
+    payload: { error: "continuation_budget_exceeded", taskId: input.taskId, stageKey: input.stageKey,
+      ownerUserId: input.room.ownerUserId, nextAction: "Correct the required continuation context budget before dispatch." } });
 }
 
 export async function applyGraphDrivePlan(input: {
@@ -170,20 +207,20 @@ export async function applyGraphDrivePlan(input: {
   const dispatched: string[] = [];
   const failed: string[] = [];
   for (const token of dispatch) {
-    // GPP element 2 "Attachment" + element 5 "Capability set": each branch's
-    // task carries only its own stage's declared tools (design §11, correction 7).
-    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
-      shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: token.stageKey });
+    const continuation = buildNativeContinuationDispatch({ room, plan, stageKey: token.stageKey, taskId: token.taskId as string,
+      agentId: token.agentId as string, expiresAt, dispatchScope: plan.marking && !("raw" in plan.marking) && plan.cycle
+        ? { runKey: plan.marking.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: token.iteration } : undefined });
+    if (!continuation.success) {
+      await recordContinuationRefusal({ room, taskId: token.taskId as string, stageKey: token.stageKey, snapshot, persist, message: continuation.message });
+      failed.push(token.stageKey);
+      continue;
+    }
     const scheduled = await effects.upsertAgentTask({
       taskId: token.taskId as string,
       agentId: token.agentId as string,
       ownerUserId: room.ownerUserId,
       title: `Workroom ${room.capsuleId} / ${token.stageKey}`,
-      prompt: buildStageBrief(brief),
-      stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
-      ...(plan.marking && !("raw" in plan.marking) && plan.cycle ? { dispatchScope: {
-        runKey: plan.marking.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: token.iteration,
-      } } : {}),
+      ...continuation.fields,
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });

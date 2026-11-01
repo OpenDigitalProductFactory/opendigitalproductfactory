@@ -4,6 +4,7 @@ import { deriveArchetypeBusinessViews } from "./business-view-profile";
 import {
   getPerformanceMetricDefinition,
   PRIORITY_PHYSICAL_VIEW_PACKS,
+  resolvePerformanceMetricPack,
 } from "./performance-metric-catalog";
 
 function metricKeys(performance: ReturnType<typeof deriveArchetypeBusinessViews>["performance"]) {
@@ -17,6 +18,15 @@ function metricKeys(performance: ReturnType<typeof deriveArchetypeBusinessViews>
 }
 
 describe("deriveArchetypeBusinessViews", () => {
+  it("defines a bounded recorded-ledger software pack without revenue, cash or delivery proxies", () => {
+    const keys = metricKeys(resolvePerformanceMetricPack("software-platform"));
+    expect(keys).toEqual(["posted-ledger-income", "posted-ledger-expenses", "posted-ledger-net-result"]);
+    for (const key of keys) expect(getPerformanceMetricDefinition(key)).toMatchObject({
+      unit: "currency", grain: "month", sensitivity: "financial", sourceOwner: "finance-ledger",
+      allowedDimensions: ["organization"],
+    });
+  });
+
   it("derives exactly one bounded operations and performance contract for every seeded archetype", () => {
     for (const archetype of ALL_ARCHETYPES) {
       const views = deriveArchetypeBusinessViews(archetype);

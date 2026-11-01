@@ -91,7 +91,7 @@ open each relevant workspace:
 | Check | Where | Confirm |
 | --- | --- | --- |
 | Public identity | **Settings → Portal** | slug, tagline, description, contact details, and hero image |
-| Business truth | **Settings → Your Business** | mission, market, address, jurisdictions, payment handling, and risk posture |
+| Business truth | **Settings → Your Business** | direction (mission, vision, outcomes), market, address, jurisdictions, payment handling, and risk posture |
 | Product mix | **Products / Portfolio** | the main and adjacent product lines match what the organization actually sells |
 | Customer content | **Sections** and **Items** | only intended sections are visible; names, descriptions, prices, calls to action, and images are accurate |
 | Fulfilment | **Team**, **Tables & Capacity**, or **Units** when shown | the people or resources that receive work exist and have the right capacity |

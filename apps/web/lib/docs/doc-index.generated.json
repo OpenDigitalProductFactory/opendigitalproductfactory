@@ -2848,7 +2848,8 @@
         "workroom-cycle-continuity",
         "existing-persistence-and-bounded-reads",
         "recovery-integration-still-required",
-        "verification-and-rollback-boundary"
+        "verification-and-rollback-boundary",
+        "bounded-assignment-and-continuation-briefs"
       ]
     },
     "docs/architecture/workroom-ingestion-scale-qualification.md": {
@@ -12844,7 +12845,8 @@
         "what-to-watch",
         "recovery-and-evidence",
         "ask-for-a-branded-report-workbook-or-letter",
-        "related-help"
+        "related-help",
+        "recorded-general-ledger-and-software-results"
       ]
     },
     "docs/user-guide/getting-started/ai-coworker.md": {
@@ -13424,6 +13426,7 @@
         "use-this-doc-for",
         "choose-the-right-settings-area",
         "update-portal-presentation",
+        "set-your-direction",
         "keep-business-context-current",
         "set-hours-and-timezone-safely",
         "verification-and-recovery",
@@ -13552,6 +13555,16 @@
         "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"
+      ]
+    },
+    "docs/user-guide/workspace/performance.md": {
+      "publicHref": "/user-guide/workspace/performance/",
+      "portalHref": "/docs/workspace/performance",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "review-recorded-results",
+        "missing-records-and-zero"
       ]
     },
     "docs/user-guide/workspace/supported-file-formats.md": {

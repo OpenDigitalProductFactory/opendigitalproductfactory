@@ -166,7 +166,7 @@ describe("composeOpeningBriefing", () => {
 
   it("falls back to the triage-top item when nothing is surface-local", () => {
     const briefing = composeOpeningBriefing({
-      routeContext: "/finance",
+      routeContext: "/workspace",
       proactivityLevel: "balanced",
       items: [
         makeItem({ id: "a", title: "First by triage" }),
@@ -176,5 +176,86 @@ describe("composeOpeningBriefing", () => {
     });
     expect(briefing?.content).toContain("First by triage");
     expect(briefing?.content).toContain("2 more items are waiting for your review");
+  });
+});
+
+describe("Finance contextual opening research (BI-9F118032)", () => {
+  const routine = () => makeItem({ title: "Technical release question", deepLink: "/build" });
+  const finance = () => makeItem({ id: "finance", title: "Check supplier discrepancy", deepLink: "/finance/bills" });
+  const compose = (items: AttentionItem[], routeContext = "/finance/spend") =>
+    composeOpeningBriefing({ items, routeContext, proactivityLevel: "balanced" });
+
+  it.each([1, 3])("keeps all %i routine global decisions counted without a technical headline", (count) => {
+    const result = compose(Array.from({ length: count }, (_, i) => ({ ...routine(), id: `global-${i}` })));
+    expect(result?.content).not.toContain("Technical release question");
+    expect(result?.content).toContain("/finance/my-expenses/new");
+    expect(result?.content).toContain("positive amount");
+    expect(result?.content).toContain("receipt URL");
+    expect(result?.content).toContain(`${count} owner ${count === 1 ? "decision is" : "decisions are"}`);
+    expect(result?.content).toContain("/workspace/inbox");
+    expect(result?.itemCount).toBe(count);
+  });
+
+  it("prefers relevant Finance work and counts the remaining owner decisions", () => {
+    const result = compose([routine(), finance()]);
+    expect(result?.content).toContain("[Check supplier discrepancy](/finance/bills)");
+    expect(result?.content).not.toContain("Technical release question");
+    expect(result?.content).toContain("1 more item is waiting for your review");
+    expect(result?.itemCount).toBe(2);
+  });
+
+  it.each(["overdue", "due-today"] as const)("keeps a global %s decision ahead of routine local Finance work", (timeToAct) => {
+    const urgent = routine();
+    urgent.triage = { ...urgent.triage, timeToAct };
+    const result = compose([urgent, { ...finance(), deepLink: "/finance/spend/ai" }]);
+    expect(result?.content).toContain("[Technical release question](/build)");
+    expect(result?.content).toContain(timeToAct === "overdue" ? "deadline passed" : "deadline today");
+    expect(result?.content).toContain("/finance/my-expenses/new");
+    expect(result?.itemCount).toBe(2);
+  });
+
+  it("keeps irreversible high-risk global decisions visible and preserves their input order", () => {
+    const urgent = { ...routine(), riskClass: "high-risk" as const };
+    urgent.triage = { ...urgent.triage, irreversible: true };
+    const later = { ...urgent, id: "later", title: "Later urgent item" };
+    const result = compose([urgent, later, { ...finance(), deepLink: "/finance/spend/ai" }]);
+    expect(result?.content).toContain("[Technical release question](/build)");
+    expect(result?.content).toContain("irreversible, high-risk");
+    expect(result?.content).not.toContain("Later urgent item");
+    expect(result?.content).toContain("2 more items");
+    expect(result?.itemCount).toBe(3);
+  });
+
+  it("normalizes Finance query/fragment and prefers the current Finance surface", () => {
+    const local = { ...finance(), id: "local", title: "Current Spend decision", deepLink: "/finance/spend/ai" };
+    expect(compose([finance(), local], "/finance/spend?view=all#details")?.content).toContain("Current Spend decision");
+  });
+
+  it("does not mistake Finance-like item prefixes for relevant Finance work", () => {
+    const other = { ...routine(), deepLink: "/finance-other" };
+    expect(compose([other], "/finance")?.content).not.toContain("Technical release question");
+    expect(compose([other], "/finance")?.content).not.toContain("positive amount");
+  });
+
+  it("keeps non-expense Finance help general and non-Finance behavior unchanged", () => {
+    const general = compose([routine()], "/finance/reports/general-ledger");
+    expect(general?.content).toContain("finance task");
+    expect(general?.content).not.toContain("/finance/my-expenses/new");
+    expect(compose([routine()], "/finance-other")?.content).toContain("Technical release question");
+  });
+
+  it.each(["/finance/spend/ai", "/finance/my-expenses-other", "/finance/expense-claims-other"])("does not prescribe expense entry for %s", (routeContext) => {
+    expect(compose([routine()], routeContext)?.content).not.toContain("/finance/my-expenses/new");
+  });
+
+  it("does not create an urgent override for reversible high-risk routine work", () => {
+    const global = { ...routine(), riskClass: "high-risk" as const };
+    expect(compose([global, finance()])?.content).toContain("Check supplier discrepancy");
+    expect(compose([global, finance()])?.content).not.toContain("Technical release question");
+  });
+
+  it.each(["/finance/spend", "/finance/expense-claims", "/finance/my-expenses/new"])("preserves balanced zero-owner silence on %s", (routeContext) => {
+    expect(compose([], routeContext)).toBeNull();
+    expect(composeOpeningBriefing({ items: [routine()], routeContext, proactivityLevel: "quiet" })).toBeNull();
   });
 });

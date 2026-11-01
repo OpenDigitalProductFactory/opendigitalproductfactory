@@ -428,6 +428,8 @@ export async function evaluatePerspectiveGate(input: {
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
   alignmentCorpora?: AlignmentCorpora;
+  /** Caller-recorded facts merged into the ledger payload; the gate's own fields win. */
+  outcomePayloadExtra?: Record<string, unknown>;
   /**
    * BI-7FFFBEE3 slice B: "shadow" when the caller will not act on this verdict.
    * Recorded on the row so the owner inbox never lists it as a decision.
@@ -733,6 +735,7 @@ export async function evaluatePerspectiveGate(input: {
     agentId,
     proposedOptionId: input.proposedOptionId ?? null,
     outcomePayloadExtra: {
+      ...(input.outcomePayloadExtra ?? {}),
       ...(isWwwd ? {
         orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
         caller: input.caller ?? null,
