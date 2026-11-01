@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Acceptance completion context implementation
 Backlog: BI-5B0CD1BC. Design: [acceptance completion context](../specs/2026-10-31-acceptance-completion-context.md).
 Workroom: WC-6D95C3A1. Decision: DI-A96BC6850DB1.

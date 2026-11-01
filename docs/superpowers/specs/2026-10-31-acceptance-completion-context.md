@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Acceptance completion context
 Backlog: BI-5B0CD1BC. Workroom: WC-6D95C3A1. Status: proposed corrective design.
 

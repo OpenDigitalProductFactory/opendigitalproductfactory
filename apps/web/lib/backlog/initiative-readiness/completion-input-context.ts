@@ -19,6 +19,15 @@ export function publicCompletionActivityPayload(payload: unknown): unknown {
   return publicPayload;
 }
 
+/** One projection keeps the public audit fields together with input redaction. */
+export function publicCompletionActivity(activity: {
+  id: string; kind: string; summary: string; recordedAt: Date; payload: unknown;
+}) {
+  return { id: activity.id, kind: activity.kind, summary: activity.summary,
+    recordedAt: activity.recordedAt.toISOString(),
+    payload: publicCompletionActivityPayload(activity.payload) };
+}
+
 /** Bind only the existing medium, retained-body acceptance lane. */
 export function completionInputBinding(args: {
   item: { id: string; itemId: string; status: string; body?: string | null; title?: string | null;
