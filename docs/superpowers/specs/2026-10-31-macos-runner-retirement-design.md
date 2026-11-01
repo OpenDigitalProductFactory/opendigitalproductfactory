@@ -1,7 +1,11 @@
+---
+status: active
+---
+
 # Preserve Apple Silicon installer verification after runner retirement
 
 Backlog: BI-83786CD7. Workroom: WC-E697132E.
-Status: design preparation; implementation and hosted execution not yet admitted.
+Implementation is admitted; protected publication and actual hosted verification remain pending.
 
 ## Problem and existing contract
 
@@ -48,8 +52,9 @@ truth. Do not edit branch protection or fabricate a passing result.
 This is source-only CI maintenance. It changes no production runtime,
 credentials, grants, schema, inference provider, endpoint repair or review
 policy. No new runner tier, extra matrix, purchase or provider-review budget
-is authorized by this design. The current workroom funding allocation remains
-unresolved and must not be inferred from administrator or coordinator status.
+is authorized by this design. The human selected the organization's shared-platform
+budget for this repair; its item-specific funding binding was recorded on October 31.
+That binding does not change spending limits or historical review allowances.
 
 ## Objectives and acceptance
 
