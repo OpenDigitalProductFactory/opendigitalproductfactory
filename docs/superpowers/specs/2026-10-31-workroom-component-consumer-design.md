@@ -27,9 +27,9 @@ found thirty-nine original seed matches and one existing schema tool-name fix.
 GPP candidate source preserves that BI-D37B2C13 fix explicitly; no old schema
 is copied back into DPF. Host fixes outside these pure bodies stay in place.
 
-The private Workroom artifact is `@opendigitalproductfactory/dpf-workroom@0.1.0-candidate.1`,
-source `b3806fdcbcf734e0d22bec9a9290515bb108e05b`, SHA256
-`46215f845b26c79a526e215b00c2ae25c50610fa53788e344408cdab239bbb39`.
+The private Workroom artifact is `@opendigitalproductfactory/dpf-workroom@0.1.0-candidate.2`,
+source `e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97`, SHA256
+`b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40`.
 It has no runtime dependency and exposes one ESM implementation plus declarations.
 Its pinned build checks passed Node 24.16.0 / TypeScript 6.0.3, including
 22 provenance entries, thirteen source and thirteen installed protocol scenarios.
@@ -43,8 +43,11 @@ actual browser/CSP proof, Linux enforcement or native DPF review receipts.
 ## Boundary and dependency transport
 
 Pin the existing private archive under `packages/validators/vendor/` and its
-source/qualification identity alongside it. Add the dependency to validators
-and web through one workspace catalog entry and the integrity-pinned pnpm lock.
+source/qualification identity alongside it. Add repository-relative file dependencies to validators and web, both resolving
+to this single archive, with its integrity-pinned pnpm lock. pnpm 10.33.2 rejects
+file-protocol catalog entries (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC); the existing
+SBOM specifier-drift policy already classifies file references as first-party
+plumbing rather than registry catalog drift.
 The Docker dependency stage must copy that archive before frozen installation;
 no image is built or deployed by hand. This is the tested versioned-artifact
 route selected by DI-7E68467A7AD0, not recurring source absorption.
@@ -100,7 +103,13 @@ library, provider, registry or spend. The existing scope decisions remain the
 reason for this extraction; local tests do not substitute native admission.
 
 Native research receipt: `initiative-78cb09aa-f6b5-4766-bbad-a69a1611d4a9`.
-The current medium delivery rule uses the five Acceptance bullets in the live item as its objective baseline; independent spec approval is not required. Independent client design/plan review passed. Immutable plan coverage and DPF execution evidence remain owed.
+The current medium delivery rule uses the five Acceptance bullets in the live item as its objective baseline; independent spec approval is not required. Independent client design/plan review passed. Plan coverage cmvx82ucj0oo101tm9r40g6v2 binds the quoted acceptance plan at be04ad60d529251e440c6f0bba6d4e80d253d496. This source update corrects only demonstrated dependency transport and the qualified candidate version; its acceptance criteria are unchanged. Reconcile coverage to this plan revision before publication. DPF execution evidence remains owed.
 The prior local-refactor exception permits bounded source preparation with
 independent client review and native gates honestly marked unrun; it grants no
 production deployment, public package release, credential or permission change.
+
+Strict-engine qualification first reproduced EBADENGINE on Node 24.22.0 with
+the seed engine pin. Workroom `.2`, scoped judgment `.1` and GPP `.1` admit
+exactly the tested Node 24.16.0 and 24.22.0; all exported APIs and emitted code
+bytes are unchanged. The new exact-archive receiving matrix passed with npm
+engine-strict installation and TypeScript 7.0.2.

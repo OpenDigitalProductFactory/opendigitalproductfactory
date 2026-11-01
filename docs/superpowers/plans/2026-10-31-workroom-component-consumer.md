@@ -28,8 +28,10 @@ adoption and DPF2 implementation are separately owned and excluded.
    Add an identity/parity test that fails while bridges still have local bodies.
 2. **Pinned artifact and receiving installation.** Add the exact Workroom
    candidate archive and source/integrity identity under validators/vendor.
-   Declare one shared catalog entry in pnpm-workspace.yaml, dependencies in
-   web/validators manifests, and regenerate the receiving pnpm lock. Update
+   Declare repository-relative file dependencies in web/validators manifests,
+   both pointing to one archive, and regenerate the integrity-pinned pnpm lock.
+   pnpm 10.33.2 rejects file-protocol catalog entries; the existing SBOM policy
+   already permits file dependencies as first-party plumbing. Update
    the Docker dependency COPY before frozen installation. Verify a clean lock
    install and package declarations with the actual DPF compiler/loader.
 3. **Real caller and same-slice retirement.** Change shape-conformance's graph,
@@ -73,9 +75,11 @@ adoption and DPF2 implementation are separately owned and excluded.
 Atomic deliverable: `workroom-consumer`, BI-FCDCAE98, OBJ-PILOT,
 AC-PILOT-1 through AC-PILOT-5, V-PARITY/V-LOADER/V-INTEGRATION/V-ROLLBACK.
 Dependencies: delivered planning BI-66681CBB and qualified Workroom foundation
-from BI-A574E138 under BI-B8A4DE44. Native immutable coverage is pending; this
-section is not a receipt or a claim of plan completeness. Record coverage against
-the committed plan and approved objective baseline before native implementation.
+from BI-A574E138 under BI-B8A4DE44. Recorded coverage: cmvx82ucj0oo101tm9r40g6v2 binds the quoted acceptance plan
+at be04ad60d529251e440c6f0bba6d4e80d253d496. All deliverables map atomically to
+BI-FCDCAE98 with the dependencies above. This transport/candidate correction
+retains those criteria; refresh immutable coverage for this plan revision before
+publication. Implementation admission IRD-2C8888567FF2 was allowed.
 
 ## Risks and rollback
 
