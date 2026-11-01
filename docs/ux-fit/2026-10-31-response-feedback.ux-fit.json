@@ -5,7 +5,10 @@
   "scope": {
     "files": [
       "apps/web/components/agent/AgentMessageBubble.tsx",
-      "apps/web/components/agent/ResponseFeedback.tsx"
+      "apps/web/components/agent/ResponseFeedback.tsx",
+      "apps/web/components/platform/RoutingManagementWorkspace.tsx",
+      "apps/web/components/platform/RoutingManagementInspector.tsx",
+      "apps/web/components/platform/RoutingResponseReview.tsx"
     ]
   },
   "evidence": {
@@ -26,7 +29,14 @@
     "Feedback never dispatches inference or modifies routing policy.",
     "Human, agent and unattributed feedback remain distinct from quality and execution success.",
     "44px targets, keyboard pressed state and status announcements without focus movement.",
-    "Exact missing or changed producer binding stays unavailable."
+    "Exact missing or changed producer binding stays unavailable.",
+    "Answer review replaces the existing inspector body, retains URL scope and returns focus without stacking a modal.",
+    "Answer reads require current access and exact clicked-attempt binding; general routing data and routine feedback state contain no answer text."
   ],
-  "prototype": "docs/ux-fit/2026-10-31-routing-feedback-prototype.html"
+  "prototype": "docs/ux-fit/2026-10-31-routing-feedback-prototype.html",
+  "sourceVerification": {
+    "kind": "source-local interaction tests",
+    "servedUsability": "unrun for this implementation",
+    "prototypeLimit": "Earlier simulated prototype illustrates contextual feedback; it does not verify the actual answer reader or rendered layout."
+  }
 }

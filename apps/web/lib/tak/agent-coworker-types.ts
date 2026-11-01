@@ -35,6 +35,8 @@ export type AgentMessageRow = {
   agentId: string | null;
   routeContext: string | null;
   createdAt: string; // ISO string via .toISOString()
+  /** Display hint only; the feedback action rechecks exact binding and current authority. */
+  responseFeedbackEligible?: boolean;
   attachments?: AttachmentInfo[];
   provider?: AgentMessageProvider;
   proposal?: {

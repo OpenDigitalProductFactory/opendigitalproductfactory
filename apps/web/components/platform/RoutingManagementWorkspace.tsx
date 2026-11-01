@@ -85,7 +85,12 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
         { key: "runs", header: t("routed"), cell: c => c.count },
         { key: "execution", header: t("modelExecutionSuccess"), cell: c => c.knownExecution ? t("knownUnknown", { p0: c.successes, p1: c.knownExecution, p2: c.count - c.knownExecution }) : t("noExecutionEvidence", { unknown: c.count }) },
         { key: "quality", header: t("evaluatedQuality"), cell: c => t("scored", { p0: c.evaluated, p1: c.count, p2: c.evaluated ? "" : " · unavailable" }) },
-        { key: "feedback", header: t("operatorFeedback2"), cell: c => c.feedback.length ? t("acceptedAttempts", { p0: c.feedback.filter(a => a.feedback).length, p1: c.feedback.length }) : t("noFeedback") },
+        { key: "feedback", header: t("feedbackCoverage"), cell: c => c.feedback.length ? <div className="space-y-1">
+          <p>{t("humanFeedbackCoverage", { kept: c.humanFeedback.filter(a => a.feedback).length, total: c.humanFeedback.length })}</p>
+          <p>{t("agentFeedbackCoverage", { kept: c.agentFeedback.filter(a => a.feedback).length, total: c.agentFeedback.length })}</p>
+          {c.unattributedFeedback.length > 0 && <p>{t("unattributedFeedbackCoverage", { total: c.unattributedFeedback.length })}</p>}
+          <p>{t("feedbackRecordedCount", { recorded: c.feedback.length, total: c.feedbackAttemptCount })}</p>
+        </div> : t("noFeedback") },
         { key: "cost", header: t("recordedCost"), cell: c => <span>{c.costCovered ? money(c.recordedCost) : t("unknown")}<span className="block text-xs text-[var(--dpf-muted)]">{t("pricedCount", { known: c.costCovered, total: c.count })}</span></span> },
     ];
     return <section aria-labelledby="routing-management-title" className="space-y-4 text-[var(--dpf-text)]" data-routing-management>

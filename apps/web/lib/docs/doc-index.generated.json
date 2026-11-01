@@ -12111,7 +12111,8 @@
         "anthropic-oauth-subscription",
         "chatgpt-openai-subscription",
         "docker-model-runner-local",
-        "troubleshooting"
+        "troubleshooting",
+        "investigate-routing-and-record-feedback"
       ]
     },
     "docs/user-guide/ai-workforce/priority-and-outcomes.md": {

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { createResponseProducer, type ResponseProducer } from "../routing/response-producer";
 // apps/web/lib/ai-inference.ts
 // Shared inference module — plain server-only module (NOT "use server").
 // Server actions in actions/*.ts can import from here freely.
@@ -73,6 +75,7 @@ import { reassessmentNativeMessagesFetch } from "./reassessment-native-runtime";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type InferenceResult = {
+  responseProducer?: ResponseProducer;
   content: string;
   inputTokens: number;
   outputTokens: number;
@@ -423,6 +426,7 @@ export async function callProvider(
       : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
   const telemetryStartedAt = new Date();
+  const telemetryAttemptId = randomUUID();
   // Phase A7: telemetry kind derived from the structured selector when
   // present; legacy-string paths land as "legacy:<adapter>" so analytics can
   // distinguish unrouted traffic from structured-selector traffic.
@@ -504,6 +508,7 @@ export async function callProvider(
     // swallows its own errors so we never mask the original throw.
     const finishedAt = new Date();
     void writeAdapterTelemetry({
+      id: telemetryAttemptId,
       investment,
       traceId: attribution?.traceId ?? undefined,
       adapterKind: telemetryAdapterKind,
@@ -560,6 +565,7 @@ export async function callProvider(
   // can't break the user's reply.
   const telemetryFinishedAt = new Date();
   void writeAdapterTelemetry({
+    id: telemetryAttemptId,
     investment,
     traceId: attribution?.traceId ?? undefined,
     adapterKind: telemetryAdapterKind,
@@ -586,6 +592,7 @@ export async function callProvider(
   // 5. Map AdapterResult → InferenceResult
   return transferLocalNativeContinuation<InferenceResult>(result, {
     content: result.text,
+    responseProducer: result.asyncOperation ? undefined : createResponseProducer({ attemptId: telemetryAttemptId, providerId, modelId, content: result.text }),
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,

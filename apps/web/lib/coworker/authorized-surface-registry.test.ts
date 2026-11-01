@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+const feedback = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/routing/response-feedback", () => ({ getResponseFeedback: feedback.read }));
+import { describe, expect, it, vi } from "vitest";
 
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
@@ -6,6 +8,7 @@ import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 import {
   ALL_SURFACE_DEFINITIONS,
   AUTHORIZED_SURFACE_CATALOG,
+  authorizedSurfaceRuntime, createServerSurfaceContext,
 } from "./authorized-surface-registry";
 
 describe("Authorized Surface fleet conformance", () => {
@@ -37,5 +40,29 @@ describe("Authorized Surface fleet conformance", () => {
       expect(new Set(definition.nodes.map((node) => node.nodeId)).size).toBe(definition.nodes.length);
       expect(new Set(definition.actions.map((action) => action.actionId)).size).toBe(definition.actions.length);
     }
+  });
+});
+
+describe("response feedback registered resource parity", () => {
+  const raw = { delegatingUserId: "u1", actingAgentId: "AGT-1", mode: "external" as const, locale: "en-US", timezone: "UTC",
+    workContext: { resourceType: "agent-message", resourceIds: ["m1"] } };
+  it("refuses a surface-only reader before accessing feedback", async () => {
+    feedback.read.mockClear();
+    const context = createServerSurfaceContext(raw, { authorizedToolNames: new Set(["surface_open"]) });
+    const result = await authorizedSurfaceRuntime.open({ context, selector: { surfaceId: "coworker.response-feedback" } });
+    expect(result).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(feedback.read).not.toHaveBeenCalled();
+  });
+  it("loads the same domain DTO and binds fixed disposition arguments through governed dispatch", async () => {
+    feedback.read.mockResolvedValue({ messageId: "m1", available: true, unavailableReason: null, value: null, source: null, actorLabel: null, acceptedAt: null, revision: 4, canWrite: true });
+    const dispatch = vi.fn(async () => ({ success: true, message: "Saved." }));
+    const context = createServerSurfaceContext(raw, { authorizedToolNames: new Set(["get_response_feedback", "record_response_feedback"]), governedDispatch: dispatch });
+    const opened = await authorizedSurfaceRuntime.open({ context, selector: { resourceType: "agent-message" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    expect(feedback.read).toHaveBeenCalledWith("m1", { userId: "u1", agentId: "AGT-1" });
+    const result = await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw, expectedRevision: opened.session.revision,
+      actionId: "feedback.revise", args: { messageId: "forged", expectedRevision: 999, value: true, source: "human" } });
+    expect(result.ok).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith("record_response_feedback", { messageId: "m1", expectedRevision: 4, value: false }, expect.objectContaining({ actionId: "feedback.revise" }));
   });
 });

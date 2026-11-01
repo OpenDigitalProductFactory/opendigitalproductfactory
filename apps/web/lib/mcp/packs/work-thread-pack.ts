@@ -1,19 +1,14 @@
-// Work-thread (agent thread spawning) tool pack — EP-8DC217EB BET-4.
-//
-// Drains the self-contained "work-thread" domain out of the mcp-tools.ts
-// executeTool switch: the four tools a coworker uses to delegate work to child
-// threads — spawn a child thread, cancel one, poll one for its result, and list
-// the current thread's children. Each handler lazy-imports the agent-coworker
-// server actions and reproduces the former switch case verbatim, so behaviour is
-// identical when a tool is invoked over MCP.
-//
-// Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
-// mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
+// Work-thread tools share one pack and governing grant map. Child-thread
+// handlers retain their existing delegation behavior. Exact-response feedback
+// handlers use the shared transactional domain, with read/write grants distinct.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { THREAD_TOOL_GRANTS } from "@/lib/tak/thread-tool-grants";
+import { responseFeedbackDefinitions, responseFeedbackHandlers } from "./work-thread-feedback";
 
 const definitions: ToolDefinition[] = [
+  ...responseFeedbackDefinitions,
   {
     name: "spawn_work_thread",
     description: "Start a child coworker thread from the current thread. Use for delegated work that should report back separately.",
@@ -170,6 +165,7 @@ async function getChildThreadsHandler(
 }
 
 const handlers: Record<string, ToolPackHandler> = {
+  ...responseFeedbackHandlers,
   spawn_work_thread: (params, userId, context) => spawnWorkThreadHandler(params, userId, context),
   cancel_thread: (params, userId, context) => cancelThreadHandler(params, userId, context),
   get_thread_result: (params, userId) => getThreadResultHandler(params, userId),
@@ -180,10 +176,5 @@ export const workThreadPack: ToolPack = {
   packId: "work-thread",
   definitions,
   handlers,
-  grants: {
-    spawn_work_thread: ["thread_write"],
-    cancel_thread: ["thread_write"],
-    get_thread_result: ["thread_read"],
-    get_child_threads: ["thread_read"],
-  },
+  grants: THREAD_TOOL_GRANTS,
 };

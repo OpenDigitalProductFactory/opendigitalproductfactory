@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   cancelThread: vi.fn(),
   getThreadResult: vi.fn(),
   getChildThreads: vi.fn(),
+  feedbackRead: vi.fn(),
+  feedbackAnswer: vi.fn(),
+  feedbackWrite: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/agent-coworker", () => ({
@@ -13,6 +16,8 @@ vi.mock("@/lib/actions/agent-coworker", () => ({
   getThreadResult: mocks.getThreadResult,
   getChildThreads: mocks.getChildThreads,
 }));
+
+vi.mock("@/lib/routing/response-feedback", () => ({ getResponseFeedback: mocks.feedbackRead, getResponseFeedbackAnswer: mocks.feedbackAnswer, recordResponseFeedback: mocks.feedbackWrite }));
 
 vi.mock("@/lib/mcp/deliberation-handlers", () => ({
   DELIBERATION_TOOLS: [],
@@ -99,4 +104,16 @@ describe("thread MCP tools", () => {
 
     expect(mocks.getChildThreads).toHaveBeenCalledWith({ parentThreadId: "parent-1" }, "user-1");
   });
+  it("dispatches exact-response read and write through the registered pack with real actor context", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const context = { agentId: "AGT-1", governedSource: "jsonrpc" as const, tokenScope: "write" as const, tokenGrantScopes: ["thread_read", "thread_write"] };
+    mocks.feedbackRead.mockResolvedValue({ available: true, revision: 0 });
+    mocks.feedbackAnswer.mockResolvedValue({ content: "Saved answer", state: { available: true, revision: 0 } });
+    mocks.feedbackWrite.mockResolvedValue({ ok: true, changed: true, state: { value: false, source: "agent" } });
+    expect(await executeTool("get_response_feedback", { messageId: "m1" }, "u1", context)).toMatchObject({ success: true, data: { state: { available: true } } });
+    expect(await executeTool("get_response_feedback", { messageId: "m1", includeAnswer: true, expectedAttemptId: "a1" }, "u1", context)).toMatchObject({ success: true, data: { answer: { content: "Saved answer" } } });
+    expect(await executeTool("record_response_feedback", { messageId: "m1", value: false, expectedRevision: 0 }, "u1", context)).toMatchObject({ success: true, data: { state: { source: "agent" } } });
+    expect(mocks.feedbackWrite).toHaveBeenCalledWith({ messageId: "m1", value: false, expectedRevision: 0 }, { userId: "u1", agentId: "AGT-1", surface: "mcp" });
+  });
+
 });
