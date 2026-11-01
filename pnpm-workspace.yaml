@@ -38,6 +38,8 @@ catalog:
   yaml: ^2.9.1
   zod: ^4.6.7
 overrides:
+  # GHSA-3f7j-7jwc-fxfj (Dependabot #241): patch the platform telemetry dependency.
+  'systeminformation@<5.33.16': '5.33.16'
   # Vitest declares API ^1.9.0; share the SDK 2-compatible API until
   # BI-5262A49E can upgrade the runtime cohort together. No peer widening.
   'vitest>@opentelemetry/api': '1.9.1'
