@@ -492,9 +492,24 @@ describe("prepared system trust reaches native paging transport", () => {
     const { EventEmitter } = await import("node:events");
     const env = Object.freeze({ DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only",
       ...(kind === "client_credentials" ? { DPF_MCP_CLIENT_ID: "fixture-client", DPF_MCP_CLIENT_SECRET: "fixture-secret" } : {}) });
-    let discoveries = 0, trustResolutions = 0, requests = 0, mints = 0, expectedEnv, expectedConnection;
+    let discoveries = 0, trustResolutions = 0, requests = 0, mints = 0, expectedEnv, expectedConnection, expectedOAuthEnv;
+    let expectPreparation = true, nativeTrustChecks = 0;
     const resolveTrust = options => {
       trustResolutions++;
+      const preparing = expectPreparation;
+      if (preparing) {
+        assert.equal(options.env, env, "each observation starts from its explicit environment");
+        assert.equal(options.connection, undefined);
+        expectPreparation = false;
+      } else {
+        assert.equal(options.connection, expectedConnection, "every request and OAuth mint forwards the prepared connection");
+        if (Object.hasOwn(options, "clientId")) {
+          assert.equal(options.env, expectedOAuthEnv, "OAuth forwards its scoped credential environment");
+        } else {
+          assert.equal(options.env, expectedEnv, "every native request forwards the scoped transport environment");
+          nativeTrustChecks++;
+        }
+      }
       const trust = resolveHostMcpTrust({ ...options, platform: "win32", installDir: ".",
         spawnSyncImpl: () => {
           discoveries++;
@@ -502,14 +517,14 @@ describe("prepared system trust reaches native paging transport", () => {
           return { status: 0, stdout: JSON.stringify({ McpUrl: env.DPF_MCP_URL, CaBundle: "" }) };
         },
       });
-      if (!options.connection) { expectedEnv = trust.env; expectedConnection = trust.connection; }
+      if (preparing) { expectedEnv = trust.env; expectedConnection = trust.connection; }
       return trust;
     };
     const resolveCredential = options => {
       assert.equal(options.env, expectedEnv);
       assert.equal(options.connection, expectedConnection);
-      return resolveMcpCredential({ ...options,
-        env: { ...options.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: fileURLToPath(new URL("./missing-fixture-credentials.json", import.meta.url)) },
+      expectedOAuthEnv = { ...options.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: fileURLToPath(new URL("./missing-fixture-credentials.json", import.meta.url)) };
+      return resolveMcpCredential({ ...options, env: expectedOAuthEnv,
         exchange: async config => {
           assert.equal(config.env.DPF_MCP_URL, env.DPF_MCP_URL);
           assert.equal(config.connection, expectedConnection);
@@ -545,12 +560,14 @@ describe("prepared system trust reaches native paging transport", () => {
       return request;
     };
     for (let observation = 1; observation <= 2; observation++) {
+      expectPreparation = true;
       const result = await loadActiveWorkroomPaths({ env, resolveTrust, resolveCredential, requestImpl });
       assert.equal(result.available, true, result.reason);
       assert.equal(result.activePaths.size, 2);
       assert.equal(discoveries, observation, "fresh observations discover again, individual reads do not");
       assert.equal(trustResolutions, observation * (kind === "pat" ? 4 : 5), "instrument preparation, every native request and OAuth trust");
       assert.equal(requests, observation * 3, "two native pages and one native detail read");
+      assert.equal(nativeTrustChecks, observation * 3, "each native trust call checks both forwarding arguments");
       assert.equal(mints, kind === "pat" ? 0 : observation);
     }
   });
