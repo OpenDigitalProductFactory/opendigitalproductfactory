@@ -209,3 +209,11 @@ the briefing before all unanswered requests after the last assistant response;
 completed conversations retain the
 existing proactive overview at the end. The new ordering still needs served
 verification; source32b's retention check does not qualify the changed ordering.
+
+## Integration with scoped response persistence
+
+The later source51 served check retained one synthetic saved request across reload and verified the briefing-before-pending order, keyboard disclosure and mobile width. It produced no coworker answer or real provider-continuation result. That historical evidence does not qualify a new merged tree.
+
+Delivered main4de adds exact response-producer attribution and scoped persistence. Preserve its shared finalization and content digest while executing the final save inside the existing foreground publication transaction. That transaction still owns the TaskRun row lock, current authority, deadline, result-message linkage and cancellation ordering. Pass the same transaction client to the shared persistence helper; do not write the response or resolve its scope through an unrelated client. Operational research summaries still clear producer evidence, and retained foreground work still refuses unsupported build handoffs.
+
+The reconciled source passes 177 affected tests across 16 suites and both local web TypeScript programs. Fresh exact-tree canonical qualification, the real-PostgreSQL publication cases, current served verification and original critique remain owed. A saved response's producer binding is separate from verified business-result acceptance.

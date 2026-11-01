@@ -106,6 +106,8 @@ docker build -f Dockerfile.doctools -t dpf-doctools .
 bash tools/doctools/smoke.sh dpf-doctools
 ```
 
+If the portal's baked version contains only a source commit, it uses the mounted clone to identify the release that exact commit descends from. That initial lookup describes the stamped commit. Missing commit history or a missing release ancestor leaves conversion unavailable until that source history is restored.
+
 The portal only runs a digest-pinned image. To point a dev portal at a local build, set `DPF_DOCTOOLS_IMAGE` in the dev portal's own environment to its image id (`docker image inspect -f '{{.Id}}' dpf-doctools`). The docker-gated converter test uses the same reference and is skipped without it:
 
 ```bash

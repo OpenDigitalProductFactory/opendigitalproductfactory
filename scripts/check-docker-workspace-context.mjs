@@ -1,5 +1,5 @@
 // Edge build-input closure. Reuses the Docker parser and lockfile traversal.
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { posix, join } from "node:path";
 import { parseStages, isDockerignored } from "./lib/docker-stage-graph.mjs";
 import { loadGraph, collectWorkspaceClosure } from "./sbom/runtime-surface.mjs";
@@ -63,4 +63,39 @@ export function checkEdgeWorkspaceContext(root = process.cwd()) {
   } catch (error) {
     return { ok: false, problems: [`${image}: ${error.message}`] };
   }
+}
+
+// pnpm can fetch root file dependencies even when --filter selects another
+// importer. Prove the archive exists at every install snapshot, not a later COPY.
+export function findMissingFileContext(text, files, dockerignore = "") {
+  const stages = parseStages(text), byName = new Map(stages.map(stage => [stage.name, stage]));
+  const problems = [];
+  for (const stage of stages) for (const snapshot of stage.installs) for (const file of files) {
+    if (isDockerignored(file, dockerignore) || !provides({ ...stage, ...snapshot }, file, byName)) {
+      problems.push(`stage ${stage.name} requires file dependency ${file} before pnpm install`);
+    }
+  }
+  return problems;
+}
+
+export function checkFileDependencyContext(root, images) {
+  try {
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const files = [...new Set(Object.values({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies })
+      .filter(value => typeof value === "string" && value.startsWith("file:") && value.endsWith(".tgz"))
+      .map(value => value.slice(5)))];
+    const problems = [];
+    for (const file of files) {
+      if (posix.isAbsolute(file) || file.split(/[\\/]/).includes("..") || !existsSync(join(root, file))) {
+        problems.push(`Missing or unsafe root file dependency: ${file}`);
+      }
+    }
+    const ignore = readFileSync(join(root, ".dockerignore"), "utf8");
+    for (const image of images) {
+      if (!existsSync(join(root, image))) continue;
+      problems.push(...findMissingFileContext(readFileSync(join(root, image), "utf8"), files, ignore)
+        .map(problem => `${image}: ${problem}`));
+    }
+    return { ok: problems.length === 0, problems, files };
+  } catch (error) { return { ok: false, problems: [error.message] }; }
 }

@@ -1,0 +1,115 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Saved coworker response binding",
+    "Existing adapter-attempt feedback state",
+    "Existing AdminActivity audit",
+    "Safe response feedback read DTO",
+    "Routing feedback source coverage",
+    "Golden Triangle human calibration"
+  ],
+  "migration": {
+    "name": "20261031211500_response_feedback",
+    "backfill": "None. All existing message binding, scope and feedback attribution fields remain NULL. feedbackRevision starts0; old booleans are not reattributed. Nullable additive columns and two enums extend existing owners only.",
+    "observationMethod": "Source/schema inspection and source-local Prisma validate/generate. Privileged live row-count inspection is not authorized to this caller; no row counts are invented.",
+    "rollback": "Revert application readers/writers through protected delivery. Retain additive columns, typed provenance and existing audit history. Do not drop populated evidence or infer historical owners. Any destructive schema rollback requires a separate reviewed migration."
+  },
+  "tests": [
+    "apps/web/lib/routing/response-producer.test.ts",
+    "apps/web/lib/tak/coworker-response-persistence.test.ts",
+    "apps/web/lib/routing/response-feedback.test.ts",
+    "apps/web/lib/actions/response-feedback.test.ts",
+    "apps/web/lib/mcp/packs/work-thread-feedback.test.ts",
+    "apps/web/lib/ai-operations-map/routing-management.test.ts",
+    "apps/web/lib/golden-triangle/telemetry-receipts.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent-message",
+      "prismaModel": "AgentMessage",
+      "lifecycleDisposition": "Existing model confidentiality and retention remain authoritative. AgentMessage retains its conversation lifecycle; AdapterRunTelemetry remains180-day bounded telemetry. Audit history uses existing AdminActivity retention. No new table or inferred legacy attribution.",
+      "fields": [
+        {
+          "fieldId": "data:agent-message#responseAttemptId",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Soft reference to existing AdapterRunTelemetry id. Never guessed; missing or expired capture is unavailable."
+        },
+        {
+          "fieldId": "data:agent-message#responseContentDigest",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "One-way digest of exact saved answer bytes. No copied answer body; later edits fail eligibility."
+        },
+        {
+          "fieldId": "data:agent-message#responseScope",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Typed known_unroomed/workroom. NULL is unknown legacy, never backfilled from current ownership."
+        },
+        {
+          "fieldId": "data:agent-message#responseWorkroomId",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Existing Workroom FK. On deletion SET NULL retains workroom scope and causes denial."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:adapter-run-telemetry",
+      "prismaModel": "AdapterRunTelemetry",
+      "lifecycleDisposition": "Existing model confidentiality and retention remain authoritative. AgentMessage retains its conversation lifecycle; AdapterRunTelemetry remains180-day bounded telemetry. Audit history uses existing AdminActivity retention. No new table or inferred legacy attribution.",
+      "fields": [
+        {
+          "fieldId": "data:adapter-run-telemetry#feedbackPrincipalId",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Canonical Principal FK with delete restriction. Current writer derives it; no client actor or historical backfill."
+        },
+        {
+          "fieldId": "data:adapter-run-telemetry#feedbackSource",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Typed human/agent provenance. NULL remains unattributed legacy; agent cannot replace human judgment."
+        },
+        {
+          "fieldId": "data:adapter-run-telemetry#feedbackRevision",
+          "resolution": "governed",
+          "reason": "Extend existing response/attempt owners; exact feedback cannot be safely derived from trace/timestamp or current provider settings.",
+          "provenance": "BI-A009189A; docs/superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Monotonic optimistic revision starts0. Serializable mutation and mandatory AdminActivity correction audit commit atomically."
+        }
+      ]
+    }
+  ]
+}

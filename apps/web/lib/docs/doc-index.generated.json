@@ -918,7 +918,8 @@
         "proposed-architecture",
         "historical-records",
         "provider-and-model-pin-semantics",
-        "planned-one-picture-experience"
+        "planned-one-picture-experience",
+        "exact-saved-answer-feedback"
       ]
     },
     "docs/architecture/application-boundaries.md": {
@@ -3012,7 +3013,8 @@
         "141-success-metrics-does-the-shipped-feature-work",
         "15-open-decisions",
         "16-prototype-guidance",
-        "17-final-design-principle"
+        "17-final-design-principle",
+        "current-acceptance-receipt-boundary-bi-a009189a"
       ]
     },
     "docs/design/golden-triangle-slice0-substrate-audit.md": {
@@ -12112,7 +12114,8 @@
         "anthropic-oauth-subscription",
         "chatgpt-openai-subscription",
         "docker-model-runner-local",
-        "troubleshooting"
+        "troubleshooting",
+        "investigate-routing-and-record-feedback"
       ]
     },
     "docs/user-guide/ai-workforce/priority-and-outcomes.md": {
@@ -12127,6 +12130,7 @@
         "the-work-itself-can-raise-the-bar",
         "reading-the-outcomes-view",
         "the-calibration-suggestion",
+        "answer-feedback",
         "honest-limits",
         "related",
         "how-work-rooms-behave"

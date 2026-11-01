@@ -73,7 +73,13 @@ export const evalBackground = jobs.createFunction(
     const gate = await gateAtEntry(step, "ai/eval-background");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    const { endpointId, modelId, userId, force } = event.data;
+    const { endpointId, modelId, userId, force, calibrationRunId } = event.data;
+    if (calibrationRunId) {
+      return step.run("run-commissioned-calibration", async () => {
+        const { runSubscriptionCalibration } = await import("@/lib/routing/subscription-calibration-execution");
+        return withInferenceOrigin("autonomous", () => runSubscriptionCalibration({ runId: calibrationRunId, endpointId, modelId, userId }));
+      });
+    }
 
     // BI-C8164664: claim the GPU eval slot BEFORE the work. A retry/lease-storm
     // re-invocation within the cooldown loses the claim and skips, so the GPU is
@@ -103,6 +109,9 @@ export const evalBackground = jobs.createFunction(
       // Record completion in ScheduledJob for UI visibility
       await step.run("record-completion", async () => {
         const { prisma } = await import("@dpf/db");
+        const actual = await prisma.endpointTestRun.findUnique({ where: { runId: result.testRunId },
+          select: { status: true, endpointId: true, modelId: true } });
+        if (!actual || actual.endpointId !== endpointId || actual.modelId !== modelId || actual.status === "running") return;
         await prisma.scheduledJob.upsert({
           where: { jobId: `eval-${modelId}` },
           create: {
@@ -110,12 +119,12 @@ export const evalBackground = jobs.createFunction(
             name: `Eval: ${modelId}`,
             schedule: "manual",
             lastRunAt: new Date(),
-            lastStatus: "completed",
+            lastStatus: actual.status,
             nextRunAt: null,
           },
           update: {
             lastRunAt: new Date(),
-            lastStatus: "completed",
+            lastStatus: actual.status,
           },
         });
       });

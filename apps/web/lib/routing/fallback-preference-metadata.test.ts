@@ -45,6 +45,7 @@ vi.mock("./route-outcome", () => ({
 }));
 
 import { callProvider } from "@/lib/ai-inference";
+import { createResponseProducer } from "./response-producer";
 import { prisma } from "@dpf/db";
 import { callWithFallbackChain } from "./fallback";
 import type { RouteDecision } from "./types";
@@ -90,6 +91,26 @@ beforeEach(() => {
 });
 
 describe("callWithFallbackChain configured preference metadata", () => {
+  it("returns only the successful fallback producer rather than the selected model", async () => {
+    const content = "The fallback model produced this answer.";
+    const responseProducer = createResponseProducer({ attemptId: "fallback-attempt", providerId: "prov2", modelId: "model2", content });
+    mockCallProvider.mockRejectedValueOnce(new Error("selected endpoint unavailable"))
+      .mockResolvedValueOnce({ content, inputTokens: 5, outputTokens: 5, inferenceMs: 20, responseProducer });
+    const result = await callWithFallbackChain({ ...decision, preferenceResolution: undefined, fallbackChain: ["prov2"],
+      candidates: [{ endpointId: "prov2", providerId: "prov2", modelId: "model2", endpointName: "Backup", fitnessScore: 1, dimensionScores: {}, costPerOutputMToken: null, excluded: false }] },
+      [{ role: "user", content: "Answer the task." }], "system", undefined, undefined, undefined, undefined,
+      { agentMessageId: "assistant-id", threadId: "thread-id" });
+    expect(result).toMatchObject({ providerId: "prov2", modelId: "model2", responseProducer });
+    expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    expect(mockCallProvider.mock.calls[1]?.[8]).toMatchObject({ agentMessageId: "assistant-id", threadId: "thread-id" });
+  });
+  it.each(["content", "model"])("clears a producer whose %s no longer matches the successful call", async mismatch => {
+    const content = "The actual response content.";
+    mockCallProvider.mockResolvedValueOnce({ content, inputTokens: 5, outputTokens: 5, inferenceMs: 20,
+      responseProducer: createResponseProducer({ attemptId: "mismatched", providerId: "prov1", modelId: mismatch === "model" ? "other" : "model1", content: mismatch === "content" ? "Different generated content." : content }) });
+    const result = await callWithFallbackChain(decision, [{ role: "user", content: "hi" }], "system");
+    expect(result.responseProducer).toBeUndefined();
+  });
   it("preserves a typed async start handle without exposing raw provider data", async () => {
     mockCallProvider.mockResolvedValueOnce({
       content: "",

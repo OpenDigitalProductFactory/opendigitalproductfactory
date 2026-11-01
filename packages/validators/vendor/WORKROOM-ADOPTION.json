@@ -1,0 +1,269 @@
+{
+  "backlogItem": "BI-FCDCAE98",
+  "artifact": {
+    "component": "@opendigitalproductfactory/dpf-workroom",
+    "version": "0.1.0-candidate.4",
+    "sourceCommit": "ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9",
+    "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44"
+  },
+  "realCaller": "apps/web/lib/work-management/workroom-shape-conformance.ts",
+  "callerDisposition": "Graph, receipt and process-identity imports directly use public artifact exports.",
+  "retainedBridges": {
+    "packages/validators/src/workroom/index.ts": {
+      "artifactSubpath": ".",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [],
+      "testImporters": [
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/workroom/flow-graph.ts": {
+      "artifactSubpath": "./flow-graph",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/work-management/workroom-shape-rebind.ts",
+        "apps/web/lib/work-management/workroom-stage-decision.ts",
+        "packages/validators/src/gpp/constructs-used-by.ts",
+        "packages/validators/src/gpp/decompile.ts",
+        "packages/validators/src/gpp/drc.ts",
+        "packages/validators/src/gpp/entering-gate.ts",
+        "packages/validators/src/gpp/interpreter.ts",
+        "packages/validators/src/gpp/soundness.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/work-management/drive-parity-parallel.test.ts",
+        "apps/web/lib/work-management/drive-parity-rework.test.ts",
+        "apps/web/lib/work-management/drive-parity-sub-shape.test.ts",
+        "apps/web/lib/work-management/work-shape-flow-graph.test.ts",
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/workroom/marking.ts": {
+      "artifactSubpath": "./marking",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/attention/sources/workroom-stall.ts",
+        "apps/web/lib/queue/functions/workroom-drive-children.ts",
+        "apps/web/lib/queue/functions/workroom-drive-deadlines.ts",
+        "apps/web/lib/queue/functions/workroom-drive-graph.ts",
+        "apps/web/lib/work-capsules/workroom-continuation-read.server.ts",
+        "apps/web/lib/work-management/drive-child-rooms.ts",
+        "apps/web/lib/work-management/drive-graph-tick.ts",
+        "apps/web/lib/work-management/drive-resolution-graph.ts",
+        "apps/web/lib/work-management/drive-resolution.ts",
+        "apps/web/lib/work-management/drive-sequential-run.ts",
+        "apps/web/lib/work-management/workroom-shape-rebind.ts",
+        "packages/validators/src/workroom-policy/drive-deadlines.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/queue/functions/workroom-drive-children.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive-cross-cycle.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive-scheduling.test.ts",
+        "apps/web/lib/work-management/drive-child-rooms.test.ts",
+        "apps/web/lib/work-management/drive-deadlines.test.ts",
+        "apps/web/lib/work-management/drive-marking.test.ts",
+        "apps/web/lib/work-management/drive-parity-deadline.test.ts",
+        "apps/web/lib/work-management/drive-parity-parallel.test.ts",
+        "apps/web/lib/work-management/drive-parity-rework.test.ts",
+        "apps/web/lib/work-management/drive-parity-sub-shape.test.ts",
+        "apps/web/lib/work-management/drive-resolution.test.ts",
+        "apps/web/lib/work-management/work-shape-graph-constructs.test.ts",
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/workroom/receipts.ts": {
+      "artifactSubpath": "./receipts",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/operate/coo-surface.ts",
+        "apps/web/lib/queue/functions/workroom-drive.ts",
+        "apps/web/lib/work-management/drive-graph-tick.ts",
+        "apps/web/lib/work-management/drive-plan-stage.ts",
+        "apps/web/lib/work-management/drive-resolution-graph.ts",
+        "apps/web/lib/work-management/drive-resolution.ts",
+        "apps/web/lib/work-management/drive-sequential-run.ts",
+        "apps/web/lib/work-management/room-read-model.ts",
+        "apps/web/lib/work-management/stage-evidence-receipts.ts",
+        "apps/web/lib/work-management/workroom-drive-snapshot-merge.ts",
+        "apps/web/lib/work-management/workroom-drive-state.ts",
+        "apps/web/lib/work-management/workroom-shape-rebind.ts",
+        "apps/web/lib/work-management/writeback-latch.ts",
+        "packages/validators/src/gpp/interpreter.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/gpp/shape-language/interpreter-parity.test.ts",
+        "apps/web/lib/gpp/shape-language/interpreter.test.ts",
+        "apps/web/lib/operate/coo-surface.test.ts",
+        "apps/web/lib/work-management/drive-parity-deadline.test.ts",
+        "apps/web/lib/work-management/drive-parity-parallel.test.ts",
+        "apps/web/lib/work-management/drive-parity-rework.test.ts",
+        "apps/web/lib/work-management/drive-parity-sub-shape.test.ts",
+        "apps/web/lib/work-management/workroom-drive-receipts.test.ts",
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/action-result.ts": {
+      "artifactSubpath": "./result",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/shared/action-result.ts"
+      ],
+      "testImporters": [
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/outcome-disposition.ts": {
+      "artifactSubpath": "./outcome-disposition",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "packages/validators/src/gpp/gpp-shape-schema.ts",
+        "packages/validators/src/gpp/work-shape-contracts.ts",
+        "packages/validators/src/index.ts",
+        "packages/validators/src/trusted-agent-contracts.ts",
+        "packages/validators/src/trusted-agent-reference-loop.ts"
+      ],
+      "testImporters": [
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/gpp/element-ids.ts": {
+      "artifactSubpath": "./process/element-ids",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/work-management/drive-resolution-graph.ts",
+        "packages/validators/src/gpp/browser.ts",
+        "packages/validators/src/gpp/constructs-used-by.ts",
+        "packages/validators/src/gpp/drc.ts",
+        "packages/validators/src/gpp/interpreter.ts",
+        "packages/validators/src/gpp/parse.ts",
+        "packages/validators/src/gpp/resolve.ts",
+        "packages/validators/src/gpp/soundness.ts",
+        "packages/validators/src/workroom-policy/drive-deadlines.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/gpp/shape-language/element-ids.test.ts",
+        "apps/web/lib/work-management/declared-flows/build-studio.conformance.test.ts",
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/gpp/diagnostics.ts": {
+      "artifactSubpath": "./process/diagnostics",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/gpp/shape-language/dpf-toolkit.ts",
+        "apps/web/lib/gpp/shape-language/known-findings.ts",
+        "packages/validators/src/gpp/browser.ts",
+        "packages/validators/src/gpp/compile.ts",
+        "packages/validators/src/gpp/drc.ts",
+        "packages/validators/src/gpp/parse.ts",
+        "packages/validators/src/gpp/soundness.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/gpp/shape-language/drc-corpus.test.ts",
+        "apps/web/lib/gpp/shape-language/drc-registry.test.ts",
+        "apps/web/lib/gpp/shape-language/drc.test.ts",
+        "apps/web/lib/gpp/shape-language/element-ids.test.ts",
+        "apps/web/lib/gpp/shape-language/known-findings.test.ts",
+        "apps/web/lib/gpp/shape-language/not-executable.test.ts",
+        "apps/web/lib/gpp/shape-language/parse.test.ts",
+        "packages/validators/src/gpp/compiler-contract.test.ts",
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    },
+    "packages/validators/src/gpp/executable-constructs.ts": {
+      "artifactSubpath": "./process/executable-constructs",
+      "owner": "DPF maintainers",
+      "removalCondition": "DPF maintainers remove this bridge and its compatibility-only test when all listed production and fixture consumers migrate to the explicit artifact subpath. Tests alone do not extend bridge lifetime.",
+      "productionImporters": [
+        "apps/web/lib/work-management/drive-resolution-graph.ts",
+        "packages/validators/src/gpp/browser.ts",
+        "packages/validators/src/gpp/constructs-used-by.ts",
+        "packages/validators/src/gpp/drc.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/gpp/shape-language/constructs-used-by.test.ts",
+        "apps/web/lib/gpp/shape-language/drc-corpus.test.ts",
+        "apps/web/lib/gpp/shape-language/drc.test.ts",
+        "apps/web/lib/gpp/shape-language/not-executable.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive-children.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive-cross-cycle.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive-deadline.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive-rework.test.ts",
+        "apps/web/lib/queue/functions/workroom-drive.test.ts",
+        "apps/web/lib/work-management/drive-marking-durable.test.ts",
+        "apps/web/lib/work-management/work-shape-graph-constructs.test.ts",
+        "packages/validators/src/workroom/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/workroom-kernel/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
+      ]
+    }
+  },
+  "hostAuthority": "DPF retains actor identity, current admission/permits, transactions and effect/result custody.",
+  "migration": "Move-only; no persisted-record rewrite.",
+  "rollback": "Protected revert restores prior artifact/dependency/import/body set together; component repository and other consumers stay independently owned.",
+  "imageMaintenanceScripts": "The root direct file dependency installs the same archive into the existing filtered runtime dependency set, so /app/apps/web-src maintenance scripts can resolve the real conformance caller imports. Web and validators declarations point to the same lockfile artifact.",
+  "implementationCorrection": {
+    "reason": "Actual governed integration cmvxc3gyq1oji01tmy3aoqwm1 failed five Next CommonJS source-loader cases;45841other tests passed. Candidate.2 exposed import-only conditions.",
+    "change": "Candidate.3 adds require conditions to exactly the same emitted ESM files; every export and function identity matches native import. No domain/provenance/API semantic change.",
+    "plan": "The original pilot plan and five AC-PILOT criteria remain unchanged. This version correction implements its existing source-loader acceptance requirement; the original candidate.2 design pin is retained as historical intent.",
+    "verification": "Component RED/GREEN, standalone original/installed13groups and strict24.22TS7matrix passed. Actual DPF source-loader and merged integration must rerun before acceptance."
+  },
+  "nodePatchCorrection": {
+    "reason": "Current DPF CI runs24.22.1; previous exact engine profile correctly refused strict install. Candidate.4 admits the newly tested patch; no emitted code/API/source change.",
+    "strictReceiverMatrix": [
+      "foundation-v5-node24.22.0-ts7-receiver-result.json",
+      "foundation-v5-node24.22.1-ts7-receiver-result.json"
+    ],
+    "previousCandidate": "0.1.0-candidate.3 remains immutable in component artifact archive"
+  }
+}
