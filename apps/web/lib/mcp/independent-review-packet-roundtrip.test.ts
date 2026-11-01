@@ -131,7 +131,7 @@ describe("bounded recovery packet round trip", () => {
     const rooms = [room, { ...room, capsuleId: "WC-OTHER", headBranch: "feat/other" }];
     const selectRooms = async (query: unknown) => {
       const { where } = query as { where: Record<string, unknown> };
-      return rooms.filter(row => ["repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
+      return rooms.filter(row => ["capsuleId", "repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
         where[key] === undefined || where[key] === row[key as keyof typeof row]));
     };
     const db = database(activities);
@@ -181,6 +181,10 @@ describe("bounded recovery packet round trip", () => {
       expect(bounded.success, JSON.stringify(bounded)).toBe(true);
       expect(packetFrom(bounded)).toEqual(packet);
     }
+    const selected = await getBacklogItem({ itemId: item.itemId, workroomId: room.capsuleId,
+      recoveryGate: "spec-approval" }, "AGT-AUTHOR", "human", context);
+    expect(selected.success, JSON.stringify(selected)).toBe(true);
+    expect(packetFrom(selected)).toEqual(packet);
     const authorityResult = await authorizeCoworkerRequest(packet, "human", context);
     expect(authorityResult.refusal, JSON.stringify(authorityResult)).toBeUndefined();
     expect(authorityResult.bounded).toBe(true);
@@ -199,6 +203,32 @@ describe("bounded recovery packet round trip", () => {
       expect.objectContaining({ code: "CANONICAL_DESIGN_REQUIRED", state: "missing",
         nextAction: expect.stringContaining("Current immutable design verification is unavailable") }),
     ]) } } });
+  });
+  it("refuses a selected source that changes during packet issuance", async () => {
+    const { issue } = prepare(gates[1]);
+    const room = { ...await mocks.room(), capsuleId: "WC-ROUNDTRIP", archivedAt: null, status: "ready" };
+    mocks.room.mockResolvedValue(room);
+    mocks.recovery.mockImplementation(async ({ taskAuthority }) => {
+      const result = await issue(taskAuthority ?? null);
+      mocks.room.mockResolvedValue({ ...room, headSha: "f".repeat(40) });
+      return result;
+    });
+    expect(await getBacklogItem({ itemId: "BI-ROUNDTRIP", workroomId: room.capsuleId,
+      recoveryGate: "spec-approval" }, "AGT-AUTHOR", "human", context))
+      .toMatchObject({ success: false, error: "workroom_source_unavailable" });
+  });
+  it("ignores caller source hashes when a valid exact locator is supplied", async () => {
+    prepare(gates[1]);
+    const room = { ...await mocks.room(), capsuleId: "WC-ROUNDTRIP", archivedAt: null, status: "ready" };
+    mocks.room.mockResolvedValue(room);
+    const result = await getBacklogItem({ itemId: "BI-ROUNDTRIP", workroomId: room.capsuleId,
+      recoveryGate: "spec-approval", currentDesignSource: { headSha: "forged" }, claimSource: { headSha: "forged" } },
+      "AGT-AUTHOR", "human", context);
+    expect(result.success).toBe(true);
+    expect(mocks.design).toHaveBeenCalledWith({ itemId: "BI-ROUNDTRIP", claimSource: {
+      workroomId: room.capsuleId, repositoryFullName: room.repositoryFullName, headBranch: room.headBranch,
+      baseSha: room.baseSha, headSha: room.headSha,
+    } });
   });
   it.each(gates)("admits the fresh %s packet exactly as emitted", async (...gate) => {
     prepare(gate);

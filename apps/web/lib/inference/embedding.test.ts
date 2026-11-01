@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const admission = vi.hoisted(() => ({ provider: vi.fn(), connection: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
@@ -8,6 +8,11 @@ vi.mock("@dpf/db", () => ({ prisma: {
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("./provider-inference-transport", () => ({ providerInferenceFetch: transport.fetch }));
+const selection = vi.hoisted(() => ({ endpoint: null as string | null, error: null as Error | null }));
+vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: () => {
+  if (selection.error) throw selection.error;
+  return selection.endpoint;
+} }));
 
 vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>()),
@@ -34,6 +39,57 @@ beforeEach(() => {
   transport.fetch.mockReset();
   admission.provider.mockReset().mockResolvedValue({ status: "active" });
   admission.connection.mockReset().mockResolvedValue({ status: "active" });
+  selection.endpoint = null;
+  selection.error = null;
+  vi.stubEnv("LLM_BASE_URL", "http://model-runner.docker.internal/v1");
+  vi.stubEnv("OLLAMA_INTERNAL_URL", "");
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe("embedding follows the committed local engine selection (BI-CA88DAA7)", () => {
+  it("routes requests and availability to native, then Docker after rollback", async () => {
+    selection.endpoint = "http://host.docker.internal:12436/v1";
+    transport.fetch
+      .mockResolvedValueOnce(okEmbedding([0.1]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "ai/nomic-embed-text-v1.5" }] })))
+      .mockResolvedValueOnce(okEmbedding([0.2]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "ai/nomic-embed-text-v1.5" }] })));
+
+    await expect(generateEmbedding("knowledge")).resolves.toEqual([0.1]);
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+    selection.endpoint = null;
+    await expect(generateEmbedding("knowledge")).resolves.toEqual([0.2]);
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+
+    expect(transport.fetch.mock.calls.map(([url]) => url)).toEqual([
+      "http://host.docker.internal:12436/v1/embeddings",
+      "http://host.docker.internal:12436/v1/models",
+      "http://model-runner.docker.internal/v1/embeddings",
+      "http://model-runner.docker.internal/v1/models",
+    ]);
+    expect(JSON.parse(String(transport.fetch.mock.calls[0]![1].body))).toEqual({
+      model: "ai/nomic-embed-text-v1.5", input: "knowledge",
+    });
+  });
+
+  it.each(["transitioning", "invalid selection"])("contains %s without provider dispatch", async (message) => {
+    selection.error = new Error(message);
+    transport.fetch.mockImplementation(async () => okEmbedding([0.9]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toEqual({ status: "failed", reason: message });
+    await expect(generateEmbedding("knowledge")).resolves.toBeNull();
+    await expect(isEmbeddingAvailable()).resolves.toBe(false);
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+
+  it("contains a genuine endpoint conflict without silently using Docker", async () => {
+    selection.endpoint = "http://host.docker.internal:12436/v1";
+    transport.fetch.mockImplementation(async () => okEmbedding([0.9]));
+    vi.stubEnv("LLM_BASE_URL", "http://different-host/v1");
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "failed", reason: expect.stringMatching(/conflict/) });
+    await expect(generateEmbedding("knowledge")).resolves.toBeNull();
+    await expect(isEmbeddingAvailable()).resolves.toBe(false);
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-7F674966B4B2)", () => {
@@ -236,5 +292,26 @@ describe("operator pause is authoritative for embedding inference", () => {
     await expect(isEmbeddingAvailable()).resolves.toBe(true);
     expect(admission.connection).not.toHaveBeenCalled();
     expect(transport.fetch).toHaveBeenCalledWith(expect.stringContaining("/models"), expect.not.objectContaining({ method: "POST" }));
+  });
+});
+
+
+describe("pause and selection compose before each embedding dispatch", () => {
+  it("honors operator pause before resolving an unavailable selection", async () => {
+    admission.connection.mockResolvedValue({ status: "paused" });
+    selection.error = new Error("transitioning");
+    transport.fetch.mockImplementation(async () => okEmbedding([0.9]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the selection fence before an oversize retry", async () => {
+    selection.endpoint = "http://host.docker.internal:12436/v1";
+    transport.fetch.mockImplementationOnce(async () => {
+      selection.error = new Error("transitioning");
+      return new Response(OVERSIZE_BODY, { status: 500 });
+    }).mockImplementation(async () => okEmbedding([0.9]));
+    await expect(generateEmbeddingDetailed("x".repeat(5000))).resolves.toEqual({ status: "failed", reason: "transitioning" });
+    expect(transport.fetch).toHaveBeenCalledTimes(1);
   });
 });

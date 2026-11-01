@@ -8,7 +8,7 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import { prepareCurrentArtifactObservation, type ArtifactObservationDb } from "./current-artifact-observation";
 
 type Db = Pick<typeof prisma, "backlogItem" | "backlogItemActivity" | "workroom"> & ArtifactObservationDb;
-type ClaimSource = { repositoryFullName: string; headBranch: string; baseSha?: string | null; headSha?: string | null };
+type ClaimSource = { workroomId?: string; repositoryFullName: string; headBranch: string; baseSha?: string | null; headSha?: string | null };
 type Room = ClaimSource & { capsuleId: string; baseSha: string; headSha: string;
   leaseHolderPrincipalId: string | null; executorRef: string | null; leaseExpiresAt: string | null; status: string };
 type BoundResearch = {
@@ -44,6 +44,7 @@ async function loadBinding(itemId: string, db: Db, claimSource?: ClaimSource): P
   const rooms = await db.workroom.findMany({
     where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
       status: { notIn: ["abandoned", "archived", "superseded"] },
+      ...(claimSource?.workroomId ? { capsuleId: claimSource.workroomId } : {}),
       ...(claimSource ? { repositoryFullName: claimSource.repositoryFullName, headBranch: claimSource.headBranch,
         baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, headBranch: true, baseSha: true, headSha: true,

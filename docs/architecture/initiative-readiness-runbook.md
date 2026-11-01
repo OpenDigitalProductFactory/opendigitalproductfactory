@@ -420,16 +420,17 @@ The protocol is deliberately two-phase. **Prepare** is pinned to the item, Workr
 
 The scheduled task, stage mandate, Workroom state, tool effects, and recorded evidence all recheck the same binding digest. A token cannot be rearmed after start or settlement, and pages from another identity, path, phase, attempt, or outcome never combine into evidence. Only complete positive terminal Verify evidence can be selected for the governed research writer. Negative, inconclusive, blocked, stale, conflicting, or failed-only evidence remains audit history and readiness stays closed. The design author must still persist the normal `record_initiative_evidence(gate:"research")` receipt; qualification evidence never writes that receipt directly.
 
-Verify is not currently executable. The host-resource runner can claim and
-supervise the exact lease, but it reports through the same MCP credential as
-the caller; a matching lease plus caller-supplied output therefore cannot prove
-the child ran. Terminal recovery withholds qualification tokens and the
-execution-evidence writer refuses qualification claims. The existing signed
-native Edge action channel has a separate machine identity, but deliberately
-supports only its closed action allow-list and no qualification-test action.
-Do not widen it into a remote shell. Sandbox-labelled, caller-asserted,
-foreign, expired or duplicate receipts remain audit history and cannot support
-research.
+Verify can settle only through the machine-authenticated native Edge result
+path. That path validates the immutable action, phase and qualification binding
+before it records the terminal result; it remains a closed capability and is
+not a general remote shell. Historical `workroom-host` activity and lease rows
+remain audit history only. A lease proves admission and process ownership, not
+that the child executed or produced the claimed output, so caller-authored host
+rows never contribute qualification evidence even when every stored field
+matches. Sandbox-labelled, caller-asserted, foreign, expired or duplicate
+receipts likewise cannot support research. Qualification evidence is still
+only an input to the independently governed research writer and never counts as
+a research PASS by itself.
 
 The source contract is [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts); routing and progression live in [terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts). The design is [qualification research admission](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
 

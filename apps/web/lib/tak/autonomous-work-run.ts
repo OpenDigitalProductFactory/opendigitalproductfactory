@@ -1,3 +1,5 @@
+import { createPublicTaskRunId, initialStatusForTrigger, taskRunSourceForTrigger, type AutonomousWorkTrigger } from "./autonomous-work-task-identity";
+export type { AutonomousWorkTrigger } from "./autonomous-work-task-identity";
 import { randomUUID } from "crypto";
 import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-management/room-turn-authority";
 import { prisma } from "@dpf/db";
@@ -28,15 +30,6 @@ function lastUserRequest(history: ChatMessage[]): string {
   return "";
 }
 
-export type AutonomousWorkTrigger =
-  | "interactive"
-  | "scheduled"
-  | "external-mcp"
-  | "build"
-  | "deliberation"
-  | "radar"
-  | "system-recovery"
-  | "capacity-continuity";
 
 export type AutonomousWorkRunRef = {
   id: string;
@@ -100,32 +93,6 @@ export type AutonomousWorkRunInput = {
     progressPayload?: Prisma.InputJsonValue;
   };
 };
-
-const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
-  interactive: "CHAT",
-  scheduled: "SCHED",
-  "external-mcp": "MCP",
-  build: "BUILD",
-  deliberation: "DELIB",
-  radar: "RADAR",
-  "system-recovery": "RECOV",
-  "capacity-continuity": "CAP",
-};
-
-function taskRunSourceForTrigger(trigger: AutonomousWorkTrigger): string {
-  if (trigger === "interactive") return "coworker";
-  if (trigger === "build") return "build";
-  if (trigger === "deliberation") return "skill";
-  return "proactive";
-}
-
-function initialStatusForTrigger(trigger: AutonomousWorkTrigger): string {
-  return trigger === "interactive" ? "submitted" : "working";
-}
-
-function createPublicTaskRunId(trigger: AutonomousWorkTrigger): string {
-  return `TR-${TRIGGER_PREFIX[trigger]}-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
 
 export async function createAutonomousWorkRun(
   input: AutonomousWorkRunInput,
@@ -267,6 +234,8 @@ export async function resolveAutonomousWorkTools(input: {
   requiredToolNames?: readonly string[];
   /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
   restrictedReviewBinding?: InitiativeReviewBinding;
+  /** Server-owned finite CE preparation; resolves only its registered readers without ambient runtime probes. */
+  restrictedEngagementBinding?: import("../coworker-service-catalog/engagement-task-binding").EngagementTaskBinding;
   /** Current server-resolved scheduled commission; never copied from model arguments. */
   scheduledReportingMode?: "read-only-history";
   taskRunId?: string;
@@ -303,6 +272,16 @@ export async function resolveAutonomousWorkTools(input: {
   const authorized = (reporting?.mode ?? input.scheduledReportingMode) === "read-only-history"
     ? normallyAuthorized.filter(isScheduledReportingRead) : normallyAuthorized;
 
+  if (input.restrictedEngagementBinding) {
+    const { parseEngagementTaskBinding, ENGAGEMENT_READ_TOOLS } = await import("../coworker-service-catalog/engagement-task-binding");
+    const binding = parseEngagementTaskBinding(input.restrictedEngagementBinding), names = new Set(input.requiredToolNames ?? []);
+    if (!binding?.presentAssessment || names.size !== ENGAGEMENT_READ_TOOLS.length
+      || ENGAGEMENT_READ_TOOLS.some(name => !names.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new Error("engagement-present-tool-surface-unavailable");
+    }
+    const tools = authorized.filter(tool => names.has(tool.name));
+    return { tools, toolsForProvider: toolsToOpenAIFormat(tools), deferredTools: [] };
+  }
   if (input.restrictedReviewBinding) {
     const binding = input.restrictedReviewBinding;
     const names = [immutablePageReaderForArtifact(binding.artifactRef), binding.writerToolName];

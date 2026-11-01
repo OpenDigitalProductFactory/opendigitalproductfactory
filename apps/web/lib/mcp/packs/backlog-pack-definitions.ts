@@ -282,6 +282,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       type: "object",
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
+        workroomId: { type: "string", description: "Optional exact persisted Workroom locator. Requires current human and assistant action access and matching item/source; never supplies authority or caller source hashes. Preserves unscoped ambiguity when omitted." },
         recoveryGate: { type: "string", enum: RECOVERY_READ_GATES, description: "Return only this gate's exact current recovery request or explicit issuer escalation, without large body/history. Re-read unchanged identity for the same request; never reconstruct a packet." },
         reassessmentAuthorizationItemId: { type: "string", description: "Optional immutable approved policy item locator for a separately authorized present design-spec or spec-approval reassessment. Selects evidence only; cannot grant execution, replay an original task or replenish an allowance." },
       },

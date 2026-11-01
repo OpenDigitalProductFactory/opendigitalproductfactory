@@ -187,3 +187,46 @@ action flag, run duplicate inference, repeat reviews, overwrite historical repor
 hashes or settle UNKNOWN effects. Keep the immutable qualification verifier strict.
 Source rollback restores code only; runtime recovery remains the existing owner's
 recorded-profile obligation.
+
+
+## Standard local endpoint convergence amendment — October 30, 2026
+
+Corrective implementation owner: **BI-CA88DAA7**. The earlier merged source and physical acceptance obligations remain separate. This amendment is source planning; it grants no native activation, provider override, model request, permission expansion or uncertain-task replay.
+
+### Reproduction and selected correction
+
+At immutable served source `1f8c111c409a4e8cc3575d118a7a154134791ba9`, `docker-compose.yml:209` and `docker-compose.local-ci.yml:27` inject `http://host.docker.internal:11434` into `OLLAMA_INTERNAL_URL` while `LLM_BASE_URL` selects Docker Model Runner. Canonical `.env` has no legacy key. Actual pure execution of `managedInferenceProviderDigest` rejects these inherited values, accepts the same standard LLM endpoint without the legacy fallback, and still rejects a genuinely foreign endpoint. `getOllamaBaseUrl` independently enforces the same override veto during managed serving. Removing only admission validation would leave serving broken and weaken configuration protection.
+
+Actual source-path tracing also found `embedding.ts` constructs its own environment-first endpoint. Its transport only owns IO and cancellation; it does not rewrite the selected endpoint. Thus a native selection would leave document/knowledge embedding calls on Docker. This is source-path proof, not a successful live retrieval test.
+
+Use the existing endpoint/selection contract. Desktop and local-CI Compose retain an explicitly supplied `OLLAMA_INTERNAL_URL` but use an empty inherited fallback (`${OLLAMA_INTERNAL_URL:-}`). Keep the standard LLM default. The Linux overlay retains its intentional Ollama endpoint. Reuse `getOllamaBaseUrl` for both embedding requests and availability checks; contain selection-read errors within the existing failed/null/false API. Keep all explicit-configuration vetoes and provider digest fields unchanged. Do not broaden the allowlist, erase explicit operator settings or dispatch to Docker after a corrupt/transitioning selection.
+
+Docker's interpolation standard defines `${VAR:-default}` as the set/nonempty value or its fallback and applies interpolation per file before merge: https://docs.docker.com/reference/compose-file/interpolation/. An empty inherited fallback leaves one standard local inference source while the existing Linux overlay and explicit values retain ownership. Changing the fallback to another nonempty API URL would retain duplicate competing defaults; weakening admission would hide a real conflict. Neither alternative is needed.
+
+Protected PR6775 added authoritative provider pause checks while this correction was being verified. Preserve that admission before resolving the selected endpoint on every dispatch attempt, including oversize retries. A paused provider returns its existing deferred outcome; once admitted, invalid or unsettled selection remains a contained failure with no dispatch. Re-read selection for a retry rather than using an endpoint captured before a transition. Two composition regressions first failed on a naive combined merge (pause plus unavailable selection, and a selection fence raised after the first oversize response); the correction must preserve both protected pause behavior and the selected-engine contract. This is the same existing-provider scope, with no new permission or model policy.
+
+**OBJ-EPC1:** Standard Desktop defaults permit the existing managed-engine admission and serving resolver while explicit conflicts, Linux and independently selected providers retain their contracts.
+**OBJ-EPC2:** Actual portal embedding consumers follow the committed local selection and rollback, with contained failures and unchanged model, input, retry and timeout behavior.
+
+**CONTRACT-EPC-ENDPOINT:** Reuse CONTRACT-MRI-PROVIDER and the existing strict managed inference provider digest and canonical local resolver. No selection, authority or API format changes.
+**FLOW-EPC-CONVERGENCE:** published Compose/application correction → independently admitted canonical update → read back actual defaults → separately admitted native activation → actual useful workload/embedding retrieval → signed rollback/readback → final eligible activation. Source tests alone prove none of these runtime effects.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-EPC1 | OBJ-EPC1 | Render real Desktop/local-CI Compose defaults and prove both admission and managed serving accept them; preserve explicitly supplied legacy values and Linux overlay defaults. |
+| AC-EPC2 | OBJ-EPC1 | Genuine foreign environment/provider endpoints remain rejected, digest sensitivity remains intact, and independently selected providers keep their own endpoint. |
+| AC-EPC3 | OBJ-EPC2 | The real embedding helper and availability check use the managed endpoint and return to Docker after rollback, retaining the existing Nomic model, truncation/retry and timeout contract. |
+| AC-EPC4 | OBJ-EPC2 | Corrupt or transitioning selection and conflicting settings produce contained failed/null/false results without any provider dispatch or silent fallback. |
+| AC-EPC5 | OBJ-EPC1, OBJ-EPC2 | Deliver affected tests, typechecks, existing guards, independent immutable-source assessment, canonical integration gate, protected DCO publication and documented existing-install convergence. |
+
+### Ordered atomic fix: FLOW-EPC-SOURCE
+
+1. Publish this design-only amendment and bind its immutable blob, reproduction, source scope and atomic coverage to BI-CA88DAA7. Obtain normal current implementation admission before changing implementation files.
+2. Add first-failing tests exercising actual Compose defaults with the production admission and serving helpers; cover explicit overrides and the Linux overlay. Add real embedding-consumer request/availability, rollback and selection-failure regressions. Verify the pre-fix failures rather than counting a fixture's own logic as reproduction.
+3. Remove only the inherited Desktop/local-CI Ollama fallback; keep operator values and Linux overlay unchanged. Replace embedding's duplicate endpoint reader with the existing canonical resolver, inside its failure boundary.
+4. Verify VERIFY-EPC-UNIT: affected embedding, ollama-url, managed-admission and Compose contracts. Preserve negative provider cases, model/input/retries/deadlines, deferral distinction and no-dispatch on invalid selection. Run affected package typechecks and the Workroom impact contract.
+5. Verify VERIFY-EPC-INTEGRATION: applicable source/Compose/docs guards, independent full immutable-source assessment, canonical shared gate, DCO protected publication. Existing live advance is separately admitted through the canonical owner; read back actual serving source/defaults before activation. Do not replay any uncertain prior operation.
+
+**Backlog coverage:** one atomic deliverable BI-CA88DAA7. Default admission and actual embedding-consumer routing together repair the existing single-provider selection contract; neither a ready offer with a stale consumer nor a routed consumer with a refused offer realizes this correction. Map OBJ-EPC1, OBJ-EPC2, CONTRACT-EPC-ENDPOINT, FLOW-EPC-SOURCE, FLOW-EPC-CONVERGENCE, AC-EPC1–AC-EPC5, VERIFY-EPC-UNIT and VERIFY-EPC-INTEGRATION to that deliverable. The preimplementation plan is the published `4cec8b9312e119d90adbbc887df1d028c3c62684` snapshot (blob `791034c7bcd1d692bcf3ce37d61a3d7612da42aa`). Atomic coverage is `cmvuhx4x60jot01ls5bpght3g`, mapping this one deliverable to BI-CA88DAA7 with no independent dependencies. Author research is `initiative-ad297dbf-8e13-471d-a1ab-78579d759413`; implementation admission is `IRD-72B1B90AAD88`, on WC-9B75B557. The server raises the declared small shape to effective medium/elevated for Compose; its required five item-body acceptance criteria quote AC-EPC1–AC-EPC5 verbatim. The first coverage refusal for missing body criteria minted no receipt; the corrected call followed that remediation. These records authorize source implementation, not a live engine transition or historical-task replay.
+
+Source rollback restores prior files through protected delivery. It does not silently erase committed native selection or substitute for signed runtime rollback. No schema migration, provider row change, new API, new scheduler, engine benchmark or hardware-qualification claim is included. Existing native acceptance remains with this chat and its current admitted host procedure; ordinary source delivery does not prove AC-MRI3–AC-MRI6 or healthy recurring AI Ops learning.

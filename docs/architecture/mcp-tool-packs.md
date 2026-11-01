@@ -232,15 +232,17 @@ Three properties make the binding honest rather than merely present. The id is *
 
 This adds no approval store and grants no implementation authority. The ordinary stage tool set is intersected with the phase's narrower set: Prepare may edit only the named test/helper paths and cannot run tests; Verify may run the exact qualification and cannot edit or auto-fix. Candidate and verification evidence must carry the binding digest and phase-specific immutable results. Settlement records the evidence id on the same Workroom state, so terminal recovery can advance from a settled Prepare only after independent review of its exact candidate, and can use only a settled positive Verify result when constructing the ordinary research writer path.
 
-Verify remains fail-closed for both executor modes. A valid qualification claim
-can derive lease purpose, Workroom, source head, platform and command from a
-signed token, but those bindings prove admission rather than execution. The
-current host runner and a direct MCP caller use the same credential, so
-`record_execution_evidence` cannot authenticate which one observed a child
-process and refuses host qualification claims. Sandbox qualification remains
-non-evidence for the same missing-producer reason. The signed native Edge
-action channel is not a substitute: its closed allow-list does not expose a
-qualification-test action or arbitrary command surface.
+Verify remains fail-closed for caller-authored executor evidence. A valid
+qualification claim can derive lease purpose, Workroom, source head, platform
+and command from a signed token, but those bindings prove admission rather
+than child execution. Historical `workroom-host` rows therefore remain
+audit-only even when every stored field matches; sandbox-labelled and other
+caller-authored rows likewise contribute no evidence. Terminal qualification
+can settle only through the machine-authenticated native Edge result path,
+which validates the exact immutable action and phase binding. Its capability
+is closed and bounded rather than an arbitrary command surface. A valid Edge
+result is still qualification evidence, not a research PASS: the separately
+governed research writer must persist the normal research receipt.
 
 The carrier and state machine are defined in [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts), enforced by [Workroom storage](../../apps/web/lib/work-capsules/work-capsule-store.ts), and described in the [initiative-readiness runbook](initiative-readiness-runbook.md#bounded-qualification-research-admission).
 

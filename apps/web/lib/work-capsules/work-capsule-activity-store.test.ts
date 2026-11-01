@@ -107,7 +107,7 @@ describe("transactional Workroom activity", () => {
       .rejects.toThrow(/stale, duplicated/i);
     vi.unstubAllEnvs();
   });
-  it("does not settle caller-authenticated host metadata without executor attestation", async () => {
+  it("does not settle a retained caller-authenticated host receipt without trusted child provenance", async () => {
     vi.stubEnv("DPF_QUALIFICATION_ADMISSION_SECRET", "activity-store-test-secret");
     const now = Date.now();
     const issuedAt = new Date(now - 60_000).toISOString();
@@ -129,9 +129,10 @@ describe("transactional Workroom activity", () => {
     const digest = qualificationBindingDigest(binding);
     const started = { schemaVersion: 1, status: "started", token: createQualificationExperimentAdmission(binding),
       bindingDigest: digest, startCount: 1, issuedAt, startedAt, taskId: "workroom-host:WC-ONE" };
-    const execution = { workroomId: binding.workroomId, qualificationBindingDigest: digest,
+    const execution = { workroomId: binding.workroomId, leaseId: "NPEL-QUAL-1",
+      qualificationBindingDigest: digest,
       executorMode: "workroom-host", platform: "win32", headSha: binding.headSha,
-      testBlobIds: binding.candidate!.testBlobIds, command: "pnpm exec vitest run scripts/example.test.mjs",
+      testBlobIds: binding.candidate!.testBlobIds, command: "node --test scripts/example.test.mjs",
       outputDigest: `sha256:${"2".repeat(64)}`, startedAt, completedAt, exitCode: 0, skipped: false };
     const create = vi.fn().mockResolvedValue({ id: "evidence-host", workCapsuleId: "room-1" });
     const update = vi.fn().mockResolvedValue({});
@@ -139,8 +140,14 @@ describe("transactional Workroom activity", () => {
       workspaceState: { qualificationExperimentAdmission: started } });
     const findMany = vi.fn().mockResolvedValue([{ id: "activity-host", backlogItem: { itemId: binding.itemId },
       payload: { evidenceKind: "test_pass", qualification: execution }, recordedAt: new Date(completedAt) }]);
+    const leaseFindMany = vi.fn().mockResolvedValue([{ leaseId: execution.leaseId,
+      environmentKey: "host-heavy-resource", status: "active", claimKey: "qualification-attempt-1", // gitleaks:allow — deterministic fixture id, not a credential
+      purpose: `host-resource:qualification:${digest}`, ownerSessionId: "session-1", ownerProvider: "codex",
+      branchName: "fix/qualification", buildId: binding.headSha, taskRunId: binding.workroomId,
+      ownerPid: 42, ownerProcessIdentity: "windows:42", admittedAt: new Date(now - 45_000),
+      expiresAt: new Date(now + 30_000), evidenceRecordId: "activity-host" }]);
     const db = { workroom: { findUnique, update }, workroomActivity: { create },
-      backlogItemActivity: { findMany } } as never;
+      backlogItemActivity: { findMany }, nonProductionEnvironmentLease: { findMany: leaseFindMany } } as never;
     const evidence = { kind: "test" as const, stageKey: "reproduce", outcome: "completed" as const,
       summary: "Windows qualification passed", result: { qualificationBindingDigest: digest,
         qualificationOutcome: "positive", executorMode: "workroom-host", requiredPlatform: "win32",
@@ -150,7 +157,7 @@ describe("transactional Workroom activity", () => {
 
     await expect(recordWorkCapsuleEvidence({ db, capsuleId: "WC-ONE", evidence,
       actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
-      deferPublication: true })).rejects.toThrow(/requires exact recorded execution activities/i);
+      deferPublication: true })).rejects.toThrow(/trusted child provenance/i);
     expect(update).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });

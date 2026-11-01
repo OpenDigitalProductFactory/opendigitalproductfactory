@@ -19,6 +19,14 @@ separate payable record.
 
 ## Before You Start
 
+- From **Finance → Spend**, open **Expenses → My Expenses**, then **New Expense Claim**.
+  The claims-review page also links to **My Expenses** for personal entry.
+- Your sign-in needs a linked employee profile. If entry reports that it is missing,
+  ask your People administrator to check the profile; finance approval access does
+  not replace a claimant identity.
+- Required information is a title and at least one line with its date, category,
+  description and positive amount. Receipt URLs and notes are optional form fields.
+  **What to prepare** explains draft saving and approval submission on the entry page.
 - Use the employee self-service route for your own claim and the finance queue
   for organization-wide review.
 - Give the claim a clear business title, currency, and line-item detail.

@@ -482,3 +482,24 @@ describe("ResourceLane parent cancellation", () => {
     await expect(lane.run(async () => "next")).resolves.toBe("next");
   });
 });
+
+describe("captured local capacity port", () => {
+  it("runs the real captured capacity probe under the same serialized lane without an uncaptured fallback", async () => {
+    vi.mocked(assertLocalGpuFree).mockReset();
+    const order: string[] = [];
+    const capturedCapacityProbe = vi.fn(async () => { order.push("captured-capacity"); });
+    await withLocalInferenceLock(async () => { order.push("dispatch"); }, { origin: "autonomous", capturedCapacityProbe });
+    expect(order).toEqual(["captured-capacity", "dispatch"]);
+    expect(capturedCapacityProbe).toHaveBeenCalledTimes(1);
+    expect(assertLocalGpuFree).not.toHaveBeenCalled();
+  });
+  it("holds on captured capacity failure and releases the shared lane without default probing or model dispatch", async () => {
+    vi.mocked(assertLocalGpuFree).mockReset();
+    const dispatch = vi.fn();
+    const failedProbe = vi.fn(async () => { throw new Error("captured-capacity-unproven"); });
+    await expect(withLocalInferenceLock(dispatch, { capturedCapacityProbe: failedProbe })).rejects.toThrow("captured-capacity-unproven");
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(assertLocalGpuFree).not.toHaveBeenCalled();
+    await expect(withLocalInferenceLock(async () => "next", { capturedCapacityProbe: async () => {} })).resolves.toBe("next");
+  });
+});

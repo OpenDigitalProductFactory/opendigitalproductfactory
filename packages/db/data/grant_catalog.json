@@ -1593,7 +1593,8 @@
         "adopt_worktree"
       ],
       "implies": [
-        "work_capsule_read"
+        "work_capsule_read",
+        "worktree_provision"
       ]
     },
     {
@@ -1616,17 +1617,13 @@
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "claim_capsule_scope",
         "approve_runtime_permission",
-        "claim_workroom_scope",
         "create_work_capsule",
         "create_workroom",
         "drive_workroom_runtime",
         "heartbeat_capsule",
         "heartbeat_runtime_target",
         "heartbeat_workroom",
-        "plan_capsule_worktree",
-        "plan_workroom_worktree",
         "rebind_workroom_shape",
         "record_capsule_evidence",
         "record_runtime_verification",
@@ -1654,6 +1651,21 @@
         "record_workroom_evidence"
       ],
       "implies": []
+    },
+    {
+      "key": "worktree_provision",
+      "description": "Provision a source worktree for a Workroom: plan its worktree and claim the paths it will edit (BI-D1FB8C4D). Split out of work_capsule_write so a read-only room (source-inquiry) can record its own evidence without reaching worktree provisioning. Implied by work_capsule_adopt (one-way).",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "claim_capsule_scope",
+        "claim_workroom_scope",
+        "plan_capsule_worktree",
+        "plan_workroom_worktree"
+      ],
+      "implies": [
+        "work_capsule_read"
+      ]
     },
     {
       "key": "work_engagement_read",

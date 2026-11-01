@@ -30,6 +30,7 @@ import { DELIVERY_SHAPES } from "./delivery-shapes";
 import { GENERATED_WORK_SHAPES } from "./generated/index.generated";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { PLATFORM_REVIEW_SHAPES } from "./platform-review-shape";
+import { SOURCE_INQUIRY_SHAPES } from "./source-inquiry-shape";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 
@@ -153,9 +154,9 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
 
 /**
  * The full registry: the anchor compliance shape, the standing operations, the
- * five delivery shapes, one orchestration cycle per IT4IT value stream, and the
- * acceptance-verification steward activity, and the platform post-implementation
- * review (BI-AA47C672).
+ * five delivery shapes, one orchestration cycle per IT4IT value stream, the
+ * acceptance-verification steward, platform post-implementation review and
+ * read-only source inquiry activities.
  */
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...SHAPES,
@@ -167,6 +168,7 @@ const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...ORCHESTRATION_SHAPES,
   ...ACCEPTANCE_VERIFICATION_SHAPES,
   ...PLATFORM_REVIEW_SHAPES,
+  ...SOURCE_INQUIRY_SHAPES,
 };
 
 // A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its

@@ -122,6 +122,10 @@ export const WORK_SHAPE_CAPABILITY_GRANTS: Readonly<Record<string, readonly stri
   ],
   // Reversible source work inside the governed sandbox worktree.
   "write-source": ["sandbox_execute"],
+  // Provision a source worktree: plan it and claim the paths it will edit
+  // (BI-D1FB8C4D). Separate from write-internal so a read-only shape that
+  // records its own evidence cannot reach worktree provisioning.
+  "worktree-provision": ["worktree_provision"],
 };
 
 export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {

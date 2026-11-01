@@ -268,7 +268,7 @@ describe("requestSelfUpgrade", () => {
     expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 
-  it("does not grant recovery authority to a plain request after a terminal failure", async () => {
+  it("does not grant recovery authority to a plain request after a never-dispatched terminal failure", async () => {
     mocks.getLatestRun.mockResolvedValue({
       runId: "SUR-6B312E24",
       status: "failed",
@@ -276,6 +276,11 @@ describe("requestSelfUpgrade", () => {
       targetTag: "v2026.08.29-terminal-writer-failed-reader-history.1",
       deployedSha: null,
       completedAt: new Date("2026-08-29T14:45:34.380Z"),
+      admissionFingerprint: "adm-1",
+      dispatchStatus: "dispatch_failed",
+      dispatchAttemptCount: 0,
+      dispatchAcknowledgedAt: null,
+      dispatchEventIds: [],
     });
     const result = await requestSelfUpgrade({
       requestedBy: "manual:user-ops-1",
@@ -288,6 +293,31 @@ describe("requestSelfUpgrade", () => {
       reason: "terminal-recovery-needs-operator-binding",
     });
     expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("refuses while a failed run has not settled (BI-CC9DB006)", async () => {
+    mocks.getLatestRun.mockResolvedValue({ runId: "SUR-SETTLING", status: "failed", completedAt: null });
+    const result = await requestSelfUpgrade({ requestedBy: "mcp:agent", actorKind: "agent" });
+    expect(result).toMatchObject({ status: "human_override_required" });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("does not hold an agent hostage to a dispatched failure that ended with nothing installed (BI-CC9DB006)", async () => {
+    mocks.getLatestRun.mockResolvedValue({
+      runId: "SUR-F2A0D477",
+      status: "failed",
+      targetSha: "7d67ef2f4f1d4370d35dc6bda711672ec1750a13",
+      targetTag: "v2026.10.27-dev-recovery.146",
+      deployedSha: null,
+      completedAt: new Date("2026-10-27T18:54:47.229Z"),
+      admissionFingerprint: "adm-2",
+      dispatchStatus: "dispatched",
+      dispatchAttemptCount: 1,
+      dispatchAcknowledgedAt: new Date("2026-10-27T18:50:51.024Z"),
+      dispatchEventIds: ["evt-1"],
+    });
+    const result = await requestSelfUpgrade({ requestedBy: "mcp:agent", actorKind: "human" });
+    expect(result).not.toMatchObject({ reason: "terminal-recovery-needs-operator-binding" });
   });
 
   it.each(["running", "queued", "pending"])(
