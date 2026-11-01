@@ -155,7 +155,7 @@ Closed by `record_marketing_grounding` (`apps/web/lib/mcp/marketing-grounding-to
 
 `assessMarketingGrounding()` is the paired read: it reports which of the three drafter-critical fields are still empty, and distinguishes an untouched archetype bootstrap (`lastReviewedAt === null` on a row carrying a `sourceSummary`) from a plan someone edited and left incomplete, so the refusal copy can be accurate about which one the operator is looking at.
 
-What is missing:
+What was missing at the May review (historical, not a current build list):
 
 - No durable outbound draft model.
 - No marketing approval queue item/decision model.
@@ -165,6 +165,69 @@ What is missing:
 - No LinkedIn publishing connector or OAuth page.
 - No Postmark inbound/outbound connector in the native catalog.
 - No external marketing publish/send MCP tools.
+
+### 2.2 Current repair contract and delivered overlap
+
+The historical inventory and phase suggestions below do not authorize rebuilding
+capabilities that have since shipped. The controlling implementation sequence is
+[the July evidence-to-outcome plan](../plans/2026-07-28-marketing-evidence-to-outcome-loop.md).
+Current source already contains draft/approval execution, publication, scheduler,
+autopilot, KPI pullback, variants, the operating snapshot and owner next-decision
+projection under `apps/web/lib/marketing/`. Their presence is source evidence;
+This operator install's end-to-end operation still requires the acceptance below.
+
+Fresh governed backlog reads on 1 November 2026 UTC establish two additional
+completed repairs. BI-FB24DC2C provides `record_marketing_grounding.routeToMarket`
+and reasoned archival through `retire_marketing_work`; BI-DB179A8D records the
+scheduled keep/refresh decision and makes drafting conditional. Reuse these
+implementations, preserve their completed status and do not treat either as
+proof of the full autonomous acquisition cycle. Archival capability does not
+authorize this repair executor to retire the owner's saved campaigns.
+
+The existing unfinished coverage is BI-80016B62 (recurring cycle), BI-F6A5AAAE
+(lineage/learning) and BI-E61045B0 (owner view and certification). Those are the
+live records returned by this installation; the July plan retains its original
+identifiers and receipt. Their formal correspondence must be reconciled through
+governed coverage, not asserted from matching titles. BI-60821082 separately
+covers grouped creative winner/rejection decisions; do not duplicate that feature
+to fix the CEO's aggregate count.
+
+**OBJ-MKT-1:** The owner sees the same number and identities of pending draft
+decisions in the customer overview and the marketing approval queue for the same
+organization. Internal preparation remains visible with its actual next actor.
+
+**OBJ-MKT-2:** The next recommended marketing work is supported by the current
+saved strategy and recorded work lineage; missing or conflicting support is
+explicit and does not silently replace, archive or approve existing work.
+
+**OBJ-MKT-3:** The existing recurring execution infrastructure advances useful
+safe internal work, records a durable decision and waits at public publish,
+customer reply and spend boundaries without duplicate or filler artifacts.
+
+**OBJ-MKT-4:** The next acquisition decision cites attributable measurements and
+their freshness, provenance and sufficiency, preserving uncertainty where the
+existing data cannot support a result.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-MKT-1 | OBJ-MKT-1 | Preparation with no pending drafts yields zero owner approvals; a pending draft is counted once despite related briefs/tasks; approved, rejected and published drafts are excluded. |
+| AC-MKT-2 | OBJ-MKT-1 | Overview count, linked queue and returned identities agree for one organization; another organization's work is excluded; navigation has no publish or send effect. |
+| AC-MKT-3 | OBJ-MKT-2 | An older SaaS-audience brief is not presented as aligned with the current SMB/MSP strategy without supporting lineage; absent support prompts alignment review and preserves saved work. |
+| AC-MKT-4 | OBJ-MKT-3 | Reducer and durable execution tests cover blocked, wait, prepare, approval-needed, measure and iterate; duplicate wakeups and provider recovery do not duplicate work. |
+| AC-MKT-5 | OBJ-MKT-3 | One permitted served dispatch advances internal work and reaches the correct human gate; recurring operation is claimed only after an actual scheduled run and verified provider recovery. |
+| AC-MKT-6 | OBJ-MKT-4 | Lineage and decision tests cover low sample, ties, zero conversion, stale evidence, high spend and unknown attribution; unsupported evidence does not produce a winner or revenue claim. |
+| AC-MKT-7 | OBJ-MKT-3, OBJ-MKT-4 | An authorized isolated journey uses the existing test adapter, records KPI evidence and bases its next decision on that evidence; no customer publication or spending is required. |
+| AC-MKT-8 | OBJ-MKT-1, OBJ-MKT-2, OBJ-MKT-3, OBJ-MKT-4 | Served desktop and 390px checks verify owner language, linked actions, keyboard use, honest empty/failure states and organization separation after affected tests, typechecks and protected delivery. |
+
+Authority stays with existing organization-scoped readers and governed writers.
+This amendment grants no provider, mailbox, publication, campaign-retirement,
+spend or customer-data access. Reuse the existing relations before proposing a
+schema change; any justified migration belongs to its independently scoped
+deliverable with fleet-safe convergence evidence. No migration follows from the
+count/read-model correction itself. The negative customer-proof guard above
+remains delivered; this contract does not claim its unimplemented positive proof
+path. Current funding ownership, independent scope approval and live plan
+coverage remain prerequisites, not conclusions of this design document.
 
 Design implication: existing marketing models should remain the planning source of truth. Execution should sit downstream of `MarketingAssetTask`, link back to existing strategy/campaign records, and feed metrics into `MarketingKpiCheckpoint`. The new durable concepts should not be named only for marketing if they are inherently shared outbound execution concepts.
 
