@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
-import { pauseLocalProvider, resumeLocalProvider, reconcileOverdueProviderPauses, type PauseDatabase } from "./provider-operator-pause";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { pauseLocalProvider, resumeLocalProvider, restoreOperatorProviderPause, reconcileOverdueProviderPauses, type PauseDatabase } from "./provider-operator-pause";
+
+const restorationStance = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/install/instance-stance", () => ({ loadInstanceStance: restorationStance.read, prismaInstanceStanceStore: (db: unknown) => db }));
+beforeEach(() => restorationStance.read.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" }));
 
 type Job = { jobId: string; metadata: unknown; lastStatus: string; nextRunAt: Date | null; enabled: boolean };
 function fixture(providerId = "local") {
   let state = {
     provider: { providerId, status: "active" },
-    connection: { providerId, connectionId: `provider-default-${providerId}`, status: "active" },
+    connection: { providerId, connectionId: `provider-default-${providerId}`, status: "active", authMethod: "local", executionChannel: "local-runtime", credentialEntryId: null, organizationId: null },
     job: null as Job | null,
     audit: [] as Array<{ userId: string; parameters: Record<string, unknown> }>,
   };
@@ -213,5 +217,110 @@ describe("durable operator provider pause", () => {
     expect(f.state.job?.nextRunAt).toBeNull();
     expect(f.state.connection.status).toBe("inactive");
     expect(f.probe).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("restoring the exact persisted operator pause", () => {
+  async function resumed() {
+    const f = fixture();
+    const original = await pauseLocalProvider({ providerId: "local", actorId: "original-operator", duration: { value: 1, unit: "hours" } }, f.deps);
+    await resumeLocalProvider({ providerId: "local", actorId: "window-operator" }, { ...f.deps, now: new Date("2026-10-12T02:01:00Z") });
+    const input = { providerId: "local", expectedOperationId: original.operationId, actorId: "restoring-operator" };
+    return { ...f, input, restoreDeps: { ...f.deps, now: new Date("2026-10-12T02:10:00Z") } };
+  }
+  it("restores the original exact expiry with a new attributable generation", async () => {
+    const f = await resumed();
+    const result = await restoreOperatorProviderPause(f.input, f.restoreDeps);
+    expect(result).toMatchObject({ outcome: "restored", resumeAt: "2026-10-12T03:00:00.000Z" });
+    expect(result.operationId).not.toBe(f.input.expectedOperationId);
+    expect(f.state.job).toMatchObject({ lastStatus: "paused", nextRunAt: new Date("2026-10-12T03:00:00Z"), metadata: { restoredFromOperationId: f.input.expectedOperationId, actorId: "restoring-operator", priorProviderStatus: "active", priorConnectionStatus: "active" } });
+    expect(f.state.provider.status).toBe("inactive");
+    expect(f.state.connection.status).toBe("paused");
+    expect(f.state.audit.at(-1)).toMatchObject({ userId: "restoring-operator", parameters: { action: "restore-pause", restoredFromOperationId: f.input.expectedOperationId } });
+    expect(f.send).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ operationId: result.operationId, resumeAt: result.resumeAt }) }));
+  });
+  it("observes a duplicate restoration without another effect, audit, timer or probe", async () => {
+    const f = await resumed();
+    const first = await restoreOperatorProviderPause(f.input, f.restoreDeps);
+    const counts = [f.state.audit.length, f.send.mock.calls.length, f.probe.mock.calls.length];
+    expect(await restoreOperatorProviderPause(f.input, f.restoreDeps)).toMatchObject({ outcome: "already-restored", operationId: first.operationId, resumeAt: first.resumeAt });
+    expect([f.state.audit.length, f.send.mock.calls.length, f.probe.mock.calls.length]).toEqual(counts);
+  });
+  it("does not allow an old timer to expire the restored generation", async () => {
+    const f = await resumed();
+    await restoreOperatorProviderPause(f.input, f.restoreDeps);
+    expect(await resumeLocalProvider({ providerId: "local", automatic: true, operationId: f.input.expectedOperationId }, { ...f.deps, now: new Date("2026-10-12T03:01:00Z") })).toMatchObject({ outcome: "superseded" });
+    expect(f.state.connection.status).toBe("paused");
+  });
+  it("preserves a newer independent provider veto", async () => {
+    const f = await resumed();
+    f.state.provider.status = "disabled";
+    await restoreOperatorProviderPause(f.input, f.restoreDeps);
+    expect(f.state.provider.status).toBe("disabled");
+    expect(f.state.connection.status).toBe("paused");
+  });
+  it("refuses a concurrent operator generation observed after acquiring the lock", async () => {
+    const f = await resumed();
+    f.tx.$queryRaw.mockImplementationOnce(async () => { (f.state.job!.metadata as Record<string, unknown>).operationId = "newer-operation"; return []; });
+    await expect(restoreOperatorProviderPause(f.input, f.restoreDeps)).rejects.toThrow(/source.*changed|superseded/i);
+    expect(f.state.connection.status).toBe("active");
+    expect(f.state.audit).toHaveLength(2);
+  });
+  it("refuses to overwrite a later operator pause", async () => {
+    const f = await resumed();
+    await pauseLocalProvider({ providerId: "local", actorId: "new-operator" }, f.restoreDeps);
+    await expect(restoreOperatorProviderPause(f.input, f.restoreDeps)).rejects.toThrow(/source.*changed|superseded/i);
+    expect(f.state.job?.metadata).toMatchObject({ actorId: "new-operator", resumeAt: null });
+  });
+  it.each([
+    { operationId: "different" }, { providerId: "ollama" }, { kind: "different" },
+    { resumeAt: null }, { resumeAt: "invalid" }, { resumeAt: "2026-10-12T02:05:00Z" },
+    { resumedAt: undefined }, { resumedAt: "invalid" }, { resumedAt: "2026-10-12T03:00:00Z" },
+  ])("refuses invalid or expired persisted source without effects: %j", async change => {
+    const f = await resumed();
+    Object.assign(f.state.job!.metadata as Record<string, unknown>, change);
+    await expect(restoreOperatorProviderPause(f.input, f.restoreDeps)).rejects.toThrow(/source|expiry|superseded/i);
+    expect(f.state.connection.status).toBe("active");
+    expect(f.state.audit).toHaveLength(2);
+  });
+  it.each(["inactive", "disabled", "unconfigured", "error", "paused"])("preserves an independent current account restriction %s", async status => {
+    const f = await resumed(); f.state.connection.status = status;
+    await expect(restoreOperatorProviderPause(f.input, f.restoreDeps)).rejects.toThrow(/source|account|superseded/i);
+    expect(f.state.connection.status).toBe(status);
+  });
+  it("rechecks DEV purpose under the transaction lock before restoring", async () => {
+    const f = await resumed();
+    f.tx.$queryRaw.mockImplementationOnce(async () => { restorationStance.read.mockResolvedValue({ environmentClass: "production", primaryPurpose: "evolve-dpf" }); return []; });
+    await expect(restoreOperatorProviderPause(f.input, f.restoreDeps)).rejects.toThrow(/development|DEV|eligibility/i);
+    expect(f.state.connection.status).toBe("active");
+    expect(f.state.audit).toHaveLength(2);
+  });
+  it("does not restore a deadline that expires while waiting for its lock", async () => {
+    const f = await resumed();
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-12T02:10:00Z"));
+      f.tx.$queryRaw.mockImplementationOnce(async () => { vi.setSystemTime(new Date("2026-10-12T03:01:00Z")); return []; });
+      await expect(restoreOperatorProviderPause(f.input, { ...f.deps, now: undefined })).rejects.toThrow(/source|expired/i);
+      expect(f.state.connection.status).toBe("active");
+    } finally { vi.useRealTimers(); }
+  });
+  it("requires a trusted actor before any transaction", async () => {
+    const f = await resumed(); f.db.$transaction.mockClear();
+    await expect(restoreOperatorProviderPause({ ...f.input, actorId: "" }, f.restoreDeps)).rejects.toThrow(/identity/i);
+    expect(f.db.$transaction).not.toHaveBeenCalled();
+  });
+  it("rolls back restoration when its attributable audit cannot persist", async () => {
+    const f = await resumed(); f.tx.adminActivity.create.mockRejectedValueOnce(new Error("audit unavailable"));
+    await expect(restoreOperatorProviderPause(f.input, f.restoreDeps)).rejects.toThrow("audit unavailable");
+    // Read through the DB mock: rollback replaces its state object.
+    expect(await f.tx.aiProviderConnection.findUnique()).toMatchObject({ status: "active" });
+  });
+  it("keeps the exact durable timer if event delivery fails", async () => {
+    const f = await resumed(); f.send.mockRejectedValueOnce(new Error("queue unavailable"));
+    expect(await restoreOperatorProviderPause(f.input, f.restoreDeps)).toMatchObject({ outcome: "restored", deliveryPending: true, resumeAt: "2026-10-12T03:00:00.000Z" });
+    expect(f.state.job?.nextRunAt).toEqual(new Date("2026-10-12T03:00:00Z"));
+    expect(f.state.connection.status).toBe("paused");
   });
 });

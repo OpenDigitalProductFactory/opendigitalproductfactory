@@ -36,6 +36,8 @@ const lazyNode = vi.hoisted(() => ({
 vi.mock("@/lib/shared/lazy-node", () => lazyNode);
 
 const accounts = vi.hoisted(() => ({ addProviderAccount: vi.fn(), configureProviderAccount: vi.fn(), setProviderAccountEnabled: vi.fn() }));
+const pauseRestore = vi.hoisted(() => ({ restoreOperatorProviderPause: vi.fn() }));
+vi.mock("@/lib/inference/provider-operator-pause", () => pauseRestore);
 const accountRead = vi.hoisted(() => ({ getProviderAccounts: vi.fn() }));
 const accountAuth = vi.hoisted(() => ({ testProviderAuthInternal: vi.fn() }));
 vi.mock("@/lib/inference/provider-account-management", () => accounts);
@@ -240,5 +242,41 @@ describe("model-provider pack — handler behavior (delegation preserved)", () =
     expect(res.success).toBe(false);
     expect(res.error).toBe("Not found");
     expect(db.prisma.modelProvider.update).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("native exact pause restoration", () => {
+  const request = { operation: "restore-pause", connectionId: "provider-default-local", providerId: "local", expectedOperationId: "original-pause" };
+  beforeEach(() => {
+    db.prisma.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: request.connectionId, providerId: "local" });
+    pauseRestore.restoreOperatorProviderPause.mockResolvedValue({ outcome: "restored", operationId: "new-pause", resumeAt: "2026-11-22T03:37:14.209Z", deliveryPending: false });
+  });
+  it("forwards only the governed server caller and persisted source generation", async () => {
+    const result = await modelProviderPack.handlers.manage_provider_account(request, "trusted-caller");
+    expect(result).toMatchObject({ success: true, data: { outcome: "restored", operationId: "new-pause", resumeAt: "2026-11-22T03:37:14.209Z" } });
+    expect(pauseRestore.restoreOperatorProviderPause).toHaveBeenCalledExactlyOnceWith({ providerId: "local", expectedOperationId: "original-pause", actorId: "trusted-caller" });
+    expect(accounts.setProviderAccountEnabled).not.toHaveBeenCalled();
+  });
+  it.each([{ actorId: "spoofed" }, { resumeAt: "2030-01-01" }, { duration: { value: 1, unit: "days" } }, { force: true }, { expectedOperationId: "" }])("rejects arbitrary input before restoring: %j", async extra => {
+    expect(await modelProviderPack.handlers.manage_provider_account({ ...request, ...extra }, "trusted-caller")).toMatchObject({ success: false });
+    expect(pauseRestore.restoreOperatorProviderPause).not.toHaveBeenCalled();
+  });
+  it("refuses a missing trusted caller", async () => {
+    expect(await modelProviderPack.handlers.manage_provider_account(request, "")).toMatchObject({ success: false });
+    expect(pauseRestore.restoreOperatorProviderPause).not.toHaveBeenCalled();
+  });
+  it("returns an actionable source conflict without reporting success", async () => {
+    pauseRestore.restoreOperatorProviderPause.mockRejectedValue(new Error("Provider pause source changed; refresh before restoring"));
+    const result = await modelProviderPack.handlers.manage_provider_account(request, "trusted-caller");
+    expect(result).toMatchObject({ success: false, error: expect.stringMatching(/source changed/) });
+  });
+  it("exposes restoration through the existing account tool without actor or expiry fields", () => {
+    const definition = modelProviderPack.definitions.find(d => d.name === "manage_provider_account")!;
+    const properties = definition.inputSchema.properties as Record<string, { enum?: string[] }>;
+    expect(properties.operation.enum).toContain("restore-pause");
+    expect(properties.expectedOperationId).toBeDefined();
+    expect(properties.actorId).toBeUndefined();
+    expect(properties.resumeAt).toBeUndefined();
   });
 });

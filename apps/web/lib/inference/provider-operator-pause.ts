@@ -23,6 +23,7 @@ export type ProviderPauseState = {
   resumeAt: string | null;
   priorProviderStatus: string;
   priorConnectionStatus: string;
+  restoredFromOperationId?: string;
 };
 
 function assertProviderId(providerId: string) {
@@ -38,6 +39,28 @@ export function readProviderPauseState(value: unknown): ProviderPauseState | nul
     || !Number.isFinite(Date.parse(String(row.pausedAt)))
     || (row.resumeAt !== null && (typeof row.resumeAt !== "string" || !Number.isFinite(Date.parse(row.resumeAt))))) return null;
   return row as ProviderPauseState;
+}
+/** Read-only qualification, reused by native consequence classification and again
+ * under the lifecycle lock. Only a persisted dated pause can be restored. */
+export function readProviderPauseRestoration(input: { providerId: string; expectedOperationId: string; account: unknown; job: unknown }, now = new Date()): { pause: ProviderPauseState; alreadyRestored: boolean } | null {
+  const row = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
+  const account = row(input.account), job = row(input.job), metadata = row(job.metadata);
+  const pause = readProviderPauseState(metadata);
+  if (!input.expectedOperationId.trim() || !isLocal(input.providerId)
+    || account.providerId !== input.providerId || account.connectionId !== `provider-default-${input.providerId}`
+    || account.authMethod !== "local" || account.executionChannel !== "local-runtime"
+    || account.credentialEntryId !== null || account.organizationId !== null
+    || job.jobId !== providerPauseJobId(input.providerId) || job.enabled !== true
+    || !pause || pause.providerId !== input.providerId || !pause.resumeAt || Date.parse(pause.resumeAt) <= now.getTime()
+    || !["active", "degraded", "inactive"].includes(pause.priorProviderStatus)
+    || !["active", "degraded", "inactive"].includes(pause.priorConnectionStatus)) return null;
+  const alreadyRestored = job.lastStatus === "paused" && account.status === "paused"
+    && pause.restoredFromOperationId === input.expectedOperationId && pause.operationId !== input.expectedOperationId;
+  if (alreadyRestored) return { pause, alreadyRestored: true };
+  if (job.lastStatus !== "resumed" || !["active", "degraded"].includes(String(account.status))
+    || pause.operationId !== input.expectedOperationId || typeof metadata.resumedAt !== "string"
+    || !Number.isFinite(Date.parse(metadata.resumedAt)) || Date.parse(metadata.resumedAt) > now.getTime()) return null;
+  return { pause, alreadyRestored: false };
 }
 function expiry(now: Date, duration?: PauseDuration): string | null {
   if (!duration) return null;
@@ -63,6 +86,7 @@ async function auditPause(tx: Prisma.TransactionClient, pause: ProviderPauseStat
   await tx.adminActivity.create({ data: {
     userId: actorId ?? pause.actorId, toolName: "provider_operator_pause", tier: 2, result: "success",
     parameters: { action, providerId: pause.providerId, operationId: pause.operationId, resumeAt: pause.resumeAt,
+      ...(pause.restoredFromOperationId ? { restoredFromOperationId: pause.restoredFromOperationId } : {}),
       authorizingOperatorId: pause.actorId, executedBy: automatic ? "timer" : actorId ?? "provider-account-control", executedAt: now.toISOString() },
     summary: `${action}: ${pause.providerId}`,
   } });
@@ -114,27 +138,49 @@ export async function reconcileOverdueProviderPauses(deps: PauseDependencies = {
   return resumed;
 }
 
+type PauseWriteResult = { operationId: string; resumeAt: string | null; deliveryPending?: boolean; outcome: "paused" | "restored" | "already-restored" };
 export async function pauseOperatorProvider(input: { providerId: string; actorId: string; duration?: PauseDuration }, deps: PauseDependencies = {}): Promise<{ operationId: string; resumeAt: string | null; deliveryPending: boolean }> {
+  const result = await writeOperatorPause(input, deps);
+  return { operationId: result.operationId, resumeAt: result.resumeAt, deliveryPending: result.deliveryPending === true };
+}
+/** This narrows current routing eligibility; it never enables an account, accepts
+ * a caller-selected deadline, or impersonates the original operator. */
+export async function restoreOperatorProviderPause(input: { providerId: string; actorId: string; expectedOperationId: string }, deps: PauseDependencies = {}): Promise<PauseWriteResult> {
+  if (typeof input.expectedOperationId !== "string" || !input.expectedOperationId.trim()) throw new Error("An exact persisted pause source is required");
+  return writeOperatorPause({ providerId: input.providerId, actorId: input.actorId, restoreOperationId: input.expectedOperationId }, deps);
+}
+async function writeOperatorPause(input: { providerId: string; actorId: string; duration?: PauseDuration; restoreOperationId?: string }, deps: PauseDependencies): Promise<PauseWriteResult> {
   assertProviderId(input.providerId);
   if (!input.actorId) throw new Error("An operator identity is required");
   const db = deps.db ?? prisma;
-  const now = deps.now ?? new Date();
-  const resumeAt = expiry(now, input.duration);
-  const operationId = (deps.newId ?? randomUUID)();
+  let now = deps.now ?? new Date();
+  const requestedExpiry = expiry(now, input.duration);
   const connectionId = `provider-default-${input.providerId}`;
   const jobId = providerPauseJobId(input.providerId);
-  await db.$transaction(async tx => {
+  const committed = await db.$transaction(async tx => {
     await lockProvider(tx, input.providerId);
+    if (input.restoreOperationId) {
+      const { loadInstanceStance, prismaInstanceStanceStore } = await import("@/lib/install/instance-stance");
+      const stance = await loadInstanceStance(prismaInstanceStanceStore(tx));
+      if (stance.environmentClass !== "development" || stance.primaryPurpose !== "evolve-dpf") throw new Error("Pause restoration requires current DEV maintenance eligibility");
+    }
     const provider = await tx.modelProvider.findUnique({ where: { providerId: input.providerId } });
     const connection = await tx.aiProviderConnection.findUnique({ where: { connectionId } });
     if (!provider || !connection) throw new Error("Provider account not found");
     if (["service", "transcription"].includes(provider.endpointType)) throw new Error("This endpoint does not support model-routing pauses");
     if (provider.status === "unconfigured") throw new Error("Set up this provider before pausing traffic");
     const priorJob = await tx.scheduledJob.findUnique({ where: { jobId } });
-    const prior = connection.status === "paused" && priorJob?.lastStatus === "paused" ? readProviderPauseState(priorJob.metadata) : null;
+    if (input.restoreOperationId) now = deps.now ?? new Date(); // Recheck expiry after waiting for the lifecycle lock/readers.
+    const restoration = input.restoreOperationId ? readProviderPauseRestoration({ providerId: input.providerId, expectedOperationId: input.restoreOperationId, account: connection, job: priorJob }, now) : null;
+    if (input.restoreOperationId && !restoration) throw new Error("Provider pause source changed or expired; refresh before restoring");
+    if (restoration?.alreadyRestored) return { outcome: "already-restored" as const, operationId: restoration.pause.operationId, resumeAt: restoration.pause.resumeAt };
+    const prior = restoration?.pause ?? (connection.status === "paused" && priorJob?.lastStatus === "paused" ? readProviderPauseState(priorJob.metadata) : null);
+    const operationId = (deps.newId ?? randomUUID)();
+    const resumeAt = restoration ? restoration.pause.resumeAt : requestedExpiry;
     const metadata: ProviderPauseState = {
       kind: PAUSE_KIND, version: 1, providerId: input.providerId, operationId, actorId: input.actorId,
       pausedAt: now.toISOString(), resumeAt,
+      ...(restoration ? { restoredFromOperationId: restoration.pause.operationId } : {}),
       priorProviderStatus: prior?.priorProviderStatus ?? provider.status,
       priorConnectionStatus: prior?.priorConnectionStatus ?? connection.status,
     };
@@ -142,21 +188,21 @@ export async function pauseOperatorProvider(input: { providerId: string; actorId
       await tx.modelProvider.update({ where: { providerId: input.providerId }, data: { status: "inactive" } });
     }
     await tx.aiProviderConnection.update({ where: { connectionId }, data: { status: "paused" } });
-    const data = {
-      schedule: "once", nextRunAt: resumeAt ? new Date(resumeAt) : null, lastStatus: "paused", lastError: null,
-      metadata, enabled: true, category: "core", locked: true,
-    };
+    const data = { schedule: "once", nextRunAt: resumeAt ? new Date(resumeAt) : null, lastStatus: "paused", lastError: null,
+      metadata, enabled: true, category: "core", locked: true };
     await tx.scheduledJob.upsert({ where: { jobId }, create: { jobId, name: `Operator pause for ${input.providerId}`, ...data }, update: data });
-    await auditPause(tx, metadata, prior ? "change-pause" : "pause", now, input.actorId);
+    await auditPause(tx, metadata, restoration ? "restore-pause" : prior ? "change-pause" : "pause", now, input.actorId);
+    return { outcome: restoration ? "restored" as const : "paused" as const, operationId, resumeAt };
   });
+  if (committed.outcome === "already-restored") return committed;
   let deliveryPending = false;
-  if (resumeAt) {
+  if (committed.resumeAt) {
     try {
       const send = deps.send ?? (async event => (await import("@/lib/jobs")).jobs.send(event));
-      await send({ name: PROVIDER_PAUSE_EXPIRY_EVENT, id: `provider-pause-expiry-${operationId}`, data: { providerId: input.providerId, operationId, resumeAt } });
+      await send({ name: PROVIDER_PAUSE_EXPIRY_EVENT, id: `provider-pause-expiry-${committed.operationId}`, data: { providerId: input.providerId, operationId: committed.operationId, resumeAt: committed.resumeAt } });
     } catch { deliveryPending = true; } // The committed timer is repaired by the overdue sweep.
   }
-  return { operationId, resumeAt, deliveryPending };
+  return { ...committed, deliveryPending };
 }
 
 export async function resumeOperatorProvider(input: { providerId: string; operationId?: string; automatic?: boolean; actorId?: string }, deps: PauseDependencies = {}): Promise<{ outcome: "resumed" | "superseded" | "not-due"; status?: string; connectionStatus?: string }> {

@@ -23,7 +23,9 @@ export const providerAccountConsequence: ToolCallConsequenceRefiner = async ({ p
     return quotaRecoveryCommission(job?.metadata)
       ? { consequence: null, reason: "stop-existing-subscription-recovery-commission" } : authority;
   }
-  if (!["disable", "test"].includes(String(params.operation)) || !explicitAccount || !identityOnly ||
+  const restore = params.operation === "restore-pause" && typeof params.expectedOperationId === "string" && Boolean(params.expectedOperationId.trim())
+    && Object.keys(params).every(key => ["operation", "connectionId", "providerId", "expectedOperationId"].includes(key));
+  if (!["disable", "test", ...(restore ? ["restore-pause"] : [])].includes(String(params.operation)) || !explicitAccount || (!identityOnly && !restore) ||
       (params.providerId !== undefined && typeof params.providerId !== "string")) return authority;
 
   const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
@@ -47,5 +49,10 @@ export const providerAccountConsequence: ToolCallConsequenceRefiner = async ({ p
       connection.credentialEntryId !== null || connection.organizationId !== null ||
       connection.authMethod !== "local" || connection.executionChannel !== "local-runtime" ||
       (params.providerId !== undefined && params.providerId !== connection.providerId)) return authority;
-  return { consequence: null, reason: "delegated-development-local-containment" };
+  if (restore) {
+    const { readProviderPauseRestoration, providerPauseJobId } = await import("@/lib/inference/provider-operator-pause");
+    const job = await prisma.scheduledJob.findUnique({ where: { jobId: providerPauseJobId(connection.providerId) }, select: { jobId: true, metadata: true, lastStatus: true, enabled: true } });
+    if (!readProviderPauseRestoration({ providerId: connection.providerId, expectedOperationId: params.expectedOperationId as string, account: connection, job })) return authority;
+  }
+  return { consequence: null, reason: restore ? "delegated-development-existing-pause-restoration" : "delegated-development-local-containment" };
 };
