@@ -68,7 +68,7 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
       {drillthrough.decision ? (
         <details className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2.5">
           <summary className="cursor-pointer text-dpf-caption font-semibold text-[var(--dpf-text)]">
-            Why this decision works this way
+            Why this decision
           </summary>
           <div className="mt-2 grid gap-2 text-dpf-caption text-[var(--dpf-muted)]">
             <div>
@@ -111,16 +111,25 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
 
       {drillthrough.source ? (
         <div className="mt-2 rounded-md border border-[var(--dpf-border)] px-2.5 py-2 text-dpf-caption">
-          <p className="m-0 font-semibold text-[var(--dpf-text)]">Implementation source</p>
-          <a
-            href={drillthrough.source.href}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 block break-all text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-          >
-            {drillthrough.source.path}
-            {drillthrough.source.symbol ? `#${drillthrough.source.symbol}` : ""}
-          </a>
+          <p className="m-0 font-semibold text-[var(--dpf-text)]">
+            {drillthrough.source.href ? "Implementation source" : "Source reference"}
+          </p>
+          {drillthrough.source.href ? (
+            <a
+              href={drillthrough.source.href}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 flex min-h-11 items-center break-all text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            >
+              {drillthrough.source.path}
+              {drillthrough.source.symbol ? `#${drillthrough.source.symbol}` : ""}
+            </a>
+          ) : (
+            <p className="mb-0 mt-1 break-all text-[var(--dpf-muted)]">
+              {drillthrough.source.path}
+              {drillthrough.source.symbol ? `#${drillthrough.source.symbol}` : ""}
+            </p>
+          )}
           {drillthrough.source.version || drillthrough.source.implementationStatus ? (
             <p className="mb-0 mt-1 text-[var(--dpf-muted)]">
               {[drillthrough.source.implementationStatus, drillthrough.source.version]

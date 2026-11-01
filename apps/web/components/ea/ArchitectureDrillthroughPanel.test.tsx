@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ArchitectureDrillthroughPanel } from "./ArchitectureDrillthroughPanel";
+import { inspectArchitectureSource } from "@/lib/ea/architecture-drillthrough";
 
 describe("ArchitectureDrillthroughPanel", () => {
   it("renders accessible related viewpoints and a privacy-safe decision explanation", () => {
@@ -52,5 +53,30 @@ describe("ArchitectureDrillthroughPanel", () => {
     expect(html).toContain("Possible outcomes");
     expect(html).toContain("latest record");
     expect(html).not.toContain("prompt");
+  });
+});
+
+
+describe("architecture source-reference rendering", () => {
+  it("labels the actual registry identity as a plain source reference", () => {
+    const sourceKey = "it4it:value_stream:value_stream__evaluate";
+    const html = renderToStaticMarkup(<ArchitectureDrillthroughPanel drillthrough={{
+      relatedViews: [], operationsMapHref: null, decision: null,
+      source: inspectArchitectureSource({ sourceKey }),
+    }} />);
+    expect(html).toContain("Source reference");
+    expect(html).toContain(sourceKey);
+    expect(html).not.toContain("href=");
+    expect(html).not.toContain("Implementation source");
+  });
+
+  it("renders unknown reference text safely without inventing a file link", () => {
+    const html = renderToStaticMarkup(<ArchitectureDrillthroughPanel drillthrough={{
+      relatedViews: [], operationsMapHref: null, decision: null,
+      source: inspectArchitectureSource({ sourceKey: "<img src=x onerror=alert(1)>" }),
+    }} />);
+    expect(html).toContain("&lt;img");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("href=");
   });
 });
