@@ -20,6 +20,7 @@ import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
 import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
 import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
 import type { RemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
+import { foregroundExecutionContext } from "@/lib/agent/foreground-work-context";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -670,6 +671,10 @@ export async function executeAutonomousAgenticLoop(input: {
       authorizedGuidanceHighlights,
     );
   }
+
+  // These asynchronous hooks have no retained execution fence. Keep the saved
+  // request/result as evidence rather than starting writers outside its scope.
+  if (foregroundExecutionContext()) return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
 
   // Governed Hermes learning Slice 2: fire-and-forget reflection trigger.
   // Inspects PlatformIssueReport rows produced during this run and emits

@@ -217,3 +217,21 @@ The later source51 served check retained one synthetic saved request across relo
 Delivered main4de adds exact response-producer attribution and scoped persistence. Preserve its shared finalization and content digest while executing the final save inside the existing foreground publication transaction. That transaction still owns the TaskRun row lock, current authority, deadline, result-message linkage and cancellation ordering. Pass the same transaction client to the shared persistence helper; do not write the response or resolve its scope through an unrelated client. Operational research summaries still clear producer evidence, and retained foreground work still refuses unsupported build handoffs.
 
 The reconciled source passes 177 affected tests across 16 suites and both local web TypeScript programs. Fresh exact-tree canonical qualification, the real-PostgreSQL publication cases, current served verification and original critique remain owed. A saved response's producer binding is separate from verified business-result acceptance.
+# Retained post-run observer boundary
+
+An independent source review identified inner autonomous-loop reflection and
+pattern observers that the outer foreground suppression did not cover. A test
+using the actual foreground execution context reproduced the launch of unfenced
+post-run work (one failing case, ordinary-context control passing). The shared
+loop now returns its requested result before launching those optional hooks when
+inside retained foreground execution. Ordinary callers retain both reflection
+and pattern observers. This reuses the existing context and does not create a
+new permission, queue or observer engine.
+
+Served run41307884215 recovered its saved task through a synthetic capacity
+interruption but failed full metadata equality. That artifact lacks before/after
+metadata, so it does not establish whether an observer caused the mismatch.
+Diagnostic41309326130 captures those observations with the assertion unchanged;
+it runs the pre-guard source. The new guard still requires exact-source canonical
+qualification, independent review and actual served verification. No real
+provider, mailbox or business acceptance follows from the focused test.
