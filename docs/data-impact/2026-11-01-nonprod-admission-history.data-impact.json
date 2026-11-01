@@ -1,0 +1,44 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-operations",
+  "affectedCopies": ["postgres:NonProductionEnvironmentLease", "Prisma reservation projection", "internal obsolete-approval reconciliation"],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "Internal operational provenance, associated with the existing lease ownership; no new person, content or credential fields.",
+    "dataSubjectRights": "Inherits existing lease access, ownership and retention; no new use of person-level data.",
+    "reviewDisposition": "The two nullable facts follow the existing reservation row and its existing lifecycle; no new journal or retention copy."
+  },
+  "migration": {
+    "name": "20261101060000_nonprod_lease_admission_history",
+    "backfill": "None. No existing-row UPDATE or history reconstruction. Legacy NULL version remains unknown, including through future requeue and revival.",
+    "rollback": "Forward-only database-owned invariant. Older source writers omit these fields; the trigger preserves or records them without caller changes. Source rollback retains history and never drops the invariant to reinterpret old rows."
+  },
+  "tests": [
+    "apps/web/lib/nonprod/environment-lease-admission-history.postgres.test.ts",
+    "apps/web/lib/coworker/obsolete-lease-envelope.test.ts",
+    "apps/web/lib/coworker/obsolete-lease-envelope.postgres.test.ts",
+    "apps/web/lib/decision/concierge-sweep-runner.test.ts"
+  ],
+  "changes": [{
+    "kind": "model",
+    "assetId": "data:nonproduction-environment-lease",
+    "prismaModel": "NonProductionEnvironmentLease",
+    "lifecycleDisposition": "Existing operational lease evidence; these facts are retained with that same row.",
+    "fields": [
+      {
+        "fieldId": "data:nonproduction-environment-lease#admissionHistoryVersion",
+        "resolution": "governed",
+        "reason": "Database-owned positive birth/history protocol. Legacy NULL is unknown and cannot be backfilled into eligibility.",
+        "provenance": "BI-3C0F7A92 / DI-BAAF37D46EC3",
+        "flags": []
+      },
+      {
+        "fieldId": "data:nonproduction-environment-lease#firstAdmittedAt",
+        "resolution": "governed",
+        "reason": "Database-clock first resource admission, retained across requeue and revival. NULL proves no admission only with the positive version-1 birth invariant; it never proves child success or cleanup.",
+        "provenance": "BI-3C0F7A92 / DI-BAAF37D46EC3",
+        "flags": []
+      }
+    ]
+  }]
+}
