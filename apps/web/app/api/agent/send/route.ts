@@ -13,7 +13,7 @@ import { admitForegroundWork } from "@/lib/agent/foreground-work-admission";
 import { jobs } from "@/lib/jobs";
 import { FOREGROUND_WORK_EVENT, foregroundReceiptId } from "@/lib/agent/foreground-work-contract";
 import { prisma } from "@dpf/db";
-import { ApiError } from "@/lib/api/error";
+import { ApiError, apiErrorResponse } from "@/lib/api/error";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       requestExtras: { formAssistContext: input.formAssistContext, buildId: input.buildId, attachmentId: input.attachmentId, questionPacket: input.questionPacket },
     });
   } catch {
-    return NextResponse.json({ error: "Your message is saved, but its coworker job could not be admitted. Nothing has started.", userMessageId }, { status: 503 });
+    return apiErrorResponse("FOREGROUND_ADMISSION_UNAVAILABLE", "Your message is saved, but its coworker job could not be admitted. Nothing has started.", 503, { userMessageId });
   }
 
   // Return immediately — agent execution runs in background
