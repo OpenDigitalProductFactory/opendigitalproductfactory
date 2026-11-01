@@ -18,13 +18,13 @@
         "axeViolations": 1
       }
     },
-    "sourceSha": "7aa31f6ea021a91ae93a9971135a8264398b77a6",
-    "leaseId": "NPEL-DA14C613EA",
+    "sourceSha": "51cf512507fef75336c5280e1322f39d543af608",
+    "leaseId": "NPEL-5CFD31294F",
     "viewport": { "width": 1280, "height": 900 },
-    "capture": "CUA developer inspection using the canonical pruneInvisible and measureUxBudget functions and axe WCAG2A/2AA/2.2AA options",
-    "artifact": "WC-02CBE4C1 / foreground7aa-reload-keyboard-ux-actual; /tmp/foreground7aa-served-ux-evidence.json",
-    "artifactSha256": "e0924aaab4583a1f90565f5ffce4ba642dbb17e4eb59625c3f96cc3887639910"
+    "capture": "CUA supported CDP; canonical pruneInvisible with TypeScript annotations erased and canonical measureUxBudget; axe WCAG2A/2AA/2.2AA with its temporary global restored",
+    "artifact": "WC-02CBE4C1 / foreground51-served-retention-ordering-keyboard-mobile; /tmp/foreground51-served-ux-evidence.json",
+    "artifactSha256": "9d098e1f525358dbb102e9ffd53abfe8dac913bd30180da901eec50eee143883"
   },
-  "additionalVerification": "Actual mobile390x844 default166words/0primary/0fields/5sublegible/0buried/1axe. Expanded retained-job disclosure exercised with Enter/Space, same native job reference survived reload without resend. Expanded interactive states were captured separately and were not compared as default-arrival measurements. The measured disclosure implementation is unchanged.",
-  "limitations": "This is measured fit evidence, not a native specialist approval or business acceptance. Original CE-E46D47D4 remains unfulfilled because the original prototype document cannot render/export. Existing shell aria-label and expanded-panel contrast findings remain. The newly corrected pending-status wording has source regression coverage but has not yet been served. The real Finance job remained submitted because the preview lacked background transport; controlled provider-busy/automatic continuation and saved business result remain unrun. No budget baseline was changed."
+  "additionalVerification": "Current51 health identified the exact admitted source and lease. One synthetic FG51-20261101 request was submitted once; TR-CHAT-3198645a008240d253d0b745d9754101 survived a full reload and mobile viewing, with one request and the opening briefing before it. Enter expanded and Space collapsed the job reference. Actual mobile390x844 default166words/0primary/0fields/5sublegible/0buried/1axe; document width390. Expanded desktop395words/1field/2axe was measured separately from default arrival. All eight default-view axes stayed within the committed route baseline. The preview was released and its writer/container cleanup confirmed before this evidence-only source update.",
+  "limitations": "This is measured fit evidence, not native specialist approval or business acceptance. Original CE-E46D47D4 remains requested and unfulfilled; immutable rendered prototype capture and fulfillment remain owed. Browser security denied local-file prototype navigation; no workaround was attempted. Existing shell aria-label and expanded-panel contrast findings remain. The synthetic Finance request remained unanswered; no provider continuation, verified coworker result, cancellation settlement or business completion is claimed. Multiple-pending ordering retains source regression coverage; this served run exercised one pending request. No budget baseline was changed."
 }
