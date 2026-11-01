@@ -83,6 +83,11 @@ overrides:
 
 packageExtensionsChecksum: sha256-pFEExG4o57joHucsVi/dgGpp9BfdxYD7y4blLQUpCqI=
 
+patchedDependencies:
+  react-data-grid@7.0.0-beta.63:
+    hash: 035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18
+    path: patches/react-data-grid@7.0.0-beta.63.patch
+
 importers:
 
   .:
@@ -220,8 +225,8 @@ importers:
         specifier: 19.2.8
         version: 19.2.8
       react-data-grid:
-        specifier: 7.0.0-beta.61
-        version: 7.0.0-beta.61(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 7.0.0-beta.63
+        version: 7.0.0-beta.63(patch_hash=035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-day-picker:
         specifier: ^10.0.2
         version: 10.0.2(@types/react@19.3.0)(react@19.2.8)
@@ -4059,8 +4064,8 @@ packages:
   rc9@3.0.1:
     resolution: {integrity: sha512-gMDyleLWVE+i6Sgtc0QbbY6pEKqYs97NGi6isHQPqYlLemPoO8dxQ3uGi0f4NiP98c+jMW6cG1Kx9dDwfvqARQ==}
 
-  react-data-grid@7.0.0-beta.61:
-    resolution: {integrity: sha512-YTfOzvj/V/3vMoz7A/kaXFp869j7C8JW5PmH4JAnAsfaa2SMzDeOHvuoGezEDBk1G3nwOFXNVyl9tC9sosEIjA==}
+  react-data-grid@7.0.0-beta.63:
+    resolution: {integrity: sha512-AJh9ow+rvey+Wu3yAjIZ2gzfCImWYYw/AbndSTQ4I5aV4UDkQLYKiEZcJ60tRQWN6HthiK6a8xCkHgu0hOsaTQ==}
     peerDependencies:
       react: 19.2.8
       react-dom: 19.2.8
@@ -8181,7 +8186,7 @@ snapshots:
       defu: 6.1.7
       destr: 2.0.5
 
-  react-data-grid@7.0.0-beta.61(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  react-data-grid@7.0.0-beta.63(patch_hash=035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
