@@ -212,3 +212,38 @@ remained submitted without a coworker result: that preview had no background
 wake transport. Controlled provider-busy recovery and full business acceptance
 remain unrun. Native Workroom evidence retains the commands and source/lease
 identities; these narrow SQL results do not establish actual provider execution.
+### Served retained-work qualification
+
+The SQL fixture still replaces the coworker turn and wake transport. The next
+bounded slice uses an optional `foreground-recovery` mode of the existing
+GitHub UX runtime: its canonical production bundle, disposable PostgreSQL and
+normal authenticated browser. The normal boot starts the existing owned
+PostgreSQL engine for `agent/foreground-work-run` and `agent/task-dispatch`.
+The latter keeps its actual five-minute reconciliation schedule. A loopback
+OpenAI-compatible fixture is the only simulated execution boundary.
+
+One synthetic main-room request must be durably acknowledged, survive a
+provider-capacity wait and reload, resume without another submission, and save
+one correctly linked response. Repeating the original authenticated HTTP
+request must reuse its message and job. Record current request/job/result,
+source and production-build identity, observed queue transitions, actual
+provider requests, stored response provenance, screenshots and cleanup.
+This proves the controlled path; real model quality, Finance tools, real mail
+and customer isolation retain their separate acceptance obligations.
+
+Fixture writes require explicit scenario opt-in, the existing exact GitHub CI
+database/origin boundary and current source/run binding. Configured provider
+credentials, unrelated retained jobs and identity collisions refuse setup.
+Only synthetic provider/account/model rows are enabled; their manual scores
+are test inputs, never real calibration evidence. Preserve original state and
+clean up only owned fixtures after work settles. A measurement boot does not
+qualify background execution, so this mode uses normal boot and reports its
+own evidence instead of claiming a route sweep.
+
+This expands the existing Small test slice to Medium, admitted by
+IRD-55A6228E4398 after plan admission IRD-E74F3BA0F3A8. Funding remains
+unresolved; it introduces no paid model, allocation decision or provider
+subscription. Existing Large business-review baselines remain unchanged.
+The installed Next.js Playwright guide and
+[official testing guide](https://nextjs.org/docs/app/guides/testing/playwright)
+support exercising the served production bundle.
