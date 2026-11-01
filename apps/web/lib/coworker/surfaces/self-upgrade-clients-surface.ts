@@ -26,10 +26,6 @@ export function projectSelfUpgradeClientsSurface(view: ConnectedClientsView | nu
       label: "Connected agent clients",
       purpose: SELF_UPGRADE_CLIENTS_SURFACE.purpose,
       status: facts.status,
-      highlights: [
-        "For client details, open Connected agent clients on /ops/self-upgrade. This read does not update or repair clients.",
-        ...(facts.status === "unavailable" ? ["Connected-client health is unavailable; do not infer client status from upgrade or background-job health."] : []),
-      ],
     },
     values: { "clients.health": JSON.stringify(facts) },
   };

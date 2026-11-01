@@ -6,7 +6,7 @@ vi.mock("@/lib/agent-toolchain/connected-clients", async (original) => ({
 }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: user }));
 import { authorizedSurfaceRuntime } from "../authorized-surface-registry";
-import { groundPromptWithAuthorizedSurface } from "../authorized-surface-prompt-grounding";
+import { enforceAuthorizedSurfaceGuidanceCoverage, groundPromptWithAuthorizedSurface } from "../authorized-surface-prompt-grounding";
 
 const context = { delegatingUserId: "operator", actingAgentId: "coworker", mode: "browser" as const,
   locale: "en-US", timezone: "UTC", route: "/ops/self-upgrade" };
@@ -16,6 +16,13 @@ beforeEach(() => {
   load.mockResolvedValue({ release: { packVersion: "0.2.19", fingerprint: "released1234" }, clients: [], truncated: false });
 });
 describe("Self-upgrade client health trusted surface", () => {
+  it("keeps a complete ordinary answer free of forced diagnostic boilerplate", async () => {
+    const result = await groundPromptWithAuthorizedSurface({ systemPrompt: "Help", context, authorizedToolNames: new Set() });
+    expect(result.grounded).toBe(true);
+    const answer = "The connected clients section currently lists no clients.";
+    expect(enforceAuthorizedSurfaceGuidanceCoverage(answer, result.guidanceHighlights ?? [])).toBe(answer);
+    if (result.sessionId) await authorizedSurfaceRuntime.close(result.sessionId, context);
+  });
   it("grounds the exact route in the shared read model without write actions", async () => {
     const result = await groundPromptWithAuthorizedSurface({ systemPrompt: "Help", context, authorizedToolNames: new Set() });
     expect(result.grounded).toBe(true);
