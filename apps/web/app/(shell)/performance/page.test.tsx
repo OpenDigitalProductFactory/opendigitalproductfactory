@@ -13,6 +13,7 @@ vi.mock("@/lib/performance/business-performance-provider", () => ({
   loadBusinessPerformance: vi.fn(),
 }));
 
+vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: async () => ({ language: "en-US", formatLocale: "en-US" }) }));
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
 }));
@@ -43,7 +44,7 @@ describe("PerformancePage", () => {
     expect(html).toContain("data-owner-first-next-action");
     expect(html).toContain("data-dpf-primary-action");
     expect(html).not.toContain(">0<");
-    expect(loadBusinessPerformance).toHaveBeenCalledWith({ userId: "user-owner" });
+    expect(loadBusinessPerformance).toHaveBeenCalledWith({ userId: "user-owner", formatLocale: "en-US" });
   });
 
   it("says the surface is unavailable (not pending) when the archetype has no metrics engine", async () => {

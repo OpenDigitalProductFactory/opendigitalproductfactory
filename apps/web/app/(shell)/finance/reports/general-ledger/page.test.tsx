@@ -1,5 +1,7 @@
+import { DEFAULT_LOCALE, translate } from "@dpf/i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ auth: vi.fn(), can: vi.fn(), context: vi.fn(), report: vi.fn(), actor: vi.fn() }));
+vi.mock("@/lib/i18n/t.server", () => ({ getT: async () => (key: any) => translate(DEFAULT_LOCALE, "shell", key) }));
 vi.mock("@/lib/auth", () => ({ auth: m.auth }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: m.actor }));
 vi.mock("@/lib/permissions", () => ({ can: m.can }));

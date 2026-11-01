@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { EmptyState } from "@/components/ui/report-kit";
 import { BusinessPerformanceDashboard } from "@/components/performance/BusinessPerformanceDashboard";
 import { loadBusinessPerformance } from "@/lib/performance/business-performance-provider";
@@ -23,9 +24,10 @@ export default async function PerformancePage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const locale = await getLocaleContext();
   const query = await searchParams;
   const performance = await loadBusinessPerformance(
-    { userId: session.user.id, ...(query?.period ? { period: query.period } : {}) },
+    { userId: session.user.id, formatLocale: locale.formatLocale, ...(query?.period ? { period: query.period } : {}) },
   );
   const watches = performance.status === "ready"
     ? await listBusinessAnalysisWatchesFor(session.user.id, performance.organizationId)
@@ -45,7 +47,7 @@ export default async function PerformancePage({
       </header>
 
       {performance.status === "ready" ? (
-        <BusinessPerformanceDashboard performance={performance} watches={watches} />
+        <BusinessPerformanceDashboard performance={performance} watches={watches} language={locale.language} />
       ) : (
         <EmptyState
           title={

@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE } from "@dpf/i18n";
 import { currentUserContextFromRecord } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import {
@@ -104,6 +105,7 @@ export type BusinessPerformanceReadModel =
 export interface BusinessPerformanceLoadInput {
   userId: string;
   period?: string;
+  formatLocale?: string;
 }
 
 export interface BusinessPerformanceProvider {
@@ -181,6 +183,7 @@ export function buildBusinessPerformanceReadModel(input: {
   rows: readonly PersistedMetricRow[];
   now?: Date;
   selectedPeriod?: string;
+  formatLocale?: string;
 }): BusinessPerformanceReadModel {
   const software = input.archetypeId === "software-platform";
   const now = input.now ?? new Date();
@@ -201,7 +204,7 @@ export function buildBusinessPerformanceReadModel(input: {
 
   const keyFor = (row: PersistedMetricRow) => software ? row.periodStart.toISOString().slice(0, 7) : periodKey(row.periodStart, row.timezone);
   const labelFor = (row: PersistedMetricRow) => software
-    ? new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", year: "numeric" }).format(row.periodStart)
+    ? new Intl.DateTimeFormat(input.formatLocale ?? DEFAULT_LOCALE, { timeZone: "UTC", month: "short", year: "numeric" }).format(row.periodStart)
     : periodLabel(row.periodStart, row.timezone);
   const periods = [...new Set(rows.map((row) => row.periodStart.getTime()))].sort(
     (a, b) => b - a,
@@ -375,6 +378,7 @@ export function createBusinessPerformanceProvider(
         organizationId: context.organizationId,
         archetypeId: context.archetypeId,
         ...(input.period ? { selectedPeriod: input.period } : {}),
+        ...(input.formatLocale ? { formatLocale: input.formatLocale } : {}),
         rows: rows.map((row) => ({
           ...row,
           value: row.value === null ? null : Number(row.value),

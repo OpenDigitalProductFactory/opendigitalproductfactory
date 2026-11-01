@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, translate } from "@dpf/i18n";
 import Link from "next/link";
 
 import {
@@ -105,10 +106,13 @@ function MetricSection({
 export function BusinessPerformanceDashboard({
   performance,
   watches = [],
+  language = DEFAULT_LOCALE,
 }: {
   performance: ReadyBusinessPerformance;
   watches?: readonly BusinessAnalysisWatchView[];
+  language?: string;
 }) {
+  const t = (key: Parameters<typeof translate<"shell">>[2], args?: Parameters<typeof translate>[3]) => translate(language, "shell", key, args);
   const metrics = new Map(performance.metricValues.map((metric) => [metric.key, metric]));
   const decisionSummary = buildPerformanceDecisionSummary({
     metrics: performance.metricValues,
@@ -121,9 +125,9 @@ export function BusinessPerformanceDashboard({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">{performance.periodLabel} · {performance.reportingCurrency}</h2>
-          <p className="text-xs text-[var(--dpf-muted)]">Available ledger records · UTC · {performance.periodState === "in-progress" ? "Partial month" : "Recorded month"}</p>
+          <p className="text-xs text-[var(--dpf-muted)]">{t("finance.results.scope", { state: t(performance.periodState === "in-progress" ? "finance.results.partialMonth" : "finance.results.recordedMonth") })}</p>
         </div>
-        <StatusBadge intent={performance.freshness === "stale" ? "warning" : "neutral"} label={performance.refreshFailure ? "Refresh failed" : performance.freshness === "stale" ? "Snapshot delayed" : "Recorded snapshot"} />
+        <StatusBadge intent={performance.freshness === "stale" ? "warning" : "neutral"} label={t(performance.refreshFailure ? "finance.results.refreshFailed" : performance.freshness === "stale" ? "finance.results.snapshotDelayed" : "finance.results.recordedSnapshot")} />
       </div>
       <section aria-label="Headline performance" className="grid gap-3 md:grid-cols-3">
         {performance.sections.headline.flatMap(key => {
@@ -132,11 +136,11 @@ export function BusinessPerformanceDashboard({
       </section>
       {performance.nextAction ? <Link href={performance.nextAction.href} data-dpf-primary-action data-owner-first-next-action className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-[var(--dpf-accent)]">{performance.nextAction.label}</Link> : null}
       <details className="rounded-lg border border-[var(--dpf-border)] p-3">
-        <summary className="cursor-pointer text-sm font-medium">Explore results</summary>
+        <summary className="cursor-pointer text-sm font-medium">{t("finance.results.explore")}</summary>
         <div className="mt-3 space-y-4">
           {performance.refreshFailure && <p className="text-xs text-[var(--dpf-muted)]">{performance.refreshFailure.reason}</p>}
-          <p className="text-xs text-[var(--dpf-muted)]">Recorded income and expenses; not bank cash, tax profit or verified complete books. Last source check <LocalTime value={performance.asOf} mode="time" />.</p>
-          <ExportButton rows={exportRows} filename="recorded-results.csv" label="Export this period" />
+          <p className="text-xs text-[var(--dpf-muted)]">{t("finance.results.limits")} {t("finance.results.checked")} <LocalTime value={performance.asOf} mode="time" />.</p>
+          <ExportButton rows={exportRows} filename="recorded-results.csv" label={t("finance.results.export")} />
           <BusinessAnalysisWorkspace performance={performance} watches={watches} />
           <PerformanceTrendPanel points={performance.trendPoints} metrics={performance.metricValues.map(({ key, label, unit, currency }) => ({ key, label, unit, currency: currency ?? undefined }))} preferredKeys={performance.sections.headline} />
         </div>

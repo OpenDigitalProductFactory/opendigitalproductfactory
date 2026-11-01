@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { getT } from "@/lib/i18n/t.server";
 import { can } from "@/lib/permissions";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { isLedgerMonth } from "@/lib/finance/ledger-period-report";
@@ -24,6 +25,7 @@ export default async function GeneralLedgerReportPage({
   if (!session?.user?.id) redirect("/login");
   const actor = await currentUserContext(session.user.id);
   if (!actor || !can(actor, "view_finance")) notFound();
+  const t = await getT("shell");
   const params = await searchParams;
   const periodKey = params.period === undefined ? null : params.period;
   const unavailable = (reason: string, retry = false) => (
@@ -88,7 +90,7 @@ export default async function GeneralLedgerReportPage({
           </div>
 
           <details className="rounded-lg border border-[var(--dpf-border)] p-3">
-            <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Account details</summary>
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{t("finance.accountDetails")}</summary>
             <div className="mt-3">
           {/* Recorded movements, not a verified position. */}
           <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Recorded movements</h2>

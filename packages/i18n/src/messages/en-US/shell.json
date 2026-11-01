@@ -8,7 +8,20 @@
   },
   "finance": {
     "mileageTitle": "Mileage",
-    "mileageDescription": "Log business trips so they can be claimed and reported."
+    "mileageDescription": "Log business trips so they can be claimed and reported.",
+    "accountDetails": "Account details",
+    "results": {
+      "explore": "Explore results",
+      "scope": "Available ledger records · UTC · {$state}",
+      "partialMonth": "Partial month",
+      "recordedMonth": "Recorded month",
+      "recordedSnapshot": "Recorded snapshot",
+      "refreshFailed": "Refresh failed",
+      "snapshotDelayed": "Snapshot delayed",
+      "limits": "Recorded income and expenses; not bank cash, tax profit or verified complete books.",
+      "checked": "Last source check",
+      "export": "Export this period"
+    }
   },
   "federation": {
     "fromPeers": "From connected peers:",
