@@ -123,3 +123,36 @@ not to install time.
 - `pnpm --filter web typecheck`, and the pregate.
 - AC-1 on a running customizable install is verified live after the release
   that carries this fix. A unit test cannot prove it.
+
+## D6: recover lineage from a bare source stamp
+
+Fresh acceptance evidence on 1 November 2026 found a remaining D1 failure.
+The running source-built portal has no `DPF_PLATFORM_VERSION` override, uses
+`DPF_IMAGE_TAG=latest`, and its actual baked version is `7396fc5fd`. The registry
+owner is present, but both configured and machine-owned converter pins are absent.
+`releaseTagFromPlatformVersion` correctly refuses this bare commit as a release
+tag. `loadSourceLineageContext` consequently returns null, so reconciliation exits
+before the existing published, ancestor and local-build recovery paths.
+
+The exact running commit has a reachable release tag in the source clone:
+`git describe --tags --always 7396fc5fdb0874686c59966f020b8f17a0f0e59c`
+returned `v2026.10.28-dev-recovery.154-80-g7396fc5fdb0`.
+The gap remains in main `45d7efc6b4adf45a4d5275295d6a498d41e21f18`.
+
+Extend D1 using the existing `describeSourceLineage` primitive when, and only
+when, the baked version is a hexadecimal source commit (7–40 characters).
+Describe that exact stamped commit in the existing mounted clone; never use its
+mutable HEAD or infer a tag from the image's `latest` label. Keep direct release
+and git-describe stamps on the existing path. A missing owner, unreadable stamp,
+unsupported value, failed Git read or missing reachable release still returns no
+context. The tag parser continues to reject bare commits as registry tags.
+
+This extends the existing design without a new resolver, setting, image tag,
+permission or build mechanism. D2–D5 retain published digest pinning, bounded
+ancestor resolution and the existing controlled local fallback. It does not
+change release-upgrade strategy or perform a converter build during diagnosis.
+
+The [D6 repair plan](../plans/2026-11-01-doctools-source-stamp-recovery.md)
+binds first-failing tests, existing lifecycle controls, normal publication gates
+and the original live export acceptance. BI-4E18BC28 remains the one carrier;
+BI-660D77EC's already implemented ancestor walk is reused.
