@@ -31,10 +31,13 @@ export async function verifyForegroundRecovery() {
   let fixture: ForegroundFixture | undefined, taskRunId: string | undefined;
   let unresolvedClientSubmissions = 0;
   let completed = false, failure: string | undefined, cleanup = "not-started";
+  let fixtureSettlement = "not-created";
+  const cleanupFailures: Array<{ resource: string; error: string }> = [];
   const evidence: Record<string, unknown> = { ...runtime, syntheticProvider: true, realProviderCapacity: "unrun", businessAcceptance: "unrun" };
   const snapshots: Array<Record<string, unknown>> = [];
   const write = () => writeFileSync(resolve(OUT, "execution.json"), JSON.stringify({ ...evidence,
-    status: completed && !failure && cleanup === "completed" ? "passed" : failure ? "failed" : "running", failure, cleanup, snapshots,
+    status: completed && !failure && cleanup === "completed" ? "passed" : failure ? "failed" : "running",
+    failure, cleanup, fixtureSettlement, cleanupFailures, snapshots,
     providerRequests: transport.counts() }, null, 2));
   try {
     write();
@@ -57,7 +60,9 @@ export async function verifyForegroundRecovery() {
       sendRouteSha256: createHash("sha256").update(readFileSync(resolve(ROOT, "apps/web/.next/server/app/api/agent/send/route.js"))).digest("hex"),
       sourceBinding: "reported CI deployment source plus canonical production build, compiled route hash and observed matching served static bytes; no live-install or baked-image claim",
     };
+    fixtureSettlement = "preparation-outcome-unknown";
     fixture = await prepareForegroundFixtures(prisma, transport.baseUrl);
+    fixtureSettlement = "active";
     await page.goto(runtime.origin + "/workspace", { waitUntil: "domcontentloaded", timeout: 60_000 });
     const scriptPath = await page.locator('script[src^="/_next/static/"]').first().getAttribute("src");
     check(scriptPath, "The served page has no production static asset");
@@ -104,8 +109,13 @@ export async function verifyForegroundRecovery() {
     const read = async () => {
       const row = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId: taskRunId! } });
       const progress = isRecord(row.progressPayload) ? row.progressPayload : {};
+      const response = typeof progress.resultMessageId === "string" ? await prisma.agentMessage.findFirst({
+        where: { id: progress.resultMessageId, taskRunId: taskRunId!, threadId: String(requestData.threadId) },
+        select: { id: true, role: true, content: true, providerId: true, modelId: true },
+      }) : null;
       const snapshot = { status: row.status, outcome: progress.foregroundOutcome ?? null, resultMessageId: progress.resultMessageId ?? null,
-        resourceWait: progress.resourceWait ?? null };
+        resourceWait: progress.resourceWait ?? null,
+        response: response ? { ...response, content: safeError(response.content) } : null };
       if (JSON.stringify(snapshots.at(-1)) !== JSON.stringify(snapshot)) { snapshots.push(snapshot); write(); }
       return { row, progress };
     };
@@ -169,7 +179,12 @@ export async function verifyForegroundRecovery() {
     evidence.panelPresent = await panel.count();
     evidence.noUnrelatedDispatches = true;
     completed = true;
-  } catch (error) { failure = safeError(error); throw error; }
+  } catch (error) {
+    failure = safeError(error);
+    try { await context?.pages()[0]?.screenshot({ path: resolve(OUT, "failed-workflow.png"), fullPage: true }); }
+    catch (captureError) { evidence.captureFailure = safeError(captureError); }
+    throw error;
+  }
   finally {
     try {
       if (fixture) {
@@ -188,12 +203,30 @@ export async function verifyForegroundRecovery() {
         }
         for (const id of ownedIds) await waitForForegroundDelivery(prisma, { taskRunId: id, requireSuccess: false });
         await cleanupForegroundFixtures(prisma, fixture, { taskRunIds: ownedIds, clientSubmissionsSettled: true });
+        fixtureSettlement = "completed";
+      } else if (fixtureSettlement === "preparation-outcome-unknown") {
+        throw new Error("Fixture preparation outcome is unknown; preserve the disposable target");
       }
       cleanup = "completed";
-    } catch (error) { cleanup = "unsettled-fixture-preserved"; failure = failure ?? safeError(error); }
+    } catch (error) {
+      fixtureSettlement = "unsettled-fixture-preserved";
+      cleanup = "unsettled-fixture-preserved";
+      cleanupFailures.push({ resource: "provider-fixture", error: safeError(error) });
+      failure = failure ?? safeError(error);
+    }
     finally {
-      const closed = await Promise.allSettled([context?.close(), browser?.close(), transport.close(), prisma.$disconnect()]);
-      if (closed.some(value => value.status === "rejected")) { cleanup = "failed"; failure ??= "Fixture runtime resource cleanup failed"; }
+      // Closing the browser concurrently can interrupt its context's graceful close.
+      try { await context?.close(); }
+      catch (error) { cleanupFailures.push({ resource: "browser-context", error: safeError(error) }); }
+      const resources = ["browser", "provider-transport", "database"];
+      const closed = await Promise.allSettled([browser?.close(), transport.close(), prisma.$disconnect()]);
+      closed.forEach((value, index) => {
+        if (value.status === "rejected") cleanupFailures.push({ resource: resources[index]!, error: safeError(value.reason) });
+      });
+      if (cleanupFailures.length) {
+        if (cleanup === "completed") cleanup = "resource-cleanup-failed";
+        failure ??= "Fixture runtime resource cleanup failed";
+      }
       write();
     }
     if (failure) throw new Error(failure);

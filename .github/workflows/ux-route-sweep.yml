@@ -298,10 +298,18 @@ jobs:
             export INNGEST_DEV=1
             export INNGEST_EVENT_KEY=synthetic-ci-event-key
           fi
-          if [ "$DPF_REUSED_BUILD" = "true" ]; then
-            (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js) &
+          start_portal() {
+            if [ "$DPF_REUSED_BUILD" = "true" ]; then
+              (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js)
+            else
+              pnpm --filter web start
+            fi
+          }
+          if [ "$DPF_WORKFLOW_SCENARIO" = "foreground-recovery" ]; then
+            mkdir -p apps/web/test-results/foreground-work-recovery
+            start_portal > apps/web/test-results/foreground-work-recovery/portal.log 2>&1 &
           else
-            pnpm --filter web start &
+            start_portal &
           fi
           for i in $(seq 1 60); do
             if curl -sf http://localhost:3000/login > /dev/null; then

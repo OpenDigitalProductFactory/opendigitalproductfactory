@@ -298,3 +298,13 @@ the run artifact. Schedules stay suspended until disposable database teardown;
 they are never restored while the worker lives. Production seeds and schedules
 are untouched. This addresses a source-proven setup conflict without claiming
 the first generic exception's precise cause or a served acceptance pass.
+
+Run41304920793 passed real seed preparation, both isolation checks, build,
+portal startup and sign-in. Its authenticated request was saved and then
+blocked before any provider request. The generic progress artifact does not
+establish why. The next run retains the exact job/thread-bound saved response,
+failed-workflow capture and disposable portal logs; no grant or routing policy
+is changed based on a guessed diagnosis. Cleanup now reports provider settlement
+and secondary resource errors separately. Close the explicit browser context
+before its browser, as the [Playwright API requires for graceful cleanup](https://playwright.dev/docs/api/class-browser#browser-close).
+The first cleanup failure's exact cause is not inferred from this correction.
