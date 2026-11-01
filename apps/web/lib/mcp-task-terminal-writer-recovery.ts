@@ -1,3 +1,4 @@
+import { captureTaskExecutionFence, type TaskExecutionFence } from "./shared/task-execution-fence";
 import { prisma, type Prisma } from "@dpf/db";
 import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reserveTaskRunGenerationWorking } from "./observability/heartbeat";
@@ -63,6 +64,7 @@ export async function reserveTerminalWriterReplay(input: {
   wait: TerminalWriterWait;
   readerExecutions: PersistedTerminalReaderExecution[];
   bootstrapReaderEvidence: boolean;
+  executionFence: TaskExecutionFence;
 } | null> {
   if (!remoteTaskRequestMatches(input.existing.a2aMetadata, input.parsed)) return null;
   if (hasExecutionUncertainty(input.existing.progressPayload)) return null;
@@ -149,17 +151,19 @@ export async function reserveTerminalWriterReplay(input: {
           ...(writerAttempt.parameters ? { proposal: writerAttempt.parameters } : {}),
         } } : {}),
   };
+  const reservedProgress = { ...progress, terminalWriterWait: wait, resumeReservedAt: now };
+  const metadata = input.existing.a2aMetadata && typeof input.existing.a2aMetadata === "object"
+    && !Array.isArray(input.existing.a2aMetadata) ? input.existing.a2aMetadata as Record<string, unknown> : {};
+  const captured = captureTaskExecutionFence(reservedProgress, metadata.requestDigest ?? null);
+  if (!captured || (input.parsed.initiativeReviewBinding && !captured.requestDigest)) return null;
+  const executionFence = Object.freeze(captured);
   const reserved = await reserveTaskRunGenerationWorking({
     taskRunId: input.existing.taskRunId,
     expectedStatus: input.existing.status,
     updatedAt: input.existing.updatedAt,
-    progressPayload: {
-      ...progress,
-      terminalWriterWait: wait,
-      resumeReservedAt: now,
-    } as Prisma.InputJsonValue,
+    progressPayload: reservedProgress as Prisma.InputJsonValue,
   });
   return reserved
-    ? { wait, readerExecutions, bootstrapReaderEvidence }
+    ? { wait, readerExecutions, bootstrapReaderEvidence, executionFence }
     : null;
 }

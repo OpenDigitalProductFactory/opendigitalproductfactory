@@ -1,4 +1,5 @@
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { publicCompletionActivity } from "@/lib/backlog/initiative-readiness/completion-input-context";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
@@ -426,6 +427,11 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  const { selectWorkroomReadSource, selectionRefusal } = await import("../backlog-workroom-read-source");
+  const selected = await selectWorkroomReadSource({ workroomId: params["workroomId"],
+    userId: currentUserId, agentId: currentAgentId,
+    itemId: item.itemId, itemRowId: item.id });
+  if (selected && !selected.ok) return selectionRefusal;
   const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
   const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
@@ -461,10 +467,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   // existing projection.
   const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
   const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
-  // Only a server caller that already checked exact room access supplies this.
-  // Public tool params deliberately cannot select a room or design source.
+  // Public selection contributes only the persisted source after exact action access.
+  // Legacy internal callers retain their independently checked source binding.
   const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId,
-    ...(internal ? { claimSource: internal.currentDesignSource } : {}) });
+    ...(selected?.ok ? { claimSource: selected.source } : internal ? { claimSource: internal.currentDesignSource } : {}) });
   const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
     currentDesign: currentDesign.evidence });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
@@ -538,7 +544,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const recovery = needsTerminalRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
       currentUserId,
-        decision: completion, currentAgentId, refusedWorkroomId: null,
+        decision: completion, currentAgentId, refusedWorkroomId: selected?.ok ? selected.source.workroomId : null,
         ...(taskAuthority ? { taskAuthority } : {}),
       })
     : undefined;
@@ -574,8 +580,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
         if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
       }
     }
+    if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
     return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
   }
+  if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
   return {
     success: true,
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
@@ -646,13 +654,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
         title: r.title,
         date: r.date,
       })),
-      recentActivity: item.activities.slice(0, 10).map((a) => ({
-        id: a.id,
-        kind: a.kind,
-        summary: a.summary,
-        recordedAt: a.recordedAt.toISOString(),
-        payload: a.payload,
-      })),
+      recentActivity: item.activities.slice(0, 10).map(publicCompletionActivity),
     },
   };
 }

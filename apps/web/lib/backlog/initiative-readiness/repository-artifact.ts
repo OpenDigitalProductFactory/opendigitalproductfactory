@@ -14,6 +14,7 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { canonicalPlanMatchesArtifact, type CanonicalPlanSourceProof } from "./canonical-plan-source";
+import { parseManagedRepositoryInput } from "@/lib/forge/managed-repository-access";
 import {
   changesFromProviderCompare,
   commitRangeDigest,
@@ -28,6 +29,31 @@ import {
 } from "./repo-commit-range";
 
 type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+
+/** Internal source binding, never a tool argument or a replacement for actor authority. */
+export type RepositorySourceAdmission = {
+  itemId: string;
+  workroomId: string;
+  repositoryFullName: string;
+  branchName: string;
+  headSha: string;
+  isCurrent: () => Promise<boolean>;
+};
+
+async function currentSource(admission: RepositorySourceAdmission | undefined, repository: string, commit: string) {
+  if (!admission || !admission.itemId || !admission.workroomId || !admission.branchName
+    || admission.repositoryFullName.toLowerCase() !== repository.toLowerCase()
+    || !/^[a-f0-9]{40}$/i.test(commit) || admission.headSha.toLowerCase() !== commit.toLowerCase()
+    || typeof admission.isCurrent !== "function") return false;
+  try { return await admission.isCurrent() === true; } catch { return false; }
+}
+
+export async function isCanonicalRepositorySource(repositoryFullName: string): Promise<boolean> {
+  try {
+    const repository = await resolveRepoIdentity(prisma);
+    return `${repository.owner}/${repository.name}`.toLowerCase() === repositoryFullName.toLowerCase();
+  } catch { return false; }
+}
 
 const MAX_REPOSITORY_ARTIFACT_BYTES = 1024 * 1024;
 
@@ -141,6 +167,7 @@ async function fetchGithubJson(args: {
   url: string;
   token: string | null;
   fetchImpl: typeof fetch;
+  publicOnly?: boolean;
 }): Promise<GithubJsonResult> {
   for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
     let response: Response;
@@ -152,6 +179,7 @@ async function fetchGithubJson(args: {
           ...(args.token ? { Authorization: `Bearer ${args.token}` } : {}),
         },
         cache: "no-store",
+        ...(args.publicOnly ? { redirect: "error" as const } : {}),
       });
     } catch (cause) {
       if (attempt < MAX_PROVIDER_ATTEMPTS) continue;
@@ -206,6 +234,7 @@ async function fetchRepositoryProviderBlob(args: {
   path: string;
   expectedBlobId: string | null;
   fetchImpl: typeof fetch;
+  publicOnly?: boolean;
 }): Promise<RepositoryProviderBlobResult> {
   const encodedPath = encodePath(args.path);
   if (
@@ -219,6 +248,7 @@ async function fetchRepositoryProviderBlob(args: {
     url: `https://api.github.com/repos/${encodeURIComponent(args.owner)}/${encodeURIComponent(args.repo)}/contents/${encodedPath}?ref=${encodeURIComponent(args.commitSha)}`,
     token: args.token,
     fetchImpl: args.fetchImpl,
+    publicOnly: args.publicOnly,
   });
   if (!result.ok) {
     return {
@@ -233,10 +263,25 @@ async function fetchRepositoryProviderBlob(args: {
   return decodeGithubContent(result.data, args.expectedBlobId);
 }
 
+/** Public metadata is provider evidence, not a caller's claim of visibility. */
+async function verifyPublicRepository(repositoryFullName: string, fetchImpl: typeof fetch) {
+  const parsed = parseManagedRepositoryInput(repositoryFullName);
+  if (!parsed || parsed.fullName.toLowerCase() !== repositoryFullName.toLowerCase()) return null;
+  const response = await fetchGithubJson({
+    url: `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`,
+    token: null, fetchImpl, publicOnly: true,
+  });
+  if (!response.ok || !response.data || typeof response.data !== "object") return null;
+  const data = response.data as Record<string, unknown>;
+  return data.private === false && data.visibility === "public" && typeof data.full_name === "string"
+    && data.full_name.toLowerCase() === repositoryFullName.toLowerCase() ? { owner: parsed.owner, name: parsed.repo } : null;
+}
+
 /**
- * Read one exact immutable blob from the installation's configured canonical
- * repository. This is the source-provider fallback for deployments whose
- * read-only git volume does not contain an open-PR commit object.
+ * Read an exact immutable blob from the configured canonical repository, or
+ * anonymous public source scoped by an internal current Workroom binding.
+ * MCP callers separately require actor admission; persisted research observation
+ * returns only a digest through its existing locked readiness projection.
  */
 export async function readRepositoryProviderBlob(args: {
   repositoryFullName: string;
@@ -247,17 +292,24 @@ export async function readRepositoryProviderBlob(args: {
   db?: Pick<RepositoryArtifactDb, "credentialEntry" | "platformDevConfig" | "scheduledJob">;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
+  sourceAdmission?: RepositorySourceAdmission;
 }): Promise<RepositoryProviderBlobResult> {
   const db = args.db ?? prisma;
   let repo: Awaited<ReturnType<typeof resolveRepoIdentity>>;
-  let token: string | null;
+  let token: string | null = null;
   try {
-    [repo, token] = await Promise.all([resolveRepoIdentity(db), resolveGithubToken(db)]);
+    repo = await resolveRepoIdentity(db);
   } catch {
     return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider configuration is unavailable." };
   }
-  if (`${repo.owner}/${repo.name}`.toLocaleLowerCase("en-US") !== args.repositoryFullName.toLocaleLowerCase("en-US")) {
+  const foreign = `${repo.owner}/${repo.name}`.toLowerCase() !== args.repositoryFullName.toLowerCase();
+  if (foreign && (!args.expectedBlobId || !/^[a-f0-9]{40}$/i.test(args.expectedBlobId)
+    || !await currentSource(args.sourceAdmission, args.repositoryFullName, args.commitSha))) {
     return { ok: false, code: "CANONICAL_REPOSITORY_REQUIRED", error: "Requested repository is not this installation's canonical repository." };
+  }
+  if (!foreign) {
+    try { token = await resolveGithubToken(db); }
+    catch { return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider configuration is unavailable." }; }
   }
   let transport: GithubReadTransport | null = null;
   if (!args.fetchImpl) {
@@ -272,15 +324,28 @@ export async function readRepositoryProviderBlob(args: {
     }
   }
   try {
-    return await fetchRepositoryProviderBlob({
+    const fetchImpl = args.fetchImpl ?? transport!.fetch;
+    if (foreign) {
+      const publicRepo = await verifyPublicRepository(args.repositoryFullName, fetchImpl);
+      if (!publicRepo || !await currentSource(args.sourceAdmission, args.repositoryFullName, args.commitSha)) {
+        return { ok: false, code: "CANONICAL_REPOSITORY_REQUIRED", error: "The selected public repository source could not be verified." };
+      }
+      repo = publicRepo;
+    }
+    const result = await fetchRepositoryProviderBlob({
       owner: repo.owner,
       repo: repo.name,
       token,
       commitSha: args.commitSha,
       path: args.path,
       expectedBlobId: args.expectedBlobId ?? null,
-      fetchImpl: args.fetchImpl ?? transport!.fetch,
+      fetchImpl,
+      publicOnly: foreign,
     });
+    if (foreign && !await currentSource(args.sourceAdmission, args.repositoryFullName, args.commitSha)) {
+      return { ok: false, code: "CANONICAL_REPOSITORY_REQUIRED", error: "The selected repository admission changed during the read." };
+    }
+    return result;
   } finally {
     await transport?.close().catch(() => {});
   }
@@ -374,6 +439,7 @@ export async function resolveRepositoryArtifact(args: {
   workroomRef?: InitiativeReviewBinding["workroomRef"];
   /** Current baseline/coverage proof resolved internally by the receipt writer. */
   canonicalPlanProof?: CanonicalPlanSourceProof;
+  sourceAdmission?: RepositorySourceAdmission;
   db?: RepositoryArtifactDb;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -388,7 +454,9 @@ export async function resolveRepositoryArtifact(args: {
   const expectedFullName = `${expectedRepo.owner}/${expectedRepo.name}`;
   const range = args.locator.kind === "repo-commit-range" ? parseRepoCommitRangeRef(args.locator) : null;
   const blob = args.locator.kind === "repo-blob-at-commit" ? args.locator : null;
-  if (args.locator.repositoryFullName.toLocaleLowerCase("en-US") !== expectedFullName.toLocaleLowerCase("en-US")
+  const foreign = args.locator.repositoryFullName.toLowerCase() !== expectedFullName.toLowerCase();
+  if ((foreign && (!blob || args.subject.kind !== "backlog-item" || args.sourceAdmission?.itemId !== args.subject.id
+      || !await currentSource(args.sourceAdmission, args.locator.repositoryFullName, blob.commitSha)))
     || (blob ? !/^[a-f0-9]{40}$/i.test(blob.commitSha) || !/^[a-f0-9]{40}$/i.test(blob.providerBlobId) || !encodePath(blob.path)
       : !range)) {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository artifact locator is not a recognized immutable provider blob or commit range." };
@@ -437,7 +505,15 @@ export async function resolveRepositoryArtifact(args: {
       },
     },
   });
-  const boundRoom = args.workroomRef;
+  const selectedRoom = foreign && args.sourceAdmission ? { kind: "workroom-head" as const,
+    workroomId: args.sourceAdmission.workroomId, repositoryFullName: args.sourceAdmission.repositoryFullName,
+    branchName: args.sourceAdmission.branchName, headSha: args.sourceAdmission.headSha } : undefined;
+  if (selectedRoom && args.workroomRef && (selectedRoom.workroomId !== args.workroomRef.workroomId
+    || selectedRoom.repositoryFullName !== args.workroomRef.repositoryFullName
+    || selectedRoom.branchName !== args.workroomRef.branchName || selectedRoom.headSha !== args.workroomRef.headSha)) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The selected source differs from the accepted review's Workroom." };
+  }
+  const boundRoom = args.workroomRef ?? selectedRoom;
   const planProof = args.canonicalPlanProof;
   if (planProof && (!boundRoom || !blob || args.subject.kind !== "backlog-item" || planProof.itemId !== args.subject.id
     || !planProof.baselineId || !planProof.scopeOwnerItemId || !/^sha256:[a-f0-9]{64}$/i.test(planProof.digest)
@@ -488,9 +564,9 @@ export async function resolveRepositoryArtifact(args: {
         }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${locatorCommitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,
     };
   }
-  let token: string | null;
+  let token: string | null = null;
   try {
-    token = await resolveGithubToken(db);
+    if (!foreign) token = await resolveGithubToken(db);
   } catch {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider credentials are unavailable." };
   }
@@ -508,12 +584,20 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
+    if (foreign) {
+      const publicRepo = await verifyPublicRepository(args.locator.repositoryFullName, fetchImpl);
+      if (!publicRepo || !await currentSource(args.sourceAdmission, args.locator.repositoryFullName, locatorCommitSha)) {
+        return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The selected public repository source could not be verified." };
+      }
+      expectedRepo = publicRepo;
+    }
     if (blob && boundRoom && !planProof && !mergedRepair && boundRoom.headSha.toLowerCase() !== blob.commitSha.toLowerCase()) {
       // The review retains the immutable original locator. A later branch head
       // may own it only when the provider proves the same path/blob is present.
       const currentBlob = await fetchRepositoryProviderBlob({
         owner: expectedRepo.owner, repo: expectedRepo.name, token, commitSha: boundRoom.headSha,
         path: blob.path, expectedBlobId: blob.providerBlobId, fetchImpl,
+        publicOnly: foreign,
       });
       if (!currentBlob.ok) return { ok: false,
         code: currentBlob.code === "IMMUTABLE_BLOB_MISMATCH" ? "CANONICAL_DESIGN_AMBIGUOUS" : "CANONICAL_DESIGN_REQUIRED",
@@ -527,6 +611,7 @@ export async function resolveRepositoryArtifact(args: {
         url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(commitSha)}`,
         token,
         fetchImpl,
+        publicOnly: foreign,
       });
       if (!commitResult.ok) {
         return {
@@ -625,6 +710,7 @@ export async function resolveRepositoryArtifact(args: {
     path: blob!.path,
     expectedBlobId: blob!.providerBlobId,
     fetchImpl,
+    publicOnly: foreign,
   });
     if (!providerBlob.ok) {
     return {
@@ -640,6 +726,9 @@ export async function resolveRepositoryArtifact(args: {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified immutable plan bytes do not match the current coverage digest." };
     }
     verified = { digest, bytes: providerBlob.data };
+    }
+    if (foreign && !await currentSource(args.sourceAdmission, args.locator.repositoryFullName, locatorCommitSha)) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The selected source or actor admission changed during artifact verification." };
     }
     return {
       ok: true,

@@ -93,6 +93,22 @@ describe("createEvidencePlan", () => {
     );
   });
 
+  it("maps the policy-guard registry to its declared PR Health Logic test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["scripts/lib/ci-policy-guards.mjs"],
+      knownTests: ["scripts/ci-policy-guards.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/ci-policy-guards.test.mjs"]);
+  });
+
+  it("maps the installed published-correction guard to its PR Health Logic test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/hooks/lib/published-correction.mjs"],
+      knownTests: ["scripts/published-correction.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/published-correction.test.mjs"]);
+  });
+
   it("does not claim a Python route, because .py files serve none", () => {
     const plan = createEvidencePlan(input({
       changedFiles: [
@@ -405,6 +421,26 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.affectedTests, ["apps/web/lib/orders.test.ts"]);
     assert.equal(plan.fullSuite, false);
     assert.deepEqual(plan.escalations, []);
+  });
+
+  it("retains an explicit existing-test mapping for a Dockerfile", () => {
+    const source = "services/edge-node/Dockerfile";
+    const test = "scripts/check-docker-workspace-context.test.mjs";
+    const plan = createEvidencePlan(input({
+      changedFiles: [source],
+      knownTests: [test],
+      relatedTestsBySource: { [source]: [test] },
+      codeGraphAdvice: trustedGraph(),
+    }));
+
+    assert.deepEqual(plan.affectedTests, [test]);
+    assert.deepEqual(plan.fileDispositions, [{
+      path: source,
+      kind: "other",
+      disposition: "mapped-tests",
+      tests: [test],
+      routes: [],
+    }]);
   });
 
   it("derives Next route paths and route families from page ownership", () => {

@@ -22,7 +22,7 @@ set -eu
 #            the current holder and exits non-zero instead of silently
 #            re-binding. Prints LEASE_ID=<id> on success.
 #   status   Print the active lease holder for :3001 (if any). Exit 0 always.
-#   release  Release a lease previously claimed for the preview. Pass the lease
+#   release  Request governed release of a preview lease. Pass the lease
 #            id via --lease-id or DPF_DEV_PORTAL_LEASE_ID.
 #
 # Reuses the same MCP tools as scripts/gate-worktree.sh:
@@ -62,9 +62,10 @@ Subcommands:
             Refuses (non-zero) when another holder is active and prints them.
   refresh   Claim the lease, stop the shared preview, and restart it from this
             worktree. Stays in the foreground to renew authority; stopping the
-            keeper stops the preview and releases the lease.
+            keeper stops its owned preview and observes reservation settlement.
+            Explicit lease release remains a governed operation.
   status    Print the current holder for the shared lease (if any).
-  release   Release a lease previously claimed for the preview.
+  release   Request governed release of a previously claimed preview lease.
 
 Options:
   --worktree PATH         Worktree to bind (default: $DPF_DEV_WORKTREE).
@@ -361,7 +362,7 @@ EOF
       holder_line="$(printf '%s' "$holder_json" | describe_holder)"
       printf '%s\n' "REFUSING to silently re-bind :3001." >&2
       printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
-      printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
+      printf '%s\n' "Coordinate explicitly: ask the holder to end its owned keeper and observe native settlement. Explicit release (scripts/dev-portal-lease.sh release --lease-id <id>) remains governed." >&2
       return 3
     fi
     if [ "$claim_error" = "lease_terminal" ]; then

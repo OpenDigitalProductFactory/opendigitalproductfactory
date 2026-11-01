@@ -339,16 +339,16 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   const vector = await generateEmbedding(input.query);
   if (!vector) {
     // BI-512FBD20. A null vector means the query could not be embedded — the
-    // provider is down or the model is missing. Returning [] here is
+    // provider may be paused, unreachable, or missing a model. Returning [] here is
     // indistinguishable, to the caller, from "no page matched", which is how
     // wiki_query and principle_decide silently degraded to empty results while
     // reporting themselves healthy. The [] contract stays (callers expect it),
     // but the failure is now loud in the logs with a distinct, greppable marker
-    // and the exact fix. `make-silent-failures-observable`.
+    // without guessing its cause. `make-silent-failures-observable`.
     console.error(
       "[searchWikiPages] embedding-provider-unavailable — query could not be " +
         "embedded; using Postgres lexical fallback. " +
-        "Fix: docker model pull ai/nomic-embed-text-v1.5",
+        "Review provider routing and model availability.",
     );
     return searchWikiPagesLexically(input);
   }

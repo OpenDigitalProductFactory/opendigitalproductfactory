@@ -82,6 +82,30 @@ beforeEach(() => {
   autonomous.resolveAgent.mockResolvedValue({ agentId: parsed.agentId, systemPrompt: "Review independently.", sensitivity: "internal" });
 });
 describe("admitted review execution fence", () => {
+  it.each(["request", "authority", "owner", "reviewer", "reservation", "dispatch", "unknown", "held", "cancelled"])(
+    "does not adopt a changed %s after hydration", async changed => {
+      const current = { userId: "human", currentAgentId: parsed.agentId, status: "working", updatedAt: new Date(),
+        progressPayload: { resumeReservedAt: "reserved", dispatch: { claimedAt: "dispatch" } } as Record<string, unknown>,
+        a2aMetadata: { requestDigest: "9".repeat(64), initiativeReviewBinding: parsed.initiativeReviewBinding } };
+      const { captureTaskExecutionFence } = await import("./shared/task-execution-fence");
+      const expectedExecutionFence = captureTaskExecutionFence(current.progressPayload, current.a2aMetadata.requestDigest)!;
+      if (changed === "request") current.a2aMetadata.requestDigest = "8".repeat(64);
+      if (changed === "authority") current.progressPayload.reviewExecutionAuthority = { schemaVersion: 1, tokenId: "other" };
+      if (changed === "owner") current.userId = "other";
+      if (changed === "reviewer") current.currentAgentId = "other";
+      if (changed === "reservation") current.progressPayload.resumeReservedAt = "later";
+      if (changed === "dispatch") current.progressPayload.dispatch = { claimedAt: "later" };
+      if (changed === "unknown") current.progressPayload.executionUncertainty = { settlement: "unknown" };
+      if (changed === "held") current.status = "input-required";
+      if (changed === "cancelled") current.status = "canceled";
+      db.findTaskRun.mockResolvedValue(current);
+      await executeRemoteTaskAttempt({ run: { id: "original", taskRunId: "TR-ORIGINAL", contextId: "thread-1" }, threadId: "thread-1",
+        token: { tokenId: "oauth", userId: "human", capability: "write", source: "oauth" }, userContext: {} as never,
+        parsed, idempotentReplay: true, capacityAttempt: 1, expectedExecutionFence });
+      expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(db.updateTaskRun).not.toHaveBeenCalled();
+    });
   it.each(["completion", "exception", "parking"])("does not overwrite a later uncertainty, authority or owner during %s", async mode => {
     for (const displacedBy of ["uncertainty", "authority", "owner", "actor", "request", "parked"] as const) {
       vi.clearAllMocks();

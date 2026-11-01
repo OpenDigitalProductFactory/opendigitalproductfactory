@@ -10,6 +10,7 @@ import { formatMessageForResponses } from "./provider-message-format";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { buildResponsesUrl, isChatGptBackend } from "./responses-contract";
 import { isReassessmentExecutionError } from "./reassessment-execution-scope";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 type ResponsesOutputItem =
   | {
@@ -26,6 +27,15 @@ type ResponsesOutputItem =
 type ResponsesMessagePart = {
   type?: string;
   text?: string;
+};
+
+type ResponsesPayload = {
+  id?: string;
+  status?: string;
+  incomplete_details?: { reason?: string };
+  output?: ResponsesOutputItem[];
+  output_text?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
 };
 
 /** The parameter a 400 names as unsupported, e.g. {"detail":"Unsupported parameter: temperature"}. */
@@ -91,32 +101,51 @@ async function readResponsesPayload(
   res: Response,
   providerId: string,
   baseUrl: string,
-): Promise<{
-  output?: ResponsesOutputItem[];
-  output_text?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
-}> {
+): Promise<{ data: ResponsesPayload; terminalEvidenceValid: boolean }> {
   if (!isChatGptBackend(providerId, baseUrl)) {
-    return await res.json() as {
-      output?: ResponsesOutputItem[];
-      output_text?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+    return { data: await res.json() as ResponsesPayload, terminalEvidenceValid: true };
   }
 
   const rawText = await res.text();
   const lines = rawText.split("\n");
-  let lastCompleted: Record<string, unknown> | null = null;
+  let lastTerminal: Record<string, unknown> | null = null;
   let lastDelta = "";
+  let terminalEvidenceValid = true;
+  let terminalFingerprint: string | undefined;
+  let responseId: string | undefined;
+  let declaredEvent: string | undefined;
   // Collect function call argument deltas keyed by output_index
   const funcCallDeltas = new Map<string, { callId: string; name: string; args: string }>();
 
-  for (const line of lines) {
-    if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line) { declaredEvent = undefined; continue; }
+    if (line.startsWith("event:")) { declaredEvent = line.slice(6).trim(); continue; }
+    if (!line.startsWith("data:")) continue;
+    const eventData = line.slice(5).trimStart();
+    if (!eventData || eventData === "[DONE]") continue;
     try {
-      const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
-      if (parsed.type === "response.completed" && parsed.response) {
-        lastCompleted = parsed.response as Record<string, unknown>;
+      const parsed = JSON.parse(eventData) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) { terminalEvidenceValid = false; continue; }
+      if (declaredEvent && declaredEvent !== parsed.type) terminalEvidenceValid = false;
+      const response = parsed.response && typeof parsed.response === "object" && !Array.isArray(parsed.response)
+        ? parsed.response as Record<string, unknown> : undefined;
+      const eventResponseId = response?.id ?? parsed.response_id;
+      if (typeof eventResponseId === "string" && eventResponseId) {
+        if (responseId && responseId !== eventResponseId) terminalEvidenceValid = false;
+        responseId ??= eventResponseId;
+      }
+      const terminalEvent = ["response.completed", "response.incomplete", "response.failed"].includes(String(parsed.type));
+      if (lastTerminal && !terminalEvent && String(parsed.type).endsWith(".delta")) terminalEvidenceValid = false;
+      if (terminalEvent) {
+        if (!response) { terminalEvidenceValid = false; continue; }
+        const status = String(parsed.type).slice("response.".length);
+        if (response.status !== undefined && response.status !== status) terminalEvidenceValid = false;
+        const terminal = { ...response, status: response.status ?? status };
+        const fingerprint = canonicalJson(terminal);
+        if (terminalFingerprint && terminalFingerprint !== fingerprint) terminalEvidenceValid = false;
+        terminalFingerprint ??= fingerprint;
+        lastTerminal = terminal;
       }
       if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
         lastDelta += parsed.delta;
@@ -135,7 +164,8 @@ async function readResponsesPayload(
         if (existing) existing.args += parsed.delta;
       }
     } catch {
-      // Ignore malformed SSE lines and keep scanning for the completed payload.
+      // Retain readable output, but malformed protocol data cannot prove completion.
+      terminalEvidenceValid = false;
     }
   }
 
@@ -144,7 +174,7 @@ async function readResponsesPayload(
     .filter(l => l.startsWith("data: ") && l !== "data: [DONE]")
     .map(l => { try { return (JSON.parse(l.slice(6)) as Record<string, unknown>).type; } catch { return "parse_error"; } });
   const uniqueTypes = [...new Set(eventTypes)];
-  if (!lastCompleted && !lastDelta && funcCallDeltas.size === 0) {
+  if (!lastTerminal && !lastDelta && funcCallDeltas.size === 0) {
     console.warn(
       `[responses-adapter] Empty response from ${providerId}. ` +
       `SSE lines: ${lines.length}, event types: [${uniqueTypes.join(", ")}]. ` +
@@ -169,12 +199,12 @@ async function readResponsesPayload(
     } as unknown as ResponsesOutputItem);
   }
 
-  // If response.completed exists, use it for usage data — but prefer
+  // Preserve the actual terminal payload and its usage; prefer
   // synthetic output when the completed event has empty/useless output.
   // The ChatGPT backend often sends text/tools via SSE deltas while the
   // completed event's output[] is empty or contains only empty text.
-  if (lastCompleted) {
-    const completedOutput = (lastCompleted as { output?: unknown[] }).output ?? [];
+  if (lastTerminal) {
+    const completedOutput = (lastTerminal as { output?: unknown[] }).output ?? [];
     // Check if completed output has actual content (non-empty text or tool calls)
     const hasRealContent = completedOutput.some((item: unknown) => {
       const it = item as Record<string, unknown>;
@@ -186,15 +216,12 @@ async function readResponsesPayload(
       return false;
     });
     const useCompleted = hasRealContent;
-    return {
+    return { terminalEvidenceValid, data: {
+      ...lastTerminal,
       output: useCompleted ? completedOutput : syntheticOutput,
-      output_text: useCompleted ? (lastCompleted as { output_text?: string }).output_text : (lastDelta || undefined),
-      usage: (lastCompleted as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
-    } as {
-      output?: ResponsesOutputItem[];
-      output_text?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+      output_text: useCompleted ? (lastTerminal as { output_text?: string }).output_text : (lastDelta || undefined),
+      usage: (lastTerminal as ResponsesPayload).usage,
+    } as ResponsesPayload };
   }
 
   // No completed event — return synthetic output only
@@ -205,14 +232,10 @@ async function readResponsesPayload(
     } as unknown as ResponsesOutputItem);
   }
 
-  return {
+  return { terminalEvidenceValid: false, data: {
     output: syntheticOutput,
     output_text: lastDelta || undefined,
-  } as {
-    output?: ResponsesOutputItem[];
-    output_text?: string;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
+  } as ResponsesPayload };
 }
 
 export const responsesAdapter: ExecutionAdapterHandler = {
@@ -220,6 +243,10 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools, previousResponseId } = request;
+    const requiredOutputBound = plan.responsePolicy.requireOutputBound === true;
+    if (requiredOutputBound && (!Number.isSafeInteger(plan.maxTokens) || (plan.maxTokens ?? 0) <= 0)) {
+      throw new InferenceError("Required output bound must be a positive finite integer", "provider_error", providerId);
+    }
     const responsesUrl = buildResponsesUrl(providerId, provider.baseUrl);
 
     const body: Record<string, unknown> = {
@@ -243,7 +270,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     if (systemPrompt) {
       body.instructions = systemPrompt;
     }
-    if (plan.maxTokens && !isChatGptBackend(providerId, provider.baseUrl)) {
+    if (plan.maxTokens && (requiredOutputBound || !isChatGptBackend(providerId, provider.baseUrl))) {
       body.max_output_tokens = plan.maxTokens;
     }
     // BI-EFA3869E: the Codex backend's reasoning models reject `temperature`
@@ -287,10 +314,8 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     const startMs = Date.now();
     let res: Response;
-    // At most one narrowing retry: a provider that names an unsupported request
-    // parameter is asking for a narrower request, not refusing the work, so drop
-    // that one parameter and send again rather than turning catalog drift into
-    // a dead provider.
+    // Retry only the existing optional sampling setting. Required tools,
+    // instructions, state, storage and output bounds must survive unchanged.
     for (let attempt = 0; ; attempt += 1) {
       try {
         res = await request.fetchImpl(responsesUrl, {
@@ -310,7 +335,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       if (res.ok) break;
       const errBody = await res.text().catch(() => "");
       const unsupported = unsupportedParameterName(res.status, errBody);
-      if (attempt === 0 && unsupported && unsupported in body) {
+      if (attempt === 0 && unsupported === "temperature" && unsupported in body) {
         console.warn(`[responses-adapter] ${providerId} rejected parameter "${unsupported}" — retrying once without it.`);
         delete body[unsupported];
         continue;
@@ -319,8 +344,14 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     }
     const inferenceMs = Date.now() - startMs;
 
-    const data = await readResponsesPayload(res, providerId, provider.baseUrl);
+    const { data, terminalEvidenceValid } = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
+    const status = typeof data.status === "string" ? data.status : undefined;
+    const incompleteReason = typeof data.incomplete_details?.reason === "string" ? data.incomplete_details.reason : undefined;
+    const contradictoryCompletion = status === "completed" && (data.incomplete_details != null
+      || (data as Record<string, unknown>).error != null);
+    const termination = terminalEvidenceValid && !contradictoryCompletion && status ? { finishReason: status === "incomplete" ? incompleteReason ?? status : status,
+      truncated: status === "incomplete" && incompleteReason === "max_output_tokens" } : {};
 
     // Log all responses to diagnose tool call issues
     if (!parsed.text && parsed.toolCalls.length === 0) {
@@ -342,6 +373,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
           inferenceMs,
           raw: data as Record<string, unknown>,
           responseId: (data as { id?: string }).id ?? undefined,
+          ...termination,
         };
       }
     } else {
@@ -361,6 +393,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       inferenceMs,
       raw: data as Record<string, unknown>,
       responseId: (data as { id?: string }).id ?? undefined,
+      ...termination,
     };
   },
 };

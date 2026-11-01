@@ -10,12 +10,24 @@ import {
   inspectLocalSandboxFence,
   reconcileDeadLocalSandboxFence,
   readProcessIdentity,
+  inspectProcessIdentity,
   releaseLocalSandboxFence,
 } from "./local-sandbox-fence.mjs";
 
 function fencePath() {
   return join(mkdtempSync(join(tmpdir(), "dpf-sandbox-fence-")), "owner.json");
 }
+
+test("strong process observation distinguishes ESRCH from permission, identity and reused-PID uncertainty", () => {
+  const owner = { pid: 808, processIdentity: "birth:original" };
+  const fail = code => () => { throw Object.assign(new Error(code), { code }); };
+  assert.equal(inspectProcessIdentity(owner, { kill: fail("ESRCH") }).status, "absent");
+  for (const code of ["EPERM", "EACCES", "EIO"]) assert.equal(inspectProcessIdentity(owner, { kill: fail(code) }).status, "unknown");
+  assert.equal(inspectProcessIdentity(owner, { kill() {}, processIdentity: () => "birth:original" }).status, "live");
+  assert.equal(inspectProcessIdentity(owner, { kill() {}, processIdentity: () => "birth:reused" }).status, "unknown");
+  assert.equal(inspectProcessIdentity(owner, { kill() {}, processIdentity: () => "" }).status, "unknown");
+  assert.equal(inspectProcessIdentity({ pid: 808 }, { kill: fail("ESRCH") }).status, "unknown");
+});
 
 test("a live owner blocks a competing claimant even beyond database TTL", () => {
   const path = fencePath();

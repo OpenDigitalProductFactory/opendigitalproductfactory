@@ -160,6 +160,11 @@ function loadToolToGrants(): Record<string, string[]> {
       pattern: /PROVIDER_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
     {
+      // Work-thread tools retain their existing grants after feedback extraction.
+      path: "apps/web/lib/tak/thread-tool-grants.ts",
+      pattern: /THREAD_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
       // Platform updates and explicit reconciliation share this canonical map.
       path: "apps/web/lib/tak/platform-update-tool-grants.ts",
       pattern: /PLATFORM_UPDATE_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,

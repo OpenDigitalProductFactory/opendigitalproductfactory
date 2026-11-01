@@ -1,3 +1,5 @@
+import { createPublicTaskRunId, initialStatusForTrigger, taskRunSourceForTrigger, type AutonomousWorkTrigger } from "./autonomous-work-task-identity";
+export type { AutonomousWorkTrigger } from "./autonomous-work-task-identity";
 import { randomUUID } from "crypto";
 import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-management/room-turn-authority";
 import { prisma } from "@dpf/db";
@@ -28,15 +30,6 @@ function lastUserRequest(history: ChatMessage[]): string {
   return "";
 }
 
-export type AutonomousWorkTrigger =
-  | "interactive"
-  | "scheduled"
-  | "external-mcp"
-  | "build"
-  | "deliberation"
-  | "radar"
-  | "system-recovery"
-  | "capacity-continuity";
 
 export type AutonomousWorkRunRef = {
   id: string;
@@ -100,32 +93,6 @@ export type AutonomousWorkRunInput = {
     progressPayload?: Prisma.InputJsonValue;
   };
 };
-
-const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
-  interactive: "CHAT",
-  scheduled: "SCHED",
-  "external-mcp": "MCP",
-  build: "BUILD",
-  deliberation: "DELIB",
-  radar: "RADAR",
-  "system-recovery": "RECOV",
-  "capacity-continuity": "CAP",
-};
-
-function taskRunSourceForTrigger(trigger: AutonomousWorkTrigger): string {
-  if (trigger === "interactive") return "coworker";
-  if (trigger === "build") return "build";
-  if (trigger === "deliberation") return "skill";
-  return "proactive";
-}
-
-function initialStatusForTrigger(trigger: AutonomousWorkTrigger): string {
-  return trigger === "interactive" ? "submitted" : "working";
-}
-
-function createPublicTaskRunId(trigger: AutonomousWorkTrigger): string {
-  return `TR-${TRIGGER_PREFIX[trigger]}-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
 
 export async function createAutonomousWorkRun(
   input: AutonomousWorkRunInput,
@@ -267,6 +234,12 @@ export async function resolveAutonomousWorkTools(input: {
   requiredToolNames?: readonly string[];
   /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
   restrictedReviewBinding?: InitiativeReviewBinding;
+  /** Server-owned finite CE preparation; resolves only its registered readers without ambient runtime probes. */
+  restrictedEngagementBinding?: import("../coworker-service-catalog/engagement-task-binding").EngagementTaskBinding;
+  /** Current server-resolved scheduled commission; never copied from model arguments. */
+  scheduledReportingMode?: "read-only-history";
+  taskRunId?: string;
+  threadId?: string;
   roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
@@ -279,7 +252,7 @@ export async function resolveAutonomousWorkTools(input: {
   const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import(
     "@/lib/coworker/authorized-surface-coworker-contract"
   );
-  const authorized = await getAvailableTools(input.userContext, {
+  const normallyAuthorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
@@ -288,6 +261,27 @@ export async function resolveAutonomousWorkTools(input: {
     ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
 
+  const { isScheduledReportingRead } = await import("@/lib/operate/scheduled-jobs/scheduled-reporting-contract");
+  const reportingUserId = input.userContext.userId;
+  if (input.taskRunId && !reportingUserId) throw new Error("Scheduled reporting requires its authenticated owner.");
+  const reporting = input.taskRunId && reportingUserId ? await (await import("@/lib/operate/scheduled-jobs/scheduled-reporting-authority"))
+    .resolveScheduledReportingContext(reportingUserId, { taskRunId: input.taskRunId, threadId: input.threadId, agentId: input.agentId }) : null;
+  if (input.taskRunId && input.scheduledReportingMode && reporting?.mode !== input.scheduledReportingMode) {
+    throw new Error("Scheduled reporting requires its current persisted commission.");
+  }
+  const authorized = (reporting?.mode ?? input.scheduledReportingMode) === "read-only-history"
+    ? normallyAuthorized.filter(isScheduledReportingRead) : normallyAuthorized;
+
+  if (input.restrictedEngagementBinding) {
+    const { parseEngagementTaskBinding, ENGAGEMENT_READ_TOOLS } = await import("../coworker-service-catalog/engagement-task-binding");
+    const binding = parseEngagementTaskBinding(input.restrictedEngagementBinding), names = new Set(input.requiredToolNames ?? []);
+    if (!binding?.presentAssessment || names.size !== ENGAGEMENT_READ_TOOLS.length
+      || ENGAGEMENT_READ_TOOLS.some(name => !names.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new Error("engagement-present-tool-surface-unavailable");
+    }
+    const tools = authorized.filter(tool => names.has(tool.name));
+    return { tools, toolsForProvider: toolsToOpenAIFormat(tools), deferredTools: [] };
+  }
   if (input.restrictedReviewBinding) {
     const binding = input.restrictedReviewBinding;
     const names = [immutablePageReaderForArtifact(binding.artifactRef), binding.writerToolName];
@@ -395,6 +389,8 @@ export async function resolveAutonomousWorkTools(input: {
 }
 
 export async function executeAutonomousAgenticLoop(input: {
+  /** Server-owned commission narrowing; its report must not emit optional proposal writers. */
+  scheduledReportingMode?: "read-only-history";
   canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
@@ -632,6 +628,10 @@ export async function executeAutonomousAgenticLoop(input: {
     );
   }
 
+  // Report settlement owns the output/history. Optional draft revision and
+  // background learning writers are outside this observation-only commission.
+  if (input.scheduledReportingMode === "read-only-history") return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
+
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on
   // Quality/effort, run one deliberation pass over the draft before it's returned —
@@ -640,7 +640,7 @@ export async function executeAutonomousAgenticLoop(input: {
   // proposals and for Balanced/low postures. (The full multi-agent deliberation
   // engine — minutes-long, build-artifact-coupled — stays the build-phase mechanism;
   // this is the synchronous, output-revising leverage for coworker turns.)
-  if (result.content && !result.proposal) {
+  if (result.content && !result.proposal && !result.failure) {
     try {
       const pattern = await resolveCoworkerReviewPattern(input.agentId);
       if (pattern === "review" || pattern === "debate") {
@@ -650,7 +650,7 @@ export async function executeAutonomousAgenticLoop(input: {
           sensitivity: input.sensitivity,
           pattern,
         });
-        if (verdict.revised) result.content = verdict.content;
+        if (verdict.revised) { result.content = verdict.content; result.responseProducer = undefined; }
       }
     } catch (err) {
       console.warn("[golden-triangle] coworker deliberation (unified seam) failed (fail-open):", err);

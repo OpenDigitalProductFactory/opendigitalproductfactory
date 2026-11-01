@@ -10,6 +10,8 @@ import {
 import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
 import type { RouteDecision } from "./types";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
+import { getExclusionReasonV2 } from "./pipeline-v2";
+import type { RequestContract } from "./request-contract";
 
 const { mockPrisma, mockProviderHasConfiguredCredential, mockServedContext } = vi.hoisted(() => ({
   mockPrisma: {
@@ -220,6 +222,93 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     maxContextTokens: 262144,
     provider: { ...profileRow.provider, providerId: "local", authMethod: "none",
       baseUrl: null, endpoint: "http://model-runner.docker.internal/v1", maxOutputTokens: null },
+  });
+
+
+
+  it("uses a live captured native image observation only for an unknown local capability and never carries it across frames", async () => {
+    const { withCapturedProviderTransportOnly, createCapturedNativeImageInputEvidence } = await import("../shared/captured-effect-store");
+    const profile = { ...localProfile(), capabilities: { imageInput: null }, inputModalities: ["text"] };
+    mockPrisma.modelProfile.findMany.mockResolvedValue([profile]);
+    let heldReader!: Parameters<typeof readEndpointManifests>[1];
+    await withCapturedProviderTransportOnly(async () => {
+      const evidence = createCapturedNativeImageInputEvidence({ modelId: profile.modelId, modelDigest: "sha256:" + "a".repeat(64), observationDigest: "b".repeat(64) });
+      heldReader = async () => ({ contextTokens: 40960, imageInputEvidence: evidence });
+      const [manifest] = await readEndpointManifests(100000, heldReader);
+      expect(manifest).toMatchObject({ capabilities: { imageInput: true, streaming: true }, supportsStreaming: true, inputModalities: ["text", "image"] });
+      expect(profile.capabilities.imageInput).toBeNull(); expect(profile.inputModalities).toEqual(["text"]);
+      const [copy] = await readEndpointManifests(100001, async () => ({ contextTokens: 40960, imageInputEvidence: JSON.parse(JSON.stringify(evidence)) }));
+      expect(copy?.capabilities.imageInput).not.toBe(true);
+      for (const changed of [{ ...profile, capabilities: { imageInput: false } }, { ...profile, capabilityOverrides: { imageInput: false } }]) {
+        mockPrisma.modelProfile.findMany.mockResolvedValue([changed]);
+        const [vetoed] = await readEndpointManifests(100002, async () => ({ contextTokens: 40960, imageInputEvidence: evidence }));
+        expect(vetoed?.capabilities.imageInput).not.toBe(true);
+      }
+      mockPrisma.modelProfile.findMany.mockResolvedValue([profile]);
+    });
+    const [expired] = await readEndpointManifests(100003, heldReader);
+    expect(expired?.capabilities.imageInput).not.toBe(true);
+  });
+
+  it.each([null, {}, { streaming: null }])("admits a streaming subscription model when discovery omitted streaming: %j", async capabilities => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, providerId: "chatgpt", modelId: "gpt-6.1-sol", capabilities,
+      provider: { ...profileRow.provider, endpointType: "responses", supportsStreaming: true },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    const interactive = {
+      contractId: "streaming-regression", contractFamily: "sync.conversation",
+      taskType: "conversation", interactionMode: "sync", sensitivity: "internal",
+      modality: { input: ["text"], output: ["text"] }, requiresTools: true,
+      requiresStrictSchema: false, requiresStreaming: true, estimatedInputTokens: 1000,
+      estimatedOutputTokens: 100, reasoningDepth: "low", budgetClass: "balanced",
+    } satisfies RequestContract;
+    expect(getExclusionReasonV2(manifest!, interactive)).toBeNull();
+    expect(manifest?.supportsStreaming).toBe(true);
+  });
+
+  it.each([
+    { providerStreaming: true, modelStreaming: false },
+    { providerStreaming: false, modelStreaming: true },
+    { providerStreaming: false, modelStreaming: null },
+  ])("preserves an explicit streaming refusal: %j", async ({ providerStreaming, modelStreaming }) => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, capabilities: { streaming: modelStreaming },
+      provider: { ...profileRow.provider, supportsStreaming: providerStreaming },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities.streaming).toBe(false);
+    expect(manifest?.supportsStreaming).toBe(false);
+  });
+
+  it.each(["embedding", "image", "audio"])('does not infer text streaming for a %s model', async modelClass => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...profileRow, modelClass }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities.streaming).toBeNull();
+    expect(manifest?.supportsStreaming).toBe(false);
+  });
+
+  it("leaves streaming unknown without positive provider or model evidence", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, provider: { ...profileRow.provider, supportsStreaming: null },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities.streaming).toBeNull();
+  });
+
+  it("preserves other model capabilities when resolving transport streaming", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, capabilities: { streaming: null, imageInput: false, toolUse: true },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities).toMatchObject({ streaming: true, imageInput: false, toolUse: true });
+  });
+
+  it("reconciles streaming in the same way for enable-candidate previews", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([profileRow]);
+    const [manifest] = await loadEnableCandidateManifests();
+    expect(manifest?.capabilities.streaming).toBe(true);
+
   });
 
   it("bounds local completion by the observed shared window instead of rejecting absent output metadata", async () => {

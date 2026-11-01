@@ -149,6 +149,8 @@ type Harness = {
   activities: Array<{ kind: string; summary: string; payload: Record<string, unknown> }>;
   notices: DeadlineNoticeInput[];
   upserts: string[];
+  dispatches: Parameters<WorkroomDriveEffects["upsertAgentTask"]>[0][];
+  objective: string;
 };
 
 /** A graph room mid-instance: the given marking, with the given receipts, last ticked inside DAY. */
@@ -162,6 +164,8 @@ function room(shape: WorkShapeDefinition, marking: Omit<DriveMarking, "format" |
     activities: [],
     notices: [],
     upserts: [],
+    dispatches: [],
+    objective: "Objective",
     workspaceState: { workroomDrive: {
       kind: "workroom-drive", version: 1, action: "dispatch_agent", reason: "agent_stage", stageKey, lastCycleKey: cycleOf(shape),
       lastRunAt: T0.toISOString(), receipts,
@@ -187,7 +191,8 @@ function evidenceOf(h: Harness): RecordedEvidence[] {
 async function tick(h: Harness, now: Date) {
   const stored = readStoredWorkroomDriveState(h.workspaceState);
   const parent: WorkroomDriveRoom = {
-    id: "row-x", capsuleId: "WC-X", objective: "Objective",
+    id: "row-x", capsuleId: "WC-X", objective: h.objective,
+    repositoryFullName: "example/platform", headSha: "b".repeat(40),
     scopeClaims: [buildWorkShapeClaim({ key: h.shape.key, version: h.shape.version }), buildWorkroomPostureClaim({ proactivityLevel: "balanced" }, new Date("2026-03-01T00:00:00.000Z"))],
     workspaceState: h.workspaceState, leaseExpiresAt: null, leaseHolderPrincipalId: null, ownerUserId: "user-1",
     participants: [coordinator()], ...stored, receipts: stored.receipts, budgetUsage: [], stopConditionHits: [], reviewDue: false,
@@ -204,7 +209,7 @@ async function tick(h: Harness, now: Date) {
       h.workspaceState = JSON.parse(JSON.stringify({ ...h.workspaceState, workroomDrive: written })) as Record<string, unknown>;
     },
     acquireLease: async () => "acquired",
-    upsertAgentTask: async (input) => { h.upserts.push(`${input.taskId}@${input.stage.stageKey}`); return true; },
+    upsertAgentTask: async (input) => { h.upserts.push(`${input.taskId}@${input.stage.stageKey}`); h.dispatches.push(input); return true; },
     deactivateAgentTask: async () => {},
     notifyDeadline: async (input) => { h.notices.push(input); return true; },
   };
@@ -222,6 +227,64 @@ const instance = (h: Harness) => {
 describe("BI-086DC167: a graph instance in flight at a cycle boundary is not discarded", () => {
   beforeEach(() => {
     Object.assign(flags.table, flags.original, { "stage-deadline": true, "sub-shape": true });
+  });
+
+  it("binds parallel continuation prompts to each branch and iteration while retaining the original run across midnight", async () => {
+    const h = room(SPLIT_2, {
+      tokens: [{ node: "stage:b", enteredAt: T0.toISOString() }, { node: "stage:c", enteredAt: T0.toISOString() }],
+      iterations: { b: 1, c: 2 }, reworkTaken: {}, deadlines: {}, children: {},
+    }, [done("a")], "b");
+    await tick(h, new Date("2026-03-03T00:15:00.000Z"));
+    expect(h.dispatches).toHaveLength(2);
+    for (const dispatch of h.dispatches) {
+      const sibling = h.dispatches.find((other) => other.taskId !== dispatch.taskId)!;
+      expect(dispatch.prompt).toContain(dispatch.taskId);
+      expect(dispatch.prompt).not.toContain(`"taskId":"${sibling.taskId}"`);
+      expect(dispatch.prompt).toContain(cycleOf(SPLIT_2));
+      expect(dispatch.prompt).toContain(cycleOf(SPLIT_2, "2026-03-03"));
+      expect(dispatch.prompt).toContain("b".repeat(40));
+      expect(dispatch.dispatchScope).toEqual({ runKey: cycleOf(SPLIT_2), cycleKey: cycleOf(SPLIT_2, "2026-03-03"), iteration: dispatch.stage.stageKey === "b" ? 1 : 2 });
+      const facts = JSON.parse(dispatch.prompt.split("\n").find((line) => line.startsWith("{"))!);
+      expect(facts.identity).toEqual({ taskId: dispatch.taskId, ...dispatch.dispatchScope });
+      expect(facts.source).toEqual(dispatch.source);
+      expect(facts.stageKey).toBe(dispatch.stage.stageKey);
+      expect(facts.stageTools).toEqual(dispatch.stage.tools);
+      expect(facts.doneWhen).toBe(`${dispatch.stage.stageKey} done`);
+    }
+  });
+
+  it("retains graph tokens and recovery eligibility when mandatory briefs exceed the budget", async () => {
+    const h = room(SPLIT_2, {
+      tokens: [{ node: "stage:b", enteredAt: T0.toISOString() }, { node: "stage:c", enteredAt: T0.toISOString() }],
+      iterations: {}, reworkTaken: {}, deadlines: {}, children: {},
+    }, [done("a")], "b");
+    const before = instance(h);
+    h.objective = "Mandatory objective. ".repeat(10_000);
+    await tick(h, at(HOUR_MS));
+    expect(h.dispatches).toHaveLength(0);
+    expect(instance(h)).toEqual(before);
+    h.objective = "Objective";
+    await tick(h, at(2 * HOUR_MS));
+    expect(h.dispatches).toHaveLength(2);
+  });
+
+  it("a refused branch keeps its token while a sibling with a complete bounded brief dispatches", async () => {
+    const h = room(SPLIT_2, {
+      tokens: [{ node: "stage:b", enteredAt: T0.toISOString() }, { node: "stage:c", enteredAt: T0.toISOString() }],
+      iterations: {}, reworkTaken: {}, deadlines: {}, children: {},
+    }, [done("a")], "b");
+    const stage = SPLIT_2.stages.find((entry) => entry.key === "b")!;
+    const original = stage.advance.condition;
+    try {
+      stage.advance.condition = "Mandatory branch obligation. ".repeat(10_000);
+      await tick(h, at(HOUR_MS));
+      expect(h.dispatches.map((dispatch) => dispatch.stage.stageKey)).toEqual(["c"]);
+      expect(marking(h).tokens.find((token) => token.node === "stage:b")?.lastAction).not.toBe("dispatch_agent");
+    } finally {
+      stage.advance.condition = original;
+    }
+    await tick(h, at(2 * HOUR_MS));
+    expect(h.dispatches.map((dispatch) => dispatch.stage.stageKey)).toEqual(["c", "b"]);
   });
 
   describe("AC-GRAPH-CROSS-CYCLE", () => {

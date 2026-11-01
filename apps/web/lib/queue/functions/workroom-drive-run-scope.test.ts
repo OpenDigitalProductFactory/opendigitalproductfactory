@@ -72,6 +72,8 @@ function stageDispatchedAtFrom(activity: readonly ActivityRow[], workspaceState:
 /** One standing room driven tick by tick through the real runner. */
 function standingRoom(shape: { key: string; version: string } = SHAPE) {
   let workspaceState: Record<string, unknown> = {};
+  let objective = "Keep credential hygiene evidence current.";
+  const dispatches: Parameters<WorkroomDriveEffects["upsertAgentTask"]>[0][] = [];
   let lease: { expiresAt: Date | null; holder: string | null } = { expiresAt: null, holder: "PRN-LEASE" };
   const activity: ActivityRow[] = [];
   const evidence: RecordedEvidence[] = [];
@@ -81,6 +83,8 @@ function standingRoom(shape: { key: string; version: string } = SHAPE) {
 
   return {
     ticks,
+    dispatches,
+    setObjective(value: string) { objective = value; },
     get drive() { return asObject(workspaceState.workroomDrive); },
     record(at: string, stageKey: string, kind: string) {
       evidence.push({ stageKey, kind, outcome: "completed", recordedAt: new Date(at) });
@@ -92,6 +96,8 @@ function standingRoom(shape: { key: string; version: string } = SHAPE) {
       const room: WorkroomDriveRoom = {
         id: "row-run-scope",
         capsuleId: "WC-RUN-SCOPE",
+        objective,
+        repositoryFullName: "example/platform", headSha: "a".repeat(40),
         scopeClaims: [buildWorkShapeClaim(shape, new Date("2026-01-01T00:00:00.000Z"))],
         workspaceState,
         leaseExpiresAt: lease.expiresAt,
@@ -131,7 +137,7 @@ function standingRoom(shape: { key: string; version: string } = SHAPE) {
           lease = { expiresAt: input.expiresAt, holder: input.holderPrincipalId };
           return "acquired";
         },
-        upsertAgentTask: async () => true,
+        upsertAgentTask: async (input) => { dispatches.push(input); return true; },
         deactivateAgentTask: async () => {},
       };
       const result = await runWorkroomDriveJob(now, {
@@ -162,6 +168,35 @@ async function concludedRunOnDay1() {
 }
 
 describe("BI-853120EE: a sequential room's receipts are scoped to the run that earned them", () => {
+  it("binds the native brief to its task, run, cycle and source instead of room-latest context", async () => {
+    const room = standingRoom();
+    await room.tick("2026-10-05T09:00:00.000Z");
+    const [dispatch] = room.dispatches;
+    expect(dispatch).toBeDefined();
+    expect(dispatch!.prompt).toContain(dispatch!.taskId);
+    expect(dispatch!.prompt).toContain(runKeyOn("2026-10-05"));
+    expect(dispatch!.prompt).toContain("example/platform");
+    expect(dispatch!.prompt).toContain("a".repeat(40));
+    expect(dispatch!.dispatchScope).toEqual({ runKey: runKeyOn("2026-10-05"), cycleKey: runKeyOn("2026-10-05"), iteration: 0 });
+    const facts = JSON.parse(dispatch!.prompt.split("\n").find((line) => line.startsWith("{"))!);
+    expect(facts.identity).toEqual({ taskId: dispatch!.taskId, ...dispatch!.dispatchScope });
+    expect(facts.source).toEqual(dispatch!.source);
+    expect(facts.stageTools).toEqual(dispatch!.stage.tools);
+    expect(facts.outcome).toBe("unknown");
+    expect(facts.replay).toBe("not-authorized-by-brief");
+  });
+
+  it("does not enqueue or latch a stage when mandatory continuation context exceeds its budget, and recovers when corrected", async () => {
+    const room = standingRoom();
+    room.setObjective("Mandatory objective. ".repeat(10_000));
+    await room.tick("2026-10-05T09:00:00.000Z");
+    expect(room.dispatches).toHaveLength(0);
+    expect(room.drive).toBeNull();
+    room.setObjective("Keep credential hygiene evidence current.");
+    await room.tick("2026-10-05T09:15:00.000Z");
+    expect(room.dispatches).toHaveLength(1);
+  });
+
   it("AC-RECEIPT-RUN-SCOPED: the day after a success, the governed stage does not complete without a decision recorded in the new run", async () => {
     const room = await concludedRunOnDay1();
 

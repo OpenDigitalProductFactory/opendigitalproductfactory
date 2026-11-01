@@ -721,6 +721,17 @@ enum InvestmentWorkClass {
   new
 }
 
+// Exact-response feedback retains unknown legacy attribution as NULL.
+enum ResponseFeedbackScope {
+  known_unroomed
+  workroom
+}
+
+enum ResponseFeedbackSource {
+  human
+  agent
+}
+
 /// One immutable inference attempt, including its funding attribution at dispatch.
 /// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=startedAt
 model AdapterRunTelemetry {
@@ -763,8 +774,12 @@ model AdapterRunTelemetry {
   capabilitiesUsed    String[] // which capability booleans were actually exercised this run
   schemaDriftDetected Boolean  @default(false) // adapter emitted unexpected event shape
 
-  userAccepted Boolean? // null = not yet decided; true = message kept; false = retried/discarded
+  userAccepted        Boolean? // explicit disposition: true = kept; false = needs revision; null = no current choice
   acceptedAt   DateTime?
+  feedbackPrincipalId String?
+  feedbackSource      ResponseFeedbackSource?
+  feedbackRevision    Int                     @default(0)
+  feedbackPrincipal   Principal?              @relation("ResponseFeedbackPrincipal", fields: [feedbackPrincipalId], references: [id], onDelete: Restrict)
 
   rawEventDigest String? // sha256 of normalized event log, for cross-adapter equivalence checks
 
@@ -790,6 +805,7 @@ model AdapterRunTelemetry {
   @@index([investmentPrincipalId, investmentOrganizationId, investmentPurpose, startedAt], map: "AdapterRunTelemetry_investment_scope_startedAt_idx")
   @@index([investmentOrganizationId])
   @@index([investmentItemId])
+  @@index([feedbackPrincipalId])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the
@@ -927,6 +943,13 @@ model AgentMessage {
   // here would create a second ungoverned retention surface. Nullable: every pre-existing
   // row stays valid, and a turn that never arbitrates (system messages) simply has none.
   contextTrace     Json?
+  // Soft telemetry reference: failed asynchronous capture/retention never loses an answer.
+  responseAttemptId     String?
+  responseContentDigest String?
+  // NULL is unresolved/legacy, never proof of known-unroomed scope.
+  responseScope         ResponseFeedbackScope?
+  responseWorkroomId    String?
+  responseWorkroom      Workroom?              @relation("ResponseFeedbackWorkroom", fields: [responseWorkroomId], references: [id], onDelete: SetNull)
   proposal         AgentActionProposal?
   attachments      AgentAttachment[]
   thread           AgentThread          @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -934,6 +957,8 @@ model AgentMessage {
   @@index([threadId])
   @@index([taskRunId, createdAt])
   @@index([createdAt])
+  @@index([responseAttemptId])
+  @@index([responseWorkroomId])
 }
 
 model UserFact {

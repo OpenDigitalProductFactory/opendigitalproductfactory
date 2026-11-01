@@ -54,6 +54,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { refuseUnlessRoomProvisions } from "./worktree-provision-gate";
 import { publicationRefusedToolResult } from "./publication-refusal";
 import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence-reach";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
@@ -63,11 +64,15 @@ import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
 import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
+import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { isRecord } from "@/lib/shared/coerce";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  authorityDecisionId?: string;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -225,7 +230,11 @@ export async function claimCapsuleScopeTool(
   }
 
   const force = params["force"] === true;
+  const qualificationAdmissionToken = stringParam(params, "qualificationAdmissionToken") ?? undefined;
   const db = workCapsuleDb();
+  // GPP admission (BI-D1FB8C4D): a read-only room claims no paths.
+  const provisionRefusal = await refuseUnlessRoomProvisions(db, capsuleId, "claim_workroom_scope");
+  if (provisionRefusal) return provisionRefusal;
   let renewedCapsule;
   try {
     renewedCapsule = await runAutoRenewedCapsuleWrite({
@@ -238,6 +247,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        qualificationAdmissionToken,
         buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
@@ -245,6 +255,21 @@ export async function claimCapsuleScopeTool(
     const refusal = scopeClaimRefusal(error);
     if (refusal) return refusal;
     throw error;
+  }
+
+  if (qualificationAdmissionToken) {
+    const workspace = isRecord(renewedCapsule.workspaceState) ? renewedCapsule.workspaceState : {};
+    const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token) : null;
+    if (admission?.ok && admission.data.binding.executorMode === "native-edge") {
+      const currentActor = await actor(userId, context);
+      if (!currentActor.principalId) throw new Error("Native qualification requires an accountable principal.");
+      const queued = await materializeQualificationWindowsAction({ db: workCapsuleDb() as never,
+        capsuleId, requestedByUserId: userId, requestedByPrincipalId: currentActor.principalId,
+        authorityDecisionId: context?.authorityDecisionId });
+      if (!queued.ok) throw new Error(`Native qualification was not queued: ${queued.reason}`);
+      renewedCapsule = await renewLeaseAfterCapsuleWrite(capsuleId, currentActor);
+    }
   }
 
   return {
@@ -470,6 +495,9 @@ export async function planCapsuleWorktreeTool(
       message: `taxonomy must be one of: ${WORK_CAPSULE_BRANCH_TAXONOMIES.join(", ")}.`,
     };
   }
+  // GPP admission (BI-D1FB8C4D): a read-only room plans no worktree.
+  const provisionRefusal = await refuseUnlessRoomProvisions(workCapsuleDb(), capsuleId, "plan_workroom_worktree");
+  if (provisionRefusal) return provisionRefusal;
 
   let existingBranches = new Set<string>();
   try {
@@ -638,6 +666,7 @@ export async function recordCapsuleEvidenceTool(
       capsuleId,
       evidence,
       actor: currentActor,
+      taskRunId: context?.taskRunId ?? null,
     }),
   });
 

@@ -1,0 +1,57 @@
+{
+  "kind": "private-installed-component-candidate",
+  "component": "@opendigitalproductfactory/dpf-workroom",
+  "version": "0.1.0-candidate.4",
+  "sourceCommit": "ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9",
+  "sourceRepository": "OpenDigitalProductFactory/dpf-workroom",
+  "seedCommit": "b43be400326f8cc5777a9d40c1f058a8f0363dc8",
+  "upstreamKernelRevision": "56f3a5d2d57d751eb3ac435dcca4133c5ff46686",
+  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
+  "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44",
+  "checks": {
+    "originalSourceProvenanceFiles": 22,
+    "sourceProtocolScenarios": 13,
+    "installedProtocolScenarios": 13,
+    "allDeclaredExportsAndDeclarations": "passed",
+    "emittedImportClosure": "passed",
+    "unownedGppAnalysisExcluded": "passed",
+    "outcomeDispositionNormalAdverse": "passed",
+    "strictEngineBuildRuntime": "passed on24.16.0",
+    "allPublicCommonJsExportsMatchEsmIdentity": "passed on Node24.16.0; reproduced failure before explicit require condition"
+  },
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3",
+    "npm": "11.13.0"
+  },
+  "runtimeDependencies": [],
+  "publicPackagePublication": false,
+  "realDpfConsumerMigration": false,
+  "dpf2Migration": false,
+  "nativeOrProductionQualification": false,
+  "independentReview": "No material findings bound to exact source, archive and dependency lock; emitted bytes/provenance unchanged. Both33group strict receiver matrices verified; tests not rerun by reviewer.",
+  "supportedNodeVersions": [
+    "24.16.0",
+    "24.22.0",
+    "24.22.1"
+  ],
+  "additionalReceivingMatrix": {
+    "nodeVersions": [
+      "24.22.0",
+      "24.22.1"
+    ],
+    "typescript": "7.0.2",
+    "platform": "darwin-arm64",
+    "installationPolicy": "engine-strict",
+    "result": "passed",
+    "evidence": [
+      "foundation-v5-node24.22.0-ts7-receiver-result.json",
+      "foundation-v5-node24.22.1-ts7-receiver-result.json"
+    ],
+    "groups": 33,
+    "actualProductAdoption": false,
+    "osEnforcementQualification": false
+  },
+  "builder": "External Codex source worktree on Darwin arm64; independent client review; no native product attestation",
+  "emittedParity": "All dist files byte-identical to preceding immutable candidate; package/dependency/engine metadata only."
+}

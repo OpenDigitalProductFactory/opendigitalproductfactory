@@ -1,9 +1,64 @@
 import { describe, expect, it } from "vitest";
-import { countOperatorAttention, projectWorkroomOperatorSummary } from "./workroom-operator-summary";
+import { countOperatorAttention, projectWorkroomOperatorSummary, projectWorkroomNextAction } from "./workroom-operator-summary";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 const owner: EffectiveHumanAccountability = { state: "resolved", principalId: "P-1", source: "organization-owner", inheritedFrom: [] };
-const base = { capsuleId: "WC-1", status: "working", liveness: "live", isLive: true, accountability: owner };
+const base = { capsuleId: "WC-1", status: "working", liveness: "live", isLive: true, accountability: owner, executorKind: "codex-desktop" };
+
+describe("recorded next actor and action", () => {
+  it("keeps missing accountability ahead of a known executor and recovery context", () => {
+    const accountability: EffectiveHumanAccountability = { state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null };
+    const room = { ...base, accountability, recovery: { prerequisite: { accountableRole: "artifact-resolver" } } };
+    expect(projectWorkroomOperatorSummary(room)).toMatchObject({ health: "needs-person", group: "attention", nextAction: "inventory.nextAction.owner", action: null });
+  });
+  it("does not invent an assigned coworker when the executor is absent", () => {
+    expect(projectWorkroomNextAction({ ...base, executorKind: null, drive: { action: "pause", reason: "executor_writeback_unavailable" } }))
+      .toMatchObject({ actor: "inventory.actor.unknown", instruction: "inventory.action.recordResult" });
+  });
+  it("does not call a failed handoff a review merely because it has an agent owner", () => {
+    const view = projectWorkroomNextAction({ ...base, status: "blocked", recovery: {
+      blocker: { reason: "workroom-blocked", accountableOwner: { agentId: "AGT-EXECUTOR" } }, reviewerExecutions: [],
+    } });
+    expect(view?.instruction).not.toMatch(/review/i);
+  });
+  it("keeps a missing result with the stage executor, not the accountable founder", () => {
+    expect(projectWorkroomNextAction({ ...base, drive: { action: "pause", reason: "executor_writeback_unavailable" } }))
+      .toMatchObject({ actor: "inventory.actor.executor", instruction: "inventory.action.recordResult", decisionRecorded: false });
+  });
+  it("routes incomplete source records to the delivery coworker without leaking repair packets", () => {
+    const view = projectWorkroomNextAction({ ...base, recovery: { prerequisite: { accountableRole: "artifact-resolver",
+      repair: { packet: { secret: "private-source-packet" } } } } });
+    expect(view).toMatchObject({ actor: "inventory.actor.delivery", instruction: "inventory.action.source", decisionRecorded: false });
+    expect(JSON.stringify(view)).not.toContain("private-source-packet");
+  });
+  it("keeps an unsettled review with its requesting coworker, even when a human is accountable", () => {
+    const view = projectWorkroomNextAction({ ...base, recovery: { blocker: { reason: "historical-review-unresolved",
+      accountableOwner: { agentId: "AGT-REVIEW-REQUESTER", userId: "requester-user", displayName: "Human requester" },
+      nextAction: "private-original-task-instructions", action: { args: { secret: "private-args" } } } } });
+    expect(view).toMatchObject({ actor: "inventory.actor.requester", instruction: "inventory.action.reviewResult", decisionRecorded: false });
+    expect(JSON.stringify(view)).not.toMatch(/Human requester|private-|AGT-REVIEW-REQUESTER/);
+  });
+  it("uses only an actual governed decision, not a lifecycle or generic attention flag", () => {
+    for (const room of [{ ...base, status: "ready-for-promotion" }, { ...base, drive: { action: "attention", reason: "role_stage", attentionRecorded: true } }]) {
+      expect(projectWorkroomNextAction(room)?.decisionRecorded).toBe(false);
+    }
+    expect(projectWorkroomNextAction({ ...base, drive: { action: "attention", reason: "governed_decision", attentionRecorded: true },
+      decisions: [{ title: "Choose the response to the supplier change", condition: "Accept or defer with a date" }] }))
+      .toMatchObject({ actor: "inventory.actor.decisionOwner", instruction: "inventory.action.decision", decisionRecorded: true,
+        detail: "Choose the response to the supplier change: Accept or defer with a date" });
+  });
+  it("does not turn a waiting lease into work or imply an automatic retry", () => {
+    expect(projectWorkroomNextAction({ ...base, liveness: "durable-wait" }))
+      .toMatchObject({ actor: "inventory.actor.executor", instruction: "inventory.action.capacity", decisionRecorded: false });
+  });
+  it("makes an unknown remedy and actor explicit", () => {
+    expect(projectWorkroomNextAction({ ...base, status: "blocked", liveness: "recovery-required" }))
+      .toMatchObject({ actor: "inventory.actor.unknown", instruction: "inventory.action.unknown", decisionRecorded: false });
+  });
+  it("does not resurrect a decision or recovery for terminal history", () => {
+    expect(projectWorkroomNextAction({ ...base, status: "archived", liveness: "delivered", recovery: { prerequisite: { accountableRole: "artifact-resolver" } } })).toBeNull();
+  });
+});
 describe("operator attention count", () => {
   it("includes shared recovery outside the bounded recent-room inventory", () => {
     expect(countOperatorAttention(["WC-RECENT"], ["WC-OLDER-HELD"])).toBe(2);
@@ -46,3 +101,24 @@ describe("operator work groups", () => {
     expect(view).toMatchObject({ group: "attention", nextAction: "inventory.nextAction.owner" });
   });
 });
+
+describe("operator groups derive from the shared atlas health", () => {
+  const cases: Array<[string, Parameters<typeof projectWorkroomOperatorSummary>[0], string, string]> = [
+    ["closeout waits on a person", { ...base, status: "ready-for-promotion" }, "needs-person", "attention"],
+    ["a recorded decision waits on a person", { ...base, drive: { action: "attention", reason: "x", attentionRecorded: true } }, "needs-person", "attention"],
+    ["a missing owner waits on a person", { ...base, accountability: { state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null } }, "needs-person", "attention"],
+    ["a drive pause is a hold", { ...base, drive: { action: "pause", reason: "executor_writeback_unavailable" } }, "stuck", "attention"],
+    ["a stalled pull request is a hold", { ...base, liveness: "stalled" }, "stuck", "attention"],
+    ["silence is no signal, not progress", { ...base, isLive: false, liveness: "no-signal" }, "no-signal", "attention"],
+    ["an unknown liveness is no signal", { ...base, liveness: "something-new" }, "no-signal", "attention"],
+    ["a capacity wait is waiting", { ...base, liveness: "durable-wait" }, "waiting", "waiting"],
+    ["live work is working", base, "working", "working"],
+    ["an ended session is finished", { ...base, isLive: false, liveness: "lease-expired" }, "finished", "history"],
+  ];
+  for (const [name, room, health, group] of cases) {
+    it(name, () => {
+      expect(projectWorkroomOperatorSummary(room)).toMatchObject({ health, group });
+    });
+  }
+});
+

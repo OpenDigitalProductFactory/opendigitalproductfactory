@@ -185,6 +185,33 @@ describe("callProvider", () => {
     });
   });
 
+  it("binds each successful reply to its own telemetry primary id", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1" });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const write = vi.fn().mockResolvedValue(undefined);
+    _setAdapterTelemetryWriteOverrideForTests(write);
+    try {
+      const first = await callProvider("openai", "actual-model", [], "Help");
+      const second = await callProvider("openai", "actual-model", [], "Help");
+      expect(first.responseProducer).toMatchObject({ attemptId: expect.any(String), providerId: "openai", modelId: "actual-model", contentDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+      expect(write.mock.calls[0][0].id).toBe(first.responseProducer?.attemptId);
+      expect(write.mock.calls[1][0].id).toBe(second.responseProducer?.attemptId);
+      expect(second.responseProducer?.attemptId).not.toBe(first.responseProducer?.attemptId);
+    } finally { _setAdapterTelemetryWriteOverrideForTests(null); }
+  });
+
+  it.each(["pending", "rejected"] as const)("delivers the reply without awaiting %s telemetry or retrying inference", async mode => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1" });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    _setAdapterTelemetryWriteOverrideForTests(() => mode === "pending" ? new Promise(() => {}) : Promise.reject(new Error("telemetry unavailable")));
+    try {
+      const result = await callProvider("openai", "actual-model", [], "Help");
+      expect(result).toMatchObject({ content: "ok", responseProducer: { attemptId: expect.any(String), providerId: "openai", modelId: "actual-model" } });
+      expect(mockAdapterExecute).toHaveBeenCalledOnce();
+    } finally { _setAdapterTelemetryWriteOverrideForTests(null); warn.mockRestore(); }
+  });
+
   it("preserves the native session callback through actual provider-to-adapter dispatch",async()=>{
     mockPrisma.modelProvider.findUnique.mockResolvedValue({providerId:"openai",status:"active",authMethod:"api_key",authHeader:"Authorization",baseUrl:"https://api.openai.com/v1",endpoint:null});
     mockGetDecryptedCredential.mockResolvedValue({secretRef:"test-key"});
@@ -399,6 +426,7 @@ describe("callProvider", () => {
       status: "accepted",
       providerOperationId: "operations/provider-op-1",
     });
+    expect(result.responseProducer).toBeUndefined();
   });
 
   it("forwards attribution.agentMessageId into AdapterRunTelemetry on the success path", async () => {

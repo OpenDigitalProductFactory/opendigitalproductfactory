@@ -162,6 +162,18 @@ export function clampToolResultForModel(
       ...(handle ? { rehydrationHandle: handle } : {}),
     };
   }
+  // Continuation facts and their version are one indivisible assignment. The
+  // consumer cap (including masking and provenance) may be smaller than the
+  // shared brief budget; never expose a successful-looking partial assignment.
+  // Detect the existing envelope because native callers may omit toolName.
+  const continuation = result.data as { continuationVersion?: unknown; continuation?: unknown } | undefined;
+  if (typeof continuation?.continuationVersion === "string" && continuation.continuation !== null
+    && typeof continuation.continuation === "object" && !Array.isArray(continuation.continuation)) {
+    const error = JSON.stringify({ success: false, error: "continuation_budget_exceeded",
+      message: "Required continuation facts exceed the response budget. No partial assignment or execution permission is returned." });
+    return { text: error.length <= maxChars ? error : maxChars >= 2 ? "{}" : "", truncated: true, originalChars: full.length,
+      ...hidden, ...(handle ? { rehydrationHandle: handle } : {}) };
+  }
   // Typed Workroom pages must never become a successful-looking text prefix.
   // A mask or an unusually small caller cap may enlarge/exceed the pre-sized
   // page. Refuse that envelope explicitly; its cursor must not skip unseen rows.

@@ -1,6 +1,7 @@
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { getLatestRun } from "@/lib/self-upgrade/run-store";
+import { isEligibleRecoveryPredecessor } from "@/lib/self-upgrade/recovery-eligibility";
 import {
   admitSelfUpgrade,
   resolveCurrentSelfUpgradeTarget,
@@ -107,7 +108,13 @@ export async function requestSelfUpgrade(
       runId: latestRun.runId,
     };
   }
-  if (latestRun?.status === "failed") {
+  // The operator door's rule, not a second one (BI-CC9DB006): only a failure
+  // that is still settling, or a never-dispatched failure that needs the exact
+  // target binding to recover, needs the operator page. A dispatched failure
+  // that ended — e.g. refused at preflight with nothing installed — admits a
+  // fresh run here exactly as it does there (AC-SUA-015/016).
+  if (latestRun?.status === "failed"
+    && (latestRun.completedAt == null || isEligibleRecoveryPredecessor(latestRun as Parameters<typeof isEligibleRecoveryPredecessor>[0]))) {
     return {
       success: true,
       status: "human_override_required",

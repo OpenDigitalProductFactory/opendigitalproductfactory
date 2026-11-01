@@ -23,7 +23,7 @@ import {
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
-import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
 import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
@@ -40,7 +40,7 @@ import {
 } from "./workroom-drive-data";
 export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
 import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
-import { applyGraphDrivePlan } from "./workroom-drive-graph";
+import { applyGraphDrivePlan, buildNativeContinuationDispatch, recordContinuationRefusal } from "./workroom-drive-graph";
 import type { DeadlineNoticeInput } from "./workroom-drive-deadlines";
 import { createSubShapeChildEffects, withSubShapeChildren, type SubShapeChildEffects } from "./workroom-drive-children";
 import type { SubShapeChildObservation } from "@/lib/work-management/drive-child-rooms";
@@ -92,6 +92,9 @@ import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCL
 export type WorkroomDriveRoom = {
   id: string;
   capsuleId: string;
+  status?: string | null;
+  repositoryFullName?: string | null;
+  headSha?: string | null;
   /** BI-8A32EBFF: the item the room delivers, for the author-stage budget check. */
   backlogItemId?: string | null;
   /** BI-72679FE0: that item's status; a room whose item is not live work stands down. */
@@ -169,6 +172,7 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
     agentId: string;
     ownerUserId: string;
     dispatchScope?: import("@/lib/work-management/workroom-drive-checkpoint").DispatchScope;
+    source?: import("@/lib/work-management/workroom-drive-checkpoint").DispatchSource;
     title: string;
     prompt: string;
     /** Stage + declared tools, written to taskConfig.workroomStage for the scheduler's pin (BI-43C3E914). */
@@ -359,22 +363,18 @@ export async function applyDrivePlan(input: {
       room, plan, overlay: input.review, snapshot, now, persist, lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId }, dispatch: effects.dispatchReviewer });
     // Unreachable: settleTickTaskOwner rewrote an ownerless dispatch to a pause above.
     if (!room.ownerUserId) return "skipped";
-    // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
-    // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
-    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
-      shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
+    const continuation = buildNativeContinuationDispatch({ room, plan, taskId: plan.taskId, agentId: plan.agentId, stageKey: plan.stageKey ?? "", expiresAt,
+      dispatchScope: plan.cycle ? { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: plan.dispatchAttempt ?? 0 } : undefined });
+    if (!continuation.success) {
+      await recordContinuationRefusal({ room, taskId: plan.taskId, stageKey: plan.stageKey ?? "", snapshot, persist, message: continuation.message });
+      return "skipped";
+    }
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
       ownerUserId: room.ownerUserId,
       title: `Workroom ${room.capsuleId} / ${plan.stageKey}`,
-      // The old prompt was the stage KEY plus three prohibitions, and 337 runs
-      // answered it with prose and zero tool calls (BI-4A394B21). The shape
-      // already carries the objective, the definition of done and the evidence
-      // to leave; send it.
-      prompt: buildStageBrief(brief),
-      stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
-      ...(plan.cycle ? { dispatchScope: { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: plan.dispatchAttempt ?? 0 } } : {}),
+      ...continuation.fields,
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -622,7 +622,8 @@ async function loadStandingRooms(
     const shapeKey = shapeRef.key;
     return [{
       id: row.id,
-      capsuleId: row.capsuleId,
+      capsuleId: row.capsuleId, status: row.status,
+      repositoryFullName: row.repositoryFullName, headSha: row.headSha,
       backlogItemId: row.backlogItemId,
       objective: row.objective, workItemKey: workItemKeyOf(row),
       coordinatorEligibility: resolveCoordinatorEligibility({

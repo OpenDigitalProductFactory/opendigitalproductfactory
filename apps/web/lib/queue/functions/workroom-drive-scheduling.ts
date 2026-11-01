@@ -5,6 +5,12 @@ import { buildDispatchCheckpoint, readDispatchCheckpoint } from "@/lib/work-mana
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { WORKROOM_DRIVE_CRON } from "@/lib/work-management/workroom-drive-constants";
 import type { WorkroomDriveEffects } from "./workroom-drive";
+import {
+  parseQualificationExperimentState,
+  qualificationBindingDigest,
+  verifyQualificationExperimentAdmission,
+  validateQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 
 // One lease-fenced transaction for sequential and graph-stage enqueue capture.
 // Design: docs/architecture/workroom-cycle-continuity.md.
@@ -26,13 +32,56 @@ export async function scheduleWorkroomAgentTask(
       data: { leaseExpiresAt: input.lease.expiresAt },
     });
     if (owned.count !== 1) return false;
-    const room = await tx.workroom.findUnique({ where: { id: input.lease.roomId }, select: { workspaceState: true, objective: true } });
+    const room = await tx.workroom.findUnique({ where: { id: input.lease.roomId }, select: {
+      workspaceState: true, objective: true, capsuleId: true, backlogItemId: true, repositoryFullName: true,
+      baseSha: true, headSha: true, leaseHolderPrincipalId: true,
+    } });
     if (!room) return false;
+    // The brief was read before the lease-fenced transaction. A changed room
+    // source needs reconciliation, not dispatch using that stale instruction.
+    if (input.source !== undefined && (input.source.repositoryFullName !== (room.repositoryFullName ?? null)
+      || input.source.headSha !== (room.headSha ?? null))) return false;
     const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
+    const qualificationState = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+    let qualificationBinding = null;
+    if (qualificationState) {
+      const external = verifyQualificationExperimentAdmission(qualificationState.token, { now: clock(), allowExpired: true });
+      if (external.ok) {
+        // Native verification is dispatched through RemoteAction, never through
+        // an agent task. Historical host-attested verification remains disabled.
+        if (external.data.binding.executorMode !== "sandbox-build") return false;
+        if (external.data.binding.phase !== "prepare") {
+          throw new Error("Only qualification preparation may use the source-authoring task lane.");
+        }
+      }
+      if (qualificationState.status !== "issued" || qualificationState.startCount !== 0) {
+        throw new Error("Qualification experiment was already started or settled.");
+      }
+      const verified = verifyQualificationExperimentAdmission(qualificationState.token, { now: clock() });
+      if (!verified.ok || qualificationBindingDigest(verified.data.binding) !== qualificationState.bindingDigest) {
+        throw new Error("Qualification experiment admission is invalid or expired.");
+      }
+      const admitted = validateQualificationExperimentAdmission(verified.data.binding, {
+        itemId: room.backlogItemId ?? "", workroomId: room.capsuleId,
+        repositoryFullName: room.repositoryFullName ?? "", baseSha: room.baseSha ?? "", headSha: room.headSha ?? "",
+        protocol: verified.data.binding.protocol,
+        installationId: verified.data.binding.installationId,
+        accountablePrincipalRef: room.leaseHolderPrincipalId ?? "",
+        protocolReviewReceiptId: verified.data.binding.protocolReviewReceiptId,
+        startCount: qualificationState.startCount, now: clock(),
+      });
+      if (!admitted.ok || verified.data.binding.shapeKey !== input.stage.shapeKey
+        || verified.data.binding.shapeVersion !== input.stage.shapeVersion
+        || verified.data.binding.stageKey !== input.stage.stageKey) {
+        throw new Error("Qualification experiment no longer matches the live room or scheduled stage.");
+      }
+      qualificationBinding = verified.data.binding;
+    }
     const checkpoint = buildDispatchCheckpoint(workspace.workroomDispatchCheckpoint, {
       taskId: input.taskId, roomId: input.lease.roomId, objective: room.objective ?? null,
       stage: input.stage, now: input.now.toISOString(),
       dispatchScope: input.dispatchScope,
+      source: input.source,
       holderPrincipalId: input.lease.holderPrincipalId, leaseExpiresAt: input.lease.expiresAt.toISOString(),
     });
     // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
@@ -66,6 +115,10 @@ export async function scheduleWorkroomAgentTask(
         if (current.agentId !== input.agentId || !sameStage(prior.stage, input.stage)) {
           throw new Error("Recorded dispatch requires task identity reconciliation before replay");
         }
+        // A matching task/cycle cannot relabel an earlier source observation.
+        // Legacy receipts remain readable, but cannot prove a new source-bound retry.
+        if (prior.source?.repositoryFullName !== input.source?.repositoryFullName
+          || prior.source?.headSha !== input.source?.headSha) return false;
         return true;
       }
       // Legacy same-stage receipts cannot establish a new cycle boundary.
@@ -73,7 +126,8 @@ export async function scheduleWorkroomAgentTask(
         throw new Error("Legacy dispatch requires cycle identity reconciliation before replay");
       }
     }
-    const taskConfig = { ...withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage),
+    const scheduledStage = qualificationBinding ? { ...input.stage, qualificationExperiment: qualificationBinding } : input.stage;
+    const taskConfig = { ...withWorkroomStageTaskConfig(current?.taskConfig ?? null, scheduledStage),
       workroomDispatchCheckpoint: checkpoint } as unknown as Prisma.InputJsonValue;
     await tx.scheduledAgentTask.upsert({
       where: { taskId: input.taskId },
@@ -102,7 +156,10 @@ export async function scheduleWorkroomAgentTask(
     // Both sequential and graph branches enter here. The task, checkpoint
     // and append-only enqueue receipt commit together under the room lock.
     await tx.workroom.update({ where: { id: input.lease.roomId }, data: {
-      workspaceState: { ...workspace, workroomDispatchCheckpoint: checkpoint } as Prisma.InputJsonValue,
+      workspaceState: { ...workspace, workroomDispatchCheckpoint: checkpoint,
+        ...(qualificationState && qualificationBinding ? { qualificationExperimentAdmission: {
+          ...qualificationState, status: "started", startCount: 1, startedAt: clock().toISOString(), taskId: input.taskId,
+        } } : {}) } as Prisma.InputJsonValue,
     } });
     await tx.workroomActivity.create({ data: {
       workCapsuleId: input.lease.roomId, kind: "workroom-dispatch-confirmed",
