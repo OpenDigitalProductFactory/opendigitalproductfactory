@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { adoptWorktreeCapsule, claimWorkCapsuleScope, createWorkCapsule, planCapsuleWorkspace, type CapsuleDb } from "./work-capsule-store";
 
+vi.mock("./scope-epoch-enrollment.server", () => ({ assertScopeEpochEnrollmentReady: async () => ({ assertCurrent() {} }) }));
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 
 const actor = { userId: "author", agentId: "AGT-EXT-CODEX", principalId: "human-principal", agentPrincipalId: "assistant-principal" };
@@ -24,7 +25,7 @@ async function backlogBoundRoom() {
     },
     workroomActivity: { create: vi.fn(async () => ({})) },
   };
-  const database = db as unknown as CapsuleDb;
+  const database = { ...db, $transaction: async <T>(fn: (tx: CapsuleDb) => Promise<T>) => fn(db as unknown as CapsuleDb) } as unknown as CapsuleDb;
   const created = await createWorkCapsule({ db: database, actor, input: {
     title: "Bind author session", objective: "Preserve the author and the session", source: "external-adoption",
     executorKind: "codex-desktop", backlogItemId: "BI-SESSION-TEST", idempotencyKey: "session-binding-test",

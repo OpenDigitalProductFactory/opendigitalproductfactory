@@ -74,6 +74,8 @@ export type OverseerState = {
 export const EMPTY_OVERSEER_STATE: OverseerState = { version: 1, attention: null, needsResume: null, holdConclusion: null };
 
 export type OverseerRoom = {
+  /** Original close precondition; legacy plans without it cannot mutate scope. */
+  scopeSnapshot?: { scopeClaims: unknown; updatedAt: Date };
   id: string;
   capsuleId: string;
   status: string;

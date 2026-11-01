@@ -145,18 +145,19 @@ describe("work capsule branch adoption", () => {
 
   it.each(["claim", "release"])("preserves the execution shape and foreign claims during scope %s", async (operation) => {
     const preserved = [{ workShape: "delivery-large@1.0.0", recordedAt: "2026-09-01" }, { extension: "foreign" }];
-    const path = { kind: "module" as const, value: "reviewer", intent: "edit" as const, recordedAt: "2026-09-01", recordedByPrincipalId: "principal-1" };
+    const path = { kind: "module" as const, value: "reviewer", intent: "edit" as const, recordedAt: "2026-09-01", recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001" };
     const existing = { id: "row-shape", capsuleId: "WC-SHAPE", status: "ready", scopeClaims: [...preserved, path] };
     db.workroom.findUnique.mockResolvedValue(existing);
     db.workroom.update.mockImplementation(async ({ data }) => ({ ...existing, ...data }));
-    const args = { db: capsuleDb(), capsuleId: "WC-SHAPE", claims: [path], actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" } };
+    const args = { db: capsuleDb(), capsuleId: "WC-SHAPE", expectedRoomId: "row-shape", claims: [path], actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" } };
     const result = await (operation === "claim" ? claimWorkCapsuleScope(args) : releaseWorkCapsuleScope(args));
     expect(result.scopeClaims).toEqual(expect.arrayContaining(preserved));
     expect(result.scopeClaims).toHaveLength(operation === "claim" ? 3 : 2);
   });
 
   it.each(["adopt", "claim", "release"])("refuses a concurrent scope change during %s instead of overwriting it", async (operation) => {
-    const original = [{ workShape: "delivery-small@1.0.0", recordedAt: "original" }];
+    const target = { kind: "module" as const, value: "reviewer", intent: "edit" as const, recordedAt: "2026-09-01T00:00:00Z", recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001" };
+    const original = [{ workShape: "delivery-small@1.0.0", recordedAt: "original" }, target];
     const concurrent = [...original, { extension: "written-concurrently" }];
     let stored = concurrent;
     const existing = { id: "row-shape", capsuleId: "WC-SHAPE", status: "ready", scopeClaims: original, worktreePath: "D:/DPF-reviewer" };
@@ -172,7 +173,7 @@ describe("work capsule branch adoption", () => {
       title: "Reviewer recovery", objective: "Recover review", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
       headBranch: "feat/reviewer-recovery", worktreePath: "D:/DPF-reviewer", scope: { workShape: "delivery-large@1.0.0" },
     } }) : (operation === "claim" ? claimWorkCapsuleScope : releaseWorkCapsuleScope)({
-      db: capsuleDb(), actor, capsuleId: "WC-SHAPE", claims: [{ kind: "module", value: "reviewer", intent: "edit" }],
+      db: capsuleDb(), actor, capsuleId: "WC-SHAPE", expectedRoomId: "row-shape", claims: [target],
     });
     await expect(promise).rejects.toThrow("Concurrent scope change");
     expect(stored).toEqual(concurrent);

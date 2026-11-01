@@ -153,14 +153,24 @@ describe("the governed writers", () => {
   }
 
   it("closes through scope release and the delivered close-out, then writes the rule's trail row", async () => {
-    const claim = { kind: "path", value: "apps/web/x.ts", intent: "edit", recordedAt: NOW.toISOString(), recordedByPrincipalId: "PRN-1" };
-    const { db, activity } = fakeDb({ id: "row-1", status: "ready", scopeClaims: [claim] });
+    const claim = { kind: "path", value: "apps/web/x.ts", intent: "edit", recordedAt: NOW.toISOString(), recordedByPrincipalId: "PRN-1", releaseEpoch: "00000000-0000-4000-8000-000000000001" };
+    const { db, activity } = fakeDb({ id: "row-1", status: "ready", scopeClaims: [claim], updatedAt: NOW });
     const effects = createOverseerEffects(async () => db as never);
-    const ok = await effects.close({ kind: "close", rule: "R1", room: overseerRoom(), summary: "Overseer R1: done.", facts: {} }, NOW);
+    const ok = await effects.close({ kind: "close", rule: "R1", room: overseerRoom({ scopeSnapshot: { scopeClaims: [claim], updatedAt: NOW } }), summary: "Overseer R1: done.", facts: {} }, NOW);
     expect(ok).toBe(true);
-    expect(store.releaseWorkCapsuleScope).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-ROOM1", claims: [{ kind: "path", value: "apps/web/x.ts" }] }));
+    expect(store.releaseWorkCapsuleScope).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-ROOM1", expectedRoomId: "row-1", claims: [expect.objectContaining({ kind: "path", value: "apps/web/x.ts", releaseEpoch: claim.releaseEpoch })] }));
     expect(store.updateWorkCapsuleStatus).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-ROOM1", status: "archived", reason: "Overseer R1: done." }));
     expect(activity[0]).toMatchObject({ kind: WORKROOM_OVERSEER_ACTIVITY_KIND, payload: { rule: "R1", action: "close" } });
+  });
+
+  it("does not recapture a newer claim when an old close plan executes", async () => {
+    const original = { kind: "path", value: "apps/web/x.ts", intent: "edit", recordedAt: NOW.toISOString(), recordedByPrincipalId: "PRN-1", releaseEpoch: "00000000-0000-4000-8000-000000000001" };
+    const newer = { ...original, releaseEpoch: "00000000-0000-4000-8000-000000000002" };
+    const { db } = fakeDb({ id: "row-1", status: "ready", updatedAt: NOW, scopeClaims: [newer] });
+    const room = { ...overseerRoom(), scopeSnapshot: { updatedAt: NOW, scopeClaims: [original] } };
+    expect(await createOverseerEffects(async () => db as never).close({ kind: "close", rule: "R1", room, summary: "old close", facts: {} }, NOW)).toBe(false);
+    expect(store.releaseWorkCapsuleScope).not.toHaveBeenCalled();
+    expect(store.updateWorkCapsuleStatus).not.toHaveBeenCalled();
   });
 
   it("does not close a room another writer already closed", async () => {

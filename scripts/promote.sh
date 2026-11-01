@@ -32,6 +32,13 @@ _dry_run=0
 _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
+# scope-writer-compatibility-begin
+# Independent packaged-writer contract; reassessment proof cannot stand in for it.
+_assert_scope_writer_image() {
+  node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-image --image "$1" --source "$2"
+}
+# scope-writer-compatibility-end
+
 # reassessment-compatibility-begin
 # Kept in this N-1-staged owner: the exact portal supplies its packaged probe.
 _assert_reassessment_image() {
@@ -1005,9 +1012,11 @@ if [[ $_dry_run -eq 0 ]]; then
   _reassessment_candidate_ref="${_project}-portal"
   [[ $_release_mode -eq 0 ]] || _reassessment_candidate_ref="$_candidate_portal"
   _reassessment_candidate_digest="$(_assert_reassessment_image "$_reassessment_candidate_ref" "$_built_sha")" || exit 78
+  _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
   if [[ $_promote_phase == all ]]; then
     _reassessment_candidate_override="$PROMOTE_BACKUP_PATH/reassessment-candidate-$$.yml"
     _assert_reassessment_image "$_reassessment_candidate_digest" "$_built_sha" "$_reassessment_candidate_override" >/dev/null || exit 78
+    _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
     _f_args+=(-f "$_reassessment_candidate_override")
   fi
 fi
@@ -1305,6 +1314,7 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
     for _f in "${_compose_files[@]}"; do _rollback_f_args+=(-f "$PROMOTE_SOURCE/$_f"); done
     _reassessment_fallback_override="$PROMOTE_BACKUP_PATH/reassessment-fallback-$$.yml"
     _assert_reassessment_image "${_reassessment_baseline_config:-}" "" "$_reassessment_fallback_override" >/dev/null || exit 78
+    node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-fallback --image "$_reassessment_baseline_config" >/dev/null || exit 78
     _rollback_f_args+=(-f "$_reassessment_fallback_override")
     _restore_dispatch_process_override
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \

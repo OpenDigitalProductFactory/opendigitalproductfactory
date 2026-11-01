@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { BASH_COMMAND, BASH_OK, makeFakeBin, reassessmentCapabilityFixture, shellQuote, toBashPath } from "./promote-script-functional.test-support";
+import { BASH_COMMAND, BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeFakeBin, makeScratch, runPromote,
+  reassessmentCapabilityFixture, scopeWriterCapabilityFixture, shellQuote, toBashPath } from "./promote-script-functional.test-support";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -44,6 +45,21 @@ function fixture() {
 }
 
 describe.skipIf(!BASH_OK)("promoter fake Docker argv dispatch", () => {
+  it("does not invent scope-writer evidence when the fixture supplies none", () => {
+    const { invoke } = fixture();
+    expect(invoke(["run", "/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs"],
+      { DPF_TEST_SCOPE_WRITER_REPORT: "" }).status).toBe(78);
+  });
+
+  it("returns only the explicitly supplied scope-writer report", () => {
+    const { invoke } = fixture();
+    const report = JSON.stringify({ fixture: "explicit scope-writer observation" });
+    const result = invoke(["run", "/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs"],
+      { DPF_TEST_SCOPE_WRITER_REPORT: report });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe(report);
+  });
+
   it("keeps timed probes inside the companion fake Docker regardless of PATH", () => {
     const { root } = fixture();
     const report = reassessmentCapabilityFixture("a".repeat(40));
@@ -122,4 +138,24 @@ describe.skipIf(!BASH_OK)("promoter fake Docker argv dispatch", () => {
     const { invoke } = fixture();
     expect(invoke(["pull", "fixture.Id.Os.Architecture"]).stdout).toBe("");
   });
+});
+
+
+describe.skipIf(!BASH_OK || !GIT_OK)("real promoter candidate scope-writer gate", () => {
+  it.each([
+    ["missing", ""],
+    ["malformed", "not-json"],
+    ["wrong-source", scopeWriterCapabilityFixture("f".repeat(40))],
+  ])("refuses %s scope-writer evidence before completing the candidate", (_reason, report) => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    roots.push(root);
+    const dockerLog = join(root, "scope-candidate-docker.log");
+    const result = runPromote({ source, backup, fakeBin, targetSha: head,
+      phase: "build", dockerLog, scopeWriterReport: report });
+    expect(result.status, result.stderr).not.toBe(0);
+    expect(result.stdout).not.toContain("step=prebuild-done");
+    const calls = readFileSync(dockerLog, "utf8");
+    expect(calls).toContain("/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs");
+    expect(calls).not.toMatch(/up -d|prisma migrate/);
+  }, PROMOTE_TEST_TIMEOUT_MS);
 });

@@ -1,7 +1,7 @@
 import { readDeliveryAgreement } from "@/lib/work-management/delivery-agreement";
 import { randomUUID } from "node:crypto";
 import { captureFiniteDeliveryState } from "./delivery-agreement-capture";
-import { normalizePersistedScope, adoptionScopePatch, assertScopeReadback, replaceOwnershipClaims, scopeChangeEvidence, scopeWriteWhere } from "./scope-input";
+import { normalizePersistedScope, adoptionScopePatch, assertScopeReadback, scopeChangeEvidence, scopeWriteWhere } from "./scope-input";
 import {
   STATUS_OVERRIDE_TTL_MS,
   buildCapsuleBranchName,
@@ -15,8 +15,6 @@ import {
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
   normalizeBranchTaxonomy,
-  parseScopeClaims,
-  type ScopeClaim,
   type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleScopeInput,
@@ -26,10 +24,7 @@ import {
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
-import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
-import { assertScopeClaimLease } from "./scope-claim-lease";
-import { qualificationStateForScopeClaim } from "./qualification-scope-admission";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import {
@@ -39,14 +34,12 @@ import {
   planTerminalCapsuleResume,
   planLiveCapsuleBinding,
   readBranchIdentityCapsule,
-  TERMINAL_CAPSULE_STATUSES,
   defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
 import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
-import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 import {
   assertBacklogWorkroomClaimAvailable,
   loadBacklogWorkroomOwnership,
@@ -63,6 +56,8 @@ export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 export { heartbeatWorkCapsule, reassignWorkCapsuleExecutor } from "./workroom-lease";
 export { releaseWorkCapsuleScope } from "./scope-release-store";
+export { claimWorkCapsuleScope, detectScopeConflicts, ScopeOverlapError } from "./scope-claim-store";
+export type { ScopeConflict } from "./scope-claim-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -84,7 +79,6 @@ type CapsuleCreateInput = {
   // the creating actor. Optional.
   requestedByPrincipalId?: string | null;
 };
-type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
 
 type CapsuleWorkspacePlanInput = {
   capsuleId: string;
@@ -596,210 +590,6 @@ export async function recordAgentActivity(args: {
     summary: args.activity.body,
     payload: args.activity.payload ?? {},
     actor: args.actor,
-  });
-}
-
-/**
- * A scope claim on another active capsule that conflicts with an incoming
- * claim â€” same `kind:value`, with at least one side claiming `edit` intent.
- */
-export type ScopeConflict = {
-  capsuleId: string;
-  title: string;
-  kind: ScopeClaim["kind"];
-  value: string;
-  existingIntent: ScopeClaim["intent"];
-  incomingIntent: ScopeClaim["intent"];
-  leaseHolderPrincipalId: string | null;
-};
-
-/**
- * Thrown by claimWorkCapsuleScope when an incoming claim overlaps an active
- * claim held by another capsule. Carries the conflicts so the MCP boundary can
- * surface them to the caller (who must coordinate, pick different scope, or pass
- * force to deliberately co-claim).
- */
-export class ScopeOverlapError extends Error {
-  readonly conflicts: ScopeConflict[];
-  constructor(conflicts: ScopeConflict[]) {
-    super(
-      `Scope overlap with ${conflicts.length} active claim(s) on other Work Capsule(s): ` +
-        conflicts.map((c) => `${c.kind}:${c.value} (held by ${c.capsuleId})`).join(", "),
-    );
-    this.name = "ScopeOverlapError";
-    this.conflicts = conflicts;
-  }
-}
-
-/**
- * Find active claims on OTHER capsules that conflict with `claims`. "Active" =
- * not archived, not in a terminal status, and (for lease-backed executors) the
- * lease has not expired â€” an expired-lease capsule has released its hold, so its
- * scope is reclaimable. Conflict detection is done in JS over the parsed
- * scopeClaims JSON (the active-capsule population is small), mirroring how the
- * rest of this store reasons about scope.
- */
-export async function detectScopeConflicts(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  claims: ScopeClaimInput[];
-  now?: Date;
-}): Promise<ScopeConflict[]> {
-  if (args.claims.length === 0) return [];
-
-  const now = args.now ?? new Date();
-  const others = await args.db.workroom.findMany({
-    where: {
-      capsuleId: { not: args.capsuleId },
-      archivedAt: null,
-      status: { notIn: TERMINAL_CAPSULE_STATUSES },
-      OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { gt: now } }],
-    },
-    select: {
-      capsuleId: true,
-      title: true,
-      scopeClaims: true,
-      leaseHolderPrincipalId: true,
-    },
-  });
-
-  const conflicts: ScopeConflict[] = [];
-  for (const other of others ?? []) {
-    for (const existing of parseScopeClaims(other.scopeClaims)) {
-      // A `path` claim covers its whole subtree, so a directory claim conflicts
-      // with a file/dir beneath it (and vice-versa) even though the kind:value
-      // strings differ â€” without this, `path:dir/` and `path:dir/file.ts` were
-      // treated as disjoint and two sessions could both "own" overlapping edit
-      // scope. Non-path kinds keep exact-value matching.
-      const incoming = args.claims.find(
-        (c) =>
-          c.kind === existing.kind &&
-          scopeValuesOverlap(existing.kind, existing.value, c.value) &&
-          intentsConflict(existing.intent, c.intent),
-      );
-      if (incoming) {
-        conflicts.push({
-          capsuleId: other.capsuleId,
-          title: other.title,
-          kind: existing.kind,
-          value: existing.value,
-          existingIntent: existing.intent,
-          incomingIntent: incoming.intent,
-          leaseHolderPrincipalId: other.leaseHolderPrincipalId ?? null,
-        });
-      }
-    }
-  }
-  return conflicts;
-}
-
-export async function claimWorkCapsuleScope(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  claims: ScopeClaimInput[];
-  actor: WorkCapsuleActor;
-  now?: Date;
-  /** Deliberately co-claim despite an overlap with another active capsule. */
-  force?: boolean;
-  /** Signed, server-issued qualification admission stored atomically with the scope claim. */
-  qualificationAdmissionToken?: string;
-  /** Prospective, advisory impact derived before the scope write. */
-  buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
-}) {
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-  let qualificationAdmission: ReturnType<typeof qualificationStateForScopeClaim> | null = null;
-  if (args.qualificationAdmissionToken) {
-    qualificationAdmission = qualificationStateForScopeClaim({ room: capsule,
-      token: args.qualificationAdmissionToken, accountablePrincipalRef: args.actor.principalId ?? null, now: args.now });
-  }
-
-  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
-  // (the abandoned-main false-success path landed claims on an unrelated WC).
-  if (isTerminalCapsuleStatus(capsule.status) || capsule.archivedAt != null) {
-    throw new Error(
-      `Work Capsule ${args.capsuleId} is ${capsule.status ?? "terminal"} and cannot accept scope claims. ` +
-        "Claim a live capsule (or re-run claim_backlog_item_for_work to mint a fresh one).",
-    );
-  }
-
-  // Capsule-first enforcement: refuse to claim scope already held by another
-  // active capsule unless the caller explicitly forces it. This is the lock that
-  // stops two sessions from building the same BI / editing the same files.
-  const conflicts = await detectScopeConflicts({
-    db: args.db,
-    capsuleId: args.capsuleId,
-    claims: args.claims,
-    now: args.now,
-  });
-  if (conflicts.length > 0 && !args.force) throw new ScopeOverlapError(conflicts);
-  // BI-2D65BD1B: the rule the authority gate used to call this claim ordinary.
-  assertScopeClaimLease(capsule, args.actor.principalId ?? null, args.force === true, args.now ?? new Date());
-
-  const recordedAt = (args.now ?? new Date()).toISOString();
-  const nextClaims = new Map<string, ScopeClaim>();
-  for (const entry of parseScopeClaims(capsule.scopeClaims)) {
-    nextClaims.set(`${entry.kind}:${entry.value}`, entry);
-  }
-
-  const added: ScopeClaim[] = [];
-  const refreshed: ScopeClaim[] = [];
-  for (const claim of args.claims) {
-    const normalized: ScopeClaim = {
-      kind: claim.kind,
-      value: claim.value,
-      intent: claim.intent,
-      recordedAt,
-      recordedByPrincipalId: args.actor.principalId ?? "",
-    };
-    const key = `${normalized.kind}:${normalized.value}`;
-    if (nextClaims.has(key)) refreshed.push(normalized);
-    else added.push(normalized);
-    nextClaims.set(key, normalized);
-  }
-
-  const scopeClaims = replaceOwnershipClaims(capsule.scopeClaims, Array.from(nextClaims.values()));
-  const impact = await planCapsuleChangeImpact({
-    scopeClaims: parseScopeClaims(scopeClaims),
-    incomingClaims: args.claims,
-    verificationState: capsule.verificationState,
-    build: args.buildChangeImpactContract,
-  });
-  return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workroom.update({
-      where: scopeWriteWhere(capsule),
-      data: {
-        scopeClaims,
-        ...(qualificationAdmission ? { workspaceState: { ...qualificationAdmission.workspaceState,
-          qualificationExperimentAdmission: qualificationAdmission.state } } : {}),
-        ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
-      },
-    });
-    await recordActivity(tx, {
-      workCapsuleId: capsule.id,
-      kind: "scope-claimed",
-      summary:
-        conflicts.length > 0
-          ? `Force-claimed ${added.length} new scope item(s) over ${conflicts.length} active conflict(s); refreshed ${refreshed.length}.`
-          : `Claimed ${added.length} new scope item(s); refreshed ${refreshed.length}.`,
-      payload: {
-        added,
-        refreshed,
-        ...(qualificationAdmission ? { qualificationBindingDigest: qualificationAdmission.state.bindingDigest } : {}),
-        ...(conflicts.length > 0 ? { forcedOverConflicts: conflicts } : {}),
-      },
-      actor: args.actor,
-    });
-    if (impact.activity) {
-      await recordActivity(tx, {
-        workCapsuleId: capsule.id,
-        ...impact.activity,
-        actor: args.actor,
-      });
-    }
-    return { ...updated, changeImpactContract: impact.contract };
   });
 }
 
