@@ -36,7 +36,7 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
     ...(results.some((result) => result.parseError) ? { parseError: true as const } : {}),
     ...(parseDiagnostics.length > 0 ? { parseDiagnostics } : {}),
     ...(inconclusive.length > 0
-      ? { inconclusiveReason: inconclusive.map((result) => result.inconclusiveReason ?? "review-branch-incomplete").join(",") }
+      ? { inconclusiveReason: [...new Set(inconclusive.map((result) => result.inconclusiveReason ?? "review-branch-incomplete"))].join(",") }
       : {}),
   };
 }
