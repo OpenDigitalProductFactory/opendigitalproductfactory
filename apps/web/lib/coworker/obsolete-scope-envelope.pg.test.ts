@@ -44,7 +44,7 @@ describe.skipIf(!url)("unused scope withdrawal on isolated leased PostgreSQL", (
       await fixture.db.principalAlias.create({ data: { principalId: id, aliasType, aliasValue, issuer: "" } });
     }
     await fixture.db.workroom.create({ data: { id: "original-room", capsuleId: "WC-SCOPE-PG", title: "Synthetic original room",
-      objective: "Verify isolated lifecycle serialization", source: "synthetic-test", status: "working", scopeClaims: [] } });
+      objective: "Verify isolated lifecycle serialization", source: "external-adoption", status: "working", scopeClaims: [] } });
     await fixture.db.workroomActivity.create({ data: { id: "original-issuance", workCapsuleId: "original-room", kind: "scope-claimed",
       summary: "Synthetic authentic-added fixture", recordedById: "person", recordedByAgentId: "assistant",
       payload: { added: [{ ...target, recordedAt: now.toISOString() }], refreshed: [] } } });
@@ -221,7 +221,7 @@ describe.skipIf(!url)("unused scope withdrawal on isolated leased PostgreSQL", (
       await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = 'original-room' FOR UPDATE`;
       await tx.workroom.delete({ where: { id: "original-room" } });
       await tx.workroom.create({ data: { id: "replacement-room", capsuleId: "WC-SCOPE-PG", title: "Synthetic replacement",
-        objective: "Different persistent identity", source: "synthetic-test", status: "working", scopeClaims: [] } });
+        objective: "Different persistent identity", source: "external-adoption", status: "working", scopeClaims: [] } });
       held.open(); await release.promise;
     }, { timeout: 20_000 });
     await reach(held.promise, replacement);
