@@ -38,7 +38,7 @@ describe("provider capacity store", () => {
   it("projects current account recovery facts without credential or raw provider material", async () => {
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
       providerId: null, scopeKey: accountCapacityScope("openai", identity.accountId),
-      state: "reauth_required", retryAt: null, lastObservedAt: NOW,
+      state: "reauth_required", retryAt: null, lastObservedAt: NOW, lastSuccessAt: NOW,
       safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true,
       rawSnippet: "must-never-reach-the-overview",
       observedCredentialRevision: identity.credentialRevision,
@@ -47,7 +47,7 @@ describe("provider capacity store", () => {
     }] as never);
     const snapshots = await loadProviderCapacitySnapshots();
     expect(snapshots.get(accountRuntimeKey("openai", identity.connectionId))).toEqual({
-      state: "reauth_required", retryAtMs: null, observedAtMs: NOW.getTime(),
+      state: "reauth_required", retryAtMs: null, observedAtMs: NOW.getTime(), lastSuccessAtMs: NOW.getTime(),
       safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true,
     });
     expect(snapshots.has("openai")).toBe(false);
