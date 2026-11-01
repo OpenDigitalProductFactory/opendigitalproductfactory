@@ -308,3 +308,15 @@ is changed based on a guessed diagnosis. Cleanup now reports provider settlement
 and secondary resource errors separately. Close the explicit browser context
 before its browser, as the [Playwright API requires for graceful cleanup](https://playwright.dev/docs/api/class-browser#browser-close).
 The first cleanup failure's exact cause is not inferred from this correction.
+
+The scoped response and routing log from41306548335 identify a valid refusal:
+the main-room coworker requires confidential clearance, but the fictional CI
+connection declared only public/development/internal. This was a fixture
+mismatch, not a broken privacy gate. The loopback-only synthetic fixture now
+includes the main-room sensitivity; no live account, real privacy attestation,
+production policy, grant or break-glass override changes. A first-failing test
+uses the actual sensitivity predicate on the fixture's declaration, retains a
+public/internal negative and refuses an external target before another write.
+This remains synthetic test input, never evidence that a real provider may
+receive confidential business mail. Cleanup in413065 completed with verified
+provider settlement and no secondary resource errors.

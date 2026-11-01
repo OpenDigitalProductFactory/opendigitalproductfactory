@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
+import { endpointGenuinelyClearsSensitivity } from "../lib/routing/sensitivity-clearance";
+import type { EndpointManifest } from "../lib/routing/types";
 import { assertForegroundFixtureRuntime, assertForegroundBackgroundQuiet, prepareForegroundFixtures,
   cleanupForegroundFixtures, foregroundIsolationFailure, foregroundSeedScheduleDefinitions, prepareForegroundTarget,
   hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
@@ -35,6 +37,26 @@ describe("foreground workflow fixture target", () => {
 });
 
 describe("foreground fixture does not replace existing authority or provider state", () => {
+  it("models the confidential main-room case only inside the admitted loopback fixture", async () => {
+    enable();
+    const providerUpdate = vi.fn(async (_input: unknown) => ({}));
+    const write = vi.fn(async () => ({}));
+    const db = {
+      modelProvider: { findUniqueOrThrow: async () => ({ status: "unconfigured" }), update: providerUpdate },
+      aiProviderConnection: { findUniqueOrThrow: async () => ({ id: "account", status: "unconfigured" }), update: write },
+      credentialEntry: { count: async () => 0, create: write },
+      modelProfile: { count: async () => 0, findMany: async () => [], updateMany: write, create: write },
+      providerCapacityStatus: { count: async () => 0 }, ...quietScope(),
+      $transaction: vi.fn(async <T>(fn: (tx: unknown) => Promise<T>) => fn(db)),
+    };
+    await prepareForegroundFixtures(db as never, "http://127.0.0.1:40000");
+    const input = providerUpdate.mock.calls[0]![0] as { data: Pick<EndpointManifest, "sensitivityClearance"> };
+    expect(endpointGenuinelyClearsSensitivity(input.data as EndpointManifest, "confidential")).toBe(true);
+    expect(endpointGenuinelyClearsSensitivity({ sensitivityClearance: ["public", "internal"] } as EndpointManifest, "confidential")).toBe(false);
+    const calls = db.$transaction.mock.calls.length;
+    await expect(prepareForegroundFixtures(db as never, "https://api.openai.com")).rejects.toThrow("loopback only");
+    expect(db.$transaction.mock.calls).toHaveLength(calls);
+  });
   it.each(["provider", "credential", "health", "scheduled-task", "retained-request"])("refuses existing %s state before any write", async collision => {
     enable();
     const write = vi.fn(async () => ({}));

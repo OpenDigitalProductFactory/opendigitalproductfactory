@@ -237,7 +237,8 @@ export async function prepareForegroundFixtures(db: PrismaClient, baseUrl: strin
     await tx.credentialEntry.create({ data: { id: credentialId, providerId, status: "ok", secretRef: "synthetic-foreground-api-key" } });
     await tx.modelProvider.update({ where: { providerId }, data: { status: "active", baseUrl, endpoint: baseUrl,
       authHeader: "Authorization", authMethod: "api_key", endpointType: "llm",
-      sensitivityClearance: ["public", "development", "internal"], supportsToolUse: true, supportsStreaming: true } });
+      // Fictional, loopback-only CI service. This does not attest any live account.
+      sensitivityClearance: ["public", "development", "internal", "confidential"], supportsToolUse: true, supportsStreaming: true } });
     await tx.aiProviderConnection.update({ where: { connectionId }, data: {
       status: "active", label: "Synthetic retained-work fixture", credentialEntryId: credentialId, executionChannel: "direct-api", authMethod: "api-key",
       accountClass: "business-team", commercialBasis: "usage-metered", entitlements: { noTraining: true },
