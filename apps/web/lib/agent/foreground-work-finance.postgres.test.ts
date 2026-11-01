@@ -25,9 +25,19 @@ import { assertForegroundAgent, requireForegroundUser } from "./foreground-work-
 import { publishForegroundMessage } from "./foreground-work-publication";
 import { executeForegroundWork, reconcileForegroundWork } from "./foreground-work-worker";
 
-// Never fall back to an install DATABASE_URL. Only an explicitly governed SQL
-// test URL enables this suite; the helper clones definitions, never user rows.
-const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL;
+// Reuse the canonical slot's existing admission marker and database naming
+// contract. Ordinary install DATABASE_URL values never enable this suite.
+function sqlTarget(env: Record<string, string | undefined>) {
+  const explicit = env.DPF_SQL_TEST_DATABASE_URL ?? env.DPF_LOCAL_CI_TEST_DATABASE_URL;
+  if (explicit !== undefined) return explicit;
+  if (!/^NPEL-[A-Z0-9]+$/.test(env.DPF_NONPROD_LEASE_ID ?? "") || !env.DATABASE_URL) return undefined;
+  try {
+    const target = new URL(env.DATABASE_URL);
+    if (["postgres:", "postgresql:"].includes(target.protocol) && /^\/dpf_local_ci_\d+$/.test(target.pathname)) return env.DATABASE_URL;
+  } catch { /* Malformed runtime configuration grants no SQL test target. */ }
+  return undefined;
+}
+const url = sqlTarget(process.env);
 const schema = `review_finance_${randomUUID().replaceAll("-", "")}`;
 const taskRunId = "TR-FINANCE-PG";
 const threadId = "finance-pg-thread", userId = "finance-pg-owner", agentId = "finance-pg-specialist";
@@ -35,6 +45,20 @@ const routeContext = "/finance/spend";
 const content = "Show the native expense entry path and required receipt information. Do not create an expense or move money.";
 const answer = "Synthetic guidance for the worker fixture; no real Finance advice or result is claimed.";
 const tables = ["TaskRun", "AgentThread", "AgentMessage", "User", "UserGroup", "PlatformRole"];
+
+describe("Finance SQL target admission", () => {
+  it("refuses an install database even with a lease marker", () => {
+    expect(sqlTarget({ DATABASE_URL: "postgresql://localhost/dpf", DPF_NONPROD_LEASE_ID: "NPEL-FIXTURE" })).toBeUndefined();
+  });
+  it("requires admission before using the canonical local-CI database", () => {
+    const DATABASE_URL = "postgresql://localhost/dpf_local_ci_0";
+    expect(sqlTarget({ DATABASE_URL })).toBeUndefined();
+    expect(sqlTarget({ DATABASE_URL, DPF_NONPROD_LEASE_ID: "NPEL-FIXTURE" })).toBe(DATABASE_URL);
+  });
+  it("refuses malformed runtime URLs without throwing or enabling SQL", () => {
+    expect(sqlTarget({ DATABASE_URL: "malformed", DPF_NONPROD_LEASE_ID: "NPEL-FIXTURE" })).toBeUndefined();
+  });
+});
 
 describe.skipIf(!url)("retained Finance worker with PostgreSQL and current membership", () => {
   let fixture: Awaited<ReturnType<typeof createReviewPostgresFixture>>;

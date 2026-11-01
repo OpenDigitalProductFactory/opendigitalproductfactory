@@ -174,8 +174,11 @@ The five new cases use the existing isolated PostgreSQL fixture, real retained
 worker, request digest, publication transaction and current membership lookup.
 They cover capacity wait followed by competing deliveries and one stored result,
 user deactivation, changed thread ownership, committed publication followed by
-acknowledgement loss, and changed request content. Only explicit governed test
-database URLs enable them; no install DATABASE_URL fallback is permitted.
+acknowledgement loss, and changed request content. Explicit governed test
+database URLs or the admitted canonical local-CI slot enable them. The latter
+requires its existing NPEL admission marker and a PostgreSQL URL whose database
+name matches `dpf_local_ci_<number>`. Ordinary install DATABASE_URL values never
+enable the suite. This reuses the existing calibration qualification convention.
 Fixture teardown removes its unique schema, never public rows.
 
 The coworker turn, job wake transport and event bus remain controlled doubles.
