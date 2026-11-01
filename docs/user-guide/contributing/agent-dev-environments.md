@@ -318,6 +318,11 @@ the permissions you approved, and the assistant's allowed tools. Build Studio
 access and access to each workroom are checked separately. Signing in does not
 admit the assistant to every room.
 
+If this account's work was previously handed over, the page also asks you to
+acknowledge that connecting it will bring new work back to that account. The
+platform automation account cannot authorize an interactive client; sign in
+as yourself instead.
+
 The same connection supports multiple tasks and normal token refresh without
 another sign-in. Each task keeps its own target and evidence. If an older
 connection says it needs an assistant role, use your AI client's DPF reconnect

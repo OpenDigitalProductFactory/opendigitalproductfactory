@@ -16,6 +16,12 @@ The remaining defect is the required account checkbox followed by Connect.
 The existing default-coworker implementation remains in place. This change
 combines explicit account confirmation with the native submit action.
 
+Current-main reconciliation (2026-10-31): retain the separate handover
+acknowledgement for an account whose work was handed over (BI-9D2199D4),
+and the refusal to bind interactive clients to the automation persona
+(BI-F586F8A5). One-click acceptance applies to the normal signed-in personal
+account. These exceptional account protections remain unchanged.
+
 The item's acceptance criteria are retained verbatim:
 
 - Supported fresh connection, once signed in: one consent click, zero role selections, zero command/file-edit instructions for the operator.
@@ -93,3 +99,19 @@ criterion. Preserve it verbatim as a regression context, not the desired outcome
 Verification must establish that the current personal account resolves Codex
 without a new role choice. Reuse prior role-default repair evidence only where
 its exact behavior remains unchanged; remeasure the named-account click path.
+
+## Recovery and current verification (2026-10-31)
+
+The October 14 acceptance sweep marked the item done despite this amendment
+having no PR. Reopened the same item and resumed WC-D32E1140 through governed
+tools; restored the removed worktree from the preserved signed commits.
+Merged current main at 10da4ec877fd362f0455a0865c9e2a9f3b853cf7, resolving only
+the account renderer conflict while retaining both newer account protections.
+The merge is db9aad50fb0533f0cf55da6a6bbedb2c05ae77f4.
+
+On the merged source, all 291 OAuth tests, web typecheck and the merge's
+precommit package typechecks passed. This is source-local evidence. The
+October 13 integration pass and independent assessment remain historical;
+the changed tree still requires fresh integration and committed-change review,
+then publication, canonical deployment and measured desktop/CLI consent flows.
+Do not infer delivery from the sweep's former completion status.

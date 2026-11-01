@@ -15,6 +15,6 @@
     "sourceTruth": "The authenticated session supplies account identity. The unchanged POST compares confirm_account to the current session user ID and intersects scopes and coworker eligibility.",
     "states": "Missing or stale identity issues no code and renders a fresh account choice. Cancel and a submission without an explicit approval remain refusals. Labels are escaped and the full account wraps.",
     "aiBoundary": "No prompt send or automatic submission. The named native button is the explicit consent action.",
-    "verification": "256 OAuth unit tests and web typecheck passed locally. Served narrow-viewport, keyboard, light/dark checks and canonical first-connect/reconnect measurements remain required; this recorded decision is not browser acceptance."
+    "verification": "On October31 current-main reconciliation,291 OAuth unit tests and web typecheck passed locally, preserving handover acknowledgement and automation-persona refusal. Served narrow-viewport, keyboard, light/dark checks and canonical first-connect/reconnect measurements remain required; this recorded decision is not browser acceptance."
   }
 }
