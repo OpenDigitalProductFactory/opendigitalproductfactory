@@ -34,6 +34,12 @@ requests whose exact parked call belongs to the same user and tool and hashes
 to the stored approval input fingerprint. Require the envelope binding itself
 to match its recorded fingerprint and actor fields. A redacted, malformed,
 unbound, task-bound or ambiguous request stays untouched.
+Positively identify every bound original `ToolExecution`: `success: false`,
+result `error: approval_required`, and the same result envelope ID, tool,
+human, assistant and exact input. Reuse `originalToolParameters` and the existing
+fingerprint functions. A non-parked, successful, failed or uncertain execution
+row prevents settlement. Read at most 26 rows; more than 25 is inconclusive.
+Do not require platform-only resume metadata on an external MCP request.
 
 Read the exact reservation under its existing environment advisory lock in a
 database transaction: terminal gate rows can be revived by a normal claim, so
@@ -41,6 +47,8 @@ an unlocked snapshot is insufficient. Require a cancelled/expired reservation,
 no admission, no slot or active key, no process identity/PID, cleanup command,
 resource class or memory reservation. Require exact lease/session arguments to
 match the row. This is target identity, not proof that the caller owns resources.
+Require a version-1 slot manifest and a recorded terminal timestamp; legacy
+absence of an admission date alone is not proof of never-started work.
 No active, queued, admitted, missing or uncertain target qualifies. Existing
 explicit-always policies and PROD cleanup controls are unchanged because this
 path authorizes and releases nothing. No legacy provenance is backfilled.
@@ -55,10 +63,18 @@ scope so this change cannot strand or falsely finish a paused task.
    cleanup despite an already cancelled, never-admitted reservation.
 2. Add a bounded, server-only lifecycle reconciler and compose it with the
    existing concierge cleanup. Preserve ordinary time expiry separately.
+   Scan at most 200 requests per pass in stable ID order, with one look-ahead
+   row. Save counts and the next cursor in the existing standing-room sweep
+   activity payload; resume from that cursor next pass and wrap at the end.
+   Unchanged negative prefixes must not starve an eligible request on page 2.
+   No new scheduler, table, queue or authority store is introduced.
 3. Verify cancelled and expired targets, proposed and approved states, exact
    input binding, unchanged audit data, no handler execution, idempotence,
    human/execution races, and every negative boundary above. Report scan limits;
    a bounded pass must not claim to have examined the entire inbox.
+   Include a more-than-one-page regression and real isolated-PostgreSQL barrier
+   tests for revival versus settlement and execution reservation versus
+   settlement: one winner, zero handler calls and original audit data retained.
 4. Run affected tests, both web TypeScript checks, documentation checks and the
    governed integration gate; obtain independent source assessment and publish
    through the protected PR process. Exercise the existing cancelled outcome on
