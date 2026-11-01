@@ -119,3 +119,37 @@ describe("compact provider account overview", () => {
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Retry creation");
   });
 });
+
+
+describe("provider readiness is visible before opening an account", () => {
+  it("retains readiness and real recovery scheduling without a contradictory missing schedule", () => {
+    const recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]> = { models: [], selectedModelId: null, hourly: true, canCheck: false,
+      lastCheckAt: null, nextCheckAt: "2026-10-31T21:00:00Z", lastResult: null, checkedModelId: null, checkedAt: null,
+      proofExpiresAt: null, observedAt: null, observationSource: null, limits: [], usageUrl: null, unavailable: false };
+    render(<ProviderAccountsOverview rows={[{ ...row, quotaRecovery: recovery,
+      readiness: { state: "paused", label: "Routing paused", summary: "Provider is inactive" } }]}
+      catalog={catalog} firstRun={false} canWrite={false} copy={{ ...SOURCE_CATALOG.providerAccounts, ...copy }} />);
+    expect(screen.getByText("Routing paused")).toBeTruthy();
+    expect(screen.queryByText(SOURCE_CATALOG.providerAccounts.noScheduledCheck, { exact: false })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: SOURCE_CATALOG.providerAccounts.limitDetails }));
+    expect(screen.getByRole("region", { name: SOURCE_CATALOG.providerAccounts.limitDetails })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: SOURCE_CATALOG.providerAccounts.capacityCheck })).toBeNull();
+  });
+  it.each([
+    ["verified-success", "success"], ["enabled", "success"], ["temporary-wait", "warning"],
+    ["paused", "warning"], ["action-required", "danger"], ["unverified", "neutral"],
+  ] as const)("shows %s using its shared semantic status", (state, intent) => {
+    const account = { ...row, readiness: { state, label: `Account ${state}`, summary: "Current observation" } };
+    render(<ProviderAccountsOverview rows={[account]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, status: "Status" }} />);
+    expect(screen.getByText(`Account ${state}`).closest("[data-intent]")?.getAttribute("data-intent")).toBe(intent);
+  });
+  it("shows a usage wait as the account status while keeping data permission separate", () => {
+    const waitingAccount = { ...row, allowedWork: "Company work", allowedWorkSummary: "Approved for company work",
+      readiness: { state: "temporary-wait" as const, label: "Waiting for usage reset", summary: "Usage limit reached" } };
+    render(<ProviderAccountsOverview rows={[waitingAccount]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, status: "Status" }} />);
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeTruthy();
+    expect(screen.getByText("Waiting for usage reset")).toBeTruthy();
+    expect(screen.getByText("Usage limit reached")).toBeTruthy();
+    expect(screen.getByText("Company work")).toBeTruthy();
+  });
+});

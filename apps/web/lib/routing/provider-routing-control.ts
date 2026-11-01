@@ -11,6 +11,7 @@ export type ProviderRoutingControlView = {
   restrictions: RoutingRestriction[];
   weeklyHint: string | null;
   healthSummary: string;
+  healthStatus?: ProviderHealth["status"];
 };
 
 /** Keep simultaneous vetoes visible; lifting one never claims the others cleared. */
@@ -64,5 +65,5 @@ export function projectProviderRoutingControl(input: {
       : restrictions.length && (eligibility.eligible || eligibility.state === "disabled")
         ? { ...eligibility, eligible: false, recommendedAction: null, state: "disabled" as const, label: "Routing restricted", reason: restrictions[0]!.summary }
       : eligibility;
-  return { eligibility: effectiveEligibility, restrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation." };
+  return { eligibility: effectiveEligibility, restrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation.", healthStatus: healthRestricted ? input.health?.status : undefined };
 }
