@@ -8,6 +8,24 @@ import {
 const NOW = Date.parse("2026-07-17T12:00:00.000Z");
 
 describe("capacityRoutingExclusionReason", () => {
+  it("qualifies only the exact checked Responses candidate while preserving CLI/other-model and hard holds", () => {
+    const checked = { providerId: "chatgpt", providerConnectionId: "provider-default-chatgpt", providerConnectionVersion: "a".repeat(64), modelId: "tested" };
+    const other = { ...checked, modelId: "untested" }, cli = { ...checked, providerId: "codex", providerConnectionId: "provider-default-codex" };
+    const local = { providerId: "local", modelId: "local" };
+    const capacity = new Map<string, import("./capacity-routing-exclude").CapacitySnapshot>([
+      ["chatgpt", { state: "quota_resets_at", retryAtMs: NOW + 7 * 86400_000 }],
+      ["codex", { state: "quota_resets_at", retryAtMs: NOW + 7 * 86400_000 }],
+      ["chatgpt:account:provider-default-chatgpt", { state: "available", executionProof: { version: 1, providerId: "chatgpt", connectionId: checked.providerConnectionId, modelId: "tested", accountVersion: checked.providerConnectionVersion,
+        credentialRevision: "b".repeat(64), modelRevision: "c".repeat(64), endpointRevision: "d".repeat(64), quotaRevision: "e".repeat(64), adapter: "responses", observedAt: NOW, expiresAt: NOW + 3600_000 } }],
+    ]);
+    const run = () => applyCapacitySoftExclusion({ endpoints: [checked, other, cli, local], capacityByProvider: capacity, nowMs: NOW });
+    expect(run().eligible).toEqual([checked, local]);
+    capacity.set("chatgpt", { state: "billing_action_required" });
+    expect(run().eligible).toEqual([local]);
+    capacity.set("chatgpt", { state: "quota_resets_at", retryAtMs: NOW + 86400_000 });
+    checked.providerConnectionVersion = "changed";
+    expect(run().eligible).toEqual([local]);
+  });
   it("isolates account health while retaining shared quota restrictions", () => {
     const endpoints = [{ providerId: "openai", providerConnectionId: "a" }, { providerId: "openai", providerConnectionId: "b" }];
     const result = applyCapacitySoftExclusion({ endpoints, capacityByProvider: new Map([["openai:account:a", { state: "reauth_required" }]]), nowMs: NOW });

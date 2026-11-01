@@ -274,6 +274,12 @@ jobs:
           DPF_APPROVAL_SCENARIO_CI: "1"
         run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/approval-disclosure-verification.ts
 
+      - name: Verify provider recovery controls and synthetic Responses
+        if: ${{ inputs.update_baseline != true }}
+        env:
+          DPF_PROVIDER_QUOTA_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/provider-quota-recovery-verification.ts
+
       # Manual arming path: measure the running portal and emit the baseline as an
       # artifact for a human to commit via PR. Deliberately NOT committed from CI —
       # the baseline is a reviewed engineering act, and this job has read-only
@@ -300,6 +306,7 @@ jobs:
             apps/web/test-results/ux-route-sweep/route-sweep-execution.json
             apps/web/test-results/ux-route-sweep/visible-text
             apps/web/test-results/ux-route-sweep/approval-scenarios
+            apps/web/test-results/ux-route-sweep/provider-quota-recovery
             apps/web/test-results/managed-inference-control
           if-no-files-found: warn
 
