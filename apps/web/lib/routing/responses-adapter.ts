@@ -28,6 +28,15 @@ type ResponsesMessagePart = {
   text?: string;
 };
 
+type ResponsesPayload = {
+  id?: string;
+  status?: string;
+  incomplete_details?: { reason?: string };
+  output?: ResponsesOutputItem[];
+  output_text?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+};
+
 /** The parameter a 400 names as unsupported, e.g. {"detail":"Unsupported parameter: temperature"}. */
 export function unsupportedParameterName(status: number, errBody: string): string | null {
   if (status !== 400) return null;
@@ -91,22 +100,14 @@ async function readResponsesPayload(
   res: Response,
   providerId: string,
   baseUrl: string,
-): Promise<{
-  output?: ResponsesOutputItem[];
-  output_text?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
-}> {
+): Promise<ResponsesPayload> {
   if (!isChatGptBackend(providerId, baseUrl)) {
-    return await res.json() as {
-      output?: ResponsesOutputItem[];
-      output_text?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+    return await res.json() as ResponsesPayload;
   }
 
   const rawText = await res.text();
   const lines = rawText.split("\n");
-  let lastCompleted: Record<string, unknown> | null = null;
+  let lastTerminal: Record<string, unknown> | null = null;
   let lastDelta = "";
   // Collect function call argument deltas keyed by output_index
   const funcCallDeltas = new Map<string, { callId: string; name: string; args: string }>();
@@ -115,8 +116,10 @@ async function readResponsesPayload(
     if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
     try {
       const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
-      if (parsed.type === "response.completed" && parsed.response) {
-        lastCompleted = parsed.response as Record<string, unknown>;
+      if (["response.completed", "response.incomplete", "response.failed"].includes(String(parsed.type)) && parsed.response) {
+        const terminal = parsed.response as Record<string, unknown>;
+        lastTerminal = { ...terminal, status: typeof terminal.status === "string"
+          ? terminal.status : String(parsed.type).slice("response.".length) };
       }
       if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
         lastDelta += parsed.delta;
@@ -144,7 +147,7 @@ async function readResponsesPayload(
     .filter(l => l.startsWith("data: ") && l !== "data: [DONE]")
     .map(l => { try { return (JSON.parse(l.slice(6)) as Record<string, unknown>).type; } catch { return "parse_error"; } });
   const uniqueTypes = [...new Set(eventTypes)];
-  if (!lastCompleted && !lastDelta && funcCallDeltas.size === 0) {
+  if (!lastTerminal && !lastDelta && funcCallDeltas.size === 0) {
     console.warn(
       `[responses-adapter] Empty response from ${providerId}. ` +
       `SSE lines: ${lines.length}, event types: [${uniqueTypes.join(", ")}]. ` +
@@ -169,12 +172,12 @@ async function readResponsesPayload(
     } as unknown as ResponsesOutputItem);
   }
 
-  // If response.completed exists, use it for usage data — but prefer
+  // Preserve the actual terminal payload and its usage; prefer
   // synthetic output when the completed event has empty/useless output.
   // The ChatGPT backend often sends text/tools via SSE deltas while the
   // completed event's output[] is empty or contains only empty text.
-  if (lastCompleted) {
-    const completedOutput = (lastCompleted as { output?: unknown[] }).output ?? [];
+  if (lastTerminal) {
+    const completedOutput = (lastTerminal as { output?: unknown[] }).output ?? [];
     // Check if completed output has actual content (non-empty text or tool calls)
     const hasRealContent = completedOutput.some((item: unknown) => {
       const it = item as Record<string, unknown>;
@@ -187,14 +190,11 @@ async function readResponsesPayload(
     });
     const useCompleted = hasRealContent;
     return {
+      ...lastTerminal,
       output: useCompleted ? completedOutput : syntheticOutput,
-      output_text: useCompleted ? (lastCompleted as { output_text?: string }).output_text : (lastDelta || undefined),
-      usage: (lastCompleted as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
-    } as {
-      output?: ResponsesOutputItem[];
-      output_text?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+      output_text: useCompleted ? (lastTerminal as { output_text?: string }).output_text : (lastDelta || undefined),
+      usage: (lastTerminal as ResponsesPayload).usage,
+    } as ResponsesPayload;
   }
 
   // No completed event — return synthetic output only
@@ -208,11 +208,7 @@ async function readResponsesPayload(
   return {
     output: syntheticOutput,
     output_text: lastDelta || undefined,
-  } as {
-    output?: ResponsesOutputItem[];
-    output_text?: string;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
+  } as ResponsesPayload;
 }
 
 export const responsesAdapter: ExecutionAdapterHandler = {
@@ -220,6 +216,10 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools, previousResponseId } = request;
+    const requiredOutputBound = plan.responsePolicy.requireOutputBound === true;
+    if (requiredOutputBound && (!Number.isSafeInteger(plan.maxTokens) || (plan.maxTokens ?? 0) <= 0)) {
+      throw new InferenceError("Required output bound must be a positive finite integer", "provider_error", providerId);
+    }
     const responsesUrl = buildResponsesUrl(providerId, provider.baseUrl);
 
     const body: Record<string, unknown> = {
@@ -243,7 +243,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     if (systemPrompt) {
       body.instructions = systemPrompt;
     }
-    if (plan.maxTokens && !isChatGptBackend(providerId, provider.baseUrl)) {
+    if (plan.maxTokens && (requiredOutputBound || !isChatGptBackend(providerId, provider.baseUrl))) {
       body.max_output_tokens = plan.maxTokens;
     }
     // BI-EFA3869E: the Codex backend's reasoning models reject `temperature`
@@ -319,6 +319,10 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     const data = await readResponsesPayload(res, providerId, provider.baseUrl);
     const parsed = parseResponsesOutput(data.output, data.output_text);
+    const status = typeof data.status === "string" ? data.status : undefined;
+    const incompleteReason = typeof data.incomplete_details?.reason === "string" ? data.incomplete_details.reason : undefined;
+    const termination = status ? { finishReason: status === "incomplete" ? incompleteReason ?? status : status,
+      truncated: status === "incomplete" && incompleteReason === "max_output_tokens" } : {};
 
     // Log all responses to diagnose tool call issues
     if (!parsed.text && parsed.toolCalls.length === 0) {
@@ -340,6 +344,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
           inferenceMs,
           raw: data as Record<string, unknown>,
           responseId: (data as { id?: string }).id ?? undefined,
+          ...termination,
         };
       }
     } else {
@@ -359,6 +364,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       inferenceMs,
       raw: data as Record<string, unknown>,
       responseId: (data as { id?: string }).id ?? undefined,
+      ...termination,
     };
   },
 };
