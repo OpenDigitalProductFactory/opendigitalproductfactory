@@ -1,7 +1,13 @@
 {
   "schemaVersion": 1,
   "entry": "kernel/workroom-policy/index.ts",
-  "runtimeDependencies": [],
+  "runtimeDependencies": [
+    {
+      "name": "@opendigitalproductfactory/dpf-workroom",
+      "version": "0.1.0-candidate.2",
+      "source": "exact local tarball"
+    }
+  ],
   "sources": [
     "packages/validators/src/action-result.ts",
     "packages/validators/src/guards.ts",
@@ -33,8 +39,17 @@
     "packages/validators/src/workroom-policy/funded-author.ts",
     "packages/validators/src/workroom-policy/index.ts"
   ],
-  "toolchain": { "node": "24.16.0", "typescript": "6.0.3" },
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3"
+  },
   "license": "Apache-2.0",
   "sourceBaseline": "4fa796b64425b6129f172a01b89d8c8887c065fc",
-  "qualification": "Synthetic policy and local host-boundary fixture only; no authenticated authority, financial reservation, production scheduler, concurrent database, tool execution or runtime/browser qualification."
+  "qualification": "Synthetic policy and local host-boundary fixture only; no authenticated authority, financial reservation, production scheduler, concurrent database, tool execution or runtime/browser qualification.",
+  "componentArtifact": {
+    "name": "@opendigitalproductfactory/dpf-workroom",
+    "version": "0.1.0-candidate.2",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz",
+    "sha256": "b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40"
+  }
 }

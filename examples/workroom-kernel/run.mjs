@@ -1,3 +1,4 @@
+import { installWorkroomArtifact } from "../_shared/install-workroom-artifact.mjs";
 import { readRegularFile } from "../_shared/read-regular-file.mjs";
 import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,6 +19,7 @@ if (compilerPackage.version !== manifest.toolchain.typescript) throw new Error(`
 const temp = await mkdtemp(join(tmpdir(), "dpf-workroom-consumer-"));
 const sourceDigests = {};
 try {
+  const workroomArtifact = await installWorkroomArtifact({ root, destination: temp, artifact: manifest.componentArtifact, node });
   await writeFile(join(temp, "package.json"), JSON.stringify({ name: "workroom-kernel-isolated-consumer", private: true, type: "module", version: "0.0.0", dependencies: {} }, null, 2));
   await writeFile(join(temp, "package-lock.json"), JSON.stringify({ name: "workroom-kernel-isolated-consumer", version: "0.0.0", lockfileVersion: 3, requires: true, packages: { "": { name: "workroom-kernel-isolated-consumer", version: "0.0.0" } } }, null, 2));
   await cp(join(here, "src"), join(temp, "src"), { recursive: true, dereference: false });
@@ -28,7 +30,7 @@ try {
       const contents = await readRegularFile(path, "utf8");
       sourceDigests[source] = createHash("sha256").update(contents).digest("hex");
       for (const match of contents.matchAll(/(?:from\s*|import\s*\()(["'])([^"']+)\1/g)) {
-        if (!match[2].startsWith(".") || !match[2].endsWith(".ts")) throw new Error(`Nonportable import in ${source}: ${match[2]}`);
+        if (!workroomArtifact.acceptsImport(match[2]) && (!match[2].startsWith(".") || !match[2].endsWith(".ts"))) throw new Error(`Nonportable import in ${source}: ${match[2]}`);
       }
       const target = resolve(temp, "kernel", relative(resolve(root, "packages/validators/src"), path));
       await mkdir(dirname(target), { recursive: true });
@@ -39,7 +41,7 @@ try {
   const run = spawnSync(node, ["--input-type=module", "--eval", `const {runSmoke}=await import(${JSON.stringify(pathToFileURL(join(temp, "dist/src/smoke.js")).href)}); console.log(JSON.stringify(runSmoke(),null,2));`], { cwd: temp, encoding: "utf8", env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } });
   if (run.status !== 0) throw new Error(`Standalone behavioral smoke failed:\n${run.stdout}${run.stderr}`);
   process.stdout.write(run.stdout);
-  process.stdout.write(`${JSON.stringify({ node: version.stdout.trim(), typescript: compilerPackage.version, runtimeDependencies: [], copiedSourceSha256: sourceDigests }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ node: version.stdout.trim(), typescript: compilerPackage.version, runtimeDependencies: [workroomArtifact.evidence], copiedSourceSha256: sourceDigests }, null, 2)}\n`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

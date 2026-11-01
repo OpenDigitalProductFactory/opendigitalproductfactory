@@ -1,0 +1,48 @@
+{
+  "kind": "private-installed-component-candidate",
+  "component": "@opendigitalproductfactory/dpf-workroom",
+  "version": "0.1.0-candidate.2",
+  "sourceCommit": "e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97",
+  "sourceRepository": "OpenDigitalProductFactory/dpf-workroom",
+  "seedCommit": "b43be400326f8cc5777a9d40c1f058a8f0363dc8",
+  "upstreamKernelRevision": "56f3a5d2d57d751eb3ac435dcca4133c5ff46686",
+  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.2.tgz",
+  "sha256": "b30b8eba47df6b983e26e7a0f4b724363eb1a62df7a10829359a50e7d77acb40",
+  "checks": {
+    "originalSourceProvenanceFiles": 22,
+    "sourceProtocolScenarios": 13,
+    "installedProtocolScenarios": 13,
+    "allDeclaredExportsAndDeclarations": "passed",
+    "emittedImportClosure": "passed",
+    "unownedGppAnalysisExcluded": "passed",
+    "outcomeDispositionNormalAdverse": "passed",
+    "strictEngineBuildRuntime": "passed on24.16.0"
+  },
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3",
+    "npm": "11.13.0"
+  },
+  "runtimeDependencies": [],
+  "publicPackagePublication": false,
+  "realDpfConsumerMigration": false,
+  "dpf2Migration": false,
+  "nativeOrProductionQualification": false,
+  "independentReview": "No material findings, bound to e106fb192ddfe7f19e9a7dfb94d2b496b5f92a97. Exported APIs and emitted bytes unchanged; exact engine declarations and dependency archive/lock integrities verified. Independent client assessment, not native/host acceptance.",
+  "supportedNodeVersions": [
+    "24.16.0",
+    "24.22.0"
+  ],
+  "additionalReceivingMatrix": {
+    "node": "v24.22.0",
+    "typescript": "7.0.2",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "installationPolicy": "engine-strict",
+    "result": "passed",
+    "evidence": "foundation-v2-node24.22-ts7-receiver-result.json",
+    "actualProductAdoption": false,
+    "osEnforcementQualification": false
+  },
+  "builder": "External Codex source worktree on Darwin arm64; independent client review; no native product attestation"
+}
