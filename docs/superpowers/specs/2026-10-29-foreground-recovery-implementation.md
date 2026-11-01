@@ -235,3 +235,12 @@ Diagnostic41309326130 captures those observations with the assertion unchanged;
 it runs the pre-guard source. The new guard still requires exact-source canonical
 qualification, independent review and actual served verification. No real
 provider, mailbox or business acceptance follows from the focused test.
+
+The mandatory image-script dependency guard rejected importing the authenticated
+foreground context into the shared autonomous runner: shipped source scripts do
+not carry the web authentication packages. The existing single AsyncLocalStorage
+scope is now separated into an auth-free module; saved-actor revalidation stays
+in foreground-work-context. The autonomous runner imports only its read
+projection. No guard, runtime dependency set, grant or authority check is
+weakened. The unchanged dependency guard passes, as do45 focused tests across6
+files including real-context isolation and deadline/authority controls.

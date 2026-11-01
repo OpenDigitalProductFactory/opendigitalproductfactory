@@ -1,13 +1,12 @@
 import "server-only";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { prisma } from "@dpf/db";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { isRecord } from "@/lib/shared/coerce";
 import { captureTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
 import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
-
-const execution = new AsyncLocalStorage<{ taskRunId: string; agentId: string | null; fence: TaskExecutionFence | null; deadlineAt: string; userId: string; threadId: string }>();
+import { withForegroundExecutionScope, foregroundExecutionContext } from "./foreground-work-execution-scope";
+export { foregroundExecutionContext } from "./foreground-work-execution-scope";
 
 /** Queue callers supply only a retained job identity, never a user or role. */
 async function currentForegroundActor(taskRunId: string) {
@@ -41,7 +40,7 @@ async function currentForegroundActor(taskRunId: string) {
 export async function withForegroundWork<T>(taskRunId: string, action: () => Promise<T>, expectedFence?: TaskExecutionFence | null): Promise<T> {
   const current = await currentForegroundActor(taskRunId);
   if (expectedFence !== undefined && !sameTaskExecutionFence(expectedFence, current.fence)) throw new Error("Foreground executor was superseded before entry.");
-  return execution.run({ taskRunId, fence: current.fence, agentId: current.agentId, deadlineAt: current.deadlineAt,
+  return withForegroundExecutionScope({ taskRunId, fence: current.fence, agentId: current.agentId, deadlineAt: current.deadlineAt,
     userId: current.actor.id, threadId: current.threadId }, () => withGovernedInferenceDeadline({
     deadlineAt: current.deadlineAt,
     verifyAuthority: async () => {
@@ -53,7 +52,7 @@ export async function withForegroundWork<T>(taskRunId: string, action: () => Pro
 }
 
 export async function requireForegroundUser() {
-  const scope = execution.getStore();
+  const scope = foregroundExecutionContext();
   if (!scope) return requireUser();
   const current = await currentForegroundActor(scope.taskRunId);
   if (!sameTaskExecutionFence(scope.fence, current.fence)) throw new Error("Foreground executor was superseded.");
@@ -61,14 +60,10 @@ export async function requireForegroundUser() {
 }
 
 export function foregroundExecutionFence(): TaskExecutionFence | null {
-  return execution.getStore()?.fence ?? null;
-}
-
-export function foregroundExecutionContext() {
-  return execution.getStore() ?? null;
+  return foregroundExecutionContext()?.fence ?? null;
 }
 
 export function assertForegroundAgent(agentId: string | null | undefined): void {
-  const scope = execution.getStore();
+  const scope = foregroundExecutionContext();
   if (scope && (!scope.agentId || scope.agentId !== agentId)) throw new Error("The assigned foreground coworker changed; reconcile the retained request first.");
 }
