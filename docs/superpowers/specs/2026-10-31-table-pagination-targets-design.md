@@ -48,3 +48,14 @@ This document is the canonical ordered fix design and plan for implementation pa
 
 RED: live targets below 44×44, as recorded above. Prototype: 44×44 at 320px light/dark, paging works, no horizontal overflow. Source tests, gate, review, merge and containing-release live verification remain separate evidence; none is implied by this design.
 
+
+## Exact delivery coverage
+
+Requirement and acceptance references for the native small-delivery coverage:
+
+- Both Prev and Next have minimum 44×44 CSS pixel targets in the shared DataTable, including disabled states.
+- Paging, page limits, disabled states and responsive layout retain existing behavior; no horizontal overflow at 320/390/1280 widths in both themes.
+- Existing meaningful DataTable tests, affected guards/typechecks and governed exact-tree integration qualify the source. Do not add class-string tests that merely mirror implementation.
+- After merge and a containing governed deployment, remeasure actual routing Evaluation targets and supersede the recorded failure with fresh evidence; no unmerged CSS is claimed served.
+
+Contract: `DataTable` stays presentational. Flow: operators paging routing Evaluation. Verification: colocated DataTable behavior tests, web typecheck, exact-tree governed gate and containing-release live geometry.
