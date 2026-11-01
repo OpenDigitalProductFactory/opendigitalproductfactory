@@ -2848,7 +2848,8 @@
         "workroom-cycle-continuity",
         "existing-persistence-and-bounded-reads",
         "recovery-integration-still-required",
-        "verification-and-rollback-boundary"
+        "verification-and-rollback-boundary",
+        "bounded-assignment-and-continuation-briefs"
       ]
     },
     "docs/architecture/workroom-ingestion-scale-qualification.md": {
