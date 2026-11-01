@@ -295,9 +295,11 @@ async function main() {
     recoveryPlan,
     startedAt,
     attempts: result.attempts,
+    failedTestFiles: result.failedTestFiles ?? [],
   });
+  const failedFiles = result.failedTestFiles?.length ? ` failed-files=${result.failedTestFiles.join(",")}` : "";
   process.stdout.write(
-    `[local-ci-vitest] classification=${result.classification} attempts=${result.attempts.length} recovered=${recovered} diagnostics=${diagnosticsPath}\n`,
+    `[local-ci-vitest] classification=${result.classification} attempts=${result.attempts.length} recovered=${recovered}${failedFiles} diagnostics=${diagnosticsPath}\n`,
   );
   process.exit(result.status);
 }

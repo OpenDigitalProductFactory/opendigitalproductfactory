@@ -12,6 +12,7 @@ import { fieldControlClass } from "@/components/ui/form/styles";
 import { addProviderAccount } from "@/lib/actions/provider-accounts";
 import { completeProviderAccountSetup } from "@/lib/actions/provider-account-setup";
 import { providerAccountHref, type ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
+import { ProviderQuotaDetails } from "./ProviderQuotaDetails";
 export type { ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
 
 export type ProviderAccountCatalogRow = {
@@ -33,6 +34,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const [search, setSearch] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [showCatalog, setShowCatalog] = useState(firstRun);
+  const [openRecoveryId, setOpenRecoveryId] = useState<string | null>(null);
   const [newProvider, setNewProvider] = useState<ProviderAccountCatalogRow | null>(null);
   const [label, setLabel] = useState("");
   const [method, setMethod] = useState("");
@@ -77,15 +79,19 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       <StatusBadge intent="neutral" label={row.allowedWork} />
       <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</p>
     </div> },
-    { key: "capacity", header: copy.capacityAndChecks ?? copy.capacity, mobileFullWidth: true, cell: row => <div className="space-y-2 text-xs">
+    { key: "capacity", header: copy.capacityAndChecks ?? copy.capacity, mobileFullWidth: true, cell: row => {
+      const nextCheckAt = row.quotaRecovery ? row.quotaRecovery.nextCheckAt : row.quotaRecheckAt;
+      return <div className="space-y-2 text-xs">
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
         <dt className="text-[var(--dpf-muted)]">{copy.lastCheck}</dt><dd className="m-0">{row.lastCheckedAt ? <LocalTime value={row.lastCheckedAt} /> : copy.noCheckEvidence}</dd>
         <dt className="text-[var(--dpf-muted)]">{copy.lastSuccess}</dt><dd className="m-0">{row.lastSucceededAt ? <LocalTime value={row.lastSucceededAt} /> : copy.noSuccessEvidence}</dd>
       </dl>
-      <p className="m-0">{copy.nextCapacityCheck} {row.quotaRecheckAt ? <LocalTime value={row.quotaRecheckAt} /> : copy.noScheduledCheck}</p>
+      <p className="m-0">{copy.nextCapacityCheck} {nextCheckAt ? <LocalTime value={nextCheckAt} /> : copy.noScheduledCheck}</p>
       {row.readiness?.providerResetAt && <p className="m-0">{copy.providerResetEstimate} <LocalTime value={row.readiness.providerResetAt} /></p>}
       <p className="m-0 text-[var(--dpf-muted)]">{row.capacitySummary}</p>
-    </div> },
+      {row.quotaRecovery && <ProviderQuotaDetails key={row.connectionId} connectionId={row.connectionId} recovery={row.quotaRecovery} canWrite={canWrite} copy={copy}
+        open={openRecoveryId === row.connectionId} onOpenChange={open => setOpenRecoveryId(open ? row.connectionId : null)} />}
+    </div>; } },
     { key: "manage", header: copy.nextAction ?? copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="space-y-2">
       <Link href={providerAccountHref(row)} data-owner-first-next-action={row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="inline-block rounded border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-accent)]">{row.nextActionLabel ?? copy.manage}</Link>
       <Link href={providerAccountHref(row)} className="block py-2 text-xs text-[var(--dpf-accent)]">{copy.configureDetails}</Link>

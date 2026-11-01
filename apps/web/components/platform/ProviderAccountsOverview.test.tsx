@@ -6,6 +6,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, refres
 vi.mock("@/lib/actions/provider-accounts", () => ({ addProviderAccount: mocks.add }));
 import { ProviderAccountsOverview, type ProviderAccountOverviewRow } from "./ProviderAccountsOverview";
 import { measureUxBudget } from "@/lib/ux-budget/measure";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 
 const copy = { connection: "Accounts", accountName: "Account name", provider: "Provider", allowedWork: "Allowed work", models: "Models", capacity: "Capacity", manage: "Manage", addAccount: "Add account", addProvider: "Add provider", noAccounts: "No accounts", catalog: "Available providers", searchAccounts: "Search accounts", searchProviders: "Search providers", authMethod: "Authentication method", apiKeyMethod: "API key", oauthMethod: "Sign-in", workloadMethod: "Client credentials", cancel: "Cancel", failed: "Failed" };
 const catalog = [{ providerId: "codex", name: "Codex", summary: "Coding and reasoning", supportedAuthMethods: ["oauth2_authorization_code"] }, { providerId: "anthropic", name: "Anthropic", summary: "Writing and coding", supportedAuthMethods: ["api_key"] }];
@@ -14,6 +15,21 @@ beforeEach(() => { vi.resetAllMocks(); mocks.add.mockResolvedValue({ ok: true, d
 afterEach(cleanup);
 
 describe("compact provider account overview", () => {
+  it("opens one account's recovery controls at a time without sending work", () => {
+    const recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]> = { models: [], selectedModelId: null, hourly: false, canCheck: false,
+      lastCheckAt: null, nextCheckAt: null, lastResult: null, checkedModelId: null, checkedAt: null, proofExpiresAt: null,
+      observedAt: null, observationSource: null, limits: [], usageUrl: null, unavailable: false };
+    render(<ProviderAccountsOverview rows={[{ ...row, quotaRecovery: recovery }, { ...row, connectionId: "other-account", label: "Personal", quotaRecovery: recovery }]}
+      catalog={catalog} firstRun={false} canWrite copy={{ ...SOURCE_CATALOG.providerAccounts, ...copy }} />);
+    const [first, second] = screen.getAllByRole("button", { name: SOURCE_CATALOG.providerAccounts.limitDetails });
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(first);
+    expect(first.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(second);
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+    expect(second.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByRole("region", { name: SOURCE_CATALOG.providerAccounts.limitDetails })).toHaveLength(1);
+  });
   it.each(["row", "catalog"])("restores the exact %s Add account trigger after cancellation", source => {
     render(<ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite copy={copy} />);
     let opener = screen.getByRole("button", { name: "Add account" });
@@ -106,6 +122,19 @@ describe("compact provider account overview", () => {
 
 
 describe("provider readiness is visible before opening an account", () => {
+  it("retains readiness and real recovery scheduling without a contradictory missing schedule", () => {
+    const recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]> = { models: [], selectedModelId: null, hourly: true, canCheck: false,
+      lastCheckAt: null, nextCheckAt: "2026-10-31T21:00:00Z", lastResult: null, checkedModelId: null, checkedAt: null,
+      proofExpiresAt: null, observedAt: null, observationSource: null, limits: [], usageUrl: null, unavailable: false };
+    render(<ProviderAccountsOverview rows={[{ ...row, quotaRecovery: recovery,
+      readiness: { state: "paused", label: "Routing paused", summary: "Provider is inactive" } }]}
+      catalog={catalog} firstRun={false} canWrite={false} copy={{ ...SOURCE_CATALOG.providerAccounts, ...copy }} />);
+    expect(screen.getByText("Routing paused")).toBeTruthy();
+    expect(screen.queryByText(SOURCE_CATALOG.providerAccounts.noScheduledCheck, { exact: false })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: SOURCE_CATALOG.providerAccounts.limitDetails }));
+    expect(screen.getByRole("region", { name: SOURCE_CATALOG.providerAccounts.limitDetails })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: SOURCE_CATALOG.providerAccounts.capacityCheck })).toBeNull();
+  });
   it.each([
     ["working", "success"], ["enabled", "success"], ["waiting", "warning"],
     ["paused", "warning"], ["blocked", "danger"], ["unverified", "neutral"],
