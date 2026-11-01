@@ -1,6 +1,10 @@
+---
+status: draft
+---
+
 # Exact-response routing feedback implementation plan
 
-**Backlog:** BI-A009189A; EP-6D558A14. **Workroom:** WC-07BD76E9. **Branch:** feat/routing-attempt-feedback. **Source base:** 4177c09734178904c79c402a3b210ba67d850df3. **Design:** [CLI routing §4.3.1](../specs/2026-04-29-cli-execution-adapter-routing-design.md#431-exact-response-disposition-bi-a009189a-design-2026-10-31), author research artifact aff531f210406921e6a1097949163cce764a977b. Native author research receipt initiative-4fa5ce3f-1d85-4718-82a0-a7edf1d3c98c; plan admission IRD-2112354C980F. Neither is feature acceptance. Declaring access-control edit paths subsequently raised effective readiness to large/high, so current independent design/spec/architecture receipts and a parsed scope baseline are required before plan coverage or implementation. The stored delivery estimate was not downgraded to avoid this review.
+**Backlog:** BI-A009189A; EP-6D558A14. **Workroom:** WC-07BD76E9. **Branch:** feat/routing-attempt-feedback. **Source base:** 4177c09734178904c79c402a3b210ba67d850df3. **Design:** [Exact-response routing feedback](../specs/2026-10-31-exact-response-routing-feedback-design.md). **Parent architecture:** [CLI routing §4.3](../specs/2026-04-29-cli-execution-adapter-routing-design.md#43-adapterruntelemetry-table-new). Historical author research artifact aff531f210406921e6a1097949163cce764a977b. Native author research receipt initiative-4fa5ce3f-1d85-4718-82a0-a7edf1d3c98c; plan admission IRD-2112354C980F. Neither is feature acceptance. Declaring access-control edit paths subsequently raised effective readiness to large/high, so current independent design/spec/architecture receipts and a parsed scope baseline are required before plan coverage or implementation. The stored delivery estimate was not downgraded to avoid this review.
 
 For agentic workers: execute this plan as one independently reviewable backlog item, branch and PR. Use dpf-tdd for meaningful red-green implementation, dpf-local-merge-ci-before-push and this completion gate before success claims, and dpf-pr-with-dco for handoff. Source work is isolated here; runtime verification uses the canonical install/shared governed lease. Do not edit installed runtime assets or mutate the paired production installation.
 
@@ -17,7 +21,7 @@ The six criteria below are requirements AC-1 through AC-6, in order:
 
 ## Boundaries and contracts
 
-CONTRACT-PRODUCER is canonical CLI routing §4.3.1: one existing telemetry id per actual provider call, exact successful producer through the real result types, saved content digest and explicit persisted known-unroomed/Workroom scope. Missing identity/scope or later content change is ineligible. Recover earlier drafts with their producer; rewritten/synthetic/async-start results remain unbound unless their actual producer is carried.
+CONTRACT-PRODUCER is the dedicated feedback design’s producer-binding contract: one existing telemetry id per actual provider call, exact successful producer through the real result types, saved content digest and explicit persisted known-unroomed/Workroom scope. Missing identity/scope or later content change is ineligible. Recover earlier drafts with their producer; rewritten/synthetic/async-start results remain unbound unless their actual producer is carried.
 
 CONTRACT-FEEDBACK is the same spec's governed writer: current state on AdapterRunTelemetry, canonical Principal/source, feedback revision, Serializable current authority and binding checks, atomic AdminActivity, distinct human/agent provenance and protected human judgment. Proposed concrete schema names are responseAttemptId/responseContentDigest/responseScope/responseWorkroomId on AgentMessage, feedbackPrincipalId/feedbackSource/feedbackRevision on AdapterRunTelemetry; use typed enums and existing Principal/Workroom relations. The responseAttemptId remains a deliberately soft telemetry reference; all other durable relationships follow the existing FK/index rules. The implementation may refine names consistently without changing meaning.
 

@@ -64,13 +64,17 @@ try {const saved = JSON.parse(sessionStorage.getItem(storageKey)); if(saved && s
 function persist(){try{sessionStorage.setItem(storageKey, JSON.stringify(state));}catch(_){}}
 function current(){return scenarios[state.scenario];}
 function status(text, kind='idle'){const region=$('save-status'); region.dataset.state=kind;region.replaceChildren();if(kind==='pending'){const dot=document.createElement('span');dot.className='pending-dot';dot.setAttribute('aria-hidden','true');region.append(dot);}region.append(document.createTextNode(text));}
+function focusFeedbackAction(){const target=$(state.value==='revision'?'revise':'keep');if(!target.disabled&&!target.closest('[hidden]'))target.focus();}
+function hideSaveError(){const restoreFocus=$('save-error').contains(document.activeElement);$('save-error').hidden=true;if(restoreFocus)focusFeedbackAction();}
 function setView(view){const response=view==='response';$('response-view').hidden=!response;$('evaluation-view').hidden=response;$('response-tab').setAttribute('aria-pressed',String(response));$('evaluation-tab').setAttribute('aria-pressed',String(!response));}
 function render(){
  const c=current(), unavailable=Boolean(c.unavailable), locked=Boolean(c.protected), blocked=unavailable||locked;
  $('scenario').value=state.scenario;$('acting-as').textContent=c.name;
  $('feedback-controls').hidden=unavailable;
  for(const [id,value] of [['keep','kept'],['revise','revision']]){$(id).setAttribute('aria-pressed',String(state.value===value));$(id).disabled=locked;$(id).setAttribute('aria-disabled',String(pending));}
+ const clearHadFocus=document.activeElement===$('clear');
  $('clear').hidden=state.value===null;$('clear').disabled=locked;$('clear').setAttribute('aria-disabled',String(pending));
+ if(clearHadFocus&&$('clear').hidden)focusFeedbackAction();
  $('unavailable').hidden=!blocked;
  $('unavailable').querySelector('strong').textContent=locked?'Owner feedback is protected':'Feedback unavailable';
  $('unavailable-reason').textContent=locked?'An AI coworker cannot replace or clear an owner’s judgment. The owner can change this choice.':(c.unavailable||'');
@@ -93,21 +97,21 @@ function render(){
 }
 async function saveChoice(value){
  if(pending||current().unavailable||current().protected)return;
- pending=true;failedChoice=undefined;$('save-error').hidden=true;render();status(value===null?'Clearing feedback…':'Saving feedback…','pending');$('feedback-controls').setAttribute('aria-busy','true');
+ pending=true;failedChoice=undefined;hideSaveError();render();status(value===null?'Clearing feedback…':'Saving feedback…','pending');$('feedback-controls').setAttribute('aria-busy','true');
  await new Promise(resolve=>setTimeout(resolve,700));
  if(state.failRemaining){state.failRemaining=false;failedChoice=value;pending=false;persist();render();status('Last confirmed choice retained.');$('error-text').textContent='Demo save failed. Your last confirmed choice is unchanged.';$('save-error').hidden=false;$('feedback-controls').setAttribute('aria-busy','false');return;}
  const previous=state.value,c=current();state.value=value;state.source=value===null?null:c.actor;state.actor=value===null?null:c.name;state.revision+=1;state.history.push({value,previous,source:c.actor,actor:c.name,revision:state.revision,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});pending=false;persist();render();status(value===null?'Choice cleared in this demo.':'Feedback saved in this demo.','saved');$('feedback-controls').setAttribute('aria-busy','false');
 }
 function resetScenario(key){if(pending)return;state={scenario:key,value:key==='protected'?'kept':null,source:key==='protected'?'human':null,actor:key==='protected'?'Mark · owner':null,revision:key==='protected'?1:0,history:key==='protected'?[{value:'kept',previous:null,source:'human',actor:'Mark · owner',revision:1,time:'10:42 AM'}]:[],failRemaining:Boolean(scenarios[key].fail)};failedChoice=undefined;$('save-error').hidden=true;persist();render();if(!current().unavailable&&!current().protected)status('Demo reset. No feedback yet.');}
 function openInspector(trigger){returnFocus=trigger;$('inspector').showModal();$('close-dialog').focus();}
-$('keep').addEventListener('click',()=>saveChoice('kept'));$('revise').addEventListener('click',()=>saveChoice('revision'));$('clear').addEventListener('click',()=>saveChoice(null));$('retry-save').addEventListener('click',()=>{if(failedChoice!==undefined)saveChoice(failedChoice);});$('dismiss-error').addEventListener('click',()=>{$('save-error').hidden=true;failedChoice=undefined;status('Last confirmed choice retained.');});
+$('keep').addEventListener('click',()=>saveChoice('kept'));$('revise').addEventListener('click',()=>saveChoice('revision'));$('clear').addEventListener('click',()=>saveChoice(null));$('retry-save').addEventListener('click',()=>{if(failedChoice!==undefined)saveChoice(failedChoice);});$('dismiss-error').addEventListener('click',()=>{hideSaveError();failedChoice=undefined;status('Last confirmed choice retained.');});
 $('scenario').addEventListener('change',e=>resetScenario(e.target.value));$('reset').addEventListener('click',()=>resetScenario(state.scenario));
 $('response-tab').addEventListener('click',()=>setView('response'));$('evaluation-tab').addEventListener('click',()=>setView('evaluation'));$('routing-details').addEventListener('click',e=>openInspector(e.currentTarget));$('inspect-evaluation').addEventListener('click',e=>openInspector(e.currentTarget));
 $('close-dialog').addEventListener('click',()=>$('inspector').close());$('inspector').addEventListener('close',()=>{if(returnFocus?.isConnected&&!returnFocus.closest('[hidden]'))returnFocus.focus();});$('open-evaluation').addEventListener('click',()=>{returnFocus=null;$('inspector').close();setView('evaluation');$('evaluation-tab').focus();});
 $('inspector').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const items=[...$('inspector').querySelectorAll('button:not(:disabled),a[href],summary,select,input:not(:disabled),[tabindex="0"]')].filter(el=>el.getClientRects().length>0);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
 let theme='light';try{theme=sessionStorage.getItem(storageKey+'-theme')||'light';}catch(_){}
 function setTheme(value){document.documentElement.dataset.theme=value;$('theme').textContent=value==='dark'?'Light theme':'Dark theme';$('theme').setAttribute('aria-label','Switch to '+(value==='dark'?'light':'dark')+' theme');try{sessionStorage.setItem(storageKey+'-theme',value);}catch(_){}}
-$('theme').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));setTheme(theme);render();
+$('theme').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));setTheme(theme);render();if(state.value!==null&&!current().unavailable&&!current().protected)status('Saved feedback restored in this demo.','saved');
 </script>
 </body>
 </html>
