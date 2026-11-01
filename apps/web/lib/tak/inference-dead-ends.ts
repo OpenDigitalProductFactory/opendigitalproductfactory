@@ -25,6 +25,8 @@ import { buildHumanHandoff } from "./escalation-ladder";
 import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, type ExecutionUncertainty } from "../shared/execution-uncertainty";
 import { isLocalProviderId } from "../routing/provider-locality";
+import { NoEligibleEndpointsError, type RoutingExclusionBucket } from "../routing/inference-error";
+import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
 
 /** Routing eliminated every candidate — a real configuration question. */
 export function noEligibleModelHandoff(): string {
@@ -56,8 +58,8 @@ export function sensitivityClearanceHandoff(sensitivity: string): string {
       `This coworker handles ${sensitivity} work, and none of the connected AI providers are cleared for ` +
       `${sensitivity} data. Cloud providers such as Claude or GPT stay limited to public work until their ` +
       `account's data policy is reviewed — a personal subscription is deliberately not cleared for ${sensitivity} ` +
-      `data, so ${sensitivity} content is never sent to a provider that might train on it. The built-in local ` +
-      `model is cleared for it but is not strong enough for this request.`,
+      `data, so ${sensitivity} content is never sent to a provider that might train on it.` +
+      ` Check model eligibility within the current data boundary.`,
     steps: [
       `To let a cloud provider handle ${sensitivity} work: open Platform > AI Operations > Providers & Routing, ` +
       `and only on a genuine business or enterprise account with a no-training agreement, attest its data policy ` +
@@ -477,6 +479,42 @@ function describeToolRouteFailureMessage(
   return unexplainedDeadEndHandoff();
 }
 
+
+/** Render only validated content-free counts, never raw route reasons. */
+function routingEligibilityHandoff(error: NoEligibleEndpointsError): string {
+  const eligibility = readRoutingEligibility(error.eligibility);
+  if (!eligibility || eligibility.exclusions.length === 0) return noEligibleModelHandoff();
+  const total = eligibility.exclusions.reduce((sum, entry) => sum + entry.count, 0);
+  if (!Number.isSafeInteger(total) || total !== eligibility.excludedCount
+    || new Set(eligibility.exclusions.map(entry => entry.bucket)).size !== eligibility.exclusions.length) {
+    return noEligibleModelHandoff();
+  }
+  const labels: Record<RoutingExclusionBucket, string> = {
+    "account-model-eligibility": "cannot use the selected model with their account",
+    "connection-excluded": "are outside the approved connection set",
+    "sensitivity-clearance": "lack the required data clearance",
+    "quality-floor": "do not meet the required quality",
+    "capability-floor": "lack a required capability",
+    "context-window": "cannot fit the required context",
+    "output-capacity": "cannot fit the required response",
+    residency: "do not meet the data-location (residency) rules",
+    "endpoint-status": "are not in a usable state",
+    "model-class": "are the wrong kind of model",
+    other: "have exclusions this view cannot explain",
+  };
+  const breakdown = eligibility.exclusions.map(entry =>
+    `${entry.count} of ${total} endpoints ${labels[entry.bucket]}.`).join(" ");
+  return buildHumanHandoff({
+    blocker: (error.providerDispatch === "not-started" ? "This AI step did not start. " : "")
+      + "No available model met this turn's requirements. " + breakdown,
+    steps: [
+      "Open Platform > AI Operations > Providers & Routing.",
+      "Review these constraints within the current data boundary; changing one may leave others unresolved.",
+    ],
+    verify: "re-check which models this coworker can reach",
+  });
+}
+
 export type InferenceDeadEndKind =
   | "evidence-unavailable"
   | "model-missing"
@@ -532,6 +570,9 @@ export function describeToolRouteFailureOutcome(
       kind: "required-terminal-writer-not-enforceable",
       message: requiredTerminalWriterNotEnforceableHandoff(),
     };
+  }
+  if (error instanceof NoEligibleEndpointsError) {
+    return { kind: "policy-or-capability", message: routingEligibilityHandoff(error) };
   }
   if (/model[_ ]not[_ ]found|model not found|provider model inventory changed/i.test(msg)) {
     return { kind: "model-missing", message: modelMissingHandoff() };

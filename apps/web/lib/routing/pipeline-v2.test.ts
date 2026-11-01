@@ -734,3 +734,24 @@ describe("routeEndpointV2 — runtime circuit breaker", () => {
     vi.useRealTimers();
   });
 });
+
+describe("routeEndpointV2 mixed exclusion wording (BI-3EA21FE6)", () => {
+  it("does not universalize one clearance failure across other rejected candidates", async () => {
+    const decision = await routeEndpointV2([
+      makeEndpoint({ id: "needs-clearance", providerId: "local", sensitivityClearance: ["public"] }),
+      makeEndpoint({ id: "needs-capability", providerId: "local", supportsToolUse: false, sensitivityClearance: ["confidential"] }),
+    ], makeContract({ sensitivity: "confidential", requiresTools: true }), [], [], { capacityByProvider: new Map() });
+    expect(decision.selectedEndpoint).toBeNull();
+    expect(decision.excludedCount).toBe(2);
+    expect(decision.reason).not.toContain("No connected provider is cleared");
+  });
+
+  it("retains clearance-specific wording only when all evaluated candidates lack clearance", async () => {
+    const decision = await routeEndpointV2([
+      makeEndpoint({ id: "clearance-a", sensitivityClearance: ["public"] }),
+      makeEndpoint({ id: "clearance-b", sensitivityClearance: ["public"] }),
+    ], makeContract({ sensitivity: "confidential" }), [], [], { capacityByProvider: new Map() });
+    expect(decision.selectedEndpoint).toBeNull();
+    expect(decision.reason).toContain("No connected provider is cleared");
+  });
+});

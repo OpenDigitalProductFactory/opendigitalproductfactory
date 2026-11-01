@@ -1,6 +1,6 @@
 # Coworker routing explanation repair
 
-Backlog: BI-3EA21FE6. Workroom: WC-A9C87759. Shape: delivery-small@1.0.0. Status: proposed; no implementation or coverage receipt claimed.
+Backlog: BI-3EA21FE6. Workroom: WC-A9C87759. Shape: delivery-small@1.0.0. Status: implementation admitted; source verification in progress; no deployed fix claimed.
 
 Design: [Coworker routing failure explanations](../specs/2026-10-31-coworker-routing-explanation-design.md).
 Canonical predecessor: [routing dead-end visibility](2026-08-16-routing-dead-end-visibility.md).
@@ -33,9 +33,8 @@ Contract refs: NoEligibleEndpointsError, readRoutingEligibility.
 Flow refs: F1.
 Verification refs: V1, V2, V3, V4, V5.
 Decision proposed: atomic; router wording and owner projection are one correction to the same failed outcome, not separate features.
-Receipt: pending immutable committed artifact and governed server validation. Planning is incomplete until that receipt is recorded.
+Coverage receipt cmvx5ybya1c1f01mezgldawjo records atomic coverage against the immutable initial plan at afb9a5084329c47704ce7c401e9f547c251498db, blob 05716056688de46ca08c8383d4d9fe2969f00528. Research receipt initiative-ab4f323b-e723-41fd-ab19-ad132d799c93 records reproduction only. Native implementation admission IRD-8958DA29F6A0 allowed this scope.
 
 ## Verification state at authoring
 
 Worktree classifier: source-only (dependencies absent). No source tests, typecheck, integration, UX acceptance or deployed check has run for this repair. Baseline failure evidence is reused from the actual native task; no new model calls have been made.
-

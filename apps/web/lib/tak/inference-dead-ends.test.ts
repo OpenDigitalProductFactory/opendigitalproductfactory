@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { NoEligibleEndpointsError, type RoutingEligibility } from "../routing/inference-error";
 import {
   describeCapacityWindow,
   describeToolRouteFailureOutcome,
@@ -381,5 +382,62 @@ describe("all-endpoints-failed classification", () => {
     const outcome = describeToolRouteFailureOutcome(
       aggregate([{ endpointId: "codex", error: "invalid API key" }, reserved]), 3);
     expect(outcome.kind).not.toBe("busy");
+  });
+});
+
+
+describe("bounded routing refusal explanation (BI-3EA21FE6)", () => {
+  const reason = "No connected provider is cleared for 'confidential' data. private-payload-canary";
+  const mixed = { sensitivity: "confidential", residencyPolicy: "local_only", excludedCount: 29,
+    exclusions: [{ bucket: "residency" as const, count: 13 }, { bucket: "capability-floor" as const, count: 8 },
+      { bucket: "sensitivity-clearance" as const, count: 8 }] };
+  const routeError = (eligibility: unknown = mixed) => new NoEligibleEndpointsError(
+    "status-query", reason, 29, undefined, "coo", eligibility as RoutingEligibility);
+  it("explains the actual mixed refusal through the coworker projection without leaking raw reasons", () => {
+    const error = routeError();
+    const outcome = describeToolRouteFailureOutcome(error.message, 0, error);
+    expect(outcome.kind).toBe("policy-or-capability");
+    expect(outcome.message).toContain("13 of 29");
+    expect(outcome.message).toContain("8 of 29");
+    expect(outcome.message).toMatch(/residency|data.location/i);
+    expect(outcome.message).toMatch(/capability/i);
+    expect(outcome.message).toMatch(/clearance|cleared/i);
+    expect(outcome.message).not.toMatch(/none of the connected|no connected provider|private-payload-canary|not strong enough/i);
+  });
+  it("does not infer a screening block or zero dispatch from local-only eligibility", () => {
+    const error = routeError();
+    expect(describeToolRouteFailure(error.message, 0, error)).not.toMatch(/did not start|screen.*block|nothing was sent/i);
+  });
+  it("may name a proven no-dispatch boundary without claiming a screening cause", () => {
+    const error = routeError();
+    error.providerDispatch = "not-started";
+    const message = describeToolRouteFailure(error.message, 0, error);
+    expect(message).toMatch(/did not start/i);
+    expect(message).not.toMatch(/screen.*block/i);
+  });
+  it("retains all-clearance guidance without inventing a local-model evaluation", () => {
+    const error = routeError({ ...mixed, excludedCount: 2, exclusions: [{ bucket: "sensitivity-clearance", count: 2 }] });
+    const message = describeToolRouteFailure(error.message, 0, error);
+    expect(message).toMatch(/2 of 2/);
+    expect(message).toMatch(/clearance|cleared/i);
+    expect(message).not.toMatch(/built-in|not strong enough|private-payload-canary/i);
+  });
+  it.each([
+    undefined,
+    { ...mixed, exclusions: [] },
+    { ...mixed, excludedCount: -1 },
+    { ...mixed, excludedCount: 28 },
+    { ...mixed, exclusions: [{ bucket: "residency", count: 13 }, { bucket: "residency", count: 16 }] },
+    { ...mixed, exclusions: [{ bucket: "private-payload-canary", count: 29 }] },
+  ])("keeps absent or malformed structured diagnostics generic", eligibility => {
+    const error = routeError(null);
+    Object.assign(error, { eligibility });
+    expect(describeToolRouteFailure(error.message, 0, error)).toBe(noEligibleModelHandoff());
+  });
+  it("preserves an unrecognised exclusion as uncertainty, never its raw sample", () => {
+    const error = routeError({ ...mixed, excludedCount: 1, exclusions: [{ bucket: "other", count: 1 }] });
+    const message = describeToolRouteFailure(error.message, 0, error);
+    expect(message).not.toMatch(/private-payload-canary|no connected provider/i);
+    expect(message).toMatch(/unknown|not.*summari|not.*explain/i);
   });
 });
