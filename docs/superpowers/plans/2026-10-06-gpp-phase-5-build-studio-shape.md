@@ -34,11 +34,18 @@ configuration only (design §8).
 1. **Allowlist of changed paths.** Each PR runs:
    ```bash
    git diff --name-only origin/main...HEAD \
-     | grep -vE '^(apps/web/lib/gpp/|apps/web/lib/work-management/declared-flows/|apps/web/lib/work-management/generated/(declared-flows|[a-z0-9-]+\.flow)\.generated\.ts$|apps/web/scripts/build-gpp-shapes\.ts$|apps/web/lib/docs/doc-impact\.generated\.json$|docs/)' \
+     | grep -vE '^(packages/validators/src/gpp/gpp-shape-schema\.ts$|apps/web/lib/gpp/|apps/web/lib/work-management/declared-flows/|apps/web/lib/work-management/generated/(declared-flows|[a-z0-9-]+\.flow)\.generated\.ts$|apps/web/scripts/build-gpp-shapes\.ts$|apps/web/lib/docs/doc-impact\.generated\.json$|docs/)' \
      && echo "PATH OUTSIDE ALLOWLIST" || echo ok
    ```
    Any output line other than `ok` fails the PR. The PR body records the output. This replaces any
    definition of "a Build Studio file": nothing outside the allowlist can change.
+   **Founder amendment, 2026-10-31:** the single additional validator source path above
+   permits the minimal tool-name compatibility repair and its existing allowlisted tests.
+   The schema moved to the portable package after this plan was approved. Real registered
+   names `reviewDesignDoc`, `reviewBuildPlan` and `saveBuildEvidence` must be preserved;
+   permit internal capital letters rather than rename tools or suppress schema errors.
+   The founder explicitly authorized this scope extension in the delivery chat. No other
+   validator path, runtime grant, approval rule or execution behavior is changed.
 2. **No runtime reader.** Only tests and `apps/web/scripts/build-gpp-shapes.ts` import a
    declared-flow module. A test enforces it (design P7).
 3. **No enforcement.** `GPP_BINDING_ENFORCEMENT`, `GPP_BINDINGS` and `KNOWN_SHADOW_BINDINGS` are
@@ -382,8 +389,11 @@ per property; each failure names the file and row to update.
 - **P5 containment.** Environment-bound stages plus known `C-7/SANDBOX-CONTAINMENT` entries equal
   `BUILD_STUDIO_SANDBOX_STAGES`.
 - **P7 inertness.** Import scan over `app/` and `lib/` excluding tests and `scripts/`.
-- **P8 registry unchanged.** `listWorkShapes()` keys equal
-  `__fixtures__/work-shape-keys.pre-migration.json`; `GENERATED_WORK_SHAPES` unchanged.
+- **P8 registry unchanged by this delivery.** Record the before/after current-base registry
+  keys and shared artifact digests as publication evidence; preserve the older migration fixture.
+  Permanent tests assert that `build-studio` remains absent from the runtime shape registry and
+  `build-studio-sandbox` remains absent from the runtime binding/enforcement tables. They must
+  allow unrelated, independently governed shape and binding changes.
 - **Element map.** Every compiled element id has exactly one row, and the reverse.
 - **Binding draft.** `emitBindingRecords` over the compiled document returns exactly one draft:
   binding `build-studio-sandbox@1`, owning gate `gate:plan` (WWMD, `build-studio`), tools

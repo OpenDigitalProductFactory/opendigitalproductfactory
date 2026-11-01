@@ -136,6 +136,7 @@ export async function completeBacklogItemTransition(args: {
       closureFollowsDelivery = evaluated.closureFollowsDelivery;
       customerReported = evaluated.customerReported;
       return {
+        completionInputContext: evaluated.completionInputContext ?? null,
         governed: evaluated.governed,
         decision: evaluated.decision,
         anchorBacklogItemId: lockedItem.id,

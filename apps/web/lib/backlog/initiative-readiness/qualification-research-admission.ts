@@ -415,8 +415,8 @@ export type QualificationExecutionEvidence = {
 };
 
 /** A lease proves admission, not child execution or output. Historical
- * workroom-host receipts remain verifiable after their atomic write, but no
- * caller-supplied host result is accepted as a new attestation. */
+ * workroom-host rows remain auditable, but cannot close qualification without
+ * a trusted producer-owned child receipt. */
 export function qualificationExecutorAttestationAvailable(
   _executorMode: QualificationExperimentBinding["executorMode"],
 ): boolean {
@@ -501,56 +501,6 @@ export function qualificationExecutionEvidenceAllowed(input: {
     && completed <= lease.expiresAt.getTime()
     && completed - stateStarted <= input.binding.maxDurationMs
     && input.now.getTime() >= completed;
-}
-
-export function qualificationExecutionActivitiesMatch(input: {
-  binding: QualificationExperimentBinding; state: QualificationExperimentState;
-  itemId: string; activityIds: string[]; rows: unknown[]; accountablePrincipalRef: string | null;
-  proof: QualificationVerificationEvidence;
-  leases: unknown[];
-}): boolean {
-  if (input.activityIds.length === 0 || input.rows.length !== input.activityIds.length) return false;
-  const expected = new Set(input.activityIds);
-  const matches = input.rows.every((value) => {
-    const row = record(value);
-    const payload = record(row?.payload);
-    const backlogItem = record(row?.backlogItem);
-    const qualification = parseQualificationExecutionEvidence(payload?.qualification);
-    const lease = qualification ? input.leases.map(record).find((candidate) =>
-      candidate?.leaseId === qualification.leaseId && candidate?.evidenceRecordId === row?.id) : null;
-    const admittedAt = lease?.admittedAt instanceof Date ? lease.admittedAt : new Date(String(lease?.admittedAt ?? ""));
-    const expiresAt = lease?.expiresAt instanceof Date ? lease.expiresAt : new Date(String(lease?.expiresAt ?? ""));
-    const recordedAt = row?.recordedAt instanceof Date ? row.recordedAt : new Date(String(row?.recordedAt ?? ""));
-    const startedAt = qualification ? new Date(qualification.startedAt) : new Date("");
-    const completedAt = qualification ? new Date(qualification.completedAt) : new Date("");
-    return typeof row?.id === "string" && expected.delete(row.id)
-      && backlogItem?.itemId === input.itemId && payload?.evidenceKind === "test_pass"
-      && qualification !== null
-      && input.binding.executorMode === "workroom-host" && input.binding.phase === "verify"
-      && input.state.status === "started" && input.state.startCount === 1
-      && input.accountablePrincipalRef === input.binding.accountablePrincipalRef
-      && qualification.workroomId === input.binding.workroomId
-      && qualification.qualificationBindingDigest === qualificationBindingDigest(input.binding)
-      && qualification.platform === input.binding.requiredPlatform
-      && qualification.headSha.toLowerCase() === input.binding.headSha.toLowerCase()
-      && canonicalJson(qualification.testBlobIds) === canonicalJson(input.binding.candidate?.testBlobIds)
-      && qualificationEvidenceCommandMatchesBinding(qualification.command, input.binding.allowedPaths)
-      && lease?.environmentKey === "host-heavy-resource"
-      && lease?.purpose === `host-resource:qualification:${qualificationBindingDigest(input.binding)}`
-      && typeof lease?.claimKey === "string" && lease.claimKey.length > 0
-      && String(lease?.buildId ?? "").toLowerCase() === input.binding.headSha.toLowerCase()
-      && lease?.taskRunId === input.binding.workroomId && Boolean(lease?.ownerPid)
-      && typeof lease?.ownerProcessIdentity === "string" && lease.ownerProcessIdentity.length > 0
-      && Number.isFinite(admittedAt.getTime()) && Number.isFinite(expiresAt.getTime())
-      && Number.isFinite(recordedAt.getTime()) && Number.isFinite(startedAt.getTime()) && Number.isFinite(completedAt.getTime())
-      && startedAt.getTime() >= admittedAt.getTime() && completedAt.getTime() <= expiresAt.getTime()
-      && recordedAt.getTime() >= completedAt.getTime()
-      && qualification.command === input.proof.command
-      && qualification.outputDigest.toLowerCase() === input.proof.outputDigest.toLowerCase()
-      && qualification.startedAt === input.proof.startedAt
-      && qualification.completedAt === input.proof.completedAt;
-  });
-  return matches && expected.size === 0;
 }
 
 export function parseQualificationVerificationEvidence(value: unknown): QualificationVerificationEvidence | null {

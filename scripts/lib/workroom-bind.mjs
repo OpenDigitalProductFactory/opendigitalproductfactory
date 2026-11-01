@@ -29,6 +29,7 @@ import path from "node:path";
 import { mcpCall } from "./mcp-client.mjs";
 import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./mcp-credential.mjs";
 import { gitTextOrNull } from "./git.mjs";
+import { isMcpCredentialRefusal } from "../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs";
 
 export const DEFAULT_MCP_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 /** Must match packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs. */
@@ -257,13 +258,20 @@ export async function bindWorktreeToWorkroom({
         timeoutMs: BIND_TIMEOUT_MS,
       });
     } catch (err) {
+      // HTTP denials prove the authority answered; recovery must not treat
+      // them as an outage and enter the provisioning break-glass path.
+      if (isMcpCredentialRefusal(err)) {
+        return { status: "refused", code: err.code, reason: "The existing MCP identity was refused; use its governed credential or grant remedy." };
+      }
       return { status: "unavailable", reason: err?.message ?? String(err) };
     }
     if (!(payload?.success === false || payload?.error)) {
       refusal = null;
       break;
     }
-    refusal ??= { status: "refused", reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
+    // The code lets a caller tell an authorization answer (e.g.
+    // worktree_provision_not_admitted, BI-D1FB8C4D) from an outage.
+    refusal ??= { status: "refused", code: payload.error ?? null, reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
     if (payload.error !== "branch_occupied") break;
   }
   if (refusal) return refusal;
@@ -291,7 +299,9 @@ export async function bindWorktreeToWorkroom({
   } catch (err) {
     // The claim EXISTS; only the cache failed. Say so rather than reporting a
     // failure to bind — the guard will simply re-derive it.
-    return { status: "bound", capsuleId: marker.capsuleId, reason: `claim recorded, marker not cached: ${err?.message ?? err}` };
+    return { status: "bound", capsuleId: marker.capsuleId, marker, reason: `claim recorded, marker not cached: ${err?.message ?? err}` };
   }
-  return { status: "bound", capsuleId: marker.capsuleId };
+  // The marker is returned so a caller that bound before the worktree existed
+  // (no gitDir yet) can cache it once the checkout is created.
+  return { status: "bound", capsuleId: marker.capsuleId, marker };
 }

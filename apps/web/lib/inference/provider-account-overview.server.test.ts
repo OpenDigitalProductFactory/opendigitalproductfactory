@@ -17,6 +17,26 @@ const copy = { companyWork: "Company work", publicOnly: "Public only", workBlock
 const account = { id: "connection-db", connectionId: "provider-account-team", providerId: "codex", isDefault: false, label: "Team", status: "active", credential: null, accessibleModelIds: [], modelsVerifiedAt: null, lastReviewedAt: null, supplierContractId: null } as unknown as ProviderAccountRow;
 beforeEach(() => { vi.resetAllMocks(); mocks.capacity.mockResolvedValue(new Map()); mocks.accounts.mockResolvedValue([account]); mocks.business.mockResolvedValue({ businessContextConfigured: true }); mocks.connections.mockResolvedValue([{ ...account, provider: pw.provider, trustEvidence: [], supplierContract: null }]); mocks.evidence.mockReturnValue({ posture: { connectionId: account.connectionId } }); mocks.review.mockReturnValue({ scope: "public-only", headline: "Review terms" }); });
 describe("provider account presentation truth", () => {
+  it.each(["local", "openai"])("keeps %s account restrictions visible without unrelated subscription controls", async providerId => {
+    const selected = { ...account, providerId, connectionId: `provider-default-${providerId}`, isDefault: true,
+      credential: { hasUsableMaterial: true } };
+    mocks.accounts.mockResolvedValue([selected]);
+    const controls = new Map([[providerId, { eligibility: { label: "Check account settings" },
+      restrictions: [{ key: "connection", summary: "Review this account's connection", until: null }] }]]) as never;
+    const [row] = await loadProviderAccountOverview({ providers: [{ provider: { providerId, name: providerId }, credential: null } as ProviderWithCredential],
+      modelSummaries: new Map(), controls, resolvesPhases: new Map(), copy });
+    expect(row.resetSummary).toContain("Review this account's connection");
+    expect(row.quotaRecovery).toBeUndefined();
+  });
+  it.each(["codex", "chatgpt", "anthropic-sub"])("retains recovery or provider usage for the %s subscription", async providerId => {
+    mocks.accounts.mockResolvedValue([{ ...account, providerId, connectionId: `provider-default-${providerId}`,
+      isDefault: true, status: "paused" }]);
+    const [row] = await loadProviderAccountOverview({ providers: [{ provider: { providerId, name: providerId }, credential: null } as ProviderWithCredential],
+      modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy });
+    expect(row.quotaRecovery).toBeDefined();
+    expect(row.quotaRecovery?.usageUrl).toMatch(/^https:\/\//);
+    expect(row.quotaRecovery?.canCheck).toBe(false);
+  });
   it("shows owned recovery and shared quota without borrowing the default account's authentication failure", async () => {
     mocks.capacity.mockResolvedValue(new Map([[`codex:account:${account.connectionId}`, {
       state: "billing_action_required", safeSummary: "This account needs credits.", action: "add_credits_or_plan", isHumanActionRequired: true,

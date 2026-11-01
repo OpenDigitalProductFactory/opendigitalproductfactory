@@ -179,6 +179,23 @@ changed definition inventory requires a fresh traversal. Whole pages fit the
 existing result budget; a refusal never advances past unseen definitions.
 The full contract is in [Workroom review profiles](workroom-review-profile-contract.md).
 
+`get_workroom` also supports `continuationMode: "bounded"` under fresh room
+content admission. Use `continuationTaskId` for an exact scheduled task or
+`continuationStageKey` for a current manual branch; the selectors are mutually
+exclusive. Task reads check the task's own checkpoint against the current room,
+branch, source and lease. They do not substitute the room's latest checkpoint.
+Pass the returned `continuationVersion` on a later read to detect changed facts
+or authority. A stale version, mismatched task binding or oversized mandatory
+brief returns a refusal; none authorizes replay. Read this mode separately from
+activity, review and cursor queries. The response shares native assignment facts,
+excludes the originating transcript and grants no execution authority. Manual
+reads can include `advisoryCheckpoint`, retaining the saved next action and risks
+with provenance. Its `head-matches` status checks only the recorded commit head;
+the existing carrier has no repository snapshot. It remains room-scoped and
+unbound to any graph stage. Scheduled-task reads exclude it, and stale manual
+notes require reconciliation. See
+[bounded assignment and continuation briefs](workroom-cycle-continuity.md#bounded-assignment-and-continuation-briefs).
+
 `list_workrooms` accepts `headBranch` and `pullRequestNumber` so an assistant
 asked to take over a PR can find its room (BI-679D2BF6). For an OAuth
 assistant, a lookup also matches the person's rooms that another assistant
@@ -232,15 +249,17 @@ Three properties make the binding honest rather than merely present. The id is *
 
 This adds no approval store and grants no implementation authority. The ordinary stage tool set is intersected with the phase's narrower set: Prepare may edit only the named test/helper paths and cannot run tests; Verify may run the exact qualification and cannot edit or auto-fix. Candidate and verification evidence must carry the binding digest and phase-specific immutable results. Settlement records the evidence id on the same Workroom state, so terminal recovery can advance from a settled Prepare only after independent review of its exact candidate, and can use only a settled positive Verify result when constructing the ordinary research writer path.
 
-Verify remains fail-closed for both executor modes. A valid qualification claim
-can derive lease purpose, Workroom, source head, platform and command from a
-signed token, but those bindings prove admission rather than execution. The
-current host runner and a direct MCP caller use the same credential, so
-`record_execution_evidence` cannot authenticate which one observed a child
-process and refuses host qualification claims. Sandbox qualification remains
-non-evidence for the same missing-producer reason. The signed native Edge
-action channel is not a substitute: its closed allow-list does not expose a
-qualification-test action or arbitrary command surface.
+Verify remains fail-closed for caller-authored executor evidence. A valid
+qualification claim can derive lease purpose, Workroom, source head, platform
+and command from a signed token, but those bindings prove admission rather
+than child execution. Historical `workroom-host` rows therefore remain
+audit-only even when every stored field matches; sandbox-labelled and other
+caller-authored rows likewise contribute no evidence. Terminal qualification
+can settle only through the machine-authenticated native Edge result path,
+which validates the exact immutable action and phase binding. Its capability
+is closed and bounded rather than an arbitrary command surface. A valid Edge
+result is still qualification evidence, not a research PASS: the separately
+governed research writer must persist the normal research receipt.
 
 The carrier and state machine are defined in [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts), enforced by [Workroom storage](../../apps/web/lib/work-capsules/work-capsule-store.ts), and described in the [initiative-readiness runbook](initiative-readiness-runbook.md#bounded-qualification-research-admission).
 

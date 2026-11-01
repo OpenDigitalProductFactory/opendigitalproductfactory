@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": ["Provider account capacity read model", "Routing capacity snapshots", "Existing scheduled recovery job"],
+  "migration": {
+    "name": "20261030015000_provider_execution_proof",
+    "backfill": "None. Existing rows retain NULL; one nullable JSONB column is added to the existing capacity owner. No table, data copy, account rewrite or credential migration.",
+    "observationMethod": "Source/schema inspection. Live row counts were not read: privileged database inspection is not authorized to this caller. The migration is additive and independent of row content; no invented counts are supplied.",
+    "rollback": "Revert readers/writers through protected delivery and retain the nullable column and existing evidence. Do not drop populated evidence or erase quota history. Disable the existing per-account recovery job through supported controls if required."
+  },
+  "tests": ["apps/web/lib/routing/provider-capacity/execution-proof.test.ts", "apps/web/lib/routing/provider-capacity/execution-proof.db.test.ts", "apps/web/lib/inference/subscription-quota-recovery.test.ts"],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:provider-capacity-status",
+      "prismaModel": "ProviderCapacityStatus",
+      "lifecycleDisposition": "Existing operational/domain retention and confidential classification remain authoritative. One proof per owned capacity row is replaced by a newer exact observation; broad quota and CLI observations remain separate and retained. Account deletion retains the existing cascade. Expired or invalid proof confers no eligibility and does not need a data rewrite.",
+      "fields": [{
+        "fieldId": "data:provider-capacity-status#executionProof",
+        "resolution": "governed",
+        "reason": "Existing account health has no exact model/catalog/endpoint/quota-generation binding; route and adapter telemetry lack the required account and credential generations. The existing capacity owner is extended instead of adding a ledger.",
+        "provenance": "BI-D81CCC24; docs/superpowers/specs/2026-10-29-provider-quota-recovery-design.md CT-QUOTA-OBSERVATION",
+        "flags": ["sensitive"],
+        "fieldPolicy": "Strict versioned object: fixed provider/account/model/adapter identifiers, one-way configuration/generation fingerprints, observation and expiry times only. No credentials, raw provider body, business text or grant. NULL, empty, widened, stale or changed payloads grant nothing. Ordinary success cannot renew proof age; failures invalidate it."
+      }]
+    }
+  ]
+}
