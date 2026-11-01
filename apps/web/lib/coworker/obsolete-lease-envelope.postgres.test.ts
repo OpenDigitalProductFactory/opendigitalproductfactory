@@ -12,6 +12,7 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TE
 const schema = `review_obsolete_${randomUUID().replaceAll("-", "")}`;
 const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution"];
 let now = new Date();
+let transactionErrors: unknown[] = [];
 function barrier() {
   let open!: () => void;
   const promise = new Promise<void>(resolve => { open = resolve; });
@@ -31,6 +32,7 @@ describe.skipIf(!url)("obsolete release settlement on isolated leased PostgreSQL
   });
   beforeEach(async () => {
     now = new Date();
+    transactionErrors = [];
     await fixture.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease"`);
     const { toolExecutions, argsJson, ...envelope } = obsoleteEnvelope();
     await fixture.db.coworkerActionEnvelope.create({ data: { ...envelope, argsJson: argsJson as any,
@@ -39,8 +41,10 @@ describe.skipIf(!url)("obsolete release settlement on isolated leased PostgreSQL
     await fixture.db.toolExecution.create({ data: { ...toolExecutions[0], parameters: toolExecutions[0].parameters as any,
       result: toolExecutions[0].result as any, threadId: "", executionMode: "external-jsonrpc" } });
     const { admissionHistoryVersion, firstAdmittedAt, ...target } = obsoleteTarget();
-    await fixture.db.nonProductionEnvironmentLease.create({ data: { ...target, status: "queued", releasedAt: null,
+    const fresh = await fixture.db.nonProductionEnvironmentLease.create({ data: { ...target, status: "queued", releasedAt: null,
       ownerProvider: "codex", purpose: "synthetic isolated race test", url: "http://fixture.invalid", ports: [], expiresAt: now } });
+    expect(fresh, "Fresh fixture must acquire database-owned birth history")
+      .toMatchObject({ admissionHistoryVersion: 1, firstAdmittedAt: null });
     now = new Date();
     await fixture.db.nonProductionEnvironmentLease.update({ where: { leaseId: "NPEL-unused" },
       data: { status: "cancelled", releasedAt: now } });
@@ -49,7 +53,8 @@ describe.skipIf(!url)("obsolete release settlement on isolated leased PostgreSQL
   const port = (transform?: (tx: any) => any): ObsoleteReleaseDb => ({
     coworkerActionEnvelope: fixture.db.coworkerActionEnvelope,
     nonProductionEnvironmentLease: fixture.db.nonProductionEnvironmentLease,
-    $transaction: (run: any) => fixture.db.$transaction(tx => run(transform ? transform(tx) : tx), { timeout: 15_000 }),
+    $transaction: (run: any) => fixture.db.$transaction(tx => run(transform ? transform(tx) : tx), { timeout: 15_000 })
+      .catch(error => { transactionErrors.push(error); throw error; }),
   } as unknown as ObsoleteReleaseDb);
   async function audit() {
     return fixture.db.toolExecution.findMany({ orderBy: { id: "asc" } });
@@ -57,7 +62,9 @@ describe.skipIf(!url)("obsolete release settlement on isolated leased PostgreSQL
 
   it("cancels the exact obsolete request without authorizing or dispatching a handler", async () => {
     const before = await audit(), original = await fixture.db.coworkerActionEnvelope.findFirstOrThrow();
-    expect(await settleObsoleteLeaseReleaseEnvelopes(port(), now)).toMatchObject({ cancelled: 1, inconclusive: 0 });
+    const result = await settleObsoleteLeaseReleaseEnvelopes(port(), now);
+    expect(transactionErrors).toEqual([]);
+    expect(result).toMatchObject({ cancelled: 1, inconclusive: 0 });
     expect(await fixture.db.coworkerActionEnvelope.findFirstOrThrow()).toEqual({ ...original, status: "cancelled", resolvedAt: now });
     expect(await audit()).toEqual(before); // Zero new handler/audit executions.
   });

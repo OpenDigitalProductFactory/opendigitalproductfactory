@@ -37,6 +37,7 @@ async function realClaim(f: Fixture, queued: boolean) {
     ownerProvider: "codex", ownerSessionId: "this-session", claimKey: `gate:${randomUUID().replaceAll("-", "").repeat(2)}`,
     purpose: "Isolated admission-history producer test", url: "http://fixture.invalid", ports: [],
     expiresAt: new Date(now.getTime() + 120_000), requestedTtlMs: 120_000,
+    waitDeadlineAt: new Date(now.getTime() + 120_000),
     slotManifestVersion: 1, hostPressure: pressure, capacityBroker: async () => pressure, now });
 }
 async function parked(f: Fixture, leaseId: string) {
