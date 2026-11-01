@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # DPF consumer cutover to independently maintained components
 
 Status: proposed; source design, not implementation or release admission.

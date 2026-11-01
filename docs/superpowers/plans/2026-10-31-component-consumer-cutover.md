@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # DPF component consumer-cutover planning
 
 Status: proposed; independent client assessment clear; native review pending.
