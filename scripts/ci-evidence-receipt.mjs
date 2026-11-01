@@ -42,6 +42,8 @@ const REUSABLE_HEAVY_GATE_IDS = [
   "build",
   "ux-route-sweep-runtime",
   "ux-route-sweep",
+  "foreground-recovery-runtime",
+  "foreground-recovery",
   "adp-integration-tests",
 ];
 

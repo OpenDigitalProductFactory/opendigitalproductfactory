@@ -1,13 +1,30 @@
 import type { PrismaClient } from "../../../packages/db/generated/client/client";
 import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { isRecord } from "../lib/shared/coerce";
 import { readWorkroomPostureClaim } from "../lib/work-management/workroom-posture-claim";
 import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
 import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
+
+/** One case inventory shared with the existing diff-impact planner. */
+export function foregroundRequiredCaseIds(): string[] {
+  const policy: unknown = JSON.parse(readFileSync(new URL("../../../config/ci-evidence-policy.json", import.meta.url), "utf8"));
+  const scenario = isRecord(policy) && Array.isArray(policy.runtimeScenarios)
+    ? policy.runtimeScenarios.find(value => isRecord(value) && value.id === "foreground-recovery") : null;
+  const cases: unknown = isRecord(scenario) ? scenario.requiredCaseIds : null;
+  if (!Array.isArray(cases) || cases.length === 0 || cases.some(value => typeof value !== "string" || !/^[a-z][a-z0-9-]+$/.test(value))
+    || new Set(cases).size !== cases.length) throw new Error("Invalid required foreground cases inventory");
+  return cases as string[];
+}
+
+export function assertForegroundCasesExecuted(required: string[], executed: string[]) {
+  if (required.length === 0 || new Set(required).size !== required.length || new Set(executed).size !== executed.length
+    || required.length !== executed.length || required.some(id => !executed.includes(id)))
+    throw new Error("Missing or invalid required foreground cases evidence");
+}
 
 /** Explicit opt-in to the existing disposable GitHub runtime, before any I/O. */
 export function assertForegroundFixtureRuntime(env: Readonly<Record<string, string | undefined>>) {

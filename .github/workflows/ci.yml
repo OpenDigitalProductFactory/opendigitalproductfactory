@@ -47,6 +47,7 @@ jobs:
     outputs:
       heavy: ${{ steps.decide.outputs.heavy }}
       portal_ux_required: ${{ steps.decide.outputs.portal_ux_required }}
+      foreground_recovery_required: ${{ steps.decide.outputs.foreground_recovery_required }}
       evidence_plan_digest: ${{ steps.decide.outputs.evidence_plan_digest }}
       evidence_tier: ${{ steps.decide.outputs.evidence_tier }}
     steps:
@@ -890,6 +891,50 @@ jobs:
       reuse_current_run_build: ${{ needs.changes.outputs.heavy == 'true' }}
       workers: "2"
 
+  # Conformance shares the qualified runtime/build, but retains its own result.
+  foreground-recovery-runtime:
+    name: Foreground Recovery Runtime
+    needs: [changes, exact-tree-evidence-shadow]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (github.event_name != 'push' ||
+      needs.exact-tree-evidence-shadow.outputs.reusable != 'true')
+    uses: ./.github/workflows/ux-route-sweep.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      scenario: foreground-recovery
+      run_sweep: ${{ needs.changes.outputs.foreground_recovery_required != 'false' }}
+      reuse_current_run_build: ${{ needs.changes.outputs.heavy == 'true' }}
+      workers: "2"
+
+  foreground-recovery:
+    name: Foreground Recovery Conformance
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [changes, exact-tree-evidence-shadow, foreground-recovery-runtime]
+    steps:
+      - name: Require the selected recovery journey
+        env:
+          FOREGROUND_RECOVERY_REQUIRED: ${{ needs.changes.outputs.foreground_recovery_required }}
+          REUSE_EXACT_TREE: ${{ needs.exact-tree-evidence-shadow.outputs.reusable }}
+          RUNTIME_RESULT: ${{ needs.foreground-recovery-runtime.result }}
+        run: |
+          if [ "$REUSE_EXACT_TREE" = "true" ] || [ "$FOREGROUND_RECOVERY_REQUIRED" = "false" ]; then
+            if [ "$RUNTIME_RESULT" != "skipped" ]; then
+              echo "::error::Recovery runtime concluded $RUNTIME_RESULT instead of the planned skip"
+              exit 1
+            fi
+            echo "Recovery runtime omitted by explicit scope or validated exact-tree receipt"
+            exit 0
+          fi
+          if [ "$RUNTIME_RESULT" != "success" ]; then
+            echo "::error::Required recovery runtime concluded $RUNTIME_RESULT"
+            exit 1
+          fi
+
   # Preserve the stable branch-protection context even though the runtime now
   # lives in a reusable workflow. An explicit non-portal classification may skip
   # the runtime before runner allocation; every other skip/failure is red.
@@ -1085,6 +1130,8 @@ jobs:
       - build
       - ux-route-sweep-runtime
       - ux-route-sweep
+      - foreground-recovery-runtime
+      - foreground-recovery
       - dockerfile-node-version
       - compose-image-pins
       - edge-footprint-bom

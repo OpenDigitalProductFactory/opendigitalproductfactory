@@ -52,6 +52,50 @@ function escalationCodes(plan) {
 }
 
 describe("createEvidencePlan", () => {
+  it("selects foreground recovery for each covered execution boundary", () => {
+    for (const path of [
+      "apps/web/app/api/agent/send/route.ts",
+      "apps/web/lib/agent/foreground-work-publication.ts",
+      "apps/web/lib/agent/foreground-work-context.ts",
+      "apps/web/lib/queue/functions/agent-task-dispatch.ts",
+      "apps/web/lib/tak/autonomous-work-run.ts",
+      "apps/web/lib/routing/governed-inference-deadline.ts",
+      "apps/web/lib/shared/task-execution-fence.ts",
+      "apps/web/lib/mcp-task-capacity-contract.ts",
+      "apps/web/lib/govern/current-user-context.ts",
+      "apps/web/lib/inference/ai-inference.ts",
+      "apps/web/lib/actions/coworker-response-persistence.ts",
+      "apps/web/lib/tak/agentic-loop.ts",
+      "apps/web/lib/agent-form-assist.ts",
+      "apps/web/lib/coworker/agent-coworker-core.ts",
+      "apps/web/scripts/foreground-work-recovery-verification.ts",
+    ]) {
+      const test = path.replace(/\.ts$/, ".test.ts");
+      const plan = createEvidencePlan(input({ changedFiles: [path, test], knownTests: [test],
+        codeGraphAdvice: trustedGraph(), relatedTestsBySource: { [path]: [test] } }));
+      assert.equal(plan.fullSuite, false, `covered path must select without an escalation: ${path}`);
+      assert.ok(plan.runtimeScenarios?.some(scenario => scenario.id === "foreground-recovery"
+        && scenario.requiredCaseIds.includes("stored-result-provenance")), path);
+    }
+  });
+
+  it("does not require foreground recovery for an unrelated trusted PR", () => {
+    const path = "apps/web/lib/example.ts", test = "apps/web/lib/example.test.ts";
+    const plan = createEvidencePlan(input({ changedFiles: [path, test], knownTests: [test],
+      codeGraphAdvice: trustedGraph(), relatedTestsBySource: { [path]: [test] } }));
+    assert.equal(plan.fullSuite, false);
+    assert.deepEqual(plan.runtimeScenarios, []);
+  });
+
+  it("requires the runtime journey for exhaustive lifecycles and unsafe scope", () => {
+    for (const eventName of ["merge_group", "push", "workflow_dispatch", "schedule"]) {
+      const plan = createEvidencePlan(input({ eventName, changedFiles: ["README.md"] }));
+      assert.ok(plan.runtimeScenarios?.some(scenario => scenario.id === "foreground-recovery"), eventName);
+    }
+    const unknown = createEvidencePlan(input({ changedFiles: [] }));
+    assert.ok(unknown.runtimeScenarios?.some(scenario => scenario.id === "foreground-recovery"));
+  });
+
   // Python was invisible to the classifier: neither convention matched, so any
   // change touching a .py file fell through to `unmapped-file` and escalated the
   // whole run to exhaustive — which switches on the portal UX sweep for a diff

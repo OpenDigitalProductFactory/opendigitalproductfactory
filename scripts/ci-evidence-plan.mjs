@@ -149,6 +149,8 @@ export function githubOutputsForPlan(plan) {
   return [
     `heavy=${heavy}`,
     `portal_ux_required=${portalUxRequired}`,
+    `foreground_recovery_required=${!Array.isArray(plan.runtimeScenarios)
+      || plan.runtimeScenarios.some(scenario => scenario.id === "foreground-recovery")}`,
     `mobile=${plan.scope.mobile}`,
     `evidence_tier=${plan.evidenceTier}`,
     `evidence_plan_digest=${plan.digest}`,

@@ -400,7 +400,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ux-route-budget-report
+          name: ${{ inputs.scenario == 'foreground-recovery' && 'foreground-recovery-report' || 'ux-route-budget-report' }}
           path: |
             apps/web/lib/ux-budget/route-budget-report.json
             apps/web/test-results/ux-route-sweep/route-sweep-execution.json
@@ -417,6 +417,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ux-route-sweep-failure-diagnostics
+          name: ${{ inputs.scenario == 'foreground-recovery' && 'foreground-recovery-failure-diagnostics' || 'ux-route-sweep-failure-diagnostics' }}
           path: apps/web/test-results/ux-route-sweep/screenshots
           if-no-files-found: ignore

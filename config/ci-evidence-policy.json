@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "policyVersion": "2026-08-24.2",
-  "plannerVersion": "1.1.0",
+  "policyVersion": "2026-11-01.1",
+  "plannerVersion": "1.2.0",
   "mode": "authoritative-docs",
   "selectionThresholdPercent": 70,
   "graphAdviceSchemaVersion": 1,
@@ -23,6 +23,44 @@
     "docs-integrity",
     "repo-guards",
     "secrets"
+  ],
+  "runtimeScenarios": [
+    {
+      "id": "foreground-recovery",
+      "requiredCaseIds": [
+        "authenticated-acceptance",
+        "capacity-wait",
+        "waiting-duplicate",
+        "reload-retention",
+        "server-recovery",
+        "request-authority-preserved",
+        "stored-result-provenance",
+        "terminal-duplicate",
+        "no-unrelated-dispatch",
+        "result-reload",
+        "settled-cleanup"
+      ],
+      "patterns": [
+        "^apps/web/app/api/agent/(send|cancel)/",
+        "^apps/web/components/agent/",
+        "^apps/web/lib/agent(/|-)",
+        "^apps/web/lib/actions/agent-coworker",
+        "^apps/web/lib/actions/coworker-response-persistence",
+        "^apps/web/lib/coworker/",
+        "^apps/web/lib/tak/",
+        "^apps/web/lib/shared/(task-execution-fence|execution-uncertainty)",
+        "^apps/web/lib/mcp-task-capacity-contract",
+        "^apps/web/lib/govern/current-user-context",
+        "^apps/web/lib/actions/shared/guards",
+        "^apps/web/lib/(routing|inference)/",
+        "^apps/web/lib/build/inference-retry",
+        "^apps/web/lib/(jobs|queue|govern/authority)/",
+        "^apps/web/scripts/foreground-work-recovery-",
+        "^\\.github/workflows/(ci|ux-route-sweep)\\.yml$",
+        "^config/ci-evidence-policy\\.json$",
+        "^scripts/(lib/)?ci-evidence-"
+      ]
+    }
   ],
   "patterns": {
     "docs": [

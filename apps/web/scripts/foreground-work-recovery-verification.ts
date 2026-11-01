@@ -10,6 +10,7 @@ import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
 import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
 import { assertForegroundFixtureRuntime, prepareForegroundFixtures, cleanupForegroundFixtures,
   assertForegroundBackgroundQuiet, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport, type ForegroundFixture } from "./foreground-work-recovery-fixtures";
+import { foregroundRequiredCaseIds, assertForegroundCasesExecuted } from "./foreground-work-recovery-fixtures";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/foreground-work-recovery");
@@ -20,6 +21,7 @@ const pause = (ms: number) => new Promise(resolveWait => setTimeout(resolveWait,
 
 export async function verifyForegroundRecovery() {
   const runtime = assertForegroundFixtureRuntime(process.env);
+  const expectedCaseIds = foregroundRequiredCaseIds();
   check(execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim() === runtime.sourceSha,
     "Declared source does not match the exact runtime checkout");
   mkdirSync(OUT, { recursive: true });
@@ -35,6 +37,9 @@ export async function verifyForegroundRecovery() {
   const cleanupFailures: Array<{ resource: string; error: string }> = [];
   const evidence: Record<string, unknown> = { ...runtime, syntheticProvider: true, realProviderCapacity: "unrun", businessAcceptance: "unrun" };
   const snapshots: Array<Record<string, unknown>> = [];
+  const executedCaseIds: string[] = [];
+  evidence.expectedCaseIds = expectedCaseIds;
+  evidence.executedCaseIds = executedCaseIds;
   const write = () => writeFileSync(resolve(OUT, "execution.json"), JSON.stringify({ ...evidence,
     status: completed && !failure && cleanup === "completed" ? "passed" : failure ? "failed" : "running",
     failure, cleanup, fixtureSettlement, cleanupFailures, snapshots,
@@ -141,12 +146,15 @@ export async function verifyForegroundRecovery() {
     check(savedRequest.taskRunId === taskRunId && savedRequest.threadId === requestData.threadId && savedRequest.content === prompt,
       "The stored request is not associated with its acknowledged job");
     check(transport.counts().requests > 0, "No actual request reached the synthetic provider");
+    executedCaseIds.push("authenticated-acceptance", "capacity-wait");
     evidence.waitingDuplicateDelivery = await duplicateSubmission();
+    executedCaseIds.push("waiting-duplicate");
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByText(prompt, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
     await page.screenshot({ path: resolve(OUT, "retained-capacity-wait.png"), fullPage: true });
     const reloaded = await read();
     check(reloaded.row.taskRunId === taskRunId && reloaded.row.status === "input-required", "Reload did not retain the same waiting job");
+    executedCaseIds.push("reload-retention");
     const waitObservedAt = new Date();
     evidence.wait = { observedAt: waitObservedAt.toISOString(), progress: reloaded.progress, reloadRetained: true, duplicateRetained: true };
     transport.recover(); // No further client submission until the saved result exists.
@@ -154,6 +162,7 @@ export async function verifyForegroundRecovery() {
     evidence.requestMetadataAfterRecovery = result.row.a2aMetadata;
     write();
     check(JSON.stringify(result.row.a2aMetadata) === JSON.stringify(originalMetadata), "Recovery changed the original request authority or deadline");
+    executedCaseIds.push("request-authority-preserved");
     const message = await prisma.agentMessage.findUniqueOrThrow({ where: { id: String(result.progress.resultMessageId) } });
     const digest = createHash("sha256").update(message.content).digest("hex");
     check(message.role === "assistant" && message.taskRunId === taskRunId && message.threadId === savedRequest.threadId
@@ -162,23 +171,28 @@ export async function verifyForegroundRecovery() {
     check(Boolean(message.responseAttemptId) && message.responseContentDigest === digest, "Stored response provenance is missing or does not match its bytes");
     check(await prisma.agentMessage.count({ where: { taskRunId, role: "user" } }) === 1
       && await prisma.agentMessage.count({ where: { taskRunId, role: "assistant" } }) === 1, "Recovery duplicated the user request or assistant result");
+    executedCaseIds.push("stored-result-provenance");
     const jobs = await prisma.jobRun.findMany({ where: { functionKey: "agent/foreground-work-run", event: { path: ["data", "taskRunId"], equals: taskRunId } },
       select: { id: true, status: true, createdAt: true, finishedAt: true, output: true } });
     const reconciliation = await prisma.jobRun.findMany({ where: { functionKey: "agent/task-dispatch", createdAt: { gte: waitObservedAt }, status: "completed" },
       select: { id: true, status: true, steps: { where: { stepKey: "reconcile-retained-foreground-work" }, select: { stepKey: true, output: true } } } });
     check(jobs.length >= 2 && jobs.some(job => job.status === "completed") && hasSuccessfulForegroundReconciliation(reconciliation),
       "The result has no actual owned-queue and recurring reconciliation evidence");
+    executedCaseIds.push("server-recovery");
     const countBefore = transport.counts().requests;
     evidence.terminalDuplicateDelivery = await duplicateSubmission();
     check(transport.counts().requests === countBefore && await prisma.agentMessage.count({ where: { taskRunId, role: "assistant" } }) === 1,
       "Repeating a completed request executed inference or wrote another result");
+    executedCaseIds.push("terminal-duplicate");
     await assertForegroundBackgroundQuiet(prisma, [taskRunId]);
     check(await prisma.taskRun.count({ where: { createdAt: { gte: admittedAt }, taskRunId: { not: taskRunId } } }) === 0
       && await prisma.jobRun.count({ where: { createdAt: { gte: admittedAt }, functionKey: { notIn: ["agent/foreground-work-run", "agent/task-dispatch"] } } }) === 0
       && await prisma.jobEvent.count({ where: { name: FOREGROUND_WORK_EVENT, data: { path: ["taskRunId"], not: taskRunId } } }) === 0
       && transport.counts().rejected === 0, "Unrelated work was dispatched during the isolated scenario");
+    executedCaseIds.push("no-unrelated-dispatch");
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByText(answer, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+    executedCaseIds.push("result-reload");
     await page.screenshot({ path: resolve(OUT, "recovered-result.png"), fullPage: true });
     evidence.result = { taskRunId, messageId: message.id, contentDigest: digest, responseAttemptId: message.responseAttemptId,
       responseScope: message.responseScope, jobs, reconciliation, noResubmissionAfterCapacityReturn: true, duplicateResultStable: true };
@@ -232,6 +246,11 @@ export async function verifyForegroundRecovery() {
       if (cleanupFailures.length) {
         if (cleanup === "completed") cleanup = "resource-cleanup-failed";
         failure ??= "Fixture runtime resource cleanup failed";
+      }
+      if (cleanup === "completed") executedCaseIds.push("settled-cleanup");
+      if (completed && !failure) {
+        try { assertForegroundCasesExecuted(expectedCaseIds, executedCaseIds); }
+        catch (error) { failure = safeError(error); }
       }
       write();
     }

@@ -53,6 +53,7 @@ describe("exact-tree CI receipt reuse workflow", () => {
       "test-packages",
       "build",
       "ux-route-sweep-runtime",
+      "foreground-recovery-runtime",
       "adp-integration-tests",
     ];
     for (const job of heavyJobs) {

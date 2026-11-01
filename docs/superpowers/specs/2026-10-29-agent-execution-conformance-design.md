@@ -329,3 +329,21 @@ Four provider requests, zero rejected requests and completed fixture/resource
 cleanup are recorded; this is not an acceptance pass. Preserve the full equality
 assertion and retain both synthetic metadata observations before it on the next
 run so the changed fields can be diagnosed without guessing or relaxing scope.
+
+The runtime journey's required cases and covered paths are recorded in the
+existing `config/ci-evidence-policy.json`. The evidence planner includes selected
+runtime scenarios in its content digest and emits a fail-closed recovery flag.
+Entry, authority, dispatch, result, provider and recovery changes select the
+journey; exhaustive or uncertain scope also selects it. An unrelated trusted PR
+is the omission control. The existing reusable runtime consumes the current-run
+production build, with separate scenario concurrency and artifact names so it
+can coexist with the route sweep. A required skipped/failed journey makes the
+existing Merge Readiness aggregate fail. Accepted exact-tree receipts include
+the recovery runtime and wrapper; no new approval step or live runtime exists.
+
+The served evidence reports expected and actually executed case IDs from that
+same inventory. Each executed ID is added only after its real assertion, and
+success requires exactly all cases including settled cleanup. Missing, duplicate,
+unexpected or empty coverage fails. Source controls first failed for missing
+selection, case completeness and mandatory workflow wiring, then passed. This
+source wiring is not itself evidence that any served scenario completed.

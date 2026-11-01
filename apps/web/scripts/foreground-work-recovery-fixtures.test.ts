@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 import { endpointGenuinelyClearsSensitivity } from "../lib/routing/sensitivity-clearance";
 import type { EndpointManifest } from "../lib/routing/types";
+import * as fixtureHelpers from "./foreground-work-recovery-fixtures";
 import { assertForegroundFixtureRuntime, assertForegroundBackgroundQuiet, prepareForegroundFixtures,
   cleanupForegroundFixtures, foregroundIsolationFailure, foregroundSeedScheduleDefinitions, prepareForegroundTarget,
   hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
@@ -15,6 +17,22 @@ const admitted = {
 };
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 const enable = () => { for (const [key, value] of Object.entries(admitted)) vi.stubEnv(key, value); };
+
+describe("required served journey coverage", () => {
+  const expected = ["accepted", "recovered", "settled"];
+  it("accepts exactly the cases actually executed, independent of order", () => {
+    expect(() => fixtureHelpers.assertForegroundCasesExecuted(expected, ["settled", "accepted", "recovered"])).not.toThrow();
+    expect(fixtureHelpers.foregroundRequiredCaseIds()).toContain("stored-result-provenance");
+  });
+  it.each([
+    [expected, ["accepted", "settled"]],
+    [expected, ["accepted", "accepted", "settled"]],
+    [expected, [...expected, "invented"]],
+    [[], []],
+  ])("rejects incomplete, duplicated, extra or empty case evidence", (required, executed) => {
+    expect(() => fixtureHelpers.assertForegroundCasesExecuted(required, executed)).toThrow(/required foreground cases/);
+  });
+});
 
 describe("foreground workflow fixture target", () => {
   it("admits only the explicitly selected isolated CI target", () => {
@@ -186,6 +204,37 @@ it("checks isolation early and again immediately before normal boot", () => {
   expect(checks.length).toBeGreaterThanOrEqual(2);
   expect(checks[0]).toBeLessThan(steps.findIndex(step => step.name === "Build the portal"));
   expect(checks.at(-1)).toBe(steps.findIndex(step => step.name === "Start the portal") - 1);
+});
+
+describe("required recovery workflow", () => {
+  const ci = parse(readFileSync(new URL("../../../.github/workflows/ci.yml", import.meta.url), "utf8"));
+  const ux = parse(readFileSync(new URL("../../../.github/workflows/ux-route-sweep.yml", import.meta.url), "utf8"));
+  it("runs the selected journey with a separate artifact and existing production build", () => {
+    const job = ci.jobs["foreground-recovery-runtime"];
+    expect(job?.uses).toBe("./.github/workflows/ux-route-sweep.yml");
+    expect(job?.with.scenario).toBe("foreground-recovery");
+    expect(job?.with.run_sweep).toContain("foreground_recovery_required != 'false'");
+    expect(job?.with.reuse_current_run_build).toContain("needs.changes.outputs.heavy == 'true'");
+    expect(ci.jobs["merge-readiness"].needs).toEqual(expect.arrayContaining(["foreground-recovery", "foreground-recovery-runtime"]));
+    const report = ux.jobs.sweep.steps.find((step: { name: string }) => step.name === "Upload the budget report");
+    expect(report.with.name).toContain("foreground-recovery-report");
+  });
+  it.each([
+    ["true", "false", "success", 0],
+    ["true", "false", "skipped", 1],
+    ["true", "false", "failure", 1],
+    ["", "false", "skipped", 1],
+    ["false", "false", "skipped", 0],
+    ["false", "false", "success", 1],
+    ["true", "true", "skipped", 0],
+    ["true", "true", "failure", 1],
+  ])("enforces selected proof, explicit omission and exact-tree reuse: %s/%s/%s", (required, reuse, result, code) => {
+    const step = ci.jobs["foreground-recovery"]?.steps[0];
+    expect(step?.run).toBeTypeOf("string");
+    const observed = spawnSync("bash", ["-c", step.run], { encoding: "utf8",
+      env: { ...process.env, FOREGROUND_RECOVERY_REQUIRED: required as string, REUSE_EXACT_TREE: reuse as string, RUNTIME_RESULT: result as string } });
+    expect(observed.status, observed.stderr).toBe(code);
+  });
 });
 
 it("refuses work introduced after the initial isolation check", async () => {
