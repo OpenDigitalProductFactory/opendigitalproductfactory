@@ -234,6 +234,23 @@ model AdapterRunTelemetry {
 
 The unit being judged is one saved answer and the exact successful attempt that produced it. An operator may mark it **Kept** or **Needs revision**, change that choice, or clear it. These are explicit dispositions. A retry, elapsed time, gratitude or successful HTTP response does not establish either disposition or correctness. Saving feedback does not run another model, update routing weights, change a provider assignment, or confirm an override.
 
+##### Feedback delivery objectives and acceptance
+
+The following scope applies to the BI-A009189A extension only; historical adapter-delivery phases elsewhere in this spec retain their own owners and evidence.
+
+**OBJ-RF-1:** Attribute each explicit disposition to the exact saved answer and successful producing attempt, with current authority and auditable corrections.
+
+**OBJ-RF-2:** Make feedback easy to record and useful in routing evaluation while keeping human preference, agent judgment, execution success, evaluated quality and costs distinguishable.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-1 | OBJ-RF-1 | Define the evaluated unit and explicit operator action before writing: a response-producing attempt, not every route in a shared message or fallback chain. |
+| AC-2 | OBJ-RF-1 | Resolve exact attempt identity server-side and recheck current thread/room ownership and provider/model/trace association. Read-only platform access alone is not feedback-write authority. |
+| AC-3 | OBJ-RF-1 | Record attributable feedback and time through the existing governed/audited path; allow correction according to the chosen design. Preserve missing/ambiguous/historical evidence as unavailable. |
+| AC-4 | OBJ-RF-2 | Show feedback coverage separately from execution success, evaluator scores, diagnostics/test results and costs. Do not infer a model score from gratitude, elapsed time, today's provider profile or one shared trace. |
+| AC-5 | OBJ-RF-1 | Saving feedback must not dispatch inference, update learned routing behavior or confirm an override. |
+| AC-6 | OBJ-RF-1, OBJ-RF-2 | Verify ownership/permission removal, repeated attempts/fallbacks, duplicate/corrected submissions, source attribution, and the actual compact keyboard-accessible UX. |
+
 ##### Research & Benchmarking
 
 The existing source was audited at commit 4177c09734178904c79c402a3b210ba67d850df3. AdapterRunTelemetry has an id primary key and userAccepted/acceptedAt; it has no attemptId column. AgentMessage has no generic metadata slot. The writer intentionally suppresses telemetry failures, while fallback and agentic results manually copy response fields. A recovered earlier draft or an inline-review rewrite can otherwise inherit the wrong last-call identity.
