@@ -111,6 +111,7 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
         },
       },
       ...(name === "record_initiative_evidence" ? {
+        workroomId: { type: "string", description: "Optional exact actor-admitted Workroom selecting current public component research; never supplies source hashes or authority." },
         operation: { type: "string", enum: ["gate-receipt", "objective-mapping"] },
         baselineId: { type: "string" },
         qualificationEvidenceId: {
@@ -629,6 +630,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       boundReviewTask: lane.independent ? binding?.boundReviewTask : undefined,
       workroomRef: binding?.workroomRef ?? undefined,
       expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
+      sourceWorkroomId: params.workroomId,
       reason: String(params.reason ?? ""),
       findings,
       resolvedFindingRefs,
