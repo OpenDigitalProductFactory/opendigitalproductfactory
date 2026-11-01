@@ -28,6 +28,7 @@ import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { evidenceRecoveryFailure, type EvidenceRecoveryDiagnostics } from "./evidence-recovery-artifact";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import { transferLocalNativeContinuation, withLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
@@ -606,7 +607,7 @@ export function detectUnsavedEvidence(
   return wasSaved ? null : entry.field;
 }
 
-export type AgenticResult = {
+export type AgenticResult = EvidenceRecoveryDiagnostics & {
   /** Final text response from the agent */
   content: string;
   suppliedSourceEvidence?: boolean;
@@ -941,7 +942,7 @@ export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<Agen
   let isSuccess = false;
   try {
     const result = await withLocalNativeContinuation(() => _runAgenticLoop(params, tracker, restricted));
-    isSuccess = true;
+    isSuccess = !result.failure;
     return result;
   } finally {
     if (!restricted && tracker.activeSkillId) {
@@ -1153,12 +1154,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   });
   const suppliedSourceEvidence = !!evidenceRequirement.suppliedSourceEvidence && isConversationalRoute && !requireTools;
   let evidenceRecoveryNudges = 0;
+  const withheldDrafts: string[] = [];
   let terminalToolNudges = 0;
   let terminalToolSurfaceOverride: string[] | null = null;
   const completeResult = (
     content: string,
     source: Pick<RoutedInferenceResult, "providerId" | "modelId" | "downgraded" | "downgradeMessage"> | null = lastResult,
-    extra: Partial<Pick<AgenticResult, "failure" | "executionPlan">> = {},
+    extra: Partial<Pick<AgenticResult, "failure" | "executionPlan" | "withheldContent" | "evidenceFailure">> = {},
   ): AgenticResult => ({
     content,
     providerId: source?.providerId ?? "",
@@ -1237,7 +1239,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       providerId: provider,
       modelId: model,
       dispatches: inferenceCallCount,
-      nudges: continuationNudges,
+      nudges: continuationNudges + evidenceRecoveryNudges,
       toolsAttached: toolsAttachedForTurn,
       executedTools: executedTools.length,
       totalMs: Date.now() - startTime,
@@ -1721,6 +1723,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           recoveryNudgesUsed: evidenceRecoveryNudges,
         });
         if (recovery.kind === "nudge") {
+          withheldDrafts.push(result.content);
           evidenceRecoveryNudges++;
           console.warn(`[agentic-loop] evidence-required turn, zero authoritative tools; nudging. route=${JSON.stringify(routeContext)}`);
           messages = [
@@ -1731,11 +1734,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continue;
         }
         if (recovery.kind === "refuse") {
-          // BI-0C0669B5: log the WITHHELD length so a turn whose reasoning was
-          // quarantined is greppable, and so the extractor's zero can be
-          // compared against what the model actually produced.
           console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)} withheldChars=${recovery.withheldContent.trim().length}`);
-          return completeResult(recovery.message, result);
+          logTurnSummary(result.providerId, result.modelId);
+          const failure = await evidenceRecoveryFailure({ taskRunId, taskExecutionFence: params.taskExecutionFence, userId, agentId, threadId,
+            message: recovery.message, drafts: [...withheldDrafts, recovery.withheldContent], toolResults: executedTools.map(tool => tool.result), observedToolExecutions: executedTools.length, observedSuccessfulToolExecutions: authoritativeToolExecutions, recoveryNudges: evidenceRecoveryNudges });
+          return completeResult(failure.failure.message, result, failure);
         }
       }
 

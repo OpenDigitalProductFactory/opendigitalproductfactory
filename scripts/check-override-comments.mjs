@@ -24,6 +24,12 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
+  // Inngest's supported-range telemetry alignment pin, documented beside the
+  // override. This exact parent-scoped compat pin is not an advisory floor.
+  "vitest>@opentelemetry/api",
+  "inngest>@opentelemetry/auto-instrumentations-node",
+  "@opentelemetry/auto-instrumentations-node@0.81.2>@opentelemetry/core",
+  "@opentelemetry/instrumentation@0.223.0>import-in-the-middle",
   // react / react-dom are compat pins, not CVE floors. In apps/mobile they hold
   // the exact version React Native's embedded renderer needs (BI-E5E72FE3); at
   // the root they keep one React in the platform tree. Rationale lives beside
