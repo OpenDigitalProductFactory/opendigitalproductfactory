@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ load: vi.fn(), update: vi.fn(), list: vi.fn(), message: vi.fn(), createMessage: vi.fn(), patchMessage: vi.fn(), execute: vi.fn(), context: vi.fn(), wake: vi.fn(), emit: vi.fn() }));
 vi.mock("server-only", () => ({}));
-vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: mocks.load, updateMany: mocks.update, findMany: mocks.list }, agentMessage: { findFirst: mocks.message, upsert: mocks.createMessage, updateMany: mocks.patchMessage } } }));
+vi.mock("@dpf/db", () => ({ Prisma: { DbNull: null }, prisma: { taskRun: { findUnique: mocks.load, updateMany: mocks.update, findMany: mocks.list }, agentMessage: { findFirst: mocks.message, upsert: mocks.createMessage, updateMany: mocks.patchMessage } } }));
 vi.mock("./foreground-work-context", () => ({ withForegroundWork: mocks.context }));
 vi.mock("@/lib/actions/agent-coworker", () => ({ sendMessage: mocks.execute }));
 vi.mock("@/lib/jobs", () => ({ jobs: { send: mocks.wake } }));
@@ -10,6 +10,7 @@ import { foregroundRequestDigest } from "./foreground-request-digest";
 import { executeForegroundWork, reconcileForegroundWork } from "./foreground-work-worker";
 
 describe("retained foreground worker", () => {
+  afterEach(() => vi.useRealTimers());
   let row: any;
   beforeEach(() => {
     vi.clearAllMocks();
@@ -39,7 +40,7 @@ describe("retained foreground worker", () => {
   it("retains a capacity wait and resumes the same job after its due time", async () => {
     mocks.execute.mockResolvedValueOnce({ agentMessage: { id: "wait", role: "system" }, resourceWait: "capacity" });
     expect(await executeForegroundWork("TR-one")).toEqual({ kind: "capacity-wait" });
-    expect(row.status).toBe("input-required");
+    expect(row.status).toBe("submitted");
     expect(row.progressPayload.resourceWait.attempt).toBe(1);
     await executeForegroundWork("TR-one");
     expect(mocks.execute).toHaveBeenCalledOnce();
@@ -47,6 +48,28 @@ describe("retained foreground worker", () => {
     expect(await executeForegroundWork("TR-one")).toEqual({ kind: "responded" });
     expect(mocks.execute).toHaveBeenCalledTimes(2);
     expect(mocks.context.mock.calls.every(([id]) => id === "TR-one")).toBe(true);
+  });
+  it("makes an expired wait owner-facing even before a future retry time", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    mocks.execute.mockResolvedValueOnce({ agentMessage: { id: "wait", role: "system" }, resourceWait: "capacity" });
+    await executeForegroundWork("TR-one");
+    const deadline = Date.parse(row.a2aMetadata.foregroundRequest.deadlineAt);
+    row.progressPayload.resourceWait.nextAttemptAt = new Date(deadline + 60_000).toISOString();
+    vi.setSystemTime(deadline + 1);
+    expect(await executeForegroundWork("TR-one")).toEqual({ kind: "blocked" });
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload.summary).toContain("recovery window ended");
+    expect(row.progressPayload.resourceWait).toBeUndefined();
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+  });
+  it("continues an existing legacy input-required capacity wait under the same identity", async () => {
+    mocks.execute.mockResolvedValueOnce({ agentMessage: { id: "wait", role: "system" }, resourceWait: "capacity" });
+    await executeForegroundWork("TR-one");
+    row.status = "input-required";
+    row.progressPayload.resourceWait.nextAttemptAt = new Date(Date.now() - 1).toISOString();
+    expect(await executeForegroundWork("TR-one")).toEqual({ kind: "responded" });
+    expect(row.taskRunId).toBe("TR-one");
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
   it("does not replay an uncertain execution, including after another queue delivery", async () => {
     mocks.execute.mockRejectedValueOnce(new Error("lost response after possible effect"));
@@ -101,7 +124,7 @@ describe("retained foreground worker", () => {
   });
   it("stops at the existing capacity retry bound", async () => {
     row.status = "input-required";
-    row.progressPayload = { resourceWait: { schemaVersion: 1, kind: "provider-capacity", failureKind: "busy", resumeMode: "same-taskrun", attempt: 5, observedAt: new Date().toISOString(), nextAttemptAt: new Date(Date.now() - 1).toISOString() } };
+    row.progressPayload = { resourceWait: { schemaVersion: 1, kind: "provider-capacity", failureKind: "busy", resumeMode: "same-taskrun", attempt: 5, observedAt: new Date().toISOString(), nextAttemptAt: new Date(Date.now() + 60_000).toISOString() } };
     expect(await executeForegroundWork("TR-one")).toEqual({ kind: "blocked" });
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(row.progressPayload.resourceWait).toBeUndefined();

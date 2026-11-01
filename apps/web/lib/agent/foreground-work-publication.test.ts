@@ -118,11 +118,26 @@ describe("foreground publication transaction", () => {
     await withForegroundWork("TR-one", () => publishForegroundMessage(db => db.agentMessage.create({ data: {
       threadId: "thread", taskRunId: "TR-one", role: kind === "capacity-wait" ? "system" : "assistant", content: "Pending",
     } }), { kind, ...(kind === "capacity-wait" ? { resourceWait: "capacity" as const } : {}) }));
-    expect(row.status).toBe("input-required");
+    expect(row.status).toBe(kind === "capacity-wait" ? "submitted" : "input-required");
     expect(row.progressPayload.foregroundOutcome).toBe(kind);
     expect(row.progressPayload.dispatch.claimedAt).toBe("original");
     expect(row.progressPayload.foregroundPublication.messageId).toBe("answer");
     if (kind === "capacity-wait") expect(row.progressPayload.resourceWait.attempt).toBe(1);
+  });
+  it("reads an acknowledged capacity publication in new and legacy wait states", async () => {
+    let fence: ReturnType<typeof foregroundExecutionFence>;
+    await withForegroundWork("TR-one", async () => {
+      fence = foregroundExecutionFence();
+      await publishForegroundMessage(db => db.agentMessage.create({ data: {
+        threadId: "thread", taskRunId: "TR-one", role: "system", content: "Capacity wait",
+      } }), { kind: "capacity-wait", resourceWait: "busy" });
+    });
+    for (const status of ["submitted", "input-required"]) {
+      row.status = status;
+      expect(await readForegroundPublication("TR-one", fence!)).toMatchObject({ kind: "capacity-wait", agentMessageId: "answer" });
+    }
+    row.progressPayload.resourceWait = { kind: "provider-capacity" };
+    expect(await readForegroundPublication("TR-one", fence!)).toBeNull();
   });
 
   it("keeps auxiliary notices separate from job completion", async () => {

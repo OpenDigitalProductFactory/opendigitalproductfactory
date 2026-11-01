@@ -3,7 +3,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { isRecord } from "@/lib/shared/coerce";
 import { captureTaskExecutionFence, sameTaskExecutionFence, taskExecutionEligible, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
-import { createResourceWaitProjection } from "@/lib/mcp-task-capacity-contract";
+import { createResourceWaitProjection, parseResourceWaitProjection } from "@/lib/mcp-task-capacity-contract";
 import { foregroundExecutionContext } from "./foreground-work-context";
 import { sanitizeFieldUpdates, type AgentFormAssistField } from "@/lib/agent-form-assist";
 
@@ -87,7 +87,7 @@ export async function publishForegroundMessage<T extends { id: string }>(
       if (notice?.taskRunId !== scope.taskRunId || notice.threadId !== scope.threadId || notice.role !== "system") throw stopped();
     }
     const saved = await db.taskRun.updateMany({ where: { taskRunId: scope.taskRunId, status: "working" }, data: {
-      status: disposition.kind === "responded" ? "completed" : "input-required",
+      status: disposition.kind === "responded" ? "completed" : pending ? "submitted" : "input-required",
       completedAt: disposition.kind === "responded" ? acceptedAt : null,
       progressPayload: { ...progress, ...(pending ? { resourceWait: pending } : {}),
         foregroundOutcome: disposition.kind, summary, nextActor: pending ? "platform" : "owner", resultMessageId: message.id,
@@ -130,7 +130,8 @@ export async function readForegroundPublication(taskRunId: string, fence: TaskEx
   }
   const kind = publication.kind;
   if (!["responded", "approval-required", "capacity-wait", "blocked"].includes(String(kind))
-    || run.status !== (kind === "responded" ? "completed" : "input-required") || progress.foregroundOutcome !== kind) return null;
+    || (kind === "capacity-wait" ? !["submitted", "input-required"].includes(run.status) || !parseResourceWaitProjection(progress)
+      : run.status !== (kind === "responded" ? "completed" : "input-required")) || progress.foregroundOutcome !== kind) return null;
   const message = await prisma.agentMessage.findUnique({ where: { id: publication.messageId }, select: { threadId: true, taskRunId: true, role: true } });
   if (publication.systemMessageId) {
     if (typeof publication.systemMessageId !== "string") return null;

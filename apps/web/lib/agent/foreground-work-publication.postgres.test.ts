@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createReviewPostgresFixture } from "../../test-support/review-postgres-fixture";
 
-const ports = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown> }));
+const ports = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown>, wake: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/agent-event-bus", () => ({ agentEventBus: { requestCancel: vi.fn() } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: ports.wake } }));
 vi.mock("@dpf/db", async () => ({
   ...await import("../../../../packages/db/generated/client/client"),
   prisma: new Proxy({}, { get(_target, key) {
@@ -18,6 +19,9 @@ vi.mock("@dpf/db", async () => ({
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => ({ userId: "fixture-owner", platformRole: "employee", isSuperuser: false }) }));
 import { withForegroundWork } from "./foreground-work-context";
 import { publishForegroundMessage } from "./foreground-work-publication";
+import { executeForegroundWork, reconcileForegroundWork } from "./foreground-work-worker";
+import { createResourceWaitProjection } from "../mcp-task-capacity-contract";
+import { Prisma } from "@dpf/db";
 import { stopThreadTurn } from "@/lib/tak/thread-cancellation";
 import { TERMINAL_TASK_STATE_LIST } from "@/lib/tak/task-states";
 
@@ -36,6 +40,7 @@ describe.skipIf(!url)("foreground publication on PostgreSQL", () => {
   afterAll(async () => { await fixture?.close(); });
   afterEach(() => vi.useRealTimers());
   beforeEach(async () => {
+    vi.clearAllMocks();
     await fixture.pool.query('TRUNCATE "TaskRun", "AgentThread", "AgentMessage"');
     deadlineAt = new Date(Date.now() + 60_000).toISOString();
     await fixture.db.agentThread.create({ data: { id: "fixture-thread", userId: "fixture-owner" } });
@@ -118,5 +123,47 @@ describe.skipIf(!url)("foreground publication on PostgreSQL", () => {
     }, { kind: "responded" }))).rejects.toThrow("Controlled write failure");
     expect(await fixture.db.agentMessage.count({ where: { role: "assistant" } })).toBe(0);
     expect((await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: "TR-FG-SQL" } })).status).toBe("working");
+  });
+
+  it("keeps a platform wait out of owner review until its original window expires", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await withForegroundWork("TR-FG-SQL", () => publishForegroundMessage(db => db.agentMessage.create({ data: {
+      id: "fixture-response", threadId: "fixture-thread", taskRunId: "TR-FG-SQL", role: "system", content: "Synthetic capacity wait",
+    } }), { kind: "capacity-wait", resourceWait: "busy" }));
+    // Same status predicate used by Workspace's owner-attention count.
+    const needsReview = () => fixture.db.taskRun.count({ where: { taskRunId: "TR-FG-SQL", status: { in: ["input-required", "auth-required"] } } });
+    expect(await needsReview()).toBe(0);
+    const saved = await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: "TR-FG-SQL" } });
+    const progress = saved.progressPayload as Record<string, any>;
+    progress.resourceWait.nextAttemptAt = new Date(Date.parse(deadlineAt) + 60_000).toISOString();
+    await fixture.db.taskRun.update({ where: { taskRunId: "TR-FG-SQL" }, data: { progressPayload: progress } });
+    vi.setSystemTime(Date.parse(deadlineAt) + 1);
+    expect(await executeForegroundWork("TR-FG-SQL")).toEqual({ kind: "blocked" });
+    expect(await needsReview()).toBe(1);
+  });
+
+  it("selects fresh, due, legacy and expired work before the limit, past fifty future waits", async () => {
+    const now = new Date(), future = new Date(+now + 600_000).toISOString();
+    const row = (id: string, status: string, due: string | null, expired = false) => ({
+      taskRunId: id, userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo", routeContext: "/workspace", source: "coworker",
+      title: "Synthetic wake selection", objective: "Verify bounded eligible selection", status,
+      createdAt: new Date(+now - (id.startsWith("future") ? 60_000 : 0)),
+      lastHeartbeatAt: due ? now : null,
+      progressPayload: due ? { foregroundOutcome: "capacity-wait", resourceWait: { ...createResourceWaitProjection("busy", 1, now), nextAttemptAt: due } } : Prisma.DbNull,
+      a2aMetadata: { trigger: "interactive", foregroundRequest: { schemaVersion: 1, deadlineAt: expired ? new Date(+now - 1).toISOString() : new Date(+now + 3_600_000).toISOString() } },
+    });
+    await fixture.db.taskRun.createMany({ data: [
+      ...Array.from({ length: 52 }, (_, i) => row(`future-${i}`, "submitted", future)),
+      row("eligible-new", "submitted", null), row("eligible-due", "submitted", new Date(+now - 1).toISOString()),
+      row("eligible-legacy", "input-required", new Date(+now - 1).toISOString()), row("eligible-expired", "submitted", future, true),
+    ] });
+    const exhausted = row("eligible-exhausted", "submitted", future);
+    await fixture.db.taskRun.create({ data: { ...exhausted,
+      progressPayload: { foregroundOutcome: "capacity-wait", resourceWait: { ...createResourceWaitProjection("busy", 5, now), nextAttemptAt: future } },
+    } });
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId).sort()).toEqual([
+      "eligible-due", "eligible-exhausted", "eligible-expired", "eligible-legacy", "eligible-new",
+    ]);
   });
 });
