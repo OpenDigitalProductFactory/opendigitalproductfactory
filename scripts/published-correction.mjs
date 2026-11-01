@@ -175,7 +175,16 @@ export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = r
 
 export function chooseInitialAnchor({ records, previous, pullRequest, treeAt, now = Date.now() }) {
   const expected = { repositoryFullName: pullRequest.repositoryFullName, branch: pullRequest.headRefName, pullRequestNumber: pullRequest.number };
-  if (previous?.sha === pullRequest.headRefOid && classifyPublishedCorrection(previous, { ...expected, sha: previous.sha, now }).ok) return previous.publicationCorrection.anchor;
+  const proof = previous?.publicationCorrection;
+  const completedAt = Date.parse(proof?.completedAt);
+  // Recover the qualified historical anchor, never the expired affected result.
+  // An interrupted push may leave GitHub at the anchor rather than this proof.
+  if (Number.isFinite(completedAt) && completedAt <= now
+    && classifyPublishedCorrection(previous, { ...expected, sha: previous.sha, now: completedAt }).ok
+    && proof.pullRequest.number === pullRequest.number
+    && Date.parse(proof.anchor.capturedAt) <= completedAt
+    && [previous.sha, proof.anchor.sha, proof.pullRequest.headRefOid].includes(pullRequest.headRefOid)
+    && treeAt(previous.sha) === proof.tree && treeAt(proof.anchor.sha) === proof.anchor.tree) return proof.anchor;
   for (const { state, metadata } of records) {
     if (state?.sha !== pullRequest.headRefOid) continue;
     const anchor = { ...expected, sha: state.sha, tree: treeAt(state.sha), state, metadata,
