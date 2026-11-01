@@ -17,7 +17,6 @@ vi.mock("@/components/admin/MarketContextFields", () => ({
 
 const baseInitial = {
   description: "",
-  mission: "",
   targetMarket: "",
   sourceSystem: "Legacy spreadsheets",
   companySize: null,
@@ -58,7 +57,8 @@ describe("BusinessContextForm", () => {
       <BusinessContextForm initial={baseInitial} archetypeSummary={null} />,
     );
     expect(html).toContain('name="description"');
-    expect(html).toContain('name="mission"');
+    // Mission moved to the Direction panel (BI-916216E7): one home for it.
+    expect(html).not.toContain('name="mission"');
     expect(html).toContain('name="targetMarket"');
   });
 
@@ -86,21 +86,10 @@ describe("BusinessContextForm", () => {
     expect(html).toContain("Continue");
   });
 
-  it("keeps a nonprofit mission unanswered while offering an archetype-aware starter", () => {
+  it("uses the organization noun for a nonprofit", () => {
     const html = renderToStaticMarkup(
-      <BusinessContextForm
-        initial={baseInitial}
-        archetypeSummary={{ name: "Pet Rescue", category: "nonprofit-community" }}
-        missionSuggestion="At Second Chance, we exist to give every animal time and care."
-      />,
+      <BusinessContextForm initial={baseInitial} archetypeSummary={{ name: "Pet Rescue", category: "nonprofit-community" }} />,
     );
-
     expect(html).toContain("What does your organization do?");
-    expect(html).toContain("Why does your organization exist?");
-    expect(html).toContain("Suggest a starter");
-    expect(html).toMatch(/name="mission"[^>]*>\s*<\/textarea>/);
-    expect(html).not.toContain(
-      ">At Second Chance, we exist to give every animal time and care.</textarea>",
-    );
   });
 });

@@ -24,6 +24,7 @@ model User {
   automationSlot                   Int?
   automationExpiresAt              DateTime?
   automationVerification           RuntimeVerification? @relation(fields: [automationVerificationId], references: [id], onDelete: Restrict)
+  instanceDirectionRevisions       InstanceDirectionRevision[]         @relation("InstanceDirectionRevisionAuthor")
   createdAt                        DateTime                            @default(now())
   /// Last time this person used the workforce portal: stamped at sign-in and,
   /// at most hourly, on shell renders. Null = not seen since tracking began.
@@ -526,6 +527,8 @@ model Organization {
   resourceCapacityAllocations       ResourceCapacityAllocation[]       @relation("ResourceCapacityAllocationOrganization")
   hospitalityBookingHolds           BookingHold[]                      @relation("BookingHoldOrganization")
   businessContext                   BusinessContext?
+  instanceOutcomes                  InstanceOutcome[]
+  instanceDirectionRevisions        InstanceDirectionRevision[]
   marketingStrategy                 MarketingStrategy?
   marketingReviews                  MarketingReview[]
   marketingCampaigns                MarketingCampaign[]
@@ -671,6 +674,57 @@ model OrganizationCapabilityActivation {
   @@index([organizationId])
 }
 
+// The instance's top-level outcomes (BI-916216E7, EP-OUTCOME-HIERARCHY, WWMD
+// DI-5C99BCBB0AF4; boundary contract in 2026-10-28-outcome-hierarchy-design).
+// The top of the outcome hierarchy: Epic.servesInstanceOutcomeId (BI-7CD178F8)
+// points at this row's id, so rows are retired, never deleted. The id is the
+// stable semantic id IO-XXXXXXXX, minted in app code. The owner writes them;
+// no agent path does. At most five are active
+// (apps/web/lib/organization-direction/direction.ts).
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
+model InstanceOutcome {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // What will be true, and for whom.
+  statement      String
+  // Optional "how we'll know": the plain-language measure.
+  measure        String?
+  ordinal        Int          @default(0)
+  // The record lifecycle convention (data-model stewardship runbook): an
+  // outcome the owner removes becomes `retired`; it is never deleted.
+  lifecycle      RecordLifecycle @default(active)
+  lifecycleAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, lifecycle])
+}
+
+// Append-only version history of the instance's direction (mission, vision,
+// active outcomes). One row per owner save; decisions cite direction@vN.
+// Same snapshot pattern as WikiPageRevision and PromptRevision.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
+model InstanceDirectionRevision {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  version         Int
+  mission         String?
+  vision          String?
+  // Snapshot of the active outcomes after the save: [{ id, statement, measure }].
+  outcomes        Json
+  changedByUserId String?
+  changedBy       User?        @relation("InstanceDirectionRevisionAuthor", fields: [changedByUserId], references: [id], onDelete: SetNull)
+  // Where the save came from: "settings" or "setup".
+  source          String
+  createdAt       DateTime     @default(now())
+
+  @@unique([organizationId, version])
+  @@index([organizationId])
+  @@index([changedByUserId])
+}
+
 model BusinessContext {
   id             String       @id @default(cuid())
   organizationId String       @unique
@@ -682,6 +736,10 @@ model BusinessContext {
   // Why the company exists — captured at onboarding (business-context step).
   // Seeds the company-mission prompt (Block 0) and the org WWWD corpus.
   mission          String?
+  // Where the organization is heading, in the owner's own words. Captured at
+  // the direction setup step beside mission (BI-916216E7, spec
+  // 2026-10-28-instance-direction-design). Never machine-filled.
+  vision           String?
 
   // Who they serve
   targetMarket     String?
