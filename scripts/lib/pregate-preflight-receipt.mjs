@@ -41,7 +41,7 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
 // publish hook necessarily has a different session, tracing and provider
 // environment from the shell that recorded a correction proof.  Keep only
 // inputs that select an executable or can change Node/CI guard behaviour.
-const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATH|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:TEST_POWERSHELL|SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
+const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATH|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|BASE_SHA|BASE_REF|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:TEST_POWERSHELL|PREPUSH_BASE_REF|GUARD_SPAWN_RETRIES|SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
 const GIT_HOOK_PATH_PREFIX = /[\\/]Git[\\/]mingw64[\\/]libexec[\\/]git-core[\\/]*$/i;
 const PATH_DELIMITER = process.platform === "win32" ? ";" : ":";
 

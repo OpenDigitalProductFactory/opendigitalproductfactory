@@ -714,6 +714,18 @@ test("guard-result identity retains the selected PowerShell test executable", ()
   assert.notDeepEqual(pwsh, legacy);
 });
 
+test("guard-result identity retains semantic base and guard-runner selectors", () => {
+  const baseline = guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" });
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "b".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "BASE_SHA selects the diff scanned by registered guards");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/release", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "BASE_REF is a fallback diff selector");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/topic", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "DPF_PREPUSH_BASE_REF is a hook diff selector");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "0" }), baseline,
+    "runner retry policy changes which executed guard outcome can be reused");
+});
+
 test("guard-result identity ignores only the Git hook PATH prefix", () => {
   const base = { CI: "true", PATH: "C:/toolchain/openssl-a;C:/toolchain/bash-a" };
   const hook = { ...base, PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${base.PATH}` };
