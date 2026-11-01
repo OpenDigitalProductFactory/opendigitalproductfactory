@@ -47,8 +47,29 @@ export function previewOverride({ worktree, sha, leaseId, cloneImage, declaratio
     init.labels['dpf.preview.clone-image'] = cloneImage;
   }
   const portal = service();
+  portal.ports = [{ host_ip: '127.0.0.1', published: '3001', target: 3000, protocol: 'tcp' }];
   if (declarationPath) portal.volumes.push(previewDeclarationMount(declarationPath));
   return { services: { 'dev-init': init, 'dev-portal': portal } };
+}
+
+// JSON values remain valid YAML and quote all dynamic content. Only this fixed
+// Compose tag is YAML-specific: plain arrays merge by host IP and retain broad
+// inherited bindings. Compose >=2.24.4 replaces the complete port attribute.
+export function serializePreviewOverride(identity) {
+  const { services } = previewOverride(identity);
+  return 'services:\n' + Object.entries(services).map(([name, service]) =>
+    '  ' + JSON.stringify(name) + ':\n' + Object.entries(service).map(([key, value]) =>
+      '    ' + JSON.stringify(key) + ': ' + (key === 'ports' ? '!override ' : '') + JSON.stringify(value) + '\n'
+    ).join('')
+  ).join('');
+}
+
+function assertPreviewPorts(ports, actual = false) {
+  const valid = Array.isArray(ports) && ports.length > 0 && ports.every(port => port && (actual
+    ? ['127.0.0.1', '::1'].includes(port.HostIp) && port.HostPort === '3001'
+    : ['127.0.0.1', '::1'].includes(port.host_ip) && String(port.published) === '3001'
+      && port.target === 3000 && port.protocol === 'tcp'));
+  if (!valid) throw new Error(actual ? 'preview_actual_port_binding_mismatch' : 'preview_port_binding_mismatch');
 }
 
 export function assertPreviewConfig(config, { worktree, sha, leaseId, declarationPath }) {
@@ -60,6 +81,7 @@ export function assertPreviewConfig(config, { worktree, sha, leaseId, declaratio
         || service.labels?.['dpf.preview.sha'] !== sha
         || service.labels?.['dpf.preview.lease'] !== leaseId) throw new Error(`preview_identity_mismatch:${name}`);
   }
+  assertPreviewPorts(config.services['dev-portal'].ports);
   assertPreviewDeclarationMount(config.services['dev-portal'].volumes, { declarationPath });
   const init = config.services['dev-init'].environment;
   if (!init.CONTRIBUTOR_PREVIEW_PASSWORD || !init.PRODUCTION_DATABASE_URL || !init.DATABASE_URL
@@ -77,6 +99,7 @@ export function assertPreviewContainer(container, { worktree, sha, leaseId, dock
       || !container.Config?.Env?.includes(`DPF_PREVIEW_LEASE_ID=${leaseId}`)) throw new Error('preview_actual_environment_mismatch');
   if (container.Config?.Labels?.['dpf.preview.sha'] !== sha
       || container.Config?.Labels?.['dpf.preview.lease'] !== leaseId) throw new Error('preview_actual_identity_mismatch');
+  assertPreviewPorts(container.NetworkSettings?.Ports?.['3000/tcp'], true);
   assertPreviewDeclarationMount(container.Mounts, { declarationPath, dockerOperatingSystem }, true);
 }
 
@@ -249,7 +272,7 @@ async function runAdmittedPreview(env, cleanupState) {
   await runner.run(['exec', portals[0], 'test', '-f', '/app/packages/db/src/sanitized-clone-batches.ts']);
   const declaration = await createPreviewDeclaration({ worktree, stateDirectory: dirname(statePath) });
   const identity = { worktree, sha, leaseId, cloneImage: canonical.Image, declarationPath: declaration.path };
-  const overridePath = resolve(dirname(statePath), `preview-${randomBytes(12).toString('hex')}.json`);
+  const overridePath = resolve(dirname(statePath), `preview-${randomBytes(12).toString('hex')}.yaml`);
   const base = ['compose', '-p', state.composeProjectName || 'dpf', '--project-directory', root, '--env-file', envFile,
     ...files.flatMap(file => ['-f', file]), '-f', overridePath, '--profile', 'dev'];
   let protectedBefore;
@@ -282,7 +305,7 @@ async function runAdmittedPreview(env, cleanupState) {
   };
   try {
     await assertPreviewDeclarationFile(declaration);
-    await writeFile(overridePath, JSON.stringify(previewOverride(identity)), { mode: 0o600, flag: 'wx' });
+    await writeFile(overridePath, serializePreviewOverride(identity), { mode: 0o600, flag: 'wx' });
     assertToolReadiness(await call('load_tools', { names: REQUIRED_PREVIEW_DELIVERY_TOOLS }));
     const leases = await call('list_nonprod_environment_leases', {});
     const admitted = leases.data?.leases?.find(lease => lease.leaseId === leaseId);
