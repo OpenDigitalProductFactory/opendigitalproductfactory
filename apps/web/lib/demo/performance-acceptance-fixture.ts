@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { can } from "@/lib/permissions";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 
 import {
   DEMO_REF_PREFIX,
@@ -241,7 +242,7 @@ export async function seedSoftwarePerformanceAcceptanceFixture(input: {
     const [storefront, owner, user, demos, realEntries, refs] = await Promise.all([
       tx.storefrontConfig.findUnique({ where: { id: input.storefrontId }, select: { organizationId: true, archetype: { select: { archetypeId: true } } } }),
       tx.platformSetupProgress.findUnique({ where: { userId: input.ownerUserId }, select: { organizationId: true } }),
-      tx.user.findUnique({ where: { id: input.ownerUserId }, select: { platformRole: true, isSuperuser: true } }),
+      currentUserContext(input.ownerUserId, tx),
       tx.storefrontBooking.count({ where: { organizationId: input.organizationId, storefrontId: input.storefrontId, bookingRef: { startsWith: DEMO_REF_PREFIX } } }),
       tx.journalEntry.count({ where: { organizationId: input.organizationId, OR: [{ sourceType: null }, { sourceType: { not: marker } }, { NOT: { entryRef: { startsWith: prefix } } }] } }),
       tx.journalEntry.findMany({ where: { entryRef: { startsWith: prefix } }, take: 5, select: { organizationId: true, sourceType: true, sourceId: true } }),

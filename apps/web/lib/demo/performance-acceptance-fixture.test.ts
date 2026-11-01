@@ -96,11 +96,15 @@ describe("seedPerformanceAcceptanceFixture", () => {
 });
 
 import { seedSoftwarePerformanceAcceptanceFixture } from "./performance-acceptance-fixture";
+function fixtureOwner(roles = ["HR-000"]) {
+  return { isActive: true, isSuperuser: false, automationExpiresAt: null,
+    groups: roles.map(roleId => ({ platformRole: { roleId } })) };
+}
 function softwareFixture() {
   const tx: any = {
     storefrontConfig: { findUnique: vi.fn(async () => ({ organizationId: "org-1", archetype: { archetypeId: "software-platform" } })) },
     platformSetupProgress: { findUnique: vi.fn(async () => ({ organizationId: "org-1" })) },
-    user: { findUnique: vi.fn(async () => ({ platformRole: "HR-000", isSuperuser: false })) },
+    user: { findUnique: vi.fn(async () => fixtureOwner()) },
     storefrontBooking: { count: vi.fn(async () => 1) },
     journalEntry: { count: vi.fn(async () => 0), findMany: vi.fn(async () => []), upsert: vi.fn(async () => ({})) },
     ledgerAccount: { upsert: vi.fn(async (args: any) => ({ id: args.create.code })) },
@@ -120,15 +124,27 @@ it("refuses a production database address even when environment says development
   await expect(seedSoftwarePerformanceAcceptanceFixture({ ...input, target: { ...input.target, databaseHost: "postgres" } })).rejects.toThrow(/disposable preview/);
   expect(database.$transaction).not.toHaveBeenCalled();
 });
-it.each(["operating-journal", "foreign-owner", "no-demo", "worker", "foreign-ref"])("refuses %s before financial writes", async scenario => {
+it.each(["operating-journal", "foreign-owner", "no-demo", "worker", "foreign-ref", "inactive", "expired", "no-membership"])("refuses %s before financial writes", async scenario => {
   const { input, tx } = softwareFixture();
   if (scenario === "operating-journal") tx.journalEntry.count.mockResolvedValue(1);
   if (scenario === "foreign-owner") tx.platformSetupProgress.findUnique.mockResolvedValue({ organizationId: "org-2" });
   if (scenario === "no-demo") tx.storefrontBooking.count.mockResolvedValue(0);
-  if (scenario === "worker") tx.user.findUnique.mockResolvedValue({ platformRole: "HR-500", isSuperuser: false });
+  if (scenario === "worker") tx.user.findUnique.mockResolvedValue(fixtureOwner(["HR-500"]));
+  if (scenario === "no-membership") tx.user.findUnique.mockResolvedValue(fixtureOwner([]));
+  if (scenario === "inactive") tx.user.findUnique.mockResolvedValue({ ...fixtureOwner(), isActive: false });
+  if (scenario === "expired") tx.user.findUnique.mockResolvedValue({ ...fixtureOwner(), automationExpiresAt: new Date(Date.now() - 60_000) });
   if (scenario === "foreign-ref") tx.journalEntry.findMany.mockResolvedValue([{ organizationId: "org-2", sourceType: "PerformanceAcceptanceFixture" }]);
   await expect(seedSoftwarePerformanceAcceptanceFixture(input)).rejects.toThrow(/fixture|demo|owner|scope/i);
   expect(tx.ledgerAccount.upsert).not.toHaveBeenCalled(); expect(tx.journalEntry.upsert).not.toHaveBeenCalled();
+});
+it("uses current memberships including a finance-authorized secondary group", async () => {
+  const { input, tx } = softwareFixture();
+  tx.user.findUnique.mockResolvedValue(fixtureOwner(["HR-500", "HR-000"]));
+  await seedSoftwarePerformanceAcceptanceFixture(input);
+  expect(tx.journalEntry.upsert).toHaveBeenCalledTimes(4);
+  const query = tx.user.findUnique.mock.calls[0][0];
+  expect(query.select).not.toHaveProperty("platformRole");
+  expect(query.select).toHaveProperty("groups");
 });
 it("writes balanced source journals with stable fixture refs for populated, zero and empty scenarios", async () => {
   const { input, tx } = softwareFixture();
