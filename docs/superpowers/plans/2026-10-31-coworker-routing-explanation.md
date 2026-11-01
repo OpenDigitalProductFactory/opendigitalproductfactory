@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Coworker routing explanation repair
 
 Backlog: BI-3EA21FE6. Workroom: WC-A9C87759. Shape: delivery-small@1.0.0. Status: implementation admitted; source verification in progress; no deployed fix claimed.

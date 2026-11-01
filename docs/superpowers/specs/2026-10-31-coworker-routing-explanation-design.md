@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Coworker routing failure explanations
 
 Backlog: BI-3EA21FE6. Workroom: WC-A9C87759. Design authored 2026-10-31; status: proposed, implementation admission pending.
@@ -43,5 +47,3 @@ Legacy errors without validated eligibility retain a truthful generic fallback. 
 ## Dependencies
 
 Prior done peer-owned BI-431524DF and BI-E2CCFAC1 remain historical references. PR6782 assignment search does not cover this defect. Routing owner acknowledged no active local overlapping writer. The first release batch is unchanged. Original paired-installation streamlining-spec lookup is separate, currently blocked by peer upgrade/sign-in. Funding binding and native implementation admission remain pending.
-
-
