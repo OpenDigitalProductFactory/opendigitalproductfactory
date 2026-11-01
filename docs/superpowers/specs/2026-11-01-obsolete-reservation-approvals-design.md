@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 # Settle obsolete reservation approvals
 
@@ -89,8 +89,20 @@ cancellation of queued reservations, process cleanup, owner impersonation,
 original-task replay, or general DI execution. A read or transaction failure is
 inconclusive and leaves the request unchanged. Rollback is a normal source revert.
 
-Capture remains design-pending until named-source reproduction and canonical
-plan coverage are recorded. This document is not a passing test receipt.
+The immutable ordered design at `23b555b2b9d8a5f50e9d64a3fe54bcbdba9e5c63`
+has canonical atomic coverage `cmvxc39dl1ohb01tmxht777wk`. Research receipt
+`initiative-7bd2fe82-f908-4096-926e-4fa741fbc1c8` and implementation admission
+`IRD-5942914DF41A` cover this bounded repair. The source-only checks passed
+1,419 affected tests and both web TypeScript programs. Nineteen conditional
+tests were skipped, including all four new isolated-PostgreSQL cases: database
+barriers, qualified integration and served acceptance remain unrun here.
+
+The strengthened reproduction uses a positively identified original parked
+`approval_required` call and exact fingerprint. Against the unchanged main
+expiry routine alone it fails with proposed rather than cancelled; adding the
+new lifecycle step passes. A controlled baseline experiment restored the green
+test's exact bytes afterward. Native receipt and source review remain distinct
+from database, execution and deployment proof.
 
 ## Coverage of the recorded acceptance contract
 
