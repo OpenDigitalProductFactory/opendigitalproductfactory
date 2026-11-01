@@ -40,19 +40,12 @@ export function invalidateLocalOnlyInferenceCache(): void {
 
 /**
  * True when local-only inference is enabled. Defaults to false (cloud allowed).
- * Never throws — a DB error degrades to the permissive default so inference is
- * not bricked by a config-read failure.
+ * A failed read rejects: unknown policy must never grant cloud permission.
+ * Only successfully read values are cached; the next call can retry a failure.
  */
 export async function getLocalOnlyInference(now: number = Date.now()): Promise<boolean> {
   if (cached && now - cached.at < TTL_MS) return cached.value;
-  try {
-    const value = await readLocalOnlyInference();
-    cached = { value, at: now };
-    return value;
-  } catch (err) {
-    console.error("[local-only] failed to read inference-local-only config:", err);
-    return false;
-  }
+  return getLocalOnlyInferenceFresh(now);
 }
 
 /**
@@ -60,9 +53,14 @@ export async function getLocalOnlyInference(now: number = Date.now()): Promise<b
  * this fail-closed boundary immediately before an external async POST.
  */
 export async function getLocalOnlyInferenceFresh(now: number = Date.now()): Promise<boolean> {
-  const value = await readLocalOnlyInference();
-  cached = { value, at: now };
-  return value;
+  try {
+    const value = await readLocalOnlyInference();
+    cached = { value, at: now };
+    return value;
+  } catch (error) {
+    invalidateLocalOnlyInferenceCache();
+    throw error;
+  }
 }
 
 /** Persist the local-only inference switch and invalidate the read cache. */

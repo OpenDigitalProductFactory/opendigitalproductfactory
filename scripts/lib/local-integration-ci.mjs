@@ -1,8 +1,9 @@
+import { projectVitestCoverage, resolveVitestExhaustiveReason } from "./local-ci-vitest-selection.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
-import { EXIT_CHILD_SIGNAL_DEATH } from "./sandbox-freshness.mjs";
+import { EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_DEATH } from "./sandbox-freshness.mjs";
 
 /**
  * The exit code a local-CI STAGE uses to say it ran but reached no verdict
@@ -85,6 +86,17 @@ export const HOST_BUILD_NODE_ENV = "NODE_ENV=production";
 export const HOST_TEST_NODE_OPTIONS = "NODE_OPTIONS=--no-experimental-webstorage";
 export const HOST_TEST_INITIAL_WORKERS = "4";
 export const HOST_TEST_RETRY_WORKERS = "2";
+
+export function resolveLocalCiTestProfile(env = process.env) {
+  const requested = env?.DPF_LOCAL_CI_TEST_WORKERS;
+  if (requested !== undefined && !/^[1-4]$/.test(requested)) {
+    throw new Error("DPF_LOCAL_CI_TEST_WORKERS must be an integer from 1 to 4");
+  }
+  const initialWorkers = Number(requested ?? HOST_TEST_INITIAL_WORKERS);
+  const exhaustiveReason = resolveVitestExhaustiveReason(env);
+  return { initialWorkers, retryWorkers: Math.min(Number(HOST_TEST_RETRY_WORKERS), initialWorkers),
+    ...(exhaustiveReason ? { exhaustiveReason } : {}) };
+}
 
 export function resolveCommandInvocation(command, baseEnv = process.env) {
   if (command[0] !== "env") {
@@ -178,6 +190,44 @@ export function createCommandFailureDiagnostics({ invocation, result, elapsedMs 
   };
 }
 
+function isGitMergeCommand(command) {
+  return command[0] === "git" && command[1] === "merge";
+}
+
+/**
+ * BI-FCC1DCB2. After a `git merge` exits non-zero, ask git which paths it left
+ * unmerged. An empty answer means the merge failed for another reason (an
+ * unknown ref, a dirty tree), and the caller keeps git's own status. The probe
+ * reads git's index state, never its prose, so a changed message cannot turn a
+ * conflict back into a product failure.
+ */
+export function readUnmergedPaths({ spawnSyncImpl = spawnSync, env } = {}) {
+  const result = spawnSyncImpl("git", ["diff", "--name-only", "--diff-filter=U", "-z"], {
+    encoding: "utf8",
+    shell: false,
+    env,
+  });
+  if (result?.status !== 0 || typeof result.stdout !== "string") return [];
+  return [...new Set(result.stdout.split("\0").filter(Boolean))].sort();
+}
+
+/**
+ * The merge conflict a metadata record carries, only when that record describes
+ * the run asking (BI-FCC1DCB2). The lease separates two runs on one commit;
+ * the candidate SHA is the fallback when either side predates the lease stamp.
+ * A previous run's paths are worse than none: they would send the author to
+ * resolve files that no longer conflict.
+ */
+export function metadataMergeConflictForRun(metadata, { leaseId = "", sha = "" } = {}) {
+  const conflict = metadata?.execution?.mergeConflict;
+  if (!conflict || !Array.isArray(conflict.paths)) return null;
+  const runLease = String(metadata.runLeaseId || "");
+  if (leaseId && runLease) return runLease === leaseId ? conflict : null;
+  const candidateSha = String(metadata.candidateSha || "");
+  if (sha && candidateSha && candidateSha !== sha) return null;
+  return conflict;
+}
+
 export function executeLocalIntegrationPlan(plan, {
   spawnSyncImpl = spawnSync,
   baseEnv = process.env,
@@ -212,6 +262,28 @@ export function executeLocalIntegrationPlan(plan, {
         elapsedMs: now() - commandStartedAt,
       });
       error(`[local-integration-ci] command-failure ${JSON.stringify(diagnostics)}`);
+      // BI-FCC1DCB2: a merge that stopped on conflicts is a verdict about the
+      // branch, with a remedy the author owns. Name the paths, put the scratch
+      // workspace back on the base, and exit the code that says so.
+      const unmergedPaths = !diagnostics.hostLaunchFailure && isGitMergeCommand(command)
+        ? readUnmergedPaths({ spawnSyncImpl, env: invocation.env })
+        : [];
+      if (unmergedPaths.length > 0) {
+        spawnSyncImpl("git", ["merge", "--abort"], { stdio: "ignore", shell: false, env: invocation.env });
+        const mergeConflict = {
+          mergedRef: command.at(-1),
+          baseRef: plan.baseRef ?? "origin/main",
+          paths: unmergedPaths,
+        };
+        error(`[local-integration-ci] merge-conflict ${JSON.stringify(mergeConflict)}`);
+        return {
+          status: EXIT_CANDIDATE_MERGE_CONFLICT,
+          completedCommandCount,
+          failedCommand: [...command],
+          diagnostics,
+          mergeConflict,
+        };
+      }
       return {
         // BI-1669E08A: a host that could not START the command graded nothing.
         // EXIT_CHILD_SIGNAL_DEATH is the code classifyGateOutcome already reads
@@ -277,6 +349,9 @@ export function createToolchainFingerprint(input) {
     nodeOptions: input.nodeOptions ?? "",
     testNodeOptions: input.testNodeOptions ?? "",
   };
+  if (input.testProfile && (input.testProfile.initialWorkers !== Number(HOST_TEST_INITIAL_WORKERS) || input.testProfile.exhaustiveReason)) {
+    toolchain.testProfile = input.testProfile;
+  }
   return {
     toolchain,
     toolchainFingerprint: createHash("sha256").update(stableJson(toolchain)).digest("hex"),
@@ -327,8 +402,10 @@ function fileSha256(path) {
   }
 }
 
-export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd() } = {}) {
+export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd(), env = process.env } = {}) {
+  const testProfile = resolveLocalCiTestProfile(env);
   return createToolchainFingerprint({
+    testProfile,
     buildStrategy,
     nodeVersion: process.version,
     pnpmVersion: commandOutput("pnpm", ["--version"]),
@@ -343,6 +420,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
 }
 
 export function createLocalIntegrationPlan(input) {
+  const testProfile = resolveLocalCiTestProfile(input.env ?? process.env);
   const branch = integrationBranchName(input.candidateBranch, input.slotKey);
   const baseRef = input.baseRef ?? "origin/main";
   const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform, input.env);
@@ -423,7 +501,7 @@ export function createLocalIntegrationPlan(input) {
     // Fast PR guard parity runs before the expensive test/build gates.
     ...guardCommands,
     // Fail fast on the definitive compile/type-generation proof before spending
-    // the shared sandbox on the exhaustive suite. A red typecheck cannot become
+    // the shared sandbox on the selected local suite. A red typecheck cannot become
     // green after tests, while successful candidates still execute every gate.
     // Typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
@@ -442,9 +520,9 @@ export function createLocalIntegrationPlan(input) {
       "node",
       "scripts/local-ci-vitest-runner.mjs",
       "--initial-workers",
-      HOST_TEST_INITIAL_WORKERS,
+      String(testProfile.initialWorkers),
       "--retry-workers",
-      HOST_TEST_RETRY_WORKERS,
+      String(testProfile.retryWorkers),
       // The integration base, so the stage can narrow to the tests this
       // candidate can reach (BI-2227C37C). Absent or unreadable => exhaustive.
       "--base",
@@ -463,6 +541,20 @@ export function createLocalIntegrationPlan(input) {
     baseRef,
     buildStrategy,
     executionLane,
+    testProfile,
     commands,
+  };
+}
+
+export function projectLocalCiEvidence({ evidencePlan, evidencePlanPath, vitestReceipt, ...input }) {
+  return {
+    plannedExecutionLane: evidencePlan?.executionLane ?? null,
+    evidencePlan: evidencePlan ? {
+      path: evidencePlanPath, digest: evidencePlan.digest,
+      plannerVersion: evidencePlan.plannerVersion, policyVersion: evidencePlan.policyVersion,
+      evidenceTier: evidencePlan.evidenceTier, executionLane: evidencePlan.executionLane,
+      fullSuite: evidencePlan.fullSuite, basis: "planned-policy",
+    } : null,
+    vitestCoverage: projectVitestCoverage({ receipt: vitestReceipt, ...input }),
   };
 }

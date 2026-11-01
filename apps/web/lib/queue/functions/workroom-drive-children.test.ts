@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SUB_IN_REWORK, SUB_SEQ } from "@/lib/work-management/__fixtures__/graph-shapes/sub-shape";
 import { resolveDrivePlan, workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
-import type { DriveMarking } from "@/lib/work-management/drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 import { projectPersistedWorkroomRoster } from "@/lib/work-management/room-participant-assignment";
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
@@ -28,8 +28,8 @@ import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom 
 import { SUB_SHAPE_DRIVE_ACTOR, createSubShapeChildEffects, withSubShapeChildren } from "./workroom-drive-children";
 
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
-vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+vi.mock("@dpf/validators/gpp/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/validators/gpp/executable-constructs")>();
   flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
   flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
   return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };
@@ -85,6 +85,9 @@ function memoryDb() {
       },
     },
     workroomActivity: { create: async ({ data }: Row) => { const row = { id: `act-${++seq}`, recordedAt: new Date(), ...data }; state.activities.push(row); return row; } },
+    // No account here was handed over (BI-C66B6076 reads these before appointing).
+    principalAlias: { findFirst: async () => null },
+    user: { findFirst: async () => null },
     workroomParticipant: {
       findMany: async ({ where }: Row) => state.participants.filter((row) => row.workroomId === where.workroomId),
       create: async ({ data }: Row) => { state.participants.push({ id: `part-${++seq}`, ...data }); return data; },

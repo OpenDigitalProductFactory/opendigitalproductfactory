@@ -25,6 +25,12 @@ User-facing copy lives in the message catalog, not in JSX. Two rules:
 - **Catalogs.** They sit at `packages/i18n/src/messages/<locale>/<namespace>.json`, and **en-US is the source of truth**. Register a new namespace in `SOURCE_CATALOG` (`packages/i18n/src/catalog.ts`).
 - **Keys.** They are typed from the en-US JSON, so an unknown key fails typecheck.
 
+Provider account setup uses the registered `providerAccounts` namespace. Server
+provider routes resolve its messages for the viewer and pass the translated
+copy to the compact account table and selected-account forms. Pending and result
+feedback use that same catalog with the shared form controls. Provider and
+account labels remain stored user data rather than translation keys.
+
 Use the translator that matches where the code runs:
 
 | Where | How |
@@ -32,7 +38,7 @@ Use the translator that matches where the code runs:
 | Server components and actions | `const t = await getT("errors"); t("notFound.storefront.heading")` |
 | Client components | `const t = useT("setup"); t("steps.branding")` |
 
-A client component's namespace must be provided by a `MessagesProvider` (`apps/web/components/i18n/MessagesProvider.tsx`; its context lives in `apps/web/lib/i18n/messages-context.ts`) above it. The root layout provides `errors` and `setup`, and a page can add a provider for its own subtree. For example, `/customer/footprint` wraps its client map in a provider for the `footprint` namespace (`namespaceMessages(locale, "footprint")`). Likewise, `/admin/settings` provides the `admin` namespace for its accountable-owner panel, and `/storefront/sections` provides `storefront` for its section text editor.
+A client component's namespace must be provided by a `MessagesProvider` (`apps/web/components/i18n/MessagesProvider.tsx`; its context lives in `apps/web/lib/i18n/messages-context.ts`) above it. The root layout provides `errors`, `setup`, `shell` and `backlog` (the backlog intake form's Outcome field), and a page can add a provider for its own subtree. For example, `/customer/footprint` wraps its client map in a provider for the `footprint` namespace (`namespaceMessages(locale, "footprint")`). Likewise, `/admin/settings` provides the `admin` namespace for its accountable-owner panel, and `/storefront/sections` provides `storefront` for its section text editor.
 
 **Message syntax** is a subset of Unicode MessageFormat 2.0:
 

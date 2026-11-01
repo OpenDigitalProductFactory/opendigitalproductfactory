@@ -1,3 +1,4 @@
+import { projectDeliveryAgreement } from "./delivery-agreement";
 import type {
   WorkCaseBlockingActorKind,
   WorkCaseDetail,
@@ -29,7 +30,7 @@ import {
   readWorkShapeDefinitionContract,
   type WorkShapeDefinition,
 } from "./work-shapes";
-import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
+import { isCompletingWorkroomDriveReceiptAt } from "@dpf/validators/workroom/receipts";
 import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
 import {
   evaluateWorkroomShapeConformance,
@@ -58,6 +59,7 @@ export type { WorkroomBoundaryInput } from "./room-boundary";
 
 export interface BuildWorkroomViewInput {
   caseKey: string;
+  deliveryState?: unknown;
   detail: WorkCaseDetail;
   boundary?: Partial<WorkroomBoundaryInput>;
   currentCycle?: WorkroomCycleView | null;
@@ -74,6 +76,8 @@ export interface BuildWorkroomViewInput {
   reviewerRuns?: WorkroomView["reviewerRuns"];
   sourceHealth?: WorkroomView["projection"]["sourceHealth"];
   executionAttentionReason?: string | null;
+  recordedBlocker?: WorkroomView["work"]["recordedBlocker"];
+  failedHandoffRecovery?: WorkroomView["work"]["failedHandoffRecovery"];
   /**
    * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
    * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
@@ -90,6 +94,8 @@ export interface BuildWorkroomViewInput {
   shapeKey?: string | null;
   /** The room's activityKind, from the anchored Workroom. */
   activityKind?: string | null;
+  /** The anchored Workroom's change passes a governed gate chain (BI-D0DFE502). */
+  gateGoverned?: boolean;
   /** Raw scopeClaims of the anchored Workroom, for the declared-posture claim. */
   scopeClaims?: unknown;
   /** The instant the view is built. Passed in so the build stays deterministic. */
@@ -215,6 +221,7 @@ export function buildWorkroomView(
 
   const source = sourceEntryForDetail(input.detail);
   const participants = [...(input.participants ?? [])];
+  const recordedBlocker = input.detail.summary.terminal ? null : input.recordedBlocker ?? null;
   const context: WorkroomContextView = {
     refs: dedupeRoomSourceRefs(input.context?.refs ?? []),
     digest: roomText(input.context?.digest),
@@ -244,6 +251,7 @@ export function buildWorkroomView(
       cycleActive: Boolean(input.currentCycle),
       dueAt: boundary.timeBoundary.dueAt,
       declaration: readWorkroomPostureClaim(input.scopeClaims),
+      gateGoverned: input.gateGoverned ?? false,
     },
     input.postureContext ?? null,
     input.now ?? new Date(),
@@ -322,6 +330,7 @@ export function buildWorkroomView(
 
   return {
     roomKey: input.caseKey,
+    delivery: mode === "finite" ? projectDeliveryAgreement({ workspaceState: input.deliveryState, currentObjective: boundary.outcome, terminal: input.detail.summary.terminal }) : null,
     reviewProfile: {
       source: composeRoomReviewProfile(caseRef.sourceType, []),
       applicability: "unknown",
@@ -357,17 +366,25 @@ export function buildWorkroomView(
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),
     work: {
+      recordedBlocker,
+      failedHandoffRecovery: input.detail.summary.terminal ? null : input.failedHandoffRecovery ?? null,
       nextAction: processNeedsAttention
         ? "Resolve the process check before continuing"
         : input.executionAttentionReason
         ? "Inspect Observed execution for the reviewer status and required action."
         : driveAttention
         ? driveAttention
+        : recordedBlocker
+        ? "Inspect the recorded blocker before continuing."
         : standingIdle
         ? "Open next cycle"
+        : input.detail.summary.state === "triage"
+          && input.detail.summary.nextAction === "Assign owner"
+          && boundary.accountablePrincipalRef
+        ? "Review the next step with the accountable owner"
         : input.detail.summary.nextAction,
-      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || input.detail.summary.attention.required,
-      attentionReason: [processAttention, input.executionAttentionReason, driveAttention, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
+      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || Boolean(recordedBlocker) || input.detail.summary.attention.required,
+      attentionReason: [processAttention, input.executionAttentionReason, driveAttention, recordedBlocker ? "Work is blocked." : input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
       blockingActorKind: blockingActorKindForState(input.detail.summary.state),
       activeCapsuleRefs,
       activeTaskRunSummary: null,

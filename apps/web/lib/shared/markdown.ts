@@ -26,10 +26,7 @@
 // components and server code import it alike. Components show the result
 // through <MarkdownHtml>, the one place the HTML reaches the DOM.
 
-import MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
-import type StateCore from "markdown-it/lib/rules_core/state_core.mjs";
-import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
+import MarkdownIt, { type StateCore, type StateInline, type Token } from "markdown-it";
 
 /** Elements a caller can give a class to. `code` is inline code; `pre` wraps a code block. */
 export type MarkdownElement =
@@ -74,6 +71,12 @@ export const escapeHtml: (value: string) => string = md.utils.escapeHtml;
 
 function optionsOf(env: unknown): RenderMarkdownOptions {
   return (env as Env | undefined)?.options ?? {};
+}
+
+/** markdown-it 15 attribute values are string | number. href and src are text. */
+function attrString(token: Token, name: string): string {
+  const value = token.attrGet(name);
+  return typeof value === "string" ? value : "";
 }
 
 function inlineText(token: Token | undefined): string {
@@ -165,7 +168,7 @@ const renderToken = md.renderer.renderToken.bind(md.renderer);
 md.renderer.rules.link_open = (tokens, idx, _opts, env) => {
   const token = tokens[idx];
   const options = optionsOf(env);
-  const href = token.attrGet("href") ?? "";
+  const href = attrString(token, "href");
   let external = false;
   if (options.resolveLink && token.info !== "wikilink") {
     const resolved = options.resolveLink(href);
@@ -216,7 +219,7 @@ md.renderer.rules.image = (tokens, idx, opts, env, self) => {
   const options = optionsOf(env);
   const alt = self.renderInlineAsText(token.children ?? [], opts, env);
   const resolve = options.resolveImage ?? sameOriginImage;
-  const src = resolve(token.attrGet("src") ?? "", alt);
+  const src = resolve(attrString(token, "src"), alt);
   if (src === null) return alt ? escapeHtml(`[${alt}]`) : "";
   token.attrSet("src", src);
   token.attrSet("alt", alt);
@@ -255,4 +258,9 @@ md.renderer.rules.table_close = (tokens, idx, opts, env) => {
 export function renderMarkdown(source: string, options: RenderMarkdownOptions = {}): string {
   const env: Env = { options };
   return md.render(source ?? "", env);
+}
+
+/** Source tokens and line maps, using the same grammar as every rendered surface. */
+export function parseMarkdown(source: string): Token[] {
+  return md.parse(source, { options: {} });
 }

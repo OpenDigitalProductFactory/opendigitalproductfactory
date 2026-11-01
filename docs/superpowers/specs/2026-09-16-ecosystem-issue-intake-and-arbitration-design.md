@@ -450,6 +450,200 @@ link keep the relay/direct behaviour byte-for-byte.
 
 ## 6. Verification
 
+### 6.1 Customer-first controller commissioning (BI-FD40397B)
+
+Operator direction, 2026-09-27: the repository-controller installation owns the DPF GitHub project and
+platform issue follow-through. External submissions require earlier attention
+because they can affect customers, adoption, revenue and reputation. This
+extends intake and operations; it does not replace the demand scoring system.
+
+**Authority and installation boundary.** Commission on the repository-controller
+installation. The development peer may inspect realistic records but
+must not mutate peer-owned work or start a competing controller. Reuse the
+installation identity, repository configuration, scheduled-job catalogue,
+Workroom/TaskRun and accountable coworker assignments. A purpose of `evolve-dpf`
+alone is insufficient to prove repository-controller ownership. An unbound
+installation reports `not commissioned` and names the missing owner binding.
+
+The concrete extension points are:
+
+| Concern | Canonical record and writer | Enforcement or read path |
+| --- | --- | --- |
+| Repository | `PlatformDevConfig.upstreamRemoteUrl`, existing platform-development configuration writer | `contributor-change-lanes/github-rest-reader.ts::resolveRepoIdentity`; commissioning requires an explicit URL, never the reader's fallback repository |
+| Installation purpose and peer | `PlatformConfig[installation.operating-intent.v1]`, `saveInstallationOperatingIntent` | `loadInstallationOperatingIntent` and the existing installation profile; a suggested or missing intent is insufficient |
+| Accountable controller | Existing `Workroom` with `repositoryFullName`, `issue-triage-watch@1.0.0`, owner and participant assignments | Governed workroom creation/assignment; the existing shape's portfolio-advisor classifies and deduplicates, backlog-owner decides admission |
+| Recurrence | Existing `ScheduledJob` for `ecosystem-inbound-issue-triage`; extend its typed metadata with the commissioned Workroom reference | `inbound-triage-runner.ts` resolves that reference before reading or ingesting; metadata points at authority and does not copy it |
+| Canonical work and source | `BacklogItem` and `BacklogItemActivity(kind=intake_origin)`, written through `ingestBacklogItem` | Extend origin reconciliation in `operate/backlog-ingest.ts`; do not add an issue queue or source table |
+| Public disposition | Existing issue bridge and its terminal/outbound retry owners | Project approved delivery evidence; never publish the intake body |
+
+Commissioning must refuse a missing, foreign, inactive or repository-mismatched
+Workroom reference. Before each run, the runner resolves the current workroom
+owner and its local write authority, validates the explicit repository identity,
+and acquires the existing scheduler's single-run protection. A development peer
+with read-only authority cannot pass this predicate even if its purpose is
+`evolve-dpf`. The scheduled-job record remains one per job identifier; the standing
+workroom supplies roles and evidence, not another polling timer. Revocation or
+owner reassignment invalidates the next run. This is local controller fencing, not
+a claim of a global distributed lock across untrusted independent installations.
+
+**AC-1 controller predicate (operator decision, 2026-10-13).** The runner and the
+commissioning action evaluate one predicate, and refuse with
+`not commissioned: <reason>` unless every clause holds:
+
+1. `ScheduledJob[ecosystem-inbound-issue-triage].metadata.intakeControllerCommission`
+   names a Workroom, the repository, `issue-triage-watch@1.0.0`, the commissioning
+   principal and the time. Schedule edits and enable toggles merge metadata, so they
+   never drop this reference.
+2. The Workroom exists, is not archived and is not `complete`, `abandoned` or `archived`.
+3. It declares `issue-triage-watch@1.0.0`.
+4. It is locally owned: no peer-canonical `FederatedRecordMirror` points at it, and
+   its bound BacklogItem carries no `[origin:federatedWork:…]` marker.
+5. `PlatformDevConfig.upstreamRemoteUrl` is set and parses to a GitHub repository,
+   and that repository matches both the Workroom and the commission. The reader's
+   fallback repository is never used.
+6. An active `accountable` or `coordinator` participant is an active local principal
+   (an `external-agent` federated principal does not count), and the commissioning
+   principal still holds one of those roles.
+7. **Install identity:** the environment class resolved by the instance-stance
+   precedence chain is a declared `production`. A development or test peer, or an
+   install whose class is only the undeclared cautious default, cannot become the
+   controller even with a local Workroom.
+8. The installation operating intent is valid, confirmed and has `evolve-dpf` as its
+   primary purpose or as a declared secondary purpose. An install that operates an
+   organisation can also own platform repository follow-through (kernel decision
+   DI-A6148958CADB, 2026-10-21); the operator declares secondary purposes on the
+   installation identity panel.
+
+Only a user with `manage_platform` whose active human principal owns the Workroom may
+commission it. The queue function runs with a concurrency limit of one. A failing or
+uncommissioned scan reaches Attention and links to `/admin/scheduled-jobs`.
+
+For existing installs, add the optional metadata reference first and treat absence
+as uncommissioned. Populate it only through owner-authorized commissioning after
+validating an existing workroom; never infer authority from a GitHub token. For
+origin backfill, read legacy `intake_origin` activities and the stored source URL,
+resolve a unique repository-qualified identity, and append an audited mapping to
+the same item. Dual-read legacy and qualified identities during transition;
+ambiguous collisions stop for reconciliation without creating work or changing
+terminal status. Switch writers to the qualified identity only after the backfill
+and repeated-poll checks pass. Retain old evidence for audit and rollback of the
+reader; no destructive migration or new model is required by this amendment.
+
+**Operating contract.** Separate intake detection from the weekly voting digest.
+The owner ratified these internal targets on 2026-10-21 (the originally proposed
+hourly / one-day / two-day / weekly set was declined as too aggressive): detection
+every four hours, acknowledgement and assignment of external submissions within
+two business days, a triage disposition within five business days, and a
+meaningful progress update every two weeks while unresolved. The scheduled job's
+default cadence is every four hours; an install may tune it on the scheduled-work
+register. These are internal targets, not published customer commitments, until
+the owner says otherwise. Urgent service, safety or security impact
+uses the existing incident/escalation path. Routine external acknowledgement
+precedes internal suggestions; delivery order still considers severity, evidenced
+impact, age, dependencies and available capacity. Unknown origin remains visible
+for review. A bot author, repository member or relay credential does not establish
+the originating customer's relationship. Never infer revenue from an issue label.
+
+**Identity and reconciliation.** Repository-qualified origin identity is the
+join key. Resolve existing unqualified issue-number origins against their stored
+source URL before adding identities; ambiguous records remain in review. Repeated
+polls must not increment occurrence counts, duplicate deferred/retired work or
+reopen completed work. Reopening an issue records a new source event on the same
+canonical item for disposition. Follow pagination to completion and distinguish
+partial reads from an empty queue. Comments, edits, closure and reopen events
+must reconcile through the existing issue bridge and source registry. Preserve
+source evidence and canonical delivery state when retiring duplicate imports.
+
+**Identity decision (BI-952F08BA, 2026-10-20).** Kernel decision DI-0C1759862297
+chose this section's design over BI-952F08BA's original schema acceptance criteria
+(a `sourceSystem` enum, an `upstreamRecordKey` column and a database unique
+constraint). Those criteria are superseded; no migration is part of this item.
+The delivered shape uses existing primitives only:
+
+- The origin id of an upstream issue is `owner/repo#<number>`, lowercased, taken
+  from the issue URL and falling back to the commissioned repository. An issue
+  with no resolvable repository is refused, never filed under a bare number.
+  The `intake_origin` payload records `source.repository`, `source.url`,
+  `source.state` and a content/state `source.fingerprint`.
+- `ingestBacklogItem` reconciles only when the caller opts in with `reconcile`;
+  other detectors keep their recurrence semantics (non-terminal match plus an
+  occurrence bump). A reconciled origin matches its item in every status. It
+  never bumps `occurrenceCount`, changes status or creates a second item. A new
+  `intake_origin` event with `change.kind` of `edited`, `closed` or `reopened`
+  is appended to the same item only when the fingerprint differs from the last
+  recorded one.
+- Legacy `[origin:ecosystem-upstream-issue:<n>]` markers are dual-read. A legacy
+  item matches only when its stored source URLs name exactly the same
+  repository. One mapping activity (`payload.mapping`, legacy id to qualified
+  id) is then appended, once. A legacy item whose URL names another repository
+  is a different issue. An unresolvable legacy item, or more than one
+  claimant, returns `needs-review`: nothing is created and no status changes.
+- The scheduled run summary reports created, unchanged, changed, recurred,
+  needs-review and failed counts, and names each origin awaiting review.
+
+Issue #4563 is the measured case. Its retired intake (BI-EADA73BA) and its
+re-created intake (BI-41C048D8) both carry the legacy marker and the same URL,
+so it now stops for review until an owner reconciles the pair. The sweep still
+reads open issues only, so a closure is not observed until the issue is read
+again. Closure and reopen events become complete when the reader moves to an
+incremental `state=all` read, which belongs to the reconciliation item (BI-CCD8D841) in the controller plan.
+
+**Action and communication.** Every unresolved actionable issue has an accountable
+owner, next action, due date, blocker and source link in the existing Work/Attention
+views. The controller selects work through the current demand scorer and capacity
+arbitration, then writes the disposition through the existing approved outbound
+path. Public content is a sanitized projection, never a private BI body. Failed
+publication remains visibly pending and retries idempotently. Do not treat a
+drafted reply, proposed work or imported record as a delivered customer outcome.
+
+**Human availability.** BI-8239CD30 owns approval lifecycle repair. Controller
+operations must not assume a person will answer within fifteen minutes. Pending
+decisions remain discoverable through overnight and weekend absence; short-lived
+execution authority is revalidated when the person acts. Changed inputs or policy
+require an explained refreshed review. Approval resumes work on the server, with
+the outcome visible in the same Inbox item. This dependency never authorizes
+automatic consent or bypassing existing gates.
+
+**UX acceptance.** Extend shared report and attention primitives. The first
+viewport shows external requests awaiting response, overdue actions, current
+owner, latest successful scan, next scan and incomplete coverage. Each row leads
+to the existing work record, with impact, blocker and next action before technical
+provenance. Empty, uncommissioned, blocked and failed states have distinct copy and
+one relevant next action. Keyboard, mobile and both themes use existing tokens.
+
+**Burndown.** Report opening balance, new, reopened, accepted, delivered and
+remaining work, plus oldest unanswered external request, overdue reviews, stale
+updates and cycle time. Duplicate retirement is reconciliation, not delivery.
+Standing reports and epic umbrellas close only against their own acceptance
+criteria. A seven-day observed baseline and a successful recurring controller run
+are required before claiming continuous operation.
+
+**Delivery sequence and existing ownership.**
+
+1. BI-FD40397B commissions controller identity, cadence, owner and operational
+   evidence on the controller; confirm the write-authorized owning connection first.
+2. EP-37AE9BA3 / BI-952F08BA / BI-CCD8D841 carry source identity and reconciliation;
+   validate repeat-poll, terminal-state and cross-repository collision cases there.
+3. BI-4C8A83AB carries arbitration integration and real capacity/disposition
+   acceptance. BI-AE9FCB4C carries terminal closure; EP-EAD82F94 owns durable
+   outbound retry. Reuse their delivery evidence before creating successor work.
+4. Reconcile the audited 25 overdue deferrals and seek acceptance for four
+   delivered candidates. Keep six umbrellas, four hardware invitations and the
+   standing security report open until their evidence warrants closure.
+5. Exercise a new external submission end to end: one canonical item, owner and
+   due action; repeat poll unchanged; edited comment and reopen reconciled;
+   capacity-backed disposition; failed read visibly incomplete; quiet no-op run.
+
+Reserve approximately twenty percent of implementation effort for consolidating
+origin reconciliation and public status projection into existing primitives.
+No second queue, GitHub client, ranking engine or dashboard is introduced.
+There is no schema migration in this design amendment. Any later schema change
+must include forward-only compatibility and backfill evidence before rollout.
+
+**Delivery status.** Design amendment awaiting independent review and operating
+target ratification. No controller has been commissioned by this document, no
+approval timeout has changed, and runtime acceptance remains outstanding.
+
 - Unit: quadratic cost function; budget exhaustion; tie-break ordering; dedupe across both transports; consent gate refusal paths.
 - Integration: a report on a non-coding install reaches an upstream BacklogItem with submitter provenance intact and no PII in the envelope (`assertNoExcludedEgress` already enforces this — assert it in the test).
 - Negative: no opt-in → nothing leaves. Budget exhausted → the vote is refused, not silently dropped. Untrusted link → no transport.

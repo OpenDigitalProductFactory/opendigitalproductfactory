@@ -9,6 +9,7 @@ import {
 } from "./local-integration-status.mjs";
 import {
   CRITICAL_PACKAGES,
+  EXIT_CANDIDATE_MERGE_CONFLICT,
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_VITEST_RUNNER_TERMINATION,
   EXIT_CONTROL_PLANE_STARVATION,
@@ -93,6 +94,34 @@ test("parseLockedVersion reads importer-scoped resolved versions", () => {
   assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "left-pad"), "");
   // Must not leak into the top-level packages: section.
   assert.equal(parseLockedVersion(LOCKFILE, "packages", "next"), "");
+});
+
+// BI-D2FE6931: TypeScript 7 is installed under an npm alias. pnpm records an
+// aliased dependency's version as "<target>@<version>"; the installed
+// package.json says just "<version>". Reading the alias form verbatim would
+// report drift on every run.
+test("parseLockedVersion reads an npm-aliased dependency as its target version", () => {
+  const aliased = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript7:
+        specifier: npm:typescript@7.0.2
+        version: typescript@7.0.2
+      scoped-alias:
+        specifier: npm:@scope/pkg@1.2.3
+        version: '@scope/pkg@1.2.3(react@19.2.7)'
+`;
+  assert.equal(parseLockedVersion(aliased, ".", "typescript7"), "7.0.2");
+  assert.equal(parseLockedVersion(aliased, ".", "scoped-alias"), "1.2.3");
+});
+
+test("critical package sentinels include the TypeScript 7 checker pinned at the root", () => {
+  const ts7 = CRITICAL_PACKAGES.find((pkg) => pkg.name === "typescript7");
+  assert.ok(ts7, "a TypeScript 7 bump must reach the local-CI sandbox before it grades a diff");
+  assert.deepEqual(ts7.importers, ["."]);
 });
 
 test("critical package sentinels include the unit-test runner used by local-CI", () => {
@@ -552,6 +581,38 @@ test("classifyGateOutcome passes/fails normally when the sandbox is green", () =
   assert.equal(failed.productEvidence, true);
 });
 
+// BI-B62A6686: prisma migrate deploy P1001 used to be stored as a reusable
+// product FAIL. A test title that merely mentions P1001 is still a product fail.
+test("prisma migrate deploy P1001 is control-plane starvation, not a product fail", () => {
+  const log = [
+    "> prisma migrate deploy",
+    "Error: P1001",
+    "Can't reach database server at `127.0.0.1:5432`",
+  ].join("\n");
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1, gateOutput: log });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /prisma migrate deploy/);
+});
+
+test("a test title that mentions P1001 stays a product failure", () => {
+  const log = "FAIL lib/foo.test.ts > reports P1001 when the database is down\n";
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1, gateOutput: log });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
+test("ECONNREFUSED without prisma migrate deploy stays a product failure", () => {
+  const outcome = classifyGateOutcome({
+    freshnessVerdict: "green",
+    gateExitCode: 1,
+    gateOutput: "connect ECONNREFUSED 127.0.0.1:9\n",
+  });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
 test("classifyGateOutcome treats pnpm lifecycle exit 3 as product evidence when freshness is green", () => {
   const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_SANDBOX_DRIFT });
   assert.equal(failed.status, "failed");
@@ -591,6 +652,28 @@ test("a parent SIGTERM (exit 130) is blocked, not a product FAIL (BI-8392DA16)",
   const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 130 });
   assert.equal(outcome.status, "blocked_child_signal_death");
   assert.equal(outcome.productEvidence, false);
+});
+
+test("a directly observed owner signal names the interruption without guessing memory exhaustion", () => {
+  for (const receivedSignal of ["SIGINT", "SIGTERM"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH, receivedSignal });
+    assert.equal(outcome.status, "blocked_child_signal_death");
+    assert.equal(outcome.gatePassed, false); assert.equal(outcome.productEvidence, false);
+    assert.ok(outcome.summary.includes(`gate owner received ${receivedSignal}`));
+    assert.doesNotMatch(outcome.summary, /out of memory|box is quieter/i);
+  }
+});
+
+test("unattributed signal death and log text cannot invent an owner cancellation or cause", () => {
+  for (const receivedSignal of [undefined, "SIGKILL", "forged SIGINT"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH,
+      receivedSignal, gateOutput: "gate-worktree: received SIGINT; child process tree terminated" });
+    assert.match(outcome.summary, /cause is unknown/);
+    assert.doesNotMatch(outcome.summary, /gate owner received|out of memory/i);
+    assert.equal(outcome.productEvidence, false);
+  }
+  const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 9, receivedSignal: "SIGINT" });
+  assert.equal(failed.status, "failed"); assert.equal(failed.productEvidence, true);
 });
 
 test("a fenced lease (exit 75) is blocked, not a product FAIL (BI-465B3D60)", () => {
@@ -633,6 +716,7 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
     EXIT_CONTROL_PLANE_STARVATION,
     EXIT_VITEST_RUNNER_TERMINATION,
     EXIT_CHILD_SIGNAL_DEATH,
+    EXIT_CANDIDATE_MERGE_CONFLICT,
     75,
     130,
     143,
@@ -654,6 +738,30 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
       + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
     );
   }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main was recorded as
+// blocked_control_plane_starvation, and authors retried for hours. It is an
+// author-actionable verdict: the recorder's existing `conflict` status, naming
+// the paths, never infrastructure, and never a product-evidence run that owes
+// a completion checkpoint (that demand is what turned it into starvation).
+test("a candidate merge conflict is a `conflict` verdict naming the paths, not starvation", () => {
+  const mergeConflict = { mergedRef: "abc123", baseRef: "origin/main", paths: ["agent_registry.json", "coworker-grants.ts"] };
+  for (const freshnessVerdict of [null, "", "green", "drifted"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict, gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT, mergeConflict });
+    assert.equal(outcome.status, "conflict", String(freshnessVerdict));
+    assert.equal(outcome.gatePassed, false);
+    assert.equal(outcome.productEvidence, false, "a run that stopped at the merge owes no completion checkpoint");
+    assert.match(outcome.summary, /merge origin\/main into your branch and resolve: agent_registry\.json, coworker-grants\.ts/);
+    assert.doesNotMatch(outcome.summary, /infrastructure/i);
+    assert.deepEqual(outcome.mergeConflict, mergeConflict);
+  }
+});
+
+test("a merge conflict whose paths were not recorded still names the remedy", () => {
+  const outcome = classifyGateOutcome({ gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT });
+  assert.equal(outcome.status, "conflict");
+  assert.match(outcome.summary, /merge origin\/main into your branch and resolve/);
 });
 
 test("a status the recorder does not know still records rather than dropping the write", () => {

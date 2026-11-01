@@ -43,6 +43,7 @@ type AuthorityDb = {
     findFirst(args: unknown): Promise<{
       id: string;
       agentId: string;
+      slugId?: string | null;
       sensitivity: string;
       hitlTierDefault: number;
       governanceProfile: {
@@ -76,7 +77,10 @@ function asString(value: unknown): string | null {
 
 export function deriveCoworkerAuthoritySubject(
   params: Record<string, unknown>,
+  toolName?: string,
 ): CoworkerAuthoritySubject {
+  // create_backlog_item mints params.itemId. That id is not an existing item.
+  const skipMintedItemId = toolName === "create_backlog_item";
   const candidates: Array<
     [keyof Record<string, unknown>, CoworkerAuthoritySubject["kind"]]
   > = [
@@ -89,6 +93,7 @@ export function deriveCoworkerAuthoritySubject(
     ["teamId", "team"],
   ];
   for (const [key, kind] of candidates) {
+    if (skipMintedItemId && key === "itemId") continue;
     const id = asString(params[key]);
     if (id) return { kind, id };
   }
@@ -176,14 +181,26 @@ export async function resolveTrustedInitiativeItemId(input: {
   task: InitiativeReviewTask | null;
   toolName: string;
   boundItemId: string | null;
-  loadStewardItemId: (taskRunId: string) => Promise<string | null>;
+  loadStewardItemId: (taskRunId: string, toolName: string) => Promise<string | null>;
 }): Promise<string | null> {
   if (input.boundItemId) return input.boundItemId;
-  if (input.toolName !== "record_initiative_evidence" || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
-  return input.loadStewardItemId(input.task.taskRunId);
+  if (!STEWARD_WRITERS.has(input.toolName) || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId, input.toolName);
 }
 
-async function loadAcceptanceStewardItemId(taskRunId: string): Promise<string | null> {
+/**
+ * Writers a platform-issued room packet binds for a token-less scheduled run:
+ * the acceptance steward's objective mapping (BI-099A0BA3) and the platform
+ * post-implementation review (BI-AA47C672).
+ */
+const STEWARD_WRITERS: ReadonlySet<string> = new Set(["record_initiative_evidence", "record_initiative_post_implementation_review"]);
+
+async function loadAcceptanceStewardItemId(taskRunId: string, toolName: string): Promise<string | null> {
+  if (toolName === "record_initiative_post_implementation_review") {
+    const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+    const platform = await resolvePlatformReviewRunBinding(taskRunId);
+    return platform?.ok ? platform.data.itemId : null;
+  }
   const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
   const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
   return steward?.ok ? steward.data.itemId : null;
@@ -197,9 +214,15 @@ export function resolveBoundInitiativeReviewItem(
 }
 
 /** Resolve initiative subject and organization from the canonical item. Caller
- * organization fields are ignored; authenticated context can only narrow. */
+ * organization fields are ignored; authenticated context can only narrow.
+ *
+ * create_backlog_item ignores params.itemId: that id is being minted, so the
+ * subject is the parent (authenticated organization, or the platform). Tools
+ * that address an existing item still fail closed when it is absent.
+ */
 export async function resolveInitiativeAuthorityContext(input: {
   params: Record<string, unknown>;
+  toolName?: string;
   trustedBoundItemId?: string | null;
   authenticatedOrganizationId?: string | null;
   db: InitiativeAuthorityDb;
@@ -209,7 +232,7 @@ export async function resolveInitiativeAuthorityContext(input: {
 }> {
   const subject: CoworkerAuthoritySubject = input.trustedBoundItemId
     ? { kind: "backlog-item", id: input.trustedBoundItemId }
-    : deriveCoworkerAuthoritySubject(input.params);
+    : deriveCoworkerAuthoritySubject(input.params, input.toolName);
   if (subject.kind !== "backlog-item") {
     return {
       subject,
@@ -276,6 +299,8 @@ export function deriveCoworkerApprovalPolicy(input: {
  * no steering, so a room can only ever narrow what a coworker may do alone.
  */
 export function resolveSteering(input: {
+  /** Current server-resolved profile; a numeric HITL default is not this veto. */
+  hitlPolicy?: string | null;
   initiativeReviewBinding: InitiativeReviewBinding | null;
   roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
   /**
@@ -304,6 +329,9 @@ export function resolveSteering(input: {
    */
   connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
 }): EscalationSteering {
+  // A saved operator always policy cannot be displaced by automatic steering.
+  // The evaluator still validates an exact human approval through its normal lane.
+  if (input.hitlPolicy?.trim().toLowerCase() === "always") return "none";
   if (input.initiativeReviewBinding) return "independent-reviewer";
   const room = input.roomAuthority;
   if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
@@ -369,8 +397,8 @@ export function proposeBoundaryAuthority(
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
-export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
-  async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
+export const resolveCoworkerToolAuthorityInput =
+  (async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
     const actingAgentId = execution.context?.agentId;
     if (!actingAgentId) {
       throw new Error("Coworker authority resolution requires an agent identity.");
@@ -389,6 +417,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         select: {
           id: true,
           agentId: true,
+          slugId: true,
           sensitivity: true,
           hitlTierDefault: true,
           governanceProfile: {
@@ -424,6 +453,20 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       task,
       execution.toolName,
     );
+    const engagementMetadata = objectRecord(task?.a2aMetadata);
+    if (engagementMetadata?.engagementBinding != null) {
+      const { parseEngagementTaskBinding, engagementToolAllowed, validateEngagementTask, engagementProviderIdentityRefs } = await import("@/lib/coworker-service-catalog/engagement-fulfillment");
+      const binding = parseEngagementTaskBinding(engagementMetadata.engagementBinding);
+      const tokenId = asString(engagementMetadata.apiTokenId);
+      const source = engagementMetadata.tokenSource;
+      const sourceRef = objectRecord(engagementMetadata.sourceRef);
+      if (!task || !binding || engagementMetadata.engagementReadFailure || !tokenId || (source !== "oauth" && source !== "pat")
+        || engagementMetadata.trigger !== "external-mcp" || sourceRef?.kind !== "mcp-token" || sourceRef.id !== tokenId
+        || !engagementProviderIdentityRefs(binding.providerAgentId).includes(actingAgentId) || execution.userId !== binding.userId
+        || !engagementToolAllowed(binding, execution.toolName, execution.rawParams)) throw new Error("Engagement tool is outside its immutable advisory binding.");
+      await validateEngagementTask({ binding, token: { tokenId, userId: execution.userId, capability: "write", source },
+        taskRunId: task.taskRunId, requireAssociation: true, authorityScope: Array.isArray(task.authorityScope) ? task.authorityScope.filter((scope): scope is string => typeof scope === "string") : [] });
+    }
     const trustedBoundItemId = await resolveTrustedInitiativeItemId({
       task,
       toolName: execution.toolName,
@@ -435,6 +478,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       delegationPromise,
       resolveInitiativeAuthorityContext({
         params: execution.rawParams,
+        toolName: execution.toolName,
         trustedBoundItemId,
         authenticatedOrganizationId: execution.context?.organizationId,
         db,
@@ -520,6 +564,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       },
       // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
       steering: resolveSteering({
+        hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
         taskRunId: execution.context?.taskRunId ?? null,
         agentId: execution.context?.agentId ?? null,
         toolName: execution.toolName,
@@ -530,7 +575,10 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
           ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
               taskRunId: task.taskRunId,
               a2aMetadata: task.a2aMetadata,
-              agentIds: [agent.agentId, actingAgentId],
+              agentIds: [agent.agentId, actingAgentId, ...(agent.slugId ? [agent.slugId] : [])],
+              toolName: execution.toolName,
+              params: execution.rawParams,
+              allowBlockedReport: agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
             })
           : null,
       }),
@@ -588,4 +636,6 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       ...input,
       approval,
     };
-  };
+  // `satisfies`, not an annotation: the optional `db` stays callable, so the
+  // AC-PROBE runner can evaluate on a read-only transaction (BI-129EFFD1).
+  }) satisfies CoworkerAuthorityInputResolver;

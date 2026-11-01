@@ -2,6 +2,8 @@
 // (BI-02E5F2A1, DI-FC5699629694). Every side effect is injected: no host, no
 // portal, no credential file is touched.
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -18,7 +20,15 @@ import {
 } from "./pre-push-gate-infrastructure-probe.mjs";
 
 const MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
-const PAT_ENV = { DPF_MCP_BEARER_TOKEN: "pat-placeholder-not-a-real-token" };
+// BI-17DFD47E: with no credentials file named, the resolver falls back to the
+// host's ~/.dpf/mcp-client-credentials.json, and on any machine that has one
+// the real client credentials outrank the fixture. Every test env names a file
+// that does not exist, so the host's credentials are never read.
+const NO_CREDENTIALS_FILE = join(tmpdir(), `dpf-probe-test-no-credentials-${process.pid}.json`);
+const PAT_ENV = {
+  DPF_MCP_BEARER_TOKEN: "pat-placeholder-not-a-real-token",
+  DPF_MCP_CLIENT_CREDENTIALS_FILE: NO_CREDENTIALS_FILE,
+};
 
 function baseProbeInput(overrides = {}) {
   return {
@@ -138,6 +148,31 @@ test("probe: a successful claim is released and the override is REFUSED", async 
   assert.equal(result.details.released, "released");
 });
 
+test("probe: a queued claim on a closed pool is infrastructure evidence and the probe lease is released", async () => {
+  const calls = [];
+  const call = async (tool, args) => {
+    calls.push({ tool, args });
+    if (tool === PROBE_TOOL) {
+      return {
+        success: true,
+        data: {
+          admission: { status: "queued" },
+          lease: { leaseId: "NPEL-CLOSED" },
+          poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-stage-headroom-low" },
+        },
+      };
+    }
+    return { success: true };
+  };
+  const result = await probeGateInfrastructure(baseProbeInput({ call }));
+  assert.equal(result.ok, true);
+  assert.equal(result.evidence.kind, "pool-closed");
+  assert.match(result.evidence.message, /effective capacity is 0|capacity is 0|not a runnable gate/);
+  assert.equal(classifyGateInfrastructureEvidence(result.evidence).ok, true);
+  assert.equal(calls[1].tool, PROBE_RELEASE_TOOL);
+  assert.equal(calls[1].args.leaseId, "NPEL-CLOSED");
+});
+
 test("probe: a queued claim still means the pool answers — refused, nothing left behind silently", async () => {
   const calls = [];
   const call = async (tool) => {
@@ -157,7 +192,7 @@ test("probe: a queued claim still means the pool answers — refused, nothing le
 test("probe: no configured credential is not infrastructure evidence", async () => {
   let called = false;
   const call = async () => { called = true; };
-  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {} }));
+  const result = await probeGateInfrastructure(baseProbeInput({ call, env: { DPF_MCP_CLIENT_CREDENTIALS_FILE: NO_CREDENTIALS_FILE } }));
   assert.equal(result.ok, false);
   assert.equal(result.outcome, "no-credential");
   assert.equal(called, false);

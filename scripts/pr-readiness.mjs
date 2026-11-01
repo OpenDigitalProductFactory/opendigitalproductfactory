@@ -7,33 +7,35 @@
 
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
 import { collectWorktreeDiff } from "./gate-context.mjs";
-import { resolvePolicyGuardInvocation } from "./lib/ci-policy-guards.mjs";
-import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
-import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
+import { createDefaultExecute, isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { GitCommandError, runGit } from "./lib/git.mjs";
 import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 import { resolveWorktreeContext } from "./pregate-status.mjs";
 import { LOCAL_CI_SLOT_KEYS, createLocalCiSlotManifest } from "./lib/local-ci-slot-manifest.mjs";
 import { readLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
+import { classifyChangedFiles } from "./ci-change-scope.mjs";
+import { verifyPublishedCorrection, readPublishedContext, inspectCorrectionRecord } from "./published-correction.mjs";
 
-export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState) {
+export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState, inspect = inspectCorrectionRecord) {
   if (!context) return [];
-  return LOCAL_CI_SLOT_KEYS.map(slotKey => {
+  const records = LOCAL_CI_SLOT_KEYS.map(slotKey => {
     const manifest = createLocalCiSlotManifest({ slotKey, ...context });
     return { state: read(manifest.evidence.state), metadata: read(manifest.evidence.metadata) };
   });
+  const inspected = inspect();
+  if (inspected.ok) records.push({ state: inspected.state, metadata: null, publicationInspection: inspected });
+  return records;
 }
 
-function git(args, { allowFail = false } = {}) {
-  const result = runGit(args, { cwd: process.cwd(), maxBuffer: 32 * 1024 * 1024 });
+function git(args, { allowFail = false, cwd = process.cwd() } = {}) {
+  const result = runGit(args, { cwd, maxBuffer: 32 * 1024 * 1024 });
   if (result.ok || allowFail) return result.stdout;
   throw new GitCommandError(args, result);
 }
@@ -79,8 +81,8 @@ function usage() {
   ].join("\n");
 }
 
-function readCommits() {
-  const raw = git(["log", "origin/main..HEAD", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%B%x1e"], { allowFail: true });
+function readCommits({ baseSha, headSha }, git) {
+  const raw = git(["log", `${baseSha}..${headSha}`, "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%B%x1e"], { allowFail: true });
   return raw
     .split("\x1e")
     .map((entry) => entry.trim())
@@ -97,78 +99,86 @@ function readCommits() {
     });
 }
 
-function readAheadBehind(upstream) {
+function readAheadBehind(upstream, { baseSha, headSha }, git) {
   if (!upstream) {
-    const ahead = Number.parseInt(git(["rev-list", "--count", "origin/main..HEAD"], { allowFail: true }).trim() || "0", 10);
+    const ahead = Number.parseInt(git(["rev-list", "--count", `${baseSha}..${headSha}`], { allowFail: true }).trim() || "0", 10);
     return { ahead, behind: 0 };
   }
-  const [behind, ahead] = git(["rev-list", "--left-right", "--count", `${upstream}...HEAD`], { allowFail: true })
+  const [behind, ahead] = git(["rev-list", "--left-right", "--count", `${upstream}...${headSha}`], { allowFail: true })
     .trim()
     .split(/\s+/)
     .map((n) => Number.parseInt(n || "0", 10));
   return { ahead: Number.isFinite(ahead) ? ahead : 0, behind: Number.isFinite(behind) ? behind : 0 };
 }
 
-function readRepoState(publishedRef = null) {
-  fetchOriginMainSharedSafe((args) => git(args));
+export function readRepoState(publishedRef = null, { cwd = process.cwd(), fetch = fetchOriginMainSharedSafe } = {}) {
+  const readGit = (args, options) => git(args, { ...options, cwd });
+  fetch((args) => readGit(args));
+  const baseSha = readGit(["rev-parse", "--verify", "origin/main^{commit}"]).trim();
 
-  const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
-  const headSha = git(["rev-parse", "HEAD"]).trim();
+  const branch = readGit(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const headSha = readGit(["rev-parse", "HEAD"]).trim();
   const publishedSha = publishedRef
-    ? git(["rev-parse", "--verify", publishedRef], { allowFail: true }).trim()
+    ? readGit(["rev-parse", "--verify", publishedRef], { allowFail: true }).trim()
     : "";
-  const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { allowFail: true }).trim();
-  const aheadBehind = readAheadBehind(upstream);
-  const mergeBases = git(["merge-base", "--all", "origin/main", "HEAD"], { allowFail: true })
+  const upstream = readGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { allowFail: true }).trim();
+  const source = { baseSha, headSha };
+  const aheadBehind = readAheadBehind(upstream, source, readGit);
+  const mergeBases = readGit(["merge-base", "--all", baseSha, headSha], { allowFail: true })
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const worktreeDiff = collectWorktreeDiff({ base: "origin/main" });
+  const worktreeDiff = collectWorktreeDiff({ base: baseSha, head: headSha, cwd });
   const changedFiles = worktreeDiff.changedFiles.map((entry) => entry.path);
 
   return {
     branch,
+    baseSha,
     headSha,
     isDetached: branch === "HEAD",
-    isShallow: isShallowRepository((args) => git(args)),
+    isShallow: isShallowRepository((args) => readGit(args)),
     mergeBases,
     changedFiles,
     changedFileEntries: worktreeDiff.changedFiles,
     addedLinesByFile: worktreeDiff.addedLinesByFile,
-    statusPorcelain: git(["status", "--porcelain"], { allowFail: true }),
+    statusPorcelain: readGit(["status", "--porcelain"], { allowFail: true }),
     upstream: upstream || null,
     ahead: aheadBehind.ahead,
     behind: aheadBehind.behind,
-    commits: readCommits(),
+    commits: readCommits(source, readGit),
     publishedRef,
     publishedRefMatchesHead: Boolean(publishedRef) && publishedSha === headSha,
   };
 }
 
-let guardEnv;
-export function runGate(gate) {
+export async function runGate(gate, { progress, signal } = {}) {
   const [command, args] = gate.command;
-  guardEnv ??= guardShellEnv();
-  const env = { ...guardEnv, ...gate.env };
-  const invocation = resolvePolicyGuardInvocation(command, args, { env });
-  const result = spawnSync(invocation.command, invocation.args, {
-    cwd: process.cwd(),
-    env,
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-    shell: false,
-  });
-  const output = [result.stdout, result.stderr, result.error?.message]
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+  const execute = createDefaultExecute({ ...process.env, ...gate.env }, { progress, signal });
+  const result = await execute(command, args, { guardName: gate.name });
+  const output = result.output.trim();
   return {
     name: gate.name,
-    ok: result.status === 0,
-    skippedEnvironment: result.status !== 0 && isEnvironmentFailureOutput(output),
-    exitCode: result.status ?? 1,
+    ok: result.exitCode === 0 && !result.outcome,
+    skippedEnvironment: !result.outcome && result.exitCode !== 0 && isEnvironmentFailureOutput(output),
+    outcome: result.outcome,
+    exitCode: result.exitCode,
     output,
   };
+}
+
+export async function verifyCurrentPublication({ contextReader = readPublishedContext, verify = verifyPublishedCorrection } = {}) {
+  let publishedContext;
+  try { publishedContext = contextReader(); } catch { /* Initial publication retains its existing path. */ }
+  if (publishedContext) {
+    const state = publishedContext.pullRequest?.state;
+    if (state === "MERGED" || state === "CLOSED") return;
+    if (state !== "OPEN") throw new Error("Published PR state is unproven; inspect the GitHub context before publication.");
+    let observed = false;
+    await verify({ contextReader: () => {
+      if (!observed) { observed = true; return publishedContext; }
+      return contextReader();
+    } });
+  }
 }
 
 async function main() {
@@ -193,14 +203,36 @@ async function main() {
     process.exit(2);
   }
 
-  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson });
-  const execution = args.runGates ? await runWithGuardReceipt({
+  if (args.runGates) {
+    try { await verifyCurrentPublication(); }
+    catch (error) {
+      console.error(`PR readiness: NOT READY. ${error.message} No broad local guard or integration rerun was started.`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  const inspected = inspectCorrectionRecord();
+  const proportional = inspected.ok;
+  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles), publishedCorrection: proportional, baseSha: repo.baseSha, headSha: repo.headSha });
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+  let execution;
+  try { execution = args.runGates ? await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pr-readiness",
-    identify: () => identifyGuardExecution({ plan: gatePlan }),
-    execute: async () => gatePlan.map(runGate),
+    identify: () => identifyGuardExecution({ plan: gatePlan, source: { baseSha: repo.baseSha, headSha: repo.headSha } }),
+    execute: async ({ progress }) => {
+      const results = [];
+      for (const gate of gatePlan) results.push(await runGate(gate, { progress, signal: controller.signal }));
+      return results;
+    },
     passed: results => Array.isArray(results) && results.length === gatePlan.length && results.every(result => result.ok && !result.skippedEnvironment),
-  }) : { result: [], reused: false };
+  }) : { result: [], reused: false }; } finally {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
+  }
   const gateResults = execution.result;
   const gateContext = buildGateContext({
     changedFiles: repo.changedFileEntries,
@@ -210,7 +242,14 @@ async function main() {
   repo.publicationIdentityChanged = git(["rev-parse", "HEAD"]).trim() !== repo.headSha
     || git(["rev-parse", "--abbrev-ref", "HEAD"]).trim() !== repo.branch;
   repo.statusPorcelain = git(["status", "--porcelain"]);
+  const latestBaseSha = git(["rev-parse", "--verify", "origin/main^{commit}"], { allowFail: true }).trim() || null;
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext, localCiRecords: readPublicationGateRecords() });
+  if (latestBaseSha !== repo.baseSha) verdict.notes.push(`origin/main is now ${latestBaseSha ?? "unavailable"}; these checks cover pinned base ${repo.baseSha}, not the newer main. Protected GitHub checks remain the integration authority.`);
+  if (proportional) verdict.notes.push("Published correction: fresh repository/DCO/metadata guards run locally; broad source guards and full integration delegated to protected GitHub, not rerun locally.");
+  if (args.runGates && !execution.identityVerified) {
+    verdict.ready = false;
+    verdict.blockers.push("Host guard execution lacks a complete unchanged source/environment identity; inspect its receipt and recover those prerequisites before publication.");
+  }
   if (execution.reused) verdict.notes.push(`Local guard results reused from ${execution.executedAt}; no guard scripts rerun. Repository and PR metadata inspected now. Protected GitHub checks remain the integration authority.`);
   process.stdout.write(formatReadinessReport(verdict));
   if (args.json) {
@@ -220,6 +259,7 @@ async function main() {
       warnings: verdict.warnings,
       notes: verdict.notes,
       branch: verdict.branch,
+      source: { baseSha: repo.baseSha, headSha: repo.headSha, latestBaseSha },
       changedFiles: verdict.changedFiles,
       localGuards: {
         reused: execution.reused,

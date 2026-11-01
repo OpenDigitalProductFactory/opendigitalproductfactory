@@ -40,6 +40,9 @@ export const AREA_SECTIONS = PORTAL_SHELL_SECTIONS.filter(
     section.portfolioRole !== null,
 );
 
+/** The views of a workroom-shaped area, as its tab row names them. */
+export const AREA_VIEW_LABELS = { work: "Work", team: "Team", setup: "Setup" } as const;
+
 export function areaHref(key: PortalShellSectionKey, view?: "work" | "team" | "setup"): string {
   return view && view !== "work" ? `/area/${key}?view=${view}` : `/area/${key}`;
 }

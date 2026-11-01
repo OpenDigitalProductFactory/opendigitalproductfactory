@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { reconstructTimelines, buildSnapshotRow } from "@/lib/queue/queue-metrics-rollup";
 
 import {
+  compareStageEvents,
   entryStageKey,
+  planRoomEndClosures,
   planStageTransitions,
   readDriveObservation,
   workroomStageLiveCounts,
@@ -192,6 +194,45 @@ describe("readDriveObservation", () => {
   });
 });
 
+describe("a run's identity", () => {
+  const FINITE = "delivery-small@1.0.0";
+  const finite = (prior: DriveObservation | null, next: DriveObservation) =>
+    planStageTransitions({ capsuleId: "WC-1", shapeRef: FINITE, prior, next, at: at(0) });
+
+  it("a finite room is one run: the drive's daily cycle stamp does not start a new item", () => {
+    const day1 = obs("attention", "role_stage", "reproduce", "2026-10-07");
+    const day2 = obs("attention", "role_stage", "reproduce", "2026-10-08");
+    expect(finite(day1, day2)).toEqual([]);
+    expect(finite(null, day1).every((t) => t.itemId === "WC-1:run")).toBe(true);
+  });
+
+  it("a recurring cycle still open when the next begins is cancelled, never counted as a success", () => {
+    // Live 2026-10-12: a dependency-advisory-watch sweep started, was held on
+    // executor_writeback_unavailable, and the next day's cycle began over it.
+    const held = obs("pause", "executor_writeback_unavailable", "sweep", "2026-10-12");
+    const nextDay = obs("dispatch_agent", "agent_stage", "sweep", "2026-10-13");
+    const out = plan(held, nextDay);
+    expect(out.map((t) => [t.itemId.split(":").pop(), t.transition, t.outcome])).toEqual([
+      ["2026-10-12", "released", null],
+      ["2026-10-12", "cancelled", "cancelled"],
+      ["2026-10-13", "enqueued", null],
+      ["2026-10-13", "started", null],
+    ]);
+  });
+
+  it("moving to the next step inside one cycle still completes the step", () => {
+    const out = plan(obs("dispatch_agent", "agent_stage", "sweep", "c1"), obs("dispatch_agent", "agent_stage", "raise", "c1"));
+    expect(compact(out)).toEqual([["sweep", "finished", "success"], ["raise", "enqueued", null], ["raise", "started", null]]);
+  });
+
+  it("re-attaches to the item a room left open when it went idle, instead of entering it twice", () => {
+    const idle = obs("do_not_wake", "quiet", null, "c1");
+    const resumed = obs("dispatch_agent", "agent_stage", "sweep", "c1");
+    const out = planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior: idle, next: resumed, at: at(0), openStageKey: "sweep" });
+    expect(compact(out)).toEqual([["sweep", "released", null], ["sweep", "started", null]]);
+  });
+});
+
 describe("openStageAfter", () => {
   it("follows the last enqueue and clears on a finish", async () => {
     const { openStageAfter } = await import("./workroom-stage-telemetry");
@@ -253,3 +294,58 @@ describe("a conformance hold names its deviation", () => {
   });
 });
 
+// BI-C9F1DE01: a room that ends (archived, abandoned, complete) never writes
+// again, so the drive cannot close its open step. The close is planned here.
+describe("planRoomEndClosures", () => {
+  const ev = (queueKey: string, itemId: string, transition: string, minute: number) =>
+    ({ queueKey, itemId, transition, occurredAt: at(minute) });
+  const Q = (stage: string) => workroomStageQueueKey("delivery-small@1.0.0", stage);
+
+  it("releases a held step and cancels it; a working step is cancelled without a release", () => {
+    const out = planRoomEndClosures([
+      ev(Q("reproduce"), "WC-1:run", "enqueued", 0), ev(Q("reproduce"), "WC-1:run", "finished", 5),
+      ev(Q("repair"), "WC-1:run", "enqueued", 5), ev(Q("repair"), "WC-1:run", "held", 6),
+      ev(Q("merge"), "WC-2:run", "enqueued", 1), ev(Q("merge"), "WC-2:run", "started", 2),
+    ], at(30));
+    expect(out.map((t) => [t.queueKey, t.itemId, t.transition, t.outcome, t.actorType])).toEqual([
+      [Q("repair"), "WC-1:run", "released", null, "system"],
+      [Q("repair"), "WC-1:run", "cancelled", "cancelled", "system"],
+      [Q("merge"), "WC-2:run", "cancelled", "cancelled", "system"],
+    ]);
+    expect(out.every((t) => t.itemKind === "workroom-stage")).toBe(true);
+    // The cancel lands strictly after its release, so "latest event" never ties
+    // on a released step and reads it as still open.
+    expect(out.map((t) => t.occurredAt.getTime() - at(30).getTime())).toEqual([0, 1, 0]);
+  });
+
+  it("leaves closed steps alone, so running it twice writes nothing the second time", () => {
+    expect(planRoomEndClosures([
+      ev(Q("merge"), "WC-1:run", "enqueued", 0), ev(Q("merge"), "WC-1:run", "cancelled", 3),
+      ev(Q("repair"), "WC-1:run", "enqueued", 0), ev(Q("repair"), "WC-1:run", "finished", 2),
+    ], at(30))).toEqual([]);
+  });
+
+  it("never closes a step before its own last event", () => {
+    const [t] = planRoomEndClosures([ev(Q("merge"), "WC-1:run", "enqueued", 40)], at(30));
+    expect(t!.occurredAt.getTime()).toBe(at(40).getTime() + 1);
+  });
+
+  it("treats a step closed in the same instant as its release as closed, in either input order", () => {
+    const tied = [ev(Q("repair"), "WC-1:run", "cancelled", 6), ev(Q("repair"), "WC-1:run", "released", 6)];
+    expect(planRoomEndClosures(tied, at(30))).toEqual([]);
+    expect(planRoomEndClosures([...tied].reverse(), at(30))).toEqual([]);
+  });
+});
+
+// Events written in one drive pass share an instant, and often a recorded
+// time too. Their order is the order the drive writes them.
+describe("compareStageEvents", () => {
+  const row = (transition: string, minute: number, createdMs?: number) =>
+    ({ transition, occurredAt: at(minute), ...(createdMs == null ? {} : { createdAt: new Date(createdMs) }) });
+
+  it("orders by occurrence, then recording, then the drive's write order", () => {
+    const shuffled = [row("finished", 5), row("held", 5), row("enqueued", 5), row("released", 5), row("started", 2)];
+    expect([...shuffled].sort(compareStageEvents).map((r) => r.transition)).toEqual(["started", "enqueued", "released", "held", "finished"]);
+    expect([row("finished", 5, 1), row("released", 5, 2)].sort(compareStageEvents).map((r) => r.transition)).toEqual(["finished", "released"]);
+  });
+});

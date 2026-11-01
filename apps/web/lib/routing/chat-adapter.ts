@@ -24,16 +24,15 @@ import {
   formatMessageForResponses,
 } from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 import { toWireSampling } from "./sampling-profile";
 import { localToolThinkingKwargs } from "./local-tool-thinking";
-// BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
-// chat AND the local build engine share ONE gate. Re-exported below for callers
-// (and tests) that import it from here.
-import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
+import { captureLocalNativeContinuation, type LocalContinuationBinding } from "./local-native-continuation";
+import { prepareLocalNativeChatReplay } from "./local-native-chat-replay";
 import { buildAnthropicSystem } from "./anthropic-cache";
 import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
 import { resolveOpenAiCompatibleApiBase } from "./openai-base";
@@ -42,34 +41,19 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
+  currentInferenceSignal } from "./governed-inference-deadline";
+import { assertReassessmentPlan, isReassessmentExecutionError, refuseReassessmentExecution,
+  validateReassessmentToolCalls } from "./reassessment-execution-scope";
+
+// Compatibility export for existing callers; callProvider now owns local
+// admission, so this adapter never acquires the lane itself.
+export { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
 // reviewer from generic local models. Both operator overrides and defaults stay
-// bounded, while the reviewer always receives its approved ten-minute window.
-
-// A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
-// at a time. The platform routinely fires inference concurrently — reviewBuildPlan
-// alone dispatches 3 reviewer calls in parallel, on top of the coworker's agentic
-// loop — which makes those calls queue behind each other inside the endpoint,
-// blow past the per-call timeout while still waiting, and 502 the endpoint under
-// load. Observed live: "Both review agents failed to respond" on every local
-// build because both reviewers aborted with "operation was aborted due to timeout".
-// Serialize local inference so each call gets the full GPU and its timeout
-// (created by the caller, inside this lock) covers real inference, not queue-wait.
-// Cloud providers are unaffected — only providerId === "local" goes through it.
-//
-// This now delegates to the shared ResourceLane (EP-3516E23D Phase 2), which is
-// the same single-slot FIFO serializer with two opt-in additions: a bounded queue
-// depth (set DPF_LOCAL_INFERENCE_MAX_QUEUE_DEPTH to reject over-capacity calls with
-// a LaneBusyError — the honest busy signal, BI-6112DDE0 — instead of letting them
-// pile up and time out while waiting), and flow telemetry so lane wait/process
-// time is measurable. Both are gated on that env: UNSET ⇒ unbounded serialize with
-// no telemetry writes, byte-for-byte the prior behavior.
-// Canonical home is resource-lane.ts (shared with the local build engine,
-// BI-98572A51); re-exported so existing importers/tests of this module are
-// unaffected.
-export { withLocalInferenceLock };
+// bounded; a server-bound parent deadline supplies the governed exception.
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
 
@@ -211,8 +195,24 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
+    const reassessment = assertReassessmentPlan({ providerId, modelId, plan, tools });
+    if (reassessment && (plan.providerSettings.thinking_budget_tokens !== undefined || plan.localThinkingBudgetEvidence !== undefined)) {
+      return refuseReassessmentExecution("reassessment-runtime-probe-not-permitted");
+    }
     const { baseUrl, headers } = provider;
     let requestHeaders = headers;
+    const total = plan.completionAllowance;
+    if (total !== undefined && (!Number.isSafeInteger(total) || total <= 0 || plan.maxTokens !== total)) {
+      throw new Error("Invalid activity total completion allowance");
+    }
+    const boundedThinking = (budget: number): number => {
+      if (total === undefined) return budget;
+      const reserve = Math.max(2048, Math.ceil(total / 4));
+      if (!Number.isSafeInteger(budget) || budget < 1024 || total - reserve < 1024) {
+        throw new Error("Activity allowance cannot accommodate provider thinking budget");
+      }
+      return Math.min(budget, total - reserve);
+    };
 
     // Build provider-specific request
     let chatUrl: string;
@@ -244,14 +244,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
         (body as Record<string, unknown>).thinking = plan.providerSettings.thinking;
         // Ensure max_tokens accommodates the explicitly set budget
         const explicitBudget = (plan.providerSettings.thinking as { budget_tokens?: number }).budget_tokens ?? 0;
-        body.max_tokens = Math.max(plan.maxTokens, explicitBudget + 2_048);
+        if (total !== undefined && (plan.providerSettings.thinking as { type?: string }).type === "enabled") {
+          (body as Record<string, unknown>).thinking = { ...(plan.providerSettings.thinking as object), budget_tokens: boundedThinking(explicitBudget) };
+        }
+        body.max_tokens = total ?? Math.max(plan.maxTokens, explicitBudget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       } else if (effort && effort !== "low" && effortBudgets[effort]) {
-        const budget = effortBudgets[effort]!;
+        const budget = boundedThinking(effortBudgets[effort]!);
         (body as Record<string, unknown>).thinking = { type: "enabled", budget_tokens: budget };
         // max_tokens must be >= budget_tokens; add 2 048 for output headroom
-        body.max_tokens = Math.max(plan.maxTokens, budget + 2_048);
+        body.max_tokens = total ?? Math.max(plan.maxTokens, budget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       }
@@ -404,6 +407,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
         max_tokens: plan.maxTokens,
         keep_alive: -1,
       };
+      if (plan.providerSettings.thinking_budget_tokens !== undefined) {
+        const budget = plan.providerSettings.thinking_budget_tokens;
+        if (typeof budget !== "number" || !Number.isSafeInteger(budget) || budget <= 0 || budget >= plan.maxTokens) {
+          throw new Error("Invalid local thinking allowance");
+        }
+        (body as Record<string, unknown>).thinking_budget_tokens = budget;
+      }
 
       if (providerId === "openrouter" && plan.openRouterPolicy) {
         // One construction point makes the typed policy load-bearing for every
@@ -476,29 +486,50 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
     // ── Dispatch ────────────────────────────────────────────────────────────
     const startMs = Date.now();
+    let continuationBinding: LocalContinuationBinding | undefined;
+    let nativeReplay = false;
     let res: Response;
     try {
-      // The AbortSignal is created inside the thunk so, for serialized local
-      // calls, the timeout clock starts when the call actually dispatches — not
-      // while it waits its turn in the local-inference lock.
-      const doFetch = () => request.fetchImpl(chatUrl, {
+      // callProvider owns admission; governed queue wait consumes the parent budget.
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
+      if (plan.providerSettings.thinking_budget_tokens !== undefined) {
+        const expected = plan.localThinkingBudgetEvidence;
+        if (!isLocalProviderId(providerId) || !expected) throw new Error("Local thinking runtime evidence unavailable");
+        const root = baseUrl.replace(/\/(engines\/)?v1\/?$/, "");
+        const actual = await request.readLocalThinkingBudgetEvidence?.(root, modelId, request.fetchImpl);
+        if (!actual || ["dialect", "modelDigest", "engineIdentity", "templateDigest", "configDigest"].some(
+          key => actual[key as keyof typeof actual] !== expected[key as keyof typeof expected],
+        )) throw new Error("Local thinking runtime evidence changed or unavailable");
+        await assertGovernedInferenceAuthority(currentInferenceSignal());
+      }
+      const continuation = reassessment ? null : await prepareLocalNativeChatReplay(request, chatUrl);
+      if (continuation) {
+        continuationBinding = continuation.binding;
+        nativeReplay = continuation.replayed;
+        body.messages = continuation.messages;
+        await assertGovernedInferenceAuthority(currentInferenceSignal());
+      }
+      const execution = currentGovernedInferenceDeadline();
+      const signal = currentInferenceSignal(execution?.signal);
+      const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+        defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
+        localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
+      }, execution ? { deadlineAt: execution.deadlineAt, now: Date.now() } : undefined).effectiveTimeoutMs);
+      res = await request.fetchImpl(chatUrl, {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
-          defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
-          localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
-        }).effectiveTimeoutMs),
+        signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
-      res = providerId === "local"
-        ? await withLocalInferenceLock(doFetch, { modelId })
-        : await doFetch();
     } catch (e) {
+      currentInferenceSignal()?.throwIfAborted();
+      if (isReassessmentExecutionError(e)) throw e;
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
-      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
+      if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
       throw new InferenceError(
-        `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
+        nativeReplay ? `Network error calling ${providerId}: private dispatch details omitted`
+          : `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
         providerId,
       );
@@ -507,7 +538,19 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      throw classifyHttpError(res.status, providerId, errBody, res.headers);
+      const error = classifyHttpError(res.status, providerId, errBody, res.headers);
+      // A server may echo the request. Keep its typed status/capacity decision,
+      // but never carry a private continuation into durable failure diagnostics.
+      if (nativeReplay) {
+        const retry = error.headers?.["retry-after"];
+        const seconds = retry && /^\d+(?:\.\d+)?$/.test(retry) ? retry : error.capacity?.retryAfterSeconds;
+        throw new InferenceError(
+          `${error.message.split(":", 1)[0]}: private dispatch details omitted`,
+          error.code, error.providerId, error.statusCode,
+          seconds === undefined ? undefined : { "retry-after": String(seconds) }, undefined, error.capacity,
+        );
+      }
+      throw error;
     }
 
     // Topology-free REAL weekly-quota capture: a subscription/OAuth Anthropic
@@ -549,7 +592,14 @@ export const chatAdapter: ExecutionAdapterHandler = {
       }
       data = lastCompleted ?? { output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }] };
     } else {
-      data = await res.json() as Record<string, unknown>;
+      try {
+        data = await res.json() as Record<string, unknown>;
+      } catch (error) {
+        if (nativeReplay) throw new InferenceError(
+          `Invalid response from ${providerId}: private dispatch details omitted`, "provider_error", providerId,
+        );
+        throw error;
+      }
     }
 
     const openRouterRoutingEvidence = providerId === "openrouter"
@@ -577,8 +627,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
     // this to avoid returning a max_tokens-truncated fragment as a final answer
     // (BI-1D144CC1). Each branch below maps its provider-specific value.
     let truncated = false;
+    let finishReason: string | undefined;
     /** Separate thinking channel, when the provider emits one (BI-1E77BEE3). */
     let reasoning: string | undefined;
+    let nativeReasoning: string | undefined;
 
     if (isAnthropic(providerId)) {
       // Anthropic response
@@ -662,35 +714,38 @@ export const chatAdapter: ExecutionAdapterHandler = {
         };
       }>)?.[0];
       const msg = choice?.message;
+      finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
 
       // Capture reasoning as its OWN channel (BI-1E77BEE3). Providers disagree on
       // the field name: llama.cpp / Docker Model Runner emit `reasoning_content`,
       // other OpenAI-compatible providers emit `reasoning`.
       reasoning = msg?.reasoning_content || msg?.reasoning || undefined;
+      nativeReasoning = typeof msg?.reasoning_content === "string" ? msg.reasoning_content : undefined;
 
-      // The answer is `content`. Falling back to reasoning is a LAST resort for a
-      // provider that returns only a thinking channel — without it such a turn
-      // renders blank. When content exists, reasoning must never displace it.
-      text = msg?.content || reasoning || "";
+      // Thinking without an answer is incomplete work. Keep it available for
+      // progress disclosure, but never promote scratchpad into a conclusion.
+      text = msg?.content ?? "";
       truncated = choice?.finish_reason === "length";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {
         // Structured tool calls (standard OpenAI format)
-        toolCalls = extractOpenAIToolCalls(msg.tool_calls);
-      } else if (text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
+        try {
+          toolCalls = extractOpenAIToolCalls(msg.tool_calls);
+        } catch (error) {
+          if (nativeReplay) throw new InferenceError(
+            `Invalid tool response from ${providerId}: private dispatch details omitted`, "provider_error", providerId,
+          );
+          throw error;
+        }
+      } else if (!reassessment && text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
         // Fallback: model runner didn't translate native tool-call markers to structured format.
         // Handles Gemma/Llama template variants that leak <tool_call> or <|tool_call> as text.
         const extracted = extractTextualToolCalls(text);
         toolCalls = extracted.toolCalls;
         text = extracted.cleanText;
-      } else if (text && text.includes('"tool_use"')) {
-        // Fallback 2: local/Docker Model Runner (Gemma, Llama) emits the
-        // canonical Anthropic-style {"type":"tool_use",...} JSON as plain
-        // content rather than a structured tool_calls field. Without this
-        // every tool-requiring turn that fallback-routes to local is a
-        // silent dead-end: the agentic loop sees toolCalls=0 and gives up.
-        // Share the CLI adapters' extractor so the behaviour is identical
-        // regardless of provider.
+      } else if (!reassessment && text && text.includes('"tool_use"')) {
+        // Ordinary local traffic may emit Anthropic tool_use JSON as text.
+        // Restricted reviews require structured provider calls instead.
         const textualUse = extractTextualToolUse(text);
         if (textualUse.length > 0) {
           toolCalls = textualUse;
@@ -712,7 +767,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
       outputTokens = readUsage("output_tokens", "completion_tokens");
     }
 
-    return {
+    validateReassessmentToolCalls(toolCalls);
+    // Keep provider-supplied identity, never the requested model or response body.
+    const returnedModel = typeof data.model === "string" && data.model.trim() ? data.model : undefined;
+    const result: AdapterResult = {
       text,
       toolCalls,
       // Only present when the provider actually offered a separate channel;
@@ -721,10 +779,16 @@ export const chatAdapter: ExecutionAdapterHandler = {
       usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
       truncated,
-      ...(openRouterRoutingEvidence
-        ? { raw: { openRouterRoutingEvidence } }
+      ...(finishReason !== undefined && { finishReason }),
+      ...(returnedModel !== undefined || openRouterRoutingEvidence
+        ? { raw: {
+          ...(returnedModel !== undefined ? { model: returnedModel } : {}),
+          ...(openRouterRoutingEvidence ? { openRouterRoutingEvidence } : {}),
+        } }
         : {}),
     };
+    if (nativeReasoning) captureLocalNativeContinuation(result, nativeReasoning, continuationBinding);
+    return result;
   },
 };
 

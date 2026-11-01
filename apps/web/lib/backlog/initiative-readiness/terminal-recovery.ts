@@ -1,11 +1,10 @@
-import { repoBlobArtifactRef, immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
+import { immutableArtifactIdentity, parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
-  objectiveMappingHistoricalProviderProofDigest,
   type ObjectiveMappingRequestHistory,
 } from "@/lib/mcp-task-objective-mapping-request-key";
 import {
@@ -14,8 +13,8 @@ import {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
-import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
+import { currentBaseline, parseBaselinePayloads, type BaselinePayload } from "./baseline-head";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
 import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
@@ -25,6 +24,15 @@ import {
 import { bodyBaselineEscalation, researchLaneEscalation, smallShapeAcceptanceEscalation } from "./shape-lane-escalations";
 import type { InitiativeReadinessDecision } from "./types";
 import { readRepositoryProviderBlob } from "./repository-artifact";
+import { bodyBaselineInputsMatch } from "./body-baseline-binding";
+import { resolveReviewerIdentity } from "./reviewer-identity";
+import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
+import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
+import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
+import { resolveQualificationAdmission, type QualificationAdmissionRoute } from "./qualification-terminal-admission";
+
+export type { MergedRepairSource } from "./merged-repair-source";
+export { defaultLoadMergedRepairSource } from "./merged-repair-source";
 
 export type TerminalRecoveryRoom = {
   capsuleId: string;
@@ -46,43 +54,52 @@ export type TerminalRecoveryEscalationReason =
   | "body-baseline-unpersisted"
   | "acceptance-criteria-missing"
   | "baseline-ambiguous"
+  | "baseline-stale"
+  | "reviewer-context-required"
   | "eligible-evidence-not-found"
   | "eligible-evidence-unbounded"
   | "objective-mapping-history-unavailable"
   | "objective-mapping-identity-conflict"
   | "objective-mapping-prior-authority-active"
   | "objective-mapping-authoritative-output-exists"
-  | "canonical-artifact-unavailable";
+  | "canonical-artifact-unavailable"
+  /** BI-CE661173: no live room, and the trunk shows no standing commit that delivered the item. */
+  | "merged-delivery-not-found"
+  /** BI-CE661173: more than one standing delivering commit; no single range to review. */
+  | "merged-delivery-ambiguous"
+  /** BI-CE661173: the item's delivery actors could not be bounded, so independence cannot be proven. */
+  | "delivery-actors-unbounded";
 
 type TerminalEscalation = {
   // design-author owns RESEARCH_REQUIRED on every shape that carries it
   // (shape-requirements.ts small() and medium()), so the research lane's
   // escalation is addressed to the author, not to a reviewer (BI-7876699F).
   accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author" | "product-owner";
-  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item";
+  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item" | "update_backlog_item_status" | "claim_workroom_scope";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
 };
 
+export type { QualificationAdmissionRoute } from "./qualification-terminal-admission";
+
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
+  qualificationAdmission?: QualificationAdmissionRoute;
 };
 
-export type BaselinePayload = {
-  baselineId: string;
-  supersedesBaselineId: string | null;
-  artifactRef?: {
-    kind: "repo-blob-at-commit";
-    repositoryFullName: string;
-    commitSha: string;
-    path: string;
-    providerBlobId: string;
-  };
-};
+export { currentBaseline, parseBaselinePayloads } from "./baseline-head";
+export type { BaselinePayload } from "./baseline-head";
 
 export type TerminalRecoveryPorts = {
+  /** Live scope declaration, shared with claim-time canonical artifact discovery. */
+  loadBacklogBody?(itemId: string): Promise<string | null>;
+  bodyReviewerCanRead?(args: { userId: string; agentId: string; capsuleId: string; baseline: BaselinePayload }): Promise<boolean>;
+  validateBodyBaselineCurrent?(args: { baseline: BaselinePayload; room: TerminalRecoveryRoom; itemId: string }): Promise<boolean>;
   loadLiveRooms(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom[]>;
+  loadDeliveredBodyAuthor?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom | null>;
+  /** BI-CE661173: a merged repair's review source when no Workroom is live. */
+  loadMergedRepairSource?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<MergedRepairSource>;
   loadBaselinePayloads(itemId: string): Promise<unknown[]>;
   loadEligibleEvidenceActivityIds(args: {
     itemId: string;
@@ -102,11 +119,28 @@ export type TerminalRecoveryPorts = {
     repositoryFullName: string;
     baseSha: string;
     headSha: string;
+    backlogBody?: string | null;
+    subjectItemId?: string;
+    headBranch?: string;
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
+  /** BI-46E344FE: a delivery of several squash commits, reviewed as their ordered union. */
+  discoverCommitRange?(args: { repositoryFullName: string; ranges: CommitRange[] }): Promise<Awaited<ReturnType<typeof discoverCommitRangeArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
   loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
+  resolveQualificationAdmission?(args: { itemId: string; refusedWorkroomId: string | null; currentAgentId: string | null }): Promise<QualificationAdmissionRoute | null>;
 };
+
+/** The PIR's bound artifact: one repair blob at `commitSha`, or the whole commit range (BI-46E344FE). */
+function pirCanonicalArtifact(
+  discovered: Awaited<ReturnType<TerminalRecoveryPorts["discoverArtifact"]>>,
+  commitSha: string,
+): NonNullable<Parameters<TerminalRecoveryPorts["resolveRecovery"]>[0]["canonicalArtifact"]> {
+  if (!discovered.resolved) return { resolved: false, nextAction: discovered.nextAction };
+  return "kind" in discovered.artifact
+    ? { resolved: true, kind: "repo-commit-range", ranges: discovered.artifact.ranges, digest: discovered.artifact.digest }
+    : { resolved: true, ...discovered.artifact, commitSha };
+}
 
 function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string): TerminalInitiativeRecovery {
   return {
@@ -120,46 +154,6 @@ function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string
       nextAction,
     }],
   };
-}
-
-export function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
-  const rows: BaselinePayload[] = [];
-  for (const payload of payloads) {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-    const row = payload as Record<string, unknown>;
-    if (typeof row.baselineId !== "string"
-      || (row.supersedesBaselineId !== null && typeof row.supersedesBaselineId !== "string")) return null;
-    const ref = row.artifactRef;
-    const artifactRef = ref && typeof ref === "object" && !Array.isArray(ref)
-      && (ref as Record<string, unknown>).kind === "repo-blob-at-commit"
-      && typeof (ref as Record<string, unknown>).repositoryFullName === "string"
-      && typeof (ref as Record<string, unknown>).commitSha === "string"
-      && typeof (ref as Record<string, unknown>).path === "string"
-      && typeof (ref as Record<string, unknown>).providerBlobId === "string"
-      ? {
-        kind: "repo-blob-at-commit" as const,
-        repositoryFullName: (ref as Record<string, unknown>).repositoryFullName as string,
-        commitSha: (ref as Record<string, unknown>).commitSha as string,
-        path: (ref as Record<string, unknown>).path as string,
-        providerBlobId: (ref as Record<string, unknown>).providerBlobId as string,
-      }
-      : undefined;
-    rows.push({
-      baselineId: row.baselineId,
-      supersedesBaselineId: row.supersedesBaselineId as string | null,
-      ...(artifactRef ? { artifactRef } : {}),
-    });
-  }
-  return rows;
-}
-
-export function currentBaseline(rows: BaselinePayload[]): BaselinePayload | null {
-  const superseded = new Set(rows.map((row) => row.supersedesBaselineId).filter((id): id is string => Boolean(id)));
-  const heads = rows.filter((row) => !superseded.has(row.baselineId));
-  if (heads.length !== 1) return null;
-  const expected = heads[0]!.baselineId;
-  const validation = validateInitiativeBaselineChainHead(rows, expected);
-  return validation.ok ? heads[0]! : null;
 }
 
 async function defaultLoadLiveRooms(args: {
@@ -197,6 +191,14 @@ async function defaultLoadBaselinePayloads(itemId: string): Promise<unknown[]> {
   // routing exactly as the projection already does for OBJECTIVE_BASELINE_REQUIRED.
   const source = await loadBaselineSource(prisma as unknown as BaselineSourceDb, itemId);
   return source ? source.baselineRows.map((row) => row.payload) : [];
+}
+
+async function defaultLoadDeliveredBodyAuthor(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom | null> {
+  const item = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, itemId: true } });
+  if (!item) return null;
+  const room = await resolveBodyBaselineAuthorRoom(prisma, item);
+  if (!room || !isArchivedBodyAuthorRoom(room) || (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId)) return null;
+  return { ...room, isLive: false };
 }
 
 async function defaultLoadEligibleEvidenceActivityIds(args: {
@@ -242,18 +244,14 @@ function parseHistoricalObjectiveMappingBinding(value: unknown): ObjectiveMappin
   const binding = value as Record<string, unknown>;
   const artifactValue = binding.artifactRef;
   if (!artifactValue || typeof artifactValue !== "object" || Array.isArray(artifactValue)) return null;
-  const artifact = artifactValue as Record<string, unknown>;
+  const artifact = parseInitiativeReviewArtifactRef(artifactValue);
   const writerToolName = nonEmptyString(binding.writerToolName);
   const itemId = nonEmptyString(binding.itemId);
   const expectedCurrentBaselineId = binding.expectedCurrentBaselineId;
-  const repositoryFullName = nonEmptyString(artifact.repositoryFullName);
-  const commitSha = nonEmptyString(artifact.commitSha);
-  const path = nonEmptyString(artifact.path);
-  const providerBlobId = nonEmptyString(artifact.providerBlobId);
   if (!writerToolName || !itemId || binding.gate !== "objective-mapping"
     || (expectedCurrentBaselineId !== undefined && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
-    || artifact.kind !== "repo-blob-at-commit" || !repositoryFullName || !commitSha || !path || !providerBlobId) {
+    || !artifact || artifact.kind === "feature-build-revision") {
     return null;
   }
   const evidence = binding.eligibleEvidenceActivityIds;
@@ -294,13 +292,7 @@ function parseHistoricalObjectiveMappingBinding(value: unknown): ObjectiveMappin
         },
       }
       : {}),
-    artifactRef: {
-      kind: "repo-blob-at-commit",
-      repositoryFullName,
-      commitSha,
-      path,
-      providerBlobId,
-    },
+    artifactRef: artifact,
   };
 }
 
@@ -402,147 +394,51 @@ async function defaultLoadObjectiveMappingHistory(args: {
   return loadObjectiveMappingHistoryFromDb(prisma, args);
 }
 
-/** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
 export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
+  loadBacklogBody: async (itemId) => (await prisma.backlogItem.findUnique({
+    where: { itemId }, select: { body: true },
+  }))?.body ?? null,
+  bodyReviewerCanRead: async ({ userId, agentId, capsuleId, baseline }) => {
+    const authorIds = [...new Set([baseline.bodyAuthorPrincipalId, baseline.sourceAuthorPrincipalId]
+      .filter((id): id is string => typeof id === "string" && id.length > 0))];
+    const reviewer = await resolveReviewerIdentity(prisma, { reviewerUserId: userId, reviewerAgentId: agentId });
+    const authors = await prisma.principal.findMany({ where: { id: { in: authorIds } }, select: { principalId: true } });
+    if (!reviewer || authorIds.length === 0 || authors.length !== authorIds.length
+      || authors.some((author) => author.principalId === reviewer.principalId) || baseline.authorAgentId === agentId) return false;
+    const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+    if (!room) return false;
+    const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+    return (await resolveAgentWorkroomAccess({ userId, agentId, workroomId: room.id, requested: "content" })).decision.level === "content";
+  },
+  validateBodyBaselineCurrent: async ({ baseline, room, itemId }) => {
+    const item = await prisma.backlogItem.findUnique({ where: { itemId }, select: { itemId: true, body: true, organizationId: true } });
+    return Boolean(item && baseline.artifactRef && room.repositoryFullName && room.headBranch && room.headSha
+      && bodyBaselineInputsMatch(baseline, { ...item!, binding: {
+        writerToolName: "record_initiative_evidence", gate: "objective-mapping", itemId,
+        expectedCurrentBaselineId: baseline.baselineId, artifactRef: baseline.artifactRef!,
+        workroomRef: { kind: "workroom-head", workroomId: room.capsuleId,
+          repositoryFullName: room.repositoryFullName!, branchName: room.headBranch!, headSha: room.headSha! },
+      } }));
+  },
   loadLiveRooms: defaultLoadLiveRooms,
+  loadDeliveredBodyAuthor: defaultLoadDeliveredBodyAuthor,
+  loadMergedRepairSource: (args) => defaultLoadMergedRepairSource(args),
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
   loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
   verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
   discoverArtifact: discoverCanonicalReviewArtifact,
+  discoverCommitRange: (args) => discoverCommitRangeArtifact(args),
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
   loadPlanArtifact: loadPlanReviewArtifact,
+  resolveQualificationAdmission: resolveQualificationAdmission,
 };
 
-function baselineAncestors(
-  rows: readonly BaselinePayload[],
-  head: BaselinePayload,
-): Map<string, BaselinePayload> {
-  const byId = new Map(rows.map((row) => [row.baselineId, row]));
-  const ancestors = new Map<string, BaselinePayload>();
-  const visited = new Set<string>([head.baselineId]);
-  let cursor = head.supersedesBaselineId;
-  while (cursor) {
-    if (visited.has(cursor)) break;
-    visited.add(cursor);
-    const row = byId.get(cursor);
-    if (!row) break;
-    ancestors.set(cursor, row);
-    cursor = row.supersedesBaselineId;
-  }
-  return ancestors;
-}
-
-type HistoricalRepoBlobArtifact = Extract<ObjectiveMappingRequestHistory["binding"]["artifactRef"], { kind: "repo-blob-at-commit" }>;
-
-function sameRepositoryPath(
-  left: NonNullable<BaselinePayload["artifactRef"]>,
-  right: HistoricalRepoBlobArtifact,
-): boolean {
-  return left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
-    && left.path === right.path;
-}
-
-export function exactArtifactRefMatches(
-  left: NonNullable<BaselinePayload["artifactRef"]>,
-  right: HistoricalRepoBlobArtifact,
-): boolean {
-  return left.kind === right.kind
-    && left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
-    && left.commitSha.toLocaleLowerCase("en-US") === right.commitSha.toLocaleLowerCase("en-US")
-    && left.path === right.path
-    && left.providerBlobId.toLocaleLowerCase("en-US") === right.providerBlobId.toLocaleLowerCase("en-US");
-}
-
-export function exactStringSetMatches(left: readonly string[], right: readonly string[]): boolean {
-  const normalizedLeft = [...new Set(left.map((entry) => entry.trim()))].sort();
-  const normalizedRight = [...new Set(right.map((entry) => entry.trim()))].sort();
-  return normalizedLeft.length === normalizedRight.length
-    && normalizedLeft.every((entry, index) => entry === normalizedRight[index]);
-}
-
-export async function classifyHistoricalObjectiveMappingArtifacts(args: {
-  history: readonly ObjectiveMappingRequestHistory[];
-  baselineRows: readonly BaselinePayload[];
-  currentBaseline: BaselinePayload;
-  currentArtifact: {
-    repositoryFullName: string;
-    path: string;
-  };
-  room: TerminalRecoveryRoom & {
-    repositoryFullName: string;
-    headSha: string;
-  };
-  verify: TerminalRecoveryPorts["verifyHistoricalArtifact"];
-}): Promise<ActionResult<{
-  history: ObjectiveMappingRequestHistory[];
-  providerProvenImpossibleTaskRunProofs: ReadonlyMap<string, string>;
-}>> {
-  const ancestors = baselineAncestors(args.baselineRows, args.currentBaseline);
-  const verificationByLocator = new Map<string, Awaited<ReturnType<typeof readRepositoryProviderBlob>>>();
-  const classified: ObjectiveMappingRequestHistory[] = [];
-  const providerProvenImpossibleTaskRunProofs = new Map<string, string>();
-
-  for (const historical of args.history) {
-    const baselineId = historical.binding.expectedCurrentBaselineId;
-    const ancestor = typeof baselineId === "string" ? ancestors.get(baselineId) : undefined;
-    // BI-926A7E90: objective mapping binds acceptance to a repository blob; a
-    // historical request bound to any other artifact kind is never eligible.
-    const historicalArtifact = repoBlobArtifactRef(historical.binding.artifactRef);
-    if (!historicalArtifact) {
-      classified.push(historical);
-      continue;
-    }
-    const ancestorArtifact = ancestor?.artifactRef;
-    const isLegacyInvalid = historical.binding.workroomRef === undefined
-      || historical.binding.eligibleEvidenceActivityIds === undefined;
-    const eligible = isLegacyInvalid
-      && ancestorArtifact !== undefined
-      && sameRepositoryPath(ancestorArtifact, historicalArtifact)
-      && ancestorArtifact.providerBlobId === historicalArtifact.providerBlobId
-      && historicalArtifact.repositoryFullName.toLocaleLowerCase("en-US")
-        === args.currentArtifact.repositoryFullName.toLocaleLowerCase("en-US")
-      && historicalArtifact.path === args.currentArtifact.path
-      && historicalArtifact.commitSha.toLocaleLowerCase("en-US") === args.room.headSha.toLocaleLowerCase("en-US");
-
-    if (!eligible) {
-      classified.push(historical);
-      continue;
-    }
-
-    const locatorKey = [
-      historicalArtifact.repositoryFullName.toLocaleLowerCase("en-US"),
-      historicalArtifact.commitSha.toLocaleLowerCase("en-US"),
-      historicalArtifact.path,
-      historicalArtifact.providerBlobId.toLocaleLowerCase("en-US"),
-    ].join("\u0000");
-    let verification = verificationByLocator.get(locatorKey);
-    if (!verification) {
-      verification = await args.verify({
-        repositoryFullName: historicalArtifact.repositoryFullName,
-        commitSha: historicalArtifact.commitSha,
-        path: historicalArtifact.path,
-        expectedBlobId: historicalArtifact.providerBlobId,
-      });
-      verificationByLocator.set(locatorKey, verification);
-    }
-    if (!verification.ok && verification.code === "IMMUTABLE_SOURCE_UNAVAILABLE") {
-      return err("historical-artifact-provider-unavailable");
-    }
-    if (!verification.ok && verification.code === "IMMUTABLE_BLOB_MISMATCH") {
-      providerProvenImpossibleTaskRunProofs.set(
-        historical.taskRunId,
-        objectiveMappingHistoricalProviderProofDigest(historical),
-      );
-    }
-    classified.push(historical);
-  }
-
-  return ok({ history: classified, providerProvenImpossibleTaskRunProofs });
-}
-
+import { classifyHistoricalObjectiveMappingArtifacts } from "./objective-mapping-history-artifacts";
+export { classifyHistoricalObjectiveMappingArtifacts, exactArtifactRefMatches, exactStringSetMatches } from "./objective-mapping-history-artifacts";
 /** Build an exact, executable reviewer handoff after — and only after — denial. */
 export async function resolveTerminalInitiativeRecovery(args: {
+  currentUserId?: string;
   decision: InitiativeReadinessDecision;
   currentAgentId: string | null;
   refusedWorkroomId: string | null;
@@ -567,14 +463,92 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const researchLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "RESEARCH_REQUIRED");
   if (researchLane) {
+    const qualification = await ports.resolveQualificationAdmission?.({
+      itemId: args.decision.subject.id,
+      refusedWorkroomId: args.refusedWorkroomId,
+      currentAgentId: args.currentAgentId,
+    });
+    if (qualification) {
+      return {
+        ...researchLaneEscalation(),
+        qualificationAdmission: qualification,
+        escalations: [{
+          accountableRole: "design-author",
+          toolName: "claim_workroom_scope",
+          grant: "backlog_write",
+          reason: "research-evidence-required",
+          nextAction: "Replay the opaque server-issued qualificationAdmissionToken through claim_workroom_scope on the named Workroom. This admits one bounded test-only experiment and does not satisfy research.",
+        }],
+      };
+    }
     return researchLaneEscalation();
   }
-  const rooms = await ports.loadLiveRooms({
+  const roomArgs = {
     itemId: args.decision.subject.id,
     refusedWorkroomId: args.refusedWorkroomId,
-  });
+  };
+  const rooms = await ports.loadLiveRooms(roomArgs);
+  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
+  const pirOnly = {
+    ...args.decision,
+    blockers: args.decision.blockers.filter(isPostImplementationReview),
+    unmet: args.decision.unmet.filter(isPostImplementationReview),
+  };
+  // BI-CE661173: a merged repair's Workroom is normally archived or idle by
+  // the time its post-implementation review is owed. The review then reads the
+  // merged squash commit on the trunk, anchored to the delivery's own newest
+  // room, and every delivery actor is excluded from reviewing it.
+  const owesPir = pirOnly.blockers.length + pirOnly.unmet.length > 0;
+  const routeMergedRepairReview = async (source: MergedRepairSource): Promise<TerminalInitiativeRecovery> => {
+    if (source.kind === "unavailable") return escalation(source.reason, source.nextAction);
+    const room = source.room;
+    // BI-46E344FE: several delivering commits are reviewed together, oldest first.
+    const ranges = mergedRepairCommits(source).map((commit) => ({ baseSha: commit.parentSha, headSha: commit.sha }));
+    const discovered = ranges.length > 1
+      ? await (ports.discoverCommitRange ?? discoverCommitRangeArtifact)({ repositoryFullName: room.repositoryFullName!, ranges })
+      : await ports.discoverArtifact({
+        repositoryFullName: room.repositoryFullName!,
+        baseSha: source.parentSha,
+        headSha: source.mergedCommitSha,
+        purpose: "post-implementation-review",
+      });
+    const excluded = new Set(source.deliveryActorIds);
+    return ports.resolveRecovery({
+      decision: pirOnly,
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext: {
+        workroomId: room.capsuleId,
+        repositoryFullName: room.repositoryFullName!,
+        branchName: room.headBranch!,
+        headSha: room.headSha!,
+      },
+      canonicalArtifact: pirCanonicalArtifact(discovered, source.mergedCommitSha),
+      expectedCurrentBaselineId: null,
+      isReviewerEligible: async (agentId) => !excluded.has(agentId),
+    });
+  };
+  if (rooms.length === 0 && owesPir && ports.loadMergedRepairSource) {
+    return routeMergedRepairReview(await ports.loadMergedRepairSource(roomArgs));
+  }
+  // Only retained body acceptance and a merged repair's review (above) can
+  // read a retired anchor. Design/spec review still requires a live Workroom.
+  let bodyPayloads: unknown[] | undefined;
+  if (rooms.length === 0 && args.decision.shapeDecision?.effective === "medium"
+    && !designPhaseReviewDecision(args.decision)
+    && [...args.decision.blockers, ...args.decision.unmet].every(entry =>
+      entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED" || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED")) {
+    bodyPayloads = await ports.loadBaselinePayloads(args.decision.subject.id);
+    const rows = parseBaselinePayloads(bodyPayloads);
+    const body = rows && currentBaseline(rows);
+    if (body?.origin === "item-body" && body.artifactRef?.kind === "document-version") {
+      const delivered = await ports.loadDeliveredBodyAuthor?.(roomArgs);
+      if (delivered) rooms.push(delivered);
+    }
+  }
   if (rooms.length === 0) {
-    return escalation("workroom-not-found", "No live Workroom is bound to this item. Claim or resume the exact Workroom, then retry completion.");
+    return escalation("workroom-not-found", "No live Workroom or exact provider-verified delivered body-acceptance author is available. Reconcile the current source attempt and merged PR observation through governed Workroom procedures, then retry completion.");
   }
   if (rooms.length !== 1) {
     return escalation("workroom-ambiguous", "More than one live Workroom is bound to this item. Reconcile ownership before dispatching an acceptance reviewer.");
@@ -593,9 +567,16 @@ export async function resolveTerminalInitiativeRecovery(args: {
   // A break-fix review assesses the repair the Workroom authored. It does not
   // create or reconcile an objective baseline. Resolve its exact source before
   // entering the baseline-owned acceptance path below (BI-594CF003).
-  const isPostImplementationReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
-    entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED";
-  if ([...args.decision.blockers, ...args.decision.unmet].some(isPostImplementationReview)) {
+  if (owesPir) {
+    // BI-CE661173 (BI-17238133): a room whose recorded base equals its head
+    // compares an empty range, though its repair merged. Review the merged
+    // squash commit instead, when the trunk proves this room's delivery.
+    if (room.baseSha.toLowerCase() === room.headSha.toLowerCase() && ports.loadMergedRepairSource) {
+      const source = await ports.loadMergedRepairSource({ itemId: args.decision.subject.id, refusedWorkroomId: room.capsuleId });
+      return routeMergedRepairReview(source.kind === "found" && source.room.capsuleId !== room.capsuleId
+        ? { kind: "unavailable", reason: "workroom-ambiguous", nextAction: "The live Workroom is not the item's newest delivery attempt. Reconcile ownership before dispatching a post-implementation reviewer." }
+        : source);
+    }
     const discovered = await ports.discoverArtifact({
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
@@ -603,23 +584,17 @@ export async function resolveTerminalInitiativeRecovery(args: {
       purpose: "post-implementation-review",
     });
     return ports.resolveRecovery({
-      decision: {
-        ...args.decision,
-        blockers: args.decision.blockers.filter(isPostImplementationReview),
-        unmet: args.decision.unmet.filter(isPostImplementationReview),
-      },
+      decision: pirOnly,
       currentAgentId: args.currentAgentId,
       db: prisma as never,
       dispatchContext,
-      canonicalArtifact: discovered.resolved
-        ? { resolved: true, ...discovered.artifact, commitSha: room.headSha }
-        : { resolved: false, nextAction: discovered.nextAction },
+      canonicalArtifact: pirCanonicalArtifact(discovered, room.headSha),
       expectedCurrentBaselineId: null,
     });
   }
 
   const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
-  const payloads = await ports.loadBaselinePayloads(args.decision.subject.id);
+  const payloads = bodyPayloads ?? await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
     if (designPhase) return routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }); // BI-1D8E53D9
     const effective = args.decision.shapeDecision?.effective;
@@ -630,6 +605,13 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const baseline = baselineRows ? currentBaseline(baselineRows) : null;
   if (!baseline) {
     return escalation("baseline-ambiguous", "The objective baseline chain has no unique valid head. Reconcile or supersede the conflicting baseline before dispatch.");
+  }
+  if (baseline.artifactRef?.kind === "document-version" && (!ports.validateBodyBaselineCurrent
+    || !await ports.validateBodyBaselineCurrent({ baseline, room, itemId: args.decision.subject.id }))) {
+    return escalation("baseline-stale", "The retained body criteria, organization or delivered source identity changed. Retry the authorized completion transition to capture the current criteria version, then record fresh eligible evidence. The earlier request cannot be reused.");
+  }
+  if (baseline.artifactRef?.kind === "document-version" && (!args.currentUserId || !ports.bodyReviewerCanRead)) {
+    return escalation("reviewer-context-required", "Resolve body acceptance recovery from the current authorized connection so reviewer Workroom admission can be checked. A document snapshot never grants room access.");
   }
 
   const decision = designPhase ?? args.decision;
@@ -674,7 +656,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   // BI-D9DECD1B: so do the archetype reviews owed before implementation. The
   // claim issues them at the head, and the review guard rebuilds them here.
   const readsHead = designPhase !== null || isArchetypePhaseReview(decision);
-  const baselineArtifact = !readsHead && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
+  const baselineArtifact = !readsHead && baseline.artifactRef?.kind === "repo-blob-at-commit" && baseline.artifactRef.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
       commitSha: baseline.artifactRef.commitSha,
@@ -682,22 +664,29 @@ export async function resolveTerminalInitiativeRecovery(args: {
       providerBlobId: baseline.artifactRef.providerBlobId,
     }
     : null;
-  const discovered = baselineArtifact ? null : await ports.discoverArtifact({
+  const documentArtifact = !readsHead && baseline.artifactRef?.kind === "document-version"
+    && baseline.artifactRef.repositoryFullName.toLocaleLowerCase("en-US") === room.repositoryFullName.toLocaleLowerCase("en-US")
+    ? { kind: "document-version" as const, versionId: baseline.artifactRef.versionId, valueDigest: baseline.artifactRef.valueDigest } : null;
+  const discovered = baselineArtifact || documentArtifact ? null : await ports.discoverArtifact({
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
       headSha: room.headSha,
+      subjectItemId: args.decision.subject.id,
+      headBranch: room.headBranch,
+      backlogBody: await ports.loadBacklogBody?.(args.decision.subject.id),
     });
   if (discovered && !discovered.resolved) {
     return escalation("canonical-artifact-unavailable", discovered.nextAction);
   }
-  const artifact = baselineArtifact ?? (discovered?.resolved ? discovered.artifact : null);
+  const artifact = documentArtifact ?? baselineArtifact ?? (discovered?.resolved ? discovered.artifact : null);
   if (!artifact) {
     return escalation("canonical-artifact-unavailable", "The current baseline has no provider-verified canonical source binding.");
   }
 
   const recovery = await ports.resolveRecovery({
     decision,
-    currentAgentId: args.currentAgentId,
+    currentAgentId: baseline.origin === "item-body" && typeof baseline.authorAgentId === "string" ? baseline.authorAgentId : args.currentAgentId,
+    ...(baseline.artifactRef?.kind === "document-version" ? { isReviewerEligible: (agentId: string) => ports.bodyReviewerCanRead!({ userId: args.currentUserId!, agentId, capsuleId: room.capsuleId, baseline }) } : {}),
     db: prisma as never,
     dispatchContext,
     canonicalArtifact: { resolved: true, ...artifact },
@@ -715,7 +704,11 @@ export async function resolveTerminalInitiativeRecovery(args: {
   // No packet because the resolver said why (no eligible reviewer, no artifact,
   // no evidence): that reason is the true one. "Refresh readiness" would send
   // the reader after the wrong remedy (BI-DF255666 found this through the sweep).
-  if (!packet && (recovery.escalations.length > 0 || recovery.unroutable.length > 0)) return recovery;
+  if (!packet && (recovery.escalations.length > 0 || recovery.unroutable.length > 0)) {
+    if (baseline.artifactRef?.kind === "document-version") return { ...recovery, escalations: recovery.escalations.map((entry) => entry.reason === "no-eligible-reviewer"
+      ? { ...entry, nextAction: `${entry.nextAction} The reviewer and delegating person must also have current Workroom content access. Use the existing governed coworker engagement procedure; revoked or narrowed room access is never bypassed by a review request.` } : entry) };
+    return recovery;
+  }
   if (!packet || !binding || !requiredToolNames) {
     return escalation(
       "objective-mapping-history-unavailable",
@@ -746,6 +739,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
       repositoryFullName: immutableArtifactIdentity(binding.artifactRef).repositoryFullName,
       path: immutableArtifactIdentity(binding.artifactRef).path,
     },
+    currentEvidenceActivityIds: binding.eligibleEvidenceActivityIds,
     room: {
       ...room,
       repositoryFullName: room.repositoryFullName,
@@ -775,6 +769,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
     },
     history: classifiedHistory.data.history,
     providerProvenImpossibleTaskRunProofs: classifiedHistory.data.providerProvenImpossibleTaskRunProofs,
+    serverProvenStaleBodyTaskRunProofs: classifiedHistory.data.serverProvenStaleBodyTaskRunProofs,
   });
   if (!authorization.authorized) {
     const reason = authorization.reason === "immutable-identity-conflict"

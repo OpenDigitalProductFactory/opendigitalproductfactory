@@ -11,10 +11,16 @@ import { classifyWorkCapsuleLiveness,
   isDemonstrablyWorking,
   type WorkCapsuleLiveness,
 } from "./liveness";
-import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { loadWorkroomRecoveryItems, projectWorkroomRecovery } from "./workroom-recovery-projection";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
+import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle, type WorkroomTitleDb } from "./workroom-display-titles.server";
+import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "@/lib/work-management/semantic-review-room-projection";
+import { readPendingGovernedDecisions, governedDecisionStage } from "@/lib/work-management/workroom-stage-decision";
+import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -45,11 +51,22 @@ const INVENTORY_SELECT = {
   updatedAt: true,
   featureBuildId: true,
   workspaceState: true,
-  activities: { orderBy: { recordedAt: "desc" }, take: 1, where: { kind: { in: ["concierge-sweep", "embedding-coverage"] } }, select: { kind: true } },
+  activities: {
+    orderBy: { recordedAt: "desc" }, take: 1,
+    where: { OR: [
+      { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+      { kind: "workroom-drive", AND: [
+        { payload: { path: ["action"], equals: "dispatch_agent" } },
+        { payload: { path: ["reason"], equals: "agent_stage" } },
+      ] },
+    ] },
+    select: { kind: true, payload: true },
+  },
   taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
 } as const satisfies Prisma.WorkroomSelect;
 
-export type InventoryDb = {
+export type InventoryDb = ReviewerRoomClient & {
+  backlogItem?: WorkroomTitleDb["backlogItem"];
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
   scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
@@ -80,15 +97,40 @@ export type CapsuleLivenessSummary = {
  */
 export async function loadCapsuleLivenessInventory(
   db: InventoryDb,
-  args: { where: Record<string, unknown>; take: number; compact?: boolean },
+  args: { where: Record<string, unknown>; take: number; compact?: boolean; portalSummary?: boolean },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
   const rows = await db.workroom.findMany({
     where: args.where,
     orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
     take: args.take,
-    select: args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+    select: args.portalSummary
+      ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false,
+          createdByPrincipalId: true, requestedByPrincipalId: true } : INVENTORY_SELECT,
   });
+  const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
+  // One bounded review read for the page, never one query per room. A truncated
+  // history stays unknown; the detail action narrows the observation to a room.
+  const reviews = await loadSemanticReviewRoomProjection(db, rows.map(row => row.capsuleId), now);
+  const recoveryItems = await loadWorkroomRecoveryItems(db, rows);
+  // Only real decision rows need shape metadata. One bounded read, no scope
+  // packets on the normal inventory query or in the display projection.
+  const decisionRooms = args.portalSummary ? rows.filter(row => readPendingGovernedDecisions(row.workspaceState).length > 0) : [];
+  const decisionsById = new Map<string, Array<{ title: string; condition: string }>>();
+  if (decisionRooms.length) {
+    const definitions = await db.workroom.findMany({ where: { capsuleId: { in: decisionRooms.map(row => row.capsuleId) } },
+      select: { capsuleId: true, scopeClaims: true }, take: decisionRooms.length }).catch(() => []);
+    const definitionsById = new Map(definitions.map(row => [row.capsuleId, row.scopeClaims]));
+    for (const room of decisionRooms) {
+      const shape = resolveWorkShapeClaim(definitionsById.get(room.capsuleId));
+      const definition = shape ? readWorkShapeDefinitionContract(shape) : null;
+      decisionsById.set(room.capsuleId, readPendingGovernedDecisions(room.workspaceState).flatMap(pending => {
+        const stage = governedDecisionStage(definition, pending.stageKey);
+        return stage ? [{ title: stage.title, condition: stage.condition }] : [];
+      }));
+    }
+  }
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
   const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
@@ -125,6 +167,7 @@ export async function loadCapsuleLivenessInventory(
     || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
 
   const capsulesAll = rows.map((row) => {
+    const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
     const lease = leaseFor(row);
     const verdict = classifyWorkCapsuleLiveness({
@@ -139,8 +182,13 @@ export async function loadCapsuleLivenessInventory(
     const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
+      ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        lastCycleKey: drive.lastCycleKey,
+        attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
+      ...(args.portalSummary ? { decisions: decisionsById.get(row.capsuleId) ?? [] } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
-      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null, now),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,

@@ -1255,12 +1255,15 @@
           "per_task_limit": 20000
         },
         "tool_grants": [
+          "file_read",
+          "initiative_design_review",
           "registry_read",
           "backlog_read",
           "release_gate_create",
           "acceptance_package_write",
           "decision_record_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "workroom_evidence_write"
         ],
         "memory": {
           "type": "session",
@@ -2815,7 +2818,9 @@
           "backlog_write",
           "file_read",
           "registry_read",
-          "web_search"
+          "web_search",
+          "approval_probe_read",
+          "document_write"
         ]
       }
     },
@@ -2883,7 +2888,8 @@
           "coworker_screen_read",
           "coworker_screen_drive",
           "initiative_evidence_write",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "web_search"
         ]
       }
     },
@@ -3848,7 +3854,10 @@
           "decision_record_create",
           "backlog_triage",
           "document_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "approval_probe_read",
+          "coworker_catalog_read",
+          "coworker_engagement_write"
         ]
       }
     },
@@ -3908,7 +3917,10 @@
           "decision_record_create",
           "backlog_triage",
           "document_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "approval_probe_read",
+          "coworker_catalog_read",
+          "coworker_engagement_write"
         ]
       }
     },
@@ -3968,7 +3980,10 @@
           "decision_record_create",
           "backlog_triage",
           "document_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "approval_probe_read",
+          "coworker_catalog_read",
+          "coworker_engagement_write"
         ]
       }
     },
@@ -4352,7 +4367,8 @@
           "backlog_read",
           "portfolio_read",
           "workroom_evidence_write",
-          "payables_read"
+          "payables_read",
+          "document_write"
         ]
       }
     },
@@ -4433,7 +4449,9 @@
           "portfolio_read",
           "document_read",
           "document_write",
-          "document_publish"
+          "document_publish",
+          "workbook_read",
+          "workbook_write"
         ]
       }
     }

@@ -18,6 +18,7 @@ import {
   type PrismaLike,
   type RepoIdentity,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const DEFAULT_MAX_PAGES = 10;
 const DEFAULT_PER_PAGE = 100;
@@ -35,7 +36,7 @@ export interface UpstreamIssue {
 
 export type UpstreamIssueReadResult =
   | { ok: true; issues: UpstreamIssue[] }
-  | { ok: false; state: "not-configured" | "error"; error: string };
+  | { ok: false; state: "not-configured" | "error" | "incomplete"; error: string };
 
 export interface UpstreamIssueReaderDeps {
   fetchImpl?: typeof fetch;
@@ -103,7 +104,7 @@ export async function readUpstreamIssues(
   deps: UpstreamIssueReaderDeps = {},
 ): Promise<UpstreamIssueReadResult> {
   const prisma = deps.prisma ?? ((await import("@dpf/db")).prisma as unknown as PrismaLike);
-  const token = deps.token !== undefined ? deps.token : await resolveGithubToken(prisma);
+  const token = deps.token !== undefined ? deps.token : await resolveGithubToken(prisma, { preferRepositoryController: true });
   if (!token) {
     return {
       ok: false,
@@ -119,6 +120,8 @@ export async function readUpstreamIssues(
   const fetchImpl = deps.fetchImpl ?? transport!.fetch;
   try {
     return await fetchIssues(fetchImpl, repo, token, deps);
+  } catch (error) {
+    return { ok: false, state: "error", error: `GitHub issue read failed: ${getErrorMessage(error)}` };
   } finally {
     await transport?.close();
   }
@@ -133,6 +136,9 @@ async function fetchIssues(
   const issues: UpstreamIssue[] = [];
   const state = deps.state ?? "all";
   const maxPages = deps.maxPages ?? DEFAULT_MAX_PAGES;
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1) {
+    return { ok: false, state: "error", error: "Issue page limit must be a positive safe integer" };
+  }
   const since = deps.since ? `&since=${encodeURIComponent(deps.since.toISOString())}` : "";
 
   for (let page = 1; page <= maxPages; page++) {
@@ -173,8 +179,12 @@ async function fetchIssues(
     // Page on the RAW length: a page that is all pull requests still means
     // there may be more pages, and stopping on the filtered count would
     // silently truncate the sweep.
-    if (json.length < DEFAULT_PER_PAGE) break;
+    if (json.length < DEFAULT_PER_PAGE) return { ok: true, issues };
   }
 
-  return { ok: true, issues };
+  return {
+    ok: false,
+    state: "incomplete",
+    error: `GitHub issue coverage is incomplete: reached the ${maxPages}-page limit before exhausting results`,
+  };
 }

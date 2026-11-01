@@ -23,8 +23,9 @@ import {
   DEMAND_SCORING_STEWARD_TASK_KIND,
   DEMAND_SCORING_STEWARD_TASK_TITLE,
 } from "./demand-scoring-steward-config";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -48,12 +49,8 @@ export async function ensureDemandScoringStewardScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findTaskOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed demand-scoring steward scheduled task");
   }
 
@@ -93,7 +90,7 @@ export async function ensureDemandScoringStewardScheduledTask(
         timezone,
         taskKind: DEMAND_SCORING_STEWARD_TASK_KIND,
         taskConfig: { ...DEMAND_SCORING_STEWARD_DEFAULT_CONFIG },
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

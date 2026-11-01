@@ -40,9 +40,11 @@ import { touchClient } from "@/lib/auth/oauth-clients";
 import { parseScopeParam } from "@/lib/auth/oauth-scope-map";
 import {
   htmlResponse,
+  renderAutomationAccountRefusal,
   renderConsentPage,
   renderConsentRefusal,
 } from "@/lib/auth/oauth-consent-page";
+import { automationConsentPermitted } from "@/lib/auth/oauth-automation-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -83,11 +85,31 @@ export async function GET(request: Request) {
     );
   }
 
+  if (!automationConsentPermitted(session.user, consentRequest(parsed.request))) {
+    // The browser is still signed in as the platform automation persona: send
+    // the person to sign in as themself and come back to this same request.
+    const requestParams = [...url.searchParams.entries()].filter(([k]) => !CONSENT_FORM_FIELDS.has(k));
+    const back = `${OAUTH_AUTHORIZE_PATH}?${new URLSearchParams(requestParams).toString()}`;
+    return htmlResponse(renderAutomationAccountRefusal(session.user.email ?? session.user.id,
+      `/login?callbackUrl=${encodeURIComponent(back)}`), 403);
+  }
+
   return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
     url.searchParams, origin, { after: url.searchParams.get("assistant_after") ?? undefined });
 }
 
-const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account"]);
+/** What an automation session's minted consent is compared against (BI-F586F8A5). */
+function consentRequest(request: AuthorizeRequest) {
+  return { clientId: request.client.clientId, codeChallenge: request.codeChallenge };
+}
+
+const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account", "acknowledge_handover"]);
+
+/** When this account's work was handed over, or null (BI-9D2199D4). */
+async function workHandedOverAt(userId: string): Promise<Date | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { workHandedOverAt: true } });
+  return user?.workHandedOverAt ?? null;
+}
 
 /**
  * Build and render the consent screen for a validated request. Shared by the
@@ -101,9 +123,10 @@ async function renderConsentFor(
   request: AuthorizeRequest,
   params: URLSearchParams,
   origin: string,
-  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean; accountNotice?: boolean } = {},
+  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean; accountNotice?: boolean; handoverNotice?: boolean } = {},
 ): Promise<Response> {
   const org = await prisma.organization.findFirst({ select: { name: true } });
+  const handedOverAt = await workHandedOverAt(human.userId);
   const { client, scopes, redirectUri, resource } = request;
   const coworkers = await eligibleOAuthCoworkers(human.userId, client.rowId, resource, prisma, { after: options.after });
   if (!coworkers.length) {
@@ -127,6 +150,8 @@ async function renderConsentFor(
       actingUserId: human.userId,
       switchAccountUrl: `/login?callbackUrl=${encodeURIComponent(back)}`,
       accountNotice: options.accountNotice,
+      workHandedOverAt: handedOverAt?.toISOString() ?? null,
+      handoverNotice: options.handoverNotice,
       scopes,
       assistant: { kind: resolution.kind, selected: resolution.selected, candidates: resolution.candidates },
       driftNotice: options.driftNotice,
@@ -199,6 +224,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // The automation persona never binds a person's interactive client; only the
+  // governed flow's own minted request may (BI-F586F8A5). Checked before any
+  // other consent field, so no confirmation on the page can override it.
+  if (!automationConsentPermitted(session.user, consentRequest(parsed.request))) {
+    return directError("access_denied",
+      "This browser is signed in as the platform automation account. Sign in as yourself and connect again.", 403);
+  }
+
   // The account is the person's decision, not the browser's (BI-07D21B4A).
   // The page carries the session user id it showed; a Connect without it, or
   // with another account's id because the session changed underneath the
@@ -206,6 +239,15 @@ export async function POST(request: Request) {
   if (form.get("confirm_account") !== session.user.id) {
     return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
       params, origin, { accountNotice: true });
+  }
+
+  // A handover moves the account's work, not its access (BI-9D2199D4). A new
+  // connection under it brings work back to it, so the person must have said
+  // on the page that they mean it, for this account.
+  const handedOverAt = await workHandedOverAt(session.user.id);
+  if (handedOverAt && form.get("acknowledge_handover") !== session.user.id) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { handoverNotice: true });
   }
 
   // The human may narrow the request on the consent screen. Their selection is
@@ -277,6 +319,8 @@ export async function POST(request: Request) {
         // Which assistant the server offered, how it chose, and whether the
         // human overrode it: the per-consent record of the one-click outcome.
         resolution: resolutionAudit,
+        // Set when the person connected under an account whose work was handed over.
+        accountWorkHandedOverAt: handedOverAt?.toISOString() ?? null,
         // How the decision arrived, for a later question about intent.
         submittedFrom: { fetchSite, fetchUser: request.headers.get("sec-fetch-user") } },
       endpointUsed: "/api/oauth/authorize", routeContext: "oauth-consent",

@@ -11,14 +11,27 @@ import {
   validatePrBodyTrailers,
 } from "./pr-readiness/core.mjs";
 import { PR_TRAILER_NAMES } from "./lib/pr-trailer-contract.mjs";
-import { runGate, readPublicationGateRecords } from "./pr-readiness.mjs";
+import { runGate, readPublicationGateRecords, verifyCurrentPublication } from "./pr-readiness.mjs";
 import { buildPublishedReadinessCommand } from "../apps/web/lib/build/build-studio-pr-readiness.ts";
 
-test("PR readiness supplies a working shell to nested fixtures", () => {
-  const result = runGate({ name: "nested shell", env: {}, command: [process.execPath,
+test("PR readiness supplies a working shell to nested fixtures", async () => {
+  const result = await runGate({ name: "nested shell", env: {}, command: [process.execPath,
     ["-e", "const {spawnSync}=require('node:child_process'); const r=spawnSync('sh',['-c','exit 0']); process.exit(r.status ?? 1);"]],
   });
   assert.equal(result.ok, true, result.output);
+});
+
+test("PR readiness blocks an executed guard violation that explains a module error", async () => {
+  const gate = await runGate({ name: "Fixture Script Imports", env: {}, command: [process.execPath,
+    ["-e", "console.error('[fixture-script-imports] FAILED: That test dies with ERR_MODULE_NOT_FOUND before its assertion.');process.exit(1)"]],
+  });
+  assert.equal(gate.exitCode, 1);
+  assert.equal(gate.outcome, null);
+  assert.equal(gate.ok, false);
+  assert.equal(gate.skippedEnvironment, false);
+  const readiness = evaluateReadiness({ repo: cleanRepo, gateResults: [gate], prBody: "" });
+  assert.equal(readiness.ready, false);
+  assert.match(readiness.blockers.join("\n"), /Fixture Script Imports failed locally/);
 });
 
 const cleanRepo = {
@@ -42,6 +55,49 @@ const cleanRepo = {
     },
   ],
 };
+
+test("historical PRs leave new publication on its ordinary guarded attestation path", async () => {
+  for (const state of ["MERGED", "CLOSED"]) {
+    let checks = 0;
+    await verifyCurrentPublication({
+      contextReader: () => ({ pullRequest: { state } }),
+      verify: async () => { checks++; throw new Error("Matching published PR and active protected checks/merge queue are required."); },
+    });
+    assert.equal(checks, 0, state);
+    const plan = buildGatePlan({ changeScope: "runtime", publishedCorrection: false });
+    assert.ok(plan.length > 10, "initial publication still requires its broad guard plan");
+    const verdict = evaluateReadiness({ repo: cleanRepo });
+    assert.equal(verdict.ready, false);
+    assert.match(verdict.blockers.join("\n"), /Local-CI-Evidence.*Local-CI-Override/);
+  }
+});
+
+test("OPEN correction verification gets the initial context then fresh protection and PR state", async () => {
+  const initial = { pullRequest: { state: "OPEN", headRefOid: "a" } };
+  const changed = { pullRequest: { state: "CLOSED", headRefOid: "b" } };
+  let reads = 0, calls = 0;
+  await assert.rejects(verifyCurrentPublication({
+    contextReader: () => (++reads === 1 ? initial : changed),
+    verify: async ({ contextReader }) => {
+      calls++;
+      assert.equal(contextReader(), initial);
+      assert.equal(contextReader(), changed);
+      throw new Error("Published PR or protection changed during correction verification.");
+    },
+  }), /protection changed/);
+  assert.equal(reads, 2);
+  assert.equal(calls, 1);
+});
+
+test("missing PR lookup retains initial publication but malformed returned state stays unproven", async () => {
+  let calls = 0;
+  await verifyCurrentPublication({ contextReader: () => { throw new Error("no PR"); }, verify: async () => { calls++; } });
+  assert.equal(calls, 0);
+  for (const context of [{}, { pullRequest: {} }, { pullRequest: { state: "UNKNOWN" } }]) {
+    await assert.rejects(verifyCurrentPublication({ contextReader: () => context, verify: async () => { calls++; } }), /state.*unproven/i);
+  }
+  assert.equal(calls, 0, "malformed data cannot start correction checks");
+});
 
 test("runtime publication cannot report READY without local-CI attestation", () => {
   const result = evaluateReadiness({ repo: cleanRepo, prBody: "Actual passing gate omitted from body" });
@@ -89,7 +145,7 @@ test("publication scans existing slot records without executing the gate", () =>
   const records = readPublicationGateRecords({ rootClone: "D:/repo", gitCommonDir: "D:/repo/.git", candidateGitDir: "D:/repo/.git/worktrees/example" }, path => {
     paths.push(path);
     return path.includes("metadata") ? publicationProof()[0].metadata : publicationProof()[0].state;
-  });
+  }, () => ({ ok: false }));
   assert.ok(records.length > 0);
   assert.equal(paths.length, records.length * 2);
   assert.ok(paths.some(path => path.includes("worktrees")));
@@ -222,6 +278,13 @@ test("parsePrBodyTrailers ignores commented template examples", () => {
   assert.deepEqual(trailers, [
     { name: "UX-Fit-Decision", value: "no-ui-impact", line: 6 },
   ]);
+});
+
+test("validatePrBodyTrailers accepts the mechanism suffix a scoped seed-fit decision requires (BI-5C66AC6C)", () => {
+  const result = validatePrBodyTrailers(
+    "Seed-Fit-Decision: archetype-scoped mechanism=read-scope symbol=resolveMailroomProfile\n",
+  );
+  assert.equal(result.blockers.some((b) => /Invalid Seed-Fit-Decision/.test(b)), false);
 });
 
 test("validatePrBodyTrailers catches duplicate trailers and invalid seed-fit decisions", () => {

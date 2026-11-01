@@ -15,6 +15,9 @@ import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
+import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
+import { isolatedGateFixtureEnvironment } from "./fixtures/gate-worktree.mjs";
 
 import {
   ENVIRONMENT_FAILURE_RE,
@@ -35,6 +38,70 @@ import { shouldRunPreflight } from "./pregate.mjs";
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const preflightCli = join(repoRoot, "scripts", "pregate-preflight.mjs");
 const pregateCli = join(repoRoot, "scripts", "pregate.mjs");
+
+test("actual CLI records an explicit omission without touching retained execution evidence", { timeout: 30000 }, async (t) => {
+  for (const retained of ["unknown", "live", "unreadable"]) await t.test(retained, () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-preflight-omission-"));
+    try {
+      const env = isolatedGateFixtureEnvironment(dir, { DPF_GUARD_OUTCOME_SUBMIT: "0",
+        GH_CONFIG_DIR: join(dir, "empty-gh-config"), GH_TOKEN: "" });
+      const git = (...args) => {
+        const result = spawnSync("git", args, { cwd: dir, env, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout.trim();
+      };
+      git("init", "-q");
+      git("config", "user.name", "DPF Test");
+      git("config", "user.email", "dpf-test@example.invalid");
+      fsSync.writeFileSync(join(dir, "README.md"), "isolated source fixture\n");
+      git("add", "README.md");
+      git("-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture");
+      git("update-ref", "refs/remotes/origin/main", "HEAD");
+      git("checkout", "-qb", "fixture-omission"); // No remote or GitHub credentials.
+      const receiptDir = join(dir, ".git", "dpf-host-guard-receipts");
+      const key = createHash("sha256").update(JSON.stringify("pregate-preflight")).digest("hex");
+      const receiptPath = join(receiptDir, `${key}.json`);
+      const lockPath = join(receiptDir, `${key}.lock`);
+      fsSync.mkdirSync(lockPath, { recursive: true });
+      const owner = { schema: "dpf-local-convergence-lock/v1", token: "fixture-original",
+        pid: process.pid, processIdentity: readProcessIdentity(process.pid), acquiredAt: new Date().toISOString() };
+      assert.ok(owner.processIdentity, "fixture must have a strong live owner identity");
+      const original = retained === "unreadable" ? "{unreadable" : JSON.stringify({
+        schemaVersion: 1, stage: "pregate-preflight", status: retained === "live" ? "running" : "inconclusive",
+        identity: { head: "original-fixture" }, owner, hostPid: owner.pid,
+        ...(retained === "unknown" ? { recovery: { reason: "controller-absent-child-outcome-unknown" } } : {}),
+      });
+      const ownerBytes = JSON.stringify(owner);
+      fsSync.writeFileSync(receiptPath, original);
+      fsSync.writeFileSync(join(lockPath, "owner.json"), ownerBytes);
+      const run = (reason) => spawnSync(process.execPath, [preflightCli], { cwd: dir,
+        env: { ...env, DPF_SKIP_PREGATE_PREFLIGHT_REASON: reason }, encoding: "utf8", timeout: 10000 });
+      const skipped = run("operator-emergency: isolated approved no-execution fixture");
+      assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
+      assert.match(skipped.stdout, /SKIPPED/);
+      assert.match(skipped.stdout, /DPF_HOST_PREFLIGHT_RESULT=\{"status":"inconclusive","entries":\[\]\}/);
+      assert.doesNotMatch(skipped.stdout, /REUSED|guards verified|running \(pid/);
+      assert.equal(fsSync.readFileSync(receiptPath, "utf8"), original);
+      assert.equal(fsSync.readFileSync(join(lockPath, "owner.json"), "utf8"), ownerBytes);
+      assert.deepEqual(fsSync.readdirSync(receiptDir).sort(), [`${key}.json`, `${key}.lock`].sort());
+      const spool = join(dir, ".git", "dpf-guard-outcomes");
+      const records = fsSync.readdirSync(spool).filter(name => name.endsWith(".json"))
+        .map(name => JSON.parse(fsSync.readFileSync(join(spool, name), "utf8")));
+      assert.equal(records.length, 1);
+      assert.deepEqual(records[0].guards, []);
+      assert.equal(records[0].override.kind, "skip-env");
+      assert.match(records[0].override.reason, /isolated approved no-execution/);
+      for (const reason of ["", undefined]) {
+        const refused = run(reason);
+        assert.equal(refused.status, 88, refused.stdout + refused.stderr);
+        assert.match(refused.stderr, /execution inconclusive/);
+        assert.doesNotMatch(refused.stdout, /SKIPPED|REUSED|running \(pid/);
+        assert.equal(fsSync.readFileSync(receiptPath, "utf8"), original);
+        assert.equal(fsSync.readFileSync(join(lockPath, "owner.json"), "utf8"), ownerBytes);
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
 
 // ── plan construction ───────────────────────────────────────────────────────
 
@@ -413,8 +480,75 @@ test("environment failure classification uses stable runtime signals, not guard 
   assert.ok(isEnvironmentFailureOutput("GuardRuntimeEnvironmentError: localized wording"));
   assert.ok(isEnvironmentFailureOutput("Local package.json exists, but node_modules missing"));
   assert.ok(isEnvironmentFailureOutput("'tsx' is not recognized as an internal or external command"));
+  assert.ok(isEnvironmentFailureOutput("/bin/sh: 1: tsx: not found"));
+  assert.ok(isEnvironmentFailureOutput("bash: line 1: tsx: command not found"));
+  assert.ok(isEnvironmentFailureOutput("Error: Cannot find module 'fixture'"));
+  assert.ok(isEnvironmentFailureOutput("WARN Local package.json exists, but node_modules missing, did you mean to install?"));
   assert.ok(!isEnvironmentFailureOutput("module exceeds ratchet baseline: 1050 > 1047 lines"));
   assert.ok(!isEnvironmentFailureOutput("Missing UX-Fit-Decision trailer"));
+});
+
+test("environment words and quoted runtime diagnostics do not excuse guard violations", () => {
+  for (const output of [
+    "That test dies with ERR_MODULE_NOT_FOUND before it reaches its assertion.",
+    "The image build dies at first run with ERR_MODULE_NOT_FOUND.",
+    "Guard found MODULE_NOT_FOUND and Cannot find module in source text",
+    "Required diagnostic: node_modules missing; tsx is not found",
+    "Expected GuardRuntimeEnvironmentError: localized wording",
+    '"Error [ERR_MODULE_NOT_FOUND]: Cannot find package \'fixture\'"',
+    "AssertionError: expected Error: Cannot find module 'fixture'",
+    "not ok 1 - Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'",
+    "# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'",
+    "the error err_module_not_found is part of the guard explanation",
+  ]) assert.equal(isEnvironmentFailureOutput(output), false, output);
+});
+
+test("real exit-1 diagnostics preserve violation versus missing-runtime classification", async (t) => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute(process.env, { maxDurationMs: 10_000 });
+  const cases = [
+    ["fixture import violation", "console.error('[fixture-script-imports] FAILED — a test copies a module into a temp tree but not the module it statically imports.\\nThat test dies with ERR_MODULE_NOT_FOUND before it reaches its assertion.');process.exit(1)", "failed"],
+    ["Dockerfile import violation", "console.error('[dockerfile-script-imports] FAILED — a Dockerfile-copied script statically imports a file the image never receives.\\nThe image build dies at first run with ERR_MODULE_NOT_FOUND.');process.exit(1)", "failed"],
+    ["native missing package", "import('dpf-intentionally-absent-preflight-runtime-package')", "skipped_environment"],
+  ];
+  for (const [name, program, status] of cases) await t.test(name, async () => {
+    const result = await runPreflight({ env: {},
+      plan: [{ id: name, name, commands: [[process.execPath, ["-e", program]]] }],
+      execute: async (...args) => {
+        const observed = await execute(...args);
+        assert.equal(observed.exitCode, 1, observed.output);
+        assert.equal(observed.outcome, null, observed.output);
+        assert.equal(observed.runnerFailure, false, observed.output);
+        assert.match(observed.output, /ERR_MODULE_NOT_FOUND/);
+        return observed;
+      },
+    });
+    assert.equal(result.entries[0].status, status);
+    assert.equal(result.ok, status === "skipped_environment");
+  });
+});
+
+test("colored native loader diagnostics and pnpm warning spacing retain environment classification", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute({ ...process.env, FORCE_COLOR: "1" }, { maxDurationMs: 10_000 });
+  const observed = await execute(process.execPath, ["-e", "import('dpf-intentionally-absent-preflight-runtime-package')"]);
+  assert.equal(observed.exitCode, 1, observed.output);
+  assert.match(observed.output, /\u{001b}\[/u, "control must exercise actual colored Node output");
+  assert.equal(isEnvironmentFailureOutput(observed.output), true);
+  const coloredHeader = observed.output.replace(/^Error/m, "\u{001b}[31mError");
+  assert.equal(isEnvironmentFailureOutput(coloredHeader), true, "diagnostic styling must not change its kind");
+  assert.equal(isEnvironmentFailureOutput("\u{2009}WARN\u{2009} Local package.json exists, but node_modules missing, did you mean to install?"), true);
+  assert.equal(isEnvironmentFailureOutput("\u{001b}[31m# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'\u{001b}[0m"), false);
+});
+
+test("explicit observer outcomes outrank runtime-looking output", async () => {
+  for (const outcome of ["cancelled", "timed_out", "runner_failed"]) {
+    const result = await runPreflight({ env: {}, plan: PLAN.slice(0, 1),
+      execute: () => ({ exitCode: 88, output: "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'", outcome }),
+    });
+    assert.equal(result.entries[0].status, outcome);
+    assert.equal(result.ok, outcome === "runner_failed");
+  }
 });
 
 // ── pregate wiring ──────────────────────────────────────────────────────────
@@ -551,6 +685,8 @@ test("the real registry declares the module-size guard code-only and leaves the 
   const docsOnly = planPreflight({ changeScope: { docsOnly: true, mobileOnly: false, heavy: false } });
   assert.ok(docsOnly.skippedByScope.length >= 20, `expected a material docs-only saving, got ${docsOnly.skippedByScope.length}`);
   assert.ok(docsOnly.entries.some((e) => e.id === "docs-link-integrity"));
+  // BI-5E4BB7CA: the promote.sh dry-run contracts held docs-only pushes 30+ minutes.
+  assert.ok(docsOnly.skippedByScope.some((e) => e.id === "installer-state-contract"));
 });
 
 // Drift detector: a guard declared `inputs: ["code"]` must not read docs or
@@ -609,7 +745,7 @@ test("createDefaultExecute hands guards an environment without git's repository-
     GIT_INDEX_FILE: "/definitely/not/a/repo/.git/index",
   });
   const probe = 'const bad=["GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE"].filter((k)=>k in process.env);process.stdout.write(JSON.stringify(bad));';
-  const result = execute("node", ["-e", probe]);
+  const result = await execute("node", ["-e", probe]);
   assert.equal(result.exitCode, 0, result.output);
   assert.equal(result.output.trim(), "[]");
 });
@@ -619,7 +755,45 @@ test("createDefaultExecute runs guards with git's automatic maintenance off (BI-
   const execute = createDefaultExecute({ ...process.env });
   // --show-origin: a repository or global config that already says false must
   // not satisfy this; the runner itself has to set it for every guard.
-  const result = execute("git", ["config", "--show-origin", "--get", "maintenance.auto"]);
+  const result = await execute("git", ["config", "--show-origin", "--get", "maintenance.auto"]);
   assert.equal(result.exitCode, 0, result.output);
   assert.match(result.output.trim(), /^command line:\s+false$/);
+});
+
+test("host command deadline is distinct from violation and never becomes a pass", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const progress = [];
+  const execute = createDefaultExecute(process.env, { maxDurationMs: 100,
+    terminationGraceMs: 100, closeGraceMs: 100, progress: event => progress.push(event) });
+  const result = await execute(process.execPath, ["-e", "setInterval(()=>{},1000)"], { guardId: "hanging" });
+  assert.equal(result.outcome, "timed_out");
+  assert.notEqual(result.exitCode, 0);
+  assert.ok(progress.some(event => event.guardId === "hanging"));
+});
+
+test("preflight awaits asynchronous guard failures instead of inventing a clean result", async () => {
+  const result = await runPreflight({ env: {}, plan: PLAN.slice(0, 1),
+    execute: async () => ({ exitCode: 1, output: "actual violation", runnerFailure: false }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.entries[0].status, "failed");
+});
+
+test("a zero-exit guard with failed progress recording cannot supply PASS", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  let observations = 0;
+  const execute = createDefaultExecute(process.env,{progress:() => {
+    if (++observations === 2) throw new Error("receipt persistence unavailable");
+  }});
+  const result = await execute(process.execPath,["-e","process.exit(0)"]);
+  assert.equal(result.outcome,"runner_failed");
+  assert.notEqual(result.exitCode,0);
+});
+
+test("preflight receipt exceptions report unrun without leaking exception contents", async () => {
+  const {runPreflightEntrypoint} = await import("./pregate-preflight.mjs");
+  let output="";
+  const status=await runPreflightEntrypoint(async () => {throw Object.assign(new Error("fixture-secret"),{code:"ENOSPC"});},text=>{output+=text;});
+  assert.equal(status,88);
+  assert.match(output,/inconclusive.*ENOSPC/);
+  assert.doesNotMatch(output,/fixture-secret/);
 });

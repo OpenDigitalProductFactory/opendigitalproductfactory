@@ -21,6 +21,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+
+NEEDS_STDLIB_TOML = unittest.skipIf(
+    __import__("codex_toml")._stdlib_parser() is None,
+    "fakes the Codex CLI, so its TOML needs Python 3.11+ or tomli; CI runs it (BI-90C9478D)",
+)
+
+
+# BI-90C9478D: these cases exercise Codex settings writes, which need a TOML
+# parser (Python 3.11+, tomli, or the Codex CLI). The stock-macOS CI runner has
+# none, so they skip there and run everywhere a parser exists.
+NEEDS_ANY_TOML = unittest.skipUnless(
+    __import__("codex_toml").available(),
+    "needs a TOML parser: Python 3.11+, tomli or the Codex CLI (BI-90C9478D)",
+)
+
 class CodexCacheVersionTest(unittest.TestCase):
     def test_changed_contents_refresh_same_source_version_and_reruns_are_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -114,6 +129,7 @@ class WriteTextIfChangedTest(unittest.TestCase):
             self.assertEqual(list(Path(tmp).iterdir()), [])
         self.assertEqual(manifest.read_bytes(), before)
 
+    @NEEDS_ANY_TOML
     def test_main_fails_when_codex_cache_verification_fails(self):
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch.object(
@@ -123,6 +139,63 @@ class WriteTextIfChangedTest(unittest.TestCase):
                 "--skill-pack-path", str(skill_pack), "--codex-only",
                 "--skip-grok-cli-install", "--skip-antigravity-cli-install",
             ]), 1)
+
+
+class ClientSelectionTest(unittest.TestCase):
+    """A selected-client repair must not depend on another client's settings."""
+
+    def run_update(self, flags, malformed_client=None):
+        import contextlib
+        import io
+        import routine_permissions
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "repo"
+            (project / ".git").mkdir(parents=True)
+            (project / "AGENTS.md").write_text("DPF source")
+            (project / "packages/dpf-skill-pack").mkdir(parents=True)
+            if malformed_client:
+                config = home / ("." + malformed_client) / "config.toml"
+                config.parent.mkdir(parents=True)
+                config.write_text('[broken = "unterminated')
+                original = config.read_bytes()
+            output = io.StringIO()
+            with patch.object(updater, "home_dir", return_value=home), patch.object(
+                routine_permissions, "apply_permissions", return_value=[]
+            ) as apply, patch.object(updater, "install_grok_hooks", return_value="preview") as grok, patch.object(
+                updater, "ensure_antigravity_mcp_config", return_value="preview"
+            ) as antigravity, contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                code = updater.main(["--skill-pack-path", str(Path(__file__).resolve().parents[1]),
+                    "--project-root", str(project), "--dry-run", "--skip-codex-cli-install",
+                    "--skip-claude-cli-install", "--skip-grok-cli-install", *flags])
+            if malformed_client:
+                self.assertEqual(config.read_bytes(), original)
+            return code, grok.call_count, antigravity.call_count, apply.call_count, output.getvalue()
+
+    @NEEDS_ANY_TOML
+    def test_codex_only_ignores_malformed_grok_config(self):
+        code, grok, antigravity, apply, output = self.run_update(["--codex-only"], "grok")
+        self.assertEqual(code, 0, output)
+        self.assertEqual((grok, antigravity, apply), (0, 0, 1))
+
+    @NEEDS_ANY_TOML
+    def test_codex_only_still_refuses_malformed_codex_config(self):
+        code, _, _, apply, _ = self.run_update(["--codex-only"], "codex")
+        self.assertEqual(code, 1)
+        self.assertEqual(apply, 0)
+
+    @NEEDS_ANY_TOML
+    def test_unfiltered_update_still_checks_grok(self):
+        code, grok, antigravity, apply, _ = self.run_update([], "grok")
+        self.assertEqual(code, 1)
+        self.assertEqual((grok, antigravity, apply), (1, 1, 0))
+
+    @NEEDS_ANY_TOML
+    def test_claude_only_ignores_other_client_configs(self):
+        code, grok, antigravity, apply, output = self.run_update(["--claude-only"], "grok")
+        self.assertEqual(code, 0, output)
+        self.assertEqual((grok, antigravity, apply), (0, 0, 1))
 
 
 class InstallGrokHooksTest(unittest.TestCase):
@@ -143,9 +216,12 @@ class InstallGrokHooksTest(unittest.TestCase):
             # number only while every guard sat in exactly one matcher group;
             # workroom-claim-guard.mjs (BI-0B292D84) is wired on both the shell
             # and the write matcher, exactly as hooks.json wires it for Claude,
-            # so len(GROK_HOOK_GUARDS) undercounts. The matchers are disjoint,
+            # so a count of unique names undercounts. The matchers are disjoint,
             # so a guard in two groups still fires at most once per call.
-            wired_entries = sum(len(guards) for _matcher, guards in updater.GROK_PRETOOLUSE_GROUPS)
+            wired_entries = sum(
+                1 for row in updater.client_hook_coverage(managed, "grok")
+                if row["event"] == "PreToolUse" and row["state"] == "wired"
+            )
             self.assertIn(f"wired {wired_entries} PreToolUse guard", status)
             self.assertIn("matcher group", status)
             self.assertIn("SessionStart+Stop", status)
@@ -164,7 +240,7 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
             shell_group = next(e for e in entries if "Shell" in str(e.get("matcher")))
             self.assertTrue(any("lease-guard.mjs" in h["command"] for h in shell_group["hooks"]))
-            for guard in updater.GROK_HOOK_GUARDS:
+            for guard in {updater.hook_script_basename(c) for c in cmds}:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
             session_cmds = [
                 h["command"]
@@ -649,6 +725,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    @NEEDS_ANY_TOML
     def test_reconverges_config_after_codex_plugin_install_recreates_legacy_alias(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -684,6 +761,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    @NEEDS_ANY_TOML
     def test_heals_config_already_corrupted_with_duplicate_table(self) -> None:
         """A config a pre-#2657 updater left with a stray appended
         `[mcp_servers.dpf]` (a TOML redefinition error) is healed back to a single
@@ -830,7 +908,9 @@ class ClaudeInstallTest(unittest.TestCase):
             stdout = ""
             stderr = ""
 
-        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
+            updater, "claude_plugin_records", return_value=[{"scope": "local"}]
+        ), patch.object(updater, "claude_record_content_matches", return_value=True), patch(
             "subprocess.run", return_value=_Result()
         ) as run:
             status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
@@ -856,6 +936,15 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
 
     def _home(self, root: Path, entries: list[dict]) -> Path:
         home = root / "home"
+        source = updater.shared_managed_plugin_path(home)
+        updater.write_json(source / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": "0.2.8"})
+        (source / "hook.mjs").write_text("new hook")
+        for index, entry in enumerate(entries):
+            if "installPath" not in entry:
+                cache = root / f"cache-{index}"
+                updater.write_json(cache / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": entry.get("version")})
+                (cache / "hook.mjs").write_text("new hook")
+                entry["installPath"] = str(cache)
         path = updater.claude_installed_plugins_path(home)
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps({"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: entries}}))
@@ -865,6 +954,31 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         project = root / name
         project.mkdir()
         return project
+
+    def test_equal_version_stale_bytes_are_not_current_after_successful_noop_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            cache = root / "cache"
+            cache.mkdir()
+            (cache / "hook.mjs").write_text("old hook")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project),
+                "version": "0.2.8", "installPath": str(cache)}])
+            source = updater.shared_managed_plugin_path(home)
+            source.mkdir(parents=True, exist_ok=True)
+            (source / "hook.mjs").write_text("new hook")
+            for pack in (source, cache):
+                updater.write_json(pack / ".claude-plugin" / "plugin.json",
+                                   {"name": "dpf-platform", "version": "0.2.8"})
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=self._Result()
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+            self.assertEqual(result["current"], [])
+            self.assertEqual(result["updated"], [])
+            self.assertEqual(result["failed"], [str(project)])
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual((cache / "hook.mjs").read_text(), "old hook")
 
     def test_stale_project_records_are_updated_in_their_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -876,8 +990,18 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
                 {"scope": "project", "projectPath": str(stale), "version": "0.2.5"},
                 {"scope": "project", "projectPath": str(current), "version": "0.2.8"},
             ])
+            def refresh(*args, **kwargs):
+                records = updater.claude_plugin_records(home)
+                for entry in records:
+                    if entry.get("scope") == "project" and entry.get("projectPath") == str(stale):
+                        entry["version"] = "0.2.8"
+                        updater.write_json(Path(entry["installPath"]) / ".claude-plugin" / "plugin.json",
+                                           {"name": "dpf-platform", "version": "0.2.8"})
+                updater.write_json(updater.claude_installed_plugins_path(home),
+                                   {"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: records}})
+                return self._Result()
             with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
-                "subprocess.run", return_value=self._Result()
+                "subprocess.run", side_effect=refresh
             ) as run:
                 result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
         self.assertEqual(result["updated"], [str(stale)])
@@ -888,6 +1012,39 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "project"],
         )
         self.assertEqual(run.call_args[1]["cwd"], str(stale))
+
+    def test_equal_version_refresh_requires_observed_new_bytes(self) -> None:
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project), "version": "0.2.8"}])
+            record = updater.claude_plugin_records(home)[0]
+            cache = Path(record["installPath"])
+            (cache / "hook.mjs").write_text("stale")
+            def refresh(*args, **kwargs):
+                shutil.copytree(updater.shared_managed_plugin_path(home), cache, dirs_exist_ok=True)
+                return self._Result()
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", side_effect=refresh
+            ) as run:
+                first = updater.converge_claude_project_plugins(home, "0.2.8", False)
+                second = updater.converge_claude_project_plugins(home, "0.2.8", False)
+            self.assertEqual(first["updated"], [str(project)])
+            self.assertEqual(second["current"], [str(project)])
+            self.assertEqual(run.call_count, 1)
+
+    def test_missing_cache_and_unreadable_digest_cannot_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project),
+                "version": "0.2.8", "installPath": str(root / "missing")}])
+            record = updater.claude_plugin_records(home)[0]
+            self.assertFalse(updater.claude_record_content_matches(home, record))
+            record["installPath"] = str(updater.shared_managed_plugin_path(home))
+            with patch("installed_copy_freshness.delivered_digest", side_effect=PermissionError("unreadable")):
+                self.assertFalse(updater.claude_record_content_matches(home, record))
 
     def test_build_metadata_on_the_pack_version_does_not_mark_current_records_stale(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1088,36 +1245,119 @@ class ClaudeUserScopeDpfServerTest(unittest.TestCase):
         self.assertEqual(status, "failed: Claude CLI not found")
 
 
-class AntigravityMcpConfigTest(unittest.TestCase):
-    def test_skipped_when_agy_absent(self) -> None:
-        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
-            status = updater.ensure_antigravity_mcp_config(
-                Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False
-            )
-        self.assertEqual(status, "skipped: Antigravity CLI (agy) not found")
+class _FakeAgy:
+    """`agy mcp add` / `agy mcp disable` as agy 1.4.4 does them (probed 2026-10-27).
 
-    def test_upserts_dpf_server_env_backed_and_idempotent(self) -> None:
-        # Plain http: the header is the only credential path there. The https
-        # default carries no header (OnePluginOwnedConnectorTest).
+    `add` replaces the whole entry (so it resets `disabled`) and keeps other
+    servers. `honest=False` exits 0 and writes nothing: the read-back case.
+    """
+
+    def __init__(self, honest: bool = True) -> None:
+        self.honest = honest
+        self.calls: list[list[str]] = []
+
+    def __call__(self, command: list[str], **kwargs: Any) -> Any:
+        self.calls.append(command)
+        path = updater.antigravity_mcp_config_path(Path(kwargs["env"]["HOME"]))
+        if self.honest:
+            raw = path.read_text() if path.exists() else ""
+            data = json.loads(raw) if raw.strip() else {}
+            servers = data.setdefault("mcpServers", {})
+            if command[1:3] == ["mcp", "add"]:
+                headers = dict(item.split(": ", 1) for item in command[4:-2:2])
+                servers[command[-2]] = {"disabled": False, **({"headers": headers} if headers else {}),
+                                        "serverUrl": command[-1]}
+            elif command[1:3] == ["mcp", "disable"]:
+                servers[command[-1]]["disabled"] = True
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data))
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+
+class AntigravityMcpConfigTest(unittest.TestCase):
+    """agy owns its MCP config: DPF converges it through `agy mcp` (BI-1DCF9F23, spec M4)."""
+
+    def _converge(self, home: Path, url: str = updater.DEFAULT_MCP_URL, agy: Any = None, **kwargs: Any) -> str:
+        with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+            return updater.ensure_antigravity_mcp_config(home, url, runner=agy or _FakeAgy(), **{"dry_run": False, **kwargs})
+
+    def test_writes_the_file_agy_and_the_ide_read(self) -> None:
+        # agy 1.4.3 and Antigravity.app read ~/.gemini/config/mcp_config.json;
+        # nothing reads ~/.antigravity/mcp_config.json (BI-4CB3C923).
+        home = Path("/tmp/home")
+        self.assertEqual(updater.antigravity_mcp_config_path(home),
+                         home / ".gemini" / "config" / "mcp_config.json")
+
+    def test_adds_the_server_through_agy_and_reads_it_back(self) -> None:
+        # Plain http: the header is the only credential path there.
         http_url = "http://127.0.0.1:3000/api/mcp/v1"
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                first = updater.ensure_antigravity_mcp_config(
-                    home, http_url, dry_run=False
-                )
-                second = updater.ensure_antigravity_mcp_config(
-                    home, http_url, dry_run=False
-                )
-            self.assertEqual(first, "converged")
-            self.assertEqual(second, "already current")
-            cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
-            dpf = cfg["mcpServers"]["dpf"]
-            self.assertEqual(dpf["type"], "http")
-            self.assertEqual(dpf["url"], http_url)
-            self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
+            agy = _FakeAgy()
+            self.assertEqual(self._converge(home, http_url, agy), "converged")
+            self.assertEqual(agy.calls, [["/fake/agy", "mcp", "add", "--header",
+                                          "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}", "dpf", http_url]])
+            dpf = json.loads(updater.antigravity_mcp_config_path(home).read_text())["mcpServers"]["dpf"]
+            self.assertEqual(dpf["serverUrl"], http_url)
+            self.assertIs(dpf["disabled"], False)
             # No plaintext secret is ever written.
             self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
+            second = _FakeAgy()
+            self.assertEqual(self._converge(home, http_url, second), "already current")
+            self.assertEqual(second.calls, [])
+
+    def test_the_declaration_rides_a_header(self) -> None:
+        declared = __import__("toolchain_convergence").Declarations.of("0.3.0", "ab" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            agy = _FakeAgy()
+            self._converge(Path(tmp), agy=agy, declarations=declared)
+            self.assertIn("X-DPF-Toolchain: pack=0.3.0;digest=abababababababab;client=antigravity", agy.calls[0])
+
+    def test_an_empty_config_file_is_converged_not_left_empty(self) -> None:
+        # The operator's file was 0 bytes, so agy listed no MCP servers at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("")
+            self.assertEqual(self._converge(home), "converged")
+            self.assertEqual(json.loads(cfg_path.read_text())["mcpServers"]["dpf"]["serverUrl"], updater.DEFAULT_MCP_URL)
+
+    def test_unparseable_config_is_left_alone_and_does_not_stop_the_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("{not json")
+            agy = _FakeAgy()
+            status = self._converge(home, agy=agy)
+            self.assertTrue(status.startswith("skipped: cannot parse"), status)
+            self.assertEqual(cfg_path.read_text(), "{not json")
+            self.assertEqual(agy.calls, [])
+
+    def test_an_operator_disabled_dpf_entry_stays_disabled(self) -> None:
+        # `agy mcp add` re-enables the entry, so the adapter disables it again.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://old/api/mcp/v1", "disabled": True}}}))
+            agy = _FakeAgy()
+            self.assertEqual(self._converge(home, agy=agy), "converged")
+            self.assertEqual(agy.calls[-1], ["/fake/agy", "mcp", "disable", "dpf"])
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertIs(dpf["disabled"], True)
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+
+    def test_agy_succeeding_without_recording_the_server_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            status = self._converge(Path(tmp), agy=_FakeAgy(honest=False))
+        self.assertTrue(status.startswith("failed:"), status)
+
+    def test_absent_when_agy_is_missing(self) -> None:
+        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
+            status = updater.ensure_antigravity_mcp_config(Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False)
+        self.assertEqual(status, "absent: Antigravity CLI (agy) not found")
 
     def test_merges_without_clobbering_other_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1125,20 +1365,18 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text(json.dumps({"mcpServers": {"other": {"url": "x"}}}))
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            self._converge(home)
             cfg = json.loads(cfg_path.read_text())
             self.assertIn("other", cfg["mcpServers"])
             self.assertIn("dpf", cfg["mcpServers"])
 
-    def test_dry_run_writes_nothing(self) -> None:
+    def test_dry_run_runs_nothing_and_says_would(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                status = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=True
-                )
-            self.assertIn("dry-run", status)
+            agy = _FakeAgy()
+            status = self._converge(home, agy=agy, dry_run=True)
+            self.assertTrue(status.startswith("dry-run: would"), status)
+            self.assertEqual(agy.calls, [])
             self.assertFalse(updater.antigravity_mcp_config_path(home).exists())
 
 
@@ -1193,8 +1431,9 @@ class ProcessSpineHealthTest(unittest.TestCase):
 class GrokCodexGuardSyncTest(unittest.TestCase):
     """Drift guard (BI-14E9F7CE, EP-CLIENT-HOOK-PLANE).
 
-    GROK_HOOK_GUARDS / CODEX_BASH_GUARDS / CODEX_ASK_GUARDS / CODEX_WRITE_GUARDS
-    are hand-maintained tuples, wholly independent of hooks/hooks.json. That is
+    CODEX_BASH_GUARDS / CODEX_ASK_GUARDS / CODEX_WRITE_GUARDS are hand-maintained
+    tuples, wholly independent of hooks/hooks.json. Grok's plane is generated from
+    hooks.json since BI-742D707B; these tests read that generated payload. That is
     load-bearing, not incidental: live probe (BI-883FC2FC, Grok 0.2.87) proved
     Grok's hook-execution plane IGNORES the plugin-bundled hooks/hooks.json
     entirely (a plugin shows has_hooks=true in inventory yet contributes
@@ -1202,7 +1441,7 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
     for Grok's actual guard enforcement regardless of whether that variable
     resolves. The REAL enforcement path for Grok is the global
     ~/.grok/hooks/dpf-guards.json this script writes with fully pre-resolved
-    absolute paths (install_grok_hooks) -- so GROK_HOOK_GUARDS is the only
+    absolute paths (install_grok_hooks) -- so that generated payload is the only
     thing that wires a guard to Grok at all. Codex differs: it DOES load the
     plugin-bundled hooks.json from its plugin cache, so the CODEX_* tuples are
     the coverage proof install_codex_hooks checks that cache against before
@@ -1247,19 +1486,31 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
         src = (cls._skill_pack() / "hooks" / basename).read_text(encoding="utf-8")
         return "emitDeny(" in src
 
-    def test_grok_hook_guards_match_every_blocking_pretooluse_guard_in_hooks_json(self) -> None:
-        by_matcher = self._pretooluse_guards_by_matcher()
-        all_guards = {name for names in by_matcher.values() for name in names}
-        blocking = {name for name in all_guards if self._is_blocking(name)}
-        self.assertEqual(
-            set(updater.GROK_HOOK_GUARDS),
-            blocking,
-            "GROK_HOOK_GUARDS has drifted from hooks/hooks.json's blocking PreToolUse "
-            "guards. Grok's hook plane ignores plugin-bundled hooks.json (BI-883FC2FC) -- "
-            "GROK_HOOK_GUARDS is the ONLY thing wiring a guard into Grok's global "
-            "~/.grok/hooks/dpf-guards.json. Add/remove it there too or it silently never "
-            "fires on Grok.",
-        )
+    @classmethod
+    def _grok_wired_by_matcher(cls) -> dict[str, set[str]]:
+        aliases = updater.client_hook_planes(cls._skill_pack())["clients"]["grok"].get("matchers", {})
+        unaliased = {grok: claude for claude, grok in aliases.items()}
+        payload = updater.build_grok_hooks_payload(cls._skill_pack(), dry_run=True)
+        wired: dict[str, set[str]] = {}
+        for group in payload["hooks"].get("PreToolUse", []):
+            matcher = unaliased.get(group["matcher"], group["matcher"])
+            wired.setdefault(matcher, set()).update(
+                updater.hook_script_basename(h["command"]) for h in group["hooks"]
+            )
+        return wired
+
+    def test_grok_wires_every_blocking_guard_on_every_matcher_hooks_json_uses(self) -> None:
+        # Read the generated payload, not a tuple: BI-742D707B found raw-tool-guard
+        # listed for Grok yet wired in no group, and the write-path root-clone-guard
+        # missing, while a set-membership check passed.
+        wired = self._grok_wired_by_matcher()
+        for matcher, names in self._pretooluse_guards_by_matcher().items():
+            blocking = {name for name in names if self._is_blocking(name)}
+            self.assertEqual(
+                blocking - wired.get(matcher, set()),
+                set(),
+                f"blocking guards on {matcher} never reach Grok's ~/.grok/hooks/dpf-guards.json",
+            )
 
     def test_codex_guard_tuples_match_hooks_json_per_matcher(self) -> None:
         by_matcher = self._pretooluse_guards_by_matcher()
@@ -1293,7 +1544,160 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
             | set(updater.CODEX_WRITE_GUARDS)
         )
         self.assertEqual(blocking, codex_all, "a blocking guard is missing from the Codex tuples")
-        self.assertEqual(blocking, set(updater.GROK_HOOK_GUARDS), "a blocking guard is missing from GROK_HOOK_GUARDS")
+        grok_all = {name for names in self._grok_wired_by_matcher().values() for name in names}
+        self.assertEqual(blocking - grok_all, set(), "a blocking guard is missing from Grok's generated plane")
+
+
+class ClientHookPlaneCoverageTest(unittest.TestCase):
+    """Every hooks.json entry is wired, bundled or excluded with a reason, per client (BI-742D707B).
+
+    hooks.json is what Claude runs. Codex loads it too, minus events it lacks.
+    Grok ignores it and runs only the payload this script generates, which used
+    to come from hand-kept tuples: raw-tool-guard sat in GROK_HOOK_GUARDS but in
+    no matcher group, so it never reached Grok, and the write-path
+    root-clone-guard was missing. These tests read the generated payload itself,
+    so a hooks.json entry cannot be dropped for any client without a recorded
+    reason in hooks/client-hook-planes.json.
+    """
+
+    @classmethod
+    def _clients(cls) -> list[str]:
+        return list(updater.client_hook_planes(cls._skill_pack())["clients"])
+
+    @staticmethod
+    def _skill_pack() -> Path:
+        return Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def _entries(cls) -> list[tuple[str, str, str]]:
+        data = json.loads((cls._skill_pack() / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        out = []
+        for event, groups in data["hooks"].items():
+            for group in groups:
+                for hook in group["hooks"]:
+                    out.append((event, str(group.get("matcher", "")), updater.hook_script_basename(hook["command"])))
+        return out
+
+    def test_every_entry_is_accounted_for_on_every_client(self) -> None:
+        entries = self._entries()
+        for client in self._clients():
+            rows = updater.client_hook_coverage(self._skill_pack(), client)
+            self.assertEqual(len(rows), len(entries), client)
+            for row in rows:
+                self.assertIn(row["state"], ("wired", "bundled", "excluded"), f"{client}: {row}")
+                if row["state"] != "wired":
+                    self.assertTrue(str(row.get("reason", "")).strip(), f"{client}: {row} has no reason")
+
+    def test_grok_payload_carries_every_entry_coverage_calls_wired(self) -> None:
+        planes = updater.client_hook_planes(self._skill_pack())
+        aliases = planes["clients"]["grok"].get("matchers", {})
+        payload = updater.build_grok_hooks_payload(self._skill_pack(), dry_run=True)
+        wired: set[tuple[str, str, str]] = set()
+        for event, groups in payload["hooks"].items():
+            for group in groups:
+                for hook in group["hooks"]:
+                    wired.add((event, str(group.get("matcher", "")), updater.hook_script_basename(hook["command"])))
+        for row in updater.client_hook_coverage(self._skill_pack(), "grok"):
+            matcher = aliases.get(row["matcher"], row["matcher"])
+            key = (row["event"], matcher, row["script"])
+            if row["state"] == "wired":
+                self.assertIn(key, wired, f"coverage says wired but the Grok payload lacks {key}")
+            elif row["state"] == "excluded":
+                self.assertNotIn(key, wired, f"excluded on Grok but still wired: {key}")
+            else:
+                substitute = row["substitute"]
+                self.assertIn((row["event"], matcher, substitute), wired, f"{key} bundled into {substitute}, which is not wired")
+
+    def test_grok_wires_the_two_guards_it_used_to_drop(self) -> None:
+        payload = updater.build_grok_hooks_payload(self._skill_pack(), dry_run=True)
+        groups = payload["hooks"]["PreToolUse"]
+
+        def scripts(fragment: str) -> set[str]:
+            group = next(g for g in groups if fragment in g["matcher"])
+            return {updater.hook_script_basename(h["command"]) for h in group["hooks"]}
+
+        self.assertIn("raw-tool-guard.mjs", scripts("Shell"))
+        self.assertIn("root-clone-guard.mjs", scripts("Write"))
+
+    def test_grok_commands_keep_their_arguments(self) -> None:
+        payload = updater.build_grok_hooks_payload(self._skill_pack(), dry_run=True)
+        start = [h["command"] for g in payload["hooks"]["SessionStart"] for h in g["hooks"]]
+        snapshot = [c for c in start if "uncommitted-work-guard.mjs" in c]
+        self.assertEqual(len(snapshot), 1, start)
+        self.assertTrue(snapshot[0].rstrip().endswith("--snapshot"), snapshot[0])
+        self.assertFalse(any("${CLAUDE_PLUGIN_ROOT}" in c for c in start))
+
+    def test_claude_and_codex_counts_match_the_founder_observation(self) -> None:
+        total = len(self._entries())
+        wired = lambda client: sum(1 for r in updater.client_hook_coverage(self._skill_pack(), client) if r["state"] == "wired")
+        self.assertEqual(wired("claude-code"), total)
+        # Codex has no WorktreeCreate event: 34 entries today, 33 trusted.
+        worktree_create = sum(1 for e in self._entries() if e[0] == "WorktreeCreate")
+        self.assertEqual(wired("codex"), total - worktree_create)
+
+    def test_an_existing_hand_kept_grok_file_converges_on_the_next_updater_run(self) -> None:
+        # Upgrade path: the hourly toolchain agent (Windows task, launchd,
+        # systemd) runs this updater when the served pack's digest changes. The
+        # pre-BI-742D707B file had 17 entries and no raw-tool-guard; one run must
+        # replace it with the generated plane, and a second run must not touch it.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(self._skill_pack(), managed, dry_run=False)
+            hook_file = updater.grok_hooks_file(home)
+            hook_file.parent.mkdir(parents=True)
+            old = {"hooks": {"PreToolUse": [{"matcher": "Shell|Bash|run_terminal_command|run_terminal_cmd", "hooks": [
+                {"type": "command", "command": f'node "{managed / "hooks" / "lease-guard.mjs"}"', "timeout": 15}]}]}}
+            hook_file.write_text(json.dumps(old), encoding="utf-8")
+
+            first = updater.install_grok_hooks(managed, home, dry_run=False)
+            converged = json.loads(hook_file.read_text(encoding="utf-8"))
+            self.assertEqual(converged, updater.build_grok_hooks_payload(managed))
+            self.assertIn("raw-tool-guard.mjs", hook_file.read_text(encoding="utf-8"))
+            self.assertNotIn("unchanged", first)
+
+            second = updater.install_grok_hooks(managed, home, dry_run=False)
+            self.assertIn("unchanged", second)
+
+    def test_every_discovered_client_kind_has_a_plane(self) -> None:
+        # toolchain_convergence.DISCOVERY is what a host run finds installed. A
+        # client it can find but this file does not name would have no stated
+        # hook coverage at all; grok-sandbox is the Build Studio dispatch plane.
+        import toolchain_convergence
+
+        self.assertEqual(
+            set(self._clients()),
+            set(toolchain_convergence.DISCOVERY) | {"grok-sandbox"},
+        )
+
+    def test_the_sandbox_generator_matches_the_host_generator(self) -> None:
+        # The Build Studio sandbox has Node but no Python, so it builds Grok's
+        # plane with hooks/lib/grok-hook-plane.mjs. Both read the same two files;
+        # this pins their output equal for the same hooks directory.
+        import shutil
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not on PATH")
+        pack = self._skill_pack()
+        result = subprocess.run(
+            [node, str(pack / "hooks" / "lib" / "grok-hook-plane.mjs"), str(pack), str(pack / "hooks")],
+            capture_output=True, text=True, check=True, timeout=60,
+        )
+        self.assertEqual(json.loads(result.stdout), updater.build_grok_hooks_payload(pack, dry_run=True))
+
+    def test_every_exclusion_names_a_real_entry(self) -> None:
+        entries = {(event, script) for event, _matcher, script in self._entries()}
+        planes = updater.client_hook_planes(self._skill_pack())
+        for client, plane in planes["clients"].items():
+            if "sameAs" in plane:
+                self.assertIn(plane["sameAs"], planes["clients"], client)
+            for key in plane.get("excluded", {}):
+                event, _, script = key.partition(":")
+                if script == "*":
+                    self.assertTrue(any(e == event for e, _ in entries), f"{client}: {key}")
+                else:
+                    self.assertIn((event, script), entries, f"{client}: stale exclusion {key}")
 
 
 class CodexHookTrustTest(unittest.TestCase):
@@ -1694,7 +2098,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
     def test_claude_descriptor_is_url_only_https_with_the_scope_pin(self) -> None:
         server = self._read("claude.mcp.json")["mcpServers"]["dpf"]
-        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
+        self.assertEqual(server["url"], "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
         self.assertNotIn("headers", server)
         self.assertEqual(server["oauth"], {"scopes": updater.MCP_CLIENT_OAUTH_SCOPE_PIN})
 
@@ -1726,6 +2130,47 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    @NEEDS_ANY_TOML
+    def test_explicit_portal_origin_keeps_the_canonical_mcp_path(self):
+        for endpoint in ("https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                path.write_text('[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1?tier=full"\nstartup_timeout_sec=45\n')
+                updater.ensure_codex_config(home, endpoint, False)
+                value = updater.existing_codex_mcp_endpoint(path.read_text())
+                self.assertEqual(updater.urlsplit(value).path, "/api/mcp/v1")
+                self.assertIn("startup_timeout_sec=45", path.read_text())
+                if "tenant=demo" in endpoint:
+                    self.assertIn("tenant=demo", value)
+
+    @NEEDS_ANY_TOML
+    def test_explicit_proxy_endpoint_preserves_path_and_query(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            updater.ensure_codex_config(home, "https://proxy.example/tenant/mcp/?tenant=demo&empty=", False)
+            self.assertEqual(updater.existing_codex_mcp_endpoint(updater.codex_config_path(home).read_text()),
+                             "https://proxy.example/tenant/mcp/?tenant=demo&empty=&tier=full")
+
+    def test_unsafe_explicit_endpoint_refuses_before_any_host_write(self):
+        for endpoint in ("not-an-endpoint", "ftp://localhost", "https:localhost", "https:///localhost", "https://localhost\\evil",
+                         "https://localhost:invalid", "https://u:p@example.test", "https://localhost?api_key=synthetic-secret"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                original = '[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1"\n'
+                path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output, \
+                        patch.object(updater, "resolve_codex_binary", return_value=None):
+                    with self.assertRaisesRegex(ValueError, "MCP endpoint"):
+                        updater.main(["--mcp-url", endpoint, "--codex-only", "--skip-codex-cli-install",
+                                      "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+                output.assert_not_called()
+                self.assertEqual(path.read_text(), original)
+                self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+
     def test_saved_endpoint_read_mode_does_not_echo_query_credentials(self):
         for key in ("access_token", "api_key", "API-Key", "client_secret"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
@@ -1775,6 +2220,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 self.assertFalse(updater.codex_managed_plugin_path(home).exists())
                 self.assertEqual(path.read_text() if path.exists() else None, original)
 
+    @NEEDS_ANY_TOML
     def test_codex_unreadable_saved_endpoint_requires_explicit_repair(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1788,6 +2234,7 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, "https://repair.example/api/mcp/v1", False)
             self.assertIn('url = "https://repair.example/api/mcp/v1?tier=full"', path.read_text())
 
+    @NEEDS_STDLIB_TOML
     def test_main_distinguishes_implicit_environment_and_cli_endpoints(self):
         original = "http://127.0.0.1:3000/api/mcp/v1?tier=full"
         environment = "https://environment.example/api/mcp/v1"
@@ -1808,6 +2255,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 self.assertIn(f'url = "{expected}"', path.read_text())
                 self.assertIn("startup_timeout_sec=45", path.read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_implicit_convergence_preserves_existing_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1822,12 +2270,14 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, None, False)
             self.assertEqual(first, path.read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_new_connection_keeps_https_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             updater.ensure_codex_config(home, None, False)
             self.assertIn('url = "https://localhost/api/mcp/v1?tier=full"', updater.codex_config_path(home).read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_explicit_endpoint_replaces_existing_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1843,6 +2293,7 @@ class OAuthDefaultTest(unittest.TestCase):
             with self.subTest(case=case):
                 self.assertEqual(updater.mcp_client_bearer_header_required(case["endpoint"], case["client"], case["mode"]), case["required"])
 
+    @NEEDS_ANY_TOML
     def test_codex_updater_preserves_oauth_and_user_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1931,9 +2382,11 @@ class WrapperEndpointParityTest(unittest.TestCase):
         self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
         self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
         self.assertIn("-McpUrl $McpEndpointNamed", ps1)
-        # Persisting a non-https endpoint keys on the operator naming one, not
-        # on a comparison with a hard-coded default.
-        self.assertIn('if [ -n "$MCP_ENDPOINT_NAMED" ]; then', sh)
+        # A named non-https endpoint reaches the clients only through
+        # --mcp-url; it is never written to the env file or launchd that
+        # Claude's OAuth connector reads (BI-8FD7C0C9).
+        self.assertNotIn('dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"', sh)
+        self.assertNotIn('dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"', sh)
 
     def test_python_default_is_canonical_https_oauth(self):
         self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
@@ -1942,6 +2395,7 @@ class WrapperEndpointParityTest(unittest.TestCase):
             self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
 
 
+@NEEDS_STDLIB_TOML
 class CodexRegistrationConvergenceTest(unittest.TestCase):
     def fixture(self, home, canonical=True, legacy=True):
         config = updater.codex_config_path(home)
@@ -2109,6 +2563,22 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
 
+    def test_shell_bootstrap_does_not_report_saved_permissions_as_an_installed_cli(self):
+        source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        if not source.exists():
+            self.skipTest("Repository adapter is not shipped in standalone packs")
+        text = source.read_text(encoding="utf-8")
+        block = text[text.index("CLAUDE_PRESENT=0"):text.index('if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then')]
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text('[projects."source"]\ntrust_level = "trusted"\n', encoding="utf-8")
+            for binary, expected in (("", "0"), ("/native/codex", "1")):
+                setup = 'maybe_install_agy() { :; }; resolve_claude_bin() { :; }; resolve_grok_bin() { :; }; resolve_agy_bin() { :; }; resolve_codex_bin() { printf "%s" "$DPF_TEST_CODEX_BIN"; };\n'
+                result = subprocess.run([updater.shutil.which("bash") or "bash", "-c", setup + block + '\nprintf "%s" "$CODEX_PRESENT"'],
+                    env={**os.environ, "CODEX_CONFIG_PATH": config.as_posix(), "DPF_TEST_CODEX_BIN": binary},
+                    capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout, expected, "Saved permissions cannot prove an installed Codex CLI")
+
     def test_registration_only_mode_does_not_write_connectors_or_other_clients(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -2166,6 +2636,277 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             version = updater.codex_content_version(copied)
             (copied / logo).write_text("changed brand asset", encoding="utf-8")
             self.assertNotEqual(updater.codex_content_version(copied), version)
+
+
+
+class CodexProjectConfigTest(unittest.TestCase):
+    def test_refusal_is_reported_not_raised(self):
+        # BI-CEDE5B55: on python3 3.9 without tomli the step refuses; the
+        # updater must report that and keep converging the other clients.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\n'
+            config.write_text(original)
+            refusal = ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged")
+            with patch.object(updater, "ensure_codex_project_config", side_effect=refusal):
+                status = updater.converge_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertTrue(status.startswith("unchanged ("), status)
+            self.assertIn("Python 3.11+", status)
+            self.assertEqual(config.read_text(), original)
+
+    def test_status_without_override_is_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                updater.converge_codex_project_config(Path(directory), "https://localhost/api/mcp/v1", False),
+                "current",
+            )
+
+    def test_missing_file_stays_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertFalse((root / ".codex" / "config.toml").exists())
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_preserves_other_settings_disabled_state_and_custom_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = 'model="custom"\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nenabled=false\nbearer_token_env_var="CUSTOM_TOKEN"\nstartup_timeout_sec=45\n[mcp_servers.other]\nurl="https://other.example/mcp"\n'
+            config.write_text(original)
+            self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            expected = tomllib.loads(original)
+            expected["mcp_servers"]["dpf"]["url"] = "https://localhost/api/mcp/v1?tier=full"
+            self.assertEqual(tomllib.loads(config.read_text()), expected)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_no_override_does_not_create_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            config.write_text('model="custom"\n')
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertEqual(config.read_text(), 'model="custom"\n')
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_malformed_toml_is_unchanged_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="unfinished'
+            config.write_text(original)
+            with self.assertRaisesRegex(ValueError, "project.*TOML"):
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+
+    def test_missing_parser_refuses_an_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
+            config.write_text(original)
+            import codex_toml
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}), patch.object(codex_toml, "_codex_binary", return_value=None):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_dry_run_and_managed_oauth_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"\n'
+            config.write_text(original)
+            with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+                self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", True))
+                self.assertEqual(config.read_text(), original)
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            parsed = tomllib.loads(config.read_text())
+            self.assertNotIn("bearer_token_env_var", parsed["mcp_servers"]["dpf"])
+            self.assertNotIn("enabled", parsed["mcp_servers"]["dpf"])
+
+    @NEEDS_ANY_TOML
+    def test_main_forwards_explicit_project_and_endpoint_even_on_dry_run(self):
+        import contextlib
+        import io
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "repo"
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "ensure_codex_project_config", return_value=False) as converge, contextlib.redirect_stdout(io.StringIO()):
+                code = updater.main(["--skill-pack-path", str(skill_pack), "--project-root", str(project), "--mcp-url", "https://selected.example/mcp", "--dry-run", "--codex-only", "--skip-codex-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 0)
+            converge.assert_called_once_with(project, "https://selected.example/mcp", True)
+
+
+class ClaimRefreshParityTest(unittest.TestCase):
+    """BI-C3D3762B: the claim-marker refresh reaches Grok and the Codex fallback copy."""
+
+    SKILL_PACK = Path(__file__).resolve().parents[1]
+
+    def _plugin_refresh_group(self) -> dict[str, Any]:
+        data = json.loads((self.SKILL_PACK / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        return next(
+            g for g in data["hooks"]["PostToolUse"]
+            if any(updater.CLAIM_REFRESH_SCRIPT in h["command"] for h in g["hooks"])
+        )
+
+    def test_matcher_mirrors_the_plugin_hooks_json(self) -> None:
+        self.assertEqual(updater.CLAIM_REFRESH_MATCHER, self._plugin_refresh_group()["matcher"])
+        self.assertTrue((self.SKILL_PACK / "hooks" / updater.CLAIM_REFRESH_SCRIPT).exists())
+
+    def test_matcher_covers_each_surface_tool_name_form(self) -> None:
+        matcher = re.compile(updater.CLAIM_REFRESH_MATCHER)
+        for name in ("mcp__plugin_dpf-platform_dpf__heartbeat_workroom", "mcp__dpf__adopt_worktree", "mcp__dpf__claim_backlog_item_for_work"):
+            self.assertTrue(matcher.search(name), name)
+        for name in ("Shell", "mcp__dpf__get_workroom", "mcp__dpf__heartbeat_workroom_v2"):
+            self.assertFalse(matcher.search(name), name)
+
+    def test_grok_payload_runs_the_refresh_after_claim_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(self.SKILL_PACK, managed, dry_run=False)
+            updater.install_grok_hooks(managed, home, dry_run=False)
+            data = json.loads(updater.grok_hooks_file(home).read_text())
+            post = data["hooks"]["PostToolUse"]
+            self.assertEqual(len(post), 1)
+            self.assertEqual(post[0]["matcher"], updater.CLAIM_REFRESH_MATCHER)
+            self.assertIn(str(managed / "hooks" / updater.CLAIM_REFRESH_SCRIPT), post[0]["hooks"][0]["command"])
+
+    def test_codex_fallback_copy_carries_the_refresh_and_keeps_foreign_post_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / "managed"
+            hooks_dir = managed / "hooks"
+            hooks_dir.mkdir(parents=True)
+            for script in (*updater.CODEX_BASH_GUARDS, *updater.CODEX_ASK_GUARDS, updater.CLAIM_REFRESH_SCRIPT):
+                (hooks_dir / script).write_text("// stub\n", encoding="utf-8")
+            (home / ".codex").mkdir()
+            foreign = {"hooks": {"PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node /foreign/audit.js"}]}]}}
+            (home / ".codex" / "hooks.json").write_text(json.dumps(foreign), encoding="utf-8")
+
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            merged = json.loads((home / ".codex" / "hooks.json").read_text())
+            post_cmds = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
+            self.assertIn("node /foreign/audit.js", post_cmds)
+            self.assertTrue(any(updater.CLAIM_REFRESH_SCRIPT in c for c in post_cmds))
+
+            # rerun is idempotent: one refresh entry, not two
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            again = json.loads((home / ".codex" / "hooks.json").read_text())
+            refresh = [h for g in again["hooks"]["PostToolUse"] for h in g["hooks"] if updater.CLAIM_REFRESH_SCRIPT in h["command"]]
+            self.assertEqual(len(refresh), 1)
+
+            # pruning (plugin plane proven) removes the DPF refresh and keeps the foreign hook
+            pruned = updater.prune_codex_hooks_payload(again, hooks_dir)
+            pruned_cmds = [h["command"] for g in pruned["hooks"].get("PostToolUse", []) for h in g["hooks"]]
+            self.assertEqual(pruned_cmds, ["node /foreign/audit.js"])
+
+
+@unittest.skipIf(tomllib is None, "TOML regression requires Python 3.11+")
+class QuotedCodexConvergenceTest(unittest.TestCase):
+    def test_permission_writer_then_updater_preserves_choices_and_is_idempotent(self):
+        import routine_permissions
+        original = {
+            "model": "operator-model",
+            "plugins": {"dpf-platform@personal": {"enabled": False, "custom": "keep"},
+                        **{key: {"enabled": False} for key in updater.codex_competitive_plugin_ids(None)}},
+            "mcp_servers": {"dpf": {
+                "url": "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+                "enabled": True, "startup_timeout_sec": 90,
+                "bearer_token_env_var": "OPERATOR_TOKEN",
+                "http_headers": {"X-Custom": "keep"},
+            }},
+            "hooks": {"state": {"operator": {"trusted_hash": "keep"}}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            target = home / ".codex/config.toml"
+            target.parent.mkdir()
+            target.write_text(routine_permissions.dump_toml(original), encoding="utf-8")
+            updater.ensure_codex_config(home, None, False)
+            parsed = tomllib.loads(target.read_text())
+            for key in original:
+                self.assertEqual(parsed[key], original[key], key)
+            first = target.read_bytes()
+            self.assertFalse(updater.ensure_codex_config(home, None, False))
+            self.assertEqual(first, target.read_bytes())
+
+    def test_literal_quoted_keys_and_headers_preserve_endpoint_and_disabled_choice(self):
+        text = "['plugins'.'dpf-platform@personal'] # operator\n'enabled' = false\n['mcp_servers'.'dpf'] # saved\n'url' = 'http://127.0.0.1:3000/api/mcp/v1?tier=full'\n'enabled' = true\n"
+        self.assertFalse(updater.desired_codex_plugin_enabled(text))
+        self.assertEqual(updater.existing_codex_mcp_endpoint(text), "http://127.0.0.1:3000/api/mcp/v1?tier=full")
+        changed = updater.set_codex_plugin_enabled(text, updater.CODEX_PLUGIN_ID, False)
+        changed = updater.upsert_toml_table(changed, "[mcp_servers.dpf]", updater.codex_mcp_body(changed, None))
+        self.assertEqual(tomllib.loads(text), tomllib.loads(changed))
+
+    def test_invalid_candidate_never_replaces_existing_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_text('model = "keep"\n', encoding="utf-8")
+            before = target.read_bytes()
+            with self.assertRaises(ValueError):
+                updater.write_text_if_changed(target, 'enabled = true\n"enabled" = false\n')
+            self.assertEqual(before, target.read_bytes())
+
+    def test_dry_run_also_rejects_invalid_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "codex_mcp_body", return_value=['url = "https://localhost/api/mcp/v1"', 'enabled = true', '"enabled" = true']):
+                with self.assertRaises(ValueError):
+                    updater.ensure_codex_config(home, None, True)
+            self.assertFalse((home / ".codex/config.toml").exists())
+
+    def test_failed_atomic_replace_keeps_original_and_cleans_staging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_bytes(b'model = "keep"\n')
+            with patch.object(updater.os, "replace", side_effect=OSError("fixture failure")):
+                with self.assertRaises(OSError):
+                    updater.write_text_if_changed(target, 'model = "new"\n')
+            self.assertEqual(target.read_bytes(), b'model = "keep"\n')
+            self.assertEqual(list(target.parent.iterdir()), [target])
+
+    def test_missing_parser_refuses_write_without_touching_original(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_bytes(b'model = "keep"\n')
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.write_text_if_changed(target, 'model = "new"\n')
+            self.assertEqual(target.read_bytes(), b'model = "keep"\n')
+
+    def test_managed_quoted_bearer_is_removed_without_changing_custom_options(self):
+        text = '["mcp_servers"."dpf"]\n"url"="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n"enabled"=true\n"bearer_token_env_var"="DPF_MCP_BEARER_TOKEN"\n"startup_timeout_sec"=90\n'
+        with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+            updated = updater.upsert_toml_table(text, "[mcp_servers.dpf]", updater.codex_mcp_body(text, None))
+        data = tomllib.loads(updated)["mcp_servers"]["dpf"]
+        self.assertNotIn("bearer_token_env_var", data)
+        self.assertEqual(data["startup_timeout_sec"], 90)
+
+    def test_refused_global_candidate_skips_native_plugin_mutation(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "validate_toml", side_effect=ValueError("Invalid TOML candidate; configuration unchanged")), patch.object(updater, "install_codex_plugin") as native, contextlib.redirect_stdout(io.StringIO()) as output:
+                code = updater.main(["--skill-pack-path", str(Path(updater.__file__).resolve().parents[1]), "--skip-claude-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 1)
+            native.assert_not_called()
+            self.assertIn("configuration unchanged", output.getvalue())
+            self.assertNotIn("Codex      : marketplace + config converged", output.getvalue())
 
 
 if __name__ == "__main__":

@@ -217,7 +217,7 @@ describe("the reason vocabulary matches what the drive emits (BI-3ACFD254)", () 
     { action: "pause", reason: "executor_writeback_unavailable", expected: "blocked" },
     { action: "pause", reason: "unknown_principal", expected: "blocked" },
     { action: "dispatch_agent", reason: "lease_held", expected: "in-motion" },
-    { action: "dispatch_agent", reason: "missing_task_owner", expected: "blocked" },
+    { action: "pause", reason: "missing_task_owner", expected: "blocked" },
   ] as const;
 
   it("lists every pair under the action that actually carries it", () => {
@@ -226,6 +226,8 @@ describe("the reason vocabulary matches what the drive emits (BI-3ACFD254)", () 
       expect(listed, `${action}/${reason}`).toContainEqual({ action, reason });
     }
     expect(listed).not.toContainEqual({ action: "attention", reason: "unknown_principal" });
+    // BI-D13FA12A: an undispatched stage is a pause, never a dispatch.
+    expect(listed).not.toContainEqual({ action: "dispatch_agent", reason: "missing_task_owner" });
   });
 
   it("concludes each of them", () => {

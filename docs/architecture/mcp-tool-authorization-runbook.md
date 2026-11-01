@@ -1,5 +1,12 @@
 # MCP tool authorization runbook
 
+Source host tooling applies existing authorized CA trust to native MCP and OAuth
+requests without changing the selected credential or grants. Supported gate
+launchers also prepare child Node startup. TLS verification failures precede
+HTTP; HTTP401 and HTTP403 remain authentication and authorization failures.
+See [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+for resolution precedence and safe recovery.
+
 **Routine delegated maintenance (BI-B22C8E02).** Current OAuth consent steers
 authorized ordinary reads and reversible work without a new approval for each
 call. Account model discovery with an explicit account identity synchronizes
@@ -15,11 +22,38 @@ context, never an extra grant; the paired installation remains read-only.
 
 ## Reading an owned semantic review's recovery state
 
+For exhausted independent-review replacement, follow the
+[initiative readiness recovery procedure](initiative-readiness-runbook.md#4-the-reviewer-roster-who-holds-which-grant).
+
 The existing `tasks/get` and `tasks/result` methods return `recovery.details`
 for semantic reviews after checking the authenticated task owner. This includes
 at most 100 task node IDs, recorded status, digest binding and current scoped
 remediation verification identity. It excludes raw provider output and diagnostic
 text. A truncated node list cannot establish complete execution settlement.
+
+`recovery.details.authority` reports the original request's current authority
+through fixed categories for human access, saved credential scope, OAuth
+continuity/consent, coworker grants and task assignment. Query or immutable
+request failures remain `unavailable`, not a diagnosed denial. This observation
+contains no credential values, actor identifiers or raw errors. A current allowed
+result is neither a historical cause nor permission to retry. Use the returned
+supported remedy for the failed stage; never replace the saved credential by hand.
+
+For `oauth-authority-invalid`, optional `detail` identifies the first current
+failure in the shared execution predicate: token kind/revocation, missing or
+revoked client, ineligible human, missing continuity binding or evidence, or
+missing/invalid consent. The fixed `nextAction` distinguishes account-owner
+review from a binding that the recovery owner must reconcile. Missing continuity
+evidence does not prove expiry caused the original failure, and reconnecting a
+different client does not restore the original binding. Storage failures remain
+unavailable. The diagnostic does not change execution eligibility, settle an old
+execution, or authorize a retry.
+
+The original signed-in human can read the same bounded recovery observation on
+the existing `/api/internal/tasks/<taskId>` task-detail endpoint. Its original
+task admission runs first; another owner's task receives no added authority
+detail even when the signed-in user is an administrator. This existing owner
+surface remains available when the client does not expose protocol Tasks methods.
 
 Failed or inactive tasks do not prove their provider executions have settled.
 `executionSettled` requires a fresh recorded health verification bound to this
@@ -82,7 +116,17 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. An administrator ends one person's
+follow the connection to another person. The platform automation persona
+(`automation@dpf.local`) is never offered there (BI-F586F8A5): a browser
+still holding its session gets a page naming that account with a link to
+sign in as yourself, and the POST issues no code. The governed acceptance
+flow keeps its path: mint `issue_ux_verification_sign_in` with `nextPath`
+set to the exact `/api/oauth/authorize?...` request (its `client_id` and
+`code_challenge`); that session may consent to that one request only.
+Fixture verification users are ordinary accounts and are unaffected. A
+connection refused `workroom_access_denied` is told which account it acts
+as (`data.connectedAs`) and to reconnect while signed in as the room's
+owner; the owner is not named to a caller who is not admitted. An administrator ends one person's
 grants under a shared client registration with People > Revoke this person's
 access on Admin > Platform Development (BI-0A724798); the whole-client revoke
 stays the larger control. The default flow is one Connect action;
@@ -124,7 +168,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **MCP bearer tokens (`dpfmcp_...`) are the legacy path, on a deprecation horizon.** They are issued from Admin > Platform Development > MCP and still resolve; issuance closes when `DPF_MCP_PAT_ISSUANCE_CLOSED=1` and resolution ends at the operator's horizon (`DPF_MCP_PAT_RESOLUTION_DISABLED=1`). Treat `.mcp.json` and `.vscode/mcp.json` as local credential files only; they are ignored by git and must never be committed. An OAuth client stores its own tokens and needs neither file for credentials.
 
-**One dpf connector per client, owned by the plugin (BI-5201141C, design §12.4.4).** Claude Code's `dpf` server is the `dpf-platform` plugin's descriptor, `packages/dpf-skill-pack/claude.mcp.json`: URL-only, `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`, no `Authorization` header, plus the `oauth.scopes` pin. It authenticates by OAuth after one Connect click. Claude Code matches a plugin server against configured servers **by endpoint, not by name** (Claude Code MCP documentation, "scope hierarchy and precedence"): a project `.mcp.json` `dpf` entry at a different URL does not replace the plugin's server, it loads beside it as a second `dpf` connector. So on https nothing writes one: the portal's host writer writes `.mcp.json` / `.vscode/mcp.json` only when the client cannot authorize by OAuth (plain http, or explicit legacy mode); the toolchain bootstrap plans the repo `.mcp.json` only in those cases; the worktree seed and sync scripts never copy it; and `.claude/settings.json` no longer auto-enables project servers. Antigravity's plugin descriptor (`antigravity.mcp.json`) follows the same URL-only rule; Grok's descriptor names `bearer_token_file`, which setup refreshes from a client_credentials client (§12.4.7). Codex's connector is its home config, `~/.codex/config.toml`. Both checked-in descriptors are generator output (`update_agent_toolchain.py`) and a test fails if they drift.
+**One dpf connector per client, owned by the plugin (BI-5201141C, design §12.4.4).** Claude Code's `dpf` server is the `dpf-platform` plugin's descriptor, `packages/dpf-skill-pack/claude.mcp.json`: URL-only, `${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`, no `Authorization` header, plus the `oauth.scopes` pin. It authenticates by OAuth after one Connect click. Claude Code matches a plugin server against configured servers **by endpoint, not by name** (Claude Code MCP documentation, "scope hierarchy and precedence"): a project `.mcp.json` `dpf` entry at a different URL does not replace the plugin's server, it loads beside it as a second `dpf` connector. So on https nothing writes one: the portal's host writer writes `.mcp.json` / `.vscode/mcp.json` only when the client cannot authorize by OAuth (plain http, or explicit legacy mode); the toolchain bootstrap plans the repo `.mcp.json` only in those cases; the worktree seed and sync scripts never copy it; and `.claude/settings.json` no longer auto-enables project servers. Antigravity's plugin descriptor (`antigravity.mcp.json`) follows the same URL-only rule; Grok's descriptor names `bearer_token_file`, which setup refreshes from a client_credentials client (§12.4.7). Codex's connector is its home config, `~/.codex/config.toml`. Both checked-in descriptors are generator output (`update_agent_toolchain.py`) and a test fails if they drift.
 
 *Existing machines converge on their own (AC-CANON-3).* The SessionStart `mcp-health` hook (sh and ps1, sharing `scripts/hooks/lib/retire-project-dpf-connector.mjs`) retires a leftover project `dpf` entry at session start, resume, clear and compact, but only when all of these hold: the endpoint is https; the installed `dpf-platform` plugin's `claude.mcp.json` (found through `~/.claude/plugins/installed_plugins.json`) is confirmed URL-only; and the entry is platform-written — key `dpf`, url on `/api/mcp/v1` at loopback or at the `DPF_MCP_URL` origin. It removes only that key, keeps every other server, writes `{"mcpServers": {}}` rather than deleting the file when `dpf` was the only server, writes atomically, keeps a one-time backup at `.mcp.json.pre-single-connector`, and does nothing on a rerun. It prints one line naming what it retired; the session that retired it still has both servers, and the next session start loads one. When a condition is not met it leaves the file alone and prints the note instead. The plugin itself converges when the toolchain bootstrap reruns or `claude plugin update dpf-platform@dpf-platform-local` picks up 0.2.8. Then `/mcp` lists one `dpf` server, from the plugin.
 
@@ -142,7 +186,9 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 *PAT caller (unchanged contract).* If `/api/mcp/v1` returns an MCP tool result with `structuredContent.error = "insufficient_token_scope"` and `requiredScope` such as `"write"`, stop the MCP workflow and surface the required scope to the operator. Do not fall back to `psql`, Prisma scripts, direct DB edits, or hidden runtime patches to bypass the MCP scope gate. The correct action is to issue a scoped token in the portal, update the client token using the displayed setup command/snippet, call `/api/mcp/token/refresh` with the new token, and retry through MCP.
 
-**Interactive setup defaults to OAuth (BI-A5307F9E).** The shared `mcpClientBearerHeaderRequired` policy accounts for the client and endpoint. Codex uses URL-only configuration on HTTPS and HTTP loopback (`localhost`, `127.0.0.1`, `[::1]`). Bootstrap and updater reruns remove the managed `DPF_MCP_BEARER_TOKEN` override; they preserve user-owned credential overrides and never revoke credentials. Other clients retain their established compatibility requirements where OAuth has not been verified. Grok does not use the browser OAuth scope pin; setup refreshes bearer_token_file from a client_credentials client (§12.4.7). Remote HTTP is not advertised as secure OAuth.
+**Interactive setup defaults to OAuth (BI-A5307F9E).** The shared `mcpClientBearerHeaderRequired` policy accounts for the client and endpoint. Codex uses URL-only configuration on HTTPS and HTTP loopback (`localhost`, `127.0.0.1`, `[::1]`). Bootstrap and updater reruns remove the managed `DPF_MCP_BEARER_TOKEN` override; they preserve user-owned credential overrides and never revoke credentials. Other clients retain their established compatibility requirements where OAuth has not been verified. Grok does not use the browser OAuth scope pin; setup refreshes bearer_token_file from a client_credentials client (§12.4.7). Remote HTTP is not advertised as secure OAuth. On a host without the container script, the agent gets the same client from the `issue_grok_credentials_client` MCP tool and pipes it to the toolchain updater (`--grok-client-stdin`). The tool returns the caller's own client or creates it once, refuses a caller narrower than `dpf.read dpf.work dpf.build`, and keeps the secret out of its audit row (BI-84C1F526, DI-4B843FAF62F9). A missing or expired credential gets a 401 whose `error.data.repair` names the portal's toolchain manifest.
+
+**Below the toolchain floor, a declared client is read-only (BI-DFC0270C).** A release can set a floor in `packages/dpf-skill-pack/toolchain-version.json` (`floor.minPackVersion`, `floor.graceStartsAt`). Once the 7-day grace ends, a client that declared its pack and whose verdict is `below-floor` gets `agent_toolchain_below_floor` on `tools/call`, `tasks/submit` and `tasks/cancel`. The refusal says reads still work and names the same manifest repair link as the 401. Read tools stay open: a tool with `annotations.readOnlyHint: true`, or one with no side effect whose grants are all read grants. So do `load_tools`, `record_surface_readiness` and `issue_grok_credentials_client`, because they are the repair. `sideEffect: false` alone is not enough, so sandbox tools such as `write_sandbox_file` are refused. Undeclared callers are never refused, and a bearer where `mcpClientBearerHeaderRequired` requires one is not below the floor. With no floor set, nothing is refused. Code: `apps/web/lib/mcp/toolchain-floor.ts`.
 
 **Install and rerun behavior.** The default bootstrap does not mint a PAT while OAuth authorization is pending. Its banner separates configuration written from an authenticated connection: sign in through the client's MCP authorization flow (Codex: `codex mcp login dpf`), then verify a governed read and a permitted write. A separate PAT probe does not establish that the client's OAuth session works. Existing user-owned overrides require explicit operator review rather than being silently removed.
 
@@ -150,17 +196,61 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **Acceptance boundary.** Generator and temporary-home rerun tests verify source behavior. Fresh server install, browser consent, restart, refresh and governed reads/writes must still be exercised during the operator's planned reinstall. Configuration written is not that acceptance evidence.
 
-**Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — minted by an operator in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
+**Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — issued through the assistant-bound native route below, or manually in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
+
+**The assistant provisions its own source client (BI-10AC904B).** From the working
+native connection, call `issue_source_credentials_client`. The server derives the
+authenticated owner and acting assistant; it accepts no recipient or scope
+override. Its fixed read/work/build scope must already fit the caller's token,
+and the same assistant's current grants still intersect on each later call.
+Current human eligibility, authority consequence, build grant and normal approval
+policy remain in force. An anonymous or portal-session caller cannot issue it.
+The owner/assistant transaction returns the same active matching client and
+refuses ambiguous, conflicting or unreadable existing credentials. It never
+rewrites another assistant's binding or revives a revoked row.
+
+Keep `data.credentialsClient` out of transcripts and tracked files. Write it only
+to `~/.dpf/mcp-client-credentials.json`, or the explicit canonical file override,
+through a private local transfer. On a shared host, use a private file for each
+actual assistant binding and select it with `DPF_MCP_CLIENT_CREDENTIALS_FILE`.
+Conversations acting as that same verified assistant may reuse its matching file;
+do not create a duplicate for every conversation or borrow another assistant's
+credential. A different client type retains its actual assistant binding and its
+client-specific credential flows. Workroom binding and gate scripts share
+`scripts/lib/mcp-credential.mjs`: headless credentials take precedence over the
+legacy PAT, and malformed configuration refuses without PAT fallback. Preserve
+the configured endpoint and trusted CA. Verify the shell's actual
+`get_my_coworker_profile` binding before treating native connector permissions
+as shell permissions. The desktop OAuth token, Grok client and automation browser
+persona are separate credentials and must not be substituted.
+
+For intentional manual provisioning, the existing Admin headless-client form
+offers **Acts as assistant** and saves its currently eligible canonical identity.
+**Your account only** remains valid for human-only clients, with an explicit
+Workroom limitation. Discovery failures block creation rather than silently
+dropping an intended assistant. Grok retains its existing dedicated issuer and
+updater path through the same underlying owned-client mechanism.
 
 **Connect over loopback https — OAuth, nothing to rotate (BI-FA2C46D7).** On an install with the organization PKI bootstrapped, the client can authorize itself and the token path above stops being needed for desktop clients. Every step is a checked-in script; the operator's only action is one browser consent.
 
 1. `bash scripts/bootstrap-organization-pki.sh --mode authority --hostname localhost --san 127.0.0.1` (re-runnable; reuses the CA). The portal certificate is issued for a year (`DPF_PKI_PORTAL_CERT_DURATION`, default `8760h`) — earlier bootstraps issued a 24h leaf that expired the next day and silently broke LDAPS and any https front (BI-5727522F); a leaf shorter than the configured lifetime is re-issued on the next run. The script starts the Caddy front (`docker-compose.tls.yml`, `:443 → portal:3000`); the installer's compose chain and the autostart unit keep it running because `DPF_ORGANIZATION_TRUST_ENABLED=1` is recorded in `.env`.
-2. `bash scripts/dpf-bootstrap-agent-toolchain.sh` (or the `.ps1` twin). An explicit process `DPF_MCP_URL` selects the endpoint, including supported loopback HTTP for OAuth discovery recovery. Otherwise it prefers the saved Codex endpoint, then the saved user endpoint, then `<PUBLIC_URL>/api/mcp/v1?tier=full` from an HTTPS install origin (BI-2D545A0C). HTTPS and explicitly selected loopback HTTP endpoints persist for future processes. HTTP persistence leaves certificate settings and credentials unchanged. For an https endpoint it resolves the organization root (`DPF_PKI_TRUST_BUNDLE`, then the install's `.env`, then `~/.dpf/pki/root_ca.crt`) and persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` beside the token — the User environment on Windows; `~/.dpf/agent-toolchain.env` (sourced from `~/.zshenv` and `~/.profile`) plus, on macOS, the launchd user environment elsewhere. Node clients (Claude Code, Codex, the gate scripts) trust the install's own CA through that variable. The installers (`install-dpf.ps1`, `install-dpf.sh`) persist the same two values on every run through the same module, `scripts/installer/lib/mcp-client-env.{sh,ps1}`, and add the root to the installing user's trust store (`scripts/installer/lib/machine-trust.{sh,ps1}`, one OS prompt) so browsers on the host open the canonical origin without a warning; the bootstrap does not touch the trust store. Claude Code's connector is the plugin descriptor (one connector, above), which carries **no** `headers.Authorization` (the scheme rule above) — that is what lets discovery run — and `oauth.scopes` = `dpf.read dpf.work dpf.build` (BI-3D2FD68C). The portal's protected-resource metadata advertises the same three scopes (`ADVERTISED_SCOPES` in `apps/web/lib/auth/oauth-scope-map.ts`, BI-CE5F8C0A); the pin keeps the consent on the write scopes even if that advertisement ever narrows, because a client holding only `dpf.read` is read-only for good: progressive disclosure never shows it a write tool, so the `insufficient_scope` step-up has nothing to fire on. `dpf.business`, `dpf.operate` and `dpf.admin` stay a deliberate operator choice. The pinned set lives once, as `MCP_CLIENT_OAUTH_SCOPE_PIN` in `packages/integration-shared/src/mcp-client-credential-policy.ts`, and the skill pack's Python generator mirrors it. Claude Code reads the descriptor only when it starts, so restart the desktop client after a plugin update. The checked-in descriptor names its endpoint as `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`; the desktop app cannot parse that before sign-in (its log reads `verifyPluginMcpBinding ... expected=<unparseable>` and Connect fails with "points at a different server URL"), so the SessionStart plugin reconcile writes this machine's literal endpoint into the installed copy (`scripts/hooks/lib/pin-plugin-mcp-url.mjs`, BI-1229E42C). It takes effect in the next session.
+2. `bash scripts/dpf-bootstrap-agent-toolchain.sh` (or the `.ps1` twin). An explicit process `DPF_MCP_URL` selects the endpoint, including supported loopback HTTP for OAuth discovery recovery. Otherwise it uses a saved https user endpoint, then `<PUBLIC_URL>/api/mcp/v1?tier=full` from an HTTPS install origin (BI-2D545A0C). **Only an https endpoint whose host is a name or IPv4 address is ever persisted** (BI-8FD7C0C9). The persisted `DPF_MCP_URL` is what Claude desktop and Claude Code expand into their OAuth connector, and OAuth refuses plain http (BI-46B636B0). Docker publishes the portal on IPv4 only, so an IPv6 literal such as `[::1]` refuses the connection. A plain-http selection therefore reaches the clients only through the updater's `--mcp-url`, never through the env file, launchd or the Windows User environment. A saved plain-http value is ignored as a leftover. Codex's saved endpoint is not a selection for every client: the updater keeps it in `~/.codex/config.toml` when no endpoint is named, and Grok keeps its own in `~/.grok/config.toml`, so a loopback-http choice for either never leaks into Claude's connector. **Claude reads its own variable (BI-D6A6462A).** Claude Code loads the `dpf` descriptor from the `dpf-platform-local` directory marketplace, which is the repo's own `packages/dpf-skill-pack/claude.mcp.json`. It expands that template with the process environment the client started with, and the pinned literal in the plugin cache does not apply. So Claude's connector reads only `DPF_CLAUDE_MCP_URL`, never the shared `DPF_MCP_URL`. Codex, Grok, the gates and the scripts keep reading `DPF_MCP_URL`. The persistence module above writes both names with the same https value and is the only writer of `DPF_CLAUDE_MCP_URL`. A client, a gate or a stale checkout that sets `DPF_MCP_URL` (for example to `http://[::1]:3000`) can no longer redirect Claude. When `DPF_CLAUDE_MCP_URL` is unset, Claude uses the descriptor's default, `https://localhost/api/mcp/v1?tier=full`. The `mcp-health` hook probes the same endpoint the client uses, so it reads this name too. Tests of this module must name the `DPF_LAUNCHCTL` seam: on a Mac, a case that did not set it ran the real `launchctl setenv` and pointed the operator's desktop app at `http://[::1]:3000`. The test helper now defaults the seam to a recording fake. For an https endpoint it resolves the organization root (`DPF_PKI_TRUST_BUNDLE`, then the install's `.env`, then `~/.dpf/pki/root_ca.crt`) and persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` beside the token — the User environment on Windows; `~/.dpf/agent-toolchain.env` (sourced from `~/.zshenv` and `~/.profile`) plus, on macOS, the launchd user environment elsewhere. Node clients (Claude Code, Codex, the gate scripts) trust the install's own CA through that variable. The installers (`install-dpf.ps1`, `install-dpf.sh`) persist the same two values on every run through the same module, `scripts/installer/lib/mcp-client-env.{sh,ps1}`, and add the root to the installing user's trust store (`scripts/installer/lib/machine-trust.{sh,ps1}`, one OS prompt) so browsers on the host open the canonical origin without a warning; the bootstrap does not touch the trust store. Claude Code's connector is the plugin descriptor (one connector, above), which carries **no** `headers.Authorization` (the scheme rule above) — that is what lets discovery run — and `oauth.scopes` = `dpf.read dpf.work dpf.build` (BI-3D2FD68C). The portal's protected-resource metadata advertises the same three scopes (`ADVERTISED_SCOPES` in `apps/web/lib/auth/oauth-scope-map.ts`, BI-CE5F8C0A); the pin keeps the consent on the write scopes even if that advertisement ever narrows, because a client holding only `dpf.read` is read-only for good: progressive disclosure never shows it a write tool, so the `insufficient_scope` step-up has nothing to fire on. `dpf.business`, `dpf.operate` and `dpf.admin` stay a deliberate operator choice. The pinned set lives once, as `MCP_CLIENT_OAUTH_SCOPE_PIN` in `packages/integration-shared/src/mcp-client-credential-policy.ts`, and the skill pack's Python generator mirrors it. Claude Code reads the descriptor only when it starts, so restart the desktop client after a plugin update. The checked-in descriptor names its endpoint as `${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`; the desktop app cannot parse that before sign-in (its log reads `verifyPluginMcpBinding ... expected=<unparseable>` and Connect fails with "points at a different server URL"), so the SessionStart plugin reconcile writes this machine's literal endpoint into the installed copy (`scripts/hooks/lib/pin-plugin-mcp-url.mjs`, BI-1229E42C). The literal is `DPF_MCP_URL` only when that is https on a name or IPv4 host. Otherwise it is the template's https default, and an OAuth copy already holding a plain-http literal is repinned to `https://localhost/api/mcp/v1?tier=full`. It takes effect in the next session.
 3. Restart the desktop client. On first connection it discovers the authorization server, registers itself (RFC 7591), and opens a browser consent page on the signed-in portal; approve once — the page names the assistant the connection will act as and lists the pinned scopes in plain words (read, work and build for Claude Code); `Adjust permissions` reveals one checkbox per scope if you want to grant less. From then on the access token refreshes silently. `Admin > Platform Development` lists the client beside any remaining PATs. To consent again later (for example after the pin changes), type `/mcp` in the Claude Code composer, pick `dpf`, and choose Authenticate. The desktop app's Settings > Connectors page lists claude.ai connectors only; it is not the place to sign in. `/mcp` shows the plugin's server as the only `dpf` entry — if a second `dpf` appears (a project server), a leftover `.mcp.json` entry is loading beside the plugin; see *Existing machines* above. If the consent page stays on screen after Approve, the sign-in still completed: the redirect targets the `claude://` scheme, so the tab never navigates away.
 
 The SessionStart health hook reads the OAuth challenge on https (a `401` naming `resource_metadata` is the healthy answer) and no longer asks for a token there. Headless callers that cannot open a browser use a `client_credentials` client (design Slice 2b) or, until then, a PAT. Liveness: `OAuthRefreshToken` rows become non-zero on the install and a session authenticates with `source=oauth` (BI-CE5F8C0A).
 
 **Preserve an existing Codex connection.** A toolchain updater run without `--mcp-url` or a nonempty process `DPF_MCP_URL` preserves the saved `mcp_servers.dpf` URL and operator options. Bootstrap also reads that saved URL before install-origin defaults when no process endpoint is named, so its probes and planner use the approved resource. Fresh bootstrap still follows the install HTTPS origin; new standalone connections default to HTTPS localhost. An explicitly named endpoint replaces the saved URL; CLI selection takes precedence over the environment. The shared read-only reader refuses an unreadable URL, embedded credentials or recognized credential query keys before printing the URL or writing configuration. Check the saved endpoint and the public discovery metadata before retrying authentication. If the endpoint changed unexpectedly, restore the approved endpoint through the supported connector command and inspect the client result; changing the resource may initiate OAuth again. Do not treat successful login as proof of silent refresh or task authority. Do not disable certificate validation, inject a legacy token, or substitute a different host.
+
+**Portal origins and MCP endpoints (BI-E2CE164A).** `--from-portal` selects the
+trusted portal that publishes the signed toolchain. `--mcp-url` names the MCP
+resource the clients will use. The standalone updater and Node bootstrap planner
+interpret an explicit bare HTTP(S) origin, with an empty path or `/`, as
+`/api/mcp/v1` on that same origin. An explicit non-root proxy path and its
+non-secret query options remain intact. Unsafe schemes, embedded credentials and
+credential query options are refused before host configuration is read or
+written; diagnostics do not echo the input. An update with no explicit endpoint
+continues to preserve the saved Codex resource. Refresh installed copies through
+the signed portal updater after this repair ships, then restart active clients.
 
 **Concurrent sessions and refresh.** Several sessions of one client can share a stored refresh token. When the same client refreshes the same token again within `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` (default 60s) of rotating it, the server issues a sibling credential and revokes nothing. Reuse after the window, or by another client, still revokes the whole credential family as `refresh_token_replayed`, and the client reports "This connection was reused. Reconnect to continue." In that case, re-authenticate with `/mcp`. The rule and its security reasoning: [credential-lifecycle amendment](../superpowers/specs/2026-09-21-oauth-external-build-authority-design.md#refresh-reuse-grace-amendment-bi-25c6219e-2026-10-02) (BI-25C6219E).
 
@@ -233,7 +323,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 - **Minimal recovery (interactive session).** Run `/mcp`, select `dpf`, choose **reconnect** (current builds also accept `/mcp reconnect dpf`). This reuses the existing config — no token re-entry, no workspace-trust re-prompt. If reconnect still fails, restart the client. **Confirm with a read-only call** (e.g. `get_backlog_item`), not just the `/mcp` status line — a status of `connected` is structural; a successful tool call is functional.
 - **Non-interactive sessions (headless / cron / SDK) cannot run `/mcp`.** There a dropped `dpf` server stays down for the life of the process, and **restarting the process is the only recovery**. Keep unattended runs short, or gate them on a health probe, so a self-upgrade mid-run does not silently strand every governed tool.
 - **Startup advisory.** The `hooks/mcp-health` SessionStart hook (`scripts/hooks/mcp-health.{ps1,sh}`, wired in `.claude/settings.json`) probes the endpoint the plugin connector uses — `DPF_MCP_URL`, then the default in `packages/dpf-skill-pack/claude.mcp.json` — at every session start / resume / `clear` / `compact`, passing `NODE_EXTRA_CA_CERTS` to curl on https, and prints reachability plus the reconnect recipe above, so a strand is loud rather than silent. It probes the **endpoint only** — it cannot see the client's MCP attach state, so treat a healthy probe beside absent `dpf` tools as proof of a client-side drop. Silence with `DPF_SKIP_MCP_HEALTH=1`.
-- **Stale installed copy (BI-16EAAB62).** `mcp-health` reads the repository's descriptor, not the copy a client loaded. The `hooks/plugin-copy-freshness` SessionStart hook (`scripts/hooks/plugin-copy-freshness.{ps1,sh}`, wired in `.claude/settings.json`) covers that: it runs `packages/dpf-skill-pack/scripts/installed_copy_freshness.py`, which walks the copy locations `update_agent_toolchain.installed_plugin_copies()` names — the shared managed copy, the Codex managed copy, and the Claude plugin-cache copy for this checkout or user scope — and compares each with the root clone's pack: version, delivered content at an equal version, and, for the copies Claude reads its connector from, the `dpf` endpoint and auth mode the updater would write for this environment. It prints one `WARN:` line per stale copy naming the path and the repair (rerun `update_agent_toolchain.py` from the root clone, then restart the client). A copy newer than the root clone is not reported. Warn-only, never writes, exits 0. Silence with `DPF_SKIP_PLUGIN_COPY_CHECK=1`.
+- **Stale installed copy (BI-16EAAB62, BI-A67B65F4).** `mcp-health` reads the repository's descriptor, not the copy a client loaded. The plugin's own SessionStart hook `hooks/toolchain-freshness.mjs` covers that, so it also runs in installed-runtime sessions with no checkout. It runs `scripts/installed_copy_freshness.py --json` from the plugin. That walks the copy locations `update_agent_toolchain.installed_plugin_copies()` names (the shared managed copy, the Codex managed copy, and the Claude plugin-cache copy for this folder or user scope) and compares each with a reference: first the manifest the portal serves at `/api/agent-toolchain/manifest` (from `--manifest-url` or the shared copy's connector origin), then the root clone's pack. It checks version, delivered content at an equal version, and, for the copies Claude reads its connector from, the `dpf` endpoint and auth mode the updater would write. With no Python the hook compares versions only, so a version match is `unknown`. The manifest wait is 2 seconds; offline is `unknown`, never `current`. Every run prints one `DPF toolchain: current|stale|unknown` line. A copy newer than the reference is not reported. Advisory only, never writes, exits 0. Grok runs it through `grok-session-start.mjs`. Silence with `DPF_SKIP_PLUGIN_COPY_CHECK=1`.
 - **`localhost` caveat.** The client must target the `127.0.0.1` literal, not `localhost`. On hosts where `localhost` resolves to `::1` and IPv6 is not answering, the client cannot connect even though `127.0.0.1:3000` is healthy; anything that re-resolves `localhost` re-breaks it.
 
 **Operator conformance probe:** after deploying a candidate, run `node scripts/mcp-progressive-disclosure-conformance.mjs --url <nonproduction-MCP-URL>` with `DPF_MCP_BEARER_TOKEN` present only in the environment. The probe never logs the credential. It validates Codex Desktop/CLI and Claude Code full-catalog defaults, the generic-client core default, initialize guidance, exact and intent loading, append-not-swap, notification-aware SSE, notification-blind re-list, same-session use, structured unknown recovery, and authentication-vs-disconnection classification. A protocol-profile pass is not live host acceptance: separately prove a fresh Codex task can find and call a non-core tool from its host registry.
@@ -516,6 +606,16 @@ The connection briefing carries bounded identity, mission, locale and owning-sco
 For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.
 
 
+## Administrator classification recovery
+
+`review_workroom_sensitivity` is a platform-administrator control-plane read. It returns only the room id, revision digest, canonical classification (or null) and whether an invalid historical declaration needs review. It does not return room contents, titles, membership or historical prose. OAuth dispatch checks the current human's `manage_platform` permission for this exact tool instead of requiring room-content admission.
+
+The paired `correct_workroom_sensitivity` operation uses that same administrative boundary and retains the normal exact authority approval. Its transaction rechecks current permission, verified classification, invalid-only eligibility and the revision/JSON compare-and-swap, then retains the original declaration in the audit. Neither operation grants room admission or changes coworker clearance. Ordinary room reads and writes keep their existing data-access checks. An administrator must verify actual classification before proposing a historical correction; DEV posture does not supply it.
+
+## Approval convergence probe
+
+`probe_pending_approval_conversion` (BI-129EFFD1) runs the AC-PROBE dry run inside the server: no inputs, `sideEffect: false` (advise-safe, admitted by a `read` token), the narrow `approval_probe_read` grant (in `dpf.read`; held by the admin assistant and the three external development identities), and the handler refuses any caller without `manage_platform`. Each evaluation step runs on a `SET TRANSACTION READ ONLY` transaction and no tool handler is called.
+
 ## Recovering an interrupted independent review
 
 Read the canonical task with MCP `tasks/get` and `tasks/result`. Native review
@@ -524,6 +624,26 @@ execution classification and next action. Polling helps only while execution is
 active. A capacity refusal before dispatch is infrastructure-inconclusive;
 transport loss remains uncertain. Neither is a failed code review or permission
 to publish. Workroom history retains the reviewer checkpoints and receipts.
+
+HTTP 200 is not review completion. A local response that exhausts its completion
+allowance on reasoning, has no final content, or ends with `finish_reason=length`
+remains inconclusive. Never parse its scratchpad as a verdict. JSON review
+requirements must participate in route capability selection and actual dispatch.
+The activity completion allowance includes both reasoning and final output; a
+fallback must not enlarge that total to accommodate thinking.
+
+Numeric local thinking limits require fresh selected-model runtime evidence,
+not an optimistic model-family prior. The verified llama.cpp b9879 dialect uses
+`thinking_budget_tokens` and requires a compatible thinking end delimiter.
+Read-only configuration, engine status and model metadata bind that dialect to
+the selected model digest, template and configuration; only an audited exact
+template digest can establish compatibility in this dialect. Delimiter text in
+comments or unreachable Jinja branches is insufficient. Unknown or overridden
+templates leave effort unexpressed. Recheck the evidence after admission before
+inference, preserving authority and the original deadline. No global configure
+write or model reload is needed. The initial final-output reserve is a candidate
+to validate with complete reviews and paired clean/defective controls, not a
+quality claim or a general tool-surface calibration result.
 
 When a local review fails near five minutes, inspect the actual transport as
 well as the model deadline. The process-lived provider transport uses the
@@ -571,3 +691,231 @@ For the review service's own repair, use the existing recovery routing and build
 gate runbooks. They provide no alternative independent-review receipt and do
 not relax DCO, grants, ownership or production integrity. Record unavailable
 checks as unrun, then reconcile them after canonical recovery.
+
+
+### Parent-bounded local review execution (BI-03AC2FD9)
+
+The local reviewer's default call window remains 600 seconds. A persisted native
+review binds each unfinished branch to its existing absolute parent deadline.
+The server checks current authority and generation before dispatch, after queue
+admission and periodically during execution. The branch uses only remaining
+parent time; queue waits and fallback never restart the clock. Ordinary chat,
+caller durations and an autonomous origin tag do not confer this authority.
+
+Parent expiry or loss of authority aborts local HTTP execution and removes queued
+waiters. Active work keeps its GPU slot until its actual call settles. A canceled
+client request is not proof that a remote provider stopped: uncertain outcomes
+still require the existing scoped reconciliation before recovery. Completed
+checkpoints survive revoked authority, but a review receipt cannot publish until
+current authority is valid. `auth-required` names that distinction; an execution
+failure remains infrastructure-inconclusive, never a failed code verdict.
+
+The 4,096-token generic output allowance and the 16,384-token semantic-review
+output reserve are separate from the model's served context window and execution
+deadline. This repair changes neither token/cost budgets nor model/tool routing.
+A larger context window alone does not prove reliable native tool execution;
+provider routing, tool schema/format fidelity, multistep completion and latency
+need separate measured acceptance.
+
+
+## Recovering an original initiative review after a connection change
+
+Original owners can collect existing review evidence through `tasks/result`
+without resubmitting the review. Initiative-review results return a bounded
+`originalResult` projection under the current connection's read scopes, original
+human/coworker identity and exact Workroom content access. An optional
+`requestDigest` pins readback to the saved request. The issuer's reconciliation
+refusal also returns the same projection and an exact `tasks/result` locator
+when the immutable original request matches. Neither route supplies dispatch
+authority or performs receipt-backed status healing.
+
+`receipt-complete` means an existing genuine governed writer receipt matches the
+original task, digest, attempt, checkpoint and immutable artifact; its recorded
+decision can be pass, fail or not-applicable. `proven-not-dispatched` and
+`proven-settled-without-receipt` require authoritative original-attempt proof.
+Missing or contradictory proof returns `unknown` with explicit missing facts.
+Current native observations record child closure as unverified, so outer close,
+timeout or a budget refusal alone cannot establish no late effects. Historical
+unknowns remain closed. Returned provenance contains bounded source identities,
+times, digests and observed facts; raw provider output and prompts are excluded.
+Concurrent checkpoint changes invalidate the collected snapshot. Collection
+never resets a deadline, attempt or approval, changes identity or grants, creates
+a verdict, or authorizes a retry. Existing receipt CAS/history healing remains a
+separate operation and accepts only its matching genuine receipt.
+
+Read `get_backlog_item` with the exact `itemId` and `recoveryGate`. For an owned,
+safely stopped review, its native `request_coworker` packet includes
+`reviewRecovery`: the original TaskRun, saved request digest and observed
+`expectedUpdatedAt`. Submit that packet unchanged. An ambiguous, active,
+execution-uncertain or exhausted predecessor requires reconciliation; readback
+returns a refusal rather than a replacement request. Dropping a recovery locator
+from a bounded native request does not authorize a new task.
+
+Before issuing recovery, the original-review guard inventories the unsuffixed
+key and every reviewer-scoped alias, including histories from earlier OAuth
+families. Coexisting unresolved tasks refuse as ambiguous even when one matches
+the current key. A completed alias cannot hide an unresolved original. Malformed
+identities, changed request bytes and incomplete inventory refuse safely.
+
+Ordinary creation repeats the predecessor check under the subject lock before
+allocating a task. Its only exhausted-reviewer exception reuses the existing
+terminal-writer exhaustion proof for a different canonical reviewer in the same
+current OAuth family. Both keys, the saved digest, artifact, binding, tool scope,
+human and requesting coworker must match their recorded authority. Renaming the
+same reviewer, changing family, uncertain execution or a present reassessment
+cannot supply another budget.
+
+The locator grants no authority. Submission rechecks the current interactive
+OAuth connection, authenticated human, canonical acting coworker, live grants,
+exact Workroom action admission and current server-issued review packet. The
+original request, source, task namespace and tool/item boundaries must match.
+PAT and credentials-client substitution cannot recover this lane. A stale target
+refuses before task creation; refresh the bounded read after concurrent changes.
+
+Recovery stores current execution authority separately from immutable origin in
+the original task's existing generation reservation. Concurrent requests compete
+on status and `updatedAt`; only one reservation wins. Workers and approval
+continuations reconstruct the same immutable request and recheck current
+authority, recorded deadlines and scope before dispatch. A malformed authority
+record never falls back to the expired origin credential. Parking for capacity,
+a missing writer or a provider failure retains current authority and recorded
+windows; capacity events use the same worker reconstruction. Nested readers and
+writers retain their current governed permission and one-shot approval checks.
+Historical tasks without an absolute deadline retain their existing retry and
+execution ceilings; recovery does not invent a new lifetime.
+
+Server reconciliation checks an already-recorded, verified writer receipt before
+reconstructing credentials or checking permission for new execution. A later
+revoked token or disabled human cannot undo that recorded outcome. The existing
+healer still checks the writer/artifact binding and status/version compare-and-swap;
+it cannot revive cancellation or authorize another inference or effect.
+
+A reservation or successful reader is not a review outcome. Verify the genuine
+governed writer receipt on the original task and reconcile its actual readiness
+finding. Deployment and live recovery acceptance remain separate from source
+verification. Ordinary task submissions retain their existing connection-bound
+idempotency rules; this is an explicit independent-review recovery operation,
+not general cross-user task ownership transfer.
+
+
+Persisted request reconstruction and the execution-authority record parser have
+one home in `apps/web/lib/mcp-task-persisted-request.ts`. Workers and authorization
+guards depend on this leaf; it does not import dispatch or worker modules.
+This keeps per-tool mediation independent of the orchestration load graph.
+
+The source-client issuer retains its authority declaration. Its per-call
+refinement removes the extra operator handoff only for its empty-input,
+assistant-bound call on a canonically resolved development/evolve-dpf install
+with local-permitted credentials. This changes caution, never permission:
+current human, token, coworker and scope checks still run in the handler.
+Production, unreadable stance, unbound calls and supplied overrides retain
+authority approval. Other authority operations, including room invitations,
+are unaffected.
+
+## Canonical review writer execution identity
+
+The captured identity also fences every task-bound review callback, whether or
+not it used connection recovery. Governed preflight, immediate tool dispatch and
+task settlement recheck the same request, reservation, dispatch claim and
+authority digest. An approval return keeps its original audited identity and
+cannot adopt a newer generation or revive a held execution. Malformed non-null
+review bindings fail closed; ordinary tasks with the historical null sentinel
+keep their normal behavior. The original owner can still read exact
+`tasks/get` and `tasks/result` evidence under current read permissions. These
+reads neither resume execution nor clear uncertainty.
+
+For a task-bound initiative review, the admitted executor captures its request
+digest, reservation, dispatch claim and recorded execution-authority digest before
+starting provider work. Internal tool execution carries that captured identity;
+native MCP carries it in the signed session. Tool arguments and JSON-RPC metadata
+cannot supply it. Approval replay uses the original server-owned audit identity,
+never the task's latest generation.
+
+Both canonical review writers lock the original task before the subject. A new
+receipt, baseline or retention pin requires a working task, no execution
+uncertainty and the same captured identity under that transaction lock. A held,
+displaced or unversioned callback cannot append an effect. A genuine exact
+existing winner remains readable under the existing actor, artifact and authority
+checks; its receipt identifier does not include the execution generation.
+
+Legacy sessions without the captured identity cannot publish new task-bound
+reviews. This refusal does not settle an unknown execution, authorize inference,
+reset attempts or qualify historical recovery. Deploy compatible writers before
+admitting these sessions. Roll back by disabling admission while retaining the
+compatible fence and readers; a pre-fence binary requires separately proven
+capability retirement and reconciled effects.
+
+## Explicitly authorized present reassessments
+
+An approved retained policy can authorize a bounded present assessment of an
+unchanged review requirement. This is separate from original-task recovery.
+`get_backlog_item` accepts `reassessmentAuthorizationItemId` with the exact
+`itemId` and `recoveryGate`; its server-issued packet retains the original
+source and the approved policy, baseline and predecessor relation. The locator
+confers no permission. Submit the complete packet unchanged through the normal
+governed `request_coworker` path.
+
+Admission rechecks current human, connection, coworker grants, Workroom access,
+independent approval, normal routing and recorded budgets. It locks the complete
+accepted lineage before the subject and authorization items. Every accepted
+assessment counts, including pending, failed, canceled and uncertain work.
+Repeated requests read the existing allocation; they cannot open another window
+or reset a counter. Historical unknown consumption remains unknown.
+The shared task creator also refuses a new ordinary bound task for the same
+held, uncertain, quarantined or already reassessed requirement. Explicit review
+writer scopes require a binding, and external independent writers require the
+validated persisted binding at publication. Direct `tasks/submit` cannot publish
+a replacement verdict by omitting that binding or changing its key.
+
+The initial TaskRun, immutable qualification root and first input commit together.
+Only declared captured configuration reads run during qualification. Promotion
+adds an immutable execution seal on that same task and original window; reader,
+writer, count and generation effects require the actual promoted scope. Current
+authority and the retained seal are checked again at each effect and inside the
+canonical writer transaction. A genuine existing receipt takes precedence over
+new execution. Predecessor quarantine retains its original status, uncertainty,
+attempts and limits alongside a separate execution hold.
+
+The finite native path captures complete count and generation bodies, reserves
+the exact prompt count plus the full output ceiling, and retains outstanding
+reservations. Normal model selection, quality floors, daily observed-usage checks
+and resource admission still apply. Missing host GPU telemetry is recorded as
+unknown under the ordinary capacity policy; it is never an idle measurement.
+An unsupported normal winner refuses before allocation.
+
+Compatible transport, approval, worker and writer owners are required on the
+actual served image. Upgrade preflight and the final swap check their packaged
+capability proof, including fallback targets. Canonical self-upgrade PostgreSQL
+rollback is currently refused before any backup or restore effect because
+whole-restore retention and effect exclusion have not been proven. This
+deliberately reduces rollback availability; the refusal is not positive
+retention evidence. Other privileged database, file and host administration
+remains the approved trusted-admin boundary. Source
+tests alone do not establish deployment, a live assessment or parent admission.
+
+## Bounded Workroom activity reads
+
+When `get_workroom` cannot deliver a raw activity page within its budget, preserve
+the unadvanced cursor. Use the same tool with `activityMode: "bounded"` and the
+same `afterSequence` to read activity metadata without loading raw payloads.
+Preserve the returned `throughSequence` while continuing with
+`nextAfterSequence`. `activityLimit` is an upper bound (1..20); fewer whole rows
+may fit. Metadata explicitly defers payload evidence and is not a full receipt.
+
+Each row supplies an exact same-room detail call. Add `activityId` in bounded
+mode to read its payload, or `activityField: "summary"` for summary text.
+`payloadPath` selects object keys or array indexes when a structured value is too
+large. A successful detail response delivers only that selected value. Missing
+paths and JSON null are distinct. Oversized scalars remain retained and
+undelivered; there is no scalar streaming fallback. Do not repeat an unchanged
+impossible read or infer full evidence from metadata.
+A value whose numbers cannot survive JSON decoding exactly is also refused;
+no rounded value is presented as complete evidence. Select a different field
+when useful. The retained original is never rewritten.
+
+Every read requires current tool authority and canonical room content admission,
+checked before and after selection. Numeric bounds and row IDs grant nothing.
+A sequence gap leaves the range unadvanced. `legacyRowsPresent` marks rows with
+no sequence; sequenced traversal cannot establish complete legacy history.
+The default room reader and legacy alias retain their existing behavior. These
+reads never settle, resume or replace a historical execution.

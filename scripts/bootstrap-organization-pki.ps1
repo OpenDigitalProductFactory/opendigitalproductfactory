@@ -27,7 +27,6 @@ $PortalCertDuration = if ($env:DPF_PKI_PORTAL_CERT_DURATION) { $env:DPF_PKI_PORT
 $RootCert = Join-Path $OutDir "root_ca.crt"
 $FingerprintFile = Join-Path $OutDir "root_ca.fingerprint"
 $PasswordFile = Join-Path $OutDir "secrets\step-ca-password"
-$script:PasswordFileEffective = $PasswordFile
 $AuthorityCert = Join-Path $OutDir "authority.crt"
 $AuthorityKey = Join-Path $OutDir "authority.key"
 $Caddyfile = Join-Path $OutDir "Caddyfile"
@@ -129,7 +128,6 @@ if ($Mode -eq "issue-join" -and (Test-Path -LiteralPath $PackageOutput)) {
 function Invoke-DpfPkiCompose {
     param([Parameter(Mandatory)][string[]]$Arguments)
     $old = @{
-        DPF_PKI_PASSWORD_FILE = $env:DPF_PKI_PASSWORD_FILE
         DPF_PKI_TRUST_BUNDLE = $env:DPF_PKI_TRUST_BUNDLE
         DPF_PKI_BIND_ADDRESS = $env:DPF_PKI_BIND_ADDRESS
         DPF_PKI_DNS_NAMES = $env:DPF_PKI_DNS_NAMES
@@ -137,7 +135,6 @@ function Invoke-DpfPkiCompose {
         DPF_TLS_DIR = $env:DPF_TLS_DIR
     }
     try {
-        $env:DPF_PKI_PASSWORD_FILE = $script:PasswordFileEffective
         $env:DPF_PKI_TRUST_BUNDLE = $RootCert
         $env:DPF_PKI_BIND_ADDRESS = $BindAddress
         $env:DPF_PKI_DNS_NAMES = ((@($Hostname) + $San + @($BindAddress, "localhost", "127.0.0.1")) | Where-Object { $_ }) -join ","
@@ -155,7 +152,11 @@ function Invoke-DpfPkiCompose {
         if ($Mode -in @("authority", "issue-join")) {
             $composeFiles += @("-f", (Join-Path $RepoRoot "docker-compose.pki.yml"))
         }
-        & docker compose --project-directory $RepoRoot @composeFiles @Arguments
+        if ($Arguments[0] -eq "stage-password") {
+            & node (Join-Path $RepoRoot "scripts/installer/stage-ca-password.mjs") $PasswordFile --project-directory $RepoRoot @composeFiles
+        } else {
+            & docker compose --project-directory $RepoRoot @composeFiles @Arguments
+        }
         if ($LASTEXITCODE -ne 0) { throw "organization_pki_compose_failed" }
     } finally {
         foreach ($key in $old.Keys) {
@@ -254,7 +255,7 @@ function Invoke-DpfLocalStepClient {
     param([Parameter(Mandatory)][string[]]$Arguments)
     $containerId = (Invoke-DpfPkiCompose -Arguments @("ps", "-q", "step-ca")).Trim()
     if (-not $containerId) { throw "organization_pki_container_unavailable" }
-    & docker run --rm --network "container:$containerId" --mount "type=bind,src=$OutDir,dst=/work" $StepImage step @Arguments
+    & docker run --rm --entrypoint step --network "container:$containerId" --mount "type=bind,src=$OutDir,dst=/work" $StepImage @Arguments
     if ($LASTEXITCODE -ne 0) { throw "organization_pki_local_client_failed" }
 }
 
@@ -264,7 +265,7 @@ function Enable-DpfEdgeClientProvisioner {
     Invoke-DpfPkiCompose -Arguments @(
         "exec", "-T", "step-ca", "step", "ca", "provisioner", "add", "dpf-edge-client",
         "--type", "JWK", "--create", "--ssh=false",
-        "--password-file", "/run/secrets/step-ca-password",
+        "--password-file", "/home/step/secrets/password",
         "--x509-template", "/etc/dpf/pki/edge-client.tpl",
         "--x509-min-dur", "5m", "--x509-default-dur", "720h", "--x509-max-dur", "720h",
         "--ca-config", "/home/step/config/ca.json"
@@ -310,20 +311,104 @@ function Test-DpfPortalLeafNeedsReissue {
     return $false
 }
 
+function Repair-DpfAuthorityEdgeClient {
+    param([Parameter(Mandatory)][string]$Subject)
+    $lock = Join-Path $OutDir ".edge-client-recovery.lock"
+    New-Item -ItemType Directory -Path $lock -ErrorAction Stop | Out-Null
+    $work = $null
+    $previous = $false
+    $publishing = $false
+    $retainCheckpoint = $false
+    try {
+        $relative = ".edge-client-" + [Guid]::NewGuid().ToString("N")
+        $work = Join-Path $OutDir $relative
+        New-Item -ItemType Directory -Path $work -ErrorAction Stop | Out-Null
+        & icacls $work /inheritance:r /grant:r "$env:USERNAME`:(OI)(CI)F" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "edge_client_private_directory_failed" }
+        $helper = Join-Path $RepoRoot "scripts/installer/edge-client-certificate.mjs"
+        $rootBefore = (Get-FileHash -LiteralPath $RootCert -Algorithm SHA256).Hash
+        $disposition = "issue"
+        $hasCert = Test-Path -LiteralPath $EdgeClientCert
+        $hasKey = Test-Path -LiteralPath $EdgeClientKey
+        if ($hasCert -or $hasKey) {
+            if (-not ($hasCert -and $hasKey)) { throw "edge_client_existing_pair_incomplete" }
+            foreach ($path in @($EdgeClientCert, $EdgeClientKey)) {
+                if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "edge_client_existing_pair_link" }
+            }
+            $identity = (& node $helper --certificate $EdgeClientCert --root $RootCert --subject $Subject --allow-expired) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw "edge_client_existing_identity_invalid" }
+            $disposition = $identity.Trim().Split(' ')[0]
+            if ($disposition -notin @("issue", "renew")) { throw "edge_client_disposition_invalid" }
+            $certPublic = (Invoke-DpfLocalStepClient -Arguments @("certificate", "key", "/work/edge-client.crt")) -join "`n"
+            $keyPublic = (Invoke-DpfLocalStepClient -Arguments @("crypto", "key", "public", "/work/edge-client.key")) -join "`n"
+            if (-not $certPublic.Trim() -or $certPublic.Trim() -cne $keyPublic.Trim()) { throw "edge_client_existing_key_mismatch" }
+            Copy-Item -LiteralPath $EdgeClientCert -Destination (Join-Path $work "previous.crt")
+            Copy-Item -LiteralPath $EdgeClientKey -Destination (Join-Path $work "previous.key")
+            $previous = $true
+        }
+        if ($disposition -eq "renew") {
+            Copy-Item -LiteralPath (Join-Path $work "previous.crt") -Destination (Join-Path $work "client.crt")
+            Copy-Item -LiteralPath (Join-Path $work "previous.key") -Destination (Join-Path $work "client.key")
+            Invoke-DpfLocalStepClient -Arguments @("ca", "renew", "/work/$relative/client.crt", "/work/$relative/client.key", "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
+        } else {
+            $edgeToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $Subject, "--not-after", "15m", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/home/step/secrets/password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")).Trim()
+            try {
+                Invoke-DpfLocalStepClient -Arguments @("ca", "certificate", $Subject, "/work/$relative/client.crt", "/work/$relative/client.key", "--token", $edgeToken, "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
+            } finally { $edgeToken = $null }
+        }
+        & node $helper --certificate (Join-Path $work "client.crt") --root $RootCert --subject $Subject | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "edge_client_replacement_identity_invalid" }
+        Invoke-DpfLocalStepClient -Arguments @("certificate", "verify", "/work/$relative/client.crt", "--roots", "/work/root_ca.crt") | Out-Null
+        $certPublic = (Invoke-DpfLocalStepClient -Arguments @("certificate", "key", "/work/$relative/client.crt")) -join "`n"
+        $keyPublic = (Invoke-DpfLocalStepClient -Arguments @("crypto", "key", "public", "/work/$relative/client.key")) -join "`n"
+        if (-not $certPublic.Trim() -or $certPublic.Trim() -cne $keyPublic.Trim()) { throw "edge_client_replacement_key_mismatch" }
+        if ($rootBefore -cne (Get-FileHash -LiteralPath $RootCert -Algorithm SHA256).Hash) { throw "edge_client_root_changed" }
+        if ($previous) {
+            foreach ($pair in @(@($EdgeClientCert, (Join-Path $work "previous.crt")), @($EdgeClientKey, (Join-Path $work "previous.key")))) {
+                if ((Get-FileHash -LiteralPath $pair[0] -Algorithm SHA256).Hash -cne (Get-FileHash -LiteralPath $pair[1] -Algorithm SHA256).Hash) { throw "edge_client_existing_pair_changed" }
+            }
+        } elseif ((Test-Path -LiteralPath $EdgeClientCert) -or (Test-Path -LiteralPath $EdgeClientKey)) { throw "edge_client_existing_pair_changed" }
+        $publishing = $true
+        Move-Item -LiteralPath (Join-Path $work "client.key") -Destination $EdgeClientKey -Force
+        Move-Item -LiteralPath (Join-Path $work "client.crt") -Destination $EdgeClientCert -Force
+        $publishing = $false
+    } finally {
+        if ($publishing) {
+            try {
+                if ($previous) {
+                    Copy-Item -LiteralPath (Join-Path $work "previous.key") -Destination $EdgeClientKey -Force
+                    Copy-Item -LiteralPath (Join-Path $work "previous.crt") -Destination $EdgeClientCert -Force
+                } else {
+                    foreach ($path in @($EdgeClientKey, $EdgeClientCert)) {
+                        if (Test-Path -LiteralPath $path -ErrorAction Stop) {
+                            Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+                        }
+                        if (Test-Path -LiteralPath $path -ErrorAction Stop) { throw "edge_client_partial_pair_remains" }
+                    }
+                }
+            } catch { $retainCheckpoint = $true; throw "edge_client_restoration_unproven" }
+        }
+        if (-not $retainCheckpoint) {
+            if ($work) { Remove-Item -LiteralPath $work -Recurse -Force }
+            Remove-Item -LiteralPath $lock -Force
+        }
+    }
+}
+
 function New-DpfEdgeActionMaterial {
     if (-not (Test-Path -LiteralPath $ActionSigningPassword)) {
-        $password = (& docker run --rm $StepImage step crypto rand --format hex 64).Trim()
+        $password = (& docker run --rm --entrypoint step $StepImage crypto rand --format hex 64).Trim()
         if ($LASTEXITCODE -ne 0 -or $password.Length -lt 32) { throw "edge_action_signing_password_generation_failed" }
         [IO.File]::WriteAllText($ActionSigningPassword, "$password`n", (New-Object Text.UTF8Encoding($false)))
         $password = $null
     }
     if (-not (Test-Path -LiteralPath $ActionSigningPublic) -or -not (Test-Path -LiteralPath $ActionSigningPrivate)) {
         Remove-Item -LiteralPath $ActionSigningPublic, $ActionSigningPrivate -Force -ErrorAction SilentlyContinue
-        & docker run --rm --mount "type=bind,src=$OutDir,dst=/work" $StepImage step crypto keypair /work/edge-action-signing-public.pem /work/secrets/edge-action-signing-private.pem --kty OKP --curve Ed25519 --password-file /work/secrets/edge-action-signing-password | Out-Null
+        & docker run --rm --entrypoint step --mount "type=bind,src=$OutDir,dst=/work" $StepImage crypto keypair /work/edge-action-signing-public.pem /work/secrets/edge-action-signing-private.pem --kty OKP --curve Ed25519 --password-file /work/secrets/edge-action-signing-password | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "edge_action_signing_key_generation_failed" }
     }
     if (-not (Test-Path -LiteralPath $MtlsProxySecret)) {
-        $secret = (& docker run --rm $StepImage step crypto rand --format hex 64).Trim()
+        $secret = (& docker run --rm --entrypoint step $StepImage crypto rand --format hex 64).Trim()
         if ($LASTEXITCODE -ne 0 -or $secret.Length -lt 32) { throw "edge_mtls_proxy_secret_generation_failed" }
         [IO.File]::WriteAllText($MtlsProxySecret, "$secret`n", (New-Object Text.UTF8Encoding($false)))
         $secret = $null
@@ -363,6 +448,7 @@ if ($Mode -eq "authority") {
 
     # Existing CA state is always reused. There is deliberately no force or
     # reinitialize switch: silent replacement would invalidate every peer.
+    Invoke-DpfPkiCompose -Arguments @("stage-password")
     Invoke-DpfPkiCompose -Arguments @("up", "-d", "step-ca")
     Wait-DpfStepCa
     Enable-DpfEdgeClientProvisioner
@@ -380,7 +466,7 @@ if ($Mode -eq "authority") {
     } else {
         # First issuance, or a leaf issued for less than $PortalCertDuration:
         # issue fresh for the full lifetime instead of renewing a 24h certificate.
-        $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--provisioner", "dpf-installer", "--password-file", "/run/secrets/step-ca-password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")
+        $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--provisioner", "dpf-installer", "--password-file", "/home/step/secrets/password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")
         $enrollmentToken = (Invoke-DpfPkiCompose -Arguments $tokenArguments).Trim()
         $certificateArguments = @("exec", "-T", "step-ca", "step", "ca", "certificate", $Hostname, "/home/step/certs/dpf-portal.crt", "/home/step/secrets/dpf-portal.key", "--token", $enrollmentToken, "--not-after", $PortalCertDuration, "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt", "--force")
         Invoke-DpfPkiCompose -Arguments $certificateArguments | Out-Null
@@ -390,26 +476,21 @@ if ($Mode -eq "authority") {
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/certs/dpf-portal.crt", $AuthorityCert)
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/secrets/dpf-portal.key", $AuthorityKey)
     $edgeSubject = "dpf-edge-" + $Hostname.Replace(':', '-')
-    if ((Test-Path -LiteralPath $EdgeClientCert) -and (Test-Path -LiteralPath $EdgeClientKey)) {
-        Invoke-DpfLocalStepClient -Arguments @("ca", "renew", "/work/edge-client.crt", "/work/edge-client.key", "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
-    } else {
-        $edgeToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $edgeSubject, "--not-after", "15m", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/run/secrets/step-ca-password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")).Trim()
-        Invoke-DpfLocalStepClient -Arguments @("ca", "certificate", $edgeSubject, "/work/edge-client.crt", "/work/edge-client.key", "--token", $edgeToken, "--ca-url", "https://127.0.0.1:9000", "--root", "/work/root_ca.crt", "--force") | Out-Null
-        $edgeToken = $null
-    }
+    Repair-DpfAuthorityEdgeClient -Subject $edgeSubject
     $EdgeActionConfigured = $true
 } elseif ($Mode -eq "issue-join") {
     if (-not (Test-Path -LiteralPath $PasswordFile)) { throw "Organization CA is not initialized on this installation" }
+    Invoke-DpfPkiCompose -Arguments @("stage-password")
     Invoke-DpfPkiCompose -Arguments @("up", "-d", "step-ca")
     Wait-DpfStepCa
     Enable-DpfEdgeClientProvisioner
     $Fingerprint = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "certificate", "fingerprint", "/home/step/certs/root_ca.crt")).Trim()
     $sanArguments = @("--san", $Hostname)
     foreach ($name in $San) { $sanArguments += @("--san", $name) }
-    $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--not-after", "$($PackageTtlSeconds)s", "--provisioner", "dpf-installer", "--password-file", "/run/secrets/step-ca-password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")
+    $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--not-after", "$($PackageTtlSeconds)s", "--provisioner", "dpf-installer", "--password-file", "/home/step/secrets/password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")
     $enrollmentToken = (Invoke-DpfPkiCompose -Arguments $tokenArguments).Trim()
     $edgeSubject = "dpf-edge-" + $Hostname.Replace(':', '-')
-    $edgeEnrollmentToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $edgeSubject, "--not-after", "$($PackageTtlSeconds)s", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/run/secrets/step-ca-password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")).Trim()
+    $edgeEnrollmentToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $edgeSubject, "--not-after", "$($PackageTtlSeconds)s", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/home/step/secrets/password", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt")).Trim()
     $bytes = New-Object byte[] 16
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $package_id = -join ($bytes | ForEach-Object { $_.ToString("x2") })
@@ -437,28 +518,25 @@ if ($Mode -eq "authority") {
     if (-not $CaUrl -or -not $Fingerprint) { throw "join mode requires CaUrl and Fingerprint" }
     if (-not $CaUrl.StartsWith("https://", [StringComparison]::OrdinalIgnoreCase)) { throw "join mode requires an HTTPS CaUrl" }
     $hasLocalLeaf = (Test-Path -LiteralPath $AuthorityCert) -and (Test-Path -LiteralPath $AuthorityKey)
-    if ($hasLocalLeaf) {
-        $script:PasswordFileEffective = $AuthorityKey
-    } else {
+    if (-not $hasLocalLeaf) {
         if (-not $TokenFile -or -not (Test-Path -LiteralPath $TokenFile)) { throw "first join requires an existing TokenFile" }
         $tokenAcl = & icacls $TokenFile
         if ($tokenAcl -match "Everyone|BUILTIN\\Users") { throw "Enrollment token file must be private" }
-        $script:PasswordFileEffective = $TokenFile
     }
-    & docker run --rm --mount "type=bind,src=$OutDir,dst=/work" $StepImage step ca root /work/root_ca.crt --ca-url $CaUrl --fingerprint $Fingerprint --force | Out-Null
+    & docker run --rm --entrypoint step --mount "type=bind,src=$OutDir,dst=/work" $StepImage ca root /work/root_ca.crt --ca-url $CaUrl --fingerprint $Fingerprint --force | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "organization_pki_root_bootstrap_failed" }
     if ($hasLocalLeaf) {
-        & docker run --rm --mount "type=bind,src=$OutDir,dst=/work" $StepImage step ca renew /work/authority.crt /work/authority.key --ca-url $CaUrl --root /work/root_ca.crt --force | Out-Null
+        & docker run --rm --entrypoint step --mount "type=bind,src=$OutDir,dst=/work" $StepImage ca renew /work/authority.crt /work/authority.key --ca-url $CaUrl --root /work/root_ca.crt --force | Out-Null
     } else {
-        & docker run --rm --mount "type=bind,src=$OutDir,dst=/work" --mount "type=bind,src=$TokenFile,dst=/run/secrets/enrollment-token,readonly" $StepImage sh -c 'step ca certificate "$1" /work/authority.crt /work/authority.key --token "$(cat /run/secrets/enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' sh $Hostname $CaUrl | Out-Null
+        & docker run --rm --entrypoint sh --mount "type=bind,src=$OutDir,dst=/work" --mount "type=bind,src=$TokenFile,dst=/run/secrets/enrollment-token,readonly" $StepImage -c 'step ca certificate "$1" /work/authority.crt /work/authority.key --token "$(cat /run/secrets/enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' sh $Hostname $CaUrl | Out-Null
     }
     if ($LASTEXITCODE -ne 0) { throw "organization_pki_leaf_issue_failed" }
     if ($EdgeTokenFile) {
         $edgeSubject = "dpf-edge-" + $Hostname.Replace(':', '-')
         if ((Test-Path -LiteralPath $EdgeClientCert) -and (Test-Path -LiteralPath $EdgeClientKey)) {
-            & docker run --rm --mount "type=bind,src=$OutDir,dst=/work" $StepImage step ca renew /work/edge-client.crt /work/edge-client.key --ca-url $CaUrl --root /work/root_ca.crt --force | Out-Null
+            & docker run --rm --entrypoint step --mount "type=bind,src=$OutDir,dst=/work" $StepImage ca renew /work/edge-client.crt /work/edge-client.key --ca-url $CaUrl --root /work/root_ca.crt --force | Out-Null
         } else {
-            & docker run --rm --mount "type=bind,src=$OutDir,dst=/work" --mount "type=bind,src=$EdgeTokenFile,dst=/run/secrets/edge-enrollment-token,readonly" $StepImage sh -c 'step ca certificate "$1" /work/edge-client.crt /work/edge-client.key --token "$(cat /run/secrets/edge-enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' sh $edgeSubject $CaUrl | Out-Null
+            & docker run --rm --entrypoint sh --mount "type=bind,src=$OutDir,dst=/work" --mount "type=bind,src=$EdgeTokenFile,dst=/run/secrets/edge-enrollment-token,readonly" $StepImage -c 'step ca certificate "$1" /work/edge-client.crt /work/edge-client.key --token "$(cat /run/secrets/edge-enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' sh $edgeSubject $CaUrl | Out-Null
         }
         if ($LASTEXITCODE -ne 0) { throw "edge_client_certificate_issue_failed" }
         $EdgeActionConfigured = $true
@@ -492,9 +570,9 @@ if ($EdgeActionConfigured) {
     }
     @edge_actions path /api/v1/edge/actions/*
     handle @edge_actions {
+        request_header -X-DPF-Edge-Cert-*
+        request_header -X-DPF-MTLS-Proxy-Secret
         reverse_proxy portal:3000 {
-            header_up -X-DPF-Edge-Cert-*
-            header_up -X-DPF-MTLS-Proxy-Secret
             header_up X-DPF-MTLS-Proxy-Secret "$proxySecret"
             header_up X-DPF-Edge-Cert-Fingerprint {tls_client_fingerprint}
             header_up X-DPF-Edge-Cert-Serial {tls_client_serial}

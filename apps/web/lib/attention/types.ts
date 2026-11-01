@@ -20,6 +20,7 @@ export type AttentionSource =
   | "approval-outbound" // OutboundDraft pending-review (marketing)
   | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)
   | "approval-expense" // ExpenseClaim submitted
+  | "approval-leave" // LeaveRequest pending — the manager's own decision (BI-7BCC87BB)
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
   | "coworker-memory" // Newly distilled CoworkerMemoryNote rows for digest visibility
@@ -37,7 +38,8 @@ export type AttentionSource =
   | "workroom-rebind" // a Workroom pinned to a superseded work-shape version (BI-CB5C0DCE)
   | "orphaned-approval" // coworker approvals going to a delegate who is not using the portal (BI-61DE8177)
   | "contribution-setup" // contribution with the DPF project is undecided, or chosen with no GitHub account connected (BI-D3342020)
-  | "mailroom-item"; // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
+  | "mailroom-item" // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
+  | "agent-toolchain"; // a computer's DPF tools have failed to update, or waited on the operator, for over a day (BI-3E66F76F)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -135,7 +137,7 @@ export type AttentionTechnicalMetadata = {
  * level union remains canonical; owner-facing labels come from
  * PROACTIVITY_LEVEL_COPY (`quiet` renders as “Quiet”). */
 export type AttentionProactivity = {
-  level: import("@/lib/proactivity/proactivity-types").ProactivityLevel;
+  level: import("@dpf/validators/workroom-policy/proactivity-types").ProactivityLevel;
   actorId?: string;
   policyId?: string;
 };
@@ -204,6 +206,12 @@ export type AttentionEnvelopeApproval = {
   declineHref: string;
   /** POST target that raises an expired, unanswered request again. */
   reraiseHref?: string;
+  /**
+   * BI-7BCC87BB (AC-OVERRIDE): set only when an admin who is not the delegate
+   * opened this request's exact link. The card then offers "Decide on their
+   * behalf" with a required reason instead of Authorize / Decline.
+   */
+  onBehalf?: { ownerLabel: string };
 };
 
 export type AttentionItem = {
@@ -241,6 +249,10 @@ export type AttentionItem = {
   /** The governed coworker action awaiting this reader's decision. Set only by
    * the `coworker-envelope` source (BI-7CB2CCDE). */
   envelope?: AttentionEnvelopeApproval;
+  /** A legacy proposal whose approval the reference monitor refused: why it
+   * can no longer run as proposed. Set only by the `agent-proposal` source
+   * (convert-and-run, BI-04E5A511); the card then offers Decline only. */
+  noLongerRunnable?: string;
 };
 
 /**

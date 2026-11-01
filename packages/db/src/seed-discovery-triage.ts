@@ -10,8 +10,9 @@ import {
   DISCOVERY_TRIAGE_TASK_ID,
   DISCOVERY_TRIAGE_TASK_TITLE,
 } from "./discovery-triage-config";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -50,13 +51,9 @@ export async function ensureDiscoveryTriageScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean; ownerUserId: string }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
+  const ownerId = await findTaskOwnerUserId(prisma);
 
-  if (!owner) {
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed discovery triage scheduled task");
   }
 
@@ -94,7 +91,7 @@ export async function ensureDiscoveryTriageScheduledTask(
         routeContext: DISCOVERY_TRIAGE_ROUTE_CONTEXT,
         schedule: DISCOVERY_TRIAGE_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });
@@ -117,6 +114,6 @@ export async function ensureDiscoveryTriageScheduledTask(
 
   return {
     created: !existingTask,
-    ownerUserId: existingTask?.ownerUserId ?? owner.id,
+    ownerUserId: existingTask?.ownerUserId ?? ownerId,
   };
 }

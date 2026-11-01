@@ -1,6 +1,9 @@
-import type { ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
+import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
+import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
+import type { prepareCurrentDesignObservation as PrepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
 
 const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_gate_receipt",
@@ -383,7 +386,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext,
+  internal?: { currentDesignSource: NonNullable<Parameters<typeof PrepareCurrentDesignObservation>[0]["claimSource"]> }): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -409,6 +413,9 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
           draftApprovedAt: true,
           sandboxId: true,
           createdAt: true,
+          designDoc: true,
+          designReview: true,
+          buildPlan: true,
         },
       },
       activities: {
@@ -419,6 +426,11 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  const { selectWorkroomReadSource, selectionRefusal } = await import("../backlog-workroom-read-source");
+  const selected = await selectWorkroomReadSource({ workroomId: params["workroomId"],
+    userId: currentUserId, agentId: currentAgentId,
+    itemId: item.itemId, itemRowId: item.id });
+  if (selected && !selected.ok) return selectionRefusal;
   const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
   const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
@@ -441,21 +453,35 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  // BI-8ECF7B5C: judge an item with an active build on its build gate's facts, so the router sees the gate's verdict.
+  const ab = item.activeBuild;
+  const buildFacts = ab ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
+    kind: ab.kind, designDoc: ab.designDoc, designReview: ab.designReview, buildPlan: ab.buildPlan,
+    originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
+  }).catch(() => null) : null;
   const evaluatedAt = new Date().toISOString();
   // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
   // evaluation (merge signal included), so this view and the gate agree. Null
   // — any other status, or an evaluation that could not run — keeps the
   // existing projection.
   const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
-  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt });
+  const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+  // Public selection contributes only the persisted source after exact action access.
+  // Legacy internal callers retain their independently checked source binding.
+  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId,
+    ...(selected?.ok ? { claimSource: selected.source } : internal ? { claimSource: internal.currentDesignSource } : {}) });
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
+    currentDesign: currentDesign.evidence });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
   const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    currentDesign: currentDesign.evidence,
     completionDecision: gateCompletion?.decision ?? null,
     inheritedScope,
     item: {
       id: item.id,
       workShape: boundWorkShape,
-      deliverySensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
+      deliverySensitivity: buildFacts?.deliverySensitivity
+        ?? assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
       body: item.body,
       itemId: item.itemId,
       status: item.status,
@@ -473,19 +499,90 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasSpec,
     hasPlan,
     evaluatedAt,
+    buildDesign: buildFacts?.buildDesign ?? null,
   }));
-  const readiness = gateCompletion
+  const deliveryReadiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
-  const completion = readiness.decisions?.completion;
-  const needsPirRecovery = completion && completion.verdict !== "allowed"
-    && [...completion.blockers, ...completion.unmet]
-      .some((entry) => entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED");
-  const recovery = needsPirRecovery
+  const { loadPlanBaselinePrerequisite } = await import("@/lib/backlog/initiative-readiness/plan-baseline-prerequisite");
+  const readiness = { ...deliveryReadiness, planBaselinePrerequisite: await loadPlanBaselinePrerequisite({
+    db: prisma, item, decision: projectedReadiness.decisions?.implementation,
+    currentDesignState: projectedReadiness.currentDesignState,
+  }) };
+  const requestedGate = params["recoveryGate"];
+  const reassessmentAuthorizationItemId = params["reassessmentAuthorizationItemId"];
+  if (reassessmentAuthorizationItemId !== undefined && (typeof reassessmentAuthorizationItemId !== "string"
+    || !/^BI-[A-F0-9]{8}$/.test(reassessmentAuthorizationItemId)
+    || !["design-spec", "spec-approval"].includes(String(requestedGate)) || context?.authSource !== "oauth")) {
+    return { success: false, error: "reassessment-policy-unproven", message: "A present reassessment requires one exact approved authorization item and design review gate on the current connection." };
+  }
+  if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
+    return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
+  }
+  const completion = requestedGate !== undefined
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}, readiness.planBaselinePrerequisite) : readiness.decisions?.completion;
+  const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
+    && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
+      .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
+        "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
+  let taskAuthority: { userId: string; taskAuthorityKey: string } | null = null;
+  // Admission regenerates these packets with trusted task history too. Omitting
+  // it changes a fresh request's identity even when an owned legacy task masks it.
+  const needsDesignTaskAuthority = needsTerminalRecovery && (requestedGate === undefined
+    ? completion && designPhaseReviewDecision(completion) !== null
+    : ["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(requestedGate));
+  if (needsTerminalRecovery && needsDesignTaskAuthority && context?.authSource === "oauth") {
+    const taskAuthorityKey = currentUserId && context.apiTokenId
+      ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+        tokenId: context.apiTokenId, userId: currentUserId, source: "oauth",
+      }) : null;
+    if (!taskAuthorityKey || !currentUserId) return { success: false, error: "review_task_authority_unavailable",
+      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading independent design recovery." };
+    taskAuthority = { userId: currentUserId, taskAuthorityKey };
+  }
+  const recovery = needsTerminalRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
-        decision: completion, currentAgentId, refusedWorkroomId: null,
+      currentUserId,
+        decision: completion, currentAgentId, refusedWorkroomId: selected?.ok ? selected.source.workroomId : null,
+        ...(taskAuthority ? { taskAuthority } : {}),
       })
     : undefined;
+  if (requestedGate !== undefined) {
+    if (!await canReadRecoveryPacket({ gate: requestedGate, recovery, currentAgentId, currentUserId })) {
+      return { success: false, error: "workroom_data_access_required", message: "The current connection cannot read this Workroom's review packet. Follow the existing room admission remedy; item visibility grants no additional access." };
+    }
+    if (recovery && currentUserId && currentAgentId && context?.authSource === "oauth") {
+      const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
+      const key = taskAuthority?.taskAuthorityKey ?? (context.apiTokenId ? await (await import("@/lib/auth/oauth-task-authority"))
+        .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
+      if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
+      for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        if (typeof reassessmentAuthorizationItemId === "string") {
+          try {
+            const { issuePresentReassessmentRequest } = await import("@/lib/mcp-task-review-reassessment");
+            route.requestCoworker = await issuePresentReassessmentRequest({ packet: route.requestCoworker,
+              authorizationItemId: reassessmentAuthorizationItemId, userId: currentUserId, actingAgentId: currentAgentId,
+              tokenGrantScopes: context.tokenGrantScopes ?? [] }) as typeof route.requestCoworker;
+          } catch {
+            return { success: false, error: "reassessment-policy-unproven", message: "The current approval, original readback or exact source could not authorize a present request. No replacement was delivered." };
+          }
+          continue;
+        }
+        const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
+          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
+          tokenGrantScopes: context.tokenGrantScopes });
+        if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
+          message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
+          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate,
+            ...(issued.originalResult ? { originalResult: issued.originalResult } : {}),
+            ...(issued.resultRead ? { resultRead: issued.resultRead } : {}) } };
+        if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+      }
+    }
+    if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
+    return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
+  }
+  if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
   return {
     success: true,
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
@@ -502,6 +599,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       triageOutcome: item.triageOutcome,
       deferral: deferralData(item),
       ...scopeData(item),
+      // BI-8DE5429B: the item's own outcome, and whether a person or agent
+      // stated it or the platform derived a draft that is still to be confirmed.
+      outcome: item.outcome ?? null,
+      outcomeSource: item.outcomeSource ?? null,
       body: item.body ?? null,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),

@@ -29,6 +29,7 @@ vi.mock("@/lib/inference/ai-provider-internals", () => ({
 vi.mock("./execution-adapter-registry", () => ({
   registerExecutionAdapter: vi.fn(),
 }));
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 
 vi.mock("./extract-tool-calls", () => ({
   extractToolCalls: vi.fn().mockReturnValue([]),
@@ -60,6 +61,7 @@ function makeMockProcess(): MockProcess {
   proc.kill = vi.fn();
   return proc;
 }
+
 
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
@@ -273,7 +275,7 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
     mockSpawn.mockImplementation(() => {
       spawnCallCount++;
       const proc = makeMockProcess();
-      if (spawnCallCount <= 2) {
+      if (spawnCallCount <= 3) {
         // Prompt + runner file writes — succeed synchronously on nextTick
         process.nextTick(() => proc.emit("close", 0));
       } else {
@@ -312,7 +314,128 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
   });
 });
 
+describe("Codex native effect replay fence", () => {
+  it.each(["close", "error", "structured-error", "empty-result"])("holds an effect-first execution followed by %s", async (event) => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0, effects = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        effects++;
+        proc.emit("spawn");
+        if (event === "empty-result") { proc.emit("close", 0); return; }
+        if (event === "structured-error") {
+          proc.stdout.emit("data", Buffer.from("Invalid API key · Fix external API key"));
+          proc.emit("close", 0); return;
+        }
+        proc.stderr.emit("data", Buffer.from("ERROR: authentication failed after native effect"));
+        if (event === "close") proc.emit("close", 1);
+        else proc.emit("error", new Error("kill ESRCH"));
+      });
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await expect(codexCliAdapter.execute(makeRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+    expect(effects).toBe(1);
+    expect(calls).toBe(4);
+  });
+});
+
+// BI-PIR-0371f80d: from 2026-10-27 every Codex run failed with exit 1 and the
+// CLI's verdict ("You've hit your usage limit ... try again at Nov 2nd, 2026
+// 6:13 AM") was dropped: the run stayed uncertain, the log said only
+// "stderrPresent: true", and the provider still read as available.
+describe("Codex CLI failure verdict is never hidden", () => {
+  const USAGE_LIMIT = "ERROR: You\u2019ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits or try again at Nov 2nd, 2026 6:13 AM.";
+
+  async function runFailing(stderr: string) {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        proc.emit("spawn");
+        proc.stderr.emit("data", Buffer.from(stderr));
+        proc.emit("close", 1);
+      });
+      return proc;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const error = await codexCliAdapter.execute(makeRequest()).catch((e: unknown) => e);
+    const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+    warn.mockRestore();
+    return { error: error as { name: string; diagnostics?: Record<string, unknown> }, logged };
+  }
+
+  it("logs the CLI's own error line, classifies it, and records the subscription cap", async () => {
+    const { recordCliRateLimit } = await import("./cli-pool-status");
+    const { error, logged } = await runFailing(`Human: PRIVATE_PROMPT discussing 401 Unauthorized\n${USAGE_LIMIT}\n`);
+    expect(error.name).toBe("NativeCliExecutionUncertainError");
+    expect(error.diagnostics).toMatchObject({ exitCode: 1, cliFailureHint: "quota" });
+    expect(logged).toContain("hit your usage limit");
+    expect(logged).toContain("hint=quota");
+    expect(logged).not.toContain("PRIVATE_PROMPT");
+    expect(recordCliRateLimit).toHaveBeenCalledWith("codex-cli", "codex", expect.stringContaining("try again at Nov 2nd, 2026 6:13 AM"), undefined);
+  });
+
+  it("classifies the CLI's auth verdict without recording a rate limit", async () => {
+    const { recordCliRateLimit } = await import("./cli-pool-status");
+    const { error, logged } = await runFailing("ERROR: Your access token could not be refreshed. Please sign in again.\n");
+    expect(error.diagnostics).toMatchObject({ cliFailureHint: "auth" });
+    expect(logged).toContain("hint=auth");
+    expect(recordCliRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("bounds and redacts what it logs", async () => {
+    const { logged } = await runFailing(`ERROR: upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP ${"x".repeat(5_000)}\n`);
+    expect(logged).not.toMatch(/eyJhbGci|sk-proj-ABCDEFGH/);
+    expect(logged).toContain("[redacted]");
+    expect(logged.length).toBeLessThan(1_200);
+  });
+});
+
 describe("Codex inference context isolation", () => {
+  it("keeps simultaneous account credentials in distinct private homes", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockImplementation(async (_provider, connectionId) => ({ secretRef: connectionId === "account-a" ? "test-key-a" : "test-key-b", cachedToken: null } as never));
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{ path: string; content: string }> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({ path: args.at(-1)!, content: Buffer.from(data, "base64").toString("utf8") }); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else {
+        process.nextTick(() => { proc.stdout.emit("data", Buffer.from("Completed")); proc.emit("close", 0); });
+      }
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await Promise.all(["account-a", "account-b"].map(providerConnectionId => codexCliAdapter.execute(makeRequest({ plan: makePlan({ providerConnectionId }) }))));
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-a");
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-b");
+    const homes = writes.filter(write => write.content.includes("const config =")).map(write => JSON.parse(write.content.match(/const config = (.+);/)![1]!).env.CODEX_HOME as string);
+    expect(new Set(homes).size).toBe(2);
+    for (const key of ["test-key-a", "test-key-b"]) {
+      const staged = writes.find(write => write.path.endsWith("auth.json") && JSON.parse(write.content).OPENAI_API_KEY === key)!;
+      expect(homes.some(home => staged.path.includes(`${home}/auth.json`))).toBe(true);
+      expect(mockExecAsync.mock.calls.some(([command]) => command.includes(key))).toBe(false);
+    }
+  });
   it("runs outside the shared checkout and cleans up its own context directory", async () => {
     vi.clearAllMocks();
     const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
@@ -338,12 +461,13 @@ describe("Codex inference context isolation", () => {
     });
     const { codexCliAdapter } = await import("./codex-cli-adapter");
     await codexCliAdapter.execute(makeRequest());
-    const runner = writes.find(value => value.startsWith("#!/bin/sh"))!;
-    const directory = runner.match(/cd (\/tmp\/codex-cwd-[\w-]+) \|\| exit 1/)?.[1];
-    expect(directory).toBeDefined();
-    expect(runner).not.toContain("cd /workspace");
-    expect(runner).toContain(`mkdir -p ${directory} || exit 1`);
-    expect(mockExecAsync.mock.calls.some(([command]) => command.includes(`rmdir ${directory}`))).toBe(true);
+    const runner = writes.find(value => value.includes("const config ="))!;
+    const config = JSON.parse(runner.match(/const config = (.+);/)![1]!);
+    expect(config.env.CODEX_HOME).toMatch(/^\/tmp\/dpf-codex-auth-/);
+    expect(runner).not.toContain("sk-test");
+    expect(config.cwd).toBe(config.env.CODEX_HOME);
+    expect(config.cwd).not.toContain("/workspace");
+    expect(mockSpawn.mock.calls.some(([, args]) => args.includes("node"))).toBe(true);
   });
 });
 
@@ -437,9 +561,94 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
     expect(looksLikeCliAuthFailure(cliFailureSignal(expired))).toBe(true);
   });
 
+  // BI-07EC0FB4 (live, 2026-10-14 00:07–00:20Z): a revoked OpenAI sign-in. The 401s
+  // sit only on timestamped `... ERROR codex_models_manager` lines, which the
+  // signal drops; the CLI's own ERROR: line says "sign in again", which no
+  // pattern matched, so 39 Workroom turns failed as provider_error and the
+  // provider was never disabled or flagged for re-auth.
+  it("classifies a refresh-token failure that asks to sign in again as auth", () => {
+    const revoked = [
+      "Reading prompt from stdin...",
+      "2026-10-14T00:16:54.477268Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: Your authentication token has expired. Please try refreshing it.",
+      "OpenAI Codex v0.162.1",
+      "--------",
+      "model: gpt-5.6-luna",
+      "--------",
+      "user",
+      "You are executing one stage of a standing Workroom activity.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+    ].join("\n");
+    const signal = cliFailureSignal(revoked);
+    expect(looksLikeCliAuthFailure(signal)).toBe(true);
+    expect(looksLikeCliRateLimit(signal)).toBe(false);
+  });
+
+  it.each([
+    "ERROR: Please sign in again.",
+    "ERROR: please sign in to continue",
+    "ERROR: Your access token could not be refreshed.",
+  ])("classifies sign-in phrasing %j as auth", (text) => {
+    expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
+  });
+
   it("falls back to the tail when the CLI printed no ERROR line", () => {
     const text = "x".repeat(10_000) + "\nnot logged in";
     expect(cliFailureSignal(text)).toContain("not logged in");
     expect(cliFailureSignal(text).length).toBeLessThanOrEqual(2_000);
+  });
+});
+
+
+describe("governed read-only Codex MCP transport", () => {
+  it("attaches only the bound native readers, never the bearer in argv or the archived prompt", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{path: string; content: string}> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({path: args.at(-1)!, content: Buffer.from(data,"base64").toString("utf8")}); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close",0)));
+      } else process.nextTick(() => {proc.stdout.emit("data",Buffer.from('{"summary":"real native result"}'));proc.emit("close",0);});
+      return proc;
+    });
+    const names = ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"];
+    const mintReadOnlySession = vi.fn(async()=>"test-session-secret");
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const result = await codexCliAdapter.execute(makeRequest({
+      messages:[{role:"user",content:[{type:"text",text:"Inspect rendered input"},{type:"image_url",image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}}]}],
+      tools: names.map(name => ({type:"function",function:{name,parameters:{type:"object",properties:{}}}})),
+      mcpSession: {userId:"human",agentId:"ux-design-critic",threadId:"thread",taskRunId:"TR-original",
+        taskExecutionFence:{schemaVersion:1,reservation:"reserved",dispatchClaim:"claimed",authorityDigest:null,requestDigest:"a".repeat(64)},
+        readOnlyToolNames:names,mintReadOnlySession},
+    }));
+    expect(mintReadOnlySession).toHaveBeenCalledExactlyOnceWith();
+    const config = writes.find(w=>w.path.endsWith("/config.toml"));
+    expect(config?.content).toContain('[mcp_servers.dpf]');
+    expect(config?.content).toContain('required = true');
+    expect(config?.content).toContain('enabled_tools = ["read_source_at_version","wiki_query","search_ux_critique_corpus"]');
+    expect(config?.content).toContain('shell_tool = false');
+    expect(config?.content).toContain('multi_agent = false');
+    expect(config?.content).toContain('apps = false');
+    expect(config?.content).toContain('test-session-secret');
+    const prompt = writes.find(w=>w.path.endsWith("-prompt.txt"))!.content;
+    expect(prompt).not.toContain('test-session-secret');
+    expect(prompt).not.toContain('Available tools. To invoke a tool, output ONE JSON');
+    const runner = writes.find(w=>w.content.includes("const config ="))!.content;
+    expect(runner).not.toContain("test-session-secret");
+    expect(runner).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(runner).toContain('read-only');
+    expect(runner).toContain('--image');
+    expect(writes.find(w=>w.path.endsWith('/image-1.png'))).toBeDefined();
+    expect(prompt).not.toContain('iVBORw0KGgo');
+    expect(prompt).toContain('[Attached image 1]');
+    expect(runner).toContain("fs.rmSync(config.home, { recursive: true, force: true })");
+    expect(result.toolCalls).toEqual([]);
+    expect(mockExecAsync.mock.calls.some(([cmd])=>cmd.includes("test-session-secret"))).toBe(false);
   });
 });

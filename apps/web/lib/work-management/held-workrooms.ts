@@ -10,9 +10,13 @@ import type { prisma } from "@dpf/db";
 
 import { isRecord } from "@/lib/shared/coerce";
 
-import { driveDeviationCodes, readDriveHold } from "./workroom-drive-hold";
+import { driveDeviationCodes, readDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
+import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "./room-workforce.server";
+import { resolveDriveConclusion } from "./drive-conclusion";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle } from "@/lib/work-capsules/workroom-display-titles.server";
+import { projectWorkroomOperatorSummary, type WorkroomNextAction } from "@/lib/work-capsules/workroom-operator-summary";
 
-type Db = Pick<typeof prisma, "workroom">;
+type Db = Pick<typeof prisma, "workroom"> & Partial<RoomWorkforceDb> & Partial<Pick<typeof prisma, "backlogItem">>;
 
 export const HELD_WORKROOM_LIMIT = 100;
 
@@ -28,6 +32,9 @@ export type HeldWorkroomRow = {
   /** Consecutive 15-minute ticks without advancing, when the hold records it. */
   stuckTicks: number | null;
   notifiedAt: string | null;
+  accountableName?: string | null;
+  recoveryCondition?: string | null;
+  nextAction?: WorkroomNextAction | null;
 };
 
 export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Promise<HeldWorkroomRow[]> {
@@ -40,18 +47,28 @@ export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Pr
         { workspaceState: { path: ["workroomDrive", "action"], equals: "escalate" } },
       ],
     },
-    select: { capsuleId: true, title: true, workspaceState: true },
+    select: { id: true, capsuleId: true, backlogItemId: true, title: true, status: true, executorKind: true, workspaceState: true },
     take: limit,
   });
+  const owners = db.workroomParticipant && db.workroomRelation && db.organization
+    ? await loadRoomAccountabilityBatch(db as RoomWorkforceDb, rooms.map(room => room.id)) : new Map();
+  const titles = await loadWorkroomDisplayTitles(db, rooms);
   return rooms.flatMap((room): HeldWorkroomRow[] => {
     const drive = isRecord(room.workspaceState) && isRecord(room.workspaceState.workroomDrive)
       ? room.workspaceState.workroomDrive : null;
     const action = drive?.action;
     if (!drive || (action !== "pause" && action !== "escalate")) return [];
     const hold = readDriveHold(room.workspaceState);
+    const owner = owners.get(room.id);
+    const conclusion = owner ? resolveDriveConclusion({ action,
+      reason: typeof drive.reason === "string" ? drive.reason : "unknown",
+      accountability: owner.accountability }) : null;
+    const operator = projectWorkroomOperatorSummary({ capsuleId: room.capsuleId, status: room.status,
+      executorKind: room.executorKind, liveness: "recovery-required", isLive: true,
+      accountability: owner?.accountability, drive: { action, reason: typeof drive.reason === "string" ? drive.reason : "unknown" } });
     return [{
       capsuleId: room.capsuleId,
-      title: room.title,
+      title: workroomDisplayTitle(room, titles),
       action,
       reason: typeof drive.reason === "string" ? drive.reason : "unknown",
       deviationCodes: driveDeviationCodes(drive.conformance),
@@ -59,6 +76,9 @@ export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Pr
       since: hold?.stuckSince ?? (typeof drive.lastRunAt === "string" ? drive.lastRunAt : null),
       stuckTicks: hold ? hold.stuckTicks : null,
       notifiedAt: hold?.notifiedAt ?? null,
+      accountableName: owner?.accountableDisplayName ?? null,
+      recoveryCondition: conclusion?.blockage?.unblockedBy ?? null,
+      nextAction: operator.action ?? { actor: "inventory.actor.unknown", instruction: operator.nextAction, decisionRecorded: false },
     }];
   }).sort((a, b) => (a.since ?? "").localeCompare(b.since ?? ""));
 }

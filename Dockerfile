@@ -72,6 +72,8 @@ COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
@@ -118,10 +120,15 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 # the sandbox's `next dev` exits with "Module not found".
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
+COPY scripts/installer/runtime-apply-lock.mjs ./scripts/installer/
+COPY scripts/installer/recovery-filesystem.mjs ./scripts/installer/
+COPY scripts/lib/canonical-json.mjs ./scripts/lib/
+COPY scripts/lib/local-sandbox-fence.mjs ./scripts/lib/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
 COPY scripts/installer/install-release-assets.mjs ./scripts/installer/
 COPY scripts/installer/install-state-lock-contract.json ./scripts/installer/
@@ -129,8 +136,23 @@ COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
+# BI-31F11C37: the installers' monitoring question. The helper reads its cost from
+# config/install-resource-budgets.json (config/ is COPYed below) through the
+# budget gate's parser, so both ship with it.
+COPY scripts/installer/monitoring-choice.mjs ./scripts/installer/
+COPY scripts/check-compose-resource-budgets.mjs ./scripts/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
-COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
+# BI-084F85E5: the consumer start script and the host convergence it runs ship
+# as release assets, so each self-upgrade replaces them in the install dir.
+COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
+# ...and their macOS/Linux twins, plus the self-upgrade step that bridges launch
+# scripts written before them (promote.sh runs it from the install root).
+COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.sh ./scripts/installer/lib/
+COPY scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/rotate-runtime-transition-secret.mjs ./scripts/
+COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
+COPY scripts/installer/edge-client-certificate.mjs ./scripts/installer/
 COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
@@ -156,6 +178,7 @@ COPY scripts/postgres-trial-restore.sh ./scripts/
 # host bootstrap against older images (see the script header).
 COPY scripts/link-web-src-workspace.sh ./scripts/
 COPY scripts/salvage-sweep.mjs ./scripts/
+COPY scripts/reassessment-capability-probe.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
@@ -183,11 +206,20 @@ COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
 COPY scripts/worktree-janitor.mjs ./scripts/
 COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
 COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
+# The janitor logs path and reason text through sanitizeForLog. That module
+# has to be in the image or the daily queue dies with ERR_MODULE_NOT_FOUND.
+COPY scripts/lib/safe-log.mjs ./scripts/lib/
 COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # worktree-janitor.mjs and worktree-liveness.mjs query leases and Workroom
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/foreground-gate-process.mjs ./scripts/lib/
+COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
+COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
+# mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
+COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
@@ -280,13 +312,20 @@ RUN pnpm --filter @dpf/db exec prisma generate
 # Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
 RUN node packages/db/scripts/generate-tools-snapshot.js
 RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
-      /dpf-release-assets/monitoring && \
+      /dpf-release-assets/monitoring /dpf-release-assets/config && \
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 /dpf-release-assets/scripts/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/edge-client-certificate.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/runtime-apply-lock.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/recovery-filesystem.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/lib/canonical-json.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/local-sandbox-fence.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/entry-module.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
@@ -295,7 +334,12 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
-    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp scripts/installer/dpf-start.consumer.ps1 /dpf-release-assets/dpf-start.ps1 && \
+    cp scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
+    cp config/install-resource-budgets.json /dpf-release-assets/config/ && \
+    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 scripts/installer/lib/host-convergence.ps1 scripts/installer/lib/host-convergence.sh /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
@@ -355,7 +399,8 @@ WORKDIR /app
 # publish path materializes LFS via `actions/checkout` with `lfs: true`; this
 # is the same guarantee for the path that has no GitHub Actions runner.
 # Dockerfile.sandbox installs it for the same class of reason.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap
+# Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -489,9 +534,16 @@ COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
+COPY scripts/installer/runtime-apply-lock.mjs /promoter/scripts/installer/runtime-apply-lock.mjs
+COPY scripts/installer/recovery-filesystem.mjs /promoter/scripts/installer/recovery-filesystem.mjs
+COPY scripts/lib/canonical-json.mjs /promoter/scripts/lib/canonical-json.mjs
+COPY scripts/lib/local-sandbox-fence.mjs /promoter/scripts/lib/local-sandbox-fence.mjs
+COPY scripts/lib/entry-module.mjs /promoter/scripts/lib/entry-module.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
+COPY scripts/promoter-epoch-evidence.mjs /promoter/scripts/promoter-epoch-evidence.mjs
+COPY scripts/lib/maintenance-epoch-receipt.mjs /promoter/scripts/lib/maintenance-epoch-receipt.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
 COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs

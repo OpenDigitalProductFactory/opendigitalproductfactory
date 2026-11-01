@@ -10,13 +10,15 @@ vi.mock("@dpf/db", () => ({
   searchSimilar: vi.fn(async () => []),
   upsertVectors: vi.fn(async () => undefined),
   scrollPoints: vi.fn(async () => []),
+  searchLexical: vi.fn(async () => []),
   VECTOR_COLLECTIONS: { PLATFORM_KNOWLEDGE: "platform-knowledge", AGENT_MEMORY: "agent-memory" },
   prisma: {},
   semanticMemoryOps: {},
 }));
 
 const { generateEmbeddingDetailed } = await import("./embedding");
-const { searchPlatformKnowledge } = await import("./semantic-memory");
+const { searchPlatformKnowledge, searchPlatformKnowledgeLexical } = await import("./semantic-memory");
+const { searchLexical } = await import("@dpf/db");
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -58,7 +60,21 @@ describe("searchPlatformKnowledge reports that it could not look", () => {
 });
 
 describe("a capacity deferral is not a model failure (BI-339C441F root cause)", () => {
-  it("names local-CI capacity, and says it is retryable", async () => {
+  it("preserves an operator-pause reason without blaming local CI", async () => {
+    vi.mocked(generateEmbeddingDetailed).mockResolvedValue({
+      status: "deferred", reason: "Provider routing is paused by an operator. Resume the provider before retrying.",
+    });
+    const search = await searchPlatformKnowledge({ query: "q" });
+    expect(search.status).toBe("unavailable");
+    if (search.status === "unavailable") {
+      expect(search.code).toBe("search_deferred");
+      expect(search.reason).toContain("paused by an operator");
+      expect(search.reason).not.toContain("local CI");
+      expect(search.reason).toContain("retryable");
+    }
+  });
+
+  it("preserves the capacity reason, and says it is retryable", async () => {
     // The root cause: embeddings come from the LOCAL provider, so
     // assertLocalProviderCapacityAvailable throws whenever a
     // local-integration-ci lease is active or queued. That was collapsed to
@@ -73,7 +89,7 @@ describe("a capacity deferral is not a model failure (BI-339C441F root cause)", 
     expect(search.status).toBe("unavailable");
     if (search.status === "unavailable") {
       expect(search.code).toBe("search_deferred");
-      expect(search.reason).toContain("local CI");
+      expect(search.reason).toContain("local-ci-active-capacity-reservation");
       expect(search.reason).toContain("retryable");
       // Must NOT blame the model — the backend is healthy throughout.
       expect(search.reason).not.toContain("failed");
@@ -99,5 +115,52 @@ describe("a capacity deferral is not a model failure (BI-339C441F root cause)", 
       expect(deferred.code).toBe("search_deferred");
       expect(failed.code).toBe("search_unavailable");
     }
+  });
+});
+
+describe("a stalled embedder still leaves the corpus searchable (BI-MCP-EFF-4F823E5B)", () => {
+  it("passes a caller's query-time deadline to the embedding step", async () => {
+    vi.mocked(generateEmbeddingDetailed).mockResolvedValue({ status: "ok", embedding: [0.1] });
+
+    await searchPlatformKnowledge({ query: "q", embedTimeoutMs: 15_000 });
+
+    expect(generateEmbeddingDetailed).toHaveBeenCalledWith("q", { timeoutMs: 15_000 });
+  });
+
+  it("matches query terms against stored titles and previews without embedding anything", async () => {
+    vi.mocked(searchLexical).mockResolvedValue([
+      { id: 1, score: 1, payload: { entityId: "BI-2", entityType: "backlog", title: "Wiki backlinks panel" } },
+    ]);
+
+    const search = await searchPlatformKnowledgeLexical({ query: "Wiki  backlinks, wiki", entityType: "backlog", limit: 3 });
+
+    expect(generateEmbeddingDetailed).not.toHaveBeenCalled();
+    expect(searchLexical).toHaveBeenCalledWith(
+      "platform-knowledge",
+      ["wiki", "backlinks"],
+      ["title", "contentPreview"],
+      { must: [{ key: "entityType", match: { value: "backlog" } }] },
+      3,
+    );
+    expect(search).toEqual({
+      status: "ok",
+      results: [{ entityId: "BI-2", entityType: "backlog", title: "Wiki backlinks panel", score: 1 }],
+    });
+  });
+
+  it("says it could not look when the lexical query itself fails", async () => {
+    vi.mocked(searchLexical).mockRejectedValue(new Error("connection refused"));
+
+    const search = await searchPlatformKnowledgeLexical({ query: "anything" });
+
+    expect(search.status).toBe("unavailable");
+    if (search.status === "unavailable") expect(search.code).toBe("search_unavailable");
+  });
+
+  it("does not run a query with no searchable terms", async () => {
+    const search = await searchPlatformKnowledgeLexical({ query: " - , " });
+
+    expect(searchLexical).not.toHaveBeenCalled();
+    expect(search).toEqual({ status: "ok", results: [] });
   });
 });

@@ -1,3 +1,6 @@
+---
+status: active
+---
 # EP-CALENDAR-001: Workspace Calendar & Activity Feed — Design Spec
 
 **Date:** 2026-03-17
@@ -202,8 +205,8 @@ Each item: icon, title, person, date, status badge, link to relevant page.
 - Route: `/api/calendar/feed/[userId]/route.ts`
 - Generates iCalendar (.ics) format from user's calendar events
 - URL can be subscribed to from Google Calendar, Outlook, Apple Calendar
-- Includes both native and projected platform events
-- Auth: token-based URL (includes API token in query param)
+- Includes the owner's own native events, others' non-private native events and projected platform events, each only in a category the owner's current roles may see (BI-051A74CE)
+- Auth: `?token=` carries a per-user, revocable feed token, stored only as a SHA-256 on `User.calendarFeedTokenHash`; the owner creates, replaces or turns it off from the business calendar. Without a matching token for that user id the route answers 404. Shipped id-only until BI-051A74CE closed the gap.
 
 ### Sync Webhook (inbound, stub)
 - Route: `/api/calendar/sync/route.ts`

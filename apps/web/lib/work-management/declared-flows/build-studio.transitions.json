@@ -1,0 +1,277 @@
+{
+  "sourceBase": "ea62f5fb890390bde854b618834f5e77fd3865ea",
+  "interpretation": "Writer target inventory; static scanning cannot prove FROM phases or gate dominance. Line numbers are navigational, file/target counts are enforced. Plan-to-build gate differences are computed independently from canonical profiles.",
+  "allowedEdges": [
+    "ideate->plan",
+    "ideate->failed",
+    "plan->build",
+    "plan->failed",
+    "build->review",
+    "build->failed",
+    "review->build",
+    "review->ship",
+    "review->failed",
+    "ship->review",
+    "ship->complete",
+    "ship->failed"
+  ],
+  "writers": [
+    {
+      "file": "app/api/agent/build/advance-phase/route.ts",
+      "target": "dynamic",
+      "count": 1,
+      "lines": [
+        186
+      ],
+      "gates": [
+        "admin admission",
+        "Approve Start",
+        "checkPhaseGate; plan entry delegates to canonical transition"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/actions/agent-coworker.ts",
+      "target": "review",
+      "count": 1,
+      "lines": [
+        1801
+      ],
+      "gates": [
+        "completed execution state; direct review recovery, no phase gate at write"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/actions/build.ts",
+      "target": "dynamic",
+      "count": 1,
+      "lines": [
+        553
+      ],
+      "gates": [
+        "build owner",
+        "canTransitionPhase on ordinary advance",
+        "phase/readiness checks on ordinary advance; separate reset/retry/resume entry paths"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/actions/build.ts",
+      "target": "build",
+      "count": 3,
+      "lines": [
+        827,
+        878,
+        1080
+      ],
+      "gates": [
+        "build owner",
+        "canTransitionPhase on ordinary advance",
+        "phase/readiness checks on ordinary advance; separate reset/retry/resume entry paths"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/backlog/initiative-readiness/build-terminal-transition.ts",
+      "target": "complete",
+      "count": 1,
+      "lines": [
+        284
+      ],
+      "gates": [
+        "completion readiness",
+        "terminal transition fencing"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/approve-decomposition.ts",
+      "target": "plan",
+      "count": 1,
+      "lines": [
+        623
+      ],
+      "gates": [
+        "approved decomposition; plan child creation or superseded parent"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/approve-decomposition.ts",
+      "target": "failed",
+      "count": 1,
+      "lines": [
+        689
+      ],
+      "gates": [
+        "approved decomposition; plan child creation or superseded parent"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/build-orchestrator.ts",
+      "target": "review",
+      "count": 1,
+      "lines": [
+        1830
+      ],
+      "gates": [
+        "checkPhaseGate"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/escalate-build-to-human.ts",
+      "target": "abandoned",
+      "count": 1,
+      "lines": [
+        296
+      ],
+      "gates": [
+        "escalation policy; terminal owner handback"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/gauntlet-repair.ts",
+      "target": "build",
+      "count": 1,
+      "lines": [
+        276
+      ],
+      "gates": [
+        "shared repair cap",
+        "implementation readiness before review-to-build; review return after repair"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/gauntlet-repair.ts",
+      "target": "review",
+      "count": 1,
+      "lines": [
+        325
+      ],
+      "gates": [
+        "shared repair cap",
+        "implementation readiness before review-to-build; review return after repair"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/inert-build-reaper.ts",
+      "target": "abandoned",
+      "count": 1,
+      "lines": [
+        212
+      ],
+      "gates": [
+        "inert-build eligibility"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/plan-to-build-transition-core.ts",
+      "target": "build",
+      "count": 1,
+      "lines": [
+        333
+      ],
+      "gates": [
+        "PLAN_TO_BUILD_GATE_PROFILES selected by caller; see computed divergence table"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/plan-to-build-transition.ts",
+      "target": "abandoned",
+      "count": 1,
+      "lines": [
+        244
+      ],
+      "gates": [
+        "unsatisfiable dependency disposition"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/resume-pre-build-phase.ts",
+      "target": "abandoned",
+      "count": 1,
+      "lines": [
+        156
+      ],
+      "gates": [
+        "resume eligibility and freshness"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/self-abandon-eligibility.ts",
+      "target": "abandoned",
+      "count": 1,
+      "lines": [
+        230
+      ],
+      "gates": [
+        "abandonment eligibility"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/ship-on-review-approval.ts",
+      "target": "ship",
+      "count": 1,
+      "lines": [
+        353
+      ],
+      "gates": [
+        "initiative readiness",
+        "checkPhaseGate",
+        "configuration-dependent WWMD ship"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/ship-source-refresh.ts",
+      "target": "review",
+      "count": 1,
+      "lines": [
+        150
+      ],
+      "gates": [
+        "ship phase",
+        "clean upstream refresh; bound evidence cleared before review"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/mcp/build-design-review-handler.ts",
+      "target": "plan",
+      "count": 2,
+      "lines": [
+        98,
+        640
+      ],
+      "gates": [
+        "design review outcome",
+        "checkPhaseGate; rightsizing opts passed"
+      ],
+      "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/mcp/packs/build-evidence-extra-pack.ts",
+      "target": "dynamic",
+      "count": 1,
+      "lines": [
+        343
+      ],
+      "gates": [
+        "handoff auto-advance request",
+        "structural gate; plan-to-build profile declares further gates"
+      ],
+      "backlogItem": "BI-BDB63485"
+    }
+  ]
+}

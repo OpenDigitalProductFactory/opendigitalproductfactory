@@ -5,7 +5,9 @@ vi.mock("./execute-coordinator-appointment.server", () => ({ executeCoordinatorA
 const resolveWorkOwner = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/portfolio/accountable-owner", () => ({ resolveWorkOwner }));
 
-import { applyAccountHandover, handoverDigest, planAccountHandover, type AccountHandoverDb } from "./account-handover";
+import { adminPageLocationLabel } from "@/lib/navigation/admin-location";
+
+import { applyAccountHandover, handoverDigest, liveAgentAccessNote, planAccountHandover, type AccountHandoverDb } from "./account-handover";
 
 const ADMIN = { userId: "u-admin", principalRowId: "p-admin", principalRef: "PRN-admin" };
 const MARK = { userId: "u-mark", principalRowId: "p-mark", principalRef: "PRN-mark", displayName: "Mark" };
@@ -13,7 +15,8 @@ const MARK = { userId: "u-mark", principalRowId: "p-mark", principalRef: "PRN-ma
 function fakeDb(overrides: Partial<{ rooms: unknown[]; builds: unknown[]; tasks: unknown[] }> = {}) {
   const db = {
     user: { findFirst: vi.fn(async ({ where }: { where: { OR: Array<{ id?: string; email?: string }> } }) =>
-      where.OR.some((o) => o.id === ADMIN.userId || o.email === "admin@dpf.local") ? { id: ADMIN.userId, email: "admin@dpf.local" } : null) },
+      where.OR.some((o) => o.id === ADMIN.userId || o.email === "admin@dpf.local") ? { id: ADMIN.userId, email: "admin@dpf.local" } : null),
+      update: vi.fn(async () => ({})) },
     principalAlias: { findFirst: vi.fn(async ({ where }: { where: { aliasValue: string } }) =>
       where.aliasValue === ADMIN.userId ? { principal: { id: ADMIN.principalRowId, principalId: ADMIN.principalRef } }
         : where.aliasValue === MARK.userId ? { principal: { id: MARK.principalRowId, principalId: MARK.principalRef } } : null) },
@@ -29,6 +32,9 @@ function fakeDb(overrides: Partial<{ rooms: unknown[]; builds: unknown[]; tasks:
     },
     buildActivity: { create: vi.fn(async () => ({})) },
     agent: { findMany: vi.fn(async () => [{ agentId: "AGT-1", portfolioId: "pf-found" }]) },
+    mcpApiToken: { count: vi.fn(async () => 4) },
+    oAuthRefreshToken: { count: vi.fn(async () => 1) },
+    oAuthClient: { count: vi.fn(async () => 1) },
     scheduledAgentTask: {
       // Like Prisma: ScheduledAgentTask has no `agent` relation, only the agentId string.
       findMany: vi.fn(async ({ select }: { select: Record<string, unknown> }) => {
@@ -59,6 +65,24 @@ describe("planAccountHandover", () => {
       ["room", "WC-1", "u-mark"],
       ["scheduled-task", "task-1", "u-mark"],
     ]);
+    expect(plan.data.digest).toBe(handoverDigest(plan.data.items, "u-admin"));
+  });
+
+  // BI-9D2199D4: the handover moves work, not access. The approver sees the
+  // account's live agent credentials, which stay live until someone ends them.
+  it("reports the account's live agent credentials without putting them in the digest", async () => {
+    const db = fakeDb();
+    const now = new Date("2026-10-14T00:00:00Z");
+    const plan = await planAccountHandover(db, { sourceAccount: "admin@dpf.local", now });
+    if (!plan.ok) throw new Error("expected a plan");
+    expect(plan.data.liveAgentCredentials).toEqual({ accessTokens: 4, refreshGrants: 1, credentialsClients: 1 });
+    // BI-DB506554: a headless client it owns mints tokens with no consent screen.
+    expect(db.oAuthClient.count).toHaveBeenCalledWith({ where: {
+      ownerUserId: "u-admin", registrationKind: "credentials", revokedAt: null } });
+    expect(db.mcpApiToken.count).toHaveBeenCalledWith({ where: {
+      userId: "u-admin", revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } });
+    expect(db.oAuthRefreshToken.count).toHaveBeenCalledWith({ where: {
+      userId: "u-admin", revokedAt: null, consumedAt: null, expiresAt: { gt: now } } });
     expect(plan.data.digest).toBe(handoverDigest(plan.data.items, "u-admin"));
   });
 
@@ -110,6 +134,28 @@ describe("applyAccountHandover", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  // BI-858FDE5A: re-homing existing work is not enough. Rules that name an
+  // owner for NEW work (the workroom drive, the task seeds) read history, so
+  // the account itself records that its work was handed over.
+  it("records on the account that its work was handed over, by whom", async () => {
+    const db = fakeDb();
+    const plan = await planAccountHandover(db, { sourceAccount: "admin@dpf.local" });
+    if (!plan.ok) throw new Error("expected a plan");
+    const now = new Date("2026-10-14T12:00:00Z");
+    await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: plan.data.digest, reason: "Absent account", actor, now });
+    expect(db.user.update).toHaveBeenCalledWith({
+      where: { id: "u-admin" },
+      data: { workHandedOverAt: now, workHandedOverById: "u-mark" },
+    });
+  });
+
+  it("records no handover when the approval was refused", async () => {
+    const db = fakeDb();
+    await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: "stale", reason: "r", actor });
+    await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: "stale", reason: " ", actor });
+    expect(db.user.update).not.toHaveBeenCalled();
+  });
+
   it("re-homes every planned item under the approving person and reports counts", async () => {
     const db = fakeDb();
     const plan = await planAccountHandover(db, { sourceAccount: "admin@dpf.local" });
@@ -129,5 +175,21 @@ describe("applyAccountHandover", () => {
     if (!plan.ok) throw new Error("expected a plan");
     const result = await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: plan.data.digest, reason: "r", actor });
     expect(result).toMatchObject({ ok: true, data: { rooms: 0, builds: 1, scheduledTasks: 1, failed: [{ ref: "WC-1" }] } });
+  });
+});
+
+// BI-DB506554: the note named "Admin > Platform Development > MCP", a path no
+// menu shows. It now names the nav model's path and links the account's panel.
+describe("liveAgentAccessNote", () => {
+  it("says what stays live and links the panel for that account", () => {
+    const note = liveAgentAccessNote("admin@dpf.local", { accessTokens: 4, refreshGrants: 1, credentialsClients: 1 });
+    expect(note).toContain("4 agent token(s), 1 refresh grant(s) and 1 headless client(s) it owns stay live");
+    expect(note).toContain(`${adminPageLocationLabel("/admin/platform-development")} › Agent access for one account`);
+    expect(note).toContain("/admin/platform-development?account=admin%40dpf.local#agent-access");
+    expect(note).not.toContain("Platform Development > MCP");
+  });
+
+  it("says nothing when nothing is live", () => {
+    expect(liveAgentAccessNote("a@b.c", { accessTokens: 0, refreshGrants: 0, credentialsClients: 0 })).toBe("");
   });
 });

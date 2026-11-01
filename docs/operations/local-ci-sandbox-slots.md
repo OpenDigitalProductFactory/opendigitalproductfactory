@@ -5,6 +5,32 @@ a versioned slot manifest. The lease decides who may run; the manifest decides
 which physical resources that admitted owner may mutate. These are separate
 safety layers.
 
+## Owned development lease cleanup
+
+On an installation proven to be `development` / `evolve-dpf`, a local-CI
+cleanup with the exact original session and a server-recorded durable wait
+belonging to the authenticated user does not need another generic authority
+approval. The classifier checks the complete lease/wait identity and version-one
+slot binding. It does not release the lease or alter its history by itself.
+
+Missing or legacy provenance, another user/session, unsupported environments,
+unknown state and live host-process reservations keep the authority gate.
+Non-development installations and explicit operator approval policies retain
+their gates. Token scope, coworker grants, user capabilities, immutable ownership,
+execution fencing and the release transaction remain enforced.
+
+Release the admitted lease after its owned work finishes. An expired or cancelled
+wait stays terminal; cleanup never implies admission, command success or completed
+verification. Reuse the exact supported request rather than creating repeated
+approval envelopes or new attempts for the same cleanup.
+
+Automatic expiry settles the lease's matching submitted durable wait in the
+same transaction. A capacity notification cannot reopen a completed wait.
+Concurrent notifications trigger a bounded re-read; sustained contention rolls
+back expiry for a later reconciliation pass. Settling a wait records only that
+waiting ended. It never proves a command ran or verification passed, and does
+not repair historical waits whose leases had already expired before this change.
+
 ## Host-wide heavyweight resource admission
 
 The local-CI slots are not the only processes capable of exhausting a
@@ -12,8 +38,25 @@ developer host. Canonical TypeScript, Vitest, Next build, Docker build,
 preview, inference, and semantic-review entry points declare a resource class
 through `scripts/host-resource-runner.mjs`. The runner requests the durable
 `host-heavy-resource` lease before starting its child, supervises that child
-and its descendants, renews while it runs, and releases only after the owned
-process group exits.
+and its descendants, and renews while it runs. When supervision ends, it stops
+renewal and reads that exact persisted reservation once. It does not request
+generic immediate release of a process-owned reservation. Natural expiry uses
+the existing reaper cadence; elapsed time alone never proves settlement.
+
+The runner reports command outcome separately from reservation state. Active or
+queued is pending; an unavailable or mismatched read is unknown. A matching
+persisted terminal row with no active slot proves reservation settlement only,
+never command success or descendant exit. Existing immediate-release authority
+checks and pending approval history remain intact.
+
+Qualification verification is currently unavailable. A signed token and host
+lease can bind admission, but the runner submits its result with the caller's
+ordinary MCP credential. Because the server cannot distinguish that submission
+from a direct forged success, terminal recovery does not issue qualification
+tokens and `record_execution_evidence` refuses qualification payloads. The
+native Edge action channel is separately authenticated but has no bounded
+qualification-test action. Ordinary host-resource commands retain the
+coordination contract above and produce no qualification evidence.
 
 The versioned profile is
 `apps/web/lib/nonprod/host-resource-profiles.json`. On a host with at most 64

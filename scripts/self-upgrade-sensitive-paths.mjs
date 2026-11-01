@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 const rule = (id, family, pattern) => Object.freeze({ id, family, pattern });
 
 export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
+  rule("maintenance-epoch-evidence", "promoterClosure", /^scripts\/(?:promoter-epoch-evidence|lib\/maintenance-epoch-receipt)\.mjs$/),
   rule("promoter-artifacts", "promoter", /^(?:Dockerfile\.promoter|scripts\/(?:promote\.|build-promoter|repair-promoter).*)/),
   rule("self-upgrade-runtime", "selfUpgrade", /^apps\/web\/(?:lib|app\/api\/ops)\/self-upgrade(?:\/|\.|$)/),
   rule("self-upgrade-queue-actions", "selfUpgrade", /^apps\/web\/(?:lib\/queue\/functions\/self-upgrade|lib\/actions\/(?:self-upgrade|promotions))/),
@@ -11,7 +12,7 @@ export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   rule("capability-catalog", "capabilities", /^(?:packages\/db\/data\/capability-service-catalog\.json|scripts\/(?:resolve|apply|compile)-.*capabilit)/),
   rule("promoter-contract", "contract", /^(?:(?:promoter-contract|scripts\/promoter-contract)(?:\.schema)?\.json|apps\/web\/lib\/self-upgrade\/promoter-contract|scripts\/promoter-contract(?:\.|\/)|Dockerfile\.promoter)/),
   rule("acceptance-workflow", "workflow", /^\.github\/workflows\/self-upgrade-acceptance\.yml$/),
-  rule("n-minus-one-harness", "harness", /^scripts\/(?:self-upgrade-sensitive-paths|test-n-minus-one-upgrade)(?:\.test)?\.mjs$/),
+  rule("n-minus-one-harness", "harness", /^scripts\/(?:self-upgrade-sensitive-paths|test-n-minus-one-upgrade|release-image-reference\.docker)(?:\.test)?\.mjs$/),
   // Everything Dockerfile.promoter bakes into the promoter image decides whether
   // an install can upgrade, so changing any of it must run the acceptance gate.
   // The rules above missed most of this closure - including the generated
@@ -19,7 +20,7 @@ export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   // capability projection reached main without the gate ever running
   // (BI-AA6FBAD0). The colocated test derives the closure from Dockerfile.promoter
   // and fails if a newly baked file is not owned here.
-  rule("promoter-image-closure", "promoterClosure", /^(?:Dockerfile|scripts\/(?:capability-service-catalog\.generated\.json|promoter-migration-envelope\.mjs|runtime-transition-authority\.mjs|rotate-runtime-transition-secret\.mjs|governed-teardown\.mjs|salvage-sweep\.mjs)|scripts\/lib\/(?:transition-signing|resolve-capability-compose-profiles|govern-capability-compose-args|script-argv|git|capability-state-hash)\.mjs)$/),
+  rule("promoter-image-closure", "promoterClosure", /^(?:Dockerfile|scripts\/(?:capability-service-catalog\.generated\.json|promoter-migration-envelope\.mjs|runtime-transition-authority\.mjs|rotate-runtime-transition-secret\.mjs|governed-teardown\.mjs|salvage-sweep\.mjs)|scripts\/lib\/(?:transition-signing|resolve-capability-compose-profiles|govern-capability-compose-args|script-argv|git|capability-state-hash|canonical-json|entry-module|local-sandbox-fence)\.mjs)$/),
 ]);
 
 export function normalizeRepositoryPath(path) {

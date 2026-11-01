@@ -5,7 +5,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION, readGitDiffDigest, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
+import { ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION, readGitDiffDigest, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
+import { DELIBERATION_ARTIFACT_TYPES } from "../apps/web/lib/deliberation/external-review-activation.ts";
 import { gitText } from "./lib/git.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -19,13 +20,16 @@ function option(name) {
     args: scriptArgv(),
     strict: false,
     allowPositionals: true,
-    options: { "receipt-file": { type: "string" }, "evidence-id": { type: "string" } },
+    options: { "receipt-file": { type: "string" }, "evidence-id": { type: "string" }, "artifact-type": { type: "string" } },
   });
   const value = values[name.replace(/^--/, "")];
   return value === undefined ? null : typeof value === "string" ? value : undefined;
 }
 
 function currentIdentity(receipt = null) {
+  // Git publication hooks always request code-change. Document callers state their role explicitly.
+  const artifactType = option("--artifact-type") ?? "code-change";
+  if (!DELIBERATION_ARTIFACT_TYPES.includes(artifactType)) throw new Error("Unsupported publication artifact type");
   const branch = git("branch", "--show-current");
   const sha = git("rev-parse", "HEAD");
   const mergeBase = git("merge-base", "HEAD", "origin/main");
@@ -33,6 +37,7 @@ function currentIdentity(receipt = null) {
   const headTreeHash = git("rev-parse", "HEAD^{tree}");
   const diffDigest = readGitDiffDigest(mergeBase);
   return {
+    artifactType,
     branch,
     sha,
     capsuleId: receipt?.capsuleId ?? "",
@@ -46,7 +51,9 @@ function currentIdentity(receipt = null) {
 }
 
 const stateFile = git("rev-parse", "--git-path", "dpf-semantic-review-gate.json");
-const command = process.argv[2] ?? "validate";
+// First positional. scriptArgv drops the leading `--` pnpm 10 forwards, so
+// `pnpm review:semantic-gate -- record` is record, not an unknown command.
+const command = scriptArgv()[0] ?? "validate";
 
 if (command === "record-exemption") {
   const sourceFile = option("--receipt-file");
@@ -55,10 +62,11 @@ if (command === "record-exemption") {
   const exemption = payload?.data?.exemption;
   if (payload.success !== true || !exemption || payload.entityId !== exemption.evidenceId) throw new Error("A successful canonical exemption response is required");
   const current = currentIdentity(exemption);
+  if (current.artifactType !== "code-change") throw new Error("Legacy publication exemptions cover code-change only");
   if (exemption.sourceHeadSha !== current.sha || exemption.baseTreeHash !== current.baseTreeHash
     || exemption.headTreeHash !== current.headTreeHash || exemption.diffDigest !== current.diffDigest
     || exemption.policyVersion !== current.policyVersion) throw new Error("exemption identity does not match the committed source and policy");
-  const state = { ...exemption, ...current, schemaVersion: LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION,
+  const state = { ...exemption, ...current, schemaVersion: ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION,
     exemptionSchemaVersion: exemption.schemaVersion, receiptDisposition: "policy-exemption", recordedAt: new Date().toISOString() };
   const result = validateLocalSemanticReviewGate(state, current);
   if (!result.valid) throw new Error(`invalid canonical exemption: ${result.reason}`);
@@ -75,6 +83,7 @@ if (command === "record") {
   const receipt = payload?.data?.receipt ?? payload?.receipt ?? payload;
   const current = currentIdentity(receipt);
   const exact = receipt.schemaVersion === policy.receiptSchemaVersion &&
+    receipt.artifactType === current.artifactType &&
     receipt.baseTreeHash === current.baseTreeHash &&
     receipt.headTreeHash === current.headTreeHash &&
     receipt.diffDigest === current.diffDigest &&
@@ -82,7 +91,7 @@ if (command === "record") {
     receipt.reviewerVersion === current.reviewerVersion;
   if (!exact) throw new Error("receipt identity does not match the current committed diff and policy");
   writeFileSync(stateFile, `${JSON.stringify({
-    schemaVersion: LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION,
+    schemaVersion: ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION,
     ...current,
     receiptDecision: receipt.result?.decision,
     receiptDisposition: receipt.disposition,

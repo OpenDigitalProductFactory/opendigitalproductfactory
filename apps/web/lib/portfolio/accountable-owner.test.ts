@@ -12,7 +12,7 @@ function install(opts: {
   portfolios?: Array<{ id: string; slug: string; accountablePrincipalId: string | null }>;
   orgAccountable?: string | null;
   principals?: Array<{ id: string; kind: string; status: string; userId?: string; displayName?: string }>;
-  users?: Array<{ id: string; email: string; isActive: boolean; isSuperuser?: boolean }>;
+  users?: Array<{ id: string; email: string; isActive: boolean; isSuperuser?: boolean; workHandedOverAt?: Date | null }>;
 }) {
   const portfolios = opts.portfolios ?? [];
   const principals = opts.principals ?? [];
@@ -39,9 +39,9 @@ function install(opts: {
       }),
     },
     user: {
-      findFirst: vi.fn(async ({ where }: { where: { id?: string; isActive?: boolean; isSuperuser?: boolean } }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; isActive?: boolean; isSuperuser?: boolean; workHandedOverAt?: null } }) => {
         if (where.id) return users.find((u) => u.id === where.id && u.isActive) ?? null;
-        return users.find((u) => u.isSuperuser && u.isActive) ?? null;
+        return users.find((u) => u.isSuperuser && u.isActive && (!("workHandedOverAt" in where) || !u.workHandedOverAt)) ?? null;
       }),
     },
   };
@@ -92,6 +92,19 @@ describe("resolveWorkOwner (BI-67B27832)", () => {
 
   it("only guesses the oldest superuser when nothing is recorded, and says so", async () => {
     const { db } = install({ portfolios: [], orgAccountable: null, principals: [], users });
+    await expect(resolveWorkOwner(db, {})).resolves.toEqual({ userId: "u-admin", source: "fallback" });
+  });
+
+  // BI-858FDE5A: the guess never lands on an account whose work was handed over.
+  it("skips a handed-over superuser when guessing", async () => {
+    const handedOver = users.map((u) => (u.id === "u-admin" ? { ...u, workHandedOverAt: new Date("2026-10-01T10:41:00Z") } : u));
+    const { db } = install({ portfolios: [], orgAccountable: null, principals: [], users: handedOver });
+    await expect(resolveWorkOwner(db, {})).resolves.toEqual({ userId: "u-mark", source: "fallback" });
+  });
+
+  it("keeps automatic work running when every superuser was handed over", async () => {
+    const only = [{ id: "u-admin", email: "admin@dpf.local", isActive: true, isSuperuser: true, workHandedOverAt: new Date() }];
+    const { db } = install({ portfolios: [], orgAccountable: null, principals: [], users: only });
     await expect(resolveWorkOwner(db, {})).resolves.toEqual({ userId: "u-admin", source: "fallback" });
   });
 

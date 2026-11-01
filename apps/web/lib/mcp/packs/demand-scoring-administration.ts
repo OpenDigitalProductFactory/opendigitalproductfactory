@@ -218,33 +218,115 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
   };
 }
 
-export async function mergeBacklogItemsHandler(params: Record<string, unknown>): Promise<ToolResult> {
+const CLOSED_ITEM_STATUSES: ReadonlySet<string> = new Set(["retired", "done"]);
+
+/**
+ * Approval cards asking to merge a duplicate that is now merged can only
+ * replay a finished merge, so they are withdrawn (proposed → cancelled, the
+ * same guarded write as `cancelEnvelope`). A card records its call in
+ * ToolExecution, so it is found by the duplicate it names, whatever rationale
+ * it carried. Best effort: a merge never fails because a card could not be
+ * withdrawn (BI-8EC69BE0).
+ */
+async function cancelSupersededMergeCards(duplicateItemId: string): Promise<number> {
+  try {
+    const rows = await prisma.toolExecution.findMany({
+      where: { toolName: "merge_backlog_items", envelopeId: { not: null }, parameters: { path: ["duplicateItemId"], equals: duplicateItemId } },
+      select: { envelopeId: true },
+    });
+    const ids = rows.map((row) => row.envelopeId).filter((id): id is string => typeof id === "string");
+    if (ids.length === 0) return 0;
+    const cancelled = await prisma.coworkerActionEnvelope.updateMany({
+      where: { id: { in: ids }, status: "proposed", resolvedAt: null },
+      data: { status: "cancelled", resolvedAt: new Date() },
+    });
+    return cancelled.count;
+  } catch {
+    return 0;
+  }
+}
+
+export async function mergeBacklogItemsHandler(
+  params: Record<string, unknown>,
+  userId?: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
   const canonicalItemId = String(params["canonicalItemId"] ?? "");
   const duplicateItemId = String(params["duplicateItemId"] ?? "");
   if (canonicalItemId === duplicateItemId) {
     return { success: false, error: "same_item", message: "Cannot merge an item into itself." };
   }
   const [canonical, duplicate] = await Promise.all([
-    prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { id: true, occurrenceCount: true } }),
-    prisma.backlogItem.findUnique({ where: { itemId: duplicateItemId }, select: { id: true, occurrenceCount: true, status: true } }),
+    prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { id: true, occurrenceCount: true, status: true } }),
+    prisma.backlogItem.findUnique({
+      where: { itemId: duplicateItemId },
+      select: { id: true, occurrenceCount: true, status: true, triageOutcome: true, duplicateOfId: true, completedAt: true },
+    }),
   ]);
   if (!canonical) return { success: false, error: "not_found", message: `Canonical ${canonicalItemId} not found` };
   if (!duplicate) return { success: false, error: "not_found", message: `Duplicate ${duplicateItemId} not found` };
+  // Idempotent (BI-8EC69BE0): a duplicate already folded is never folded again,
+  // so a replayed approval or a stale card cannot add its reach twice.
+  if (duplicate.duplicateOfId || CLOSED_ITEM_STATUSES.has(duplicate.status)) {
+    await cancelSupersededMergeCards(duplicateItemId);
+    return duplicate.duplicateOfId === canonical.id
+      ? {
+          success: true,
+          entityId: canonicalItemId,
+          message: `${duplicateItemId} is already merged into ${canonicalItemId}; nothing changed.`,
+          data: { canonicalItemId, duplicateItemId, alreadyMerged: true },
+        }
+      : { success: false, error: "already_closed", message: `${duplicateItemId} is already ${duplicate.status}; nothing changed.` };
+  }
+  if (CLOSED_ITEM_STATUSES.has(canonical.status)) {
+    return { success: false, error: "canonical_closed", message: `Canonical ${canonicalItemId} is ${canonical.status}; merge into an open item.` };
+  }
   const { computeMerge } = await import("@/lib/demand/dedup");
   const { mergedOccurrenceCount } = computeMerge({
     survivorOccurrenceCount: canonical.occurrenceCount,
     duplicateOccurrenceCount: duplicate.occurrenceCount,
   });
-  await prisma.$transaction([
-    prisma.backlogItem.update({
+  const claimedFrom = duplicate.status;
+  const folded = await prisma.$transaction(async (tx) => {
+    // Claim the duplicate first: a concurrent merge of the same row loses here
+    // and writes nothing, rather than adding the reach a second time.
+    const claimed = await tx.backlogItem.updateMany({
+      where: { itemId: duplicateItemId, duplicateOfId: null, status: claimedFrom },
+      data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
+    });
+    if (claimed.count !== 1) return false;
+    await tx.backlogItem.update({
       where: { itemId: canonicalItemId },
       data: { occurrenceCount: mergedOccurrenceCount, lastSeenAt: new Date() },
-    }),
-    prisma.backlogItem.update({
-      where: { itemId: duplicateItemId },
-      data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
-    }),
-  ]);
+    });
+    // The prior state of both rows, so a merge can be undone from the record.
+    await tx.backlogItemActivity.create({
+      data: {
+        backlogItemId: duplicate.id,
+        kind: "duplicate_merge",
+        summary: `Merged into ${canonicalItemId}`,
+        payload: {
+          role: "duplicate",
+          canonicalItemId,
+          duplicateItemId,
+          rationale: typeof params["rationale"] === "string" ? params["rationale"] : null,
+          priorStatus: duplicate.status,
+          priorTriageOutcome: duplicate.triageOutcome,
+          priorDuplicateOfId: duplicate.duplicateOfId,
+          priorCompletedAt: duplicate.completedAt?.toISOString() ?? null,
+          canonicalPriorOccurrenceCount: canonical.occurrenceCount,
+          mergedOccurrenceCount,
+        },
+        ...(userId ? { recordedById: userId } : {}),
+        ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+      },
+    });
+    return true;
+  });
+  if (!folded) {
+    return { success: false, error: "already_closed", message: `${duplicateItemId} was merged by another call; nothing changed.` };
+  }
+  await cancelSupersededMergeCards(duplicateItemId);
   return {
     success: true,
     entityId: canonicalItemId,
@@ -372,6 +454,9 @@ export async function approveDemandForFundingHandler(
 
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const rationale = typeof params["rationale"] === "string" ? (params["rationale"] as string).trim() : "";
+  // No organization currency funding threshold is configured by this model.
+  // The existing quarterly points allocation above remains its own control;
+  // points are not currency and cannot supply a guessed threshold declaration.
   const decision = await evaluateOrgBusinessDecisionGate({
     db: prisma,
     organizationId: item.organizationId,
@@ -392,7 +477,8 @@ export async function approveDemandForFundingHandler(
     },
   });
 
-  // Only advance to `ready` (funded) when the org's stance recommends/arbitrates.
+  // Advance only through the gate's canonical permission projection, including
+  // damaging holds, decisive declines and the recorded independent-review interim.
   const funded = decision.allowed;
   let volunteered: { offered: boolean; agentId: string | null } = { offered: false, agentId: null };
   if (funded) {

@@ -65,7 +65,7 @@ describe("getBuildPhasePrompt", () => {
   it("returns review prompt for review phase", async () => {
     const prompt = await getBuildPhasePrompt("review");
     expect(prompt).toContain("acceptanceMet");
-    expect(prompt).toContain("Typecheck and the applicable test suite MUST be clean");
+    expect(prompt).toContain("Typecheck and the scoped tests for the changed files MUST be clean");
     expect(prompt).toContain("Treat every reported test failure as unresolved evidence");
     expect(prompt).toContain("Ready to ship");
   });
@@ -354,5 +354,22 @@ describe("getBuildContextSection", () => {
       portfolioId: null,
     });
     expect(section).not.toContain("Design Standard (the architecture reviewer WILL hold");
+  });
+});
+
+// BI-F5D4FA50: the build prompts told agents run_sandbox_tests ran "the full
+// test suite", and one agent ran the whole suite through its own shell.
+describe("build prompts describe scoped verification", () => {
+  it("never tell an agent to run the full test suite", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const repo = resolve(__dirname, "../../../..");
+    const texts = [
+      ...(await Promise.all((["build", "review", "ship"] as const).map((phase) => getBuildPhasePrompt(phase)))),
+      readFileSync(resolve(repo, "prompts/build-phase/build.prompt.md"), "utf8"),
+      readFileSync(resolve(repo, "prompts/specialist/qa-engineer.prompt.md"), "utf8"),
+    ];
+    for (const text of texts) expect(text).not.toMatch(/full test suite|full verification/i);
+    expect(texts[0]).toMatch(/run_sandbox_tests\(auto_fix\?\): RUN the SCOPED tests/);
   });
 });

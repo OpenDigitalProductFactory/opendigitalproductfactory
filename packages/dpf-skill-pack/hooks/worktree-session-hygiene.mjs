@@ -19,17 +19,18 @@
 // warnings and lease release. The uncommitted-work-guard remains on Stop; this
 // hook must not. Destructive reaping belongs to a session-lifecycle event only.
 //
-// Why not cron-first: client CLIs do not run fleets of crons; portal Inngest may
-// not see host worktrees; schedules get disabled or go dark. Session hooks fire
-// wherever dpf-platform is installed (Claude plugin, Grok global plane, Codex
-// hooks). The optional daily schedule remains a fleet backstop only.
+// ACCELERATOR, NOT OWNER (BI-99395B29, platform-function-never-depends-on-a-client).
+// The portal Inngest job `ops/worktree-janitor` owns reaping on every install;
+// many clients and threads share one install and none of them owns its upkeep.
+// This hook only lets a cleanly ending session release its own Tier-A tree
+// sooner. A client without the hook, or one that crashes, loses nothing.
 //
 // Escape hatches:
 //   DPF_SKIP_WORKTREE_SESSION_HYGIENE=1  — no-op
 //   DPF_WORKTREE_SESSION_REAP=0          — observe only on SessionEnd (no remove)
 //   .worktree-pinned                     — never remove
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +54,52 @@ function loadClassify() {
     }
   }
   return null;
+}
+
+function loadHeartbeat() {
+  const p = join(repoRootGuess, "scripts/lib/worktree-session-heartbeat.mjs");
+  return existsSync(p) ? import(pathToFileURL(p).href) : null;
+}
+
+function payloadSessionId(payload) {
+  const id = payload.sessionId ?? payload.session_id ?? payload.transcriptSessionId;
+  return typeof id === "string" && id ? id : undefined;
+}
+
+// ── single-flight reap (BI-296C9E24) ─────────────────────────────────────────
+// Several sessions ending in one worktree at once each started a reap; the
+// removals overlapped, one was cut off, and its partial-reap restore never ran.
+// The lock lives in the worktree's own git dir, so it is scoped to this tree.
+const REAP_LOCK_NAME = "dpf-reap.lock";
+const REAP_LOCK_STALE_MS = 10 * 60_000;
+
+function takeReapLock(wtPath) {
+  const gitDir = runGit(["rev-parse", "--absolute-git-dir"], wtPath);
+  if (!gitDir.ok || !gitDir.stdout) return null;
+  const lock = join(gitDir.stdout, REAP_LOCK_NAME);
+  try {
+    writeFileSync(lock, String(Date.now()), { flag: "wx" });
+    return lock;
+  } catch {
+    try {
+      const age = Date.now() - Number(readFileSync(lock, "utf8"));
+      if (Number.isFinite(age) && age > REAP_LOCK_STALE_MS) {
+        writeFileSync(lock, String(Date.now()));
+        return lock;
+      }
+    } catch {
+      // unreadable lock: treat as held
+    }
+    return null;
+  }
+}
+
+function releaseReapLock(lock) {
+  try {
+    rmSync(lock, { force: true });
+  } catch {
+    // the tree (and its git dir) may already be gone
+  }
 }
 
 function runGit(args, cwd) {
@@ -129,7 +176,7 @@ function isCanonicalSibling(wtPath, mainRoot) {
   return true;
 }
 
-function gatherThisWorktreeFacts(cwd, mainRoot) {
+function gatherThisWorktreeFacts(cwd, mainRoot, liveOthers = []) {
   const wtPath = resolve(cwd);
   const branchR = runGit(["branch", "--show-current"], wtPath);
   const branch = branchR.ok && branchR.stdout ? branchR.stdout : null;
@@ -176,10 +223,9 @@ function gatherThisWorktreeFacts(cwd, mainRoot) {
     merged,
     dirty,
     ageDays,
-    // This is the ENDING session's OWN worktree; its own heartbeat liveness is
-    // irrelevant to whether SessionEnd may reap it (the session is over). The
-    // heartbeat gate exists for the FLEET janitor protecting OTHER live sessions.
-    hasLiveSession: false,
+    // The ENDING session's own heartbeat never counts (that session is over),
+    // but another session working in the same tree does (BI-296C9E24).
+    hasLiveSession: liveOthers.length > 0,
     // A mid-merge in the ending session's own tree is left to that session's
     // dirty check (KEEP), not quarantined here.
     midMerge: false,
@@ -269,8 +315,8 @@ async function main() {
     if (n >= 20) {
       lines.push(
         `Worktree hygiene: ${n} registered worktrees on this clone (target is a bounded count). ` +
-          `Tier-A (merged+clean) worktrees are reaped on SessionEnd of that worktree; ` +
-          `fleet backstop: node scripts/worktree-janitor.mjs --dry-run --tier-a-only.`,
+          `The platform's ops/worktree-janitor job reaps Tier-A (merged+clean) worktrees; ` +
+          `SessionEnd of a worktree may reap it sooner. Preview: node scripts/worktree-janitor.mjs --dry-run --tier-a-only.`,
       );
     }
     if (!facts.isRoot && !isCanonicalSibling(facts.path, mainRoot)) {
@@ -288,8 +334,19 @@ async function main() {
   }
 
   // SessionEnd / Stop — transactional reap of THIS worktree only.
-  const facts = gatherThisWorktreeFacts(cwd, mainRoot);
+  const heartbeat = await loadHeartbeat();
+  const top = resolveGitRoot(cwd) || cwd;
+  const liveOthers = heartbeat?.liveOtherSessionIds?.(top, payloadSessionId(payload)) ?? [];
+  const facts = gatherThisWorktreeFacts(cwd, mainRoot, liveOthers);
   if (facts.isRoot) process.exit(0);
+
+  if (liveOthers.length) {
+    emitContext(
+      event,
+      `Worktree hygiene: leaving ${facts.path} in place — another live session is working in it (${liveOthers.join(", ")}).`,
+    );
+    process.exit(0);
+  }
 
   const { verdict, reason } = classifyWorktree(facts);
   const allowReap = process.env.DPF_WORKTREE_SESSION_REAP !== "0";
@@ -313,7 +370,13 @@ async function main() {
     process.exit(0);
   }
 
+  const lock = takeReapLock(facts.path);
+  if (!lock) {
+    emitContext(event, `Worktree hygiene: another reap of ${facts.path} is already in flight — not starting a second one.`);
+    process.exit(0);
+  }
   const rem = removeThisWorktree(mainRoot, facts.path);
+  releaseReapLock(lock);
   if (rem.ok && facts.branch) {
     runGit(["branch", "-D", facts.branch], mainRoot);
   }

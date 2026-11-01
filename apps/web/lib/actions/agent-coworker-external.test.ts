@@ -185,9 +185,8 @@ vi.mock("@dpf/db", () => ({
     backlogItemActivity: {
       create: vi.fn(),
     },
-    agentActionProposal: {
-      create: vi.fn(),
-    },
+    agentActionProposal: { create: vi.fn() },
+    coworkerActionEnvelope: { findMany: vi.fn().mockResolvedValue([]) },
     agentModelConfig: {
       findUnique: vi.fn(),
     },
@@ -786,8 +785,10 @@ describe("agent coworker external access", () => {
     }
   });
 
-  it("stamps the current task run on proposals", async () => {
+  // BI-7BCC87BB: a declared proposal raises an approval request; the message that lists it carries the run.
+  it("stamps the current task run on the message that raised an approval request", async () => {
     mockPrisma.taskRun.findFirst.mockResolvedValue({ taskRunId: "run-123" });
+    mockGovernedExecuteTool.mockImplementation(async () => ({ success: false, error: "approval_required", message: "waiting", data: { envelopeId: "env-1" } }));
     mockGetAvailableTools.mockReturnValue([
       {
         name: "create_backlog_item",
@@ -824,13 +825,10 @@ describe("agent coworker external access", () => {
       routeContext: "/admin",
     });
 
-    expect(mockPrisma.agentActionProposal.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          taskRunId: "run-123",
-        }),
-      }),
-    );
+    expect(mockPrisma.agentActionProposal.create).not.toHaveBeenCalled();
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ role: "assistant", taskRunId: "run-123" }),
+    }));
   });
 
   it("persists substantive coworker responses as TaskArtifact and Work Capsule evidence", async () => {

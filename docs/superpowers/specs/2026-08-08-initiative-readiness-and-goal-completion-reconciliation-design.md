@@ -416,6 +416,12 @@ The canonical artifact must mark every objective and acceptance statement with a
 
 There is exactly one current baseline chain per governed subject. The writer locks the receipt-anchor `BacklogItem` row, reads the current chain head, and requires `expectedCurrentBaselineId` (null for the first baseline). An initial conflict, chain fork, unrelated artifact, subject mismatch, or multiple unresolved current candidates returns `CANONICAL_DESIGN_AMBIGUOUS`. Supersession is append-only: a new approved baseline must name the exact prior head, and the prior baseline remains auditable. `approvalReceiptId` is the exact same-transaction passing `spec-approval` `initiative_gate_receipt` activity ID; the writer validates matching subject, artifact locator/digest, reviewer authority/independence, and pass decision before the baseline can commit.
 
+A design changed after its approval (BI-7531B73C, BI-4592CF69). Design reviews are routed to the Workroom head, so a receipt can name a newer design than the baseline. One function, `judgedDesignDigest` in `apps/web/lib/backlog/initiative-readiness/judged-design-artifact.ts`, decides which design the design gates judge. When the newest design-bound receipt after the baseline names another design, that amended design is judged, spec approval and the objective baseline read stale, and only an approval of the amended design re-binds the baseline through the supersession above. A changed OBJ/AC manifest still needs a disposition for every removed or changed statement. When the baselined bytes return to the head, the amendment ends. A child that inherits its parent's scope keeps judging the parent's baseline.
+
+Child-owned repository research is a separate observation (BI-B87514F5). When a child has no own baseline, its latest own repository research receipt is judged against that receipt's immutable artifact at the child's current, unambiguous Workroom source. The parent baseline, design approvals and plan coverage remain parent-bound. The provider must confirm the recorded blob at the current head and the server must hash those bytes to the receipt digest. Unchanged research may survive unrelated commits; a changed blob, missing or ambiguous room, invalid authority, malformed latest receipt or unavailable source cannot fall back to an older or inherited pass. Document-version and feature-build-revision research retain their existing canonical-digest rules; this observation does not verify those sources. With no own research receipt, existing parent research inheritance remains unchanged.
+
+The shared current-artifact observer captures the selected receipt, source tuple and lease identity before provider I/O, rechecks afterward, then locks the subject and room and rechecks again during admission. No provider call occurs while those locks are held. Research reads are bounded to the latest receipt and at most two candidate rooms, with one provider read using the existing byte and transport limits. Own body, document and repository baselines do not invoke this inherited-research observation. A no-own-baseline subject may incur the bounded observation before the projector resolves inheritance; the observer does not duplicate parent history or confer inheritance itself. Source-local regression tests cover current own research, latest failures and malformed receipts, unchanged-blob reuse, source/lease/receipt races, and preservation of parent design failures. Live acceptance must retry the existing blocked child claims after deployment without recording replacement research solely to escape the old digest mismatch.
+
 The baseline, not mutable prose, defines the objective that completion reconciles. It stores stable artifact anchors and statement digests rather than copying potentially sensitive design text; authorized readers resolve content from the immutable owning artifact retained by the baseline's required artifact pin. `BacklogItem`/Epic descriptions, `TaskRun.objective`, `WorkCapsule.objective`, prompts, and agent summaries are execution context only after a baseline exists. A governed TaskRun or capsule must map its scoped execution objective to baseline `objectiveId`/`acceptanceId` values through its server-resolved subject envelope; conflicting or unmapped text returns `OBJECTIVE_BASELINE_CONFLICT`.
 
 The baseline and exactly one `InitiativeArtifactRetentionPin` commit atomically. A FeatureBuild pin references the exact `BuildArtifactRevision` with `onDelete: Restrict`; a managed-document pin references the exact `DocumentVersion` and, when blob-backed, its exact `DocumentBlob`, both with `onDelete: Restrict`; a repository pin first stores the provider-authenticated exact blob bytes in the existing content-addressed `DocumentBlob`/immutable `DocumentVersion` substrate, verifies the archive digest equals the provider blob digest, and pins both archive rows while retaining the original provider locator. The pin and every superseded baseline's pin are permanent, append-only governance records. If archival or pinning fails, approval does not commit.
@@ -423,6 +429,135 @@ The baseline and exactly one `InitiativeArtifactRetentionPin` commit atomically.
 Changing objective or acceptance scope requires a new independently approved baseline. The supersession review receives a server-generated semantic diff. Removed or weakened statements require explicit independent disposition for each affected stable ID and cannot be hidden by renumbering or paraphrase; otherwise readiness becomes `input-required`. Completion always uses the latest unambiguous approved chain head and records its `baselineId`/digest in the transition decision.
 
 ---
+
+### 8.5a Exact authorized room readiness (BI-38EC23B2)
+
+This corrective amendment is owned by BI-38EC23B2, not the delivered
+BI-7531B73C. On source `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`,
+`getBacklogItem` cannot select a persisted room; current-design discovery
+requires one room, while dispatch can select source only after a packet exists.
+Two preserved rooms therefore prevent an otherwise admitted owner from obtaining
+the packet. The original BI-7A4E70E9 rooms and their uncertain executions remain
+intact. Independent source assessment is pending; this bounded repair does not approve the original addendum.
+
+Extend the existing `get_backlog_item` input with optional `workroomId`. The
+server resolves it to the persisted room and requires the current human and
+assistant to have action access, the same backlog subject, a nonterminal room,
+repository and branch, and full immutable base/head commits. It accepts no
+caller-provided source tuple or digest. Invalid, foreign or incomplete selection
+returns a bounded refusal before source or review-packet disclosure.
+
+Use the server-resolved tuple for current-design observation and the same
+selected room for the existing terminal recovery issuer. Dispatch must reissue
+against that exact room using the existing action-access and immutable-source
+checks. Recheck the selected source after provider reads; a changed binding
+must refuse rather than issue a stale packet. Without a selector, retain current
+ambiguity behavior. A selected room does not bypass liveness, independence,
+consent, original-task recovery, funding, or implementation admission.
+
+**OBJ-ROOM-READ-01:** An admitted owner can obtain readiness and an eligible
+server-issued packet for one exact preserved Workroom without acquiring a
+conflicting edit claim or changing either room's history.
+
+**AC-ROOM-READ-01:** Reproduce the two-room refusal on the named base, then prove
+the supported selector carries the same room/source through observation, issuer
+and dispatch. **AC-ROOM-READ-02:** Deny foreign actors/items, incomplete or changed
+source, terminal rooms and forged source fields; preserve unscoped behavior.
+**AC-ROOM-READ-03:** No room/status/grant/baseline/attempt mutations or review
+dispatch occur during a read. **AC-ROOM-READ-04:** After protected deployment,
+the original owner reads its exact addendum readiness and reports any remaining
+refusal; historical execution settlement is not inferred.
+
+The item-body acceptance contract is retained verbatim for proportional coverage:
+
+- Reproduce two preserved same-item rooms where unscoped read is unavailable and ordinary claims conflict.
+- An exact room selector resolves current source only after existing actor access, item binding, repository and full immutable base/head validation; caller-provided hashes never confer authority.
+- The recovery issuer and dispatch revalidation agree on the same selected room and exact immutable packet.
+- Foreign, mismatched, incomplete or changed bindings fail closed; unscoped legacy behavior remains unchanged.
+- Both historical rooms, WIP and uncertain execution records remain intact; no implicit release, replay, approval or settlement.
+- Verify supported original addendum read after protected deployment, reporting any remaining refusal honestly.
+
+This is one atomic fix: the reader, issuer and dispatcher must agree before the
+owner can use the packet. None is an independently shippable outcome. Traceability:
+requirements AC-ROOM-READ-01..04; contract existing authenticated Workroom action
+access and immutable packet equality; flow get_backlog_item → terminal recovery
+issuer → authorizeCoworkerRequest; verification source roundtrip and negative
+controls, then original owner canonical-runtime read.
+
+Research on base `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`: the amended-design
+public-selector regression failed with `recovery_gate_unavailable`; seven existing
+roundtrip cases passed. This rules out dependency setup and a general issuer
+failure in that harness. The fix and passing regression are pending implementation;
+no live acceptance or historical settlement is claimed.
+
+Ordered implementation coverage belongs to BI-38EC23B2: (1) reproduce and record
+research against this immutable design; (2) obtain normal design/implementation
+admission; (3) extend the existing reader schema and validated room adapter;
+(4) bind canonical issuer and dispatcher to the selected room; (5) exercise
+positive roundtrip and negative authority/source controls, affected tests and
+package types; (6) independent assessment, protected publication and original-owner
+live readback. No new table, tool, grant, importer or review namespace is needed.
+
+### 8.5 Current repository design with historical references (BI-E2EEE278)
+
+The baseline is the current canonical selection; a list of Markdown links is
+not a second selection authority. A body may retain references to predecessor
+designs without revoking its independently approved current baseline. The
+October 16 reproduction on source `d9c8ed1fc887527c2a8b893f9a8062519c5a4384`
+found that discovery counted every body spec reference and returned ambiguity
+before provider access. BI-IMP-9DA35549 retains three legitimate references;
+its normal immutable source read succeeded while readiness remained unavailable.
+
+**Repair boundary.** Reuse the existing subject-scoped baseline parser,
+repository artifact locator, exact persisted Workroom tuple, provider reader
+and current-design observation guard. No schema, tool, grant, review writer or
+operator selector is added. Historical body references, receipts and baselines
+remain unchanged. A caller-supplied path, a heading, reference order, or a date
+in a filename cannot establish a trusted selection.
+
+When multiple body references are present, shared discovery may select the
+existing current baseline's repository-design path only after the server has
+resolved one valid current chain for that same subject and repository and the
+path is among the valid referenced paths. Missing, malformed, forked,
+cross-subject, cross-repository or conflicting bindings remain unavailable.
+Without that trusted binding, multiple references retain their ambiguity
+refusal. Single-reference discovery and discovery without body references keep
+their existing behavior. Invalid paths are rejected before selection.
+
+The selected path is read at the exact current Workroom head, with the provider
+verifying its regular-file path and immutable blob. The baseline's old blob is
+not substituted for current bytes. A changed current digest continues through
+the existing amendment/stale-approval rules; selection grants no design
+approval, baseline supersession or implementation admission. Missing provider
+bytes stay unavailable. Removing or changing scope still requires independent
+supersession and the existing objective dispositions.
+
+Claim issuance, current-design observation and terminal packet revalidation
+must use the same server-resolved selection contract. Provider reads remain
+outside transactions; the captured subject, baseline, body and Workroom
+binding are rechecked under the existing admission locks. Binding changes
+during a read refuse admission. Reviewer independence, exact packet equality,
+authorization and retained evidence remain mandatory.
+
+**Ordered repair and acceptance.** First bind this repair's source and research
+to BI-E2EEE278 and obtain its own normal implementation admission. Then add a
+failing three-reference regression before production changes; implement the
+shared selection rule; run focused discovery, current-observation, claim and
+terminal-revalidation tests plus package types. Positive coverage must retain
+all three references. Negative controls cover absent/malformed/forked baseline,
+wrong subject/repository, invalid path, provider failure, changed head/digest,
+and concurrent binding changes. Existing single/no-reference behavior remains
+covered. Obtain an independent source assessment before publication, then use
+protected CI/merge and the sole coordinated containing release. Only a fresh
+supported same-parent readiness result after containing CAN-TEST may establish
+the effect on the original refusal. Do not replay its uncertain reviewer task.
+This section records a proposed bounded repair, not executed tests or approval.
+
+Backlog coverage for this atomic repair: `cmvbclq0200c701o3aqnd4j74`, parent
+and sole delivery mapping `BI-E2EEE278`, no independent dependencies. The
+receipt binds the ordered fix above at commit
+`1f737a9f27a57eb660c5cb060a04202ebb7ee3b4`, blob
+`d67595daf0f5f94768941513b205b24f4d6c726e`; it confers no parent baseline.
 
 ## 9. Plan coverage, dependencies, and traceability
 

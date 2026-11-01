@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { readCollaborationProvenance } from "@/lib/tak/conversation-participants-core";
+import { postChildResultToParent } from "@/lib/tak/child-result-message";
 import {
   executeAutonomousAgenticLoop,
   resolveAutonomousWorkAgent,
@@ -36,7 +37,7 @@ async function emitCollaborationReturn(
   childThreadId: string,
   taskRunId: string,
   outcome: "completed" | "failed" | "canceled",
-  options?: { specialistReply?: string; routeContext?: string },
+  options?: { specialistReply?: string; routeContext?: string; resultText?: string },
 ): Promise<void> {
   try {
     const child = await prisma.agentThread.findUnique({
@@ -46,10 +47,27 @@ async function emitCollaborationReturn(
     if (!child?.parentThreadId) return;
     const tr = await prisma.taskRun.findUnique({
       where: { taskRunId },
-      select: { a2aMetadata: true },
+      select: { a2aMetadata: true, currentAgentId: true },
     });
     const prov = readCollaborationProvenance(tr?.a2aMetadata);
-    if (!prov) return; // only emit returns for governed collaboration spawns
+    // BI-B3194260: every child's result lands in the parent conversation once.
+    // The provider-compliance collaboration posts its own owner message below.
+    if (prov?.summary !== PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
+      const agentId = prov?.toAgentId ?? tr?.currentAgentId ?? null;
+      const agent = agentId
+        ? await prisma.agent.findFirst({ where: { OR: [{ agentId }, { slugId: agentId }] }, select: { name: true } })
+        : null;
+      await postChildResultToParent(prisma as never, {
+        parentThreadId: child.parentThreadId,
+        childTaskRunId: taskRunId,
+        agentId,
+        agentName: agent?.name ?? "The delegated coworker",
+        outcome,
+        text: options?.resultText ?? null,
+        routeContext: options?.routeContext ?? DEFAULT_ROUTE_CONTEXT,
+      });
+    }
+    if (!prov) return; // the handoff card and chain link belong to governed collaboration spawns
     if (prov.delegationLinkId) await closeDelegationLink(prov.delegationLinkId, outcome);
     let ownerMessage: string | undefined;
     if (prov.summary === PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
@@ -119,6 +137,16 @@ export type ChildRuntimeContext = {
   routeContext: string;
 };
 
+/**
+ * BI-FAD98137: a child never runs wider than the turn that delegated it. A
+ * delegate from an Advise-mode turn runs in Advise (side-effecting tools held
+ * back); every other child runs in Act, as before.
+ */
+async function childRuntimeMode(taskRunId: string): Promise<"advise" | "act"> {
+  const taskRun = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { a2aMetadata: true } });
+  return readCollaborationProvenance(taskRun?.a2aMetadata)?.runtimeMode === "advise" ? "advise" : "act";
+}
+
 async function isProviderComplianceCollaboration(taskRunId: string): Promise<boolean> {
   const taskRun = await prisma.taskRun.findUnique({
     where: { taskRunId },
@@ -147,8 +175,9 @@ async function completeChildThreadExecution(input: {
     },
   });
 
-  await prisma.taskRun.update({
-    where: { taskRunId: input.context.taskRunId },
+  // BI-259F6743: a child cancelled while it ran keeps `canceled`.
+  const moved = await prisma.taskRun.updateMany({
+    where: { taskRunId: input.context.taskRunId, status: { notIn: [...TERMINAL_STATUSES] } },
     data: {
       status: "completed",
       completedAt: new Date(),
@@ -169,8 +198,15 @@ async function completeChildThreadExecution(input: {
       },
     },
   });
+  if (moved.count === 0) {
+    await emitCollaborationReturn(input.context.threadId, input.context.taskRunId, "canceled", {
+      routeContext: input.context.routeContext,
+    });
+    return;
+  }
   await emitCollaborationReturn(input.context.threadId, input.context.taskRunId, "completed", {
     specialistReply: input.replyText,
+    resultText: input.replyText,
     routeContext: input.context.routeContext,
   });
 }
@@ -251,6 +287,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
 
     const userContext = await loadUserContext(context.userId);
     const providerComplianceCollaboration = await isProviderComplianceCollaboration(context.taskRunId);
+    const runtimeMode = await childRuntimeMode(context.taskRunId);
 
     const agentInfo = await resolveAutonomousWorkAgent({
       agentId: context.agentId,
@@ -265,8 +302,10 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
 
     const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
       userContext,
+      taskRunId: context.taskRunId,
+      threadId: context.threadId,
       agentId: resolvedAgentId,
-      mode: "act",
+      mode: runtimeMode,
       // BI-CAP-F2D39F8F: budget the attachment to the serving model; the child
       // thread's latest user turn ranks which tools stay attached.
       routeContext: context.routeContext,
@@ -424,9 +463,10 @@ async function markChildThreadFailed(
   context: ChildRuntimeContext,
   message: string,
 ): Promise<void> {
-  await prisma.taskRun
-    .update({
-      where: { taskRunId: context.taskRunId },
+  // BI-259F6743: only an unfinished run fails; a cancelled one keeps `canceled`.
+  const moved = await prisma.taskRun
+    .updateMany({
+      where: { taskRunId: context.taskRunId, status: { notIn: [...TERMINAL_STATUSES] } },
       data: {
         status: "failed",
         completedAt: new Date(),
@@ -438,7 +478,12 @@ async function markChildThreadFailed(
         taskRunId: context.taskRunId,
         error: getErrorMessage(err),
       });
+      return { count: 1 };
     });
+  if (moved.count === 0) {
+    await emitCollaborationReturn(context.threadId, context.taskRunId, "canceled", { routeContext: context.routeContext });
+    return;
+  }
 
   await prisma.agentThread
     .update({
@@ -457,5 +502,8 @@ async function markChildThreadFailed(
       });
     });
 
-  await emitCollaborationReturn(context.threadId, context.taskRunId, "failed");
+  await emitCollaborationReturn(context.threadId, context.taskRunId, "failed", {
+    resultText: message,
+    routeContext: context.routeContext,
+  });
 }

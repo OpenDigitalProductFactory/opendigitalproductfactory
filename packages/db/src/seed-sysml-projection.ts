@@ -15,8 +15,9 @@ import {
   SYSML_PROJECTION_TASK_ID,
   SYSML_PROJECTION_TASK_TITLE,
 } from "./sysml-projection-config";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -40,12 +41,8 @@ export async function ensureSysmlProjectionScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findTaskOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed SysML projection scheduled task");
   }
 
@@ -82,7 +79,7 @@ export async function ensureSysmlProjectionScheduledTask(
         routeContext: SYSML_PROJECTION_ROUTE_CONTEXT,
         schedule: SYSML_PROJECTION_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

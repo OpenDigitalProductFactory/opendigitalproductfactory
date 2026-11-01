@@ -1,0 +1,107 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approval design preview</title>
+<style>html{color-scheme:light dark}body{margin:0}</style>
+<div id="simple-approval-preview" class="viz-dotted-background">
+  <div class="approval-preview-label">Design preview · no live actions</div>
+  <label class="approval-preview-label">Example <select id="approval-example"><option value="handover">Continue the repair</option><option value="report">Save a blocked-work report</option><option value="review">Record a review</option><option value="unresolved">Unresolved effect</option></select></label>
+  <article class="approval-decision">
+    <span class="approval-context">AI queue repair</span>
+    <h3>Let Codex continue this repair?</h3>
+    <p>Codex will continue the repair using the existing files and passing test results.</p>
+    <p class="approval-consequence">Access stays limited to this repair. No broader permissions are added.</p>
+    <p class="approval-recommendation">Recommended: continue with the same assistant.</p>
+    <div class="approval-buttons">
+      <button type="button" class="approval-primary" data-choice="allow">Allow continuation</button>
+      <button type="button" class="approval-secondary" data-choice="hold">Keep on hold</button>
+    </div>
+    <p class="approval-preview-result" role="status" aria-live="polite"></p>
+    <details>
+      <summary>Why am I being asked?</summary>
+      <p>The system saved a temporary conversation label. Your permission lets it link this conversation to the repair.</p>
+      <p>Allowing this step does not approve new spending, add access to other work, or confirm that the whole repair is finished.</p>
+    </details>
+    <details class="approval-technical">
+      <summary>Technical evidence</summary>
+      <dl>
+        <dt>Workroom</dt><dd><code>WC-FA7F0A78</code></dd>
+        <dt>Requested operation</dt><dd><code>reassign_workroom_executor</code></dd>
+        <dt>Change</dt><dd>Replace the temporary executor reference with this same chat's reference.</dd>
+        <dt>Passing gate</dt><dd><code>cmvo47kzp45dk01qbaqa8k6w3</code></dd>
+        <dt>Source</dt><dd><code>31af3d5ea09cfcb7a264cf4518c50a7c465c95a6</code></dd>
+        <dt>Authorization</dt><dd>One exact request. Existing grants and scope still apply.</dd>
+      </dl>
+    </details>
+  </article>
+</div>
+<style>
+#simple-approval-preview{--approval-bg:light-dark(#ffffff,#111020);--approval-text:light-dark(#211e2e,#f1eff8);--approval-muted:light-dark(#5b556b,#b9b2cc);--approval-line:light-dark(#ddd8e8,#383149);--approval-accent:light-dark(#5c42a8,#b8a0ef);--approval-button:light-dark(#5c42a8,#c6b1f5);--approval-on-button:light-dark(#ffffff,#211535);padding:24px 16px;font-family:inherit;color:var(--approval-text)}
+#simple-approval-preview .approval-preview-label{color:var(--approval-muted);margin:0 0 12px}
+#simple-approval-preview .approval-decision{max-width:620px;margin:auto;padding:24px;background:var(--approval-bg);border:1px solid var(--approval-line);border-radius:12px}
+#simple-approval-preview .approval-context{color:var(--approval-muted)}
+#simple-approval-preview h3{margin:8px 0 12px;font-weight:500;color:var(--approval-text)}
+#simple-approval-preview p{margin:12px 0}
+#simple-approval-preview .approval-recommendation{color:var(--approval-muted)}
+#simple-approval-preview .approval-buttons{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
+#simple-approval-preview button{font:inherit;font-weight:500;min-height:44px;padding:10px 16px;border-radius:7px;cursor:var(--cursor-interaction,pointer)}
+#simple-approval-preview .approval-primary{background:var(--approval-button);color:var(--approval-on-button);border:1px solid var(--approval-button)}
+#simple-approval-preview .approval-secondary{background:var(--approval-bg);color:var(--approval-text);border:1px solid var(--approval-line)}
+#simple-approval-preview details{padding:14px 0;border-top:1px solid var(--approval-line)}
+#simple-approval-preview details:last-child{padding-bottom:0}
+#simple-approval-preview summary{cursor:var(--cursor-interaction,pointer);color:var(--approval-text)}
+#simple-approval-preview .approval-technical{color:var(--approval-muted)}
+#simple-approval-preview dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px;margin-bottom:0}
+#simple-approval-preview dd{margin:0;overflow-wrap:anywhere}
+#simple-approval-preview dt{font-weight:500}
+#simple-approval-preview code{color:inherit;font-size:inherit;overflow-wrap:anywhere}
+#simple-approval-preview .approval-preview-result:empty{display:none}
+@media(max-width:420px){#simple-approval-preview{padding:16px 8px}#simple-approval-preview .approval-decision{padding:20px 16px}#simple-approval-preview dl{grid-template-columns:minmax(0,1fr)}}
+</style>
+<script>
+(() => {
+  const root=document.getElementById('simple-approval-preview');
+  const article=root.querySelector('article');
+  const original=article.innerHTML;
+  const examples={
+    report:{context:'Release readiness',title:'Save the release status?',brief:'Your Build Lead could not check the release because no release candidate was supplied.',effect:'Records the blocked status. It does not mark the work complete or start a release.',recommendation:'Recommended: save the report so the missing release information can be addressed.',allow:'Save report',why:'This coworker must ask before it records a result.',technical:'record_workroom_evidence · WC-C9320161 · kind assurance-finding · outcome blocked · stage report. Full recorded source: The release gate evidence could not be read because this scheduled stage did not provide a release bundle ID, promotion ID, or backlog item ID. No gate was treated as satisfied, and no missing-gate assessment was invented.'},
+    review:{context:'Illustrative review example',title:'Record the research review?',brief:'The reviewer recommends that the research passes, with no findings.',effect:'Records this review result so planning may continue. It does not approve the implementation.',recommendation:'Recommended: record the reviewer’s result.',allow:'Record result',why:'You are authorizing one recorded recommendation.',technical:'Illustrative structured receipt: record_initiative_evidence; gate research; decision pass; findings []. Original identities and parameters remain bound to the request.'},
+    unresolved:{context:'Illustrative unsupported request',title:'This request’s effect is unresolved',brief:'The exact proposal is available, but this action has no supported human summary.',effect:'Its effects and reversibility are not established. Review the exact proposal before authorizing.',recommendation:'Recommended: keep it on hold until its effect is clear.',allow:'Authorize exact request',why:'A missing summary must not become a reassuring claim.',technical:'This is an illustrative unsupported-action case. Full original proposal belongs here. Actual recipients, money, permission changes, destructive effects and deadlines must remain above this disclosure when present; this example declares none.'}
+  };
+  function bind(){const result=article.querySelector('.approval-preview-result');article.querySelectorAll('[data-choice]').forEach(button=>button.addEventListener('click',()=>{result.textContent=button.dataset.choice==='allow'?'Preview: this exact request would be authorized. No approval was sent.':'Preview: this request would stay on hold. No decision was sent.';}));}
+  root.querySelector('select').addEventListener('change',event=>{
+    const e=examples[event.target.value];
+    if(!e){article.innerHTML=original;bind();return;}
+    article.innerHTML=`<span class="approval-context"></span><h3></h3><p class="approval-brief"></p><p class="approval-consequence"></p><p class="approval-recommendation"></p><div class="approval-buttons"><button type="button" class="approval-primary" data-choice="allow"></button><button type="button" class="approval-secondary" data-choice="hold">Keep on hold</button></div><p class="approval-preview-result" role="status" aria-live="polite"></p><details><summary>Why am I being asked?</summary><p></p></details><details class="approval-technical"><summary>Technical evidence</summary><p></p></details>`;
+    const fields=[['.approval-context',e.context],['h3',e.title],['.approval-brief',e.brief],['.approval-consequence',e.effect],['.approval-recommendation',e.recommendation],['.approval-primary',e.allow],['details p',e.why],['.approval-technical p',e.technical]];
+    fields.forEach(([selector,text])=>article.querySelector(selector).textContent=text);bind();
+  });bind();
+})();
+</script>
+
+<section style="max-width:620px;margin:24px auto;font-family:inherit;padding:16px" aria-label="Long inbox preview">
+<h2>18 items need your attention</h2>
+<p>Review the first three, or show the rest.</p>
+<div id="inbox-preview-list"></div>
+<button type="button" id="inbox-preview-more" aria-expanded="false" aria-controls="inbox-preview-list">Show 15 more</button>
+</section>
+<script>
+(() => {
+ const list=document.getElementById('inbox-preview-list');
+ const toggle=document.getElementById('inbox-preview-more');
+ const titles=['Choose who answers AI approvals','Review the repair result','Renew compliance evidence'];
+ function draw(expanded) {
+  if (!list.children.length) list.append(...Array.from({length:18},(_,i)=>{
+   const card=document.createElement('article'); card.style.padding='12px 0';
+   const title=document.createElement('h3'); title.textContent=titles[i%3];
+   const text=document.createElement('p'); text.textContent='Review the request and its consequences before deciding.';
+   card.append(title,text); return card;
+  }));
+  Array.from(list.children).forEach((card,i)=>{card.hidden=!expanded&&i>=3;});
+  toggle.setAttribute('aria-expanded',String(expanded));
+  toggle.textContent=expanded?'Show fewer':'Show 15 more';
+ }
+ toggle.addEventListener('click',()=>draw(toggle.getAttribute('aria-expanded')!=='true'));
+ draw(false);
+})();
+</script>

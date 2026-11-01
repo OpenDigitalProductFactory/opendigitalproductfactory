@@ -5,6 +5,10 @@
 // soft-excludes endpoints whose *in-memory* runtime circuit is open; this
 // module is the same idea for the *persisted* capacity snapshot so a 401-dead
 // or API-rate-limited provider is skipped while a healthy local floor remains.
+import { accountRuntimeKey } from "./provider-account-candidates";
+import { isAccountCapacityState } from "./provider-capacity/scopes";
+import { isProviderQuotaState } from "./provider-capacity/types";
+import { currentExecutionProof, type ExecutionProof } from "./provider-capacity/execution-proof";
 
 export type CapacitySnapshot = {
   state: string;
@@ -12,6 +16,13 @@ export type CapacitySnapshot = {
   retryAtMs?: number | null;
   /** Epoch ms when this snapshot was last observed; null/undefined = unknown. */
   observedAtMs?: number | null;
+  observationSource?: string;
+  /** Safe operator-facing recovery facts from the same validated observation. */
+  safeSummary?: string | null;
+  action?: string | null;
+  isHumanActionRequired?: boolean;
+  /** Supplied only after the capacity reader revalidates current persisted bindings. */
+  executionProof?: ExecutionProof;
 };
 
 /**
@@ -82,7 +93,8 @@ function formatRetry(retryAtMs: number | null | undefined): string {
   return ` until ${new Date(retryAtMs).toISOString()}`;
 }
 
-export type CapacitySoftExcludeInput<T extends { providerId: string }> = {
+type CapacityCandidate = { providerId: string; providerConnectionId?: string; providerConnectionVersion?: string; modelId?: string };
+export type CapacitySoftExcludeInput<T extends CapacityCandidate> = {
   endpoints: readonly T[];
   /** providerId → latest capacity snapshot (missing ⇒ available). */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot>;
@@ -100,7 +112,7 @@ export type CapacitySoftExcludeResult<T extends { providerId: string }> = {
  * at least one non-blocked peer remains (same degrade-not-lockout contract as
  * the runtime circuit breaker). Pure.
  */
-export function applyCapacitySoftExclusion<T extends { providerId: string }>(
+export function applyCapacitySoftExclusion<T extends CapacityCandidate>(
   input: CapacitySoftExcludeInput<T>,
 ): CapacitySoftExcludeResult<T> {
   const blocked: Array<{ endpoint: T; reason: string }> = [];
@@ -108,7 +120,15 @@ export function applyCapacitySoftExclusion<T extends { providerId: string }>(
 
   for (const ep of input.endpoints) {
     const snap = input.capacityByProvider.get(ep.providerId);
-    const reason = capacityRoutingExclusionReason(snap, input.nowMs);
+    const owned = ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null;
+    const proof = owned?.executionProof;
+    // This observation used Responses, not the separately constrained Codex CLI.
+    const checked = ep.providerId === "chatgpt" && owned?.state === "available" && proof
+      && currentExecutionProof(proof, proof, input.nowMs) && proof.providerId === ep.providerId
+      && proof.connectionId === ep.providerConnectionId && proof.modelId === ep.modelId && proof.accountVersion === ep.providerConnectionVersion;
+    const inheritedAccountHealth = ep.providerConnectionId && ep.providerConnectionId !== `provider-default-${ep.providerId}` && snap && isAccountCapacityState(snap.state);
+    const reason = capacityRoutingExclusionReason(inheritedAccountHealth || checked && snap && isProviderQuotaState(snap.state) ? null : snap, input.nowMs)
+      ?? capacityRoutingExclusionReason(owned, input.nowMs);
     if (reason) blocked.push({ endpoint: ep, reason });
     else live.push(ep);
   }

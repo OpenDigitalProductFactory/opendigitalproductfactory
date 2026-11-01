@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockPrisma = {
   $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(mockPrisma)),
   $executeRawUnsafe: vi.fn(),
+  authorizationDecisionLog: { findUnique: vi.fn() },
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
@@ -12,6 +13,7 @@ const mockPrisma = {
   },
   workroomActivity: {
     create: vi.fn(),
+    findMany: vi.fn(),
   },
   // adopt_worktree resolves a supplied backlogItemId before binding it, so an
   // unknown id is refused rather than silently dropped (BI-D526F72C).
@@ -121,6 +123,30 @@ describe("work capsule MCP tools", () => {
         portfolioRole: "productsAndServicesSold",
       }),
     ]);
+  });
+
+  // BI-62514632: read the room's ordered log from a position the caller holds.
+  it("get_workroom returns the log after afterSequence, oldest first", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-LOG", title: "Log", activities: [] });
+    mockPrisma.workroomActivity.findMany.mockResolvedValue([{ id: "a5", sequence: 5 }, { id: "a6", sequence: 6 }]);
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: 4 }, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { log: { afterSequence: 4, activity: [{ sequence: 5 }, { sequence: 6 }], hasMore: false } },
+    });
+    expect(mockPrisma.workroomActivity.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workCapsuleId: "row-1", sequence: { gt: 4 } },
+      orderBy: { sequence: "asc" },
+    }));
+  });
+
+  it("get_workroom refuses a malformed afterSequence", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: -3 }, "user-1", { agentId: "codex" });
+    expect(result).toMatchObject({ success: false, error: "invalid_input" });
   });
 
   it("get_workroom does not renew leases for read-only hydration", async () => {
@@ -685,6 +711,10 @@ describe("work capsule MCP tools", () => {
   });
 
   it("release_workroom_scope removes matching scope claims", async () => {
+    mockPrisma.authorizationDecisionLog.findUnique.mockResolvedValue({
+      actionKey: "release_workroom_scope", actorRef: "codex", humanContextRef: "user-1",
+      agentContextRef: "codex", decision: "allow", rationale: {},
+    });
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-RELEASE",
@@ -712,7 +742,7 @@ describe("work capsule MCP tools", () => {
     const result = await executeTool("release_workroom_scope", {
       capsuleId: "WC-RELEASE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
-    }, "user-1", { agentId: "codex" });
+    }, "user-1", { agentId: "codex", authorityDecisionId: "AUTH-release" });
 
     expect(result.success).toBe(true);
     expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -731,5 +761,20 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
+  });
+});
+
+
+describe("bounded handoff tool contract", () => {
+  it("exposes request and acknowledgement while retaining authority as the default", async () => {
+    const { workCapsulesPack } = await import("./work-capsules-pack");
+    const tool = workCapsulesPack.definitions.find(t => t.name === "reassign_workroom_executor")!;
+    expect(tool.consequence).toBe("authority");
+    expect(tool.consequenceForCall).toBeTypeOf("function");
+    expect(tool.inputSchema.properties).toMatchObject({ phase: { enum: ["request", "acknowledge"] }, requestId: { type: "string" }, targetAgentId: { type: "string" }, expectedExecutorRef: { type: "string" } });
+    // One room by capsuleId, or a batched set by capsuleIds (BI-D4144471); the handler requires one.
+    expect(tool.inputSchema.required).toBeUndefined();
+    expect(tool.inputSchema.properties).toMatchObject({ capsuleIds: { type: "array", maxItems: 20 }, dryRun: { type: "boolean" }, planDigest: { type: "string" } });
+    expect(workCapsulesPack.grants.reassign_workroom_executor).toEqual(["work_capsule_write"]);
   });
 });

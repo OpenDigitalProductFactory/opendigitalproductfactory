@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ stance: vi.fn(), account: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account } } }));
+const mocks = vi.hoisted(() => ({ stance: vi.fn(), account: vi.fn(), job: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account }, scheduledJob: { findUnique: mocks.job } } }));
 vi.mock("@/lib/install/instance-stance", () => ({ loadInstanceStance: mocks.stance, prismaInstanceStanceStore: () => ({}) }));
 
 import { providerAccountDefinitions } from "./packs/provider-account-tools";
@@ -12,6 +12,63 @@ const tool = providerAccountDefinitions.find((t) => t.name === "manage_provider_
 const classify = (params: Record<string, unknown>) => resolveCallConsequence(tool, { toolName: tool.name, params, userId: "owner" });
 const local = { connectionId: "provider-default-local", providerId: "local", authMethod: "local", executionChannel: "local-runtime", credentialEntryId: null, organizationId: null };
 const disable = { operation: "disable", connectionId: local.connectionId };
+
+describe("stopping a persisted quota-recovery commission", () => {
+  const params = { operation: "stop-quota-recovery", connectionId: "provider-default-chatgpt" };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stance.mockResolvedValue({ environmentClass: "production", primaryPurpose: "operate-business" });
+    mocks.account.mockResolvedValue({ connectionId: params.connectionId, providerId: "chatgpt", organizationId: null, status: "paused" });
+    mocks.job.mockResolvedValue({ metadata: { kind: "subscription-quota-recovery", version: 1, modelId: "target", hourly: true } });
+  });
+  it("narrows only the existing commission without restoring an account or invoking a provider", async () => {
+    expect((await classify(params)).consequence).toBeNull();
+    expect(tool.requiredCapability).toBe("manage_provider_connections");
+  });
+  it.each([{ ...params, hourly: true }, { ...params, modelId: "different" }, { ...params, providerId: "codex" }, { ...params, force: true }])("retains authority for extra or mismatched effects: %j", async request => {
+    expect((await classify(request)).consequence).toBe("authority");
+  });
+  it("retains authority if no valid owned commission is proven", async () => {
+    mocks.job.mockResolvedValue(null);
+    expect((await classify(params)).consequence).toBe("authority");
+    mocks.job.mockResolvedValue({ metadata: { kind: "different", version: 1, modelId: "target", hourly: true } });
+    expect((await classify(params)).consequence).toBe("authority");
+  });
+});
+
+describe("active DEV subscription verification", () => {
+  const account = { connectionId: "provider-default-chatgpt", providerId: "chatgpt", authMethod: "oauth", status: "active", credentialEntryId: "owned", organizationId: null };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.account.mockResolvedValue(account);
+  });
+  it.each(["chatgpt", "codex"])("verifies the active default %s through recorded delegation", async providerId => {
+    mocks.account.mockResolvedValue({ ...account, providerId, connectionId: `provider-default-${providerId}` });
+    const consequence = (await classify({ operation: "test", providerId, connectionId: `provider-default-${providerId}` })).consequence;
+    expect(consequence).toBeNull();
+    const base = { action: { sideEffect: true, executionMode: "immediate" as const, consequence }, dataPolicy: { sensitivity: "internal" as const }, operatorRequiresApproval: true };
+    expect(resolveEscalation({ ...base, steering: "connection-delegation" }).verdict).toBe("automated");
+    expect(resolveEscalation({ ...base, steering: "none" }).verdict).toBe("human");
+    expect(resolveEscalation({ ...base, steering: "connection-delegation", dataPolicy: { sensitivity: "restricted" } }).verdict).toBe("human");
+    expect(resolveEscalation({ ...base, steering: "connection-delegation", proposeBoundary: true }).verdict).toBe("human");
+  });
+  it.each([
+    { ...account, status: "inactive" }, { ...account, status: "disabled" }, { ...account, status: "disconnected" },
+    { ...account, organizationId: "peer" }, { ...account, credentialEntryId: null },
+    { ...account, authMethod: "api-key" }, { ...account, connectionId: "additional-account" }, null,
+  ])("keeps other persisted account effects consequential: %j", async persisted => {
+    mocks.account.mockResolvedValue(persisted);
+    expect((await classify({ operation: "test", connectionId: account.connectionId })).consequence).toBe("authority");
+  });
+  it.each([{}, { environmentClass: "production", primaryPurpose: "evolve-dpf" }, { environmentClass: "development", primaryPurpose: "operate-business" }])("requires proven DEV maintenance stance: %j", async stance => {
+    mocks.stance.mockResolvedValue(stance);
+    expect((await classify({ operation: "test", connectionId: account.connectionId })).consequence).toBe("authority");
+  });
+  it.each([{ secretRef: "replacement" }, { environmentClass: "development" }, { providerId: "openai" }])("does not trust configuration or environment assertions: %j", async extra => {
+    expect((await classify({ operation: "test", connectionId: account.connectionId, ...extra })).consequence).toBe("authority");
+  });
+});
 
 describe("delegated DEV credentialless local containment", () => {
   beforeEach(() => {

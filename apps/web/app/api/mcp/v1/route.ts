@@ -1,3 +1,4 @@
+import { reviewTaskTransportRefusal } from "@/lib/mcp-task-reassessment-transport";
 // Real MCP JSON-RPC 2.0 transport for external coding agents (Claude Code,
 // Codex CLI, VS Code MCP) on the user's host. Spec snapshot in
 // docs/Reference/mcp/spec/ (version 2025-11-25).
@@ -18,13 +19,8 @@
 //                              AS, same scope vocabulary, same revocation
 //                              surface. A grant type, not a side door.
 //
-// This file previously read: "We do NOT implement OAuth 2.1 resource-server
-// discovery (the GitHub-PAT pattern, intentionally)." That was right for a
-// single-operator loopback surface and stopped being right once (a) five
-// external clients connect and all of them perform RFC 9728 discovery,
-// (b) `2025-11-25` made Protected Resource Metadata a server MUST while we
-// advertise that revision on the wire, and (c) consumer installs have no
-// operator with a portal habit to mint a token by hand.
+// RFC 9728 resource discovery serves external clients and installs whose
+// operators have no portal session from which to provision a token.
 //
 // The `dpfmcp_` PAT still resolves, and every configured client keeps working.
 // It is on a deprecation horizon: issuance closes first, resolution survives
@@ -38,6 +34,9 @@ import {
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
+import { observeConnection } from "@/lib/agent-toolchain/connection-observation";
+import { toolchainNoticeFor } from "@/lib/agent-toolchain/toolchain-notice";
+import { refuseBelowToolchainFloor } from "@/lib/mcp/toolchain-floor";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
 import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
@@ -86,6 +85,7 @@ import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveL
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { workroomBindingRefusal } from "@/lib/auth/workroom-session-token";
 // GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
 import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
@@ -368,7 +368,7 @@ async function handleTasksLifecycle(
       result = await handleTasksGet(token.userId, params);
       break;
     case "tasks/result":
-      result = await handleTasksResult(token.userId, params);
+      result = await handleTasksResult(token.userId, params, { actingAgentId: token.agentId ?? null, tokenGrantScopes: token.scopes });
       break;
     case "tasks/list":
       result = await handleTasksList(token.userId, params);
@@ -406,6 +406,7 @@ async function handleTasksSubmit(
 }
 
 async function handleInitialize(
+  request: Request,
   id: JsonRpcId,
   token: ResolvedAuth,
   params?: Record<string, unknown>,
@@ -414,6 +415,7 @@ async function handleInitialize(
     id,
     await buildMcpInitializeResult({
       params,
+      toolchainNotice: await toolchainNoticeFor(request, token),
       authority: {
         scope: normalizeTokenScope(token),
         scopes: token.scopes,
@@ -554,6 +556,8 @@ async function handleToolsCall(
     return jsonRpcOk(id, quiescenceRefusal);
   }
 
+  const roomRefusal = workroomBindingRefusal(token, args); // BI-05715F4C
+  if (roomRefusal) return jsonRpcOk(id, roomRefusal);
   const userContext = await loadUserContext(token.userId);
   const executed = await governedExecuteTool({
     toolName,
@@ -565,11 +569,9 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
-      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
-      // id; governed execution resolves the TaskRun's immutable review
-      // binding from it (resolve-coworker-tool-authority), so a native CLI
-      // writer call is admitted routinely instead of parked on an envelope.
+      // Resolve the immutable review binding from the authenticated TaskRun.
       ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
+      ...(token.taskExecutionFence ? { taskExecutionFence: token.taskExecutionFence } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
@@ -633,7 +635,8 @@ async function handleToolsCall(
       dataForText = marker;
     }
   }
-  const text = JSON.stringify(
+  // BI-05715F4C: Claude's --permission-prompt-tool parses the text as the bare {behavior, ...} answer.
+  const text = toolName === "approve_runtime_permission" ? JSON.stringify(dataForText ?? {}) : JSON.stringify(
     {
       success: result.success,
       message: result.message,
@@ -675,9 +678,11 @@ export async function POST(request: Request): Promise<Response> {
       "request must have jsonrpc='2.0' and method string",
     );
   }
-
+  observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
+  if (floorRefusal) return floorRefusal;
 
   // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
   // MCP-Protocol-Version header. When present it must be a version we speak;
@@ -699,12 +704,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    const callbackRefusal = isNotification ? null : await reviewTaskTransportRefusal({
+      token, method: body.method, params: body.params,
+    });
+    if (callbackRefusal) return jsonRpcError(body.id ?? null, JSONRPC_INVALID_REQUEST,
+      callbackRefusal.message, { error: callbackRefusal.error }, 403);
     switch (body.method) {
       case "initialize":
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleInitialize(body.id ?? null, token, body.params);
+        return await handleInitialize(request, body.id ?? null, token, body.params);
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });

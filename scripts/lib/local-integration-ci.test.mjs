@@ -2,7 +2,12 @@
 // alongside BI-B5011ACE so the plan contract actually gates in the bare-runner
 // CI test job).
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { EXIT_CANDIDATE_MERGE_CONFLICT } from "./sandbox-freshness.mjs";
 import {
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
@@ -17,7 +22,38 @@ import {
   buildIsDelegated,
   defaultBuildStrategy,
   localBuildStrategy,
+  resolveLocalCiTestProfile,
 } from "./local-integration-ci.mjs";
+
+describe("bounded local-CI test profile", () => {
+  it("preserves default identity and clamps retry workers", () => {
+    const defaults = resolveLocalCiTestProfile({});
+    assert.deepEqual(defaults, { initialWorkers: 4, retryWorkers: 2 });
+    const original = createToolchainFingerprint({});
+    assert.equal(createToolchainFingerprint({ testProfile: defaults }).toolchainFingerprint, original.toolchainFingerprint);
+    assert.equal(createToolchainFingerprint({ testProfile: resolveLocalCiTestProfile({ DPF_LOCAL_CI_TEST_WORKERS: "4" }) }).toolchainFingerprint, original.toolchainFingerprint);
+    const fingerprints = new Set([original.toolchainFingerprint]);
+    for (const workers of [1, 2, 3]) {
+      const env = { DPF_LOCAL_CI_TEST_WORKERS: String(workers) };
+      const testProfile = resolveLocalCiTestProfile(env);
+      assert.deepEqual(testProfile, { initialWorkers: workers, retryWorkers: Math.min(2, workers) });
+      fingerprints.add(createToolchainFingerprint({ testProfile }).toolchainFingerprint);
+      const plan = createLocalIntegrationPlan({ candidateBranch: "feat/profile", siblingBranches: [], env });
+      const command = plan.commands.find((args) => args.includes("scripts/local-ci-vitest-runner.mjs"));
+      assert.equal(command[command.indexOf("--initial-workers") + 1], String(workers));
+      assert.equal(command[command.indexOf("--retry-workers") + 1], String(Math.min(2, workers)));
+    }
+    assert.equal(fingerprints.size, 4);
+  });
+
+  it("rejects invalid settings before constructing any execution plan", () => {
+    for (const value of ["", "0", "-1", "1.5", "5", "two", " 2", "02"]) {
+      const env = { DPF_LOCAL_CI_TEST_WORKERS: value };
+      assert.throws(() => resolveLocalCiTestProfile(env), /DPF_LOCAL_CI_TEST_WORKERS/);
+      assert.throws(() => createLocalIntegrationPlan({ candidateBranch: "feat/profile", siblingBranches: [], env }), /DPF_LOCAL_CI_TEST_WORKERS/);
+    }
+  });
+});
 
 describe("createLocalIntegrationPlan", () => {
   it("binds the production artifact to the exact integration tree", () => {
@@ -159,6 +195,7 @@ describe("createLocalIntegrationPlan", () => {
   it("disables Node host web-storage before Vitest starts jsdom workers (BI-3E989BEA)", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "fix/node-26-webstorage",
+      env: {},
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
@@ -172,6 +209,7 @@ describe("createLocalIntegrationPlan", () => {
   it("caps Vitest workers in local-CI for repeatable sandbox evidence", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/stabilize-sandbox-vitest",
+      env: {},
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
@@ -685,5 +723,117 @@ describe("production build delegated to the merge queue (BI-3A14308C)", () => {
     const delegated = createToolchainFingerprint({ buildStrategy: DELEGATED_BUILD_STRATEGY });
     const local = createToolchainFingerprint({ buildStrategy: "docker-build" });
     assert.notEqual(delegated.toolchainFingerprint, local.toolchainFingerprint);
+  });
+});
+
+// BI-FCC1DCB2. A candidate that does not merge cleanly onto origin/main used to
+// leave this runner with git's raw exit 1. The wrapper read that as a product
+// failure, demanded a completion checkpoint the stopped run could not have, and
+// rewrote it to `blocked_control_plane_starvation`, so authors retried for
+// hours a gate that only needed them to merge main. These cases use a REAL git
+// repository, because the contract is what git does on a conflict.
+describe("a candidate that conflicts with the base is a typed merge-conflict verdict (BI-FCC1DCB2)", () => {
+  const GIT_ISOLATION = [
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "user.email=gate@test.invalid",
+    "-c", "user.name=gate-test",
+    "-c", "commit.gpgsign=false",
+  ];
+
+  function git(cwd, ...args) {
+    const result = spawnSync("git", [...GIT_ISOLATION, ...args], { cwd, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+    return result.stdout.trim();
+  }
+
+  /** main and topic both edit f.txt and g.json; topic also adds clean.txt. */
+  function conflictingRepo() {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-merge-conflict-"));
+    git(dir, "init", "-q", "-b", "main");
+    writeFileSync(join(dir, "f.txt"), "a\n");
+    writeFileSync(join(dir, "g.json"), "{\"v\":0}\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "base");
+    git(dir, "checkout", "-qb", "topic");
+    writeFileSync(join(dir, "f.txt"), "topic\n");
+    writeFileSync(join(dir, "g.json"), "{\"v\":1}\n");
+    writeFileSync(join(dir, "clean.txt"), "clean\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "topic");
+    const topicSha = git(dir, "rev-parse", "HEAD");
+    git(dir, "checkout", "-q", "main");
+    writeFileSync(join(dir, "f.txt"), "main\n");
+    writeFileSync(join(dir, "g.json"), "{\"v\":2}\n");
+    git(dir, "commit", "-qam", "main moved");
+    git(dir, "checkout", "-qB", "local-integration/slot-0/topic", "main");
+    return { dir, topicSha };
+  }
+
+  function runIn(dir, plan) {
+    const errors = [];
+    const outcome = executeLocalIntegrationPlan(plan, {
+      baseEnv: process.env,
+      platform: process.platform,
+      now: () => 0,
+      log: () => {},
+      error: (line) => errors.push(line),
+      spawnSyncImpl: (command, args, options) => spawnSync(
+        command,
+        command === "git" ? [...GIT_ISOLATION, ...args] : args,
+        { ...options, cwd: dir, stdio: options?.stdio === "inherit" ? "ignore" : options?.stdio },
+      ),
+    });
+    return { outcome, errors };
+  }
+
+  it("exits the merge-conflict code and names every conflicting path", () => {
+    const { dir, topicSha } = conflictingRepo();
+    try {
+      const { outcome, errors } = runIn(dir, {
+        baseRef: "origin/main",
+        commands: [
+          ["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha],
+          ["node", "-e", "process.exit(0)"],
+        ],
+      });
+
+      assert.equal(outcome.status, EXIT_CANDIDATE_MERGE_CONFLICT);
+      assert.deepEqual(outcome.mergeConflict, {
+        mergedRef: topicSha,
+        baseRef: "origin/main",
+        paths: ["f.txt", "g.json"],
+      });
+      assert.equal(outcome.completedCommandCount, 0, "nothing after the merge runs");
+      assert.match(errors.join("\n"), /merge-conflict/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the scratch workspace out of the half-merged state", () => {
+    const { dir, topicSha } = conflictingRepo();
+    try {
+      runIn(dir, { baseRef: "origin/main", commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha]] });
+      const mergeHead = spawnSync("git", ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { cwd: dir, encoding: "utf8" });
+      assert.notEqual(mergeHead.status, 0, "MERGE_HEAD must not survive the conflict");
+      assert.equal(git(dir, "status", "--porcelain"), "");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a git merge that fails WITHOUT unmerged paths keeps git's own status", () => {
+    const { dir } = conflictingRepo();
+    try {
+      const { outcome } = runIn(dir, {
+        baseRef: "origin/main",
+        commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", "no-such-ref"]],
+      });
+      assert.notEqual(outcome.status, 0);
+      assert.notEqual(outcome.status, EXIT_CANDIDATE_MERGE_CONFLICT);
+      assert.equal(outcome.mergeConflict ?? null, null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

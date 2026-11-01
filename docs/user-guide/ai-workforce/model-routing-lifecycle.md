@@ -60,6 +60,22 @@ provider or local service failed. You can keep waiting or choose **Refresh page*
 to request the page again. The loading message does not change credentials,
 connection settings, model availability, or routing eligibility.
 
+## Where AI may run
+
+The **Where AI may run** control on [AI providers](connecting-providers.md)
+applies to DPF coding and coworker tasks. It does not enable coding or configure
+an external desktop coding app.
+
+- **Local and allowed cloud providers:** DPF may select enabled providers that
+  satisfy your other routing rules, permissions and task requirements.
+- **Local only:** Cloud providers are excluded. Work stops when no suitable
+  local model is available; DPF does not relax this restriction to finish a task.
+
+The selection changes after the server confirms the save. If saving fails,
+the previous setting remains selected. If DPF cannot read the policy after its
+short cache expires, the request stops instead of assuming cloud is allowed.
+Once the policy can be read again, later requests can proceed normally.
+
 ## Quality Tiers
 
 Every model is assigned a quality tier based on its model ID prefix. The tier system replaces opaque 0-100 scores as the primary configuration surface for admins.
@@ -160,6 +176,8 @@ Provider claims are not vendor-wide. A business agreement, BAA, DPA, no-training
 
 Open **Platform → AI Operations → Providers & Routing**, choose a provider, and review **Provider trust evidence**. Each claim shows whether its evidence is current, missing, expired, rejected, conflicting, or replaced, along with its age, expiry, and safest next action. Operator declarations expire after 90 days unless stronger reviewed evidence replaces them. Expiry removes the claim from restricted-work eligibility immediately; it does not unnecessarily block separately governed public work.
 
+A provider you have signed in to but whose account is not yet reviewed is cleared only for public work. Coworker conversations and Work Room turns are company (internal) work, so none of them can use it. Providers & Routing labels such a provider **Public work only** instead of **Routable**, and the AI readiness summary does not count it as model supply. To clear it for company work, record the account on its provider page as a business or enterprise account with no-training treatment. A personal subscription, such as an individual ChatGPT plan, should stay public-only.
+
 Every governed route may carry a privacy-safe suitability receipt. The receipt records policy and input versions, the selected provider and any router-selected underlying provider, the connection's channel/account posture, exclusions, obligations, and explanation codes. It deliberately excludes prompts, messages, credentials, vendor account identifiers, organization identifiers, evidence documents, and free-text explanations.
 
 For activity-governed work, the same suitability projection used during provider setup is bound into the live `RequestContract` before `routeEndpointV2` selects a model. Existing operator restrictions can only become narrower: provider allowlists intersect, denials accumulate, and the stricter residency rule wins. A preferred provider/model, cost tuning, model health, or fallback cannot restore a connection removed by this gate.
@@ -194,6 +212,12 @@ The rollout is cumulative and ordered: compiler shadow → admin preview → onb
 | Provider posture drifts from its attestation | The owner receives an attention item; restricted routing stays blocked until the posture or evidence is reviewed. |
 | A workload cohort is small | Provider/model totals remain available, but workload-class detail stays hidden until the privacy threshold is met. |
 
+## Local requests while background work is running
+
+Local coworker requests and background builds share one inference queue. A running request finishes before the next starts. Interactive requests normally run ahead of waiting background work; older background requests eventually advance so they are not left waiting indefinitely.
+
+Waiting has its own deadline, separate from the model's generation deadline. If that wait expires, the request is removed from the queue and will not run later. Work already queued inside DPF waits its turn; a busy signal after admission means the host or model runner is occupied outside that queue. A completed response on an idle model does not prove the queue works correctly under background load.
+
 ## Provider-Specific Notes
 
 ### Anthropic (OAuth Subscription)
@@ -216,6 +240,10 @@ The ChatGPT provider uses Server-Sent Events (SSE) for the Responses API. Known 
 Local models are automatically discovered and profiled. They are assigned the `basic` quality tier by default, which means they will only be selected for agents configured with `minimumTier: "basic"` (e.g., the onboarding assistant). To use local models more broadly, adjust agent tiers downward or improve local model dimension scores via profiling.
 
 ## Troubleshooting
+
+**Reviewing supplied code on the local model:**
+- A complete answer about code included in your message can be short, including a JSON verdict. The coworker preserves that answer without asking for a live lookup or adding a tool-unavailable warning.
+- Include multi-line code in a closed code fence; an unfenced standalone function must fit on one line. Questions about the current provider, deployment, queue or test results still require live evidence, even when code is included. A request to save or record an assessment still requires its declared tool.
 
 **Independent review reports unknown or insufficient model capacity:**
 - Unknown completion/context capacity means routing lacks usable capacity evidence; it is an infrastructure admission problem, not a failed code review or an active inference.

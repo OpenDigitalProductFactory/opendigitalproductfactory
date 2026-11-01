@@ -123,6 +123,8 @@ export type InitiativeReadinessFacts = {
   plan: ReadinessEvidenceState;
   planReview: ReadinessEvidenceState;
   planCoverage: ReadinessEvidenceState;
+  /** xlarge completion only: current decomposed coverage and distinct real children. */
+  decomposition?: ReadinessEvidenceState;
   traceability?: ReadinessEvidenceState;
   dependencies: ReadinessEvidenceState;
   authorization: ReadinessEvidenceState;
@@ -131,6 +133,8 @@ export type InitiativeReadinessFacts = {
   deliveryEvidence: ReadinessEvidenceState;
   acceptanceEvidence: ReadinessEvidenceState;
   objectiveBaseline: ReadinessEvidenceState;
+  /** Retained independently approved repository scope keeps its amendment writer. */
+  objectiveBaselineRequiresReview?: boolean;
   objectiveBaselineConflict?: boolean;
   objectiveReconciliation: ReadinessEvidenceState;
   archetypeProvisioning: ArchetypeProvisioningFacts;

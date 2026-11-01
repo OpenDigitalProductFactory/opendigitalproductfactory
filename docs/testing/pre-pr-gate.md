@@ -1,5 +1,11 @@
 # Pre-PR test gate
 
+`pnpm run pregate` applies existing saved host trust even when its desktop parent
+predates the environment setting. A verified TLS probe runs before host guards;
+an unavailable transport exits 88 without a test verdict. See
+[saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+for explicit overrides and certificate diagnostics.
+
 Every pull request against `main` runs the full DPF unit-test suite as a binding
 merge gate. **Tests run before merge — if they fail, fix in place, don't
 push-and-pray.**
@@ -13,6 +19,54 @@ wins and this doc is the bug — fix it.
 ---
 
 ## The contract (read this first)
+
+Automatic worktree adoption observes the actual repository, branch, worktree,
+fetched base branch, merge-base SHA and head SHA through the existing binder.
+Local Git observation has one ten-second elapsed budget. Missing ancestry is
+unavailable identity, never a substitute base equal to HEAD. The creation hook,
+CLI and reconciliation validate authoritative readback and recheck source
+identity after adoption before caching a binding. Conflicting, incomplete or
+changed identity leaves the recorded room for inspection and writes no success
+marker. Legacy direct adoption remains a compatibility path; a saved claim is
+not by itself proof that current source identity or review readiness is valid.
+
+Host policy commands use the existing observed-process runner with a 30-minute
+command budget, bounded diagnostic tails and graceful/forced tree termination.
+The parent preflight has a 60-minute outer budget. Full source guard loops have
+exceeded ten minutes on developer hosts, so that shorter budget is unsuitable.
+Cancellation and deadline
+expiry are unrun outcomes (exit 88), including a late zero child exit. Guard
+violations, environment limitations and interrupted execution remain distinct.
+Environment-limited host checks may continue to canonical CI, but are reported
+inconclusive and cannot produce reusable passing host receipts.
+
+Progress and results live in the existing per-worktree Git directory's
+`dpf-host-guard-receipts` slot. Interrupted exceptions settle inconclusive; an
+externally killed process retains its running receipt and PID for reconciliation.
+Only complete successful results with unchanged source, policy, dependency and
+environment identity are reused. Inspect the receipt before retrying an
+interrupted command. A queued sibling cannot hide admitted progress for the
+same branch and SHA; neither queued nor admitted is a verification pass.
+
+Host resource admission shares the existing lease-call allowance: 60 seconds
+by default, tunable through `DPF_GATE_MCP_TIMEOUT_MS`, while ordinary MCP probes
+retain their 10-second default. The transport bounds the complete response,
+including a stream that continues to send bytes. A timed-out host claim gets
+one bounded lease reconciliation and at most one same-key replacement inside
+a finite elapsed deadline; an empty listing does not prove no admission exists.
+Uncertain admission returns unrun88 with the same source-bound resume pin.
+Authoritative refusal, foreign identity and active authority owned by another
+process stop recovery. A wrapped executable that cannot spawn is also unrun88;
+an executed child's nonzero exit remains a code result. Windows package-manager
+shims use the existing command resolver, which launches the installed
+pnpm/Corepack JavaScript entrypoint through Node with literal argv. Native
+pnpm executables run directly; an unsupported shim fails without a shell
+fallback. The observed process runner disables shell parsing on Windows too.
+Local-CI pinning generates a JavaScript forwarding entrypoint so selecting the
+repository version preserves argument boundaries throughout the launch chain.
+Cleanup refusal or uncertainty is reported separately with the original
+lease/session recovery action; it cannot be presented as a verified release
+or change an executed child's nonzero result to success.
 
 Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
 
@@ -66,6 +120,12 @@ naming the substrate it ran on (AGENTS.md §15).
 ---
 
 ## Which gate runs where
+
+`pnpm pr:readiness` selects policy guards using the same changed-file
+classification as CI and host pregate. For documentation-only changes, it
+omits only guards explicitly declared code-only. Documentation guards and
+guards without input declarations still run. Mixed and unknown changes retain
+all guards; scope selection never substitutes for required publication proof.
 
 This is the single biggest source of drift, so it gets the decision table. A
 worktree is **source-control isolation, not a second DPF install**
@@ -230,6 +290,8 @@ Wired up in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) as the
 CI fails the PR check if any test fails. Branch protection requires the check to
 pass before merge.
 
+Agent toolchain bootstrap checks also feed the required `Merge Readiness` aggregate through the reusable `agent-toolchain-bootstrap-smoke.yml` workflow. Applicable PRs run both POSIX adapter smoke and stock macOS Python checks; merge-group runs exercise them exhaustively. A failed or cancelled bootstrap job blocks the aggregate. The existing change classifier can intentionally skip this job for docs-only PRs. Manual dispatch remains available for diagnostics.
+
 ## Run locally before pushing
 
 In a `compile-ready` worktree, run the source-local slice that covers what you
@@ -345,6 +407,14 @@ digest, candidate tree, commands, output, and result through
 state used by `pregate:status`. Its evidence carries no lease id because it
 never enters the scarce sandbox. A failed documentation check is a failed gate;
 it does not retry by consuming the heavyweight lane.
+
+`pregate.mjs` hands every diff to this gate, docs-only included (BI-78176241).
+It used to exit 0 on a docs-only diff before the gate started, so the lane
+never ran, no record was written, and the publish guard refused every
+docs-only push. "Docs-only" has one definition, `classifyDocsOnlyDiff` in
+`scripts/lib/ci-evidence-plan.mjs`. The planner, this lane, the pre-push
+exemption and sandbox admission all call it. If the lane declines a docs-only
+diff, the gate runs the full sandbox path. It does not exit 0 without a record.
 
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
@@ -552,6 +622,18 @@ push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
 
+The separate `hostPreflight` observation identifies the retained host-guard
+attempt, its accountable process owner, last progress, missing proof and next
+action. It never changes the integration verdict or authorizes another run.
+For an abandoned controller with matching strong receipt/lock ownership, use
+`pnpm run pregate:status -- --reconcile-host-receipt` (add `--json` for structured
+output). This records an inconclusive disposition and preserves the original
+heartbeat and observations. It does not invent a child result or remove the
+original execution lock. Resolve child outcome and descendant ownership through
+the accountable executor before seeking new admission. Live, legacy, reused-PID,
+unreadable or changed ownership stays unknown and untouched; a foreign mutation
+lock is also retained. Normal status reads never reconcile automatically.
+
 **Queued and broken read differently (BI-277ECBDB).** A queued claim reads
 `queued behind N other claims`: it is waiting on other work, and its waiter runs
 it. Before claiming, the gate probes every slot's PostgreSQL container
@@ -579,7 +661,12 @@ anchor *for that run* — it is what the closing summary block ends with. It is
 just not the thing to build automation on.
 
 **How to invoke it.** Run `pregate` in the **foreground**, unpiped, as the sole
-command. On timeout the harness migrates a foreground run to the background and
+command. A captured run whose stdout is not a terminal stops immediately with
+exit 11 and does not take a pool slot, unless `DPF_PREGATE_ALLOW_CAPTURE=1`,
+`CI=true`, or `GITHUB_ACTIONS=true` is set, or the arguments are `--help` or
+`--dry-run` (BI-4BCD269B). `pnpm gate:wait` sets that allowance and, on Windows,
+launches `pnpm.cmd` so the spawn is not recorded as a failed gate (BI-2FFDBE62).
+On timeout the harness migrates a foreground run to the background and
 it **continues** — that is the working path, and it is the opposite of the
 intuitive choice. Do not background it (`&` or `run_in_background`: the harness
 caps and kills it mid-install), do not chain another command after it with `;`
@@ -780,8 +867,10 @@ when its session closed (BI-27A37D27). The resumer is now started through WMI,
 outside that job. If WMI is unavailable, the queued payload says
 `resumerSurvivesSession: false` and the wait ends with the session. For a queued
 claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
-instead of "queued". That is not a verdict on the diff: re-run `pregate`. A
-branch cut before this fix keeps the old resumer until it is rebased.
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. While
+a live waiter already holds the same branch and SHA, another pregate does not
+spawn a second resumer; it exits 75 and names `detached-resumer` (BI-F63D8202).
+A branch cut before this fix keeps the old resumer until it is rebased.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
@@ -817,6 +906,18 @@ preflight in the scratch integration worktree. The preflight writes there and
 the wrapper reads that exact path. This prevents the two linked worktrees'
 different gitdirs from turning a green preflight into `freshness: unknown`, and
 prevents a stale prior report from classifying a new run.
+
+The integration plan's first step merges the candidate onto the accepted base.
+If that merge stops on conflicts, the runner reads the unmerged paths from git's
+index, aborts the merge, writes them to `execution.mergeConflict` in the run
+metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
+the existing `conflict` status. A run that stopped at its merge graded nothing,
+so the wrapper owes no completion checkpoint and does not rewrite the result as
+infrastructure. `pregate:status` reports FAIL and names the remedy: merge
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2). The
+same exit 10 is written before admission when `git merge-tree` reports a
+conflict, including a resumed gate, instead of labelling that resume
+`gate-identity-unavailable` (BI-45553400, BI-1F11D17A).
 
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
@@ -865,6 +966,12 @@ does not reserve capacity or authorize a later claim. That late check records
 `blocked_quiescence` for an ordinary run and parks with the same exit 75, while
 preserving existing evidence on `--finalize-evidence`. Neither check polls:
 resume after the server-owned quiescence coordinator completes.
+An already-running durable resumer retains its original reservation pin when
+its child returns the canonical `local_ci_quiescence_wait` packet. It waits
+within its original deadline, then retries that same pin. Only a validated
+`local_ci_durable_wait` handoff can replace the pin. Missing, malformed,
+foreign or mixed quiescence/handoff observations stop unrun; exit 75 alone
+does not authorize a replacement reservation.
 If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
@@ -1073,6 +1180,27 @@ It does **not** run vitest/jest — that's CI's job. The hook path is auto-wired
 `postinstall` (`scripts/set-hooks-path.mjs` sets `core.hooksPath`). Emergency
 bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and
 `DPF_SKIP_TYPECHECK=1`. CI still gates the PR regardless of local bypass.
+
+Every package `typecheck` script goes through `scripts/run-tsc.mjs`, which
+checks with TypeScript 7, the native compiler (BI-2B8D67A9). The web production
+program takes seconds instead of minutes. TypeScript 6 remains the workspace's
+`typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
+verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
+the same on every pull request.
+
+Updating TypeScript 7 is one PR that bumps the root `typescript7` alias
+(`pnpm add -w -D typescript7@npm:typescript@<version>`). Every surface follows
+the lockfile from there:
+- worktrees reinstall;
+- the local-CI sandbox's freshness step refuses to grade until its installed
+  `typescript7` matches the lock;
+- GitHub CI installs fresh;
+- Build Studio type-checks through `run-tsc.mjs` (BI-D2FE6931).
+
+Dependabot is not relied on to notice new releases of an `npm:`-aliased
+dependency. The weekly "TypeScript Checker Currency" workflow
+(`scripts/audit-typescript-checker-currency.mjs`) compares the pin with npm's
+latest release and keeps one tracking issue open while the pin is behind.
 
 The local feedback loop is therefore:
 

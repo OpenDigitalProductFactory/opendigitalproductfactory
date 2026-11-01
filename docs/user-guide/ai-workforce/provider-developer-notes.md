@@ -83,11 +83,90 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 
 ### Docker Model Runner / Ollama
 
+The existing `run_endpoint_tests` MCP operation also supports `fidelityOnly: true`
+with explicit `endpointId`, `modelId`, `providerConnectionId` and
+`fidelityObservationIndex`. Ask the coworker
+to run this mode for one configured local account/model; it cannot be combined
+with ordinary probes, scenarios, concurrency tests or exhaustive scopes.
+Start at index `0`. Each request performs at most one observation and returns a
+server-issued `runId` with `checkpoint.nextIndex` and `checkpoint.state`. Continue
+by supplying that `fidelityRunId` and the next index explicitly. Nine golden
+prompts at each surface (8/15/24/32/48) require 45 distinct continuations; a
+request does not promise to run that matrix automatically. Selection and actual
+governed-read results remain separate in the existing test-run history.
+It changes no model ratings, confidence or production tool limits.
+
+Replaying a completed index returns its stored observation without running the
+next case. The database checkpoint survives a disconnected caller or portal
+restart; a currently authorized executor must request continuation. A started
+case whose execution is unknown becomes `held` and is never stolen or retried.
+Stop on `held`, `busy` or unknown execution; retain its history for diagnosis.
+Legacy matrix runs remain immutable and cannot be resumed with this protocol.
+
+Each step uses the existing origin's finite admission budget and the selected
+model's canonical execution policy, bounded by any real inherited deadline or
+cancellation. Acquiring capacity starts the execution window; it does not prove
+that provider bytes were dispatched. Timing reports waiting, after-acquisition
+or unknown phase separately. A canceled or expired observation stays incomplete,
+and a late worker cannot overwrite its checkpoint or qualify a cohort. Current
+human, token, agent, room, catalog and runtime authority is checked again before
+inference dispatch and before recording a successful governed read. The drain
+registry conservatively covers one patient step; it grants no extra authority.
+
+This mode needs positive served-source and observed model/runtime identity.
+Its initial identity reader reuses the existing audited DMR parser/template
+proof; unsupported engines or model templates remain unrun rather than inheriting
+another model's results. A changed identity, missing permissions, invalid tool
+arguments or incomplete response cannot qualify a cohort. Three observations
+per task class do not meet the five-observation class-specific minimum.
+The result's `runtimeAcceptance` remains unverified until independently accepted.
+An expired turn cannot start a read or qualify from late audit verification.
+Ordinary OAuth clients can use this mode without a conversation thread.
+
 - Auth method: `none`
 - Auto-activates when reachable
 - `getTestUrl()` returns `/v1/models` when baseUrl contains `/v1` (Docker Model Runner), falls back to `/api/tags` for legacy Ollama
 - Full sensitivity clearance granted automatically (data stays local)
 - Model discovery + profiling runs at seed time AND on providers page visit
+
+#### Runner configuration the platform keeps in place
+
+Docker Model Runner stores runtime settings per model and mode through
+`/engines/_configure`. It forgets them on restart, and each configure call
+replaces the model's whole stored config. The local-model reconcile
+(`apps/web/lib/inference/local-model-context-reconcile.ts`) runs on boot and
+every 20 minutes, and keeps four things in place:
+
+- **Context window:** the served `context-size` for the generation model.
+- **Residency:** `keep_alive: "-1"` for the generation model (BI-34F71E9D).
+  Docker Model Runner ignores the `keep_alive` field in an OpenAI chat request
+  body; only the stored setting counts. Without it, the model unloads after five
+  idle minutes. Each reload re-reads the whole GGUF from disk and discards every
+  slot's prompt cache. A resident runner is still unloaded under memory pressure.
+- **Embedder placement:** the installed embedder runs CPU-only
+  (`runtime-flags: ["--device", "none"]`) and stays loaded (BI-B60AFE7B). On the
+  GPU beside a generation model that fills the card, each embedder load
+  overcommitted VRAM. Windows then spilled to shared memory, and generation
+  decode on a 24 GB RTX 4090 fell to about 0.02 tok/s for minutes. The embedder's
+  completion mode is also pinned CPU-only and set to unload at once, because
+  every configure call preloads the model through `/v1/chat/completions`.
+- **N-gram speculation:** on the qualified engine (llama.cpp b9879), the
+  generation model gets `runtime-flags: ["--spec-type", "ngram-mod"]`
+  (BI-0D208EBB). llama.cpp drafts tokens from n-grams already in the context and
+  verifies each one with the served model, so it needs no draft model and no
+  VRAM. Output that repeats context, such as a file rewrite, decodes about ten
+  times faster; new text decodes at the same speed. Greedy output is not
+  bit-stable once drafts are accepted. To turn it off, set the PlatformConfig
+  key `local.speculativeDecoding` to `"off"`; the next reconcile removes the
+  flags.
+
+Every context or residency write carries any other stored key (for example
+`runtime-flags` or `speculative`) back with it, so the reconcile never removes
+an operator's or a qualification run's setting. The reconcile only adds or
+removes the exact speculation pair; it never rewrites other runtime flags.
+Local thinking-budget evidence accepts `context-size`, `keep_alive` and that
+exact speculation pair, because none of them can change the chat template or
+parser. Any other stored key leaves that evidence unknown.
 
 ## Adding a New OAuth Provider
 
@@ -106,4 +185,4 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 - **Different token exchange formats** — Anthropic needs JSON + state, OpenAI needs form-encoded without state. Always check when adding a new provider.
 - **Session cookies don't cross ports** — callback routes on different ports (e.g., 1455 for Codex) can't use `auth()` for session verification. Use the `OAuthPendingFlow.state` for CSRF protection instead.
 - **Docker redirects use 0.0.0.0** — inside Docker, `request.url` resolves to `http://0.0.0.0:3000`. Callback routes must use `appBase()` helper for redirect URLs.
-- **Build cache** — after changing `provider-oauth.ts`, always verify the new code is deployed with a clean build (`docker compose build --no-cache portal`). Stale builds are a common source of confusion.
+- **Deployed source identity** — after changing `provider-oauth.ts`, use the qualified canonical release and governed self-upgrade path. Confirm the served source contains the change.

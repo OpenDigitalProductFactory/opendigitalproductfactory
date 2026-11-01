@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   buildCoworkerApprovalBinding,
   type CoworkerAuthorityInput,
@@ -21,6 +21,45 @@ export function registerWorkroomAliasCases(evidence: {
   setInvitationPreflightResult(result: RoomParticipantInvitationPreflight): void;
   invitationPreflightCalls(): unknown[][];
 }): void {
+  it.each([true, false])("expired=%s exact exceptions reject impossible parameters or retain human approval after admission", async expired => {
+    const authority = vi.fn(async () => evidence.authorityInput({ authContext: {
+      ...evidence.authorityInput().authContext,
+      grantedCapabilities: [...evidence.authorityInput().authContext.grantedCapabilities, "manage_platform"],
+    }, action: {
+      ...evidence.authorityInput().action, toolName: "record_semantic_review_exemption", sideEffect: true,
+      approvalPolicy: "all", consequence: "authority", requiredCapability: "manage_platform",
+    } }));
+    // This generic harness has no evidence store. The real eligible-reader to
+    // governor bridge is covered by semantic-review-policy-exemption.test.ts.
+    evidence.applyOverrides({ toolPreflight: expired ? null : async () => null, resolveCoworkerAuthorityInput: authority });
+    const result = await governedExecuteTool({ toolName: "record_semantic_review_exemption", userId: "user-1",
+      userContext: evidence.normalUser, source: "external-jsonrpc", context: { agentId: "AGT-100" },
+      rawParams: { capsuleId: "WC-FIXTURE", sourceHeadSha: "a".repeat(40), baseTreeHash: "b".repeat(40),
+        headTreeHash: "c".repeat(40), diffDigest: "d".repeat(64), reason: "A bounded exact fixture exception request.",
+        expiresAt: new Date(Date.now() + (expired ? -1000 : 600_000)).toISOString(),
+        verificationEvidenceId: "CI-FIXTURE", clientAssessmentActivityId: "REVIEW-FIXTURE", reviewBasis: "operator-accepted-client-assessment" } });
+    expect(result).toMatchObject({ success: false, error: expired ? "review_exemption_refused" : "approval_required" });
+    expect(evidence.executeMock()).not.toHaveBeenCalled();
+    if (expired) {
+      expect(authority).not.toHaveBeenCalled(); expect(evidence.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+      expect(result.governance).toMatchObject({ rejected: "precondition_denied" });
+    } else { expect(authority).toHaveBeenCalledOnce(); expect(evidence.approvalEnvelopeCreate()).toHaveBeenCalledOnce(); }
+  });
+  it("does not ask a person or evaluate authority for an impossible evidence receipt", async () => {
+    const authority = vi.fn(async () => evidence.authorityInput());
+    evidence.applyOverrides({
+      resolveCoworkerAuthorityInput: authority,
+      toolPreflight: async () => ({ success: false, error: "ARTIFACT_AUTHOR_REQUIRED", message: "Repair artifact provenance first." }),
+    });
+    const result = await governedExecuteTool({ toolName: "record_initiative_evidence",
+      rawParams: { itemId: "BI-1", gate: "research" }, userId: "user-1", userContext: evidence.normalUser,
+      context: { agentId: "AGT-100" }, source: "external-jsonrpc" });
+    expect(result).toMatchObject({ success: false, error: "ARTIFACT_AUTHOR_REQUIRED",
+      governance: { rejected: "precondition_denied" } });
+    expect(authority).not.toHaveBeenCalled();
+    expect(evidence.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(evidence.executeMock()).not.toHaveBeenCalled();
+  });
   it("returns an impossible room invite before creating an authority approval", async () => {
     evidence.applyOverrides({
       resolveCoworkerAuthorityInput: async () => evidence.authorityInput({
@@ -199,7 +238,12 @@ export function registerWorkroomAliasCases(evidence: {
       }),
     });
 
-    const result = await governedExecuteTool({
+    // This is a legacy task with no transferred execution authority.
+    const taskLookup = vi.spyOn((await import("@dpf/db")).prisma.taskRun, "findUnique")
+      .mockResolvedValue({ progressPayload: {} } as never);
+    let result;
+    try {
+      result = await governedExecuteTool({
       toolName: "create_backlog_item",
       rawParams: { title: "approved title" },
       userId: "user-1",
@@ -212,6 +256,7 @@ export function registerWorkroomAliasCases(evidence: {
       source: "external-jsonrpc",
     });
 
+    } finally { taskLookup.mockRestore(); }
     expect(result).toMatchObject({ success: false, error: "workroom_access_denied" });
     expect(evidence.oauthRefusalCalls()).toHaveLength(2);
     expect(evidence.executeMock()).not.toHaveBeenCalled();

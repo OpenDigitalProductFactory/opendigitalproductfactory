@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { worktreeContextFromGit } from "../pregate-status.mjs";
+import { projectGateStatus, worktreeContextFromGit } from "../pregate-status.mjs";
 import { readLocalCiGateState, writeLocalCiGateState } from "./local-ci-gate-state.mjs";
 
 import {
@@ -381,6 +381,18 @@ test("reconcile of nothing is NO-RECORD, never a pass", () => {
   assert.equal(reconcileSlots([]).verdict, "NO-RECORD");
 });
 
+test("same-source admitted progress wins over a queued sibling without inventing PASS", () => {
+  const queued = {slotKey:"slot-0",verdict:"INCONCLUSIVE",gateStatus:"queued",boundSha:HEAD,boundBranch:"fix/topic",recordedAt:"2026-10-13T00:00:00Z"};
+  const admitted = {...queued,slotKey:"slot-1",gateStatus:"admitted",recordedAt:"2026-10-13T01:00:00Z"};
+  for (const slots of [[queued, admitted], [admitted, queued]]) {
+    const result = reconcileSlots(slots);
+    assert.equal(result.slot,"slot-1");
+    assert.equal(result.verdict,"INCONCLUSIVE");
+    assert.equal(result.gateStatus,"admitted");
+  }
+  assert.equal(reconcileSlots([queued,{...admitted,boundSha:OLD}]).slot,"slot-0", "foreign source progress cannot replace this claim");
+});
+
 test("the report is short enough that nobody pipes it, and names the next step", () => {
   const lines = formatStatusReport(
     { verdict: "STALE", reason: "head moved", boundSha: OLD, boundBranch: "claude/topic", recordedAt: "2026-08-04T11:00:00.000Z", slot: "slot-0", logFile: "D:/x.log" },
@@ -422,7 +434,26 @@ test("failing record says outright that no reason was recorded", () => {
   assert.match(out.reason, /NO recorded reason/);
 });
 
-test("a started-then-released run with no failing command is a retry, not a verdict", () => {
+// BI-C1121FFB: the gate stores the failing test on failureSummary, and status
+// used to ignore it and print "NO recorded reason".
+test("failing record quotes the failure summary when no failureReason was stored", () => {
+  const out = classifySlotRecord({
+    state: failingRecord({
+      failureSummary: {
+        schema: "dpf-local-ci-failure-summary/v1",
+        failedTests: [{ line: 12, text: "FAIL apps/web/lib/foo.test.ts > the widget" }],
+        failedChecks: [],
+      },
+    }),
+    metadata: null,
+    ...atHead,
+  });
+  assert.equal(out.verdict, "FAIL");
+  assert.match(out.reason, /FAIL apps\/web\/lib\/foo.test.ts > the widget/);
+  assert.doesNotMatch(out.reason, /NO recorded reason/);
+});
+
+test("a started-then-released run requires reconciliation and has no product verdict", () => {
   // The observed shape: the run held the slot, ended early, recorded nothing.
   // local-integration-ci runs at effectiveCapacity 1 and several sessions on
   // this host gate at once.
@@ -437,7 +468,7 @@ test("a started-then-released run with no failing command is a retry, not a verd
     }),
     metadata: null, ...atHead,
   });
-  assert.match(out.reason, /contended slot is a retry/);
+  assert.match(out.reason, /stop this attempt and reconcile/);
   assert.match(out.reason, /not a verdict on your diff/);
 });
 
@@ -715,7 +746,7 @@ test("a superseded record whose winner no longer holds a pass does not claim one
   assert.doesNotMatch(result.reason, /passed/);
   assert.match(result.reason, /slot-1/);
   assert.match(result.reason, /blocked_control_plane_starvation/);
-  assert.match(result.reason, /re-run pregate/i);
+  assert.match(result.reason, /reconcile/i);
 });
 
 test("a superseded record whose winner record is gone says so instead of claiming a pass", () => {
@@ -903,7 +934,7 @@ test("a queued claim with no live waiter says so instead of 'queued'", () => {
   assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /no waiter is alive/i);
   assert.match(r.reason, /53956/);
-  assert.match(r.reason, /re-run pregate/i);
+  assert.match(r.reason, /resume|reconcile/i);
 });
 
 test("a queued claim with a live waiter keeps the queued wording", () => {
@@ -969,4 +1000,75 @@ test("an unavailable slot substrate is BLOCKED, names the container, and does no
   const lines = formatStatusReport(r, { headBranch: "topic", headSha: HEAD, now: NOW });
   assert.ok(!lines.some((l) => l.includes("pnpm run pregate")), "a substrate block must not advise a re-run");
   assert.ok(lines.some((l) => /next\s+.*dpf-local-ci-postgres-1/.test(l)), "it names the remedy instead");
+});
+
+test("raw gate state remains visible while metadata belongs to an older run", () => {
+  const result = classifySlotRecord({ state: { sha: HEAD, branch: "codex/topic", status: "admitted" },
+    metadata: { candidateSha: OLD }, headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  assert.equal(result.verdict, "STALE");
+  assert.equal(result.gateStatus, "admitted");
+});
+
+test("status JSON carries the active claim through stale metadata and names durable observation", () => {
+  const result = classifySlotRecord({ state: { sha: HEAD, branch: "codex/topic", status: "admitted" },
+    metadata: { candidateSha: OLD }, headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  const report = projectGateStatus(result, { headSha: HEAD, headBranch: "codex/topic", worktreePath: "/source" });
+  assert.equal(JSON.parse(JSON.stringify(report, null, 2)).gateStatus, "admitted");
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  assert.ok(lines.some(line => line.includes("durable")));
+  assert.ok(!lines.some(line => line.includes("pnpm run pregate ")));
+});
+
+test('unfinished current claims consistently recommend durable observation or reconciliation', () => {
+  for (const status of ['queued', 'admitted', 'running']) {
+    for (const extra of [{}, { queuedWaiter: { checked: true, alive: false, pids: [1] } }, { stateExtra: { leaseEvents: [{ type: 'queued', poolClosedReason: 'host-memory-low' }] } }]) {
+      const result = classifySlotRecord({ state: passingState({ status, gatePassed: false, ...extra.stateExtra }), headSha: HEAD, headBranch: 'claude/topic', now: NOW, queuedWaiter: extra.queuedWaiter });
+      assert.doesNotMatch(result.reason, /re-run pregate|rerun pregate/i);
+      assert.match(result.reason, /observe|resume|reconcile|waiter runs/i);
+    }
+  }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main is the author's
+// to fix, and the fix is not a re-run: name the paths and the merge to do.
+test("a merge conflict with the base is a FAIL that names the paths and the merge remedy", () => {
+  const mergeConflict = { mergedRef: HEAD, baseRef: "origin/main", paths: ["agent_registry.json", "apps/web/lib/tak/coworker-grants.ts"] };
+  const state = passingState({
+    status: "conflict",
+    gatePassed: false,
+    evidenceRecordId: "",
+    mergeConflict,
+    failureReason: "local-CI gate stopped before grading: the candidate does not merge cleanly onto origin/main.",
+  });
+  const result = classifySlotRecord({ state, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+
+  assert.equal(result.verdict, "FAIL");
+  assert.doesNotMatch(result.reason, /infrastructure|starvation/i);
+  assert.match(result.reason, /merge conflict with origin\/main/);
+  assert.match(result.reason, /agent_registry\.json, apps\/web\/lib\/tak\/coworker-grants\.ts/);
+
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.ok(
+    lines.includes("  next        merge origin/main into your branch and resolve: agent_registry.json, apps/web/lib/tak/coworker-grants.ts"),
+    lines.join("\n"),
+  );
+  assert.ok(!lines.some((line) => line.includes("pnpm run pregate ")), "re-running the gate cannot fix a conflict");
+});
+
+test("a merge-conflict record falls back to this run's metadata for the paths", () => {
+  const state = passingState({ status: "conflict", gatePassed: false, evidenceRecordId: "", leaseId: "NPEL-1" });
+  const metadata = { candidateSha: HEAD, runLeaseId: "NPEL-1", execution: { mergeConflict: { paths: ["f.txt"] } } };
+  const result = classifySlotRecord({ state, metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.equal(result.verdict, "FAIL");
+  assert.equal(result.remedy, "merge origin/main into your branch and resolve: f.txt");
+});
+
+test('terminal or uncertain current claims never recommend unqualified replacement', () => {
+  for (const status of ['failed', 'blocked_source_drift', 'blocked_control_plane_starvation', 'cancelled', 'released']) {
+    for (const metadata of [null, { candidateSha: OLD, execution: { status: 'passed' } }]) {
+      const result = classifySlotRecord({ state: passingState({ status, gatePassed: false, evidencePending: true }), metadata, headSha: HEAD, headBranch: 'claude/topic', now: NOW });
+      assert.doesNotMatch(result.reason, /re-run|rerun/i);
+      assert.match(result.reason, /stop.*reconcile/i);
+    }
+  }
 });

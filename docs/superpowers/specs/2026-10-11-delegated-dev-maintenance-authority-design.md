@@ -44,7 +44,7 @@ contract. It does not depend on repairing the embedding provider.
 | --- | --- | --- |
 | Account discover with explicit identity and no credential/configuration input | ordinary | Uses current credentials to synchronize catalog and account availability; profiling derives metadata without inference calls. No grant or clearance changes. |
 | Account add/configure/enable/disable/sign-in/disconnect | authority | Changes account identity, credentials, activation or authorization. |
-| Account test | authority retained | Current implementation can activate an account and send an inference probe. Narrowing it needs a separate effect contract. |
+| Account test | authority retained pending the bounded active-account verification delivery below | Current implementation can activate an account and send an inference probe. BI-CFFB7ED7 separates those effects; its source delivery and served evidence must precede ordinary classification. |
 | Unknown or incomplete account operation | authority retained | Fail closed. |
 | Strictly parsed local Compose ps/logs and Git status/rev-parse diagnostics | ordinary | Single read operation on the current install; no alternate project/config, shell syntax or executable override. |
 | Other commands | irreversible retained | Arbitrary scripts, mutation, unknown flags and shell composition remain on the existing controlled path. Existing destructive-command blocks remain. |
@@ -92,3 +92,112 @@ fix plan. The documentation alone does not deliver the fix.
 No schema migration is required. Rollback reverts the refiners and parser; prior
 consents remain valid, and static consequences restore the previous approval
 behavior. Source tests alone do not prove the served install is fixed.
+## Active DEV subscription verification — BI-CFFB7ED7
+
+This section supersedes the earlier blanket account-test authority classification for the bounded case below. The live active default ChatGPT test raised approval cmv7e9ejz02yv01qszshw5ehx and, after approval, failed with upstream token_expired. Existing tests on83bc3de confirm test retains authority despite existing OAuth delegation. Research receipt initiative-e02a9da4-bb25-4e49-bae5-64aab18fa776 records the reproduction and60passing policy/delegation tests.
+
+Reuse the current consequence refiner and connection delegation. No new store, grant, trust tier, approval switch or environment assertion. Blanket DEV exemption ignores actual effects; changing the approval wording does not remove the work. A bounded verification path separates checking an active account from enabling it.
+
+### Effect boundary
+
+Only identity-only tests of persisted install-owned canonical default ChatGPT/Codex OAuth connections, already active with an owned credential, refine to ordinary on persisted development/evolve-dpf. Existing capability, token/grant, connection-delegation, restricted-data and consequential-case checks remain.
+
+Execution always applies verification-only behavior for those canonical default subscription identities, including production. It rechecks persisted account ownership, OAuth method and active status. It never invokes activation, writes account status, changes clearance or refreshes the catalog. An inactive account needs the existing explicit enable workflow. Unknown/missing identities, configuration inputs and other accounts keep the authority floor.
+
+Capture the connection and its owned credential together at execution entry. Pin both updatedAt revisions and the encrypted cached/refresh-token values. Token reads and refresh use this captured identity. Recheck the joined snapshot immediately before every probe, including after model resolution and after renewal, and before returning success. Renewal may update only the captured credential using one atomic compare-and-set conditioned on its credential revision, refresh token and matching active install-owned connection revision. Both refresh success and expiry writes use that guard. Advance the in-memory credential revision only to the exact values this call itself successfully wrote; another writer still invalidates the next probe. A failed compare-and-set returns a changed-account error; it cannot overwrite a replacement credential or update another account. The existing OAuth token renewal remains the only grant exchange. Refresh cannot activate an account.
+
+The small shared account-identity/verification helper and existing guarded renewal are the refactoring allocation. Keep classification and execution on that predicate; do not duplicate a DEV exemption in the escalation engine.
+
+### Acceptance and ordered delivery
+
+- AC-1: The exact already-active default ChatGPT/Codex DEV verification proceeds under existing delegation with no fresh human approval envelope; expiry failure is reported as a connection failure, not an approval question.
+- AC-2: The execution path cannot turn inactive/disabled/disconnected accounts active or modify another account after classification, even under concurrent replacement/status change.
+- AC-3: Production/unknown context, insufficient grants/scopes, restricted data, consequential cases, new credentials and peer ownership retain existing boundaries.
+- AC-4: Regression tests exercise classification plus executed effects and concurrency; source/typecheck, governed delivery and served DEV evidence are recorded honestly.
+
+One atomic deliverable `active-account-verification`, mapped to BI-CFFB7ED7. References: requirement `AC-1`, contract `active-only-account-boundary`, flow `delegated-dev-verification`, verification `active-account-concurrency-regressions`.
+
+1. Add classification and execution failures first: active default DEV ordinary, inactive/disabled/nonlocal/production unknown consequential; valid delegation automated, absent/restricted/consequential still human; successful probe never activates; replacement rejects; refresh compare-and-set refuses stale account/token.
+2. Extend the existing refiner, shared predicate, verification-only internal path and guarded OAuth renewal. Preserve legacy behavior for other callers. Add no caller-controlled authority flag.
+3. Update this canonical operation contract, tool description and human provider guide. Keep adjacent provider form ownership with BI-7AA4EB6B.
+4. Run affected tests, production/test typechecks, deterministic guards, exact-head pregate, independent semantic assessment and protected PR/merge queue.
+5. Advance only via canonical request_self_upgrade. Verify the exact DEV manage_provider_account test after feature-sha preflight; record no new approval envelope and actual upstream result. Source pass is not served proof.
+
+Rollback restores the previous authority floor and ordinary test behavior; credentials and delegation are not reset. No schema migration, install asset edits, human impersonation or paired-production writes.
+
+## Guarded subscription renewal composition — BI-CFFB7ED7 completion integration
+
+PR #6354 delivers active-account verification and ordinary DEV classification. Its merge is source evidence; the containing release and live verification remain required. The existing catalogue plan at `7eda246b0fc4b42e1bf60cd54a606e921955ac84` decomposes the shared service dependency to BI-CFFB7ED7 and retains caller/transport work in BI-59E37E39. This section extends the existing atomic `active-account-verification` deliverable rather than claiming the catalogue or UI deliverables.
+
+`scoped-renewal-composition` preserves the public internal signature `refreshOAuthToken(providerId, connectionId, activeSnapshot?, scopedGuard?)`. The existing third argument stays in place; catalogue and routing supply `undefined` third and their raw captured scoped guard fourth. Neither metadata object is accepted from a browser or public MCP input. Reuse the existing OAuth exchange and account model; add no grant, credential store or persistent substrate.
+
+`default-lineage-fence` allows both existing canonical default credentials to participate only after proving persisted install-owned null organization ownership, exact credential owners, non-disabled OAuth state, matching selected upstream identity and equal privately decrypted refresh lineage. IDs alone do not authorize another row. Additional accounts and unproven defaults remain selected-only. Token claims validate an already selected identity and never grant clearance. Retain the existing platform decision DI-5534D2F44975 and the approved account-design compatibility boundary.
+
+`selected-refresh-dispatch` privately clones caller dates, owner fields and full encrypted credential revision before the first await. Check the selected joined owner and full credential revision immediately before HTTP for every guarded caller. The active-default predicate and caller cancellation must both hold when both guards apply. Validate response shape and selected upstream identity before writes, including unproven third-only defaults. Reuse/export the existing private token-identity parser for server callers rather than duplicating it.
+
+Acquire every captured participant's owner lock in stable connection-id order, verify its full captured ownership/state under the lock, then conditionally write all captured credential revisions in one transaction. Include cached-token and refresh-token ciphertext as well as updatedAt. A failed second CAS, disabled/reowned/peer participant or cancellation rolls back the whole write; do not downgrade a captured pair after HTTP. Advance the active caller's credential revision only after commit to exactly this call's committed values. Preserve original active-only expiry behavior under the same captured active owner/revision; expiry affects only the selected row and cannot overwrite replacement credentials. Account activation, data-use permissions, trust, catalog proofs and pins remain untouched.
+
+`paired-refresh-postgres-regressions` combines the existing guarded OAuth tests with a real Prisma/PostgreSQL fixture in a generated schema. It must prove paired success, second-write rollback, changed sibling refusal and owner locks against a concurrent update. Only an explicit SQL fixture or the governed local-CI slot database is eligible; no installed account rows are used. Skipped fixture execution is unrun, never atomicity evidence.
+
+Ordered delivery: normal same-owner scope claim and impact/test resolution; immutable plan coverage; RED against the published predecessor; integrate the prepared service and preserve expiry compatibility; affected tests and both TypeScript programs; exact-source pregate and independent native review; DCO PR and protected queue; one existing canonical publisher; containing feature preflight and normal DEV saved-account verification. Source-local unit evidence does not qualify deployment. The catalogue owner updates its fourth-position raw-credential caller separately; the joint shared-default happy path stays an acceptance dependency until both sources and the containing runtime are qualified.
+
+Preparation evidence only: the published predecessor fails 15 of 18 independent temporary tests; the repaired temporary copy passes all 18. The temporary PostgreSQL fixture, complete colocated suite, typechecks, native review and live integration are unrun. The scoped refactor consolidates captured owner/revision checks in the existing renewal service. Rollback reverts source, without resetting credentials or delegation. A rollback of the fourth-argument API must be coordinated with its dependent callers.
+
+The immutable completion-integration plan coverage receipt is `cmv7pzcm714wf01obxilb2fef`, bound to published plan commit `3a66a33080b1e80a5c5fa64da962a6c2a509d03f` and blob `dec54679ac8d7966921c1a94521c68abf7c19be9`. It retains all four acceptance criteria and the existing atomic delivery. After integration, the actual source predecessor reproduced 15 failures and three passes. A further captured-sibling dispatch regression reproduced one failure and 22 passes before correction. Both default participants are now rechecked immediately before HTTP, and captured credential comparisons reuse the existing matcher. PostgreSQL qualification and served acceptance remain required.
+
+An active verification must not reuse a token marked expired or whose decoded JWT expiry has passed merely because the stored expiry is future. Both cache regressions reproduced failures before correction. Reuse the same private claims reader for identity and lifetime hints; claims never confer authority, and opaque tokens retain the existing stored-expiry contract. Renewal still uses the captured owner and credential fences. This does not establish the cause of the observed metadata discrepancy.
+
+Consumer review found a further renewal classification defect in the first qualified source candidate: HTTP 429/500/503 and unknown OAuth 400 replies could mark the captured credential expired or request reauthentication. Four new cases reproduced failures before repair. Guarded renewal now treats quota/server availability and unknown request failures separately, without credential writes. HTTP 401/403 and a recognized OAuth 400 invalid_grant retain the existing grant-refusal path and captured expiry fence. The predecessor gate and native receipt remain historical; the corrected commit requires fresh exact-source qualification.
+
+
+## Authorization reuse in recovery instructions - BI-D50FAA80
+
+The diagnosis skill requires ratification before every mutation; the served
+stale-toolchain notice requires a fresh approval before every update. Both
+instructions can recreate a consent loop even when the operator has already
+authorized the named routine maintenance. Reuse that authority within its scope.
+This section repairs the instruction contract; it does not relax execution gates.
+
+### Design grounding and bounded change
+
+Existing substrates: `mcp/agent-host-instructions.ts`,
+`agent-toolchain/toolchain-verdict.ts`, the diagnosis skill and the contributor
+procedure runbook. Current action authorization remains with the reference
+monitor. No new grant, authority store, approval flag or client trust tier.
+
+1. Direct stale connections to the signed updater's dry-run first. A loaded
+   declaration describes a running connection; it does not prove installed
+   files need replacing. A current pack may still have stale connector settings,
+   credential wiring or project plugin pins. Request one client restart only if
+   the dry-run finds no relevant toolchain or configuration repair, and continue
+   independent authorized work.
+2. If files need updating, reuse current scoped operator authorization. Seek
+   approval only if that authority is missing or the proposed change exceeds
+   it. A dry-run does not authorize its own application. Preserve signed
+   manifest/archive verification and the exact expected installation identity.
+3. Make diagnosis step 8 report evidence and continue authorized repair. Link
+   the contributor runbook's authority rule rather than keep a second blanket
+   ratification requirement. Unknown cause still requires investigation.
+4. Preserve every host refusal, tool denial, missing capability, independent
+   review, production-integrity control, teardown capture and paired-peer limit.
+   Never route a refused update through another tool or execution path.
+
+### Acceptance
+
+- AC-I1: recovery guidance distinguishes loaded-session drift from installed drift.
+- AC-I2: the notice reuses existing scoped authorization and preserves absent
+  authority, expanded scope and host-refusal boundaries.
+- AC-I3: diagnosis reports evidence and continues already-authorized work
+  without ceremonial ratification.
+- AC-I4: portal locator, full installation identity, current/undeclared/floor
+  behavior and client reload advice remain intact.
+- AC-I5: source tests and instruction guards are reported separately from live
+  release verification; this item does not claim end-to-end DEV autonomy.
+
+No schema or runtime-policy migration. Existing clients receive the served notice
+with the canonical server release and the skill through the signed pack update.
+Rollback restores prior instructions; it grants or revokes no permission.
+
+Client allowlists/posture remain BI-F90A822E; runtime stage authority remains
+BI-6B610D94; routine monitoring consequences remain BI-C5E51A15. Those repairs
+need their own evidence and are not delivered by this instruction change.

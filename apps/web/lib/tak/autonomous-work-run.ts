@@ -1,3 +1,5 @@
+import { createPublicTaskRunId, initialStatusForTrigger, taskRunSourceForTrigger, type AutonomousWorkTrigger } from "./autonomous-work-task-identity";
+export type { AutonomousWorkTrigger } from "./autonomous-work-task-identity";
 import { randomUUID } from "crypto";
 import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-management/room-turn-authority";
 import { prisma } from "@dpf/db";
@@ -8,11 +10,16 @@ import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-rev
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
-import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import type { ResolvedDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
+import { narrowInitiativeReviewTools, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
+import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
+import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
+import type { RemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -23,15 +30,6 @@ function lastUserRequest(history: ChatMessage[]): string {
   return "";
 }
 
-export type AutonomousWorkTrigger =
-  | "interactive"
-  | "scheduled"
-  | "external-mcp"
-  | "build"
-  | "deliberation"
-  | "radar"
-  | "system-recovery"
-  | "capacity-continuity";
 
 export type AutonomousWorkRunRef = {
   id: string;
@@ -78,6 +76,11 @@ export type AutonomousWorkRunInput = {
    * payload; it exists for authority lanes that must serialize alternate keys.
    */
   admissionGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
+  /** Server-only atomic persistence, after creation and before the deferred
+   * input commits. Never accepted from serialized client or tool arguments. */
+  afterTaskCreated?: (tx: Prisma.TransactionClient, run: AutonomousWorkRunRef) => Promise<void>;
+  /** Server-derived MCP context only; never accepted from serialized tools. */
+  reviewCreationAuthority?: { taskAuthorityKey: string; tokenId: string; parsed: RemoteTaskSubmitParams };
   transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
   /**
    * Closed deferred callers may commit their first user message in the same
@@ -91,38 +94,13 @@ export type AutonomousWorkRunInput = {
   };
 };
 
-const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
-  interactive: "CHAT",
-  scheduled: "SCHED",
-  "external-mcp": "MCP",
-  build: "BUILD",
-  deliberation: "DELIB",
-  radar: "RADAR",
-  "system-recovery": "RECOV",
-  "capacity-continuity": "CAP",
-};
-
-function taskRunSourceForTrigger(trigger: AutonomousWorkTrigger): string {
-  if (trigger === "interactive") return "coworker";
-  if (trigger === "build") return "build";
-  if (trigger === "deliberation") return "skill";
-  return "proactive";
-}
-
-function initialStatusForTrigger(trigger: AutonomousWorkTrigger): string {
-  return trigger === "interactive" ? "submitted" : "working";
-}
-
-function createPublicTaskRunId(trigger: AutonomousWorkTrigger): string {
-  return `TR-${TRIGGER_PREFIX[trigger]}-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
 export async function createAutonomousWorkRun(
   input: AutonomousWorkRunInput,
 ): Promise<AutonomousWorkRunRef> {
   if (input.deferredSubmission && input.trigger !== "external-mcp") {
     throw new Error("Deferred submission is restricted to external MCP work.");
   }
+  if (input.reviewCreationAuthority && input.trigger !== "external-mcp") throw new Error("Review creation authority is restricted to external MCP work.");
   const threadId = input.threadId ?? null;
   const a2aMetadata = {
     trigger: input.trigger,
@@ -136,6 +114,11 @@ export async function createAutonomousWorkRun(
     const source = taskRunSourceForTrigger(input.trigger);
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
     await input.admissionGuard?.(tx);
+    if (input.metadata?.initiativeReviewBinding) {
+      const { lockInitiativeReviewCreationSubject } = await import("../mcp-task-review-reassessment");
+      await lockInitiativeReviewCreationSubject(tx, input.metadata.initiativeReviewBinding,
+        input.reviewCreationAuthority ? { ...input.reviewCreationAuthority, userId: input.userId } : undefined);
+    }
     const taskRun = await tx.taskRun.create({
       data: {
         taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
@@ -158,6 +141,7 @@ export async function createAutonomousWorkRun(
       },
       select: { id: true, taskRunId: true, contextId: true },
     });
+    await input.afterTaskCreated?.(tx, taskRun);
     if (input.deferredSubmission) {
       await tx.taskMessage.create({
         data: {
@@ -175,7 +159,7 @@ export async function createAutonomousWorkRun(
       });
     }
     return taskRun;
-  }, { isolationLevel: input.transactionIsolationLevel ?? "Serializable" });
+  }, { isolationLevel: input.transactionIsolationLevel ?? (input.metadata?.initiativeReviewBinding ? "ReadCommitted" : "Serializable") });
 }
 
 export async function findCurrentAutonomousWorkRun(input: {
@@ -248,6 +232,15 @@ export async function resolveAutonomousWorkTools(input: {
    *  schemas inside the attachment budget so the model never has to discover a
    *  known governed writer through the public marketplace. */
   requiredToolNames?: readonly string[];
+  /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
+  restrictedReviewBinding?: InitiativeReviewBinding;
+  /** Server-owned finite CE preparation; resolves only its registered readers without ambient runtime probes. */
+  restrictedEngagementBinding?: import("../coworker-service-catalog/engagement-task-binding").EngagementTaskBinding;
+  /** Current server-resolved scheduled commission; never copied from model arguments. */
+  scheduledReportingMode?: "read-only-history";
+  taskRunId?: string;
+  threadId?: string;
+  roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -259,13 +252,46 @@ export async function resolveAutonomousWorkTools(input: {
   const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import(
     "@/lib/coworker/authorized-surface-coworker-contract"
   );
-  const authorized = await getAvailableTools(input.userContext, {
+  const normallyAuthorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
+    ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
+
+  const { isScheduledReportingRead } = await import("@/lib/operate/scheduled-jobs/scheduled-reporting-contract");
+  const reportingUserId = input.userContext.userId;
+  if (input.taskRunId && !reportingUserId) throw new Error("Scheduled reporting requires its authenticated owner.");
+  const reporting = input.taskRunId && reportingUserId ? await (await import("@/lib/operate/scheduled-jobs/scheduled-reporting-authority"))
+    .resolveScheduledReportingContext(reportingUserId, { taskRunId: input.taskRunId, threadId: input.threadId, agentId: input.agentId }) : null;
+  if (input.taskRunId && input.scheduledReportingMode && reporting?.mode !== input.scheduledReportingMode) {
+    throw new Error("Scheduled reporting requires its current persisted commission.");
+  }
+  const authorized = (reporting?.mode ?? input.scheduledReportingMode) === "read-only-history"
+    ? normallyAuthorized.filter(isScheduledReportingRead) : normallyAuthorized;
+
+  if (input.restrictedEngagementBinding) {
+    const { parseEngagementTaskBinding, ENGAGEMENT_READ_TOOLS } = await import("../coworker-service-catalog/engagement-task-binding");
+    const binding = parseEngagementTaskBinding(input.restrictedEngagementBinding), names = new Set(input.requiredToolNames ?? []);
+    if (!binding?.presentAssessment || names.size !== ENGAGEMENT_READ_TOOLS.length
+      || ENGAGEMENT_READ_TOOLS.some(name => !names.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new Error("engagement-present-tool-surface-unavailable");
+    }
+    const tools = authorized.filter(tool => names.has(tool.name));
+    return { tools, toolsForProvider: toolsToOpenAIFormat(tools), deferredTools: [] };
+  }
+  if (input.restrictedReviewBinding) {
+    const binding = input.restrictedReviewBinding;
+    const names = [immutablePageReaderForArtifact(binding.artifactRef), binding.writerToolName];
+    const requested = new Set(input.requiredToolNames ?? []);
+    if (requested.size !== 2 || names.some(name => !requested.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new ReassessmentExecutionError("reassessment-tool-surface-unavailable", "The exact reader and writer must both be normally authorized; auxiliary tools cannot join this surface.");
+    }
+    return narrowInitiativeReviewTools({ tools: authorized, toolsForProvider: toolsToOpenAIFormat(authorized), deferredTools: [] },
+      names, binding, input.intentQuery);
+  }
 
   // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the
   // SAME budget the interactive path uses (coworker-tool-budget). A scheduled
@@ -363,6 +389,9 @@ export async function resolveAutonomousWorkTools(input: {
 }
 
 export async function executeAutonomousAgenticLoop(input: {
+  /** Server-owned commission narrowing; its report must not emit optional proposal writers. */
+  scheduledReportingMode?: "read-only-history";
+  canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
@@ -380,6 +409,7 @@ export async function executeAutonomousAgenticLoop(input: {
   agentId: string;
   threadId: string;
   taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   taskType?: string;
   /** EP-27FD96BC · P1 — unified per-turn effort warrant, forwarded to the loop. */
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
@@ -388,6 +418,8 @@ export async function executeAutonomousAgenticLoop(input: {
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
+  /** The turn's coworker mode, forwarded so delegation tools never widen it (BI-FAD98137). */
+  coworkerMode?: "advise" | "act";
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
@@ -435,6 +467,19 @@ export async function executeAutonomousAgenticLoop(input: {
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
   const { withInferenceOrigin } = await import("@/lib/inference/inference-admission");
+
+  const restricted = currentReassessmentExecution();
+  if (restricted) {
+    assertReassessmentToolCall({ toolName: immutablePageReaderForArtifact(restricted.binding.artifactRef), params: {},
+      userId: input.userId, agentId: input.agentId, taskRunId: input.taskRunId ?? undefined, executionFence: input.taskExecutionFence });
+    // The sealed review runs its exact loop. Auxiliary grounding, draft reviews
+    // and asynchronous learning writers are outside this captured composition.
+    const result = await withInferenceOrigin("autonomous", () => runAgenticLoop({ ...input, toolsForProvider: input.toolsForProvider,
+      deferredTools: [], allowToolFreeInference: false,
+      ...(input.roomTurn ? { workroomId: input.roomTurn.workroomId, roomAuthority: toRoomAuthorityContext(input.roomTurn),
+        externalAccessEnabled: input.roomTurn.externalAccess.enabled, workroomPriority: input.roomTurn.priority } : {}) }));
+    return { ...result, authoritativeSurfaceEvidence: false };
+  }
 
   // Capture before-run timestamp so the post-run reflection trigger only
   // considers PlatformIssueReport rows this run produced.
@@ -542,6 +587,7 @@ export async function executeAutonomousAgenticLoop(input: {
         agentId: input.agentId,
         threadId: input.threadId,
         taskRunId: input.taskRunId,
+        taskExecutionFence: input.taskExecutionFence,
         apiTokenId: input.apiTokenId,
         tokenScope: input.tokenScope,
         tokenGrantScopes: input.tokenGrantScopes,
@@ -551,6 +597,7 @@ export async function executeAutonomousAgenticLoop(input: {
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,
+        coworkerMode: input.coworkerMode,
         activeSkillId: input.activeSkillId ?? null,
         agentMessageId: input.agentMessageId ?? null,
         interactionMode: input.interactionMode,
@@ -581,6 +628,10 @@ export async function executeAutonomousAgenticLoop(input: {
     );
   }
 
+  // Report settlement owns the output/history. Optional draft revision and
+  // background learning writers are outside this observation-only commission.
+  if (input.scheduledReportingMode === "read-only-history") return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
+
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on
   // Quality/effort, run one deliberation pass over the draft before it's returned —
@@ -589,7 +640,7 @@ export async function executeAutonomousAgenticLoop(input: {
   // proposals and for Balanced/low postures. (The full multi-agent deliberation
   // engine — minutes-long, build-artifact-coupled — stays the build-phase mechanism;
   // this is the synchronous, output-revising leverage for coworker turns.)
-  if (result.content && !result.proposal) {
+  if (result.content && !result.proposal && !result.failure) {
     try {
       const pattern = await resolveCoworkerReviewPattern(input.agentId);
       if (pattern === "review" || pattern === "debate") {
@@ -698,6 +749,7 @@ export async function executeAutonomousWorkTool(input: {
   agentId: string;
   threadId: string;
   taskRunId: string;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
   externalAccessEnabled?: boolean;
@@ -715,6 +767,7 @@ export async function executeAutonomousWorkTool(input: {
       agentId: input.agentId,
       threadId: input.threadId,
       taskRunId: input.taskRunId,
+      taskExecutionFence: input.taskExecutionFence,
       apiTokenId: input.apiTokenId ?? undefined,
       tokenScope: input.tokenScope,
       externalAccessEnabled: input.externalAccessEnabled,

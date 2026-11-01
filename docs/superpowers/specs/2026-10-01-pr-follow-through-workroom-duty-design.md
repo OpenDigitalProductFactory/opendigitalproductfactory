@@ -116,7 +116,11 @@ only by the merge queue. What changes is the **repair** step in front of it:
   platform coding coworker running as a `ScheduledAgentTask` against the PR
   branch. It gets a structured handoff: PR, head SHA, failing check names, run
   log URLs, the room's backlog item and spec. It must produce a new signed
-  commit on the same branch that passes the local gate before it pushes. It
+  commit on the same branch after affected tests, reproduction of the named
+  failure and independent review of changed code. Final main-plus-PR
+  integration belongs to required GitHub checks and the protected merge queue.
+  An unchanged published head preserves valid evidence; a queue delay or
+  infrastructure failure does not require a repeated whole local gate. It
   records `record_workroom_evidence(kind: "pr-gate")` against the room.
 - At **`balanced`**, the same packet is staged as `attention` with a one-action
   "run repair" (propose, do not act).
@@ -167,8 +171,9 @@ deferred automatic repair to "a separate governed design"; this is that design.
 **Keeps:**
 - The merge queue is the only writer of `main` (§3.8 of the recoverable-delivery
   spec).
-- DCO, the local gate, and independent review all apply to repair commits
-  exactly as to the first commit.
+- DCO and independent review of changed code apply to repair commits. Published
+  corrections follow the build gate runbook's targeted-verification procedure;
+  initial unpublished validation is unchanged.
 - Independence: the repair agent is an executor, not a reviewer. If the PR's
   review receipt predates the repair, the existing semantic-review gate decides
   whether the new SHA needs re-review.

@@ -34,6 +34,7 @@ export type ReachMessage = {
 const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "approval-bill": "A bill needs your approval",
   "approval-expense": "An expense claim needs your approval",
+  "approval-leave": "A time-off request needs your decision",
   "approval-outbound": "A message to a customer needs your approval",
   "compliance-submission": "A filing needs your approval",
   "reservation-exception": "A booking needs your decision",
@@ -55,6 +56,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "scheduled-task": "A scheduled job stopped working",
   "ai-readiness-blocker": "Your AI setup is not finished",
   "platform-health": "A platform service is having trouble",
+  "agent-toolchain": "A computer's DPF tools have stopped updating",
   "provider-credential": "A connection needs reconnecting",
   "contribution-setup": "GitHub not connected",
   "compliance-source-freshness": "Compliance evidence is going out of date",

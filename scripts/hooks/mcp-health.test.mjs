@@ -1,7 +1,7 @@
 // scripts/hooks/mcp-health.test.mjs
 //
 // BI-8A562681 (S4, design 12.4.5): the SessionStart MCP health hook resolves the
-// endpoint the client actually uses -- DPF_MCP_URL, then the default written in
+// endpoint the client actually uses -- DPF_CLAUDE_MCP_URL, then the default written in
 // the shipped plugin descriptor -- and no longer warns when the repo .mcp.json
 // is absent. The session-reaper's https MCP calls pass the install CA bundle.
 //
@@ -30,7 +30,7 @@ const hasJq = posix && spawnSync("sh", ["-c", "command -v jq"], { stdio: "ignore
 
 const PLUGIN_DEFAULT = "https://plugin-default.example.test/api/mcp/v1?tier=full";
 
-function makeSandbox({ pluginUrl = `\${DPF_MCP_URL:-${PLUGIN_DEFAULT}}`, repoMcpJson } = {}) {
+function makeSandbox({ pluginUrl = `\${DPF_CLAUDE_MCP_URL:-${PLUGIN_DEFAULT}}`, repoMcpJson } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dpf-mcp-health-"));
   const root = join(dir, "root");
   const bin = join(dir, "bin");
@@ -85,11 +85,11 @@ function runHealth(sandbox, env) {
   return result.stdout;
 }
 
-test("mcp-health probes DPF_MCP_URL first", { skip: !posix }, () => {
+test("mcp-health probes DPF_CLAUDE_MCP_URL first", { skip: !posix }, () => {
   const sb = makeSandbox();
   try {
     const url = "https://dpf.example.lan/api/mcp/v1?tier=full";
-    const out = runHealth(sb, { DPF_MCP_URL: url });
+    const out = runHealth(sb, { DPF_CLAUDE_MCP_URL: url });
     assert.ok(sb.curlCalls().some((argv) => argv.includes(url)), JSON.stringify(sb.curlCalls()));
     assert.match(out, /dpf\.example\.lan/);
   } finally {
@@ -107,7 +107,31 @@ test("mcp-health falls back to the plugin descriptor's default", { skip: !posix 
   }
 });
 
-test("mcp-health uses the local bind when neither DPF_MCP_URL nor a descriptor exists", { skip: !posix }, () => {
+// BI-D6A6462A: Claude's connector does not read the shared DPF_MCP_URL, so a
+// poisoned value there (http://[::1]:3000 from a stale checkout's test) must
+// not become the endpoint this hook probes and reports.
+test("mcp-health ignores the shared DPF_MCP_URL and probes Claude's endpoint", { skip: !posix }, () => {
+  const sb = makeSandbox();
+  try {
+    runHealth(sb, { DPF_MCP_URL: "http://[::1]:3000/api/mcp/v1?tier=full" });
+    assert.ok(sb.curlCalls().some((argv) => argv.includes(PLUGIN_DEFAULT)), JSON.stringify(sb.curlCalls()));
+    assert.ok(!sb.curlCalls().some((argv) => argv.some((arg) => String(arg).includes("[::1]"))), JSON.stringify(sb.curlCalls()));
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test("mcp-health still reads the default from a legacy ${DPF_MCP_URL:-...} descriptor", { skip: !posix }, () => {
+  const sb = makeSandbox({ pluginUrl: `\${DPF_MCP_URL:-${PLUGIN_DEFAULT}}` });
+  try {
+    runHealth(sb, {});
+    assert.ok(sb.curlCalls().some((argv) => argv.includes(PLUGIN_DEFAULT)), JSON.stringify(sb.curlCalls()));
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test("mcp-health uses the local bind when neither DPF_CLAUDE_MCP_URL nor a descriptor exists", { skip: !posix }, () => {
   const sb = makeSandbox({ pluginUrl: null });
   try {
     runHealth(sb, { DPF_MCP_BEARER_TOKEN: "dpfmcp_test" });
@@ -135,7 +159,7 @@ test("mcp-health still diagnoses a repo .mcp.json that is present", { skip: !pos
     repoMcpJson: { mcpServers: { dpf: { type: "http", url: "http://127.0.0.1:3000/api/mcp/v1" } } },
   });
   try {
-    const out = runHealth(sb, { DPF_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1" });
+    const out = runHealth(sb, { DPF_CLAUDE_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1" });
     assert.match(out, /WARNING: DPF MCP -- \.mcp\.json configures dpf on plain-http/);
   } finally {
     sb.cleanup();
@@ -150,7 +174,7 @@ test("mcp-health names a repo .mcp.json dpf entry on https as a second connector
     repoMcpJson: { mcpServers: { dpf: { type: "http", url: "https://localhost/api/mcp/v1?tier=full" } } },
   });
   try {
-    const out = runHealth(sb, { DPF_MCP_URL: "https://localhost/api/mcp/v1?tier=full" });
+    const out = runHealth(sb, { DPF_CLAUDE_MCP_URL: "https://localhost/api/mcp/v1?tier=full" });
     assert.match(out, /second dpf connector/);
     assert.match(out, /remove the dpf entry from .*\.mcp\.json/);
   } finally {
@@ -164,7 +188,7 @@ test("mcp-health names a repo .mcp.json dpf entry on https as a second connector
 const HTTPS_URL = "https://localhost/api/mcp/v1?tier=full";
 const BACKUP = ".mcp.json.pre-single-connector";
 
-function installPlugin(sb, server = { type: "http", url: `\${DPF_MCP_URL:-${HTTPS_URL}}`, oauth: { scopes: "dpf.read dpf.work dpf.build" } }) {
+function installPlugin(sb, server = { type: "http", url: `\${DPF_CLAUDE_MCP_URL:-${HTTPS_URL}}`, oauth: { scopes: "dpf.read dpf.work dpf.build" } }) {
   const installPath = join(sb.dir, "plugin-cache", "dpf-platform", "0.2.8");
   mkdirSync(installPath, { recursive: true });
   writeFileSync(join(installPath, "claude.mcp.json"), JSON.stringify({ mcpServers: { dpf: server } }, null, 2));
@@ -186,7 +210,7 @@ test("mcp-health retires a platform-written dpf entry and keeps every other serv
   const sb = makeSandbox({ repoMcpJson: original });
   try {
     installPlugin(sb);
-    const out = runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    const out = runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     assert.match(out, /retired the project 'dpf' server/);
     assert.match(out, /next session start loads a single connector/);
     assert.doesNotMatch(out, /It was left in place/);
@@ -201,7 +225,7 @@ test("mcp-health leaves an empty mcpServers object when dpf was the only server"
   const sb = makeSandbox({ repoMcpJson: { mcpServers: { dpf: { type: "http", url: "http://127.0.0.1:3000/api/mcp/v1", headers: { Authorization: "Bearer ${DPF_MCP_BEARER_TOKEN}" } } } } });
   try {
     installPlugin(sb);
-    runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     assert.ok(existsSync(join(sb.root, ".mcp.json")), "disable, not delete");
     assert.deepEqual(readRepoMcpJson(sb), { mcpServers: {} });
   } finally {
@@ -213,10 +237,10 @@ test("mcp-health is idempotent: a rerun changes nothing and prints nothing about
   const sb = makeSandbox({ repoMcpJson: { mcpServers: { dpf: { type: "http", url: HTTPS_URL } } } });
   try {
     installPlugin(sb);
-    runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     const after = readFileSync(join(sb.root, ".mcp.json"), "utf8");
     const backup = readFileSync(join(sb.root, BACKUP), "utf8");
-    const second = runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    const second = runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     assert.doesNotMatch(second, /retired|defines a 'dpf' server/);
     assert.equal(readFileSync(join(sb.root, ".mcp.json"), "utf8"), after);
     assert.equal(readFileSync(join(sb.root, BACKUP), "utf8"), backup);
@@ -230,7 +254,7 @@ test("mcp-health leaves a dpf entry pointing at a foreign host untouched", { ski
   const sb = makeSandbox({ repoMcpJson: original });
   try {
     installPlugin(sb);
-    const out = runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    const out = runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     assert.deepEqual(readRepoMcpJson(sb), original);
     assert.equal(existsSync(join(sb.root, BACKUP)), false);
     assert.match(out, /second dpf connector/);
@@ -244,7 +268,7 @@ test("mcp-health leaves the dpf entry untouched on plain http", { skip: !posix }
   const sb = makeSandbox({ repoMcpJson: original });
   try {
     installPlugin(sb);
-    runHealth(sb, { DPF_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "dpfmcp_test" });
+    runHealth(sb, { DPF_CLAUDE_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "dpfmcp_test" });
     assert.deepEqual(readRepoMcpJson(sb), original);
     assert.equal(existsSync(join(sb.root, BACKUP)), false);
   } finally {
@@ -256,7 +280,7 @@ test("mcp-health leaves the dpf entry untouched when no installed plugin is foun
   const original = { mcpServers: { dpf: { type: "http", url: HTTPS_URL } } };
   const sb = makeSandbox({ repoMcpJson: original });
   try {
-    const out = runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    const out = runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     assert.deepEqual(readRepoMcpJson(sb), original);
     assert.match(out, /It was left in place/);
   } finally {
@@ -269,7 +293,7 @@ test("mcp-health leaves the dpf entry untouched when the installed plugin still 
   const sb = makeSandbox({ repoMcpJson: original });
   try {
     installPlugin(sb, { type: "http", url: "${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1?tier=full}", headers: { Authorization: "Bearer ${DPF_MCP_BEARER_TOKEN:-}" } });
-    runHealth(sb, { DPF_MCP_URL: HTTPS_URL });
+    runHealth(sb, { DPF_CLAUDE_MCP_URL: HTTPS_URL });
     assert.deepEqual(readRepoMcpJson(sb), original);
   } finally {
     sb.cleanup();
@@ -289,7 +313,7 @@ test("mcp-health does not steer the canonical https://localhost origin to 127.0.
 test("mcp-health passes the install CA bundle on https", { skip: !posix }, () => {
   const sb = makeSandbox();
   try {
-    runHealth(sb, { DPF_MCP_URL: CANONICAL_MCP_URL, NODE_EXTRA_CA_CERTS: sb.caBundle });
+    runHealth(sb, { DPF_CLAUDE_MCP_URL: CANONICAL_MCP_URL, NODE_EXTRA_CA_CERTS: sb.caBundle });
     const call = sb.curlCalls().find((argv) => argv.some((arg) => arg === CANONICAL_MCP_URL));
     assert.ok(call, JSON.stringify(sb.curlCalls()));
     assert.equal(call[call.indexOf("--cacert") + 1], sb.caBundle);

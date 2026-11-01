@@ -9,7 +9,7 @@
  * (`actionBoundary === "preauthorized"`): then the room DRIVES its own governed
  * review, dispatching the non-author agent reviewer who records the receipt.
  */
-import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import type {
   ProjectedWorkShapeCycle,
@@ -23,25 +23,26 @@ import {
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
 import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
-import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking";
-import type { DueDeadline } from "./drive-deadlines";
+import type { DriveMarking, DriveRework } from "@dpf/validators/workroom/marking";
+import type { DueDeadline } from "@dpf/validators/workroom-policy/drive-deadlines";
 import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
-import { usesGraphConstructs } from "./drive-marking";
+import type { StageRunObservation, WritebackRetry } from "./writeback-latch";
+import { usesGraphConstructs } from "@dpf/validators/workroom/marking";
 import { workShapeRecurs } from "./work-shapes";
 import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle, runConcluded } from "./drive-plan-stage";
 import { resolveGraphDrivePlan } from "./drive-resolution-graph";
 import {
   isCompletingWorkroomDriveReceipt,
   type PriorWorkroomDrive,
-} from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 export {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   isCompletingWorkroomDriveReceipt,
-} from "./workroom-drive-receipts";
-export type { PriorWorkroomDrive } from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
+export type { PriorWorkroomDrive } from "@dpf/validators/workroom/receipts";
 
 export type DriveAction =
   | "do_not_wake"
@@ -90,6 +91,16 @@ export type DriveResolutionInput = {
   /** Last persisted drive tick. Used to fail closed when a dispatch produced no writeback. */
   priorDrive?: PriorWorkroomDrive | null;
   /**
+   * Sequential path only (BI-7C0B2BD6): what the room's scheduled task shows
+   * about the run the drive queued; null when no task exists. Absent keeps the
+   * cycle-bounded writeback latch.
+   */
+  stageRun?: StageRunObservation | null;
+  /** Exact primary/parallel-task observations for approval waits on graph tokens. */
+  stageRunsByTask?: Readonly<Record<string, StageRunObservation | null>>;
+  /** The failed attempts the last tick recorded for its stage (BI-7C0B2BD6). */
+  writebackRetry?: WritebackRetry | null;
+  /**
    * The room's stored `workspaceState`. Read only by the graph path (GPP Phase
    * 3c), which keeps its marking there; the sequential path never reads it.
    */
@@ -122,6 +133,18 @@ export type DriveResolutionInput = {
    * condition on the attention the stage raises; it grants nothing.
    */
   authorStageWithheldBecause?: string | null;
+};
+
+/** Host dispatch policy, deliberately outside the portable marking kernel. */
+export type DriveTokenPlan = {
+  stageKey: string;
+  iteration: number;
+  action: DriveAction;
+  reason: DriveReason;
+  agentId: string | null;
+  attentionPrincipalRef: string | null;
+  taskId: string | null;
+  ledger: string[];
 };
 
 export type DrivePlan = {
@@ -171,6 +194,12 @@ export type DrivePlan = {
    * capsule id or state into the marking only once its effect committed.
    */
   subShapes?: SubShapeEffects;
+  /** BI-7C0B2BD6: a latch pause for a run still outstanding; the runner leaves the room's task active. */
+  keepTaskActive?: boolean;
+  /** BI-7C0B2BD6: the failed attempts for this stage in this cycle, stored on the snapshot. */
+  writebackRetry?: WritebackRetry | null;
+  /** BI-7C0B2BD6: the retry number of this dispatch in its cycle; the dispatch scope's iteration. */
+  dispatchAttempt?: number;
 };
 
 export { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
@@ -310,5 +339,6 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     });
   }
 
-  return planStage({ input, definition: input.definition, stage, conformance, cycle, prior: input.priorDrive ?? null });
+  return planStage({ input, definition: input.definition, stage, conformance, cycle, prior: input.priorDrive ?? null,
+    ...(input.stageRun !== undefined ? { run: input.stageRun } : {}) });
 }

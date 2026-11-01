@@ -26,8 +26,8 @@ import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-manage
 // executable-construct table is a mutable copy so a case can switch the
 // parallel flag off (the kill switch); it starts as the real table.
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
-vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+vi.mock("@dpf/validators/gpp/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/validators/gpp/executable-constructs")>();
   flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
   flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
   return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };
@@ -164,6 +164,14 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(fx.persist.mock.calls[0]?.[0]?.summary).toMatch(/lease held/i);
   });
 
+  it("pauses a room whose queue a provider failure held, and dispatches nothing (BI-2B6A8A74)", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date(), { listRooms: async () => [room({ workspaceState: { queueHold: { since: "2026-03-02T08:00:00.000Z", kind: "rate-limit", taskId: "t-held", error: "busy" } } })], effects: fx });
+    expect(result.dispatched).toBe(0);
+    expect(fx.upsertAgentTask).not.toHaveBeenCalled();
+    expect(fx.persist.mock.calls[0]?.[0]?.snapshot).toMatchObject({ reason: "provider_held" });
+  });
+
   it("records attention for a human stage and never schedules an agent task", async () => {
     const fx = effects();
     const human = room({
@@ -292,9 +300,11 @@ describe("applyDrivePlan lease expiry", () => {
     driveDb.workroomActivity.create.mockClear();
     // Simulate controller loss immediately after the scheduling transaction.
     fx.persist.mockRejectedValueOnce(new Error("controller lost"));
-    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+    // BI-7C0B2BD6: the failure is the room's, recorded on the tick, not the tick's end.
+    const lost = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
       listRooms: async () => [room()], effects: fx,
-    })).rejects.toThrow("controller lost");
+    });
+    expect(lost.plans).toEqual([expect.objectContaining({ action: "error", reason: "controller lost" })]);
     expect(driveDb.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
       workspaceState: { unrelated: true, workroomDispatchCheckpoint: expect.objectContaining({
         version: 1, revision: 1, objective: "Review evidence",
@@ -323,7 +333,8 @@ describe("applyDrivePlan lease expiry", () => {
     });
     driveDb.scheduledAgentTask.findUnique.mockImplementation(async () => task);
     fx.persist.mockRejectedValueOnce(new Error("controller lost"));
-    await expect(runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).rejects.toThrow("controller lost");
+    expect((await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).plans)
+      .toEqual([expect.objectContaining({ action: "error", reason: "controller lost" })]);
     const confirmed = structuredClone(workspace.workroomDispatchCheckpoint);
     // A replacement reconstructs from durable state; the original snapshot is absent.
     // The task may already have executed and become inactive. Do not touch it.
@@ -332,9 +343,10 @@ describe("applyDrivePlan lease expiry", () => {
     if (caseName === "missing") task = null;
     if (caseName === "foreign-agent") task = Object.assign({}, task, { agentId: "replacement-agent" });
     if (caseName === "changed-stage") task = Object.assign({}, task, { taskConfig: { workroomStage: { shapeKey: "other", shapeVersion: "1", stageKey: "other", tools: [] } } });
-    const replay = runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
-    if (caseName === "matching") await replay;
-    else await expect(replay).rejects.toThrow(/identity reconciliation/);
+    const replay = await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
+    if (caseName !== "matching") {
+      expect(replay.plans).toEqual([expect.objectContaining({ action: "error", reason: expect.stringMatching(/identity reconciliation/) })]);
+    }
     expect(driveDb.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
     expect(workspace.workroomDispatchCheckpoint).toEqual(confirmed);
     expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
@@ -358,9 +370,10 @@ describe("applyDrivePlan lease expiry", () => {
   it("refuses corrupt checkpoint history before queueing another task", async () => {
     const fx = persistedLease();
     driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { workroomDispatchCheckpoint: { version: 2, revision: 5 } } });
-    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+    const refused = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
       listRooms: async () => [room()], effects: fx,
-    })).rejects.toThrow(/checkpoint/);
+    });
+    expect(refused.plans).toEqual([expect.objectContaining({ action: "error", reason: expect.stringMatching(/checkpoint/) })]);
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
@@ -632,6 +645,14 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     // The real table: parallel split/join is executable since PR-3c-2.
     Object.assign(flags.table, flags.original);
     expect(flags.table["parallel-split-join"]).toBe(true);
+  });
+
+  it("a held queue dispatches no branch and keeps the token, which dispatches once resumed (BI-2B6A8A74)", async () => {
+    const h = harness({ queueHold: { since: "2026-03-02T08:00:00.000Z", kind: "rate-limit", taskId: "t-held", error: "busy" } });
+    const held = await tick(h, at(0));
+    expect([held.upserts, drive(h).reason]).toEqual([[], "provider_held"]);
+    delete h.workspaceState["queueHold"];
+    expect((await tick(h, at(1))).upserts).toEqual([`${PRIMARY}@a`]);
   });
 
   it("two concurrent agent branches get two upserts with distinct ids fixed on their tokens, under one lease", async () => {

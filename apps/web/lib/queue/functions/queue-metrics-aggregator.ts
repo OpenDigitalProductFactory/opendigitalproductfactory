@@ -37,6 +37,16 @@ export const queueMetricsAggregator = jobs.createFunction(
       return result;
     });
 
+    // BI-C9F1DE01: a room that ended without closing its steps (ended inside a
+    // caller's transaction, or before the close existed) is closed here, at the
+    // time it last changed. Idempotent: closed steps are no longer open.
+    await step.run("close-ended-room-steps", async () => {
+      const { reconcileEndedRoomStageTelemetry } = await import("@/lib/work-management/workroom-stage-telemetry");
+      const closed = await reconcileEndedRoomStageTelemetry();
+      if (closed > 0) console.log(`[queue-metrics] closed ${closed} workroom stage step(s) left open on ended rooms`);
+      return { closed };
+    });
+
     return step.run("aggregate-current-day", async () => {
       const { aggregateQueueMetrics, defaultRollupDeps } = await import(
         "@/lib/queue/queue-metrics-rollup"

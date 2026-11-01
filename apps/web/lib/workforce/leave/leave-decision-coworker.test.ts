@@ -82,6 +82,33 @@ describe("decideLeaveRequest", () => {
     expect(result.guardReasons.join(" ")).toMatch(/coverage/i);
   });
 
+  // BI-5CA6AB34: a fired rail still reaches a person, but now with a kernel
+  // record routed human by the rule table (the rail is a crossed threshold).
+  // The rail's verdict stands whatever the gate would have recommended.
+  it("records a fired rail through the gate as a crossed threshold, and keeps the escalation", async () => {
+    const gate = makeGate({ interactionId: "DI-RAIL-1" });
+    const result = await decideLeaveRequest(
+      { ...baseInputs, coverage: { requiredHeadcount: 3, coveredIfApproved: 2 } },
+      { db: {}, gate },
+    );
+    expect(result.action).toBe("escalate");
+    expect(result.interactionId).toBe("DI-RAIL-1");
+    expect(gate).toHaveBeenCalledTimes(1);
+    expect(gate.mock.calls[0][0].declarations).toEqual({ thresholdExceeded: true });
+    expect(gate.mock.calls[0][0].options).toEqual(["approve", "deny"]);
+    expect(result.operatorMessage).toMatch(/Escalated to a human approver/);
+  });
+
+  it("still escalates when recording the rail fails, with no record", async () => {
+    const gate = vi.fn().mockRejectedValue(new Error("ledger down"));
+    const result = await decideLeaveRequest(
+      { ...baseInputs, coverage: { requiredHeadcount: 3, coveredIfApproved: 2 } },
+      { db: {}, gate },
+    );
+    expect(result.action).toBe("escalate");
+    expect(result.interactionId).toBeNull();
+  });
+
   it("escalates when the org gate escalates", async () => {
     const gate = makeGate({
       allowed: false,

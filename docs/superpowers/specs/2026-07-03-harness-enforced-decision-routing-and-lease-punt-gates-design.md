@@ -268,3 +268,33 @@ The third failure mode is neither §9's delivery race nor §14's logic gap. The 
 2. A host-independent accelerator, chosen through `principle_decide`, flags an agent turn that puts options to the operator with no kernel consultation in that turn.
 3. Platform side: every path that puts a decision in front of a person requires a decision record showing the kernel abstained, had low confidence, hit a commandment conflict, or lacked authority (the plane-2 principle, §8). Chat questions never reach the platform, so this complements but cannot replace the client plane. Prose menus remain BI-E4DE3825.
 
+
+## 15.1 Correction (2026-10-13): the desktop host does invoke Gate A; it discarded the deny (BI-E5C45F61)
+
+§15's cause is disproven. The desktop host runs every `PreToolUse` hook, `AskUserQuestion` included. What it did not do is honour the verdict.
+
+**Cause.** `hooks/lib/hook-io.mjs` `denyEnvelope()` wrote one payload for every surface: Grok's top-level `decision: "deny"` beside Claude's `hookSpecificOutput.permissionDecision: "deny"`, on the assumption that each surface ignores the other's keys. Claude Code 2.1.295 (desktop app 2.31226.1) validates hook output and accepts a top-level `decision` only as the legacy `approve` | `block`. A `"deny"` there fails validation, and the host then drops the whole output, the valid `hookSpecificOutput` with it. It records a `hook_non_blocking_error` in the session transcript ("Hook JSON output validation failed — decision: Invalid option") and runs the tool. Every deny guard routes through `emitDeny`, so the whole deny plane failed open on that host. Context-only hooks (the Write/Edit prechecks) emit no `decision` and kept working, which is why §15 saw "other hooks fire" and narrowed the fault to one tool.
+
+**Ruled out by observation, session `98a581b3`, bypass-permissions mode.** The transcript shows both copies of each guard ran (project `${CLAUDE_PROJECT_DIR}` command and plugin `${CLAUDE_PLUGIN_ROOT}` command), exit 0, so bypass mode does not skip `PreToolUse`, the host loads the event, `${CLAUDE_PROJECT_DIR}` resolves, and stale plugin copies do not shadow the project hooks. In the desktop app `${CLAUDE_PROJECT_DIR}` is the root clone, not the session's worktree, so project-wired guards run root-clone code.
+
+**Fix.** The payload's casing names its surface (`normalizePayload().surface`): a Claude or Codex payload gets `hookSpecificOutput` only, and a Grok payload keeps the live-probed dual envelope (§11.1). `lib/claude-hook-contract.mjs` pins the host's rule. Live proof in the same desktop session with the fixed `hook-io.mjs` in the plugin copy: `docker compose up --help` was denied by `compose-guard`, and a two-option architecture `AskUserQuestion` was denied by `decision-routing-guard` before it reached the operator.
+
+**Visibility.** A guard fails open whenever it cannot run or answer. The plugin's SessionStart hook `pretooluse-guard-selftest.mjs` now pipes a harmless probe through compose, raw-tool, lease-punt and decision-routing guards, checks each verdict against the Claude contract, and checks that every declared `PreToolUse` command resolves (its `${VAR}` set, its script present). When any check fails it prints "PreToolUse guards inactive in this session" with the reasons; it is silent otherwise.
+
+**What stays true from §15.** A client hook is an accelerator. Remediation item 3, the server-side rule that a decision reaches a person only with a qualifying kernel record (BI-271B8EEC Direction 2), is still the only enforcement no client can skip, and it is not built yet.
+
+## 16. Addendum (2026-10-21): one plane-2 rule for internal and external agents (BI-638024F9)
+
+Plane 2 governed only `source: "agentic-loop"`. External coding agents reach the same consequential tools through the same governed-execution seam, as `source: "external-jsonrpc"` from `/api/mcp/v1`, and were left to plane 1. §15.1 showed how that fails: the desktop host discarded every plane-1 deny for days, and nothing on the server noticed. An internal coworker and an external agent got different verdicts for the same act.
+
+**Decision.** WWMD DI-F3C0940A38E9 (high confidence, proceed): close the parity gap first, then build the escalation backstop (BI-5CA6AB34), which covers both kinds of agent by construction.
+
+**Change.**
+- `GOVERNED_DECISION_SOURCES` = `agentic-loop`, `external-jsonrpc`. Both use one decision table (`decidePreTool`).
+- `resolveDecisionGateMode(env, source)`: internal agents follow `DPF_DECISION_GATE_MODE` (default enforce). External agents follow `DPF_DECISION_GATE_EXTERNAL_MODE` (default shadow), so the rollout audits before it denies. A global `off` wins for every source.
+- The consult is the server's own record: an external agent's `principle_decide` runs through the same `onPostToolUse` and clears the window under the token's user.
+- Audit lines now name `source`.
+
+**Still true.** The consultation ledger is per process (BI-AF7CE2BC). It holds for the single-portal deployment, where the MCP route and the agentic loop share one process. A multi-instance portal needs the durable ledger before the external mode is set to enforce.
+
+**Next.** Watch the `[decision-routing-gate] … source="external-jsonrpc"` shadow lines. Set `DPF_DECISION_GATE_EXTERNAL_MODE=enforce` once they show no unconsulted decisions from agents that did consult.

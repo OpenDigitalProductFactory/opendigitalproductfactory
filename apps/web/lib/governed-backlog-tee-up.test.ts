@@ -45,9 +45,8 @@ describe("parseFixContextFromBody (BI-E7BB3816)", () => {
 });
 
 const mockPrisma = vi.hoisted(() => ({
-  platformDevConfig: {
-    findUnique: vi.fn(),
-  },
+  platformConfig: { findUnique: vi.fn().mockResolvedValue(null) },
+  platformDevConfig: { findUnique: vi.fn() },
   backlogItem: {
     findUnique: vi.fn(),
     findMany: vi.fn(),

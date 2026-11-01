@@ -1,17 +1,54 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
-import { loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
+const roomAccess = vi.hoisted(() => ({ human: vi.fn(), agent: vi.fn() }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveHumanWorkroomAccess: roomAccess.human, resolveAgentWorkroomAccess: roomAccess.agent,
+}));
+import { listPendingApprovalOutcomes, loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
+import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 const now = new Date("2026-09-27T12:00:00Z");
+it("reads the original provider test evidence after the approval replay window without running the action", async () => {
+  const parameters = { operation: "test", providerId: "chatgpt", connectionId: "provider-default-chatgpt" };
+  const inputFingerprint = fingerprintCoworkerInput(parameters);
+  const envelope = { id: "approved-provider-test", status: "executed", createdAt: now, expiresAt: now,
+    delegatingUserId: "u1", coworkerAgentId: "a1", threadId: "thread1", manifestActionId: "manage_provider_account",
+    inputFingerprint, argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1",
+      toolName: "manage_provider_account", inputFingerprint, taskRunId: null, chainId: null, routeContext: null } },
+    toolExecutions: [],
+  };
+  const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => envelope) },
+    toolExecution: { findMany: vi.fn(async () => [{ id: "actual-run", envelopeId: envelope.id, userId: "u1", agentId: "a1",
+      threadId: "thread1", taskRunId: null, toolName: "manage_provider_account", executionMode: "external-mcp",
+      createdAt: now, durationMs: 10, parameters, success: true, result: { success: true, message: "secret raw message" } }]) },
+  };
+  const result = await readApprovalOutcome(envelope.id, "u1", "a1", db as never, new Date("2026-10-21T00:00:00Z"));
+  expect(result).toMatchObject({ state: "executed", actionEvidence: { state: "available", executionId: "actual-run",
+    outcome: "succeeded", quotaReconciliation: "unproven", responsesVerification: "unproven" } });
+  expect(JSON.stringify(result)).not.toContain("secret raw message");
+});
 const row = { id: "e1", delegatingUserId: "u1", coworkerAgentId: "a1", threadId: "thread1", taskRunId: null, status: "approved", createdAt: now, expiresAt: now, toolExecutions: [] as unknown[] };
 function fixture() {
   const findFirst = vi.fn(async ({ where }: { where: Record<string, unknown> }) => where.delegatingUserId === "u1" && (!where.coworkerAgentId || where.coworkerAgentId === "a1") ? row : null);
   const create = vi.fn(async ({ data }: { data: unknown }) => { row.toolExecutions = [data]; return data; });
-  const findMany = vi.fn(async (_args: unknown) => [row]);
+  const findMany = vi.fn(async (_args: unknown): Promise<Array<Record<string, unknown>>> => [row]);
   return { coworkerActionEnvelope: { findFirst, findMany }, toolExecution: { create } };
 }
 describe("approval receipt owner and assistant isolation", () => {
+  it("returns the exact waiting request's card link without reading action evidence", async () => {
+    const pending = { ...row, status: "proposed", expiresAt: new Date(now.getTime() + 60_000), toolExecutions: [] };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => pending) },
+      toolExecution: { findMany: vi.fn() } };
+    const result = await readApprovalOutcome("e1", "u1", "a1", db as never, now);
+    expect(result).toMatchObject({ state: "waiting",
+      inboxHref: "/workspace/inbox?approval=e1#owner-decision-coworker-envelope-e1",
+      actionEvidence: { state: "missing", reason: "not-settled" } });
+    expect(db.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "e1", delegatingUserId: "u1", coworkerAgentId: "a1" },
+    }));
+    expect(db.toolExecution.findMany).not.toHaveBeenCalled();
+  });
   it("records not-run then reads the result in a new request without transient UI state", async () => {
     const db = fixture();
     await recordApprovalOutcome("e1", "u1", { status: "not-run", reason: "credential-unavailable", message: "private raw details" }, db as never);
@@ -40,5 +77,147 @@ describe("approval receipt owner and assistant isolation", () => {
     const db = fixture();
     await expect(recordApprovalOutcome("e1", "u2", { status: "executed", message: "Done" }, db as never)).rejects.toThrow();
     expect(db.toolExecution.create).not.toHaveBeenCalled();
+  });
+  // BI-7BCC87BB (AC-OVERRIDE): an admin decided on the owner's behalf. The
+  // receipt still belongs to the owner's request; the admin is its actor.
+  it("records an on-behalf outcome on the owner's request with the admin as the actor", async () => {
+    const db = fixture();
+    await recordApprovalOutcome("e1", "u1", { status: "executed", message: "Done" }, db as never, "admin-1");
+    expect(db.toolExecution.create.mock.calls[0][0]).toMatchObject({ data: { userId: "admin-1", delegatingUserId: "u1", envelopeId: "e1" } });
+  });
+});
+
+describe("caller-scoped pending approval discovery", () => {
+  const binding = {
+    writerToolName: "record_initiative_evidence", itemId: "BI-EXAMPLE", gate: "research",
+    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+      commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) },
+  };
+  const pending = {
+    ...row, status: "proposed", expiresAt: new Date(now.getTime() + 60_000),
+    taskRunId: "TR-1", manifestActionId: binding.writerToolName, toolExecutions: [],
+    taskRun: { userId: "u1", a2aMetadata: { initiativeReviewBinding: { ...binding, secret: "private-binding-data" }, apiTokenId: "private-token" } },
+    argsJson: { secret: "private-arguments" }, rationale: "private-rationale",
+  };
+  it("queries only this user and assistant's live requests and returns safe immutable locators", async () => {
+    const db = fixture();
+    db.coworkerActionEnvelope.findMany.mockResolvedValue([pending]);
+    const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
+    expect(db.coworkerActionEnvelope.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { delegatingUserId: "u1", coworkerAgentId: "a1", status: "proposed",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 21,
+    }));
+    expect(result).toMatchObject({ hasMore: false, approvals: [{
+      envelopeId: "e1", state: "waiting", delegatingUserId: "u1", coworkerAgentId: "a1",
+      expiresAtIso: pending.expiresAt.toISOString(), taskRunId: "TR-1", reviewBinding: binding,
+      inboxHref: "/workspace/inbox?approval=e1#owner-decision-coworker-envelope-e1",
+    }] });
+    expect(JSON.stringify(result)).not.toContain("private-");
+  });
+  it.each([["", "a1"], ["u1", undefined]])("never queries without authenticated %s/%s", async (user, agent) => {
+    const db = fixture();
+    expect(await listPendingApprovalOutcomes(user, agent, db as never, now))
+      .toMatchObject({ approvals: [], hasMore: false });
+    expect(db.coworkerActionEnvelope.findMany).not.toHaveBeenCalled();
+  });
+  it("reports a bounded page without pretending extra requests do not exist", async () => {
+    const db = fixture();
+    db.coworkerActionEnvelope.findMany.mockResolvedValue(Array.from({ length: 21 }, (_, i) => ({ ...pending, id: `e${i}` })));
+    const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
+    expect(result.approvals).toHaveLength(20);
+    expect(result.hasMore).toBe(true);
+    expect(result.inboxHref).toBe("/workspace/inbox");
+  });
+  it.each([
+    { userId: "u2", a2aMetadata: { initiativeReviewBinding: binding } },
+    { userId: "u1", a2aMetadata: { initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_architecture_review" } } },
+    { userId: "u1", a2aMetadata: { initiativeReviewBinding: { secret: "private-malformed" } } },
+  ])("does not expose a foreign, conflicting or malformed task binding", async (taskRun) => {
+    const db = fixture();
+    db.coworkerActionEnvelope.findMany.mockResolvedValue([{ ...pending, taskRun }]);
+    const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
+    expect(result.approvals[0].reviewBinding).toBeNull();
+    expect(JSON.stringify(result)).not.toContain("private-");
+  });
+});
+
+describe("recorded handoff failure explanation (BI-A83A4188)", () => {
+  function handoffFixture() {
+    roomAccess.human.mockReset().mockResolvedValue({ decision: { level: "none" } });
+    roomAccess.agent.mockReset().mockResolvedValue({ decision: { level: "none" } });
+    const parameters = { capsuleId: "WC-ORIGINAL", phase: "request", commandId: "original-handoff" };
+    const inputFingerprint = fingerprintCoworkerInput(parameters);
+    const envelope = { ...row, status: "failed", manifestActionId: "reassign_workroom_executor", inputFingerprint,
+      argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1", toolName: "reassign_workroom_executor",
+        inputFingerprint, taskRunId: null, chainId: null, routeContext: null } }, toolExecutions: [
+        { executionMode: "approval-outcome", success: false, result: { status: "failed" } },
+      ] };
+    const run = { id: "original-execution", envelopeId: "e1", userId: "u1", agentId: "a1", threadId: "",
+      taskRunId: null, toolName: "reassign_workroom_executor", executionMode: "external-jsonrpc", createdAt: now,
+      durationMs: 32, parameters, success: false,
+      result: { success: false, error: "handoff-transaction-required", message: "SECRET raw handler text", data: { secret: "SECRET" } } };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => envelope), findMany: vi.fn(async () => [envelope]) },
+      toolExecution: { findMany: vi.fn(async () => [run]) },
+      workroom: { findUnique: vi.fn(async () => ({ id: "room-row", capsuleId: "WC-ORIGINAL" })) } };
+    return { envelope, run, db };
+  }
+  it("recovers a safe reason from the original execution, not the newer generic status receipt", async () => {
+    const f = handoffFixture();
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result).toMatchObject({ state: "failed", failureEvidence: { state: "available",
+      code: "handoff-transaction-required", executionId: "original-execution" } });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+    expect(f.db.toolExecution.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { envelopeId: "e1", toolName: "reassign_workroom_executor" }, take: 11,
+    }));
+  });
+  it("shares the reason across owner history and exact caller readback while checking each reader's room access", async () => {
+    const f = handoffFixture();
+    roomAccess.human.mockResolvedValue({ decision: { level: "content" } });
+    roomAccess.agent.mockResolvedValue({ decision: { level: "content" } });
+    const exact = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    const [owner] = await loadApprovalOutcomes("u1", "e1", f.db as never, now);
+    expect(owner.failureEvidence).toEqual(exact?.failureEvidence);
+    expect(owner.failureExplanation).toContain("stopped before transfer");
+    expect(owner.nextAction).toContain("does not authorize another attempt");
+    expect(owner.failureEvidence).toMatchObject({ roomHref: "/workspace/cases/work-capsule%3AWC-ORIGINAL" });
+    expect(roomAccess.human).toHaveBeenCalledWith({ userId: "u1", workroomId: "room-row", requested: "content" }, f.db);
+    expect(roomAccess.agent).toHaveBeenCalledWith({ userId: "u1", agentId: "a1", workroomId: "room-row", requested: "content" }, f.db);
+  });
+  it("keeps a proven refusal but suppresses navigation after current room access is removed", async () => {
+    const f = handoffFixture();
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result?.failureEvidence).toMatchObject({ state: "available", roomAccess: "unavailable" });
+    expect(result?.failureEvidence).not.toHaveProperty("roomHref");
+    expect(JSON.stringify(result)).not.toContain("WC-ORIGINAL");
+  });
+  it.each(["userId", "agentId", "envelopeId", "toolName", "threadId"])("does not explain a foreign execution when %s differs", async key => {
+    const f = handoffFixture(); Object.assign(f.run, { [key]: "foreign" });
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result?.failureEvidence).toMatchObject({ state: "conflicting", reason: "execution-binding-mismatch" });
+    expect(result?.failureExplanation).not.toContain("handoff");
+    expect(f.db.workroom.findUnique).not.toHaveBeenCalled();
+  });
+  it("does not explain a changed invocation under the original envelope", async () => {
+    const f = handoffFixture(); f.run.parameters.capsuleId = "WC-DIFFERENT";
+    expect((await readApprovalOutcome("e1", "u1", "a1", f.db as never, now))?.failureEvidence)
+      .toMatchObject({ state: "conflicting", reason: "execution-binding-mismatch" });
+  });
+  it("does not choose the latest of multiple actual executions", async () => {
+    const f = handoffFixture(); f.db.toolExecution.findMany.mockResolvedValue([f.run, { ...f.run, id: "second-execution" }]);
+    expect((await readApprovalOutcome("e1", "u1", "a1", f.db as never, now))?.failureEvidence)
+      .toMatchObject({ state: "conflicting", reason: "execution-ambiguous" });
+  });
+  it("does not infer a cause from a receipt without an actual execution", async () => {
+    const f = handoffFixture(); f.db.toolExecution.findMany.mockResolvedValue([]);
+    expect((await readApprovalOutcome("e1", "u1", "a1", f.db as never, now))?.failureEvidence)
+      .toMatchObject({ state: "missing", reason: "execution-missing" });
+  });
+  it("does not display an unknown raw error or private result payload", async () => {
+    const f = handoffFixture(); f.run.result.error = "SECRET unknown error";
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result?.failureEvidence).toMatchObject({ state: "missing", reason: "result-unproven" });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
   });
 });

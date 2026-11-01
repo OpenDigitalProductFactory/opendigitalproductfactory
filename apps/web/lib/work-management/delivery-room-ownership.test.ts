@@ -65,12 +65,30 @@ describe("roomOwnerUserId", () => {
   it("falls back to the creator for rooms with no requester", () => {
     expect(roomOwnerUserId({ requestedByPrincipal: null, createdByPrincipal: alias("creator") })).toBe("creator");
   });
+  // BI-858FDE5A: requester and creator are history; a handed-over account is
+  // not who the work runs for now, so the drive falls through to the room's
+  // accountable person instead of birthing a task under the absent account.
+  it("skips a handed-over requester and creator, leaving the accountability walk to name the owner", () => {
+    const handedOver = new Set(["admin-user"]);
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("admin-user"), createdByPrincipal: alias("admin-user") }, handedOver))
+      .toBeNull();
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("admin-user"), createdByPrincipal: null }, handedOver)).toBeNull();
+  });
+  it("still names an account that was not handed over", () => {
+    const handedOver = new Set(["admin-user"]);
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("admin-user"), createdByPrincipal: alias("creator") }, handedOver))
+      .toBe("creator");
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("human-user"), createdByPrincipal: null }, handedOver)).toBe("human-user");
+  });
 });
 
 describe("repairUnownedDeliveryRooms", () => {
   function repairDb(rows: Array<Record<string, unknown>>) {
     const db = {
       workroom: { findMany: vi.fn(async () => rows) },
+      // No account here was handed over (BI-C66B6076 reads these before appointing).
+      principalAlias: { findFirst: vi.fn(async () => null) },
+      user: { findFirst: vi.fn(async () => null) },
       workroomParticipant: {
         findMany: vi.fn(async () => []),
         create: vi.fn(async () => ({})),
@@ -78,6 +96,7 @@ describe("repairUnownedDeliveryRooms", () => {
       },
       workroomActivity: { create: vi.fn(async () => ({})) },
       principal: { findFirst: vi.fn(async () => ({ id: "HUMAN-FROM-ACTIVITY" })) },
+      $queryRaw: vi.fn(async () => [{ id: "delivery" }]),
       $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
     };
     return db;
@@ -104,6 +123,48 @@ describe("repairUnownedDeliveryRooms", () => {
     expect(db.principal.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ aliases: { some: { aliasType: "user", issuer: "", aliasValue: "user-1" } } }),
     }));
+  });
+
+  it("locks the parent before touching the roster or recording activity", async () => {
+    const db = repairDb([{ id: "delivery", scopeClaims: DELIVERY_CLAIMS,
+      requestedByPrincipal: person("HUMAN"), createdByPrincipal: agent("CODEX"),
+      leaseHolderPrincipal: null, activities: [] }]);
+    await repairUnownedDeliveryRooms(db as never, ["delivery"]);
+    expect(db.$queryRaw).toHaveBeenCalledOnce();
+    const [parts, roomId] = db.$queryRaw.mock.calls[0] as unknown as [string[], string];
+    expect(parts.join("?")).toContain('FROM "WorkCapsule" WHERE "id" = ? FOR UPDATE');
+    expect(roomId).toBe("delivery");
+    expect(db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      db.workroomParticipant.findMany.mock.invocationCallOrder[0]!);
+  });
+
+  // BI-C66B6076: the repair reads requester/creator history, so a room the
+  // handed-over admin requested would be given back to it. It goes to the
+  // room's accountable person instead.
+  it("gives a room requested by a handed-over account to the accountable person", async () => {
+    const db = repairDb([
+      { id: "delivery", scopeClaims: DELIVERY_CLAIMS, requestedByPrincipal: person("ADMIN"), createdByPrincipal: agent("CODEX"), leaseHolderPrincipal: null, activities: [] },
+    ]);
+    const userOf: Record<string, string> = { ADMIN: "u-admin", MARK: "u-mark" };
+    Object.assign(db, {
+      principalAlias: { findFirst: vi.fn(async ({ where }: { where: { principalId?: string; aliasValue?: string } }) => {
+        if (where.principalId) return userOf[where.principalId] ? { aliasValue: userOf[where.principalId] } : null;
+        const principalId = Object.keys(userOf).find((key) => userOf[key] === where.aliasValue);
+        return principalId ? { principalId } : null;
+      }) },
+      user: { findFirst: vi.fn(async ({ where }: { where: { id: string; workHandedOverAt?: unknown } }) =>
+        (where.workHandedOverAt ? where.id === "u-admin" : Object.values(userOf).includes(where.id)) ? { id: where.id } : null) },
+      portfolio: { findUnique: vi.fn(async ({ where }: { where: { slug?: string } }) =>
+        where.slug === "foundational" ? { id: "pf-found", slug: "foundational", accountablePrincipalId: "MARK" } : null) },
+      organization: { findFirst: vi.fn(async () => null) },
+    });
+    db.workroom = Object.assign(db.workroom, { findUnique: vi.fn(async () => ({ portfolioRole: null })) });
+    await expect(repairUnownedDeliveryRooms(db as never, ["delivery"])).resolves.toBe(1);
+    expect(db.workroomParticipant.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: "MARK", roles: ["coordinator"] }) });
+    expect(db.workroomParticipant.create).not.toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: "ADMIN" }) });
+    expect(db.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      payload: expect.objectContaining({ source: "drive-repair", reroutedFromPrincipalId: "ADMIN", ownerSource: "foundational" }),
+    }) });
   });
 
   it("does nothing without room ids", async () => {

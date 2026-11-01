@@ -9,7 +9,12 @@ vi.mock("@/lib/routing/local-provider-capacity", () => ({
   assertProviderDispatchCapacity: vi.fn(),
 }));
 
-const { executeAdapter } = vi.hoisted(() => ({ executeAdapter: vi.fn() }));
+const { executeAdapter, withLocalInferenceLockMock, managedSelection } = vi.hoisted(() => ({
+  executeAdapter: vi.fn(),
+  withLocalInferenceLockMock: vi.fn(),
+  managedSelection: { endpoint: null as string | null },
+}));
+vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: () => managedSelection.endpoint }));
 vi.mock("../routing/execution-adapter-registry", async (importOriginal) => ({
   ...await importOriginal<typeof import("../routing/execution-adapter-registry")>(),
   getExecutionAdapter: () => ({ execute: executeAdapter }),
@@ -19,6 +24,9 @@ vi.mock("./inference-admission", async (importOriginal) => ({
   acquireInferenceSlot: vi.fn(),
 }));
 vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: vi.fn() }));
+vi.mock("@/lib/queue/resource-lane", () => ({
+  withLocalInferenceLock: withLocalInferenceLockMock,
+}));
 vi.mock("../routing/adapter-telemetry-writer", () => ({ writeAdapterTelemetry: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../routing/provider-capacity/store", () => ({
   clearProviderCapacityStatus: vi.fn().mockResolvedValue(undefined),
@@ -28,15 +36,32 @@ vi.mock("../routing/provider-capacity/store", () => ({
 import { callProvider, classifyHttpError, InferenceError } from "./ai-inference";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { prisma } from "@dpf/db";
-import { acquireInferenceSlot } from "./inference-admission";
+import { acquireInferenceSlot, withInferenceCancellation } from "./inference-admission";
 
 beforeEach(() => {
+  managedSelection.endpoint = null;
   vi.mocked(assertProviderDispatchCapacity).mockReset();
   vi.mocked(assertProviderDispatchCapacity).mockResolvedValue(undefined);
   vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active" } as any);
   vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "active" } as any);
   vi.mocked(acquireInferenceSlot).mockReset().mockResolvedValue(vi.fn());
+  withLocalInferenceLockMock.mockReset().mockImplementation(async (fn) => fn());
   executeAdapter.mockReset().mockResolvedValue({ text: "done", toolCalls: [], inferenceMs: 1, usage: { inputTokens: 1, outputTokens: 1 } });
+});
+
+it("does not dispatch after a caller deadline races admission handoff", async () => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://provider.test/v1", authMethod: "none" } as any);
+  const controller = new AbortController();
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementation(async () => {
+    controller.abort(new DOMException("utility deadline reached", "AbortError"));
+    return release;
+  });
+  await expect(withInferenceCancellation(controller.signal, () =>
+    callProvider("openai", "test-model", [{ role: "user", content: "synthetic input" }], "")))
+    .rejects.toMatchObject({ name: "AbortError" });
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
 });
 
 it("rechecks setup removal after a cloud selection waits for admission", async () => {
@@ -104,36 +129,61 @@ describe("InferenceError", () => {
 });
 
 describe("callProvider host-capacity boundary", () => {
-  it.each(["active", "degraded"])("dispatches an eligible %s local provider and releases its slot", async (status) => {
+  it("dispatches actual local chat/tools through the same committed selection as embeddings and management", async () => {
+    managedSelection.endpoint = "http://host.docker.internal:12436/v1";
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://model-runner.docker.internal/v1", authMethod: "none" } as any);
+    await callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system");
+    expect(executeAdapter.mock.calls[0]?.[0].provider.baseUrl).toBe(managedSelection.endpoint);
+  });
+  it.each(["active", "degraded"])("dispatches an eligible %s local provider through the shared local lane", async (status) => {
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "http://localhost:11434/v1", authMethod: "none" } as any);
     vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status } as any);
-    const release = vi.fn();
-    vi.mocked(acquireInferenceSlot).mockResolvedValueOnce(release);
     await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
       .resolves.toMatchObject({ content: "done" });
     expect(executeAdapter).toHaveBeenCalledOnce();
+    expect(withLocalInferenceLockMock).toHaveBeenCalledWith(expect.any(Function), {
+      modelId: "qwen",
+      origin: "interactive",
+    });
+    expect(acquireInferenceSlot).not.toHaveBeenCalled();
+  });
+
+  it("keeps remote providers on the per-engine inference semaphore", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({
+      status: "active",
+      baseUrl: "https://api.example.test",
+      authMethod: "none",
+    } as any);
+    const release = vi.fn();
+    vi.mocked(acquireInferenceSlot).mockResolvedValueOnce(release);
+
+    await expect(callProvider("openai", "gpt-test", [{ role: "user", content: "triage" }], "system"))
+      .resolves.toMatchObject({ content: "done" });
+
+    expect(withLocalInferenceLockMock).not.toHaveBeenCalled();
+    expect(acquireInferenceSlot).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();
   });
 
-  it.each(["provider", "connection"])("does not dispatch when the %s is disabled while waiting for a slot", async (target) => {
+  it.each(["provider", "connection"])("does not dispatch when the %s is disabled while waiting for the local lane", async (target) => {
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://localhost:11434/v1", authMethod: "none" } as any);
-    const release = vi.fn();
     let wake!: () => void;
     let entered!: () => void;
     const waiting = new Promise<void>((resolve) => { entered = resolve; });
-    vi.mocked(acquireInferenceSlot).mockImplementationOnce(() => {
+    withLocalInferenceLockMock.mockImplementationOnce((fn) => {
       entered();
-      return new Promise<() => void>((resolve) => { wake = () => resolve(release); });
+      return new Promise((resolve, reject) => {
+        wake = () => { void Promise.resolve(fn()).then(resolve, reject); };
+      });
     });
     const pending = callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system");
-    const rejected = expect(pending).rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
     await waiting;
     if (target === "provider") vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "inactive" } as any);
     else vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "inactive" } as any);
     wake();
-    await rejected;
+    await expect(pending).rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
     expect(executeAdapter).not.toHaveBeenCalled();
-    expect(release).toHaveBeenCalledOnce();
+    expect(acquireInferenceSlot).not.toHaveBeenCalled();
   });
 
   it.each(["inactive", "disabled"])("rejects a stale local selection when the connection is %s before capacity wait", async (status) => {
@@ -204,6 +254,24 @@ describe("classifyHttpError", () => {
 
     expect(err.code).toBe("overloaded");
     expect(err.statusCode).toBe(503);
+  });
+
+  it("attaches a quota reset to an Anthropic usage-limit 400 without waiting on it like a 429", () => {
+    const err = classifyHttpError(
+      400,
+      "anthropic",
+      JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.",
+        },
+      }),
+    );
+
+    expect(err.code).toBe("provider_error");
+    expect(err.capacity).toMatchObject({ state: "quota_resets_at", action: "retry_at" });
+    expect(err.capacity?.retryAt?.toISOString()).toBe("2026-11-01T00:00:00.000Z");
   });
 
   it("attaches Z.ai capacity classification for insufficient coding credits", () => {

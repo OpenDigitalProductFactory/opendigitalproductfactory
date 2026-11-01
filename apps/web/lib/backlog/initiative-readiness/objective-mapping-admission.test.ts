@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
+import { bodyCriteriaVersion } from "./body-baseline-version";
 
 import {
   ObjectiveMappingAdmissionRefusal,
@@ -140,6 +142,42 @@ function admissionDb() {
 }
 
 describe("objective-mapping action-time admission", () => {
+  it("admits an archived exact merged body author and rechecks source under the transaction lock", async () => {
+    const fixture = admissionDb();
+    const body = "## Acceptance\n- Verify delivered repair.";
+    const original = packet();
+    const current = { ...original, binding: { ...original.binding, artifactRef: {
+      kind: "document-version" as const, repositoryFullName, versionId: "body-v1", valueDigest: "sha256:body" } } };
+    current.requestKey = createObjectiveMappingRequestKey(current);
+    const room = { capsuleId: "WC-ATOMIC", id: "room-row", backlogItemId: "BI-ATOMIC", repositoryFullName,
+      headBranch: current.binding.workroomRef.branchName, headSha, baseSha: "1".repeat(40),
+      createdByPrincipalId: "author", status: "archived", pullRequestNumber: 6265,
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
+    fixture.db.workroom.findUnique.mockResolvedValue(room);
+    fixture.db.backlogItem.findUnique.mockResolvedValue({ id: "row-bi-atomic", itemId: "BI-ATOMIC", body, organizationId: null } as never);
+    const readActivities = fixture.db.backlogItemActivity.findMany.getMockImplementation()!;
+    fixture.db.backlogItemActivity.findMany.mockImplementation(async query => {
+      const rows = await readActivities(query);
+      if (query.where.kind !== "initiative_scope_baseline") return rows;
+      return rows.map(row => ({ ...row, payload: { ...row.payload, origin: "item-body",
+        artifactRef: current.binding.artifactRef, criteriaDigest: bodyCriteriaVersion(body)!.criteriaDigest,
+        sourceIdentity: { repositoryFullName, headSha }, authoritySnapshot: { organizationId: "platform" } } })) as never;
+    });
+    const db = { ...fixture.db, workroom: { ...fixture.db.workroom,
+      findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },
+      contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: createPullRequestObservation({
+        repositoryFullName, number: 6265, url: `https://github.com/${repositoryFullName}/pull/6265`, title: "repair",
+        headBranch: room.headBranch, headSha, state: "merged", isDraft: false, mergeStateStatus: null,
+        mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-16T05:00:00Z", providerUpdatedAt: "2026-10-16T05:00:00Z",
+        observedAt: "2026-10-16T05:01:00Z" }) }]) } };
+    const result = await prepareObjectiveMappingSubmissionAdmission({ packet: current, expectedTaskRunId: "TR-NEW",
+      ports: { db: db as never, verifyHistoricalArtifact: vi.fn(), workroomIsLive: vi.fn().mockResolvedValue(false) } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await expect(result.data.admissionGuard({ ...db, $queryRaw: vi.fn() } as never)).resolves.toBeUndefined();
+    db.contributorInventorySnapshot.findMany.mockResolvedValue([]);
+    await expect(result.data.admissionGuard({ ...db, $queryRaw: vi.fn() } as never)).rejects.toMatchObject({ reason: "workroom-identity-conflict" });
+  });
   it("replays the accepted same task after a missing writer using the full immutable objective", async () => {
     const fixture = admissionDb();
     const current = packet();

@@ -13,6 +13,7 @@
  */
 
 import { Prisma, prisma } from "@dpf/db";
+import { capacityProviderIds, indexProviderCapacityByProvider } from "./provider-capacity/store";
 import {
   deriveProviderHealth,
   type ProviderHealth,
@@ -91,7 +92,7 @@ export async function loadProviderHealthBatch(
       ORDER BY "providerId", "createdAt" DESC
     `,
     prisma.providerCapacityStatus.findMany({
-      where: { providerId: { in: uniqueIds } },
+      where: { providerId: { in: capacityProviderIds(uniqueIds) } },
       select: {
         providerId: true,
         state: true,
@@ -105,7 +106,7 @@ export async function loadProviderHealthBatch(
   ]);
 
   const providersById = new Map(providers.map((provider) => [provider.providerId, provider]));
-  const capacityById = new Map(capacityRows.map((capacity) => [capacity.providerId, capacity]));
+  const capacityById = indexProviderCapacityByProvider(capacityRows, opts.now ?? Date.now());
   const outcomesById = new Map<string, ProviderHealthBatchOutcome[]>();
   for (const outcome of outcomes) {
     const bucket = outcomesById.get(outcome.providerId) ?? [];
@@ -141,7 +142,7 @@ export async function loadProviderHealthBatch(
       const lifecycle = providersById.get(providerId)?.status;
       result.set(providerId, {
         status: "rejected",
-        configured: lifecycle !== undefined && lifecycle !== "unconfigured" && lifecycle !== "inactive",
+        configured: lifecycle !== undefined && lifecycle !== "unconfigured",
       });
     }
   }

@@ -1,100 +1,154 @@
 "use client";
 
 import Link from "next/link";
-
+import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
 import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
-import type { InvocationAttribution } from "@/lib/work-capsules/invocation-attribution";
+import { countOperatorAttention, projectWorkroomOperatorSummary, type OperatorWorkGroup, type WorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { useT } from "@/lib/i18n/use-t";
 
-export type WorkroomInventoryRow = {
-  capsuleId: string;
-  backlogItemId: string | null;
-  title: string;
-  status: string;
-  source: string;
-  executorKind: string | null;
-  attribution: InvocationAttribution;
-  portfolioRole: string | null;
-  headBranch: string | null;
-  pullRequestUrl: string | null;
-  updatedAt: string;
-  liveness: string;
-  isLive: boolean;
-  isReapable: boolean;
-  livenessReason: string;
-  trueLivenessAt: string | null;
+/** COO fields stay in row details so the default-visible inventory does not grow. */
+export type WorkroomCooFields = {
+  lastCycleKey: string | null;
+  lastAction: string | null;
+  lastReason: string | null;
+  ticksSinceAdvance: number | null;
+  nextWakeAt: string | null;
+  spanOfControl: number;
+  overSpan: boolean;
+  unowned: boolean;
+  paused: boolean;
+  ownerIsSuggestion: boolean;
+  escalationLabel: string | null;
+  missingAckCount: number;
+  actionHref: string;
 };
 
-const columns: Column<WorkroomInventoryRow>[] = [
-  {
-    key: "workroom",
-    header: "Workroom",
-    cell: (room) => {
-      const caseKey = encodeWorkCaseKey(room.backlogItemId
-        ? { sourceType: "backlog-item", sourceId: room.backlogItemId }
-        : { sourceType: "work-capsule", sourceId: room.capsuleId });
-      return <div><Link className="font-medium text-[var(--dpf-accent)] hover:underline" href={`/workspace/cases/${caseKey}`}>{room.title}</Link><p className="mt-1 font-mono text-dpf-caption text-[var(--dpf-muted)]">{room.capsuleId}</p></div>;
-    },
-    sortAccessor: (room) => room.title,
-    width: "28%",
-  },
-  { key: "portfolio", header: "Portfolio", cell: (room) => portfolioRoleLabel(room.portfolioRole), sortAccessor: (room) => portfolioRoleLabel(room.portfolioRole), width: "16%" },
-  {
-    key: "liveness",
-    header: "Liveness",
-    cell: (room) => <div><StatusBadge intent={room.isLive ? "success" : room.isReapable ? "warning" : "neutral"} label={room.liveness.replaceAll("-", " ")} uppercase={false} /><p className="mt-1 max-w-xs text-xs text-[var(--dpf-muted)]">{room.livenessReason}</p></div>,
-    sortAccessor: (room) => room.liveness,
-    width: "24%",
-  },
-  { key: "executor", header: "Executor", cell: (room) => <div className="break-words">{room.attribution.executor}<p className="mt-1 text-xs text-[var(--dpf-muted)]">{room.attribution.invocation}</p></div>, sortAccessor: (room) => `${room.attribution.executor} ${room.attribution.invocation}`, width: "14%" },
-  { key: "context", header: "Development context", cell: (room) => room.headBranch ?? "Not a code Workroom", mono: true, width: "18%" },
-];
+export type CooSupervisionSummary = {
+  unownedCount: number;
+  pausedCount: number;
+  overSpanOwners: Array<{ principalId: string; displayName: string | null; roomCount: number }>;
+  missingAckCount: number;
+};
+
+export type WorkroomInventoryRow = {
+  capsuleId: string; backlogItemId: string | null; title: string; status: string;
+  portfolioRole: string | null; pullRequestUrl: string | null;
+  liveness: string; isLive: boolean;
+  accountableName?: string | null; operator?: WorkroomOperatorSummary;
+  coo?: WorkroomCooFields | null;
+};
+
+const viewOf = (room: WorkroomInventoryRow) => room.operator ?? projectWorkroomOperatorSummary(room);
+const roomHref = (room: WorkroomInventoryRow) =>
+  room.coo?.actionHref ?? `/workspace/cases/${encodeWorkCaseKey(room.backlogItemId
+    ? { sourceType: "backlog-item", sourceId: room.backlogItemId }
+    : { sourceType: "work-capsule", sourceId: room.capsuleId })}`;
 
 function WorkroomRows({ rows, label }: { rows: WorkroomInventoryRow[]; label: string }) {
-  return <DataTable ariaLabel={label} className="overflow-x-auto rounded-xl border border-[var(--dpf-border)]" columns={columns} rows={rows} getRowKey={(room) => room.capsuleId} pageSize={20} empty="No Workrooms in this group. New activity appears here when work is claimed or started." />;
-}
-
-function duration(ms: number | null): string {
-  if (ms == null) return "—";
-  if (ms < 60 * 60 * 1000) return `${Math.round(ms / 60_000)}m`;
-  return `${Math.round(ms / 3_600_000)}h`;
-}
-
-export function WorkroomInventory({
-  workrooms,
-  summary,
-}: {
-  workrooms: WorkroomInventoryRow[];
-  summary: CapsuleLivenessSummary;
-}) {
-  const live = workrooms.filter((room) => room.isLive);
-  const history = workrooms.filter((room) => !room.isLive);
-  return (
-    <div className="space-y-8">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <StatCard label="Live" value={summary.live} intent="success" />
-        <StatCard label="History" value={`${summary.history} inactive`} />
-        <StatCard label="Cleanup" value={summary.reapable} intent={summary.reapable > 0 ? "warning" : "neutral"} />
-        <StatCard label="Executing" value={summary.heavyLane.executing} />
-        <StatCard label="Ready" value={summary.heavyLane.nextReady} intent={summary.heavyLane.nextReady > 0 ? "info" : "neutral"} />
-        <StatCard label="Wait" value={duration(summary.progressSlo.oldestWaitMs)} intent={(summary.progressSlo.oldestWaitMs ?? 0) > 3_600_000 ? "warning" : "neutral"} />
-      </div>
-      <section className="space-y-3" aria-labelledby="live-workrooms-heading">
-        <div>
-          <h2 id="live-workrooms-heading" className="text-base font-semibold text-[var(--dpf-text)]">Live Workrooms</h2>
-          <p className="text-xs text-[var(--dpf-muted)]">Active.</p>
-        </div>
-        <WorkroomRows rows={live} label="Live Workrooms" />
-      </section>
-      <section className="space-y-3" aria-labelledby="history-workrooms-heading">
-        <div>
-          <h2 id="history-workrooms-heading" className="text-base font-semibold text-[var(--dpf-text)]">History</h2>
-          <p className="text-xs text-[var(--dpf-muted)]">Retained for audit.</p>
-        </div>
-        <WorkroomRows rows={history} label="Workroom history and cleanup" />
-      </section>
+const t = useT("workrooms");
+const columns: Column<WorkroomInventoryRow>[] = [
+  { key: "workroom", header: t("inventory.work"), sortAccessor: room => room.title,
+    cell: room => <div><Link className="font-medium text-dpf-accent hover:underline" href={roomHref(room)}>{room.title}</Link>
+      <p className="mt-1 text-dpf-caption text-dpf-muted">{portfolioRoleLabel(room.portfolioRole)}</p></div> },
+  { key: "owner", header: t("inventory.accountable"), cell: room => room.accountableName ?? t("inventory.unassigned") },
+  { key: "next", header: t("inventory.next"), cell: room => {
+    const view = viewOf(room);
+    return <div><StatusBadge intent={view.group === "attention" ? "warning" : view.group === "working" ? "success" : "neutral"}
+      label={t(view.label)} uppercase={false} /><p className="mt-1 text-dpf-caption text-dpf-muted">
+        {view.action ? <>{t(view.action.actor)} · {view.action.detail ?? t(view.action.instruction)}</> : t(view.nextAction)}</p>
+      {(view.action?.decisionCount ?? 0) > 1 && <p className="text-dpf-caption text-dpf-muted">{t("inventory.decisionCount", { count: view.action!.decisionCount! })}</p>}</div>;
+  } },
+  { key: "detail", header: t("inventory.details"), cell: room => <details>
+    <summary className="cursor-pointer text-dpf-accent">{t("inventory.technical")}</summary>
+    <div className="mt-2 max-w-xs space-y-2 break-words text-dpf-caption text-dpf-muted">
+      <Link className="text-dpf-accent hover:underline" href={roomHref(room)}>{t("inventory.openEvidence")}</Link>
+      {viewOf(room).recoveryCondition && <p>{t("inventory.recovery", { condition: viewOf(room).recoveryCondition ?? "" })}</p>}
+      {room.pullRequestUrl && <Link className="text-dpf-accent hover:underline" href={room.pullRequestUrl}>{t("inventory.change")}</Link>}
+      {room.coo && <CooRoomDetails room={room.coo} t={t} />}
     </div>
-  );
+  </details> },
+];
+
+  return <DataTable ariaLabel={label} className="overflow-x-auto rounded-dpf-xl border border-dpf-border"
+    columns={columns} rows={rows} getRowKey={room => room.capsuleId} pageSize={20}
+    empty={t("inventory.empty")} />;
+}
+
+function CooRoomDetails({ room, t }: { room: WorkroomCooFields; t: ReturnType<typeof useT<"workrooms">> }) {
+  return <div data-coo-fields className="space-y-2">
+    {room.lastCycleKey && <p>{t("coo.lastCycle", { cycle: room.lastCycleKey })}</p>}
+    {room.lastAction && <p>{t("coo.lastAction", { action: room.lastAction })}</p>}
+    {room.lastReason && <p>{t("coo.lastReason", { reason: room.lastReason })}</p>}
+    {room.ticksSinceAdvance != null && <p>{t("coo.ticks", { count: room.ticksSinceAdvance })}</p>}
+    <p>{room.nextWakeAt ? t("coo.nextWake", { when: room.nextWakeAt }) : t("coo.nextWakeUnknown")}</p>
+    {room.unowned && <p>{t("coo.unownedRoom")}</p>}
+    {room.paused && <p>{t("coo.pausedRoom")}</p>}
+    {room.ownerIsSuggestion && <p>{t("coo.suggestion")}</p>}
+    <p>{t("coo.span", { count: room.spanOfControl })}</p>
+    {room.overSpan && <p>{t("coo.overSpanFlag")}</p>}
+    {room.escalationLabel && <p>{t("coo.escalation", { path: room.escalationLabel })}</p>}
+    {room.missingAckCount > 0 && <p>{t("coo.missingAck", { count: room.missingAckCount })}</p>}
+  </div>;
+}
+
+export function WorkroomInventory({ workrooms, summary, heldCapsuleIds = [], attentionContent, supervision }: {
+  workrooms: WorkroomInventoryRow[]; summary: CapsuleLivenessSummary;
+  heldCapsuleIds?: string[]; attentionContent?: React.ReactNode;
+  supervision?: CooSupervisionSummary | null;
+}) {
+  const t = useT("workrooms");
+  const labels = { attention: t("inventory.attention"), working: t("inventory.working"), waiting: t("inventory.waiting"), history: t("inventory.history") };
+  const groups = { attention: [] as WorkroomInventoryRow[], working: [] as WorkroomInventoryRow[],
+    waiting: [] as WorkroomInventoryRow[], history: [] as WorkroomInventoryRow[] };
+  for (const room of workrooms) groups[viewOf(room).group].push(room);
+  const sharedRecoveryIds = attentionContent ? heldCapsuleIds : [];
+  const held = new Set(sharedRecoveryIds);
+  const attentionCount = countOperatorAttention(groups.attention.map(room => room.capsuleId), sharedRecoveryIds);
+  const [selected, setSelected] = useState<OperatorWorkGroup>(attentionCount ? "attention"
+    : groups.working.length ? "working" : "waiting");
+  const [showHistory, setShowHistory] = useState(false);
+  const visibleRows = groups[selected].filter(room => selected !== "attention" || !held.has(room.capsuleId));
+  const showRows = selected !== "attention" || visibleRows.length > 0 || !attentionContent;
+  return <div className="space-y-6">
+    <section className="space-y-3" aria-labelledby="live-workrooms-heading">
+      <h2 id="live-workrooms-heading" className="text-dpf-subtitle font-dpf-semibold text-dpf-text">{t("inventory.current")}</h2>
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t("inventory.views")}>
+        {(["attention", "working", "waiting"] as const).map(group => <Button key={group}
+          variant={selected === group ? "primary" : "secondary"} aria-pressed={selected === group}
+          onClick={() => setSelected(group)}>{labels[group]} · {group === "attention" ? attentionCount : groups[group].length}</Button>)}
+      </div>
+      {selected === "attention" && attentionContent}
+      {showRows && <WorkroomRows key={selected} rows={visibleRows} label={labels[selected]} />}
+    </section>
+    <details onToggle={event => setShowHistory(event.currentTarget.open)} className="rounded-dpf-xl border border-dpf-border p-4">
+      <summary className="cursor-pointer font-dpf-semibold">{t("inventory.historyCount", { count: groups.history.length })}</summary>
+      {showHistory && <WorkroomRows rows={groups.history} label={t("inventory.history")} />}
+    </details>
+    {supervision && <details data-coo-supervision className="rounded-dpf-xl border border-dpf-border p-4">
+      <summary className="cursor-pointer font-dpf-semibold">{t("coo.supervision")}</summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label={t("coo.unowned")} value={supervision.unownedCount} />
+        <StatCard label={t("coo.paused")} value={supervision.pausedCount} />
+        <StatCard label={t("coo.overSpan")} value={supervision.overSpanOwners.length} />
+        <StatCard label={t("coo.missingAcks")} value={supervision.missingAckCount} />
+      </div>
+      {supervision.overSpanOwners.length > 0 && <ul className="mt-3 space-y-1 text-dpf-caption text-dpf-muted">
+        {supervision.overSpanOwners.map(owner => <li key={owner.principalId}>
+          {owner.displayName ?? owner.principalId} · {owner.roomCount}
+        </li>)}
+      </ul>}
+    </details>}
+    <details className="rounded-dpf-xl border border-dpf-border p-4">
+      <summary className="cursor-pointer font-dpf-semibold">{t("inventory.system")}</summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <StatCard label={t("inventory.held")} value={summary.live} />
+        <StatCard label={t("inventory.cleanup")} value={summary.reapable} />
+        <StatCard label={t("inventory.executing")} value={summary.heavyLane.executing} />
+      </div>
+    </details>
+  </div>;
 }

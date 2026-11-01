@@ -3,6 +3,7 @@ import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from
 import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
+import { digestBuildArtifactValue } from "@/lib/build/build-artifact-provenance";
 
 import { prisma } from "@dpf/db";
 import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
@@ -91,8 +92,66 @@ function designReviewPassed(designReview: unknown): boolean {
     && (designReview as Record<string, unknown>).decision === "pass");
 }
 
+/** The digest of the stored plan, in the form a plan revision records it (BI-6F2872FC). */
+function currentBuildPlanDigest(buildPlan: unknown): string | null {
+  return buildPlan == null ? null : `sha256:${digestBuildArtifactValue(buildPlan)}`;
+}
+
 function codes(decision: InitiativeReadinessDecision) {
   return [...decision.blockers, ...decision.unmet].map((entry) => entry.code);
+}
+
+export type BuildReadinessFactsInput = {
+  kind: string;
+  designDoc: unknown;
+  designReview: unknown;
+  buildPlan: unknown;
+  originator: { id: string; itemId: string; title: string; body: string | null; workType: string | null };
+};
+
+/**
+ * The facts a Build Studio build's readiness is judged on, read once for every
+ * gate that judges a build (BI-1E8EAD10, BI-0E2E3BC5, and BI-3555F94E for the
+ * terminal transition).
+ *
+ * - The Workroom's bound delivery shape, and the parent's scope a
+ *   decomposition child inherits.
+ * - Sensitivity read from the change: the item, the room's declared paths and
+ *   the plan's files (operator direction 2026-10-07).
+ * - The build's own reviewed design. For small and medium shapes that design
+ *   is the recorded research and, absent body criteria, the baseline.
+ *
+ * A missing room or parent leaves the value null.
+ */
+export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: BuildReadinessFactsInput) {
+  const originator = build.originator;
+  const [workShape, inheritedScope, declaredPaths] = await Promise.all([
+    db.workroom
+      ? readBoundWorkShapeRef(db as BoundWorkShapeDb, originator.itemId).catch(() => null)
+      : Promise.resolve(null),
+    db.backlogItemActivity.findMany && db.backlogItem
+      ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: originator.itemId, childRowId: originator.id })
+        .catch(() => null)
+      : Promise.resolve(null),
+    db.workroom
+      ? readBoundEditPaths(db as BoundWorkShapeDb, originator.itemId).catch(() => [] as string[])
+      : Promise.resolve([] as string[]),
+  ]);
+  return {
+    workShape,
+    inheritedScope,
+    deliverySensitivity: assessDeliverySensitivity({
+      title: originator.title,
+      body: originator.body,
+      workType: originator.workType,
+      declaredPaths,
+      planPaths: buildPlanPaths(build.buildPlan),
+    }),
+    buildDesign: {
+      reviewPassed: designReviewPassed(build.designReview),
+      acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
+    },
+  };
 }
 
 export async function enforceBuildInitiativeReadiness(args: {
@@ -145,49 +204,21 @@ export async function enforceBuildInitiativeReadiness(args: {
     return { allowed: false, error: "classification_required", message: "Build has no canonical originating backlog subject.", decision };
   }
 
-  // BI-1E8EAD10: the claim path, the terminal transition and the review-outcome
-  // path all key the gates on the Workroom's bound delivery shape and let a
-  // decomposition child inherit its parent's baseline, research and coverage.
-  // This gate did neither, so every Build Studio phase was judged as an
-  // unshaped, standalone feature and owed a plan document the automated lane
-  // never produces. Read both the way those paths do; a missing room or
-  // parent simply leaves the value null, exactly as before.
-  const [workShape, inheritedScope] = await Promise.all([
-    db.workroom
-      ? readBoundWorkShapeRef(db as BoundWorkShapeDb, build.originator.itemId).catch(() => null)
-      : Promise.resolve(null),
-    db.backlogItemActivity.findMany && db.backlogItem
-      ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: build.originator.itemId, childRowId: build.originator.id })
-        .catch(() => null)
-      : Promise.resolve(null),
-  ]);
-  // BI-0E2E3BC5: sensitivity raises the shape here exactly as it does at the
-  // claim and at closure (read from the change, BI-243BC956), and the build's own
-  // reviewed design is handed to the projector: for small and medium it is the
-  // recorded research and, absent body criteria, the baseline.
-  const declaredPaths = db.workroom
-    ? await readBoundEditPaths(db as BoundWorkShapeDb, build.originator.itemId).catch(() => [])
-    : [];
+  const facts = await loadBuildReadinessFacts(db, build);
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
     item: {
       ...build.originator,
       activeBuildKind: build.kind,
-      workShape,
-      deliverySensitivity: assessDeliverySensitivity({
-        title: build.originator.title,
-        body: build.originator.body,
-        workType: build.originator.workType,
-        declaredPaths,
-        // The plan's files are the change at this gate (operator direction 2026-10-07).
-        planPaths: buildPlanPaths(build.buildPlan),
-      }),
+      workShape: facts.workShape,
+      deliverySensitivity: facts.deliverySensitivity,
     },
-    buildDesign: {
-      reviewPassed: designReviewPassed(build.designReview),
-      acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
-    },
+    buildDesign: facts.buildDesign,
+    // BI-6F2872FC: only at plan -> build does the plan under review have to be
+    // the covered one. Later phases may normalize the stored plan while
+    // building, and that must not retroactively stale the entry it passed.
+    ...(args.expectedPhase === "plan" ? { buildPlanDigest: currentBuildPlanDigest(build.buildPlan) } : {}),
     activities: build.originator.activities as InitiativeReadinessActivity[],
-    inheritedScope,
+    inheritedScope: facts.inheritedScope,
     target: args.target,
     transitionObject: {
       kind: "feature-build",

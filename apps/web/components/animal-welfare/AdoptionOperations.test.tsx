@@ -12,7 +12,7 @@ const base = { applicationRef: "AA-1", version: 1, submittedAt: "2026-09-10T00:0
 const workspace: AdoptionWorkspace = {
   limit: 50,
   currency: "USD",
-  animals: [{ animalProfileId: "a1", name: "Ranger", animalRef: "AN-1", ready: true }],
+  animals: [{ animalProfileId: "a1", name: "Ranger", animalRef: "AN-1", ready: true, needsIntake: false }],
   housing: [{ id: "k1", label: "D1", available: 1 }],
   applications: [
     { ...base, applicationId: "app-1", applicantName: "Dana Ortiz", status: "home-check" },

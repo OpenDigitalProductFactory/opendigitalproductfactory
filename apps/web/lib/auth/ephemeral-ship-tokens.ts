@@ -45,6 +45,7 @@ const EPHEMERAL_SHIP_SCOPES = [
   "spec_plan_read",
   "work_capsule_read",
   "work_capsule_write",
+  "worktree_provision",
 ] as const;
 
 /**

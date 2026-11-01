@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadSemanticReviewRoomProjection, type ReviewerRunSnapshot } from "./semantic-review-room-projection";
+import { projectWorkroomRecovery } from "@/lib/work-capsules/workroom-recovery-projection";
+
+vi.mock("./review-room-candidates", () => ({ loadReviewRoomCandidates: vi.fn(async (db, capsuleIds: string[]) => {
+  if (!capsuleIds.length) return { rows: [], partial: false, partialCapsuleIds: [] };
+  const rows = await db.taskRun?.findMany({}).catch(() => null);
+  const partial = !rows || rows.length > 20 || rows.some((row: ReviewerRunSnapshot) => !row.nodes || row.nodes.length > 12);
+  return { rows: (rows ?? []).slice(0, 20).map((row: ReviewerRunSnapshot) => ({ capsuleId: capsuleIds[0], reviewKind: "semantic-review", ...row })),
+    partial, partialCapsuleIds: partial ? capsuleIds : [] };
+}) }));
 
 const now = new Date("2026-09-08T20:00:00Z");
 const run = (status: string): ReviewerRunSnapshot => ({
@@ -10,6 +19,30 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it.each([
+    { status: "completed", decision: "pass" }, { status: "completed", decision: "fail" },
+    { status: "completed", decision: "inconclusive" }, { status: "input-required", decision: null },
+  ])("keeps complete historical-only $status/$decision observation complete and gives the canonical issuer action", async ({ status, decision }) => {
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run(status)] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "b".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
+        requesterAgentId: "AGT-EXT-CODEX", receiptId: decision ? "old-result" : null,
+        receiptDecision: decision, receiptSummary: "Historical only", receiptCreatedAt: now }]),
+    }, ["WC-1"], now);
+    expect(view.partial).toBe(false);
+    const recovery = projectWorkroomRecovery({ capsuleId: "WC-1", backlogItemId: "BI-1", leaseHolderPrincipalId: "principal-1",
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/source", baseSha: "c".repeat(40), headSha: "a".repeat(40) }, view);
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.reviewerExecution).toBeNull();
+    expect(recovery.blocker).toMatchObject({ reason: "current-review-unavailable",
+      accountableOwner: { principalId: "principal-1", role: "delivery-coordinator" },
+      action: { toolName: "get_backlog_item", args: { itemId: "BI-1", recoveryGate: "post-implementation-review" } } });
+    expect(recovery.historicalReviewerExecutions).toMatchObject([{ taskRunId: "TR-1", identityScope: "historical",
+      sourceHeadSha: "b".repeat(40), resultAction: { requiredUserId: "requester-1" } }]);
+    expect(recovery.historicalReviewerExecutions[0].receipt?.decision).toBe(decision ?? undefined);
+  });
+
   it("replaces obsolete retry instructions after expiry and links a successor", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { schemaVersion: 1, deadlineAt: "2026-09-08T19:00:00Z",
@@ -26,7 +59,7 @@ describe("reviewer state in its Workroom", () => {
     const old = { ...run("input-required"), id: "old-row", taskRunId: "TR-OLD" };
     const current = { ...run("completed"), id: "current-row", taskRunId: "TR-CURRENT" };
     const identity = (rowId: string, sourceHeadSha: string, issuedAt: string) => ({
-      rowId, capsuleId: "WC-1", requestBound: true, sourceHeadSha,
+      rowId, capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true, sourceHeadSha,
       currentHeadSha: "a".repeat(40), issuedAt, receiptId: null,
     });
     const view = await loadSemanticReviewRoomProjection({
@@ -38,7 +71,7 @@ describe("reviewer state in its Workroom", () => {
     }, ["WC-1"], now);
     expect(view.attentionReason).toBeNull();
     expect(view.runs.find(row => row.taskRunId === "TR-OLD")).toMatchObject({ identityScope: "historical" });
-    expect(view.runs.find(row => row.taskRunId === "TR-CURRENT")).toMatchObject({ identityScope: "current" });
+    expect(view.runs.find(row => row.taskRunId === "TR-CURRENT")).toMatchObject({ capsuleId: "WC-1", identityScope: "current" });
     expect(view.runs).toHaveLength(2);
   });
 
@@ -46,7 +79,7 @@ describe("reviewer state in its Workroom", () => {
     const view = await loadSemanticReviewRoomProjection({
       taskRun: { findMany: async () => [run("input-required"), { ...run("completed"), id: "row-2", taskRunId: "TR-2" }] },
       $queryRaw: vi.fn().mockResolvedValue([1, 2].map(index => ({
-        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, sourceHeadSha: "a".repeat(40),
+        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true, sourceHeadSha: "a".repeat(40),
         currentHeadSha: "a".repeat(40), issuedAt: `2026-09-08T19:0${index}:00Z`, receiptId: null,
       }))),
     }, ["WC-1"], now);
@@ -57,9 +90,10 @@ describe("reviewer state in its Workroom", () => {
 
   it("labels missing request correlation unknown instead of claiming a current review", async () => {
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
-      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", requestBound: false }]),
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", requestBound: false, requesterAgentId: "unbound-agent" }]),
     }, ["WC-1"], now);
     expect(view.runs[0]).toMatchObject({ identityScope: "unknown" });
+    expect(view.runs[0].requesterAgentId).toBeNull();
     expect(view.partial).toBe(true);
   });
 
@@ -73,13 +107,14 @@ describe("reviewer state in its Workroom", () => {
 
   it("exposes a correlated receipt as evidence without promoting Workroom completion", async () => {
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
-      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
         sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
-        receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
+        requesterAgentId: "AGT-EXT-CODEX", receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
         receiptCreatedAt: now,
       }]),
     }, ["WC-1"], now);
     expect(view.runs[0]).toMatchObject({ receipt: { id: "receipt-1", decision: "pass", summary: "The committed change was reviewed." } });
+    expect(view.runs[0].requesterAgentId).toBe("AGT-EXT-CODEX");
     expect(view.receipts.every(receipt => receipt.status === "observed")).toBe(true);
     expect(view.receipts).toContainEqual(expect.objectContaining({ receiptId: "receipt-1", rawRef: { table: "ExternalEvidenceRecord", id: "receipt-1" } }));
   });
@@ -87,10 +122,28 @@ describe("reviewer state in its Workroom", () => {
     const findMany = vi.fn(async () => [{ ...run("input-required"), user: { employeeProfile: { displayName: "Alex" } } }]);
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany } }, ["WC-1"], now);
     expect(view.runs[0]).toMatchObject({ requesterName: "Alex", requesterId: "requester-1" });
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({
-      user: { select: { employeeProfile: { select: { displayName: true } } } },
-    }) }));
+    expect(findMany).toHaveBeenCalledOnce();
   });
+  it.each(["local-ci-active-capacity-reservation", "host-gpu-busy", "portal-quiescing", "review-authority-unavailable"])(
+    "projects the automatic %s wait instead of an obsolete retry instruction", async reason => {
+      const row = run("input-required");
+      row.nodes = [];
+      row.progressPayload = { semanticReview: { schemaVersion: 1, reason: "review-capacity-deferred",
+        requestDigest: "a".repeat(64), recoveryAttempt: 1, deadlineAt: "2026-09-08T20:10:00Z",
+        nextAction: "retry-review", capacityWaitReason: reason,
+        capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 1, nextCheckAt: "2026-09-08T20:00:30Z" } } };
+      const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] },
+        $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+          requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+          sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z" }]),
+      }, ["WC-1"], now);
+      expect(view.partial).toBe(false);
+      expect(view.runs[0].nextAction).toContain("server will recheck");
+      expect(view.runs[0]).toMatchObject({ requesterId: "requester-1", reason, identityScope: "current", recoveryWait: false });
+      expect(view.runs[0].receipt).toBeUndefined();
+    },
+  );
+
   it("preserves the next action recorded by review settlement", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { nextAction: "retry-review" } };
@@ -113,12 +166,7 @@ describe("reviewer state in its Workroom", () => {
   it("reads only native reviews correlated to the selected rooms with bounded history", async () => {
     const findMany = vi.fn(async () => [run("input-required")]);
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany } }, ["WC-1"], now);
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { archivedAt: null, AND: [
-        { a2aMetadata: { path: ["gateKind"], equals: "semantic-review" } },
-        { OR: [{ a2aMetadata: { path: ["capsuleId"], equals: "WC-1" } }] },
-      ] }, take: 21,
-    }));
+    expect(findMany).toHaveBeenCalledOnce();
     expect(view.attentionReason).toContain("TR-1");
     expect(view.receipts[0]).toMatchObject({ status: "observed", rawRef: { table: "TaskRun", id: "row-1" }, actorRef: { actorId: "requester-1" } });
     expect(view.receipts[0].summary).toContain("provider-outcome-uncertain-after-restart");
@@ -154,5 +202,71 @@ describe("reviewer state in its Workroom", () => {
     expect(view.partial).toBe(true);
     expect(view.receipts).toEqual([]);
     expect(view.attentionReason).toContain("could not be read");
+  });
+});
+
+
+describe("ordinary initiative review observations", () => {
+  const initiative = (id = "original", gate = "spec-approval") => ({
+    ...run("input-required"), id, taskRunId: `TR-${id}`, nodes: [],
+    capsuleId: "WC-1", reviewKind: "initiative-review" as const,
+    createdAt: new Date("2026-09-08T19:00:00Z"), requestDigest: "d".repeat(64),
+    metadataTrigger: "external-mcp", requesterAgentId: "AGT-EXT-CODEX",
+    roomRepositoryFullName: "owner/repo", roomHeadBranch: "fix/readback",
+    roomHeadSha: "a".repeat(40), roomBacklogItemId: "BI-1",
+    initiativeBinding: { writerToolName: gate === "architecture-review" ? "record_initiative_architecture_review" : "record_initiative_design_review",
+      itemId: "BI-1", gate, workroomRef: { kind: "workroom-head", workroomId: "WC-1",
+        repositoryFullName: "owner/repo", branchName: "fix/readback", headSha: "a".repeat(40) },
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "b".repeat(40),
+        path: "docs/superpowers/plans/existing.md", providerBlobId: "c".repeat(40) } },
+    progressPayload: { executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+      semanticReview: { nextAction: "retry-review", recoveryAttempt: 0 } },
+  });
+  const project = (rows: ReturnType<typeof initiative>[]) => loadSemanticReviewRoomProjection({
+    taskRun: { findMany: async () => rows }, $queryRaw: vi.fn().mockResolvedValue([]),
+  }, ["WC-1"], now);
+
+  it("retains a current room's ordinary review of an older immutable plan without inferring settlement", async () => {
+    const view = await project([initiative()]);
+    expect(view.partial).toBe(false);
+    expect(view.runs[0]).toMatchObject({ reviewKind: "initiative-review", reviewGate: "spec-approval",
+      identityScope: "current", sourceHeadSha: "a".repeat(40), artifactVersion: "b".repeat(40),
+      requestDigest: "d".repeat(64), executionUncertain: true, recoveryWait: false });
+    expect(view.runs[0].receipt).toBeUndefined();
+    expect(view.runs[0].nextAction).not.toContain("retry-review");
+  });
+  it("carries the canonical ordinary wait reason into its blocker without granting retry", async () => {
+    const row = initiative();
+    (row as any).progressPayload = { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
+      resumeMode: "same-taskrun", writerToolName: "record_initiative_design_review", attempt: 1,
+      observedAt: "2026-09-08T19:00:00Z", dispatchContract: "required-tool-call" } };
+    const view = await project([row]);
+    expect(view.runs[0]).toMatchObject({ reason: "missing-terminal-writer", recoveryWait: false, executionUncertain: false });
+    const recovery = projectWorkroomRecovery({ capsuleId: "WC-1", backlogItemId: "BI-1", leaseHolderPrincipalId: "principal-1",
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/source",
+      baseSha: "c".repeat(40), headSha: "a".repeat(40) }, view);
+    expect(recovery.blocker).toMatchObject({ reason: "missing-terminal-writer", action: { method: "tasks/result",
+      params: { taskId: row.taskRunId, requestDigest: "d".repeat(64) } } });
+    row.status = "working";
+    expect((await project([row])).runs[0].reason).toBeNull();
+  });
+  it("preserves distinct gates and competing originals instead of choosing the latest per head", async () => {
+    const view = await project([initiative("spec-1"), initiative("architecture", "architecture-review"), initiative("spec-2")]);
+    expect(view.runs).toHaveLength(3);
+    expect(view.runs.every(row => row.identityScope === "current")).toBe(true);
+    expect(view.runs.filter(row => row.identityConflict).map(row => row.taskRunId)).toEqual(["TR-spec-1", "TR-spec-2"]);
+    expect(view.attentionReason).toBeTruthy();
+  });
+  it.each(["repository", "branch", "item", "digest", "binding"])("does not qualify an inconsistent %s identity", async kind => {
+    const row = initiative();
+    if (kind === "repository") row.roomRepositoryFullName = "foreign/repo";
+    if (kind === "branch") row.roomHeadBranch = "fix/foreign";
+    if (kind === "item") row.roomBacklogItemId = "BI-OTHER";
+    if (kind === "digest") row.requestDigest = "invalid";
+    if (kind === "binding") (row as any).initiativeBinding = [];
+    const view = await project([row]);
+    expect(view.partial).toBe(true);
+    expect(view.runs[0]).toMatchObject({ identityScope: "unknown", recoveryWait: false, requestDigest: null, sourceHeadSha: null });
+    expect(view.runs[0].receipt).toBeUndefined();
   });
 });

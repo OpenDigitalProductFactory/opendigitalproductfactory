@@ -1,4 +1,5 @@
 import { slugify } from "@/lib/shared/slugify";
+import { DECISION_SCOPES, type DecisionScope } from "@dpf/validators/decision-scopes";
 import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 
 export const WORK_CAPSULE_STATUSES = [
@@ -86,9 +87,9 @@ export const SUB_SHAPE_ROOM_KEY_PREFIX = "sub-shape:";
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 
-export const WORK_CAPSULE_DECISION_SCOPES = ["wwmd", "wwwd", "wsid"] as const;
+export const WORK_CAPSULE_DECISION_SCOPES = DECISION_SCOPES;
 
-export type WorkCapsuleDecisionScope = (typeof WORK_CAPSULE_DECISION_SCOPES)[number];
+export type WorkCapsuleDecisionScope = DecisionScope;
 
 export const WORK_CAPSULE_PORTFOLIO_ROLES = [
   "foundational",
@@ -180,6 +181,9 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "question",
   "response",
   "error",
+  // BI-49BC21C1: the room's own recurring misses recorded as harness-edit
+  // candidates, once per room per day, by the harness evolution loop.
+  "harness-evolution-candidate",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
@@ -319,7 +323,7 @@ const EXECUTOR_SET = new Set<string>(WORK_CAPSULE_EXECUTOR_KINDS);
 const ACTIVITY_SET = new Set<string>(WORK_CAPSULE_ACTIVITY_KINDS);
 const TAXONOMY_SET = new Set<string>(WORK_CAPSULE_BRANCH_TAXONOMIES);
 const EVIDENCE_KIND_SET = new Set<string>(WORK_CAPSULE_EVIDENCE_KINDS);
-const SCOPE_KIND_SET = new Set<ScopeClaim["kind"]>([
+export const SCOPE_KIND_SET: ReadonlySet<ScopeClaim["kind"]> = new Set<ScopeClaim["kind"]>([
   "path",
   "module",
   "package",

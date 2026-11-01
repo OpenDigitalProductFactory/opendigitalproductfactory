@@ -16,12 +16,12 @@
 import type { prisma } from "@dpf/db";
 
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
-import { WORKROOM_DRIVE_STALL_TICKS } from "@/lib/work-management/workroom-drive-hold";
+import { WORKROOM_DRIVE_STALL_TICKS } from "@dpf/validators/workroom-policy/drive-hold";
 import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-owner-ladder";
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
-import { openDeadlines } from "@/lib/work-management/drive-deadlines";
-import { readStoredDriveMarking } from "@/lib/work-management/drive-marking";
+import { openDeadlines } from "@dpf/validators/workroom-policy/drive-deadlines";
+import { readStoredDriveMarking } from "@dpf/validators/workroom/marking";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import type { AttentionItem, AttentionPortfolio } from "../types";
@@ -172,8 +172,10 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
         ? "this room's outcome, and anything nested under it"
         : "this room's outcome — and it has no owner to escalate to",
       // Appointing an owner or clearing a stop condition is a judgment call about
-      // who is accountable, not a one-tap acknowledgement.
-      decideEffort: "judgment",
+      // who is accountable, not a one-tap acknowledgement. A writeback stall is
+      // neither: the card says an appointment will not change it, so it asks for
+      // no judgment and owner-routing sends it to the custodian (BI-72679FE0).
+      decideEffort: writeback ? "review" : "judgment",
       irreversible: false,
     },
     // The age of the stall, not of the last tick: every tick bumps updatedAt, so

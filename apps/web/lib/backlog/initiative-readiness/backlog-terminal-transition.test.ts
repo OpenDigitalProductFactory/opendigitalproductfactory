@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("./canonical-artifact-discovery", () => ({ prepareCurrentDesignObservation: vi.fn(async () => ({
+  evidence: { state: "not-applicable" }, admissionGuard: async () => ({ state: "not-applicable" }),
+})) }));
+
 import type { InitiativeReadinessDecision } from "./types";
 import { completeBacklogItemTransition } from "./backlog-terminal-transition";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
@@ -461,14 +465,14 @@ describe("completeBacklogItemTransition", () => {
     expect(seen[0]?.completion.objectiveReconciliation).toBe("pass");
   });
 
-  it("EP-4614F35E: does NOT recognize demand-driven feature work (linked DigitalProduct) even when merged", async () => {
-    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: "DP-1" });
+  it("BI-B1B44777: does NOT recognize contractual work even when merged", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: "DP-1", lifecycleTags: ["contractual"] });
     const seen: Array<{ recognizeMergeThroughGates?: boolean; completion: { acceptanceEvidence: string } }> = [];
     await completeBacklogItemTransition({
       db: fake.db,
       itemId: "BI-1",
       expectedStatus: "in-progress",
-      resolution: "Product feature — full lifecycle required.",
+      resolution: "Contractual feature — separate acceptance required.",
       completionEvidence: {},
       actor,
       authority,
@@ -482,7 +486,7 @@ describe("completeBacklogItemTransition", () => {
       },
     });
     expect(seen[0]?.recognizeMergeThroughGates).toBe(false);
-    // Acceptance is NOT waved through for product work with no reconciliation.
+    // Acceptance is NOT waved through for contractual work with no reconciliation.
     expect(seen[0]?.completion.acceptanceEvidence).toBe("missing");
   });
 });
@@ -529,10 +533,10 @@ describe("merge signal unavailability is reported, never disguised as a negative
   });
 
   it("stays silent about the signal when the item could never qualify anyway", async () => {
-    // Demand-driven product work keeps the full lifecycle regardless of the
-    // signal, so naming an unavailable merge probe would be noise pointing at
-    // a lever that would change nothing.
-    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: "DP-1" });
+    // Contractual work keeps its acceptance step regardless of the signal
+    // (BI-B1B44777), so naming an unavailable merge probe would be noise
+    // pointing at a lever that would change nothing.
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: "DP-1", lifecycleTags: ["contractual"] });
     const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
     await completeBacklogItemTransition({
       db: fake.db,
@@ -687,7 +691,7 @@ describe("deployment closure without acceptance fabrication", () => {
     expect(fake.creates).toContainEqual(expect.objectContaining({ data: expect.objectContaining({ kind: "status_change",
       payload: expect.objectContaining({ closureBasis: "canonical-deployment", deployment: proof, acceptanceState: "missing" }) }) }));
   });
-  it.each([{ digitalProductId: "DP-1" }, { scopeKind: "archetype-leaf" }])("retains the acceptance contract for %j", async (overrides) => {
+  it.each([{ lifecycleTags: ["contractual"] }, { scopeKind: "archetype-leaf", lifecycleTags: ["contractual"] }])("retains the acceptance contract for %j", async (overrides) => {
     const fake = fakeDb(1, "feature", overrides);
     const result = await completeBacklogItemTransition({ db: fake.db, itemId: "BI-1", expectedStatus: "in-progress",
       resolution: "Deployed", completionEvidence: {}, actor, authority, dependencies: {

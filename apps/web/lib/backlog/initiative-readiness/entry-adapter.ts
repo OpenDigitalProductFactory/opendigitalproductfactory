@@ -1,3 +1,4 @@
+import { projectBuildPlanCoverage } from "./build-plan-coverage";
 import { validString, validStringArray, validAuthoritySnapshot, validInitiativeGateReceipt, normalizeInitiativeGate as normalizeGate } from "./receipt-validation";
 import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evidence";
 
@@ -9,6 +10,9 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type { DeliverySensitivityAssessment } from "./delivery-sensitivity";
 import { effectiveShape } from "./shape-requirements";
+import { NO_MARKED_OBJECTIVE_STATEMENTS } from "./baseline-manifest";
+import { judgedDesignDigest, type CurrentDesignEvidence, type CurrentResearchEvidence } from "./judged-design-artifact";
+import { parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -60,11 +64,14 @@ export function readinessShapeFromWorkShape(ref: string | null | undefined): Rea
 }
 
 type Baseline = {
+  origin?: string;
+  approvalReceiptId?: string;
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactDigest: string;
   profile: InitiativeReadinessFacts["profile"];
   recordedAt: Date;
+  artifactRef: InitiativeArtifactRef | null;
 };
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -73,7 +80,7 @@ function object(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function parseBaselines(activities: readonly InitiativeReadinessActivity[], itemId: string): {
+export function parseReadinessBaselines(activities: readonly InitiativeReadinessActivity[], itemId: string): {
   current: Baseline | null;
   malformed: boolean;
   ambiguous: boolean;
@@ -95,11 +102,14 @@ function parseBaselines(activities: readonly InitiativeReadinessActivity[], item
       return { current: null, malformed: true, ambiguous: true };
     }
     parsed.push({
+      origin: typeof payload.origin === "string" ? payload.origin : undefined,
+      approvalReceiptId: typeof payload.approvalReceiptId === "string" ? payload.approvalReceiptId : undefined,
       baselineId: payload.baselineId,
       supersedesBaselineId: payload.supersedesBaselineId as string | null,
       artifactDigest: payload.artifactDigest,
       profile: profile as Baseline["profile"],
       recordedAt: row.recordedAt,
+      artifactRef: parseInitiativeReviewArtifactRef(payload.artifactRef),
     });
   }
   const ids = new Set(parsed.map((entry) => entry.baselineId));
@@ -210,11 +220,14 @@ export function persistedTerminalCompletionDecision(
  * plan-review because "this document is a design specification", and a
  * receipt recorded against the plan read as stale against the design digest).
  */
-type AcceptedDigests = { canonical: string | null; plan: string | null };
+// `canonical` is the design the design gates judge (judged-design-artifact.ts,
+// BI-4592CF69); `baseline` is the approved one plan reviews may still cite.
+type AcceptedDigests = { canonical: string | null; baseline: string | null; plan: string | null;
+  ownResearch?: CurrentResearchEvidence };
 
 function isStaleFor(gate: string, artifactDigest: unknown, digests: AcceptedDigests): boolean {
   if (gate === "plan-review") {
-    const accepted = [digests.plan, digests.canonical].filter((value): value is string => Boolean(value));
+    const accepted = [digests.plan, digests.baseline].filter((value): value is string => Boolean(value));
     return accepted.length > 0 && !accepted.includes(String(artifactDigest));
   }
   return Boolean(digests.canonical) && artifactDigest !== digests.canonical;
@@ -231,6 +244,16 @@ function projectGateReceipt(
     receiptId: activity.id, gate, subject: { kind: "backlog-item", id: itemId },
   })) return { state: "malformed", malformed: true, gate };
   const decision = payload.decision;
+  // A child authors its own research on its own source; it cannot approve or
+  // amend the parent's design. An unavailable/newer own receipt still wins over
+  // an older or inherited pass, and never becomes approval by omission.
+  if (gate === "research" && digests.ownResearch
+    && object(payload.artifactRef)?.kind === "repo-blob-at-commit") {
+    const observed = digests.ownResearch;
+    return { state: observed.state === "verified" && observed.receiptId === activity.id
+      && observed.digest === payload.artifactDigest ? decision as ReadinessEvidenceState : "stale",
+    malformed: false, gate };
+  }
   if (isStaleFor(gate, payload.artifactDigest, digests)) {
     return { state: "stale", malformed: false, gate };
   }
@@ -238,46 +261,36 @@ function projectGateReceipt(
 }
 
 /**
- * BI-7531B73C: a design amended after its spec approval. A review that fails
- * the approved design can only be answered by changing the design, and every
- * receipt against the changed design reads stale against the baseline's digest.
- * When a design-bound receipt recorded after the baseline names another design
- * digest, the approval is owed again: spec approval reads stale, readiness
- * routes it, and the existing supersession path mints the new baseline.
- * Plan-review receipts bind the plan, so they never count.
+ * BI-7531B73C: a design amended after its spec approval owes the approval
+ * again. Which design is "amended" is decided once, in judged-design-artifact.ts
+ * (BI-4592CF69), so readiness judges the same design the reviewer routes name.
+ * A failed review of the amended design stays a failure.
  */
-function designAmendedAfterBaseline(
-  activities: readonly InitiativeReadinessActivity[],
-  baseline: Baseline | null,
-  planDigest: string | null,
-): boolean {
-  if (!baseline) return false;
-  return activities.some((activity) => {
-    if (activity.kind !== "initiative_gate_receipt" || activity.recordedAt <= baseline.recordedAt) return false;
-    if (normalizeGate(activity.gateKey) === "plan-review") return false;
-    const digest = object(activity.payload)?.artifactDigest;
-    return typeof digest === "string" && digest !== baseline.artifactDigest && digest !== planDigest;
-  });
+function specApprovalState(recorded: ReadinessEvidenceState, amended: boolean): ReadinessEvidenceState {
+  if (!amended) return recorded;
+  return recorded === "fail" ? "fail" : "stale";
 }
 
 function latestGateStates(
   activities: readonly InitiativeReadinessActivity[],
   digests: AcceptedDigests,
   itemId: string,
-): { states: Map<string, ReadinessEvidenceState>; malformed: boolean } {
+): { states: Map<string, ReadinessEvidenceState>; malformed: boolean; researchArtifactKind: unknown } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "initiative_gate_receipt")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id));
   const states = new Map<string, ReadinessEvidenceState>();
   let malformed = false;
+  let researchArtifactKind: unknown = null;
   for (const activity of latest) {
     const gate = normalizeGate(activity.gateKey);
     if (gate && states.has(gate)) continue;
+    if (gate === "research") researchArtifactKind = object(object(activity.payload)?.artifactRef)?.kind;
     const projected = projectGateReceipt(activity, digests, itemId);
     malformed ||= projected.malformed;
     if (projected.gate) states.set(projected.gate, projected.state);
   }
-  return { states, malformed };
+  return { states, malformed, researchArtifactKind };
 }
 
 function state(states: ReadonlyMap<string, ReadinessEvidenceState>, gate: string): ReadinessEvidenceState {
@@ -344,11 +357,16 @@ type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
+  buildPlanDigest?: string | null,
 ): { state: ReadinessEvidenceState; planDigest: string | null; planArtifact: InitiativePlanArtifact | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0];
   if (!latest) return { state: "missing", planDigest: null, planArtifact: null };
+  // BI-6F2872FC: a Build Studio plan is covered by the platform, bound to the
+  // plan's accepted revision rather than to a committed plan document.
+  const buildPlanCoverage = projectBuildPlanCoverage(latest.payload, baseline, buildPlanDigest);
+  if (buildPlanCoverage) return { ...buildPlanCoverage, planArtifact: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
   if (!payload
@@ -406,6 +424,7 @@ export function projectBacklogItemReadiness(args: {
   authorization: ReadinessEvidenceState;
   capsuleIdentity: ReadinessEvidenceState;
   planCoverage?: ReadinessEvidenceState;
+  currentDesign?: CurrentDesignEvidence;
   /**
    * The parent's scope rows when a decomposed coverage record maps this item
    * (see parent-scope-inheritance.ts). Used only when the item minted no
@@ -419,9 +438,9 @@ export function projectBacklogItemReadiness(args: {
    * artifact author, architecture review, plan, plan-review, plan-coverage,
    * traceability) are recognized as satisfied because the item's PR merged
    * through the code gates (CI + the merge queue + PR review) — the governance
-   * appropriate to direct-merge platform work. The CALLER is responsible for the
-   * predicate (merged + platform/common + no build/product/objective + a design
-   * spec); this projector only applies the coercion. Kernel-ratified DI-54AECB341524.
+   * appropriate to direct-merge work. The CALLER is responsible for the
+   * predicate (merged + not contractual + not an aggregate, BI-B1B44777); this
+   * projector only applies the coercion. Kernel-ratified DI-54AECB341524.
    */
   recognizeMergeThroughGates?: boolean;
   /**
@@ -430,7 +449,13 @@ export function projectBacklogItemReadiness(args: {
    * criteria it states. Consulted only on the proportional shapes.
    */
   buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
+  /**
+   * BI-6F2872FC: the digest of the Build Studio build's current plan. Coverage
+   * recorded for an earlier plan revision reads stale against it.
+   */
+  buildPlanDigest?: string | null;
   completion?: {
+    decomposition?: ReadinessEvidenceState;
     deliveryEvidence: ReadinessEvidenceState;
     acceptanceEvidence: ReadinessEvidenceState;
     objectiveReconciliation: ReadinessEvidenceState;
@@ -451,17 +476,38 @@ export function projectBacklogItemReadiness(args: {
   inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
   decision: InitiativeReadinessDecision;
+  currentDesignState?: CurrentDesignEvidence["state"] | "recorded-only";
 } {
-  const own = parseBaselines(args.activities, args.item.itemId);
+  const own = parseReadinessBaselines(args.activities, args.item.itemId);
   const parent = args.inheritedScope && !own.current && !own.malformed && !own.ambiguous
-    ? parseBaselines(args.inheritedScope.activities, args.inheritedScope.parentItemId)
+    ? parseReadinessBaselines(args.inheritedScope.activities, args.inheritedScope.parentItemId)
     : null;
   const inherited = parent?.current ? args.inheritedScope! : null;
   const baseline = inherited ? parent! : own;
-  const digest = baseline.current?.artifactDigest ?? null;
-  const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
-  const digests: AcceptedDigests = { canonical: digest, plan: projectedCoverage.planDigest };
-  const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
+  // A body snapshot versions acceptance, not the research artifact. It cannot
+  // retroactively stale author research against the previously recorded source.
+  const digest = baseline.current?.origin === "item-body" ? null : baseline.current?.artifactDigest ?? null;
+  const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current,
+    args.buildPlanDigest);
+  // Only the scope owner can amend its design. A child that inherits the
+  // parent's scope keeps judging the parent's baseline: it cannot re-approve it.
+  const judged = inherited
+    ? { amended: false, judgedDigest: digest }
+    : judgedDesignDigest({ baseline: baseline.current, activities: args.activities, planDigest: projectedCoverage.planDigest,
+      currentDesign: args.currentDesign });
+  const currentDesignUnavailable = !inherited && args.currentDesign?.state === "unavailable";
+  const designAmended = judged.amended;
+  const digests: AcceptedDigests = {
+    canonical: digest === null ? null : judged.judgedDigest,
+    baseline: digest,
+    plan: projectedCoverage.planDigest,
+  };
+  const ownReceipts = latestGateStates(args.activities, inherited
+    ? { ...digests, ownResearch: args.currentDesign?.research ?? { state: "unavailable" } }
+    : digests, args.item.itemId);
+  const ownResearchUnavailable = inherited && ownReceipts.states.get("research") === "stale"
+    && ownReceipts.researchArtifactKind === "repo-blob-at-commit"
+    && args.currentDesign?.research?.state !== "verified";
   const parentReceipts = inherited ? latestGateStates(inherited.activities, digests, inherited.parentItemId) : null;
   const receipts = parentReceipts
     ? {
@@ -510,6 +556,16 @@ export function projectBacklogItemReadiness(args: {
   // The caller owns the predicate; here it is a pure state coercion.
   const recognizeMerge = args.recognizeMergeThroughGates === true;
   const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
+  // BI-B1B44777: once delivered, a specialist review or archetype check is not
+  // owed retroactively — but a review that was recorded and FAILED is a finding
+  // about the work, and the merge does not answer it.
+  const passUnlessFailed = (s: ReadinessEvidenceState): ReadinessEvidenceState =>
+    recognizeMerge && s !== "fail" ? "pass" : s;
+  const missingObjectiveMarkers = !inherited
+    && args.currentDesign?.state === "verified"
+    && args.currentDesign.scopeManifestError === NO_MARKED_OBJECTIVE_STATEMENTS;
+  const revealMissingObjectives = (state: ReadinessEvidenceState): ReadinessEvidenceState =>
+    missingObjectiveMarkers && (state === "pass" || state === "not-applicable") ? "missing" : state;
   // BI-7876699F: research is satisfiable from the reproduction the author already
   // cited, on the shapes whose gate table says so.
   //
@@ -562,25 +618,24 @@ export function projectBacklogItemReadiness(args: {
     workType: args.item.workType ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
-    canonicalDesign: pass(baselineState),
+    canonicalDesign: revealMissingObjectives(pass(currentDesignUnavailable ? "missing" : baselineState)),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
     research: pass(researchState),
-    specApproval: pass(
-      !inherited && designAmendedAfterBaseline(args.activities, baseline.current, projectedCoverage.planDigest)
-        ? "stale"
-        : state(evidence, "spec-approval"),
-    ),
+    specApproval: revealMissingObjectives(pass(currentDesignUnavailable
+      ? state(evidence, "spec-approval") === "fail" ? "fail" : "missing"
+      : specApprovalState(state(evidence, "spec-approval"), designAmended))),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
-      data: state(evidence, "data-review"),
-      ux: state(evidence, "ux-fit-review"),
-      security: state(evidence, "security-review"),
-      compliance: state(evidence, "compliance-review"),
-      domain: state(evidence, "domain-review"),
+      data: passUnlessFailed(state(evidence, "data-review")),
+      ux: passUnlessFailed(state(evidence, "ux-fit-review")),
+      security: passUnlessFailed(state(evidence, "security-review")),
+      compliance: passUnlessFailed(state(evidence, "compliance-review")),
+      domain: passUnlessFailed(state(evidence, "domain-review")),
     },
     plan: pass(coverage),
     planReview: pass(state(evidence, "plan-review")),
     planCoverage: pass(coverage),
+    decomposition: args.completion?.decomposition,
     traceability: pass(coverage),
     dependencies: dependency === "missing" ? "not-applicable" : dependency,
     authorization: args.authorization,
@@ -588,24 +643,51 @@ export function projectBacklogItemReadiness(args: {
     capsuleIdentity: args.capsuleIdentity,
     deliveryEvidence: args.completion?.deliveryEvidence ?? "missing",
     acceptanceEvidence: args.completion?.acceptanceEvidence ?? "missing",
-    objectiveBaseline: pass(baselineState),
+    // The amended spec design must be approved before its baseline is current
+    // again. A body baseline versions acceptance, not a spec, so it never is.
+    objectiveBaseline: pass(currentDesignUnavailable ? "missing" : designAmended && digest !== null ? "stale" : baselineState),
+    // A proportional shape cannot turn an existing independent scope approval
+    // into author-owned body criteria. Restore its ordinary amendment route;
+    // the review writer still validates authority, prior baseline and source.
+    objectiveBaselineRequiresReview: !inherited && baseline.current?.origin !== "item-body"
+      && baseline.current?.artifactRef?.kind === "repo-blob-at-commit"
+      && Boolean(baseline.current.approvalReceiptId),
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {
-      templateSubstrate: archetypeProvisioning,
-      professionCorpus: archetypeProvisioning,
-      coworkerDefinition: archetypeProvisioning,
-      skillsAndTools: archetypeProvisioning,
+      templateSubstrate: passUnlessFailed(archetypeProvisioning),
+      professionCorpus: passUnlessFailed(archetypeProvisioning),
+      coworkerDefinition: passUnlessFailed(archetypeProvisioning),
+      skillsAndTools: passUnlessFailed(archetypeProvisioning),
     },
-    archetypeCompleteness: state(evidence, "archetype-completeness"),
+    archetypeCompleteness: passUnlessFailed(state(evidence, "archetype-completeness")),
     postImplementationReview: postImplementationReviewState(args.activities, evidence, args.evaluatedAt),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
     unreadEvidenceRefs: unreadEvidenceByCode(args.activities),
-    requirementReasons: args.completion?.requirementReasons,
+    requirementReasons: currentDesignUnavailable ? {
+      ...args.completion?.requirementReasons,
+      CANONICAL_DESIGN_REQUIRED: ["Current immutable design verification is unavailable; historical receipts do not prove the current head."],
+      SPEC_APPROVAL_REQUIRED: ["The current design could not be verified. Restore source access before issuing another review."],
+      OBJECTIVE_BASELINE_REQUIRED: ["The current design/baseline binding could not be verified. No baseline or approval was changed."],
+    } : ownResearchUnavailable ? {
+      ...args.completion?.requirementReasons,
+      RESEARCH_REQUIRED: ["The child's current research source could not be verified. Restore its Workroom source binding and provider access before recording more research; the inherited design remains unchanged."],
+    } : missingObjectiveMarkers ? {
+      ...args.completion?.requirementReasons,
+      CANONICAL_DESIGN_REQUIRED: [
+        ...(args.completion?.requirementReasons?.CANONICAL_DESIGN_REQUIRED ?? []),
+        `${NO_MARKED_OBJECTIVE_STATEMENTS} Required markers are OBJ- lines (for example **OBJ-1:**) and AC/OBJ table rows that name the objective.`,
+      ],
+      SPEC_APPROVAL_REQUIRED: [
+        ...(args.completion?.requirementReasons?.SPEC_APPROVAL_REQUIRED ?? []),
+        `${NO_MARKED_OBJECTIVE_STATEMENTS} Required markers are OBJ- lines (for example **OBJ-1:**) and AC/OBJ table rows that name the objective.`,
+      ],
+    } : args.completion?.requirementReasons,
   };
   return {
     governed,
+    currentDesignState: inherited ? "not-applicable" : args.currentDesign?.state ?? "recorded-only",
     baselineId: baseline.current?.baselineId ?? null,
     planArtifact: projectedCoverage.planArtifact,
     planArtifactDigest: projectedCoverage.planDigest,
@@ -619,6 +701,7 @@ export function projectBacklogItemReadinessSummary(args: {
   item: InitiativeReadinessItem;
   activities: readonly InitiativeReadinessActivity[];
   inheritedScope?: InheritedInitiativeScope | null;
+  currentDesign?: CurrentDesignEvidence;
   hasSpec: boolean;
   hasPlan: boolean;
   evaluatedAt: string;
@@ -628,6 +711,8 @@ export function projectBacklogItemReadinessSummary(args: {
    * decision still wins; absent both, completion is projected as before.
    */
   completionDecision?: InitiativeReadinessDecision | null;
+  /** The active build's reviewed design, as its build gates pass it (BI-6F2872FC AC-6). */
+  buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
 }) {
   const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
@@ -636,6 +721,7 @@ export function projectBacklogItemReadinessSummary(args: {
       item: args.item,
       activities: args.activities,
       inheritedScope: args.inheritedScope,
+      currentDesign: args.currentDesign,
       target,
       transitionObject: {
         kind: "backlog-item",
@@ -646,12 +732,15 @@ export function projectBacklogItemReadinessSummary(args: {
       authorization: "pass",
       capsuleIdentity: "pass",
       artifactHints: { hasSpec: args.hasSpec, hasPlan: args.hasPlan },
+      buildDesign: args.buildDesign ?? null,
       evaluatedAt: args.evaluatedAt,
     });
     return [target, projected.decision];
   })) as Record<ReadinessTarget, InitiativeReadinessDecision>;
   return {
     inheritedFrom: args.inheritedScope?.parentItemId ?? null,
+    currentDesignState: args.inheritedScope && !args.activities.some(activity => activity.kind === "initiative_scope_baseline")
+      ? "not-applicable" : args.currentDesign?.state ?? "recorded-only",
     governed: projectBacklogItemReadiness({
       item: args.item,
       activities: args.activities,

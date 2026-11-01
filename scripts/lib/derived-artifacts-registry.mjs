@@ -63,6 +63,25 @@ export function matchesAnyGlob(filePath, globs) {
 
 export const DERIVED_ARTIFACTS = [
   {
+    id: "judgment-guard-runtime",
+    description: "Canonical judgment scorer -> dependency-free Node20 golden guard distribution",
+    sourceGlobs: [
+      "packages/validators/src/judgment/option-scoring.ts",
+      "packages/validators/src/judgment/mcda-quality-gates.ts",
+      "scripts/build-judgment-guard-runtime.mjs",
+      "packages/repo-guard-runtime/package.json",
+      "pnpm-lock.yaml",
+    ],
+    artifactPaths: [
+      "scripts/generated/judgment/package.json",
+      "scripts/generated/judgment/option-scoring.js",
+      "scripts/generated/judgment/mcda-quality-gates.js",
+      "scripts/generated/judgment/manifest.json",
+    ],
+    generate: ["node", "scripts/build-judgment-guard-runtime.mjs"],
+    check: ["node", "scripts/build-judgment-guard-runtime.mjs", "--check"],
+  },
+  {
     id: "doc-index",
     description: "Doc corpus index (link/anchor resolution)",
     sourceGlobs: ["docs/**/*.md", "apps/web/lib/docs/doc-link-resolver.mjs"],
@@ -85,6 +104,28 @@ export const DERIVED_ARTIFACTS = [
     artifactPaths: ["packages/dpf-skill-pack/hooks/operating-contract.generated.mjs"],
     generate: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs"],
     check: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs", "--check"],
+  },
+  {
+    // BI-64795FD0: every statement of a client capability derives from one
+    // profile. The credential policy's data copy, its test fixture and the
+    // rendered matrix in the parity tracker are regenerated from it.
+    id: "client-capabilities",
+    description: "Client capability profile -> credential-policy data, policy fixture and parity matrix",
+    sourceGlobs: [
+      "packages/dpf-skill-pack/client-capabilities.json",
+      "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs",
+      "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.mjs",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/integration-shared/src/client-capability-rules.cjs",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    artifactPaths: [
+      "packages/integration-shared/src/client-capability-profile.generated.ts",
+      "packages/dpf-skill-pack/scripts/mcp-credential-policy-cases.json",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    generate: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs", "--check"],
   },
   {
     id: "doc-impact",
@@ -121,7 +162,10 @@ export const DERIVED_ARTIFACTS = [
     id: "doc-diagrams",
     description: "Rendered Mermaid diagram SVGs + manifest",
     sourceGlobs: ["docs/user-guide/**/*.md", "docs/architecture/**/*.md"],
-    artifactPaths: ["docs/user-guide/assets/diagrams/**"],
+    artifactPaths: [
+      "docs/user-guide/assets/diagrams/**",
+      "apps/web/lib/docs/diagram-versions.generated.mjs",
+    ],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
     // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:

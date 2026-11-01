@@ -7,11 +7,12 @@
  * classify, infrastructure that will not recover) also goes to the existing
  * escalation inbox — once per head, keyed by the record's attentionKey.
  */
-import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { resolveRoomActionBoundary } from "@/lib/work-management/room-turn-authority";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { shapeBiasFor } from "@/lib/work-posture/derive";
+import { shapeBiasFor } from "@dpf/validators/workroom-policy/derive";
+import { isGateGovernedExecutor } from "@/lib/work-posture/gate-governed";
 
 import {
   resolvePrRepairAuthority,
@@ -47,6 +48,8 @@ export type PrFollowThroughAnnounceDeps = {
  */
 export function resolvePrFollowThroughPosture(input: {
   scopeClaims: unknown;
+  /** Workroom.executorKind; a gate-governed room's shape yields to the default (BI-D0DFE502). */
+  executorKind?: string | null;
   platformDefaultActionBoundary: ProactivityActionBoundary | null;
 }): { authority: PrRepairAuthority; actuationAllowed: boolean; level: ProactivityLevel; boundary: ProactivityActionBoundary | null } {
   const declared = readWorkroomPostureClaim(input.scopeClaims);
@@ -55,6 +58,7 @@ export function resolvePrFollowThroughPosture(input: {
     {
       declaredActionBoundary: declared?.actionBoundary ?? null,
       shapeActionBoundary: shapeBiasFor(readWorkroomShapeClaim(input.scopeClaims))?.actionBoundary ?? null,
+      gateGoverned: isGateGovernedExecutor(input.executorKind),
     },
     input.platformDefaultActionBoundary,
   );

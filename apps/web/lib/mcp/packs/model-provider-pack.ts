@@ -314,13 +314,27 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
   const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
   if (!connection || (providerId && providerId !== connection.providerId)) return { success: false, error: "Provider account not found", message: "Provider account not found" };
   switch (params.operation) {
+    case "stop-quota-recovery": {
+      if (Object.keys(params).some(key => !["operation", "connectionId", "providerId"].includes(key)))
+        return { success: false, error: "Stop accepts only the existing account identity", message: "Stop accepts only the existing account identity" };
+      const { stopSubscriptionQuotaRecovery } = await import("@/lib/inference/subscription-quota-recovery");
+      const out = await stopSubscriptionQuotaRecovery(connectionId);
+      return { success: out.ok, message: out.message, data: out, ...(out.ok ? {} : { error: out.message }) };
+    }
+    case "recheck-quota": {
+      const { recheckSubscriptionQuota } = await import("@/lib/inference/subscription-quota-recovery");
+      if (typeof params.modelId !== "string" || !params.modelId.trim() || (params.hourly !== undefined && typeof params.hourly !== "boolean"))
+        return { success: false, error: "Choose an exact model and valid recovery commission", message: "Choose an exact model and valid recovery commission" };
+      const out = await recheckSubscriptionQuota(connectionId, params.modelId, params.hourly as boolean | undefined);
+      return { success: out.ok, message: out.message, data: out, ...(out.ok ? {} : { error: out.message }) };
+    }
     case "discover": {
       const { discoverProviderAccountModels } = await import("@/lib/inference/provider-account-discovery");
       return result(await discoverProviderAccountModels(connectionId));
     }
     case "configure": {
       const input: Parameters<typeof accounts.configureProviderAccount>[0] = { connectionId };
-      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope"] as const) {
+      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope", "providerWorkspaceId"] as const) {
         if (typeof params[key] === "string") input[key] = params[key];
       }
       return result(await accounts.configureProviderAccount(input));
@@ -338,7 +352,10 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
     }
     case "test": {
       const { testProviderAuthInternal } = await import("@/lib/actions/provider-auth-test");
-      const out = await testProviderAuthInternal(connection.providerId, false, connectionId);
+      const { isDefaultSubscriptionIdentity } = await import("@/lib/inference/active-provider-account-verification");
+      const out = isDefaultSubscriptionIdentity(connection.providerId, connectionId)
+        ? await testProviderAuthInternal(connection.providerId, false, connectionId, { verificationOnly: true })
+        : await testProviderAuthInternal(connection.providerId, false, connectionId);
       return { success: out.ok, message: out.message, ...(out.ok ? {} : { error: out.message }) };
     }
     default: return { success: false, error: "Invalid operation", message: "Choose a supported account operation" };

@@ -1,5 +1,5 @@
 // packages/db/src/index.ts
-export { prisma } from "./client";
+export { prisma, createDatabaseClient } from "./client";
 export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners, setProviderStatusWithDefaultConnection } from "./provider-connection";
 export {
   PROVIDER_COMPLIANCE_SOURCE_REGISTRY,
@@ -25,6 +25,7 @@ export type {
   CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+export type { InvestmentWorkClass, InvestmentWorkPurpose } from "../generated/client/client";
 // Worker classification: the legally-consequential axis, distinct from the
 // organisation's EmploymentType label (BI-C61CEEA9). Exported as a value so the
 // app composes from the generated enum instead of re-typing its members.
@@ -59,7 +60,7 @@ export {
 // The type still closes the set at compile time, and Postgres closes it at
 // write time, so a writer spells the member as a literal and TS rejects any
 // member the schema does not define.
-export type { DecisionSubjectKind, BacklogTriageAssessmentOutcome } from "../generated/client/client";
+export type { DecisionSubjectKind, DecisionEscalationRoute, BacklogTriageAssessmentOutcome } from "../generated/client/client";
 export {
   WorkroomParticipantRole,
   WorkroomParticipantAssignmentSource,
@@ -101,6 +102,7 @@ export {
   ensurePayloadIndexes,
   upsertVectors,
   searchSimilar,
+  searchLexical,
   scrollPoints,
   deleteVectors,
   isVectorStoreHealthy,
@@ -174,6 +176,19 @@ export {
   type PrincipleDimension,
 } from "./wiki-taxonomy";
 export { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
+export {
+  RELATION_TYPES,
+  RelationTypeError,
+  assertRelationWrite,
+  getRelationType,
+  isGenericRelationName,
+  lintRelationVocabulary,
+  toRelationType,
+  type RelationClass,
+  type RelationStatus,
+  type RelationType,
+  type RelationTypeDef,
+} from "./relation-vocabulary";
 export {
   getDownstreamImpact,
   getUpstreamDependencies,
@@ -435,7 +450,18 @@ export {
   syncDocumentReference,
   syncEaElement,
   syncEaRelationship,
+  replaceGraphEdgesFromSource,
+  projectWikiLinksToGraph,
 } from "./graph-sync";
+// BI-23900D0A: the one writer for a wiki page's out-links, and its backfill.
+export {
+  replaceWikiPageOutLinks,
+  reconcileWikiPageLinks,
+  type WikiLinkClient,
+  type ProjectWikiLinks,
+  type ReplaceWikiPageOutLinksResult,
+  type ReconcileWikiPageLinksResult,
+} from "./wiki-links";
 export {
   CODE_GRAPH_KEY,
   DOC_GRAPH_KEY,

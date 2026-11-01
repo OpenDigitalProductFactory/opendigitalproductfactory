@@ -16,18 +16,86 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 
-import { resolveAIDocForAgent, resolveInternalAIDoc } from "./aidoc-resolver";
+import { projectInternalAIDoc, resolveAIDocForAgent, resolveInternalAIDoc } from "./aidoc-resolver";
+
+describe("AIDoc canonical authority", () => {
+  const agent = (agentId: string, grants: string[], revoked: string[] = []) => ({
+    agentId, name: "Alias identity", status: "active", sensitivity: "internal", hitlTierDefault: 2,
+    lifecycleStage: "production", executionConfig: null, governanceProfile: null,
+    skills: [{ label: "alias-skill", taskType: "analysis" }],
+    toolGrants: grants.map(grantKey => ({ grantKey })),
+    toolGrantRevocations: revoked.map(grantKey => ({ grantKey })),
+  });
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.principalAlias.findFirst)
+      .mockResolvedValueOnce({ principalId: "principal-1", principal: { principalId: "PRN-ALIAS" } } as never)
+      .mockResolvedValueOnce({ aliasValue: "external-codex" } as never);
+    vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null);
+  });
+  it("uses canonical persisted grants and revocations while retaining the alias identity", async () => {
+    vi.mocked(prisma.agent.findUnique).mockImplementation((async (input: { where: { agentId?: string } }) => (
+      input.where.agentId === "AGT-EXT-CODEX"
+        ? agent("AGT-EXT-CODEX", ["registry_read", "backlog_write"], ["backlog_write"])
+        : agent("external-codex", ["admin_write"])
+    )) as never);
+    const aidoc = await resolveInternalAIDoc("gaid:priv:dpf.internal:alias");
+    expect(aidoc?.subject_name).toBe("Alias identity");
+    expect(aidoc?.principal_ref).toBe("PRN-ALIAS");
+    expect(aidoc?.prompt_class_refs).toEqual(["analysis:alias-skill"]);
+    expect(aidoc?.authorization_classes).toEqual(["observe"]);
+    expect(aidoc?.tool_surface).not.toContain("record_execution_evidence");
+    expect(prisma.agent.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-EXT-CODEX" } }));
+  });
+  it("fails closed when the canonical owner is missing", async () => {
+    vi.mocked(prisma.agent.findUnique).mockResolvedValueOnce(agent("external-codex", ["admin_write"]) as never).mockResolvedValueOnce(null);
+    const aidoc = await resolveInternalAIDoc("gaid:priv:dpf.internal:alias");
+    expect(aidoc?.tool_surface).toEqual([]);
+    expect(aidoc?.authorization_classes).toEqual([]);
+  });
+  it("does not treat raw alias grants as authority in a pure projection", () => {
+    const aidoc = projectInternalAIDoc({ gaid: "gaid:priv:dpf.internal:alias", principalRef: "PRN-ALIAS", agent: agent("external-codex", ["admin_write"]), modelConfig: null });
+    expect(aidoc.tool_surface).toEqual([]);
+    expect(aidoc.authorization_classes).toEqual([]);
+  });
+  it.each([{ authorityGrants: [] }, { authorityGrants: ["backlog_write"] }])("reuses batch authority $authorityGrants without another owner read", async ({ authorityGrants }) => {
+    vi.mocked(prisma.agent.findUnique).mockResolvedValue(agent("external-codex", ["admin_write"]) as never);
+    const aidoc = await resolveInternalAIDoc("gaid:priv:dpf.internal:alias", undefined, authorityGrants);
+    expect(prisma.agent.findUnique).toHaveBeenCalledTimes(1);
+    expect(aidoc?.authorization_classes).toEqual(authorityGrants.length ? ["create", "update"] : []);
+    expect(aidoc?.tool_surface.includes("record_execution_evidence")).toBe(authorityGrants.length > 0);
+  });
+  it("fingerprints effective authority rather than revoked or retired grants", () => {
+    const base = { gaid: "gaid:priv:dpf.internal:codex", principalRef: "PRN-CODEX", modelConfig: null };
+    const first = projectInternalAIDoc({ ...base, agent: agent("AGT-EXT-CODEX", ["registry_read", "admin_write"], ["admin_write"]) });
+    const second = projectInternalAIDoc({ ...base, agent: agent("AGT-EXT-CODEX", ["registry_read"]) });
+    expect(first.operating_profile_fingerprint).toBe(second.operating_profile_fingerprint);
+    const changed = projectInternalAIDoc({ ...base, agent: agent("AGT-EXT-CODEX", ["registry_read", "backlog_write"]) });
+    expect(changed.operating_profile_fingerprint).not.toBe(second.operating_profile_fingerprint);
+  });
+  it("preserves the issued legacy digest and does not relabel omitted governance as complete composition", () => {
+    const base = { gaid: "gaid:priv:dpf.internal:codex", principalRef: "PRN-CODEX", modelConfig: null };
+    const source = agent("AGT-EXT-CODEX", ["registry_read"]);
+    const first = projectInternalAIDoc({ ...base, agent: source });
+    expect(first.operating_profile_fingerprint).toBe("bff4e251504d69ab780a31297588a6c5c1484d84b1234ce731b7e99b3af6b91c");
+    const governed = projectInternalAIDoc({ ...base, agent: { ...source, governanceProfile: {
+      autonomyLevel: "supervised", hitlPolicy: "always", allowDelegation: false, maxDelegationRiskBand: "low",
+    } } });
+    expect(governed.hitl_profile).not.toEqual(first.hitl_profile);
+    expect(governed.operating_profile_fingerprint).toBe(first.operating_profile_fingerprint);
+  });
+});
 
 describe("resolveInternalAIDoc", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("projects a private AIDoc from the live agent identity and operating state", async () => {
     vi.mocked(prisma.principalAlias.findFirst)
       .mockResolvedValueOnce({
         principalId: "principal-1",
-        aliasValue: "gaid:priv:dpf.internal:build-specialist",
+        aliasValue: "gaid:priv:dpf.internal:identity-test-agent",
         principal: {
           principalId: "PRN-000002",
           displayName: "Build Specialist",
@@ -35,11 +103,11 @@ describe("resolveInternalAIDoc", () => {
         },
       } as never)
       .mockResolvedValueOnce({
-        aliasValue: "build-specialist",
+        aliasValue: "identity-test-agent",
       } as never);
 
     vi.mocked(prisma.agent.findUnique).mockResolvedValue({
-      agentId: "build-specialist",
+      agentId: "identity-test-agent",
       name: "Build Specialist",
       status: "active",
       sensitivity: "internal",
@@ -69,6 +137,7 @@ describe("resolveInternalAIDoc", () => {
           taskType: "analysis",
         },
       ],
+      toolGrantRevocations: [],
       toolGrants: [
         { grantKey: "backlog_write" },
         { grantKey: "registry_read" },
@@ -82,11 +151,11 @@ describe("resolveInternalAIDoc", () => {
       budgetClass: "quality_first",
     } as never);
 
-    const aidoc = await resolveInternalAIDoc("gaid:priv:dpf.internal:build-specialist");
+    const aidoc = await resolveInternalAIDoc("gaid:priv:dpf.internal:identity-test-agent");
 
     expect(aidoc).not.toBeNull();
     expect(aidoc).toMatchObject({
-      gaid: "gaid:priv:dpf.internal:build-specialist",
+      gaid: "gaid:priv:dpf.internal:identity-test-agent",
       subject_type: "agent",
       subject_name: "Build Specialist",
       principal_ref: "PRN-000002",
@@ -128,14 +197,14 @@ describe("resolveInternalAIDoc", () => {
   it("returns the same operating profile fingerprint for equivalent material state", async () => {
     const gaidAlias = {
       principalId: "principal-1",
-      aliasValue: "gaid:priv:dpf.internal:build-specialist",
+      aliasValue: "gaid:priv:dpf.internal:identity-test-agent",
       principal: {
         principalId: "PRN-000002",
         displayName: "Build Specialist",
         status: "active",
       },
     };
-    const agentAlias = { aliasValue: "build-specialist" };
+    const agentAlias = { aliasValue: "identity-test-agent" };
 
     vi.mocked(prisma.principalAlias.findFirst)
       .mockResolvedValueOnce(gaidAlias as never)
@@ -145,7 +214,7 @@ describe("resolveInternalAIDoc", () => {
 
     vi.mocked(prisma.agent.findUnique)
       .mockResolvedValueOnce({
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         name: "Build Specialist",
         status: "active",
         sensitivity: "internal",
@@ -171,14 +240,15 @@ describe("resolveInternalAIDoc", () => {
             taskType: "code_generation",
           },
         ],
-        toolGrants: [
+        toolGrantRevocations: [],
+      toolGrants: [
           { grantKey: "sandbox_execute" },
           { grantKey: "backlog_write" },
           { grantKey: "registry_read" },
         ],
       } as never)
       .mockResolvedValueOnce({
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         name: "Build Specialist",
         status: "active",
         sensitivity: "internal",
@@ -204,7 +274,8 @@ describe("resolveInternalAIDoc", () => {
           },
           { label: "repo-grounding", capability: "file_read", taskType: "analysis" },
         ],
-        toolGrants: [
+        toolGrantRevocations: [],
+      toolGrants: [
           { grantKey: "registry_read" },
           { grantKey: "backlog_write" },
           { grantKey: "sandbox_execute" },
@@ -224,8 +295,8 @@ describe("resolveInternalAIDoc", () => {
         pinnedProviderId: "openai",
       } as never);
 
-    const first = await resolveInternalAIDoc("gaid:priv:dpf.internal:build-specialist");
-    const second = await resolveInternalAIDoc("gaid:priv:dpf.internal:build-specialist");
+    const first = await resolveInternalAIDoc("gaid:priv:dpf.internal:identity-test-agent");
+    const second = await resolveInternalAIDoc("gaid:priv:dpf.internal:identity-test-agent");
 
     expect(first?.operating_profile_fingerprint).toBe(second?.operating_profile_fingerprint);
   });
@@ -236,11 +307,11 @@ describe("resolveInternalAIDoc", () => {
         principalId: "principal-1",
       } as never)
       .mockResolvedValueOnce({
-        aliasValue: "gaid:priv:dpf.internal:build-specialist",
+        aliasValue: "gaid:priv:dpf.internal:identity-test-agent",
       } as never)
       .mockResolvedValueOnce({
         principalId: "principal-1",
-        aliasValue: "gaid:priv:dpf.internal:build-specialist",
+        aliasValue: "gaid:priv:dpf.internal:identity-test-agent",
         principal: {
           principalId: "PRN-000002",
           displayName: "Build Specialist",
@@ -248,11 +319,11 @@ describe("resolveInternalAIDoc", () => {
         },
       } as never)
       .mockResolvedValueOnce({
-        aliasValue: "build-specialist",
+        aliasValue: "identity-test-agent",
       } as never);
 
     vi.mocked(prisma.agent.findUnique).mockResolvedValue({
-      agentId: "build-specialist",
+      agentId: "identity-test-agent",
       name: "Build Specialist",
       status: "active",
       sensitivity: "internal",
@@ -262,13 +333,14 @@ describe("resolveInternalAIDoc", () => {
       governanceProfile: null,
       modelConfig: null,
       skills: [],
+      toolGrantRevocations: [],
       toolGrants: [{ grantKey: "registry_read" }],
     } as never);
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null);
 
-    const aidoc = await resolveAIDocForAgent("build-specialist");
+    const aidoc = await resolveAIDocForAgent("identity-test-agent");
 
-    expect(aidoc?.gaid).toBe("gaid:priv:dpf.internal:build-specialist");
+    expect(aidoc?.gaid).toBe("gaid:priv:dpf.internal:identity-test-agent");
     expect(aidoc?.authorization_classes).toEqual(["observe"]);
   });
 });

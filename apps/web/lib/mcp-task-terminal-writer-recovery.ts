@@ -1,4 +1,6 @@
+import { captureTaskExecutionFence, type TaskExecutionFence } from "./shared/task-execution-fence";
 import { prisma, type Prisma } from "@dpf/db";
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reserveTaskRunGenerationWorking } from "./observability/heartbeat";
 import { INITIATIVE_CORRECTABLE_ERRORS } from "./backlog/initiative-readiness/disposition-contract";
 import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
@@ -9,6 +11,12 @@ import { needsTerminalReaderBootstrap, type PersistedTerminalReaderExecution } f
 import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
+
+function persistedWriterError(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const error = (result as Record<string, unknown>).error;
+  return typeof error === "string" ? error : null;
+}
 
 /**
  * The attempt a resumed terminal-writer wait runs as. BI-50B0C471: a wait the
@@ -56,15 +64,18 @@ export async function reserveTerminalWriterReplay(input: {
   wait: TerminalWriterWait;
   readerExecutions: PersistedTerminalReaderExecution[];
   bootstrapReaderEvidence: boolean;
+  executionFence: TaskExecutionFence;
 } | null> {
   if (!remoteTaskRequestMatches(input.existing.a2aMetadata, input.parsed)) return null;
+  if (hasExecutionUncertainty(input.existing.progressPayload)) return null;
   if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
   const isProjectedWait = existingWait !== null
     && ["input-required", "stalled", "failed"].includes(input.existing.status);
-  const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
-  if (!isProjectedWait && !isRecoverableCompletedExit) return null;
+  // A legacy completed row with no receipt/exit evidence cannot prove that a
+  // second execution is safe. Verified existing receipts settle before this lane.
+  if (!isProjectedWait) return null;
   if (existingWait && existingWait.writerToolName !== input.terminalToolPolicy.writerToolName) return null;
 
   const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
@@ -88,7 +99,6 @@ export async function reserveTerminalWriterReplay(input: {
   ]);
   if (successfulWriter) return null;
   const bootstrapReaderEvidence = needsTerminalReaderBootstrap(input.terminalToolPolicy, readerExecutions);
-  if (bootstrapReaderEvidence && !isProjectedWait) return null;
 
   if (writerAttempt) {
     const proposalEnvelopeId = writerAttempt.success === false
@@ -110,6 +120,11 @@ export async function reserveTerminalWriterReplay(input: {
       || !existingWait
       || !["input-required", "stalled", "failed"].includes(input.existing.status)
     ) return null;
+    // Resuming would hydrate readers and can replace this refusal with
+    // terminal_reader_identity_conflict. The writer's refusal is terminal.
+    if (writerAttempt.success === false && persistedWriterError(writerAttempt.result) === "CANONICAL_DESIGN_REQUIRED") {
+      return null;
+    }
   }
 
   const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
@@ -136,18 +151,19 @@ export async function reserveTerminalWriterReplay(input: {
           ...(writerAttempt.parameters ? { proposal: writerAttempt.parameters } : {}),
         } } : {}),
   };
+  const reservedProgress = { ...progress, terminalWriterWait: wait, resumeReservedAt: now };
+  const metadata = input.existing.a2aMetadata && typeof input.existing.a2aMetadata === "object"
+    && !Array.isArray(input.existing.a2aMetadata) ? input.existing.a2aMetadata as Record<string, unknown> : {};
+  const captured = captureTaskExecutionFence(reservedProgress, metadata.requestDigest ?? null);
+  if (!captured || (input.parsed.initiativeReviewBinding && !captured.requestDigest)) return null;
+  const executionFence = Object.freeze(captured);
   const reserved = await reserveTaskRunGenerationWorking({
     taskRunId: input.existing.taskRunId,
     expectedStatus: input.existing.status,
     updatedAt: input.existing.updatedAt,
-    progressPayload: {
-      ...progress,
-      terminalWriterWait: wait,
-      ...(isRecoverableCompletedExit ? { recoveredFromCompletedRouteExit: true } : {}),
-      resumeReservedAt: now,
-    } as Prisma.InputJsonValue,
+    progressPayload: reservedProgress as Prisma.InputJsonValue,
   });
   return reserved
-    ? { wait, readerExecutions, bootstrapReaderEvidence }
+    ? { wait, readerExecutions, bootstrapReaderEvidence, executionFence }
     : null;
 }

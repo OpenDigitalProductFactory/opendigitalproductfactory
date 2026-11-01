@@ -19,7 +19,10 @@
 // via the investment read model), that portfolio's budget for the current
 // quarter (loadPortfolioBudgets; none set is NOT funded, never read as zero),
 // and the portfolio's delivered plus in-flight points this quarter within the
-// allocation. An unsized or unattributed item is not funded, as admission
+// allocation. Both come from the read model's spend rule (BI-77313ADD): work
+// delivered this quarter by delivery date, plus work actively in progress. An
+// earlier quarter's delivery still awaiting acceptance, and a room parked on
+// attention with nothing running, commit nothing. An unsized or unattributed item is not funded, as admission
 // refuses an unsized autonomous start.
 
 import { ACUMEN_ROOM_SHAPES } from "./acumen-room-shapes";
@@ -28,24 +31,13 @@ import type { AuthorStagePreauthorisation } from "./author-stage-preauthorisatio
 import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { resolveInvestmentItem, summarizePortfolioInvestment, type InvestmentItemRow } from "@/lib/portfolio/investment-read-model";
 import type { PortfolioBudgetStatus } from "@/lib/portfolio/portfolio-budget";
+import { decideFundedAuthor, type AuthorStageFunding, type AuthorStageAutonomy } from "@dpf/validators/workroom-policy/funded-author";
+export type { AuthorStageFunding, AuthorStageAutonomy } from "@dpf/validators/workroom-policy/funded-author";
 
 /** The coworker that answers for author stages: the software-engineer acumen's resident coworker. */
 export const AUTHOR_STAGE_AGENT_REF = `agent:${
   ACUMEN_ROOM_SHAPES.find((shape) => shape.professionKey === "software-engineer")?.coworkerAgentId ?? "build-specialist"
 }`;
-
-export type AuthorStageFunding =
-  | { funded: true; portfolioId: string; summary: string }
-  | { funded: false; because: string };
-
-export type AuthorStageAutonomy = {
-  /** Merged under the room's own role bindings, which win. */
-  roleBindings: Record<string, string>;
-  /** Why the author stage is not pre-authorised for this room; null when it is, or when the rule does not apply. */
-  withheldBecause: string | null;
-};
-
-const NO_AUTONOMY: AuthorStageAutonomy = { roleBindings: {}, withheldBecause: null };
 
 /** One funding decision per item, from one read of the investment and budget models. */
 export function buildAuthorStageFunding(input: {
@@ -88,11 +80,13 @@ export function decideAuthorStageAutonomy(input: {
   preauthorisation: AuthorStagePreauthorisation;
   funding: AuthorStageFunding;
 }): AuthorStageAutonomy {
-  if (!isDeliveryShapeKey(input.shapeKey)) return NO_AUTONOMY;
-  if (input.shapeKey === DELIVERY_XLARGE_SHAPE_KEY) {
-    return { roleBindings: {}, withheldBecause: "An xlarge shape never enters implementation; it is decomposed by a person." };
-  }
-  if (input.preauthorisation.state !== "in-force") return { roleBindings: {}, withheldBecause: input.preauthorisation.because };
-  if (!input.funding.funded) return { roleBindings: {}, withheldBecause: input.funding.because };
-  return { roleBindings: { [DELIVERY_AUTHOR_ROLE]: AUTHOR_STAGE_AGENT_REF }, withheldBecause: null };
+  return decideFundedAuthor({
+    applicable: isDeliveryShapeKey(input.shapeKey),
+    excludedBecause: input.shapeKey === DELIVERY_XLARGE_SHAPE_KEY
+      ? "An xlarge shape never enters implementation; it is decomposed by a person." : null,
+    role: DELIVERY_AUTHOR_ROLE,
+    agentRef: AUTHOR_STAGE_AGENT_REF,
+    preauthorisation: input.preauthorisation,
+    funding: input.funding,
+  });
 }

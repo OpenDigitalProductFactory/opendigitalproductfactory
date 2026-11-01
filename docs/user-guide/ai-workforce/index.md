@@ -100,7 +100,8 @@ Model assignments explicitly saved by an operator remain unchanged during upgrad
 - Manage agent-to-provider assignments for specific platform capabilities
 - Optionally give the standing COO a conversational name from its coworker record; DPF always keeps the `AI COO` role visible and does not change the coworker's identity, authority, or audit attribution
 - View the **Authority** tab to understand agent tool grants, oversight levels, and escalation paths
-- Review the **Action History** to see all agent proposals and their approval status
+- Review the **Action History** to see every coworker request for approval and its outcome. It lists approval requests and the older proposals together, so history from before the change stays readable. An older proposal that nobody decided within seven days, the same window an approval request gets, shows as **Expired**: nothing ran, the record is kept, and the coworker can ask again if the action is still needed
+- On **Authority**, each supervisor agent card shows the coworker's newest pending approval. The person asked can **Authorize** or **Decline** it there; an admin who is not that person can **Decide on their behalf** with a reason
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
 - Open a coworker record to review **Living Playbooks** and see when the platform is testing a better method
 - Evaluate external tools via the **Tool Evaluation Pipeline** before adding them to the platform
@@ -129,11 +130,16 @@ The drift detail, along with route-level skills, observability, and the curator 
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
 - `/platform/ai/agent/AGT-ORCH-000` — standing COO record, including its optional organization-visible conversational name
 - `/platform/ai/runtime-health` — capability-aware local service and external-provider health
+- `/admin/settings/monitoring` — whether monitoring (Prometheus and Grafana) runs on this install, what it costs, and the switch to turn it on or off
 - `/finance/spend/ai` — finance-owned view of AI supplier commitments and work items
 
 ## Reading Runtime Health
 
 Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary. Services that only run on some host systems are judged against your install's own host: on a Mac, the `dpf-tts` voice container (Linux and Windows only, because macOS speaks through the host-native Chatterbox service) shows as optional and inactive, not degraded.
+
+### Turning monitoring on or off
+
+Monitoring is optional. Open **Settings → Monitoring** (`/admin/settings/monitoring`), or follow the action on a Prometheus, Grafana or postgres-exporter row in Runtime Health. The page shows whether monitoring is actually running, what it costs in memory and CPU, and the last change. Someone with platform management rights can turn it on or off; the change runs through the same governed capability change as any other runtime capability and reports its outcome. If the monitoring record disagrees with what is actually running, the button reads **Match records** and brings the record in line without changing what runs; only incomplete or unreadable capability records lock it. With monitoring off, health pages say "Monitoring is off on this install" rather than showing an outage.
 
 ### Coworker routing
 

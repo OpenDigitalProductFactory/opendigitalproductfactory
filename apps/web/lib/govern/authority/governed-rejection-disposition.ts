@@ -34,6 +34,10 @@ export const GOVERNED_REJECTION_DISPOSITION: Record<
   alignment_denied: "refused",
   alignment_bypass_forbidden: "refused",
   precondition_denied: "refused",
+  // BI-5FDE148A: the resolver reached an answer. Retrying unchanged cannot succeed.
+  authority_subject_not_found: "refused",
+  authority_binding_mismatch: "refused",
+  authority_scope_missing: "refused",
 
   // Parked on a human. Never retried — re-asking polls a person, which is how
   // 55 copies of one proposal accumulated.
@@ -55,6 +59,19 @@ export const GOVERNED_REJECTION_DISPOSITION: Record<
   // names, not to give up and not to retry unchanged.
   permit_required: "awaiting-input",
 };
+
+/** Older executors may omit disposition; keep their typed rejection semantics. */
+export function isGovernedToolRefusal(result: {
+  success: boolean;
+  error?: string;
+  disposition?: OutcomeDisposition;
+}): boolean {
+  if (result.success) return false;
+  if (result.disposition) return result.disposition === "refused";
+  return typeof result.error === "string"
+    && Object.hasOwn(GOVERNED_REJECTION_DISPOSITION, result.error)
+    && GOVERNED_REJECTION_DISPOSITION[result.error as GovernedExecuteRejection] === "refused";
+}
 
 
 /**

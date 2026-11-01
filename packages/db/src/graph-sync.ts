@@ -16,6 +16,7 @@
 
 import { prisma } from "./client";
 import { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
+import { assertRelationWrite, toRelationType, type RelationType } from "./relation-vocabulary";
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
@@ -66,13 +67,16 @@ async function addGraphNodeLabels(
   );
 }
 
-/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged. */
+/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged.
+ *  The type must be in the relation vocabulary (BI-85389A35): an unregistered or
+ *  retired type, or a missing required prop or qualifier, throws before the write. */
 export async function upsertGraphEdge(
   srcKey: string,
   dstKey: string,
-  relType: string,
+  relType: RelationType,
   props: Record<string, unknown> = {},
 ): Promise<void> {
+  assertRelationWrite(relType, props);
   await prisma.$executeRawUnsafe(
     `INSERT INTO graph_edge (src_key, dst_key, rel_type, props)
      VALUES ($1, $2, $3, $4::jsonb)
@@ -83,6 +87,35 @@ export async function upsertGraphEdge(
     relType,
     JSON.stringify(props),
   );
+}
+
+/** Make `srcKey`'s outgoing `relType` edges exactly `dstKeys` (BI-23900D0A).
+ *
+ *  Upsert alone can only add, so an edge whose source body no longer names its
+ *  target stayed in the mirror between two live pages. This deletes the edges
+ *  of that one type from that one source that are no longer wanted, then
+ *  upserts the rest. Edges of other types, and edges from other sources, are
+ *  never touched. */
+export async function replaceGraphEdgesFromSource(
+  srcKey: string,
+  relType: RelationType,
+  dstKeys: string[],
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge
+      WHERE src_key = $1 AND rel_type = $2 AND NOT (dst_key = ANY($3::text[]))`,
+    srcKey,
+    relType,
+    dstKeys,
+  );
+  for (const dstKey of dstKeys) {
+    await upsertGraphEdge(srcKey, dstKey, relType);
+  }
+}
+
+/** The `LINKS_TO` projection of a wiki page's out-links (BI-23900D0A). */
+export function projectWikiLinksToGraph(fromPageId: string, toPageIds: string[]): Promise<void> {
+  return replaceGraphEdgesFromSource(fromPageId, "LINKS_TO", toPageIds);
 }
 
 /** Resolve a Prisma TaxonomyNode FK (= TaxonomyNode.id, stored as the `pgId`
@@ -236,13 +269,6 @@ export async function syncWikiPage(page: {
   }
 }
 
-/** Upsert the page-to-page link edge (`WikiPageLink`). */
-export async function syncWikiPageLink(link: {
-  fromPageId: string;
-  toPageId: string;
-}): Promise<void> {
-  await upsertGraphEdge(link.fromPageId, link.toPageId, "LINKS_TO");
-}
 
 export async function syncDocumentNode(doc: {
   documentId: string;
@@ -493,7 +519,7 @@ export async function syncInventoryRelationship(rel: {
   const neoType = rel.relationshipType.toUpperCase();
 
   if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
-    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, neoType, {
+    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, toRelationType(neoType), {
       syncedAt: nowIso(),
     });
     return;
@@ -565,7 +591,7 @@ export async function syncEaRelationship(rel: {
 }): Promise<void> {
   // A relationship is also identified by relationshipId; the mirror keys edges by
   // (src,dst,rel_type) and stores relationshipId as a prop (used by deleteEaRelationship).
-  await upsertGraphEdge(rel.fromElementId, rel.toElementId, rel.neoType, {
+  await upsertGraphEdge(rel.fromElementId, rel.toElementId, toRelationType(rel.neoType), {
     relationshipId: rel.id,
     notationId: rel.notationSlug,
     relationshipType: rel.relationshipTypeSlug,

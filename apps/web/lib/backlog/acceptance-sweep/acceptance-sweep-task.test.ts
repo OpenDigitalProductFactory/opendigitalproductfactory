@@ -54,6 +54,8 @@ function summary(overrides: Partial<AcceptanceSweepSummary> = {}): AcceptanceSwe
       enabled: false, disabledReason: "not-recorded", because: "none recorded", authorisedBy: null, limit: 0,
       attempted: 0, closed: [], refused: [], skipped: [], errored: [], deferredByLimit: [],
     },
+    confirmation: { visited: 0, steps: {}, notSentByReason: {}, correctiveItemIds: [], errored: [] },
+    peerOwned: { skipped: 0 },
     cursor: "row-b",
     ...overrides,
   };

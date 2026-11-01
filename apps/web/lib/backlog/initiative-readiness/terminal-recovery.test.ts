@@ -84,12 +84,17 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
           branchName: dispatch.branchName,
           headSha: dispatch.headSha,
         },
-        artifactRef: {
+        artifactRef: artifact.kind === "document-version" ? {
+          kind: "document-version" as const,
+          repositoryFullName: dispatch.repositoryFullName,
+          versionId: artifact.versionId,
+          valueDigest: artifact.valueDigest,
+        } : {
           kind: "repo-blob-at-commit" as const,
           repositoryFullName: dispatch.repositoryFullName,
-          commitSha: (artifact.kind !== "feature-build-revision" ? artifact.commitSha : undefined) ?? dispatch.headSha,
-          path: artifact.kind !== "feature-build-revision" ? artifact.path : `build-artifact-revision/${artifact.revisionId}`,
-          providerBlobId: artifact.kind !== "feature-build-revision" ? artifact.providerBlobId : artifact.valueDigest,
+          commitSha: ("path" in artifact ? artifact.commitSha : undefined) ?? dispatch.headSha,
+          path: "path" in artifact ? artifact.path : artifact.kind === "feature-build-revision" ? `build-artifact-revision/${artifact.revisionId}` : "",
+          providerBlobId: "path" in artifact ? artifact.providerBlobId : artifact.kind === "feature-build-revision" ? artifact.valueDigest : "",
         },
       };
       const requiredToolNames = ["record_initiative_evidence", "read_source_at_version"];
@@ -636,7 +641,8 @@ describe("terminal initiative recovery", () => {
       path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) } }]);
     ports.resolveRecovery.mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
     await resolveTerminalInitiativeRecovery({ decision: { ...decision, unmet }, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
-    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha,
+      subjectItemId: decision.subject.id, headBranch: room.headBranch, backlogBody: undefined });
     expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
       // No pinned commit: the packet builder binds the room head, like the claim.
       canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
@@ -754,7 +760,7 @@ describe("terminal initiative recovery", () => {
     expect(next).not.toMatch(/cannot close|satisfies its baseline/i);
   });
 
-  it("tells a medium item whose acceptance is unmet that merged platform work is accepted on its merge", async () => {
+  it("names authorized body-version capture without offering a product-linked item the platform shortcut", async () => {
     const ports = deps([room], []);
     const result = await resolveTerminalInitiativeRecovery({
       decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: "medium", effective: "medium", sensitivity: null, raised: false } },
@@ -762,8 +768,9 @@ describe("terminal initiative recovery", () => {
       refusedWorkroomId: room.capsuleId,
       ports,
     });
-    expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted", toolName: "record_execution_evidence" }]);
-    expect(String(result.escalations[0]?.nextAction)).toMatch(/merge through branch protection/);
+    expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted", toolName: "update_backlog_item_status" }]);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/Product-linked work still requires independent acceptance/);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/one current Workroom/);
   });
 
   it("still asks a large shape with no baseline for spec approval", async () => {

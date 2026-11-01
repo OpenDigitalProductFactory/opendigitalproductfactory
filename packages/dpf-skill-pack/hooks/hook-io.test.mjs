@@ -15,12 +15,14 @@ import {
   normalizePayload,
   isShellTool,
   isDecisionTool,
+  isFileWriteTool,
   denyEnvelope,
   inDpfWorkspace,
   actionCwd,
   shellTargetDir,
   toNativePath,
 } from "./lib/hook-io.mjs";
+import { claudeDenyProblem } from "./lib/claude-hook-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Deterministic scoping: this test tree IS a DPF checkout, but pin it so the
@@ -42,7 +44,7 @@ test("normalizePayload reads Claude/Codex snake_case envelope", () => {
 });
 
 test("normalizePayload is defensive on junk input", () => {
-  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined });
+  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined, surface: "claude" });
   assert.deepEqual(normalizePayload({ tool_input: "notobj" }).toolInput, {});
 });
 
@@ -66,18 +68,48 @@ test("shellCommandFromInput accepts command/cmd/script aliases", async () => {
 test("isDecisionTool spans Claude and Grok decision tools", () => {
   assert.ok(isDecisionTool("AskUserQuestion"));
   assert.ok(isDecisionTool("AskQuestion"));
+  assert.ok(isDecisionTool("ask_user_question"));
   assert.ok(!isDecisionTool("Bash"));
 });
 
-test("denyEnvelope carries BOTH surfaces' deny channels", () => {
-  const e = denyEnvelope("nope");
-  // Grok-native
+test("isFileWriteTool spans Claude and Grok file-write tools (BI-742D707B)", () => {
+  // Grok 1.0.52 names its tools write / search_replace; a Claude-only set let
+  // every write guard fail open there, probed live 2026-10-14.
+  for (const name of ["Write", "Edit", "MultiEdit", "write", "search_replace"]) assert.ok(isFileWriteTool(name), name);
+  for (const name of ["Read", "read_file", "Bash", "NotebookEdit", undefined]) assert.ok(!isFileWriteTool(name), String(name));
+});
+
+test("denyEnvelope carries BOTH channels for Grok, whose verdict is the top-level decision", () => {
+  const e = denyEnvelope("nope", "grok");
   assert.equal(e.decision, "deny");
   assert.equal(e.reason, "nope");
-  // Claude/Codex-native
+  assert.equal(e.hookSpecificOutput.permissionDecision, "deny");
+});
+
+// BI-E5C45F61: Claude Code 2.1.295 (desktop 2.31226.1) validates the hook's
+// output and accepts a top-level `decision` only as approve|block. A "deny"
+// there failed validation, the host DISCARDED the whole output (logging a
+// non-blocking error), and every deny guard failed open on Claude.
+test("denyEnvelope for Claude/Codex carries only hookSpecificOutput and meets the Claude contract", () => {
+  const e = denyEnvelope("nope", "claude");
+  assert.equal("decision" in e, false);
   assert.equal(e.hookSpecificOutput.permissionDecision, "deny");
   assert.equal(e.hookSpecificOutput.permissionDecisionReason, "nope");
   assert.equal(e.hookSpecificOutput.hookEventName, "PreToolUse");
+  assert.equal(claudeDenyProblem(JSON.stringify(e)), null);
+});
+
+test("normalizePayload names the surface from the envelope casing", () => {
+  assert.equal(normalizePayload({ toolName: "Shell", toolInput: {} }).surface, "grok");
+  assert.equal(normalizePayload({ tool_name: "Bash", tool_input: {} }).surface, "claude");
+  assert.equal(normalizePayload(null).surface, "claude");
+});
+
+test("claudeDenyProblem rejects the legacy dual envelope the host discards", () => {
+  assert.match(claudeDenyProblem(JSON.stringify(denyEnvelope("x", "grok"))), /top-level decision/);
+  assert.match(claudeDenyProblem(""), /no output/);
+  assert.match(claudeDenyProblem("not json"), /not JSON/);
+  assert.match(claudeDenyProblem(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse" } })), /permissionDecision/);
 });
 
 // ── End-to-end: pipe a Grok-shaped payload through the real guard binaries and
@@ -120,6 +152,37 @@ test("decision-routing-guard denies a platform decision under the Grok AskQuesti
   assert.equal(v.decision, "deny");
   assert.equal(v.hookSpecificOutput.permissionDecision, "deny");
 });
+
+// The reproduction for BI-E5C45F61: the real guard binaries, fed the Claude
+// envelope, must emit an output the Claude host honours rather than discards.
+for (const [script, payload, env] of [
+  ["compose-guard.mjs", { tool_name: "Bash", tool_input: { command: "docker compose up --help" } }, { COMPOSE_PROJECT_NAME: "" }],
+  ["lease-punt-guard.mjs", { tool_name: "Bash", tool_input: { command: ["npx", "prisma", "migrate", "dev"].join(" ") } }, { DATABASE_URL: "" }],
+  [
+    "decision-routing-guard.mjs",
+    {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [
+          {
+            question: "Which architecture approach should we build first for the gate?",
+            options: [{ label: "Server-side plane" }, { label: "Harness hook only" }],
+          },
+        ],
+      },
+    },
+    {},
+  ],
+]) {
+  test(`${script} denies under the Claude envelope in a form the Claude host honours`, () => {
+    const out = execFileSync("node", [join(HERE, script)], {
+      input: JSON.stringify(payload),
+      env: { ...process.env, ...ANY, ...env },
+      encoding: "utf8",
+    });
+    assert.equal(claudeDenyProblem(out), null);
+  });
+}
 
 test("guards stay inert on non-matching Grok tool names (fail-safe allow)", () => {
   const out = execFileSync("node", [join(HERE, "lease-punt-guard.mjs")], {
@@ -187,4 +250,31 @@ test("lease-punt-guard now fires for a checkout command run from a session opene
     encoding: "utf8",
   });
   assert.match(out, /"deny"/, "the session folder no longer switches the guard off");
+});
+
+// BI-6145A168: Grok 1.0.52 sends BOTH casings (toolName AND tool_name). Keying the
+// surface on "camelCase without snake_case" classed it as Claude, so every guard
+// answered in Claude's envelope and Grok, which reads the top-level decision,
+// went ahead. Claude never sends a camelCase key, so any one of them means Grok.
+const GROK_BOTH_CASINGS = {
+  hookEventName: "PreToolUse", hook_event_name: "PreToolUse",
+  toolName: "run_terminal_command", tool_name: "run_terminal_command",
+  toolInput: { command: "ls" }, tool_input: { command: "ls" },
+  cwd: "/w", workspaceRoot: "/w",
+};
+
+test("a Grok payload carrying both casings is still Grok", () => {
+  assert.equal(normalizePayload(GROK_BOTH_CASINGS).surface, "grok");
+  assert.equal(denyEnvelope("nope", normalizePayload(GROK_BOTH_CASINGS).surface).decision, "deny");
+});
+
+test("a Claude payload, which has no camelCase keys, stays Claude", () => {
+  const claude = { session_id: "s", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" }, cwd: "/c" };
+  assert.equal(normalizePayload(claude).surface, "claude");
+});
+
+test("lease-punt-guard denies on the top-level channel for a both-casings Grok payload", () => {
+  const cmd = ["npx", "prisma", "migrate", "dev"].join(" ");
+  const v = runGuard("lease-punt-guard.mjs", { ...GROK_BOTH_CASINGS, toolInput: { command: cmd }, tool_input: { command: cmd } }, { DATABASE_URL: "", ...ANY });
+  assert.equal(v.decision, "deny");
 });

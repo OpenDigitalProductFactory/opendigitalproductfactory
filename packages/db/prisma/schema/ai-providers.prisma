@@ -77,6 +77,7 @@ model AiProviderConnection {
   financeProfileId   String?
   supplierContractId String?
   capacityStatusId   String?   @unique
+  quotaStatusId      String?
   label              String?
   status             String    @default("unconfigured")
   executionChannel   String
@@ -98,6 +99,8 @@ model AiProviderConnection {
   financeProfile   AiProviderFinanceProfile? @relation(fields: [financeProfileId], references: [id], onDelete: SetNull)
   supplierContract SupplierContract?         @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
   capacityStatus   ProviderCapacityStatus?   @relation(fields: [capacityStatusId], references: [id], onDelete: SetNull)
+  quotaStatus      ProviderCapacityStatus?   @relation("AccountQuota", fields: [quotaStatusId], references: [id], onDelete: SetNull)
+  ownedHealth      ProviderCapacityStatus?   @relation("OwnedAccountHealth")
   trustEvidence    ComplianceEvidence[]
   oauthFlows       OAuthPendingFlow[]
 
@@ -105,6 +108,7 @@ model AiProviderConnection {
   @@index([providerId, status])
   @@index([financeProfileId])
   @@index([supplierContractId])
+  @@index([quotaStatusId])
 }
 
 model DiscoveredModel {
@@ -213,6 +217,9 @@ model TokenUsage {
   traceId      String?
   agentId      String
   providerId   String
+  /// Immutable attribution snapshot, not a live foreign key.
+  recordedProviderConnectionRef String?
+  quotaScopeKey String?
   contextKey   String
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
@@ -222,6 +229,7 @@ model TokenUsage {
 
   @@index([createdAt])
   @@index([traceId])
+  @@index([recordedProviderConnectionRef, createdAt])
 }
 
 model EndpointTaskPerformance {
@@ -304,6 +312,9 @@ model RouteOutcome {
   requestId         String   @unique
   traceId           String?
   providerId        String
+  /// Immutable attribution snapshot, not a live foreign key.
+  recordedProviderConnectionRef String?
+  quotaScopeKey     String?
   modelId           String
   recipeId          String?
   contractFamily    String
@@ -323,6 +334,7 @@ model RouteOutcome {
 
   @@index([recipeId, contractFamily])
   @@index([providerId, modelId])
+  @@index([recordedProviderConnectionRef, createdAt])
   @@index([agentId, createdAt])
   @@index([traceId])
 }
@@ -589,10 +601,18 @@ model ExecutionRecipe {
 // The row is cleared (resetAt set to null) once the wall clock passes resetAt.
 //
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
+enum CliPoolAdapterKind {
+  claude_code
+  codex
+}
+
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=platform-owner steward=data-steward
 model CliPoolStatus {
   id                String    @id @default(cuid())
   /// "claude-cli" | "codex-cli"
-  adapterType       String    @unique
+  adapterType       String?   @unique
+  adapterKind       CliPoolAdapterKind?
+  scopeKey          String?   @unique
   providerId        String
   rateLimitedAt     DateTime
   /// Best-effort reset time parsed from Retry-After/X-RateLimit-Reset in stderr.
@@ -624,9 +644,15 @@ model CliPoolStatus {
 // Current live capacity state for a provider. This separates runtime capacity
 // (quota, throttles, credits, plan limits) from ModelProvider.status, which is
 // the configured/admin lifecycle state.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=platform-owner steward=data-steward
 model ProviderCapacityStatus {
   id                    String                @id @default(cuid())
-  providerId            String                @unique
+  providerId            String?               @unique
+  scopeKey              String?               @unique
+  ownedAccountId        String?               @unique
+  observedCredentialRevision String?
+  /// Exact account/model/Responses observation; null or invalid grants nothing.
+  executionProof        Json?
   state                 String
   action                String
   retryAt               DateTime?
@@ -641,8 +667,10 @@ model ProviderCapacityStatus {
   rawSnippet            String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
-  provider              ModelProvider         @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  provider              ModelProvider?        @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
   providerConnection    AiProviderConnection?
+  quotaConnections      AiProviderConnection[] @relation("AccountQuota")
+  ownedAccount          AiProviderConnection? @relation("OwnedAccountHealth", fields: [ownedAccountId], references: [id], onDelete: Cascade)
 
   @@index([state, retryAt])
   @@index([isHumanActionRequired, updatedAt])

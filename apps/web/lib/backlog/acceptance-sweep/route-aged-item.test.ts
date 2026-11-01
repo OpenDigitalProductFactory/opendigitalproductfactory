@@ -521,6 +521,8 @@ describe("routing a small item's execution-evidence lane end to end (BI-7C7E8CAC
     expect(objective).toMatch(/record_execution_evidence, itemId BI-SMALL0002/);
     expect(objective).toMatch(/ACCEPTANCE_EVIDENCE_REQUIRED: kind "manual_check"/);
     expect(objective).toMatch(/DELIVERY_EVIDENCE_REQUIRED: kind "test_pass"/);
+    expect(objective).toMatch(/record kind "manual_fail", not "manual_check"/);
+    expect(objective).toMatch(/manual_fail never earns completion credit/);
     expect(objective).not.toMatch(/record_initiative_evidence/);
     expect(objective).not.toMatch(/Not yours/);
   });

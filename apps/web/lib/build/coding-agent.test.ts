@@ -199,8 +199,9 @@ describe("runSandboxTests type-checks every package the change touches", () => {
     const exec = vi.mocked(execInSandbox);
     exec.mockReset();
     exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.includes("apps/mobile/pnpm-lock.yaml")) return "__yes__";
       if (cmd.startsWith("test -f")) return "__no__";
-      const pkg = /cd \/workspace\/\.builds\/FB-1\/([^ ]+) && pnpm exec tsc --noEmit/.exec(cmd)?.[1];
+      const pkg = /cd \/workspace\/\.builds\/FB-1\/([^ ]+) && (?:pnpm exec tsc|node \/workspace\/\.builds\/FB-1\/scripts\/run-tsc\.mjs) --noEmit/.exec(cmd)?.[1];
       if (pkg) return tsc[pkg] ?? "";
       return "";
     });
@@ -211,10 +212,23 @@ describe("runSandboxTests type-checks every package the change touches", () => {
 
   it("checks apps/mobile as well as apps/web when mobile files change, never through npx", async () => {
     const { commands } = await run(["apps/mobile/src/features/visitor/visitor.store.ts"]);
-    const tsc = commands.filter((cmd) => /tsc --noEmit/.test(cmd));
+    const tsc = commands.filter((cmd) => /--noEmit/.test(cmd));
     expect(tsc.some((cmd) => cmd.includes("/apps/mobile && pnpm exec tsc --noEmit"))).toBe(true);
-    expect(tsc.some((cmd) => cmd.includes("/apps/web && pnpm exec tsc --noEmit"))).toBe(true);
+    expect(tsc.some((cmd) => cmd.includes("/apps/web && node /workspace/.builds/FB-1/scripts/run-tsc.mjs --noEmit"))).toBe(true);
     expect(tsc.some((cmd) => /npx /.test(cmd))).toBe(false);
+  });
+
+  // BI-D2FE6931: a root-workspace package is checked with the platform's one
+  // compiler entry point (scripts/run-tsc.mjs, TypeScript 7), so Build Studio
+  // grades with the compiler CI uses and follows its pin. apps/mobile has its own
+  // workspace and lockfile, exactly as CI's mobile job, and keeps its own tsc.
+  it("checks root-workspace packages through run-tsc, never the workspace's bare tsc", async () => {
+    const { commands } = await run(["packages/db/src/x.ts", "apps/web/lib/x.ts"]);
+    const tsc = commands.filter((cmd) => /--noEmit/.test(cmd));
+    for (const pkg of ["apps/web", "packages/db"]) {
+      expect(tsc).toContain(`cd /workspace/.builds/FB-1/${pkg} && node /workspace/.builds/FB-1/scripts/run-tsc.mjs --noEmit 2>&1 || true`);
+    }
+    expect(tsc.some((cmd) => /pnpm exec tsc/.test(cmd))).toBe(false);
   });
 
   it("fails on a type error in a changed mobile file, reported relative to the package", async () => {
@@ -257,5 +271,56 @@ describe("runSandboxTests installs a separately-locked package before checking i
     expect(install).toBeGreaterThanOrEqual(0);
     expect(install).toBeLessThan(tsc);
     expect(install).toBeLessThan(jest);
+  });
+});
+
+// BI-F5D4FA50: in FB-86FAED68 an unscoped whole-suite run took ~920% CPU in
+// the sandbox. Verification never runs the whole suite there, and a scoped run
+// still gates on a failing test related to a changed file.
+describe("runSandboxTests stays scoped (BI-F5D4FA50)", () => {
+  async function run(changedFiles: string[] | undefined, vitestOutput = "Test Files  1 passed (1)", exit = 0) {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    const exec = vi.mocked(execInSandbox);
+    exec.mockReset();
+    exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.startsWith("test -f")) return cmd.includes('coding-agent.test.ts"') ? "__yes__" : "__no__";
+      if (/cat "[^"]+\/package\.json"/.test(cmd)) return JSON.stringify({ scripts: { test: "vitest run" }, devDependencies: { vitest: "5.0.3" } });
+      if (/pnpm exec vitest run/.test(cmd)) return `${vitestOutput}\n__dpf_exit=${exit}`;
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    const result = await runSandboxTests("c1", { changedFiles, workdir: "/workspace/.builds/FB-1" });
+    return { result, commands: exec.mock.calls.map(([, cmd]) => cmd) };
+  }
+
+  it("fails the build when the related test of a changed file fails", async () => {
+    const { result, commands } = await run(["apps/web/lib/build/coding-agent.ts"], " FAIL  lib/build/coding-agent.test.ts > derive\n Test Files  1 failed (1)", 1);
+    expect(result.scope).toBe("scoped");
+    expect(result.scopedTestsRun).toBe(1);
+    expect(result.passed).toBe(false);
+    const testRuns = commands.filter((cmd) => /vitest run|jest|pnpm test/.test(cmd));
+    expect(testRuns).toHaveLength(1);
+    expect(testRuns[0]).toMatch(/pnpm exec vitest run "lib\/build\/coding-agent\.test\.ts"/);
+  });
+
+  it("runs no whole suite when the changed files are unknown, and says so", async () => {
+    const { result, commands } = await run(undefined);
+    expect(result.scope).toBe("none");
+    expect(result.testOutput).toMatch(/no tests ran/);
+    expect(commands.some((cmd) => /pnpm test|vitest run|jest/.test(cmd))).toBe(false);
+  });
+});
+
+// BI-33B54E4B: the sandbox exports NODE_ENV=development and Vitest keeps an
+// existing NODE_ENV, so a test that relies on the test environment failed in the
+// sandbox only (FB-3F40A125: the objective-mapping key falls back to its test
+// secret only under NODE_ENV=test). Scoped tests run as tests, whatever the host.
+describe("scopedTestRunnerCommand runs under the test environment", () => {
+  it("sets NODE_ENV=test for Vitest and for Jest", async () => {
+    const { scopedTestRunnerCommand } = await import("./coding-agent");
+    const vitestPkg = JSON.stringify({ scripts: { test: "vitest run" }, devDependencies: { vitest: "5.0.3" } });
+    const jestPkg = JSON.stringify({ scripts: { test: "jest" }, devDependencies: { jest: "30.0.0" } });
+    expect(scopedTestRunnerCommand(vitestPkg, '"a.test.ts"')).toBe('NODE_ENV=test pnpm exec vitest run "a.test.ts"');
+    expect(scopedTestRunnerCommand(jestPkg, '"a.test.ts"')).toBe('NODE_ENV=test pnpm exec jest --ci "a.test.ts"');
   });
 });

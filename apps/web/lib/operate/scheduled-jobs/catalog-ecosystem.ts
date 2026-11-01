@@ -50,9 +50,12 @@ export const ECOSYSTEM_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] 
     purpose:
       "Reads what the ecosystem submitted — upstream issues filed by the relay and peer "
       + "federated demand — and files it into the backlog with the submitter preserved. "
-      + "No-ops unless the installation's purpose is evolve-dpf.",
-    cron: "17 6 * * 1",
-    cadence: "Weekly (Mondays, 06:17)",
+      + "Runs only on the commissioned repository controller: a declared production install "
+      + "whose confirmed purposes include evolve-dpf (primary or secondary) and whose locally "
+      + "owned issue-triage-watch workroom matches the configured upstream repository. "
+      + "Otherwise reports not commissioned. Every 4 hours: the ratified detection target.",
+    cron: "17 */4 * * *",
+    cadence: "Every 4 hours (at :17)",
     category: "editable",
     tracksRunData: true,
     runNowEvent: null,

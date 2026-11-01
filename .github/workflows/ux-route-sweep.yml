@@ -137,6 +137,12 @@ jobs:
       # swallowed"). BI-98D19DF2's interim eaReferenceModels tolerance
       # carve-out (PR #3445) is removed now that `lfs: true` above fixes the
       # root cause — a full, unmodified failure is a real signal again.
+      - name: Prepare the CI host capability fixture
+        run: |
+          node scripts/ci-runtime-install-state-fixture.mjs > "$RUNNER_TEMP/install-state.json"
+          sudo install -d /dpf-state
+          sudo install -m 0644 "$RUNNER_TEMP/install-state.json" /dpf-state/install-state.json
+
       - name: Seed the fixture organisation
         run: pnpm --filter @dpf/db seed
 
@@ -245,9 +251,34 @@ jobs:
       - name: Establish an authenticated session
         run: pnpm exec tsx e2e/auth-only.ts
 
+      # Provider-detail routes require a dynamic fixture and are excluded from
+      # the broad route sweep. Exercise the local engine control explicitly in
+      # this same governed portal; an unqualified host must retain Docker.
+      - name: Verify local engine control on desktop and mobile
+        env:
+          DPF_MEASUREMENT_RUNTIME: "1"
+        run: >-
+          pnpm exec playwright test e2e/managed-inference-control.spec.ts
+          --project=chromium --reporter=list --run-agents=none
+          --output=apps/web/test-results/managed-inference-control
+
       - name: Run the sweep
         if: ${{ inputs.update_baseline != true }}
         run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS"
+
+      # Exercise the actual served decision controls after the unchanged budget
+      # sweep. Only run-scoped CI fixtures are used; server decisions are blocked.
+      - name: Verify approval disclosure scenarios
+        if: ${{ inputs.update_baseline != true }}
+        env:
+          DPF_APPROVAL_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/approval-disclosure-verification.ts
+
+      - name: Verify provider recovery controls and synthetic Responses
+        if: ${{ inputs.update_baseline != true }}
+        env:
+          DPF_PROVIDER_QUOTA_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/provider-quota-recovery-verification.ts
 
       # Manual arming path: measure the running portal and emit the baseline as an
       # artifact for a human to commit via PR. Deliberately NOT committed from CI —
@@ -274,6 +305,9 @@ jobs:
             apps/web/lib/ux-budget/route-budget-report.json
             apps/web/test-results/ux-route-sweep/route-sweep-execution.json
             apps/web/test-results/ux-route-sweep/visible-text
+            apps/web/test-results/ux-route-sweep/approval-scenarios
+            apps/web/test-results/ux-route-sweep/provider-quota-recovery
+            apps/web/test-results/managed-inference-control
           if-no-files-found: warn
 
       # Screenshots exist only for failed eligible routes. Keeping them out of green

@@ -1,11 +1,14 @@
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { getLatestRun } from "@/lib/self-upgrade/run-store";
+import { isEligibleRecoveryPredecessor } from "@/lib/self-upgrade/recovery-eligibility";
 import {
   admitSelfUpgrade,
   resolveCurrentSelfUpgradeTarget,
 } from "@/lib/self-upgrade/admission";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import { prisma } from "@dpf/db";
+import { loadInstanceStance, prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import {
   decideUpgradeTiming,
   deferUpgradeToWindow,
@@ -105,7 +108,13 @@ export async function requestSelfUpgrade(
       runId: latestRun.runId,
     };
   }
-  if (latestRun?.status === "failed") {
+  // The operator door's rule, not a second one (BI-CC9DB006): only a failure
+  // that is still settling, or a never-dispatched failure that needs the exact
+  // target binding to recover, needs the operator page. A dispatched failure
+  // that ended — e.g. refused at preflight with nothing installed — admits a
+  // fresh run here exactly as it does there (AC-SUA-015/016).
+  if (latestRun?.status === "failed"
+    && (latestRun.completedAt == null || isEligibleRecoveryPredecessor(latestRun as Parameters<typeof isEligibleRecoveryPredecessor>[0]))) {
     return {
       success: true,
       status: "human_override_required",
@@ -126,7 +135,15 @@ export async function requestSelfUpgrade(
     };
   }
 
-  const timing = await decideUpgradeTiming({ requester: input.actorKind, config, now });
+  let instanceStance: Awaited<ReturnType<typeof loadInstanceStance>> | undefined;
+  if (input.actorKind === "agent") {
+    try {
+      instanceStance = await loadInstanceStance(prismaInstanceStanceStore(prisma));
+    } catch {
+      // Unavailable context retains the existing cautious window policy.
+    }
+  }
+  const timing = await decideUpgradeTiming({ requester: input.actorKind, config, now, instanceStance });
   if (timing.kind === "needs-timezone") {
     return {
       success: true,
@@ -168,7 +185,7 @@ export async function requestSelfUpgrade(
     return { success: true, status: "deferred_to_window", ...deferral };
   }
 
-  // AC-2: an operator outside the window runs now; the trigger records the bypass.
+  // Preserve the actual requester on any allowed outside-window run.
   const triggeredBy = timing.windowBypassed ? withWindowBypass(requestedBy) : requestedBy;
 
   const target = await resolveCurrentSelfUpgradeTarget();

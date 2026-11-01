@@ -11,7 +11,7 @@ import {
   type BuildStudioDispatchResolution,
 } from "./build-studio-dispatch-context";
 import { designPhaseReviewDecision } from "./design-phase-recovery";
-import { currentBaseline, parseBaselinePayloads } from "./terminal-recovery";
+import { currentBaseline, parseBaselinePayloads } from "./baseline-head";
 import type { InitiativeReadinessDecision } from "./types";
 
 // BI-926A7E90 PR-3 — the independent reviews a Build Studio build in plan owes.
@@ -39,7 +39,53 @@ export type BuildStudioOwedRoutesResult =
   | { routed: true; routes: Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> }
   | { routed: false; reason: string };
 
+/** Activity kinds whose arrival can change a readiness verdict. */
+const READINESS_INPUT_KINDS = ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage", "evidence"] as const;
+
+/**
+ * BI-6F2872FC AC-6: the plan -> build gate judges a build on the shape its
+ * plan raises it to (plan paths, the reviewed build design). The item read
+ * projection does not, so a medium build its plan raised to large was owed a
+ * plan review the router never saw. Prefer the gate's own persisted decision
+ * while it is current — no receipt, baseline, coverage or evidence row landed
+ * after it — and fall back to the projection otherwise.
+ */
+export function currentGateImplementationDecision(
+  row: { recordedAt: Date; payload: unknown } | null,
+  latestInputAt: Date | null,
+): InitiativeReadinessDecision | null {
+  const payload = row?.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+    ? row.payload as Record<string, unknown> : null;
+  const transition = payload?.transitionObject as Record<string, unknown> | undefined;
+  if (!row || !payload || payload.target !== "implementation"
+    || transition?.kind !== "feature-build" || transition.targetState !== "build"
+    || typeof payload.verdict !== "string" || !Array.isArray(payload.unmet) || !Array.isArray(payload.blockers)) return null;
+  if (latestInputAt && latestInputAt.getTime() > row.recordedAt.getTime()) return null;
+  return payload as unknown as InitiativeReadinessDecision;
+}
+
+async function loadGateImplementationDecision(itemId: string): Promise<InitiativeReadinessDecision | null> {
+  const item = await prisma.backlogItem.findUnique({ where: { itemId }, select: { id: true } });
+  if (!item) return null;
+  const [gate, input] = await Promise.all([
+    prisma.backlogItemActivity.findFirst({
+      where: { backlogItemId: item.id, kind: "initiative_readiness_decision",
+        payload: { path: ["transitionObject", "targetState"], equals: "build" } },
+      orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+      select: { recordedAt: true, payload: true },
+    }),
+    prisma.backlogItemActivity.findFirst({
+      where: { backlogItemId: item.id, kind: { in: [...READINESS_INPUT_KINDS] } },
+      orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+      select: { recordedAt: true },
+    }),
+  ]);
+  return currentGateImplementationDecision(gate, input?.recordedAt ?? null);
+}
+
 async function defaultLoadImplementationDecision(itemId: string, agentId: string): Promise<InitiativeReadinessDecision | null> {
+  const gate = await loadGateImplementationDecision(itemId).catch(() => null);
+  if (gate) return gate;
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId }, agentId);
   const decision = (item.data?.readiness as { decisions?: { implementation?: unknown } } | undefined)?.decisions?.implementation;

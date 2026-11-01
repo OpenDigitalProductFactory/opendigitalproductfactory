@@ -1,8 +1,17 @@
+import { Children, isValidElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
-import { workroomInventoryWhere } from "./WorkroomActivitySection";
+vi.mock("@/lib/i18n/t.server", () => ({ getT: async () => (key: string) => key }));
+const fixture = vi.hoisted(() => ({
+  load: vi.fn(), owners: vi.fn(), coo: vi.fn(),
+}));
+vi.mock("@/lib/work-capsules/liveness-inventory", () => ({ loadCapsuleLivenessInventory: fixture.load }));
+vi.mock("@/lib/work-management/room-workforce.server", () => ({ loadRoomAccountabilityBatch: fixture.owners }));
+vi.mock("@/lib/operate/coo-surface.server", () => ({ loadCooSupervision: fixture.coo }));
+import { WorkroomActivitySection, workroomInventoryWhere } from "./WorkroomActivitySection";
+import { WorkroomInventory } from "./WorkroomInventory";
 
 // EP-2FB6C0CC, BI-2EA3BB99 — AC-AREA-WORK: an area's Work view runs the same
 // inventory query as /ops/workrooms, narrowed to its portfolio and nothing else,
@@ -14,5 +23,55 @@ describe("workroomInventoryWhere", () => {
 
   it("narrows only by portfolio for an area's Work view", () => {
     expect(workroomInventoryWhere("productsAndServicesSold")).toEqual({ portfolioRole: "productsAndServicesSold" });
+  });
+  it("batches accountability and sends display data instead of full recovery/scope packets", async () => {
+    const rooms = Array.from({ length: 200 }, (_, i) => ({ id: `row-${i}`, capsuleId: `WC-${i}`,
+      backlogItemId: null, title: `Work ${i}`, status: "working", source: "manual", executorKind: "codex-desktop",
+      attribution: { executor: "codex-desktop", invocation: "session" }, portfolioRole: null,
+      headBranch: null, pullRequestUrl: null, updatedAt: new Date(), liveness: "live", isLive: true,
+      isReapable: false, livenessReason: "Recent progress", trueLivenessAt: null,
+      outcomeAnchor: { narrative: "large-outcome-packet".repeat(400) },
+      scopeClaims: [{ privateData: "scope-private".repeat(400) }], recovery: {
+        prerequisite: { accountableRole: "artifact-resolver", repair: { packet: "source-path".repeat(400) } },
+      },
+    }));
+    fixture.load.mockResolvedValue({ capsulesAll: rooms, livenessSummary: { live: 200, history: 0,
+      heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null } } });
+    fixture.owners.mockResolvedValue(new Map(rooms.map(room => [room.id, {
+      accountableDisplayName: "Recorded person", accountability: { state: "resolved", principalId: "P-1", source: "organization-owner", inheritedFrom: [] },
+    }])));
+    fixture.coo.mockResolvedValue({
+      rooms: rooms.map(room => ({
+        roomId: room.capsuleId, title: room.title, ownerPrincipalId: "P-1", ownerDisplayName: "Recorded person",
+        ownerIsSuggestion: true, stallRecipientPrincipalId: "P-1", lastCycleKey: null, lastAction: null,
+        lastReason: null, ticksSinceAdvance: null, nextWakeAt: null, spanOfControl: 200, overSpan: true,
+        unowned: false, paused: false, escalationLabel: "Recorded person", missingAckCount: 0,
+        actionHref: `/workspace/cases/work-capsule%3A${room.capsuleId}`,
+      })),
+      unowned: [], paused: [], overSpanOwners: [{ principalId: "P-1", displayName: "Recorded person", roomCount: 200 }],
+      missingAcks: [],
+    });
+    const element = await WorkroomActivitySection({});
+    let payload: unknown;
+    const walk = (node: ReactNode) => Children.forEach(node, child => {
+      if (!isValidElement<{ children?: ReactNode; workrooms?: unknown }>(child)) return;
+      if (child.type === WorkroomInventory) payload = child.props.workrooms;
+      walk(child.props.children);
+    });
+    walk(element);
+    expect(fixture.owners).toHaveBeenCalledTimes(1);
+    expect(fixture.owners.mock.calls[0]![1]).toHaveLength(200);
+    const serialized = JSON.stringify(payload);
+    console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);
+    expect(serialized).not.toMatch(/large-outcome-packet|scope-private|source-path/);
+    expect(serialized).toContain("Recorded person");
+    expect(serialized).toContain("inventory.actor.delivery");
+    expect(serialized).toContain("inventory.action.source");
+    expect(serialized).toContain("/workspace/cases/work-capsule%3AWC-0");
+    expect(serialized.length).toBeLessThan(JSON.stringify(rooms).length / 10);
+    // Executing the original0209 mapper on this same fixture measured180471.
+    // Keep diagnostics out of the list even after adding useful action fields.
+    expect(serialized.length).toBeLessThan(170000);
+    expect(fixture.load).toHaveBeenCalledWith({}, expect.objectContaining({ take: 200, portalSummary: true }));
   });
 });

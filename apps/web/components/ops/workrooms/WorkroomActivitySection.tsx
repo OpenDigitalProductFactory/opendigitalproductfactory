@@ -1,4 +1,7 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import Link from "next/link";
 
 import { getT } from "@/lib/i18n/t.server";
@@ -7,7 +10,10 @@ import { PortfolioActivityTree } from "@/components/ops/workrooms/PortfolioActiv
 import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
 import { Surface } from "@/components/ui/Surface";
 import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
+import { loadCooSupervision, type CooSupervisionDb } from "@/lib/operate/coo-surface.server";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
+import { countOperatorAttention, projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
+import { loadRoomAccountabilityBatch } from "@/lib/work-management/room-workforce.server";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import {
@@ -30,6 +36,7 @@ type Props = {
   scopeLabel?: string;
   /** Rendered between the lead band and the activity tree (the page's held rooms). */
   children?: React.ReactNode;
+  heldCapsuleIds?: string[];
 };
 
 /**
@@ -38,35 +45,78 @@ type Props = {
  * renders it for one portfolio (EP-2FB6C0CC, spec §9.3). One loader and one
  * component, so an area view can never drift into a second inventory.
  */
-export async function WorkroomActivitySection({ portfolioRole, scopeLabel, children }: Props) {
+export async function WorkroomActivitySection({ portfolioRole, scopeLabel, children, heldCapsuleIds = [] }: Props) {
   const t = await getT("shell");
+  const locale = await getLocaleContext();
   const inventory = await loadCapsuleLivenessInventory(prisma, {
     where: workroomInventoryWhere(portfolioRole),
     take: WORKROOM_READ_LIMIT,
+    portalSummary: true,
   });
   // A full page means the read stopped at its limit, so branch counts describe
   // the rooms read rather than the rooms that exist. The tree is told, and says so.
   const roomReadBounded = inventory.capsulesAll.length >= WORKROOM_READ_LIMIT;
-  const workrooms = inventory.capsulesAll.map((room) => ({
-    ...room,
-    updatedAt: room.updatedAt instanceof Date ? room.updatedAt.toISOString() : String(room.updatedAt),
-  })) as WorkroomInventoryRow[];
+  const owners = await loadRoomAccountabilityBatch(prisma, inventory.capsulesAll
+    .flatMap(room => typeof room.id === "string" ? [room.id] : []));
+  const driveOf = (room: Record<string, unknown>) => room.drive as
+    { action: string | null; reason: string | null; lastCycleKey?: string | null; attentionRecorded?: boolean } | undefined;
+  const supervisionRooms = inventory.capsulesAll.map((room) => {
+    const owner = owners.get(String(room.id));
+    const display = room as unknown as WorkroomInventoryRow;
+    return {
+      capsuleId: display.capsuleId,
+      title: display.title,
+      liveness: display.liveness,
+      accountability: owner?.accountability,
+      accountableDisplayName: owner?.accountableDisplayName ?? null,
+      drive: driveOf(room) ?? null,
+    };
+  });
+  const supervision = await loadCooSupervision(prisma as CooSupervisionDb, { rooms: supervisionRooms });
+  const cooById = new Map(supervision.rooms.map((row) => [row.roomId, row]));
+  // The client receives display fields only, never scope, outcome or recovery packets.
+  const workrooms = inventory.capsulesAll.map((room) => {
+    const owner = owners.get(String(room.id));
+    const display = room as unknown as WorkroomInventoryRow;
+    const coo = cooById.get(display.capsuleId) ?? null;
+    return {
+      capsuleId: display.capsuleId, backlogItemId: display.backlogItemId,
+      title: display.title, status: display.status,
+      portfolioRole: display.portfolioRole,
+      pullRequestUrl: display.pullRequestUrl,
+      liveness: display.liveness, isLive: display.isLive,
+      accountableName: owner?.accountableDisplayName ?? null,
+      operator: projectWorkroomOperatorSummary({ ...display, recovery: room.recovery,
+        executorKind: typeof room.executorKind === "string" ? room.executorKind : null,
+        decisions: room.decisions as Array<{ title: string; condition: string }> | undefined,
+        accountability: owner?.accountability,
+        drive: driveOf(room) }),
+      coo: coo ? {
+        lastCycleKey: coo.lastCycleKey, lastAction: coo.lastAction, lastReason: coo.lastReason,
+        ticksSinceAdvance: coo.ticksSinceAdvance, nextWakeAt: coo.nextWakeAt,
+        spanOfControl: coo.spanOfControl, overSpan: coo.overSpan, unowned: coo.unowned,
+        paused: coo.paused, ownerIsSuggestion: coo.ownerIsSuggestion,
+        escalationLabel: coo.escalationLabel, missingAckCount: coo.missingAckCount,
+        actionHref: coo.actionHref,
+      } : null,
+    };
+  });
 
   // Map only from evidence the inventory actually carries. `latestAction` stays
   // null where no concrete action was recorded — the projection then says so
   // rather than manufacturing one — and a blocked room contributes its recorded
   // liveness reason as the blocker. Nothing here asserts a verified receipt,
   // because a terminal status is not one.
-  const activityRooms: RoomActivityInput[] = workrooms.map((room) => ({
-    roomId: room.capsuleId,
-    title: room.title,
+  const activityRooms: RoomActivityInput[] = inventory.capsulesAll.map((room) => ({
+    roomId: String(room.capsuleId),
+    title: String(room.title),
     portfolioRole: (room.portfolioRole ?? null) as RoomActivityInput["portfolioRole"],
-    branchId: room.portfolioRole ?? "unplaced",
-    href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`,
-    status: room.status,
-    latestAction: null,
-    blocker: room.status === "blocked" ? room.livenessReason : null,
-    evidenceAt: room.trueLivenessAt ?? null,
+    branchId: typeof room.portfolioRole === "string" ? room.portfolioRole : "unplaced",
+    href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: String(room.capsuleId) })}`,
+    status: String(room.status),
+    latestAction: cooById.get(String(room.capsuleId))?.lastAction ?? null,
+    blocker: room.status === "blocked" && typeof room.livenessReason === "string" ? room.livenessReason : null,
+    evidenceAt: typeof room.trueLivenessAt === "string" ? room.trueLivenessAt : null,
   }));
   const activity = projectPortfolioActivityPage({ rooms: activityRooms, now: new Date(), pageSize: 50 });
   // Labels are resolved here and passed as data. The tree is a client component,
@@ -78,34 +128,41 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
         ? "Not placed in a portfolio"
         : portfolioRoleLabel(row.branchId as Parameters<typeof portfolioRoleLabel>[0]),
   }));
-  const live = inventory.livenessSummary.live;
+  const working = workrooms.filter(room => room.operator.group === "working").length;
+  const sharedRecoveryIds = children ? heldCapsuleIds : [];
+  const attention = countOperatorAttention(workrooms.filter(room => room.operator.group === "attention")
+    .map(room => room.capsuleId), sharedRecoveryIds);
   const where = scopeLabel ? ` in ${scopeLabel}` : "";
 
   return (
-    <>
+    <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
       <Surface data-dpf-lead className="my-6" rounded="xl">
         <p className="text-sm font-medium text-[var(--dpf-text)]">
-          {live === 0
-            ? `No Workrooms${where} have live execution evidence right now.`
-            : `${live} Workroom${live === 1 ? " is" : "s are"} live${where} right now.`}
+          {working} working now{where} · {attention} need attention.
         </p>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          {inventory.livenessSummary.history} retained record{inventory.livenessSummary.history === 1 ? " is" : "s are"} history, not active work.
+          {roomReadBounded ? "200 recent rooms, plus shared recovery issues." : "Counts cover the rooms in this view."} Routine expiry follows the existing cleanup policy.
         </p>
         <Link data-owner-first-next-action href="#live-workrooms-heading" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           {t("area.reviewLive")}
         </Link>
       </Surface>
-      {children}
-      {!portfolioRole && (
-        <Surface className="mt-6" rounded="xl">
-          <h2 className="text-base font-semibold text-[var(--dpf-text)]">{t("area.activityHeading")}</h2>
-          <PortfolioActivityTree rows={activityRows} partial={activity.partial} roomReadBounded={roomReadBounded} />
-        </Surface>
-      )}
       <div className="mt-6">
-        <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary} />
+        <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary}
+          heldCapsuleIds={sharedRecoveryIds} attentionContent={children}
+          supervision={{
+            unownedCount: supervision.unowned.length,
+            pausedCount: supervision.paused.length,
+            overSpanOwners: supervision.overSpanOwners,
+            missingAckCount: supervision.missingAcks.length,
+          }} />
       </div>
-    </>
+      {!portfolioRole && (
+        <details className="mt-6 rounded-dpf-xl border border-dpf-border p-4">
+          <summary className="cursor-pointer text-dpf-body font-dpf-semibold">{t("area.activityHeading")}</summary>
+          <PortfolioActivityTree rows={activityRows} partial={activity.partial} roomReadBounded={roomReadBounded} />
+        </details>
+      )}
+    </MessagesProvider>
   );
 }

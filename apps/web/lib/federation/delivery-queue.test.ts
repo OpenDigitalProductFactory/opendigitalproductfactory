@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FEDERATION_DELIVERY_QUEUE_ID,
   finishFederationDeliveryJob,
+  holdFederationDeliveryJob,
   scheduleFederationDeliveryJob,
 } from "./delivery-queue";
 
@@ -58,5 +59,71 @@ describe("federation delivery queue", () => {
       }),
     });
     expect(telemetry).toHaveBeenCalledWith(expect.objectContaining({ transition: "requeued" }));
+  });
+
+  it("re-scheduling a job that is already queued records no new enqueued transition (BI-1A8887C7)", async () => {
+    // Telemetry records state transitions, not repeated polls: queued -> queued
+    // is not an `enqueued` event. Only a job entering the queue (new, or back
+    // from completed/failed/in-progress) is.
+    const telemetry = vi.fn().mockResolvedValue(undefined);
+    const findUnique = vi.fn().mockResolvedValue({ itemId: "job-1", status: "queued" });
+    const db = {
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+        update: vi.fn(), updateMany: vi.fn(), findUnique,
+      },
+    };
+
+    await scheduleFederationDeliveryJob(db, "fdmo_1", new Date("2026-08-09T02:00:00.000Z"), telemetry);
+    await scheduleFederationDeliveryJob(db, "fdmo_1", new Date("2026-08-09T02:05:00.000Z"), telemetry);
+
+    expect(findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { sourceKey: "federation-demand:fdmo_1" },
+    }));
+    expect(telemetry).not.toHaveBeenCalled();
+  });
+
+  it("still records enqueued when a completed job re-enters the queue", async () => {
+    const telemetry = vi.fn().mockResolvedValue(undefined);
+    await scheduleFederationDeliveryJob({
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+        update: vi.fn(), updateMany: vi.fn(),
+        findUnique: vi.fn().mockResolvedValue({ itemId: "job-1", status: "completed" }),
+      },
+    }, "fdmo_1", new Date("2026-08-09T02:00:00.000Z"), telemetry);
+
+    expect(telemetry).toHaveBeenCalledTimes(1);
+    expect(telemetry).toHaveBeenCalledWith(expect.objectContaining({ transition: "enqueued", itemId: "job-1" }));
+  });
+
+  it("withdraws a job as cancelled without spending an attempt (BI-26E3B9C9)", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const telemetry = vi.fn().mockResolvedValue(undefined);
+    const now = new Date("2026-10-27T18:00:00.000Z");
+
+    await finishFederationDeliveryJob({
+      workQueue: { upsert: vi.fn() },
+      workItem: { upsert: vi.fn(), update, updateMany: vi.fn() },
+    }, { itemId: "job-1", attemptCount: 3, outcome: "withdrawn", error: "federation link revoked", now }, telemetry);
+
+    const data = update.mock.calls[0][0].data;
+    expect(data).toEqual(expect.objectContaining({ status: "cancelled", nextAttemptAt: null, completedAt: now }));
+    expect(data).not.toHaveProperty("attemptCount");
+    expect(telemetry).toHaveBeenCalledWith(expect.objectContaining({ transition: "cancelled" }));
+  });
+
+  it("holds a job by moving only its turn, never its attempt count (BI-26E3B9C9)", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const nextAttemptAt = new Date("2026-10-27T18:30:00.000Z");
+
+    await holdFederationDeliveryJob({
+      workQueue: { upsert: vi.fn() },
+      workItem: { upsert: vi.fn(), update, updateMany: vi.fn() },
+    }, { itemId: "job-1", nextAttemptAt });
+
+    expect(update).toHaveBeenCalledWith({ where: { itemId: "job-1" }, data: { status: "queued", nextAttemptAt } });
   });
 });

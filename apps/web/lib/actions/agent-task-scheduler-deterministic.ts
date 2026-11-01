@@ -9,8 +9,10 @@
 import {
   ACCEPTANCE_SWEEP_TASK_KIND,
   BOOKKEEPING_CYCLE_TASK_KIND,
+  CLIENT_CAPABILITY_REVERIFY_TASK_KIND,
   DECISION_ENGINE_REVIEW_TASK_KIND,
   DEMAND_SCORING_STEWARD_TASK_KIND,
+  HARNESS_EVOLUTION_LOOP_TASK_KIND,
 } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBookkeepingCycleTask } from "@/lib/finance/bookkeeping/bookkeeping-cycle-task";
 
@@ -20,6 +22,8 @@ export type DeterministicScheduledTask = {
   schedule: string;
   ownerUserId: string;
   agentId: string;
+  /** Per-kind config or run state; the scheduler passes the whole task row. */
+  taskConfig?: unknown;
 };
 
 /** Runs the task when its kind is deterministic. False means the scheduler handles it. */
@@ -45,6 +49,18 @@ export async function runDeterministicScheduledTaskKind(task: DeterministicSched
   if (task.taskKind === DEMAND_SCORING_STEWARD_TASK_KIND) {
     const { executeDemandScoringStewardTask } = await import("@/lib/demand/scoring-steward-task");
     await executeDemandScoringStewardTask(task);
+    return true;
+  }
+  // BI-64795FD0: the weekly client-capability re-verification.
+  if (task.taskKind === CLIENT_CAPABILITY_REVERIFY_TASK_KIND) {
+    const { executeClientCapabilityReverifyTask } = await import("@/lib/agent-toolchain/client-capability-reverify-task");
+    await executeClientCapabilityReverifyTask(task);
+    return true;
+  }
+  // BI-49BC21C1: the daily harness evolution loop.
+  if (task.taskKind === HARNESS_EVOLUTION_LOOP_TASK_KIND) {
+    const { executeHarnessEvolutionLoopTask } = await import("@/lib/harness-evolution/harness-evolution-task");
+    await executeHarnessEvolutionLoopTask(task);
     return true;
   }
   return false;

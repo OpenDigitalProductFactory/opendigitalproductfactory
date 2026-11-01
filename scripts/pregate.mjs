@@ -17,6 +17,9 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { runForegroundGate, withForegroundCancellation } from "./lib/foreground-gate-process.mjs";
+export { runForegroundGate } from "./lib/foreground-gate-process.mjs";
+import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
@@ -36,6 +39,7 @@ function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
   }
 }
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -57,6 +61,7 @@ import {
 import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
 import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -120,6 +125,19 @@ export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) 
     };
   }
   return { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" };
+}
+
+/**
+ * BI-25CB699C: a head that only merged origin/main onto a published, passed
+ * head (regenerated registry outputs included) takes the reduced tier —
+ * derived-artifact freshness, typecheck and affected tests — reusing that
+ * PASS for everything else. The reuse is recorded as a published-correction
+ * proof (gate-unrun, integration delegated); CI and the merge queue stay
+ * authoritative. Any other class, or a forced re-gate, runs the full gate.
+ */
+export function shouldTakeReducedTier({ args = [], classification = null } = {}) {
+  if (isRecordExemptInvocation(args) || args.includes(FORCE_RERUN_FLAG)) return false;
+  return classification === "main-refresh";
 }
 
 /**
@@ -721,7 +739,8 @@ export async function runGateWithQueuedRevival({
   useShell = false,
   env = process.env,
   now = () => Date.now(),
-  spawnSyncImpl = spawnSync,
+  runGateImpl = runForegroundGate,
+  signalSource = process,
   reviveInterruptedQueuedGateImpl = reviveInterruptedQueuedGate,
   recoverInterruptedGateImpl = recoverInterruptedGate,
   stderr = process.stderr,
@@ -733,7 +752,7 @@ export async function runGateWithQueuedRevival({
     env,
     nowMs: now(),
   });
-
+  return withForegroundCancellation(async signal => {
   for (;;) {
     const invocationArgs = queuedRevivals === 0
       ? args
@@ -750,16 +769,16 @@ export async function runGateWithQueuedRevival({
 
     if (useShell) {
       stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
-      result = spawnSyncImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { env, signal });
     } else {
       stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
-      result = spawnSyncImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { env, signal });
     }
 
     if (result.error || (result.status ?? 1) === 0) {
       return { result, queuedRevivals, timedOut: false };
     }
-    if (now() < queueRevivalWindow.deadlineMs) {
+    if (!signal.aborted && now() < queueRevivalWindow.deadlineMs) {
       const revived = await reviveInterruptedQueuedGateImpl({ args, result });
       if (revived.revived) {
         queuedRevivals += 1;
@@ -770,6 +789,7 @@ export async function runGateWithQueuedRevival({
     await recoverInterruptedGateImpl({ args, result });
     return { result, queuedRevivals, timedOut: false };
   }
+  }, { signalSource });
 }
 
 // Thin, failure-tolerant readers for the two safety guards above. Both fail
@@ -790,12 +810,36 @@ function readWorkingTreePorcelain() {
   return gitTextOrNull(["status", "--porcelain"], { cwd: process.cwd(), trim: false }) ?? "";
 }
 
+/**
+ * BI-4BCD269B. A pregate that is not the sole foreground command used to run
+ * until image-export and then die, leaving status running and no reason.
+ * `pnpm run` on Windows often has no TTY, and gate:wait is the sanctioned
+ * wrapper, so a bare !isTTY check is not the signal. Help and dry-run do not
+ * occupy the pool.
+ */
+export function wrappedForegroundReason({ stdoutIsTTY, env = process.env, args = [] } = {}) {
+  if (args.includes("--help") || args.includes("-h") || args.includes("--dry-run")) return null;
+  if (stdoutIsTTY) return null;
+  if (env.DPF_PREGATE_ALLOW_CAPTURE === "1") return null;
+  if (env.CI === "true" || env.GITHUB_ACTIONS === "true") return null;
+  return "pregate is not the sole foreground command: stdout is not a terminal, so this run would be captured or wrapped and can die with no recorded reason. Run `pnpm run pregate` in the foreground, or use `pnpm gate:wait`.";
+}
+
 async function main() {
   // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
   // this wrapper and the gate it spawns need the tolerance — the gate inherits
   // these very file descriptors.
   installBrokenPipeTolerance();
   const args = process.argv.slice(2);
+  const wrapped = wrappedForegroundReason({
+    stdoutIsTTY: Boolean(process.stdout.isTTY),
+    env: process.env,
+    args,
+  });
+  if (wrapped) {
+    process.stderr.write(`pregate: ${wrapped}\n`);
+    process.exit(GATE_EXIT.WRAPPED_INVOCATION);
+  }
 
   const diskCheck = checkHostDiskSpace();
   if (!diskCheck.ok) {
@@ -833,9 +877,31 @@ async function main() {
     process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
   }
 
+  if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
+    // The probe only ever narrows work: a checkout without the correction
+    // module (or its packaged classifier) runs the full gate as before.
+    const correction = await import("./published-correction.mjs").catch(() => null);
+    if (correction && shouldTakeReducedTier({ args, classification: correction.reducedTierClassification() })) {
+      process.stdout.write("pregate: HEAD only merges origin/main onto a passed published head — running the reduced tier (derived-artifact freshness, typecheck, affected tests); the prior PASS covers the rest.\n");
+      try {
+        const result = await correction.verifyPublishedCorrection();
+        process.stdout.write(`pregate: reduced tier passed (${result.publicationCorrection.commands.length} command(s)); recorded as ${result.skipReason}. Full integration UNRUN, delegated to protected GitHub checks and the merge queue.\n`);
+        process.exit(0); // exit-0: reduced-tier proof recorded for this HEAD; pre-push accepts it, CI stays authoritative
+      } catch (error) {
+        process.stderr.write(`pregate: reduced tier failed — ${error.message}\npregate: fix the named check; re-gate fully only with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`);
+        process.exit(1);
+      }
+    }
+  }
+
   const preflightStatus = await runHostPreflight({ args });
   if (preflightStatus !== 0) process.exit(preflightStatus);
 
+  // BI-78176241: a docs-only diff goes to the gate like any other. Its
+  // pre-admission documentation lane verifies the docs without a lease or the
+  // sandbox slot and writes the SHA-bound PASS that pregate:status and the
+  // publish guard read. Exiting here (BI-A254A94C) left no record, so every
+  // docs-only push needed an override.
   const useShell = shouldUseShell();
   const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {
@@ -862,13 +928,14 @@ async function main() {
 }
 
 export async function runHostPreflight({
-  args = [], env = process.env, spawnSyncImpl = spawnSync,
+  args = [], env = process.env, spawnSyncImpl = null,
+  runObservedImpl = null,
   readStatusImpl = readEarlyQuiescenceStatus,
   stdout = (text) => process.stdout.write(text),
   stderr = (text) => process.stderr.write(text),
 } = {}) {
   if (shouldRunPreflight(args, env)) {
-    const quiescence = await readStatusImpl({ args, env, warn: stderr });
+    const quiescence = await readStatusImpl({ args, env, warn: stderr, strictConnection: true });
     if (quiescenceBlocksWrites(quiescence)) {
       // No gate record, lease, observer or pending-evidence mutation on this path.
       stderr(JSON.stringify(quiescenceWait(quiescence)) + "\n");
@@ -880,11 +947,34 @@ export async function runHostPreflight({
     // text a log-tail reader mistakes for a failure. Capture it and replay it
     // only when it actually fails.
     const verbose = isVerboseGateConsole();
-    const preflight = spawnSyncImpl(
-      process.execPath,
-      [join(SCRIPT_DIR, "pregate-preflight.mjs")],
-      verbose ? { stdio: "inherit" } : { encoding: "utf8" },
-    );
+    const preflightArgs = [join(SCRIPT_DIR, "pregate-preflight.mjs")];
+    let preflight;
+    if (spawnSyncImpl) {
+      // Compatibility for injected test executors; normal execution is observed.
+      preflight = await spawnSyncImpl(process.execPath, preflightArgs,
+        { env, encoding: "utf8", timeout: 60 * 60_000, maxBuffer: 64 * 1024 });
+    } else {
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      process.once("SIGINT", cancel);
+      process.once("SIGTERM", cancel);
+      const run = runObservedImpl ?? createObservedProcessRunner({ maxDurationMs: 60 * 60_000,
+        sampleHost: () => null, stdout: { write(chunk) {
+          for (const line of String(chunk).split(/\r?\n/)) {
+            if (verbose || line.startsWith("[pregate-preflight]")) stdout(line + "\n");
+          }
+        } }, stderr: { write(chunk) { if (verbose) stderr(String(chunk)); } } });
+      try {
+        const observed = await run({ command: process.execPath, args: preflightArgs,
+          env, cwd: process.cwd(), shell: false, signal: controller.signal });
+        preflight = { ...observed, stdout: observed.outputTail, stderr: "" };
+      } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+      }
+    }
+    const unavailable = preflight.error || preflight.deadlineExceeded || preflight.cancelled || preflight.closeTimedOut;
+    if (unavailable) preflight = { ...preflight, status: 88 };
     if (preflight.error || (preflight.status ?? 1) !== 0) {
       if (!verbose) {
         stderr(String(preflight.stdout || ""));
@@ -894,7 +984,7 @@ export async function runHostPreflight({
       // spawn (taskkill /T during an eviction leaves status === null) is a
       // runner failure, not a deterministic guard violation — say so, or the
       // reader audits an innocent guard the loop never even reported on.
-      const preflightKilled = Boolean(preflight.error) || preflight.status === null;
+      const preflightKilled = Boolean(preflight.error) || preflight.status === null || preflight.status === 88;
       stderr(
         preflightKilled
           ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
@@ -903,7 +993,11 @@ export async function runHostPreflight({
       return preflight.status ?? 1;
     }
     if (!verbose) {
-      stdout("pregate: guard parity preflight passed.\n");
+      let status;
+      const line = String(preflight.stdout ?? "").split(/\r?\n/).findLast(line => line.startsWith("DPF_HOST_PREFLIGHT_RESULT="));
+      try { status = JSON.parse(line?.slice("DPF_HOST_PREFLIGHT_RESULT=".length)).status; } catch { /* Missing summary is unproven, never passed. */ }
+      stdout(status === "passed" ? "pregate: guard parity preflight passed.\n"
+        : "pregate: host preflight inconclusive or partially verified; canonical CI still enforces all applicable checks.\n");
     }
   } else if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
     stderr(
@@ -938,8 +1032,8 @@ export function readReconciledVerdictAtHead({
 // comparison must survive symlinked invocation spellings (macOS /var tmpdir),
 // or the guard silently skips main() and exits 0 (BI-745658D7).
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
-    process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
-    process.exit(1);
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    process.stderr.write(`pregate: ${error?.code ? error.message : error?.stack || String(error)}\n`);
+    process.exit(error?.hostTrustPrerequisite ? GATE_EXIT.HOST_CONNECTION_UNAVAILABLE : 1);
   });
 }

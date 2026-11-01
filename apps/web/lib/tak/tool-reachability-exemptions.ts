@@ -24,39 +24,11 @@
  * owning epic, not a side effect of the M6 conformance gate.
  */
 export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
-  // ── Coworker catalog / engagement (A2A marketplace surface) ──────────────
-  analyze_coworker_engagement_refinement:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — the coworker-marketplace surface has no owning coworker yet; granting is that epic's call.",
-  list_coworker_services:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision as analyze_coworker_engagement_refinement.",
-  list_coworker_offers:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision.",
-  get_coworker_offer:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision.",
-  resolve_coworker_offer_agent_card:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision.",
-  request_coworker_engagement:
-    "SEALED: requires coworker_engagement_write, held by no registry agent — engagement spawning is a side-effecting authority the owning epic must assign deliberately.",
-  spawn_subagents:
-    "SEALED: requires coworker_engagement_write, held by no registry agent — same deliberate-assignment call as request_coworker_engagement.",
-
   // ── Thread orchestration ─────────────────────────────────────────────────
   get_thread_result:
     "SEALED: requires thread_read, held by no registry agent — thread-orchestration tools are exercised by the platform runtime today, not by granted coworkers.",
   get_child_threads:
     "SEALED: requires thread_read, held by no registry agent — same thread-orchestration story as get_thread_result.",
-
-  // ── Workbook (spreadsheet substrate) ─────────────────────────────────────
-  workbook_list_tables:
-    "SEALED: requires workbook_read, held by no registry agent — workbook tools ship ahead of the coworker persona that will own them.",
-  workbook_get_schema:
-    "SEALED: requires workbook_read, held by no registry agent — same deferred workbook persona.",
-  workbook_query_rows:
-    "SEALED: requires workbook_read, held by no registry agent — same deferred workbook persona.",
-  workbook_create_row:
-    "SEALED: requires workbook_write, held by no registry agent — write authority deferred with the workbook persona.",
-  workbook_update_cells:
-    "SEALED: requires workbook_write, held by no registry agent — write authority deferred with the workbook persona.",
 
   // ── Screen driving ───────────────────────────────────────────────────────
   screen_set_input:

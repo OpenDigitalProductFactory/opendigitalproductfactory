@@ -16,6 +16,8 @@ vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
   recordAdmissionOutcome: mocks.recordAdmissionOutcome,
 }));
 
+const twinGate = vi.hoisted(() => ({ evaluate: vi.fn(async () => ({ kind: "clear" as const })) }));
+vi.mock("./twin-claim-gate", () => ({ evaluateTwinClaimGate: twinGate.evaluate }));
 vi.mock("./governed-work-claim", () => ({
   claimGovernedBacklogWorkspace: mocks.claimGovernedBacklogWorkspace,
 }));
@@ -54,6 +56,22 @@ describe("claimBacklogItemForWork MCP boundary", () => {
     vi.clearAllMocks();
     mocks.ensureCapsuleWorkItemAnchorWithPrisma.mockResolvedValue({});
     mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
+  });
+
+  it.each(["baseSha", "headSha"])("rejects unusable supplied %s before admission or claim writes", async field => {
+    mocks.claimGovernedBacklogWorkspace.mockResolvedValue(okClaim());
+    for (const value of ["abc123", "", "  ", "z".repeat(40), 123]) {
+      const result = await claimBacklogItemForWork({
+        params: { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", provider: "codex", sessionRef: "session-two",
+          workShape: "delivery-small@1.0.0", [field]: value }, userId: "user-1", context: undefined, db: {} as CapsuleDb,
+        resolveActor: vi.fn().mockResolvedValue({ userId: "user-1", principalId: "PRN-1" }),
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("invalid_input");
+      expect(result.message).toContain(field);
+      expect(mocks.evaluateItemAdmission).not.toHaveBeenCalled();
+      expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
+    }
   });
 
   it("threads a deliberate co-claim and its audit reason", async () => {
@@ -286,5 +304,25 @@ describe("an implementation claim is a start, admitted by points in flight (BI-3
     const db = shapeDb({ effortSize: "medium", workType: "feature", title: "t", body: "" });
     await claimBacklogItemForWork({ params: { ...params, provider: "claude", workIntent: "plan" }, userId: "user-1", context: {}, db, resolveActor: actor });
     expect(mocks.evaluateItemAdmission).not.toHaveBeenCalled();
+  });
+});
+
+describe("the claim sees the paired installation's work (BI-91FC6B9A)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
+  });
+
+  it("returns the twin refusal and claims nothing", async () => {
+    const refusal = { success: false, error: "federated_twin_in_progress", message: "Not claimed", data: { twins: [] } };
+    twinGate.evaluate.mockResolvedValueOnce({ kind: "refused", result: refusal } as never);
+    const result = await claimBacklogItemForWork({
+      params: { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", provider: "claude", sessionRef: "s", workShape: "delivery-small@1.0.0" },
+      userId: "user-1", context: undefined, db: shapeDb({ effortSize: "small", workType: "bug" }),
+      resolveActor: vi.fn().mockResolvedValue({ userId: "user-1", principalId: "PRN-1" }),
+    });
+    expect(result).toEqual(refusal);
+    expect(twinGate.evaluate).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-ONE", headBranch: "fix/two", force: false, overrideReason: null });
+    expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
   });
 });

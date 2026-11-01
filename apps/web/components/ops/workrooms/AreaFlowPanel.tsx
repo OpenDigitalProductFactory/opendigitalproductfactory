@@ -6,11 +6,13 @@ import { KpiCard } from "@/components/ui/report-kit/KpiCard";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
 
 import { PortfolioComparisonTable, ShapeFlowTable } from "./AreaFlowTables";
+import { FlowReviews } from "./FlowReviews";
+import { ShapeStepMeasures } from "./ShapeStepMeasures";
 import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { FLOW_ITEM_TYPES, FLOW_WINDOW_DAYS, type FlowItemType } from "@/lib/work-management/portfolio-flow";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { formatDuration } from "@/lib/datetime";
-import { formatMoney } from "@/lib/org-locale/org-locale";
+import { aiSpendText } from "@/lib/portfolio/ai-resource";
 import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
 
 /** Translator for the `workrooms` namespace (server: `await getT("workrooms")`). */
@@ -23,10 +25,13 @@ const ITEM_COLOR: Record<FlowItemType, string> = {
   debt: "var(--dpf-muted)",
 };
 
-const usd = (amount: number) => formatMoney(amount, "USD", null, { maximumFractionDigits: 2 });
 
-/** Median flow time per week; gaps where a week finished nothing. */
-function Trend({ values, label }: { values: (number | null)[]; label: string }) {
+/**
+ * A measure's weekly trend, oldest first; gaps where a week has no value. A
+ * dashed rule marks each week a shape version replaced an earlier one, so a
+ * change in the line can be read against the change that caused it (spec §8).
+ */
+function Trend({ values, label, markers = [], markerLabel }: { values: (number | null)[]; label: string; markers?: string[][]; markerLabel?: (versions: string) => string }) {
   const known = values.filter((v): v is number => v != null);
   if (known.length < 2) return null;
   const w = 96;
@@ -44,8 +49,15 @@ function Trend({ values, label }: { values: (number | null)[]; label: string }) 
     pen = true;
   }
   const last = [...points].reverse().find(Boolean)!;
+  const marked = markers.flatMap((versions, i) => (versions.length > 0 ? [{ x: i * step, text: markerLabel?.(versions.join(", ")) ?? versions.join(", ") }] : []));
+  const fullLabel = [label, ...marked.map((m) => m.text)].join(". ");
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label}>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={fullLabel}>
+      {marked.map((m) => (
+        <line key={m.x} x1={m.x} x2={m.x} y1={0} y2={h} stroke="var(--dpf-text-secondary)" strokeWidth={1} strokeDasharray="2 2">
+          <title>{m.text}</title>
+        </line>
+      ))}
       <path d={d} fill="none" stroke="var(--dpf-accent)" strokeWidth={1.5} strokeLinejoin="round" />
       <circle cx={last.x} cy={last.y} r={2.5} fill="var(--dpf-accent)" />
     </svg>
@@ -68,10 +80,11 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 /** The five flow measures for one portfolio (or the unplaced rooms), and its shapes. */
 export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowWithCost; areaHref: string; t: FlowT }) {
+  const versionMarker = (versions: string) => t("flow.versionMarker", { versions });
   const typed = FLOW_ITEM_TYPES.reduce((sum, type) => sum + flow.distribution[type], 0);
   const costHint = [
     flow.points ? t("flow.deliveredPoints", { points: flow.points.delivered }) : t("flow.noBudget"),
-    flow.aiUsd == null ? t("flow.aiUnavailable") : t("flow.aiSpend", { amount: usd(flow.aiUsd), days: FLOW_WINDOW_DAYS }),
+    flow.ai == null ? t("flow.aiUnavailable") : t("flow.aiSpend", { spend: aiSpendText(flow.ai), days: FLOW_WINDOW_DAYS }),
   ].join(" · ");
   return (
     <section aria-labelledby="area-flow-heading" className="space-y-3">
@@ -80,7 +93,20 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
         <p className="text-xs text-[var(--dpf-muted)]">{t("flow.windowRooms", { days: FLOW_WINDOW_DAYS, rooms: flow.rooms })}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard size="sm" value={flow.flowLoad} label={t("flow.inFlow")} hint={t("flow.inFlowHint")} />
+        <KpiCard
+          size="sm"
+          value={flow.flowLoad}
+          label={t("flow.inFlow")}
+          // An ended room now closes its run and a parked room is out of flow
+          // (BI-C9F1DE01), so load's history counts what live load counts.
+          hint={
+            <span className="flex flex-col gap-1">
+              {t("flow.inFlowHint")}
+              {delta(t, flow.flowLoad, flow.flowLoadPrior, (n) => String(n), true)}
+              <Trend values={flow.weeklyFlowLoad} label={t("flow.loadTrendLabel")} markers={flow.weeklyVersionChanges} markerLabel={versionMarker} />
+            </span>
+          }
+        />
         <KpiCard
           size="sm"
           value={flow.flowTime.p50Ms == null ? "—" : formatDuration(flow.flowTime.p50Ms)}
@@ -89,7 +115,7 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
             <span className="flex flex-col gap-1">
               {flow.flowTime.runs > 0 ? t("flow.runsFinished", { count: flow.flowTime.runs }) : t("flow.noRuns")}
               {delta(t, flow.flowTime.p50Ms, flow.flowTime.priorP50Ms, formatDuration, true)}
-              <Trend values={flow.weeklyFlowTimeP50Ms} label={t("flow.trendLabel")} />
+              <Trend values={flow.weeklyFlowTimeP50Ms} label={t("flow.trendLabel")} markers={flow.weeklyVersionChanges} markerLabel={versionMarker} />
             </span>
           }
         />
@@ -97,13 +123,24 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
           size="sm"
           value={flow.flowEfficiency.value == null ? "—" : pct(flow.flowEfficiency.value)}
           label={t("flow.efficiency")}
-          hint={<span className="flex flex-col gap-1">{t("flow.efficiencyHint")}{delta(t, flow.flowEfficiency.value, flow.flowEfficiency.prior, (n) => `${Math.round(n * 100)} pts`, false)}</span>}
+          hint={
+            <span className="flex flex-col gap-1">
+              {t("flow.efficiencyHint")}
+              {delta(t, flow.flowEfficiency.value, flow.flowEfficiency.prior, (n) => `${Math.round(n * 100)} pts`, false)}
+              <Trend values={flow.weeklyFlowEfficiency} label={t("flow.efficiencyTrendLabel")} markers={flow.weeklyVersionChanges} markerLabel={versionMarker} />
+            </span>
+          }
         />
         <KpiCard
           size="sm"
           value={flow.throughput.perWeek.toFixed(1)}
           label={t("flow.perWeek")}
-          hint={delta(t, flow.throughput.perWeek, flow.throughput.priorPerWeek, (n) => n.toFixed(1), false) ?? t("flow.perWeekHint")}
+          hint={
+            <span className="flex flex-col gap-1">
+              {delta(t, flow.throughput.perWeek, flow.throughput.priorPerWeek, (n) => n.toFixed(1), false) ?? t("flow.perWeekHint")}
+              <Trend values={flow.weeklyThroughput} label={t("flow.throughputTrendLabel")} markers={flow.weeklyVersionChanges} markerLabel={versionMarker} />
+            </span>
+          }
         />
         <KpiCard size="sm" value={flow.points ? t("flow.points", { points: flow.points.inFlight }) : "—"} label={t("flow.cost")} hint={costHint} />
       </div>
@@ -165,6 +202,8 @@ export function ShapeFlowDrillIn({ view, backHref, baseHref, stageKey, t }: { vi
       </div>
       <p className="text-xs text-[var(--dpf-muted)]">{t("flow.roomsInFlowOn", { count: model.aggregate?.roomsInFlow ?? 0, version: version ?? "" })}</p>
       <WorkroomFlowMap model={model} selectParam="stage" />
+      <ShapeStepMeasures measures={view.stepMeasures} t={t} />
+      <FlowReviews history={view.reviews} everyDays={view.reviewEveryDays} t={t} />
       {view.roomsAtStep ? (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--dpf-text)]">{t("flow.roomsAt", { stage: stageKey ?? "" })}</h3>
@@ -196,7 +235,7 @@ export function PortfolioFlowComparison({ flows, areaHrefByRole, t }: { flows: P
     { label: t("flow.efficiency"), value: (f) => (f.flowEfficiency.value == null ? "—" : pct(f.flowEfficiency.value)) },
     { label: t("flow.perWeek"), value: (f) => f.throughput.perWeek.toFixed(1) },
     { label: t("flow.pointsInFlight"), value: (f) => (f.points ? String(f.points.inFlight) : "—") },
-    { label: t("flow.aiSpendRow", { days: FLOW_WINDOW_DAYS }), value: (f) => (f.aiUsd == null ? "—" : usd(f.aiUsd)) },
+    { label: t("flow.aiSpendRow", { days: FLOW_WINDOW_DAYS }), value: (f) => (f.ai == null ? "—" : aiSpendText(f.ai)) },
   ];
   return (
     <section aria-labelledby="portfolio-flow-heading" className="my-6 space-y-2">

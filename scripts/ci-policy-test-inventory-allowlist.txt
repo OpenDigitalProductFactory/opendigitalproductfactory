@@ -64,7 +64,6 @@ scripts/finance-workforce-maturity-matrix.contract.test.mjs
 scripts/gate-worktree-lease.test.mjs
 scripts/hooks/run-hook.test.mjs
 scripts/installer-state-contract.contract.test.mjs
-scripts/lib/bootstrap-worktree-deps.test.mjs
 scripts/lib/capability-service-projection.test.mjs
 scripts/lib/capability-state-hash.test.mjs
 scripts/lib/ci-evidence-receipt.test.mjs
@@ -138,7 +137,6 @@ scripts/runtime-transition-authority.test.mjs
 scripts/sbom/check-lockfile-release-age.test.mjs
 scripts/security/run-gitleaks-local.test.mjs
 scripts/self-upgrade-sensitive-paths.test.mjs
-scripts/semantic-review-gate.test.mjs
 scripts/test-n-minus-one-upgrade.test.mjs
 scripts/ux-archetype-audit-rubric.contract.test.mjs
 scripts/workos-iam-scorecard.contract.test.mjs

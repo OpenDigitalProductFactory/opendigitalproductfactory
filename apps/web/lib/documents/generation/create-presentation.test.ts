@@ -61,7 +61,9 @@ function harness(overrides: Partial<CreatePresentationDeps> = {}) {
   }));
   const loadDocument = vi.fn(async (documentId: string) =>
     documentId === "DOC-DECK"
-      ? { documentKind: "generated-deck", organizationId: "org-deck" }
+      ? { documentKind: "generated-deck", organizationId: "org-1" }
+      : documentId === "DOC-OTHER-DECK"
+        ? { documentKind: "generated-deck", organizationId: "org-2" }
       : documentId === "DOC-POLICY"
         ? { documentKind: "policy", organizationId: "org-1" }
         : null,
@@ -128,8 +130,8 @@ describe("createPresentation", () => {
     const result = await createPresentation({ outline: campaignOutline({ documentId: "DOC-DECK" }) }, deps);
 
     if (!result.ok) throw new Error(result.error);
-    expect(render.mock.calls[0]![0].templateRef).toEqual({ kind: "brand-master", organizationId: "org-deck" });
-    expect(save).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ documentId: "DOC-DECK", organizationId: "org-deck" }));
+    expect(render.mock.calls[0]![0].templateRef).toEqual({ kind: "brand-master", organizationId: "org-1" });
+    expect(save).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ documentId: "DOC-DECK", organizationId: "org-1" }));
     expect(result.data).toMatchObject({ documentId: "DOC-DECK", version: 2, revised: true });
   });
 
@@ -137,6 +139,14 @@ describe("createPresentation", () => {
     const { deps, render, save } = harness();
     const result = await createPresentation({ outline: campaignOutline({ documentId: "DOC-POLICY" }) }, deps);
     expect(result).toMatchObject({ ok: false, reason: "not-a-presentation" });
+    expect(render).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("does not reveal or revise another organization's presentation (tenant isolation)", async () => {
+    const { deps, render, save } = harness();
+    const result = await createPresentation({ outline: campaignOutline({ documentId: "DOC-OTHER-DECK" }) }, deps);
+    expect(result).toMatchObject({ ok: false, reason: "document-not-found" });
     expect(render).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
   });
@@ -156,7 +166,7 @@ describe("createPresentation", () => {
     const result = await createPresentation({ outline }, deps);
 
     if (!result.ok) throw new Error(result.error);
-    expect(loadImage).toHaveBeenCalledWith("DOC-PHOTO");
+    expect(loadImage).toHaveBeenCalledWith("DOC-PHOTO", "org-1");
     const content = render.mock.calls[0]![0].content;
     expect(content.family === "deck" && content.slides[0]).toMatchObject({
       layout: "image",

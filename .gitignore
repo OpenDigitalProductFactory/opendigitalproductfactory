@@ -54,6 +54,8 @@ apps/mobile/coverage/
 .claude/settings.local.json
 .claude/autonomous-e2e-progress.md
 .claude/worktrees/
+.grok/config.toml
+*.dpf-permissions-*.bak
 # Browser-pane / preview launch config — machine-local ports and URLs, same
 # family as settings.local.json above. Never tracked; without this line it
 # shows as untracked work in every session's end-of-session guard.
@@ -102,6 +104,8 @@ services/adp/pnpm-lock.yaml
 /sbom/internalization-candidates.md
 /sbom/stale-override-audit.json
 /sbom/stale-override-audit.md
+/sbom/typescript-checker-currency.json
+/sbom/typescript-checker-currency.md
 /sbom/security-sweep.json
 /sbom/security-sweep.md
 

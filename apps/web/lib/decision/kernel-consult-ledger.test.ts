@@ -4,7 +4,7 @@ import {
   mapConsultOutcome,
   recordKernelConsultInteraction,
 } from "./kernel-consult-ledger";
-import type { DecisionResult } from "./option-scoring";
+import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 import type { DecisionCallerContext } from "./caller-context";
 
 function makeResult(overrides: Partial<DecisionResult> = {}): DecisionResult {
@@ -159,6 +159,11 @@ describe("mapConsultOutcome", () => {
 });
 
 describe("recordKernelConsultInteraction", () => {
+  it("records an unresolved non-damaging consult for independent review", async () => {
+    const db = makeDb();
+    await recordKernelConsultInteraction({ db: db as never, result: makeResult({ recommendation: null }), callerContext: wwmdContext, question: "Which storage approach?", optionIds: ["a", "b"], optionDescriptions: { a: "First option", b: "Second option" }, appliedPrincipleCount: 0, seal: false });
+    expect(db.created[0]).toMatchObject({ outcomeType: "defer", escalationRoute: "independent_review", escalationReason: "independent-review-required", escalationFollowOn: "corpus-gap" });
+  });
   it("persists a ledger row attributed to the governing profile", async () => {
     const db = makeDb();
     const outcome = await recordKernelConsultInteraction({

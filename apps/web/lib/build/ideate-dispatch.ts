@@ -14,6 +14,8 @@
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import {
   SANDBOX_CONTAINER,
+  credentialFileExports,
+  removeSandboxFiles,
   runSandboxAgentCli,
   sandboxExec,
   writeSandboxFile,
@@ -82,6 +84,7 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
     containerId: SANDBOX_CONTAINER,
     path: "/root/.codex/auth.json",
     content: authJson,
+    ownerOnly: true,
     mkdirParents: "/root/.codex",
   });
 }
@@ -144,28 +147,22 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
 }
 
 /**
- * Write Claude auth to temp files in the sandbox so they can be read
- * as env vars at exec time. Returns the env var fragment for the CLI command.
+ * Write Claude auth to a per-run credential file in the sandbox. Returns the
+ * file and the env var the runner loads it into.
  */
-async function ensureClaudeAuth(providerId: string): Promise<{ authEnvFragment: string; bareFlag: string }> {
+async function ensureClaudeAuth(providerId: string): Promise<{ envVar: string; credentialFile: string; bareFlag: string }> {
   const auth = await resolveClaudeAuth(providerId);
 
-  if (auth.mode === "oauth") {
-    // OAuth: write token to temp file, read at exec time via $(cat ...)
-    // CLAUDE_CODE_OAUTH_TOKEN takes the raw access token string
-    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/claude-oauth-token.txt", content: auth.token, mode: "644" });
-    return {
-      authEnvFragment: "CLAUDE_CODE_OAUTH_TOKEN=\\$(cat /tmp/claude-oauth-token.txt)",
-      bareFlag: "",  // --bare disables OAuth
-    };
-  } else {
-    // API key: write to temp file
-    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/claude-api-key.txt", content: auth.apiKey, mode: "644" });
-    return {
-      authEnvFragment: "ANTHROPIC_API_KEY=\\$(cat /tmp/claude-api-key.txt)",
-      bareFlag: "--bare ",
-    };
-  }
+  // Written 600 under umask 077 and owned by node (claude runs as node). The
+  // runner loads it into the CLI's env and deletes it (credentialFileExports);
+  // dispatchIdeateResearch removes it again if the runner never got that far.
+  // One file per run, so one run's runner cannot delete another run's token.
+  const credentialFile = ideateClaudeCredentialFile(crypto.randomUUID());
+  const credential = auth.mode === "oauth"
+    ? { envVar: "CLAUDE_CODE_OAUTH_TOKEN", value: auth.token, bareFlag: "" }  // --bare disables OAuth
+    : { envVar: "ANTHROPIC_API_KEY", value: auth.apiKey, bareFlag: "--bare " };
+  await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: credentialFile, content: credential.value, ownerOnly: true, chownNodeUser: true });
+  return { envVar: credential.envVar, credentialFile, bareFlag: credential.bareFlag };
 }
 
 /**
@@ -462,6 +459,11 @@ export const IDEATE_WORKING_DIR = "/tmp/ideate-cwd";
 /** The repository, handed to the CLI as an allowed directory rather than as its project root. */
 export const IDEATE_SOURCE_DIR = "/workspace";
 
+/** Where ensureClaudeAuth leaves a run's credential for the runner to load and delete. */
+export function ideateClaudeCredentialFile(runId: string): string {
+  return `/tmp/ideate-claude-credential-${runId.replace(/[^a-zA-Z0-9-]/g, "")}.txt`;
+}
+
 /**
  * Build the sandbox runner script for one ideate dispatch engine.
  *
@@ -473,7 +475,8 @@ export function buildIdeateRunnerScript(
   engine: "claude" | "grok" | "codex",
   opts: {
     model?: string | null;
-    claudeAuthExport?: string;
+    /** Credential file from ensureClaudeAuth and the env var to load it into. */
+    claudeCredential?: { envVar: string; file: string };
     /** Auth-mode flag fragment from ensureClaudeAuth; empty for OAuth. */
     claudeBareFlag?: string;
     providerId?: string;
@@ -485,7 +488,7 @@ export function buildIdeateRunnerScript(
       "#!/bin/sh",
       `mkdir -p ${IDEATE_WORKING_DIR}`,
       `cd ${IDEATE_WORKING_DIR}`,
-      `export ${opts.claudeAuthExport ?? ""}`,
+      ...(opts.claudeCredential ? credentialFileExports(opts.claudeCredential.envVar, opts.claudeCredential.file) : []),
       `claude ${opts.claudeBareFlag ?? ""}-p - --dangerously-skip-permissions --add-dir ${IDEATE_SOURCE_DIR} --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
     ].join("\n");
   }
@@ -618,12 +621,12 @@ export async function dispatchIdeateResearch(params: {
   }
 
   // Resolve auth — returns env var fragments for Claude, or injects auth file for Codex
-  let claudeAuthEnv = "";
+  let claudeCredential: { envVar: string; file: string } | undefined;
   let claudeBareFlag = "";
   try {
     if (dispatchEngine === "claude") {
       const authResult = await ensureClaudeAuth(providerId);
-      claudeAuthEnv = authResult.authEnvFragment;
+      claudeCredential = { envVar: authResult.envVar, file: authResult.credentialFile };
       claudeBareFlag = authResult.bareFlag;
     } else if (dispatchEngine === "grok") {
       await ensureGrokAuth(providerId);
@@ -664,7 +667,7 @@ export async function dispatchIdeateResearch(params: {
     const runAsNode = dispatchEngine !== "codex";
     const script = buildIdeateRunnerScript(dispatchEngine, {
       model,
-      claudeAuthExport: claudeAuthEnv.replace(/\\\$/g, "$"),
+      claudeCredential,
       claudeBareFlag,
       providerId,
     });
@@ -839,5 +842,11 @@ export async function dispatchIdeateResearch(params: {
       durationMs,
       error: `${dispatchEngine} CLI error: ${execErr.message?.slice(0, 500) ?? "Unknown"}`,
     };
+  } finally {
+    // The runner deletes the credential once read; this covers a run that
+    // failed before the runner reached that line.
+    if (claudeCredential) {
+      await removeSandboxFiles(SANDBOX_CONTAINER, [claudeCredential.file]);
+    }
   }
 }

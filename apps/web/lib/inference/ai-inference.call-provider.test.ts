@@ -9,6 +9,10 @@ const {
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
   mockProviderFetch,
+  mockInvestmentContext,
+  mockGpuFree,
+  mockAcquireSlot,
+  mockReleaseSlot,
 } = vi.hoisted(() => ({
   mockPrisma: {
     aiProviderConnection: { findUnique: vi.fn() },
@@ -23,7 +27,27 @@ const {
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
   mockProviderFetch: vi.fn(),
+  mockInvestmentContext: vi.fn(),
+  mockGpuFree: vi.fn(),
+  mockAcquireSlot: vi.fn(),
+  mockReleaseSlot: vi.fn(),
 }));
+
+vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: mockGpuFree }));
+vi.mock("@/lib/routing/local-provider-capacity", () => ({
+  assertProviderDispatchCapacity: vi.fn(),
+  assertLocalProviderCapacityAvailable: vi.fn(),
+}));
+vi.mock("./inference-admission", async importOriginal => {
+  const actual = await importOriginal<typeof import("./inference-admission")>();
+  return { ...actual, acquireInferenceSlot: async (...args: Parameters<typeof actual.acquireInferenceSlot>) => {
+    const release = await actual.acquireInferenceSlot(...args);
+    mockAcquireSlot(...args);
+    return () => { release(); mockReleaseSlot(); };
+  } };
+});
+
+vi.mock("../portfolio/investment-balance-server", () => ({ loadBuildInvestmentContext: mockInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE: "Funding unresolved." }));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -45,7 +69,7 @@ vi.mock("@/lib/metrics", () => ({
 }));
 
 vi.mock("../routing/execution-adapter-registry", () => ({
-  getExecutionAdapter: vi.fn(() => ({ execute: mockAdapterExecute })),
+  getExecutionAdapter: vi.fn(() => ({ type: "chat", execute: mockAdapterExecute })),
   registerExecutionAdapter: vi.fn(),
 }));
 
@@ -55,17 +79,101 @@ vi.mock("../routing/image-gen-adapter", () => ({}));
 vi.mock("../routing/embedding-adapter", () => ({}));
 vi.mock("../routing/transcription-adapter", () => ({}));
 vi.mock("../routing/async-adapter", () => ({}));
-
-vi.mock("./provider-inference-transport", () => ({
+vi.mock("./provider-inference-transport", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./provider-inference-transport")>(),
   providerInferenceFetch: mockProviderFetch,
 }));
 
 import { callProvider } from "./ai-inference";
+import { runEndpointConcurrencyDiagnostic } from "../operate/endpoint-concurrency-diagnostic";
 import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
 
 describe("callProvider", () => {
+  it.each(["stop", undefined])("observes actual local lane calls and preserves HTTP completion evidence (%s)", async finishReason => {
+    const { chatAdapter } = await vi.importActual<typeof import("../routing/chat-adapter")>("../routing/chat-adapter");
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none", authHeader: null,
+      baseUrl: "http://provider.invalid/v1", endpoint: null,
+    });
+    mockAdapterExecute.mockImplementation(chatAdapter.execute);
+    mockProviderFetch.mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: "READY" }, ...(finishReason ? { finish_reason: finishReason } : {}) }],
+      usage: { prompt_tokens: 75, completion_tokens: 22 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    _setAdapterTelemetryWriteOverrideForTests(async () => {});
+    try {
+      const result = await runEndpointConcurrencyDiagnostic("local", "test-model");
+      expect(mockProviderFetch).toHaveBeenCalledTimes(2);
+      expect(mockAcquireSlot).not.toHaveBeenCalled(); // Local uses the real shared ResourceLane.
+      expect(result.callers.map(c => c.content)).toEqual(["READY", "READY"]);
+      expect(result.callers.map(c => c.finishReason)).toEqual([finishReason ?? null, finishReason ?? null]);
+      expect(result.callers.every(c => c.released)).toBe(true);
+      expect(result.contentionObserved).toBe(true);
+      expect(result.outcome).toBe(finishReason ? "passed" : "deferred");
+    } finally {
+      _setAdapterTelemetryWriteOverrideForTests(null);
+    }
+  });
+  it("removes a cancelled caller queued behind the shared local holder", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none",
+      baseUrl: "http://localhost:12434/v1", endpoint: null,
+    });
+    const { withInferenceCancellation } = await import("./inference-admission");
+    const { getResourceLane, LOCAL_INFERENCE_LANE_KEY, withLocalInferenceLock } =
+      await import("../queue/resource-lane");
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const holder = withLocalInferenceLock(async () => { entered(); await held; });
+    await started;
+    const caller = new AbortController();
+    const reason = new Error("utility expired in local queue");
+    let observed: unknown;
+    const waiting = withInferenceCancellation(caller.signal,
+      () => callProvider("local", "test-model", [], "bounded utility"));
+    const settled = waiting.catch(error => { observed = error; });
+    try {
+      await vi.waitFor(() => expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY).depth()).toBe(1));
+      caller.abort(reason);
+      await vi.waitFor(() => expect(observed).toBe(reason));
+      expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY).depth()).toBe(0);
+      expect(mockAdapterExecute).not.toHaveBeenCalled();
+      expect(mockAcquireSlot).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await holder;
+      await settled;
+    }
+  });
+
+  it("retains caller cancellation when dispatch selects the parent's local transport", async () => {
+    const { withInferenceCancellation } = await import("./inference-admission");
+    const caller = new AbortController();
+    const reason = new Error("utility expired during governed dispatch");
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none",
+      baseUrl: "http://127.0.0.1:1", endpoint: null,
+    });
+    mockAdapterExecute.mockImplementationOnce(context => {
+      caller.abort(reason);
+      return context.fetchImpl("http://127.0.0.1:1/");
+    });
+    await expect(withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      verifyAuthority: async () => true }, () => withInferenceCancellation(caller.signal,
+      () => callProvider("local", "test-model", [], "bounded utility"))))
+      .rejects.toBe(reason);
+    expect(mockAdapterExecute).toHaveBeenCalledOnce();
+    expect(mockProviderFetch).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdapterExecute.mockReset();
+    mockInvestmentContext.mockResolvedValue({ snapshot: null, guidance: "Funding unresolved." });
+    mockGpuFree.mockReset().mockResolvedValue(undefined);
+    mockAdapterExecute.mockReset();
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "active" });
     mockStartTimer.mockReturnValue(vi.fn());
     mockAdapterExecute.mockResolvedValue({
@@ -75,6 +183,70 @@ describe("callProvider", () => {
       inferenceMs: 12,
       raw: {},
     });
+  });
+
+  it("preserves the native session callback through actual provider-to-adapter dispatch",async()=>{
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({providerId:"openai",status:"active",authMethod:"api_key",authHeader:"Authorization",baseUrl:"https://api.openai.com/v1",endpoint:null});
+    mockGetDecryptedCredential.mockResolvedValue({secretRef:"test-key"});
+    const mintReadOnlySession=vi.fn(async()=>"test-session");
+    const mcpSession={userId:"human",mintReadOnlySession};
+    await callProvider("openai","model",[{role:"user",content:"Review prototype"}],"Help",undefined,undefined,undefined,mcpSession);
+    expect(mockAdapterExecute.mock.calls[0]?.[0].mcpSession).toBe(mcpSession);
+    expect(mockAdapterExecute.mock.calls[0]?.[0].mcpSession.mintReadOnlySession).toBe(mintReadOnlySession);
+    expect(mintReadOnlySession).not.toHaveBeenCalled();
+  });
+
+  it("waits for admission before inspecting the GPU and releases on deferral", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1", endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const busy = new Error("GPU busy");
+    mockGpuFree.mockRejectedValueOnce(busy);
+    await expect(callProvider("openai", "model", [{ role: "user", content: "Hi" }], "Help"))
+      .rejects.toBe(busy);
+    expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockGpuFree.mock.invocationCallOrder[0]);
+    expect(mockReleaseSlot).toHaveBeenCalledOnce();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("delegates local chat host checks to the shared lane instead of rejecting an active build", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none", authHeader: null,
+      baseUrl: "http://localhost:12434/v1", endpoint: null,
+    });
+    await expect(callProvider("local", "local-model", [{ role: "user", content: "Hi" }], "Help"))
+      .resolves.toMatchObject({ content: "ok" });
+    expect(mockGpuFree).toHaveBeenCalledOnce();
+    expect(mockGpuFree.mock.invocationCallOrder[0]).toBeLessThan(mockAdapterExecute.mock.invocationCallOrder[0]);
+    expect(mockAcquireSlot).not.toHaveBeenCalled();
+    expect(mockReleaseSlot).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("captures funding before dispatch and preserves it when error=%s", async (fails) => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const snapshot = { investmentPrincipalId: "original-owner", investmentOrganizationId: "org", investmentItemId: "item", investmentPurpose: "sharedPlatform", investmentClass: "refactor", investmentPolicyRef: "revision", investmentInstallationRef: "install", investmentCapturedAt: new Date() };
+    mockInvestmentContext.mockResolvedValue({ snapshot, guidance: "Scoped target: 80% refactoring." });
+    mockAdapterExecute.mockImplementation(async (request) => {
+      expect(mockInvestmentContext).toHaveBeenCalledWith(mockPrisma, "build-1");
+      expect(request.systemPrompt).toContain("Scoped target: 80% refactoring.");
+      // A later ownership change must not cause a second resolution for telemetry.
+      mockInvestmentContext.mockResolvedValue({ snapshot: { ...snapshot, investmentPrincipalId: "new-owner" }, guidance: "Changed" });
+      if (fails) throw new Error("provider failed");
+      return { text: "ok", toolCalls: [], usage: { inputTokens: 4, outputTokens: 2 }, inferenceMs: 1, raw: {} };
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    _setAdapterTelemetryWriteOverrideForTests(write);
+    try {
+      const run = callProvider("openai", "test", [], "system", undefined, undefined, undefined, undefined, { buildId: "build-1" });
+      if (fails) await expect(run).rejects.toThrow("provider failed");
+      else await run;
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockInvestmentContext).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledWith(expect.objectContaining(snapshot));
+    } finally { _setAdapterTelemetryWriteOverrideForTests(null); }
   });
 
   it.each(["active", "degraded"])("preserves %s legacy activation while its default account is unconfigured", async status => {
@@ -118,6 +290,13 @@ describe("callProvider", () => {
     expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
       fetchImpl: mockProviderFetch,
     }));
+  });
+
+  it("passes the configured Anthropic workspace to the execution adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "anthropic", status: "active", authMethod: "api_key", authHeader: "x-api-key", baseUrl: "https://api.anthropic.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key", providerWorkspaceId: "wrkspc_accountA" });
+    await callProvider("anthropic", "claude-model", [{ role: "user", content: "hi" }], "system");
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({ provider: expect.objectContaining({ headers: expect.objectContaining({ "anthropic-workspace-id": "wrkspc_accountA", "x-api-key": "test-key" }) }) }));
   });
 
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
@@ -494,4 +673,45 @@ describe("callProvider", () => {
     )).rejects.toThrow(/cannot enforce required tool choice/i);
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
+});
+
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+
+it("blocks every paid fallback before adapter dispatch when parent authority is lost", async () => {
+  vi.clearAllMocks();
+  let valid = true;
+  await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    verifyAuthority: async () => valid }, async () => {
+    valid = false;
+    for (const provider of ["openai", "anthropic-sub", "codex"]) {
+      await expect(callProvider(provider, "review-model", [], "Review the diff"))
+        .rejects.toThrow("authority-lost");
+    }
+  });
+  expect(mockAdapterExecute).not.toHaveBeenCalled();
+  expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+});
+
+it("refuses an unsupported Claude CLI image channel before provider accounting or dispatch",async()=>{
+ vi.clearAllMocks();
+ await expect(callProvider("anthropic","claude",[{role:"user",content:[{type:"image_url",image_url:{url:"data:image/png;base64,pixels"}}]}],"Critic",undefined,{
+ providerId:"anthropic",modelId:"claude",recipeId:null,contractFamily:"conversation",executionAdapter:"claude-cli",maxTokens:1024,providerSettings:{},toolPolicy:{},responsePolicy:{}
+ })).rejects.toThrow("image_input_transport_unavailable");
+ expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+ expect(mockAdapterExecute).not.toHaveBeenCalled();
+ expect(mockAcquireSlot).not.toHaveBeenCalled();
+ expect(mockStartTimer).not.toHaveBeenCalled();
+});
+
+it("records image delivery only after actual adapter success and never retries a failed receipt",async()=>{
+ vi.clearAllMocks();
+ const recordImageInputDelivery=vi.fn(async()=>{throw new Error("receipt write failed");});
+ const plan={providerId:"codex",modelId:"actual",recipeId:null,contractFamily:"conversation",executionAdapter:"codex-cli",maxTokens:1024,providerSettings:{},toolPolicy:{},responsePolicy:{}};
+ const image={type:"image_url" as const,image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}};
+ const result=await callProvider("codex","actual",[{role:"user",content:[image]}],"Critic",undefined,plan,undefined,{userId:"human",recordImageInputDelivery});
+ expect(result.content).toBe("ok");expect(mockAdapterExecute).toHaveBeenCalledOnce();
+ expect(recordImageInputDelivery).toHaveBeenCalledExactlyOnceWith({sha256:[expect.stringMatching(/^[a-f0-9]{64}$/)],providerId:"codex",modelId:"actual",adapterKind:"codex-cli"});
+ recordImageInputDelivery.mockClear();mockAdapterExecute.mockRejectedValueOnce(new Error("dispatch failed"));
+ await expect(callProvider("codex","actual",[{role:"user",content:[image]}],"Critic",undefined,plan,undefined,{userId:"human",recordImageInputDelivery})).rejects.toThrow("dispatch failed");
+ expect(recordImageInputDelivery).not.toHaveBeenCalled();
 });

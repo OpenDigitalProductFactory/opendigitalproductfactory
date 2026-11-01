@@ -158,7 +158,7 @@ describe("disposition correction", () => {
       status: "input-required", updatedAt: new Date("2026-09-06T10:00:00Z"), a2aMetadata: metadata,
       progressPayload: { terminalWriterWait: {
         schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_evidence",
-        resumeMode: "same-taskrun", attempt: 2, observedAt: "2026-09-06T10:00:00Z",
+        resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 2, observedAt: "2026-09-06T10:00:00Z",
       } },
     });
     db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
@@ -167,7 +167,7 @@ describe("disposition correction", () => {
         success: false, error: "malformed-receipt", message: "A passing spec approval cannot introduce findings.",
       } });
     db.findEnvelope.mockResolvedValue(null);
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({ status: "working", userId: "user-1", currentAgentId: params.agentId, a2aMetadata: metadata });
     const outcome = await submit("PAT-DISPOSITION-RECOVERY");
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({

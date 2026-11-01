@@ -45,7 +45,14 @@ After connecting:
 1. Go to console.anthropic.com and create an API key
 2. Navigate to External Services and click "Claude / Anthropic (API Key)"
 3. Paste your API key (starts with sk-ant-api...)
-4. Click Save, then Test Connection
+4. If the key is organization-scoped, expand **Organization-scoped key** and enter its **Anthropic workspace ID**. Find the ID in Claude Console → Settings → Workspaces; it begins with `wrkspc_`. Leave this field blank for a key scoped to one workspace.
+5. Save and verify the connection, then discover models.
+
+Organization scope lets a personal or service-account key use workspaces that its linked identity can access. The workspace selection tells Anthropic where this connection's model requests and charges belong; it does not grant additional permissions. For a shared automated integration, Anthropic recommends a service-account key. API credits are separate from Claude subscription billing.
+
+If an organization-scoped key returns HTTP 400, check that a workspace ID is configured and belongs to a workspace the linked identity can access. Changing or clearing the workspace requires connection verification again. This option does not configure billing-report access or workload identity federation.
+
+See [Anthropic authentication and workspace selection](https://platform.claude.com/docs/en/manage-claude/authentication#select-a-workspace).
 
 ## Model Discovery
 
@@ -64,4 +71,8 @@ Both providers support automatic model discovery via "Sync Models & Profiles". T
 
 ## Fallback Behavior
 
-If the subscription token expires, the platform automatically attempts to refresh it. If refresh fails, the provider status changes to "expired" and the admin must sign in again. The API Key provider is unaffected by subscription token issues — they are independent.
+The platform renews the subscription sign-in in the background about two hours before it expires, so it stays fresh even when no work is running and nobody has the provider page open. If a renewal fails, the platform tries again after 10 minutes, then 20, doubling up to every two hours, and the provider stays in routing while it retries.
+
+Retrying stops only when Anthropic says the sign-in itself is no longer valid. When that happens, the Needs-you inbox shows **Sign in to Claude / Anthropic (OAuth Subscription) again**, linking to the provider page. Sign in there and background renewal starts again. A single failed request never takes a still-valid sign-in out of routing.
+
+The API Key provider is unaffected by subscription token issues — they are independent.

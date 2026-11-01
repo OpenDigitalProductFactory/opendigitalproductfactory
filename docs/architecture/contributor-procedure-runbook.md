@@ -38,7 +38,7 @@ That runs, in order:
 
 **Base-drift trap:** regenerate **after** rebasing onto current `origin/main`. Checking/regenerating on a pre-rebase tree reports “fresh” and still fails CI on the merged tree.
 
-**Typecheck heap:** if pre-commit typecheck OOMs, use `NODE_OPTIONS=--max-old-space-size=8192` (or `DPF_SKIP_TYPECHECK=1` only when justified and attested).
+**Typecheck compiler:** `scripts/run-tsc.mjs` type-checks with TypeScript 7, the native compiler (BI-2B8D67A9); it has no V8 heap to exhaust. `DPF_TSC=6` runs the workspace's TypeScript 6 instead, with the 8 GB heap that version needs for `apps/web`. Use it to compare verdicts, not as a workaround. `DPF_SKIP_TYPECHECK=1` remains only for a justified, attested skip.
 
 ## 3. Strongly-Typed String Enums (mandatory)
 
@@ -61,6 +61,24 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 `BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](../superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
+## Routine maintenance and recovery authority
+
+Report the evidence and continue routine repair within current scoped operator
+authorization. Do not ask for ratification solely because a diagnosis precedes
+a mutation or a task changes phase. A diagnosis never grants authority: missing
+authorization, material scope expansion and consequential actions retain their
+actual governing gates. Honor host and tool refusals; a shell, database or
+alternate client is never a remedy for an authorization denial.
+
+For a stale toolchain declaration, inspect the signed updater's dry-run before
+applying changes. The declaration describes the loaded connection, not the files
+currently on disk. Request one client restart only when the dry-run finds no
+relevant file, connector, credential-wiring or plugin-pin repair. Continue
+independent authorized work. For required repairs, reuse
+existing authorization only within its scope; the dry-run never approves its own
+application. Keep signature, expected-installation identity and client settings
+checks. Record a refused apply and its supported remedy rather than retrying it
+through another execution path.
 ## 13. Login & Local QA
 
 - Login email: `admin@dpf.local` unless told otherwise.

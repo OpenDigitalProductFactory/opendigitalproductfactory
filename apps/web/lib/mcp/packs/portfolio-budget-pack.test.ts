@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const investment = vi.hoisted(() => ({ save: vi.fn(), bind: vi.fn(), read: vi.fn() }));
+const investmentActor = vi.hoisted(() => vi.fn(async () => "p1"));
+vi.mock("@/lib/identity/principal-linking", () => ({ resolvePrincipalRecordIdForSessionIdentity: investmentActor }));
+vi.mock("@/lib/portfolio/investment-balance-server", () => ({
+  saveScopedBalancePolicy: investment.save, bindInvestmentFunding: investment.bind, loadScopedBalanceReport: investment.read,
+}));
 
 // The proposal reads through $queryRaw only: portfolios, budgets and items.
 const db = vi.hoisted(() => ({ items: [] as unknown[], budgets: [] as unknown[] }));
@@ -20,10 +26,12 @@ const propose = portfolioBudgetPack.handlers["propose_portfolio_budgets"]!;
 const done = (itemId: string, completedAt: string) => ({
   itemId, status: "done", effortSize: "large", jobSize: null, estimateAgreed: null, storedPortfolioId: "p1", storedPortfolioDangling: false,
   productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null,
-  hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: new Date(completedAt),
+  hasActiveWorkroom: false, deliveredAt: null, deliverySurface: "other", traced: false, completedAt: new Date(completedAt),
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  investmentActor.mockResolvedValue("p1");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-06T00:00:00Z"));
   db.items = [done("in", "2026-09-01T00:00:00Z"), done("old", "2026-06-01T00:00:00Z")];
@@ -31,6 +39,39 @@ beforeEach(() => {
 });
 
 describe("propose_portfolio_budgets", () => {
+  it("does not expose another funding owner's report to a portfolio manager", async () => {
+    investmentActor.mockResolvedValue("manager-b");
+    expect(await portfolioBudgetPack.handlers.get_investment_balance!({ scope: { principalId: "p1", organizationId: "org1", purpose: "shared-platform" } }, "manager-user")).toMatchObject({ success: false, error: "not-owner" });
+    expect(investment.read).not.toHaveBeenCalled();
+  });
+  it("passes the same scope report through the external read tool", async () => {
+    const scope = { principalId: "p1", organizationId: "org1", purpose: "shared-platform" };
+    const data = { scope, policy: { refactorPercent: 80 }, externalInferenceCoverage: "unobserved" };
+    investment.read.mockResolvedValue({ ok: true, data });
+    expect(await portfolioBudgetPack.handlers.get_investment_balance!({ scope }, "owner-user")).toMatchObject({ success: true, data });
+    expect(investment.read).toHaveBeenCalledWith(expect.anything(), scope);
+  });
+  it("takes the agent identity only from trusted execution context and preserves classification", async () => {
+    const scope = { principalId: "p1", organizationId: "org1", purpose: "shared-platform" };
+    investment.bind.mockResolvedValue({ ok: true, data: { scope } });
+    await portfolioBudgetPack.handlers.bind_investment_funding!({ scope, target: { kind: "workroom", id: "WC-1", itemId: "BI-1" }, expectedBoundAt: null, reason: "Repair documentation", classification: "refactor", agentId: "untrusted-agent" }, "owner-user", { agentId: "trusted-agent" });
+    expect(investment.bind).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ userId: "owner-user", agentId: "trusted-agent", classification: "refactor" }));
+  });
+  it("exposes owner-scoped investment controls through the existing governed pack", () => {
+    for (const name of ["get_investment_balance", "set_investment_balance", "bind_investment_funding"]) {
+      expect(portfolioBudgetPack.definitions.find((d) => d.name === name)).toBeDefined();
+      expect(portfolioBudgetPack.handlers[name]).toBeTypeOf("function");
+    }
+    expect(portfolioBudgetPack.definitions.find((d) => d.name === "bind_investment_funding")?.consequence).toBe("authority");
+  });
+  it("rejects incomplete policy input before calling the domain writer", async () => {
+    const result = await portfolioBudgetPack.handlers["set_investment_balance"]!({
+      scope: { principalId: "p1", organizationId: "org1", purpose: "shared-platform" },
+      policy: { refactorPercent: 80 }, expectedRevision: null, reason: "Founder direction",
+    }, "user-1");
+    expect(result).toMatchObject({ success: false, error: "invalid-investment-input" });
+    expect(investment.save).not.toHaveBeenCalled();
+  });
   it("advertises trailingDays and stays read-only", () => {
     const def = portfolioBudgetPack.definitions.find((d) => d.name === "propose_portfolio_budgets")!;
     expect(def.sideEffect).toBe(false);

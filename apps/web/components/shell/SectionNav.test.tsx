@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SectionNav } from "./SectionNav";
+import { withMessages } from "@/test-support/with-messages";
 
 describe("SectionNav", () => {
+  it("keeps explicitly primary workspace views outside the advanced disclosure", () => {
+    const html = renderToStaticMarkup(withMessages(<SectionNav config={{
+      variant: "families", style: "pill", families: [], subItems: [
+        { label: "Traffic", href: "/platform/ai/operations-map?routingView=traffic", active: false, primary: true },
+        { label: "Technical topology", href: "/platform/ai/operations-map", active: false },
+      ],
+    }} />));
+    const disclosure = html.indexOf("<details");
+    expect(disclosure).toBeGreaterThan(0);
+    expect(html.slice(0, disclosure)).toContain(">Traffic<");
+    expect(html.slice(disclosure)).toContain(">Technical topology<");
+    expect(html.slice(disclosure)).not.toContain(">Traffic<");
+  });
   it("renders pill families with the active family and sub-items", () => {
     const html = renderToStaticMarkup(
       <SectionNav

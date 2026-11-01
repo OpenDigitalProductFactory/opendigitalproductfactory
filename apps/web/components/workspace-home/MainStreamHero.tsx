@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { namespaceMessages } from "@dpf/i18n";
-import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
+import { ALL_ARCHETYPES, deriveTwinValueStreamBinding } from "@dpf/storefront-templates";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { Surface } from "@/components/ui/Surface";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
 import { AREA_SECTIONS } from "@/lib/navigation/portal-shell-sections";
-import { loadPortfolioFlowView, loadShapeFlowView } from "@/lib/work-management/area-flow.server";
+import { loadPortfolioFlowView, loadShapeFlowView, loadStageWaits } from "@/lib/work-management/area-flow.server";
 import { bottleneckSentence, heroShape, resolveHeroPortfolio, type PortfolioDecompositionLike } from "@/lib/work-management/main-stream-hero";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
+import { workroomStageQueueKey } from "@/lib/work-management/workroom-stage-telemetry";
 import { formatDuration } from "@/lib/datetime";
 import { getT } from "@/lib/i18n/t.server";
+import { bindArchetypeWorkroomStages, boundShapeRefs } from "@/lib/twin/workroom-stage-binding";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 /**
@@ -28,9 +30,12 @@ export async function MainStreamHero({ archetypeId }: { archetypeId: string | nu
   const section = AREA_SECTIONS.find((candidate) => candidate.portfolioRole === role);
   if (!flow || !section) return null;
   const workHref = `/area/${section.key}?view=work`;
-  const shape = heroShape(flow);
+  // The shapes the archetype binds to its delivery stage through IT4IT (BI-B32D8C16).
+  const bound = archetype ? boundShapeRefs(bindArchetypeWorkroomStages(archetype, deriveTwinValueStreamBinding(archetype))) : new Set<string>();
+  const shape = heroShape(flow, bound);
   const view = shape ? await loadShapeFlowView({ shapeKey: shape.shapeKey, portfolioRole: role }).catch(() => null) : null;
-  const sentence = bottleneckSentence(flow, (key) => getWorkShape(key)?.title ?? key);
+  const waits = await loadStageWaits(flow.shapes.filter((row) => row.held.length > 0).map((row) => row.shapeRef)).catch(() => new Map<string, number | null>());
+  const sentence = bottleneckSentence(flow, (key) => getWorkShape(key)?.title ?? key, (shapeRef, stageKey) => waits.get(workroomStageQueueKey(shapeRef, stageKey)) ?? null);
   const t = await getT("workrooms");
   const locale = await getLocaleContext();
 

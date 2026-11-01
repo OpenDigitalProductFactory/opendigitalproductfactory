@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,41 +9,17 @@ import { resolveGuardBash } from "../lib/guard-bash.mjs";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
-/**
- * Can this host represent POSIX permission bits? (BI-C69C13AC)
- *
- * bootstrap-organization-pki.sh requires the join package to be mode 0600 and
- * refuses otherwise — a real control over enrolment material, and not one to
- * weaken so a test passes. Windows has no permission bits: chmod(0o600) reads
- * back as 666, so the script correctly refuses every fixture and the
- * assertions BEYOND that gate never get to run.
- *
- * Those cases are therefore skipped here rather than failed. AGENTS.md §4: a
- * check that could not run is not a verdict, and recording it as one is worse
- * than not running it. Everything that does not depend on file mode still
- * runs on every host.
- */
-async function posixModesRepresentable() {
-  const probeDir = await mkdtemp(join(tmpdir(), "dpf-mode-probe-"));
-  const probe = join(probeDir, "probe");
-  try {
-    await writeFile(probe, "probe");
-    await chmod(probe, 0o600);
-    const { mode } = await stat(probe);
-    return (mode & 0o777) === 0o600;
-  } catch {
-    return false;
-  } finally {
-    await rm(probeDir, { recursive: true, force: true });
+test('PKI stages custody before authority startup and CLI clients bypass CA initialization', async () => {
+  const shell = await read('scripts/bootstrap-organization-pki.sh');
+  const ps = await read('scripts/bootstrap-organization-pki.ps1');
+  assert.match(shell, /compose stage-password\s+compose up -d step-ca/);
+  assert.match(ps, /@\("stage-password"\)\s+Invoke-DpfPkiCompose -Arguments @\("up", "-d", "step-ca"\)/);
+  assert.match(shell, /--entrypoint "" --user "\$\(id -u\):\$\(id -g\)"/);
+  assert.match(shell, /--env HOME=\/tmp --env STEPPATH=\/tmp\/step/);
+  for (const line of ps.split(/\r?\n/).filter(line => line.includes('docker run --rm'))) {
+    assert.match(line, /--entrypoint (step|sh)/);
   }
-}
-
-const MODE_GATED = {
-  skip: (await posixModesRepresentable())
-    ? false
-    : "host cannot represent POSIX file modes, so the 0600 join-package gate refuses every fixture before the behaviour under test (BI-C69C13AC)",
-};
-
+});
 
 test("organization PKI compose pins the approved image and protects CA custody", async () => {
   const compose = await read("docker-compose.pki.yml");
@@ -54,7 +30,8 @@ test("organization PKI compose pins the approved image and protects CA custody",
     /smallstep\/step-ca:0\.30\.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270/,
   );
   assert.doesNotMatch(compose, /smallstep\/step-ca:latest/);
-  assert.match(compose, /DPF_PKI_PASSWORD_FILE/);
+  assert.doesNotMatch(compose, /DPF_PKI_PASSWORD_FILE|\/run\/secrets\/step-ca-password/);
+  assert.match(compose, /DOCKER_STEPCA_INIT_PASSWORD_FILE: \/home\/step\/secrets\/password/);
   assert.match(compose, /DOCKER_STEPCA_INIT_PASSWORD_FILE/);
   assert.doesNotMatch(compose, /DOCKER_STEPCA_INIT_PASSWORD:/);
   assert.match(compose, /DPF_PKI_BIND_ADDRESS:-127\.0\.0\.1/);
@@ -184,7 +161,7 @@ test("join packages are short-lived, intended-peer-bound, and never require a CA
   }
 });
 
-test("Bash join rejects an expired package before Docker is invoked", MODE_GATED, async () => {
+test("Bash join rejects an expired package before Docker is invoked", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-expired-"));
   const packagePath = join(directory, "expired.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -212,7 +189,7 @@ test("Bash join rejects an expired package before Docker is invoked", MODE_GATED
   }
 });
 
-test("Bash join rejects a package intended for a different installation", MODE_GATED, async () => {
+test("Bash join rejects a package intended for a different installation", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-peer-"));
   const packagePath = join(directory, "wrong-peer.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -239,7 +216,7 @@ test("Bash join rejects a package intended for a different installation", MODE_G
   }
 });
 
-test("Bash join rejects a public CA origin before Docker is invoked", MODE_GATED, async () => {
+test("Bash join rejects a public CA origin before Docker is invoked", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-public-ca-"));
   const packagePath = join(directory, "public-ca.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -317,6 +294,33 @@ test("Edge action PKI uses a dedicated client-auth profile and host-owned keys",
   }
 });
 
+test("verified Edge identity survives upstream header operations after incoming spoof headers are removed", async () => {
+  // Caddy 2.10.2 HeaderOps.ApplyTo sets before deleting specific/prefix
+  // headers. Textual ordering of header_up lines cannot change that contract.
+  // https://github.com/caddyserver/caddy/blob/v2.10.2/modules/caddyhttp/headers/headers.go#L220-L259
+  for (const path of ["scripts/bootstrap-organization-pki.sh", "scripts/bootstrap-organization-pki.ps1"]) {
+    const source = await read(path);
+    const actionStart = source.indexOf("handle @edge_actions {");
+    assert.notEqual(actionStart, -1, path);
+    const action = source.slice(actionStart, source.indexOf("respond 404", actionStart));
+    const proxyStart = action.indexOf("reverse_proxy portal:3000");
+    assert.notEqual(proxyStart, -1, path);
+    const upstream = action.slice(proxyStart);
+    const inserted = [...upstream.matchAll(/header_up ([^-\s][^\s]*) /g)].map(match => match[1].toLowerCase());
+    const removed = [...upstream.matchAll(/header_up -([^\s]+)/g)].map(match => match[1].toLowerCase());
+    assert.ok(inserted.includes("x-dpf-mtls-proxy-secret"), `${path}: proxy assertion is still required`);
+    assert.ok(inserted.includes("x-dpf-edge-cert-fingerprint"), `${path}: verified identity is still required`);
+    for (const name of inserted) {
+      assert.ok(!removed.some(pattern => pattern.endsWith("*")
+        ? name.startsWith(pattern.slice(0, -1)) : name === pattern),
+      `${path}: Caddy deletes inserted identity header ${name}`);
+    }
+    const incoming = action.slice(0, proxyStart);
+    assert.match(incoming, /request_header -X-DPF-Edge-Cert-\*/, `${path}: remove unknown caller identity fields too`);
+    assert.match(incoming, /request_header -X-DPF-MTLS-Proxy-Secret/, `${path}: remove the caller proxy assertion`);
+  }
+});
+
 test("Caddy exposes a dedicated verified-client action listener and strips spoofable identity", async () => {
   const [shell, powershell, tlsCompose, actionCompose] = await Promise.all([
     read("scripts/bootstrap-organization-pki.sh"),
@@ -328,7 +332,7 @@ test("Caddy exposes a dedicated verified-client action listener and strips spoof
     assert.match(source, /:8443/);
     assert.match(source, /require_and_verify/);
     assert.match(source, /trust_pool file/);
-    assert.match(source, /header_up -X-DPF-Edge-Cert/);
+    assert.match(source, /request_header -X-DPF-Edge-Cert-\*/);
     assert.match(source, /tls_client_fingerprint/);
     assert.match(source, /tls_client_certificate_der_base64/);
   }
@@ -406,4 +410,24 @@ test("portal-tls publishes its ports through the install bind address (BI-6DC1CD
       `docker-compose.tls.yml publishes ${port} on every interface`,
     );
   }
+});
+
+test('authority client recovery shares public identity policy and ships its helper to existing installs', async () => {
+  const shell = await read('scripts/bootstrap-organization-pki.sh');
+  const ps = await read('scripts/bootstrap-organization-pki.ps1');
+  const image = await read('Dockerfile');
+  for (const source of [shell, ps]) {
+    assert.match(source, /edge-client-certificate\.mjs/);
+    assert.match(source, /allow-expired/);
+    assert.match(source, /certificate[\s\S]*verify[\s\S]*--roots/);
+    assert.match(source, /previous\.crt/);
+    assert.match(source, /previous\.key/);
+    assert.match(source, /edge-client-recovery\.lock/);
+    assert.doesNotMatch(source, /allow-renewal-after-expiry|--mtls=false/);
+  }
+  assert.match(shell, /repair_authority_edge_client "\$edge_subject"/);
+  assert.match(ps, /Repair-DpfAuthorityEdgeClient -Subject \$edgeSubject/);
+  assert.match(image, /COPY scripts\/installer\/edge-client-certificate\.mjs/);
+  assert.match(image, /cp scripts\/installer\/edge-client-certificate\.mjs \/dpf-release-assets\/scripts\/installer\//);
+  assert.match(image, /cp scripts\/bootstrap-organization-pki\.ps1 scripts\/bootstrap-organization-pki\.sh/);
 });

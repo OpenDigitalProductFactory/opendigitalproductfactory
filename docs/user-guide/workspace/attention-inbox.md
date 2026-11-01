@@ -46,12 +46,25 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Review the business decision** using the plain action on the card. In Simple view, builder-only links never appear as the main owner action — and neither does a placeholder button in their place.
 - **Accept, keep, or narrow a proactivity boundary** without leaving the workspace.
 - **Approve or decline a held coworker action** on the card. Once the answer is saved, or the time runs out, the buttons go away and the record stays readable. Pressing twice, or reloading and pressing again, cannot answer it twice.
+- **Inspect the complete proposal** before deciding. The card gives the action, destination, consequences, governing reason, and authorization scope. Open **Complete proposed content** to read the full saved proposal; the summary may be shortened. Authorizing an evidence record permits that write. It does not independently attest that its tests passed or replace a required specialist review. If consequences are not established, the card says so.
 - **Ask again** on a request that expired before anyone answered it. The same request comes back to you for a fresh decision.
 - **Open Technical detail** when a builder or specialist needs the full source record.
 - **Clear or snooze the Friday review** as one batch, or review an item individually.
 - Ask your [digital coworker](../getting-started/ai-coworker.md) for a briefing on what is in the inbox and why.
 
+An external assistant can also find its pending requests without a saved request
+ID. Ask it to check its pending approvals; each result names the approval owner,
+expiry, exact Inbox link and, for a saved-file review, the immutable file version
+and check. The list contains only requests for the connected user and that
+assistant. A long list reports when more requests remain in the Inbox. An exact
+request ID still lets the assistant check whether that request completed. These
+reads do not approve anything, transfer ownership or change permissions. If the
+connection belongs to another account, reconnect under the intended account;
+administrator privileges do not let you answer someone else's request.
+
 ## How long a coworker's request waits
+
+Scheduled Workroom coworkers can record an assigned stage's blocked report themselves. When a required action does need approval, the task waits on that request instead of asking again on its next run or on a new day. See [Workroom reports and approval waits](../workroom-approval-recovery.md).
 
 A request that sends something outside your business, such as an email, a post, an ad or a pull request, waits 15 minutes. What it was going to send can go out of date, and it cannot be recalled once it is sent. Every other request waits up to seven days, so a request raised while you are away is still there when you come back. Before an approved request runs, it is checked again. An approval that is too old for what the action now is does not run.
 

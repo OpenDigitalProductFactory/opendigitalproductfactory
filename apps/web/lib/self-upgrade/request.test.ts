@@ -16,6 +16,14 @@ const mocks = vi.hoisted(() => ({
   readSelfUpgradeSupport: vi.fn(),
   resolveCurrentSelfUpgradeTarget: vi.fn(),
   admitSelfUpgrade: vi.fn(),
+  loadInstanceStance: vi.fn(),
+  prismaInstanceStanceStore: vi.fn(),
+}));
+
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@/lib/install/instance-stance", () => ({
+  loadInstanceStance: mocks.loadInstanceStance,
+  prismaInstanceStanceStore: mocks.prismaInstanceStanceStore,
 }));
 
 vi.mock("@/lib/jobs", () => ({
@@ -120,6 +128,8 @@ describe("requestSelfUpgrade", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(CONFIG);
+    mocks.loadInstanceStance.mockResolvedValue({ environmentClass: "production", primaryPurpose: "operate-organization" });
+    mocks.prismaInstanceStanceStore.mockReturnValue({});
     mocks.resolveOperatingScheduleForSystem.mockResolvedValue({
       schedule: SCHEDULE,
       timezone: "America/Chicago",
@@ -178,6 +188,40 @@ describe("requestSelfUpgrade", () => {
     expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 
+  it("admits an authorized DEV batch outside business hours with agent provenance", async () => {
+    mocks.loadInstanceStance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+    const result = await requestSelfUpgrade({
+      requestedBy: "mcp:codex",
+      actorKind: "agent",
+      now: new Date("2026-10-07T15:20:00.000Z"),
+    });
+    expect(result).toMatchObject({ status: "queued", triggeredBy: "mcp:codex+outside-window" });
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: "mcp:codex+outside-window", routine: true, requestedForce: false,
+    }));
+    expect(mocks.recordDeferredUpgradeRequest).not.toHaveBeenCalled();
+  });
+
+  it("keeps an ineligible DEV batch out of admission", async () => {
+    mocks.loadInstanceStance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.resolveReleaseBatchStatus.mockResolvedValue({ ...BATCH_ELIGIBLE, eligible: false });
+    expect(await requestSelfUpgrade({ requestedBy: "mcp:codex", actorKind: "agent" }))
+      .toMatchObject({ status: "batch_below_threshold" });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("falls back to window deferral when trusted stance cannot be read", async () => {
+    mocks.loadInstanceStance.mockRejectedValue(new Error("Context unavailable"));
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+    expect(await requestSelfUpgrade({ requestedBy: "mcp:codex", actorKind: "agent" }))
+      .toMatchObject({ status: "deferred_to_window" });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
   it("BI-2128872C AC-2: an operator outside the window runs now and the run records the bypass", async () => {
     mocks.isUpgradeWindowOpen.mockReturnValue(false);
     mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
@@ -224,7 +268,7 @@ describe("requestSelfUpgrade", () => {
     expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 
-  it("does not grant recovery authority to a plain request after a terminal failure", async () => {
+  it("does not grant recovery authority to a plain request after a never-dispatched terminal failure", async () => {
     mocks.getLatestRun.mockResolvedValue({
       runId: "SUR-6B312E24",
       status: "failed",
@@ -232,6 +276,11 @@ describe("requestSelfUpgrade", () => {
       targetTag: "v2026.08.29-terminal-writer-failed-reader-history.1",
       deployedSha: null,
       completedAt: new Date("2026-08-29T14:45:34.380Z"),
+      admissionFingerprint: "adm-1",
+      dispatchStatus: "dispatch_failed",
+      dispatchAttemptCount: 0,
+      dispatchAcknowledgedAt: null,
+      dispatchEventIds: [],
     });
     const result = await requestSelfUpgrade({
       requestedBy: "manual:user-ops-1",
@@ -244,6 +293,31 @@ describe("requestSelfUpgrade", () => {
       reason: "terminal-recovery-needs-operator-binding",
     });
     expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("refuses while a failed run has not settled (BI-CC9DB006)", async () => {
+    mocks.getLatestRun.mockResolvedValue({ runId: "SUR-SETTLING", status: "failed", completedAt: null });
+    const result = await requestSelfUpgrade({ requestedBy: "mcp:agent", actorKind: "agent" });
+    expect(result).toMatchObject({ status: "human_override_required" });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("does not hold an agent hostage to a dispatched failure that ended with nothing installed (BI-CC9DB006)", async () => {
+    mocks.getLatestRun.mockResolvedValue({
+      runId: "SUR-F2A0D477",
+      status: "failed",
+      targetSha: "7d67ef2f4f1d4370d35dc6bda711672ec1750a13",
+      targetTag: "v2026.10.27-dev-recovery.146",
+      deployedSha: null,
+      completedAt: new Date("2026-10-27T18:54:47.229Z"),
+      admissionFingerprint: "adm-2",
+      dispatchStatus: "dispatched",
+      dispatchAttemptCount: 1,
+      dispatchAcknowledgedAt: new Date("2026-10-27T18:50:51.024Z"),
+      dispatchEventIds: ["evt-1"],
+    });
+    const result = await requestSelfUpgrade({ requestedBy: "mcp:agent", actorKind: "human" });
+    expect(result).not.toMatchObject({ reason: "terminal-recovery-needs-operator-binding" });
   });
 
   it.each(["running", "queued", "pending"])(

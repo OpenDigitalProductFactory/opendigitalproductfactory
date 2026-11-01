@@ -117,13 +117,30 @@ export function buildAiOpsReviewPrompt(
     "",
     "Your mandate:",
     "1. Review each finding. Prefer skills, tool merges, webhooks/events, or instruction fixes over vague chores.",
-    "2. For any CRITICAL finding without a filed BI, create a backlog item via create_backlog_item (workType skill|tool|doc|chore from the recommended action). Include origin marker and sourceId in the body.",
+    "2. For any CRITICAL finding without a filed BI, create a backlog item via create_backlog_item (workType skill|tool|doc|chore from the recommended action), with an outcome naming the waste that stops (e.g. \"<tool> calls stop failing\"). Include origin marker and sourceId in the body.",
     "3. For WARNING findings that recur or clearly waste tokens, file or update BIs; skip one-off noise.",
     "4. Do NOT re-file a finding whose sourceId already has an open BI from this scan.",
     "5. Summarize what you filed and what you deferred, with tool names and recommended actions.",
   ]
     .filter((x) => x !== null)
     .join("\n");
+}
+
+/**
+ * What will be true once an efficiency finding is fixed (BI-458CCA8D).
+ * Deterministic: the finding kind names the waste that stops.
+ */
+export function efficiencyFindingOutcome(f: Pick<EfficiencyFinding, "kind" | "toolName">): string {
+  switch (f.kind) {
+    case "thrash":
+      return `${f.toolName} is called once per need: agents stop thrashing it, and the next efficiency scan finds no thrash on it.`;
+    case "retry_storm":
+      return `${f.toolName} calls stop retry-storming: a failed call is fixed or explained instead of repeated, and the next efficiency scan finds no retry storm on it.`;
+    case "high_volume":
+      return `${f.toolName} call volume drops to what the work needs, and the next efficiency scan no longer flags it as high volume.`;
+    case "high_failure":
+      return `${f.toolName} calls stop failing, and the next efficiency scan no longer flags its failure rate.`;
+  }
 }
 
 function findingBody(f: EfficiencyFinding): string {
@@ -239,6 +256,7 @@ export async function dispatchMcpEfficiencyAiOps(
       try {
         const res = await ingestBacklogItem({
           title: `[MCP efficiency] ${f.title}`,
+          outcome: efficiencyFindingOutcome(f),
           body: findingBody(f),
           workType: actionToWorkType(f.recommendedAction),
           source: "automated-detection",

@@ -13,8 +13,9 @@ import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsu
 import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import { branchOccupiedResult } from "./mcp-result-errors";
-import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
+import { defaultPlatformRepositoryFullName, invalidSourceCommitField } from "./work-capsule-branch-identity";
 import { BacklogItemAlreadyClaimedError } from "./backlog-workroom-ownership";
+import { evaluateTwinClaimGate, type TwinGateOutcome } from "./twin-claim-gate";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
@@ -91,7 +92,28 @@ export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolu
   await db.workroom.update({ where: scopeWriteWhere({ ...row, capsuleId }), data: { scopeClaims } });
 }
 
-const FULL_SHA = /^[0-9a-f]{40}$/i;
+async function recordTwinOverride(
+  db: {
+    workroom: { findUnique(args: unknown): Promise<{ id: string } | null> };
+    workroomActivity: { create(args: unknown): Promise<unknown> };
+  },
+  capsuleId: string,
+  gate: Extract<TwinGateOutcome, { kind: "overridden" }>,
+  actor: WorkCapsuleActor,
+): Promise<void> {
+  const room = await db.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!room) return;
+  await db.workroomActivity.create({
+    data: {
+      workCapsuleId: room.id,
+      kind: "federated-twin-override",
+      summary: `Deliberately claimed despite the paired installation's work on ${gate.blockers.map((b) => b.itemId).join(", ")}: ${gate.reason}`,
+      payload: { reason: gate.reason, twins: gate.blockers },
+      recordedById: actor.userId,
+      recordedByAgentId: actor.agentId,
+    },
+  });
+}
 
 export async function claimBacklogItemForWork(args: {
   params: Record<string, unknown>;
@@ -112,9 +134,9 @@ export async function claimBacklogItemForWork(args: {
   }
   const baseSha = stringParam(params, "baseSha");
   const headSha = stringParam(params, "headSha");
-  const badSha = [["baseSha", baseSha], ["headSha", headSha]].find(([, sha]) => sha && !FULL_SHA.test(sha));
+  const badSha = invalidSourceCommitField(params);
   if (badSha) {
-    return { success: false, error: "invalid_input", message: `${badSha[0]} must be a full 40-character commit SHA.` };
+    return { success: false, error: "invalid_input", message: `${badSha} must be a full 40-character commit SHA.` };
   }
   if (requestedIntent && !WORK_INTENTS.includes(requestedIntent as WorkIntent)) {
     return { success: false, error: "invalid_work_intent", message: `workIntent must be one of: ${WORK_INTENTS.join(", ")}.` };
@@ -151,6 +173,15 @@ export async function claimBacklogItemForWork(args: {
     }
     if (admission.verdict !== "admit") admissionWarning = admission.reason;
   }
+  // The paired installation may already be working this defect (BI-91FC6B9A).
+  const { prisma: twinDb } = await import("@dpf/db");
+  const twinGate = await evaluateTwinClaimGate(twinDb as never, {
+    itemId,
+    headBranch: branchName,
+    force: params["force"] === true,
+    overrideReason: stringParam(params, "overrideReason"),
+  });
+  if (twinGate.kind === "refused") return twinGate.result;
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -185,6 +216,7 @@ export async function claimBacklogItemForWork(args: {
       };
     }
     const result = governed.data.claim;
+    if (twinGate.kind === "overridden") await recordTwinOverride(twinDb as never, result.capsuleId, twinGate, await args.resolveActor(args.userId, args.context));
     await persistClaimShape(args.db, result.capsuleId, shape.resolution);
     await ensureCapsuleWorkItemAnchorWithPrisma({
       capsuleId: result.capsuleId,
@@ -194,6 +226,9 @@ export async function claimBacklogItemForWork(args: {
       console.warn(`[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${error instanceof Error ? error.message : "unknown"}`);
     });
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
+    const investment = await (await import("../portfolio/investment-balance-server")).projectItemInvestment(
+      (await import("@dpf/db")).prisma, { itemId: result.backlogItemId, roomId: result.capsuleId },
+    );
     const conflicts = result.conflict
       ? [
           ...(result.conflict.backlogClaim ? [`${result.backlogItemId} already has an ACTIVE claim by another session; this call did NOT steal it`] : []),
@@ -209,6 +244,7 @@ export async function claimBacklogItemForWork(args: {
       data: {
         ...result,
         admissionWarning,
+        investment,
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
           ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
           : null,

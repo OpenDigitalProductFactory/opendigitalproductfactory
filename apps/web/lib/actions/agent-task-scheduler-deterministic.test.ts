@@ -4,11 +4,15 @@ const mocks = vi.hoisted(() => ({
   executeBookkeepingCycleTask: vi.fn(),
   executeDecisionEngineReviewTask: vi.fn(),
   executeAcceptanceSweepTask: vi.fn(),
+  executeClientCapabilityReverifyTask: vi.fn(),
+  executeHarnessEvolutionLoopTask: vi.fn(),
 }));
 
 vi.mock("@/lib/finance/bookkeeping/bookkeeping-cycle-task", () => ({ executeBookkeepingCycleTask: mocks.executeBookkeepingCycleTask }));
 vi.mock("@/lib/decision/self-review/decision-engine-review-task", () => ({ executeDecisionEngineReviewTask: mocks.executeDecisionEngineReviewTask }));
 vi.mock("@/lib/backlog/acceptance-sweep/acceptance-sweep-task", () => ({ executeAcceptanceSweepTask: mocks.executeAcceptanceSweepTask }));
+vi.mock("@/lib/agent-toolchain/client-capability-reverify-task", () => ({ executeClientCapabilityReverifyTask: mocks.executeClientCapabilityReverifyTask }));
+vi.mock("@/lib/harness-evolution/harness-evolution-task", () => ({ executeHarnessEvolutionLoopTask: mocks.executeHarnessEvolutionLoopTask }));
 
 import { runDeterministicScheduledTaskKind } from "./agent-task-scheduler-deterministic";
 
@@ -38,6 +42,18 @@ describe("runDeterministicScheduledTaskKind", () => {
     expect(mocks.executeDecisionEngineReviewTask).toHaveBeenCalledOnce();
     await expect(runDeterministicScheduledTaskKind(task("bookkeeping-cycle"))).resolves.toBe(true);
     expect(mocks.executeBookkeepingCycleTask).toHaveBeenCalledOnce();
+  });
+
+  // BI-64795FD0: the weekly client-capability re-verification runs off the LLM path.
+  it("runs the client-capability re-verification for its kind", async () => {
+    await expect(runDeterministicScheduledTaskKind(task("client-capability-reverify"))).resolves.toBe(true);
+    expect(mocks.executeClientCapabilityReverifyTask).toHaveBeenCalledWith(task("client-capability-reverify"));
+  });
+
+  // BI-49BC21C1: the daily harness evolution loop runs off the LLM path.
+  it("runs the harness evolution loop for its kind", async () => {
+    await expect(runDeterministicScheduledTaskKind(task("harness-evolution-loop"))).resolves.toBe(true);
+    expect(mocks.executeHarnessEvolutionLoopTask).toHaveBeenCalledWith(task("harness-evolution-loop"));
   });
 
   it("leaves every other task to the scheduler", async () => {

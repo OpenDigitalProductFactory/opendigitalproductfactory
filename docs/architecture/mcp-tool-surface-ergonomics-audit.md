@@ -116,3 +116,18 @@ Adding `run_everything` with free-form `action` string, admin scope optional, no
 ## Change control
 
 Checklist axes change via PR against this file. Feature PRs should not invent private ergonomics rules that contradict it.
+
+
+Explicit original-review recovery preserves immutable task identity and records
+current execution authority separately. Governed tool preflight rechecks that
+authority before each recovered review call; approved calls recheck at execution
+so refusal closes the approval correctly. Discovery supplies the exact locator,
+never an authority grant. See the [original-review recovery procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
+for eligibility, refusal and receipt requirements.
+
+For every task-bound review, stale callbacks must fail before executing a tool
+and before settling the task. An approval return retains the execution identity
+from its original audit record; it cannot adopt the task's latest generation.
+Check this refusal separately from the owner's `tasks/get` and `tasks/result`
+readback, which must continue to expose existing evidence under normal read
+permissions. A missing or malformed review binding must not broaden execution.

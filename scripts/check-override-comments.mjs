@@ -24,6 +24,17 @@ const TAG_RE =
 
 // Non-security pins: dedup, major-version floors, compat. Never require a tag.
 const EXEMPT_DEDUP = new Set([
+  // BI-7F3E4389: isolated mobile file: copies cannot resolve the source
+  // workspace:/catalog: protocols. These exact edges preserve that boundary.
+  "@dpf/validators>@dpf/integration-shared",
+  "@dpf/validators>zod",
+  "@dpf/integration-shared>undici",
+  // Inngest's supported-range telemetry alignment pin, documented beside the
+  // override. This exact parent-scoped compat pin is not an advisory floor.
+  "vitest>@opentelemetry/api",
+  "inngest>@opentelemetry/auto-instrumentations-node",
+  "@opentelemetry/auto-instrumentations-node@0.81.2>@opentelemetry/core",
+  "@opentelemetry/instrumentation@0.223.0>import-in-the-middle",
   // react / react-dom are compat pins, not CVE floors. In apps/mobile they hold
   // the exact version React Native's embedded renderer needs (BI-E5E72FE3); at
   // the root they keep one React in the platform tree. Rationale lives beside
@@ -33,6 +44,10 @@ const EXEMPT_DEDUP = new Set([
   "lodash",
   "uuid",
   "ip-address",
+  // c12@3.3.4 declares dotenv ^17 while the catalog is 18. parse() and
+  // config() are unchanged; preload and .env.vault (removed in 18) are unused.
+  // Qualified so the catalog: specifier on our own declarations stays put.
+  "dotenv@<18",
   // Types-only major unification: @inngest/ai, @types/net-snmp and docx each
   // pinned an older @types/node major, four copies of one types package
   // (plan 2026-09-08 M7, BI-5265CAD0). Not a CVE floor.

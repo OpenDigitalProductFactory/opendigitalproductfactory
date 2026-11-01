@@ -498,7 +498,7 @@ apps/web/components/admin/LocalePreferencesPanel.tsx	jsx-copy	5
 apps/web/components/admin/MarketContextFields.tsx	jsx-copy	1
 apps/web/components/admin/MarketContextFields.tsx	physical-direction	1
 apps/web/components/admin/MatchConfigCard.tsx	jsx-copy	4
-apps/web/components/admin/McpOAuthClientManager.tsx	jsx-copy	14
+apps/web/components/admin/McpOAuthClientManager.tsx	jsx-copy	13
 apps/web/components/admin/McpTokenManager.tsx	jsx-copy	18
 apps/web/components/admin/McpTokenManager.tsx	physical-direction	3
 apps/web/components/admin/OperatingHoursEditor.tsx	jsx-copy	2
@@ -960,7 +960,7 @@ apps/web/components/mailroom/MailroomItemActions.tsx	jsx-copy	4
 apps/web/components/monitoring/AiCoworkerHealthPanel.tsx	jsx-copy	1
 apps/web/components/monitoring/AlertBanner.tsx	jsx-copy	1
 apps/web/components/monitoring/AlertBanner.tsx	physical-direction	2
-apps/web/components/monitoring/CapabilityServiceHealth.tsx	jsx-copy	2
+apps/web/components/monitoring/CapabilityServiceHealth.tsx	jsx-copy	0
 apps/web/components/monitoring/CapabilityServiceHealth.tsx	physical-direction	1
 apps/web/components/monitoring/ContainerResourceTable.tsx	jsx-copy	5
 apps/web/components/monitoring/ContainerResourceTable.tsx	physical-direction	7
@@ -972,7 +972,7 @@ apps/web/components/monitoring/MetricTimeSeries.tsx	physical-direction	2
 apps/web/components/monitoring/PlatformHealthIndicator.tsx	jsx-copy	7
 apps/web/components/monitoring/PlatformHealthIndicator.tsx	physical-direction	2
 apps/web/components/monitoring/RecentAlertsPanel.tsx	jsx-copy	3
-apps/web/components/monitoring/ServiceHealthDashboard.tsx	jsx-copy	4
+apps/web/components/monitoring/ServiceHealthDashboard.tsx	jsx-copy	2
 apps/web/components/monitoring/ServiceStatusGrid.tsx	jsx-copy	1
 apps/web/components/monitoring/SystemHealthDashboard.tsx	jsx-copy	3
 apps/web/components/onboarding/HowYouDecideCards.tsx	jsx-copy	4
@@ -1548,9 +1548,9 @@ apps/web/lib/work-capsules.ts	physical-direction	2
 apps/web/lib/work-capture/recurrence-expander.ts	locale-literal	3
 apps/web/lib/work-management/delivery-shapes.ts	physical-direction	4
 apps/web/lib/work-management/portfolio-activity-projection.ts	locale-literal	3
-apps/web/lib/work-management/work-shape-evidence-kinds.ts	physical-direction	1
 apps/web/lib/work-management/worker-rollup.ts	locale-literal	5
-apps/web/lib/work-posture/temporal-band.ts	locale-literal	2
 packages/db/src/federation-health.ts	locale-literal	1
 packages/db/src/portfolio-sources/absorption-posture-resolver.ts	locale-literal	1
 packages/storefront-templates/src/business-analysis-plan.ts	locale-literal	1
+packages/validators/src/gpp/work-vocabulary.ts	physical-direction	1
+packages/validators/src/workroom-policy/temporal-band.ts	locale-literal	2

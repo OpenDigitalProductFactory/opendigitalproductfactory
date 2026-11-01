@@ -14,6 +14,7 @@
 // class (remove it here). Classifying a tool is a governed judgement about its
 // reach, not a mechanical edit: do it in the tool definition, then shrink.
 export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
+  "acknowledge_workroom_broadcast",
   "adopt_worktree",
   "analyze_a2a_collaboration_health",
   "analyze_mcp_call_efficiency",
@@ -22,6 +23,7 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "approve_demand_for_funding",
   "attach_to_campaign",
   "attribute_entity_to_product",
+  "broadcast_workroom_ask",
   "capture_ux_critique",
   "claim_backlog_item_for_work",
   "claim_nonprod_environment_lease",
@@ -38,10 +40,14 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "create_customer_account",
   "create_customer_contact",
   "create_digital_product",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_drawing",
   "create_ea_element",
   "create_ea_relationship",
   "create_epic",
   "create_knowledge_article",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_letter",
   "create_licensing_readiness_issue",
   "create_marketing_asset_task",
   "create_marketing_automation_candidate",
@@ -49,10 +55,14 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "create_marketing_campaign_brief",
   "create_opportunity",
   "create_presentation",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_report",
   "create_product_objective",
   "create_quote",
   "create_recurring_work_engagement",
   "create_release_bundle",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_sheet",
   "create_workroom",
   "delete_bank_rule",
   "deliberate_on",
@@ -197,6 +207,13 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "update_security_case",
   "update_workroom_status",
   "wiki_ingest",
+  // Internal writes (BI-FE8DF004): creating a workbook, table, column or view
+  // stays inside the install, is owned by the acting person and is undone by
+  // deleting it in the Workbooks UI. Nothing outward, nothing destroyed.
+  "workbook_add_column",
+  "workbook_create",
   "workbook_create_row",
+  "workbook_create_table",
+  "workbook_create_view",
   "workbook_update_cells",
 ];

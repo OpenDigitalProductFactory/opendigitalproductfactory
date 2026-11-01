@@ -11,7 +11,7 @@
 // drift results. The page maps live WikiPage rows → ParsedPrinciplePage →
 // selectKernelCommandments → here; tests pass crafted principles directly.
 
-import type { DecisionPrinciple } from "./option-scoring";
+import type { DecisionPrinciple } from "@dpf/validators/judgment/option-scoring";
 import { GOLDEN_SCENARIOS, scoreScenario } from "./golden-decisions";
 
 export type DriftKind = "flip" | "thin-margin";

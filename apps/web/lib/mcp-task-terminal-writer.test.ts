@@ -1,163 +1,11 @@
+import { describe, expect, it, vi } from "vitest";
+import { db, autonomous, params, persistedReaderExecution, submit, persistedMetadata } from "./test-support/terminal-writer-fixture";
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readerBootstrapHistory, readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
-
-const db = vi.hoisted(() => ({
-  persisted: {} as Record<string, unknown>,
-  findFirst: vi.fn(),
-  findUnique: vi.fn(),
-  findModelConfig: vi.fn(),
-  findEnvelope: vi.fn(),
-  findToolExecution: vi.fn(),
-  findToolExecutions: vi.fn(),
-  update: vi.fn(),
-  updateMany: vi.fn(),
-  upsertThread: vi.fn(),
-}));
-const autonomous = vi.hoisted(() => ({
-  create: vi.fn(),
-  execute: vi.fn(),
-  executeTool: vi.fn(),
-  resolveAgent: vi.fn(),
-  resolveTools: vi.fn(),
-}));
-
-vi.mock("@dpf/db", async () => ({
-  prisma: {
-    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
-    coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
-    toolExecution: {
-      findFirst: (...args: unknown[]) => db.findToolExecution(...args),
-      findMany: (...args: unknown[]) => db.findToolExecutions(...args),
-    },
-    agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
-    agentModelConfig: { findUnique: (...args: unknown[]) => db.findModelConfig(...args) },
-  },
-}));
-vi.mock("@/lib/tak/autonomous-work-run", () => ({
-  createAutonomousWorkRun: (...args: unknown[]) => autonomous.create(...args),
-  executeAutonomousAgenticLoop: (...args: unknown[]) => autonomous.execute(...args),
-  executeAutonomousWorkTool: (...args: unknown[]) => autonomous.executeTool(...args),
-  resolveAutonomousWorkAgent: (...args: unknown[]) => autonomous.resolveAgent(...args),
-  resolveAutonomousWorkTools: (...args: unknown[]) => autonomous.resolveTools(...args),
-}));
-vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
-vi.mock("./mcp-task-review-outcome", () => ({
-  loadTaskInitiativeReviewOutcome: vi.fn().mockResolvedValue(null),
-  loadInitiativeReviewOutcome: vi.fn().mockResolvedValue({ receiptId: "receipt-1", summary: "Receipt persisted; readiness still requires plan coverage." }),
-}));
-
-import { submitRemoteCoworkerTask } from "./mcp-task-submit";
 import { terminalTruncationMessage } from "./tak/terminal-response-truncation";
 
-const userContext = { platformRole: "developer", isSuperuser: false };
-const params = {
-  agentId: "AGT-WS-REVIEW",
-  routeContext: "/platform/build",
-  title: "Independent design review",
-  objective: "Review the immutable artifact.",
-  prompt: "Read the source and record the governed evidence.",
-  idempotencyKey: "missing-writer-same-taskrun-resume",
-  riskClass: "bounded-write",
-  authorityScope: [
-    "backlog-item:BI-F0715C9C",
-    "tool:read_source_at_version",
-    "tool:record_initiative_evidence",
-  ],
-  collaborationKind: "summon",
-  initiativeReviewBinding: {
-    writerToolName: "record_initiative_evidence",
-    itemId: "BI-F0715C9C",
-    gate: "research",
-    artifactRef: {
-      kind: "repo-blob-at-commit",
-      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-      commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
-      path: "docs/superpowers/specs/design.md",
-      providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
-    },
-  },
-};
-
-const persistedReaderExecution = {
-  id: "reader-1",
-  toolName: "read_source_at_version",
-  parameters: {
-    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-    path: "docs/superpowers/specs/design.md",
-    version: "d47536a552c7d588b2f963e478ae99369f720783",
-    expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
-    startLine: 1,
-    maxChars: 3_200,
-  },
-  result: {},
-  success: true,
-  createdAt: new Date("2026-08-28T15:30:31.190Z"),
-};
-
-function submit(tokenId: string, request = params) {
-  return submitRemoteCoworkerTask({
-    token: { tokenId, userId: "user-1", capability: "write", source: "pat" },
-    userContext,
-    params: request,
-  });
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  db.persisted = {};
-  db.findFirst.mockResolvedValue(null);
-  db.findUnique.mockResolvedValue({ status: "working" });
-  db.findEnvelope.mockResolvedValue(null);
-  db.findToolExecution.mockResolvedValue(null);
-  db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
-  db.findModelConfig.mockResolvedValue({
-    minimumTier: "strong",
-    budgetClass: "quality_first",
-    pinnedProviderId: "local",
-    pinnedModelId: "review-model",
-  });
-  db.upsertThread.mockResolvedValue({ id: "thread-external" });
-  db.update.mockResolvedValue({});
-  db.updateMany.mockResolvedValue({ count: 1 });
-  autonomous.create.mockImplementation(async (input: Record<string, unknown>) => ({
-    id: "task-internal",
-    taskRunId: input["taskRunId"],
-    contextId: "thread-external",
-  }));
-  autonomous.resolveAgent.mockResolvedValue({
-    agentId: "build-specialist",
-    displayName: "Build Lead",
-    systemPrompt: "Review the immutable artifact.",
-    sensitivity: "internal",
-  });
-  autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
-  autonomous.execute.mockResolvedValue({ content: "Done.", executedTools: [] });
-  autonomous.executeTool.mockResolvedValue({
-    success: true,
-    message: "Read design.md lines 1-3 of 3.",
-    data: {
-      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-      path: "docs/superpowers/specs/design.md",
-      version: "d47536a552c7d588b2f963e478ae99369f720783",
-      blobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
-      content: "# Recovery design\n\nThe same TaskRun preserves its immutable authority binding.",
-      startLine: 1,
-      endLine: 3,
-      totalLines: 3,
-      hasMore: false,
-      nextCursor: null,
-    },
-  });
-});
-
-async function persistedMetadata(tokenId: string, request = params) {
-  await submit(tokenId, request);
-  return (autonomous.create.mock.calls[0]?.[0] as { metadata: Record<string, unknown> }).metadata;
-}
-
 describe("terminal writer resumption", () => {
-  it("recovers the same completed review once when persisted evidence proves the route-exit defect", async () => {
+  it("does not reserve inference for a legacy completed review without execution settlement proof", async () => {
     const metadata = await persistedMetadata("PAT-WRITER-ROUTE-EXIT");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-28T09:27:00.000Z");
@@ -202,33 +50,9 @@ describe("terminal writer resumption", () => {
 
     const outcome = await submit("PAT-WRITER-ROUTE-EXIT");
 
-    expect(db.updateMany).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-ROUTE-EXIT", status: "completed", updatedAt },
-      data: {
-        status: "working",
-        lastHeartbeatAt: expect.any(Date),
-        completedAt: null,
-        progressPayload: expect.objectContaining({
-          terminalWriterWait: expect.objectContaining({ attempt: 2 }),
-          recoveredFromCompletedRouteExit: true,
-          resumeReservedAt: expect.any(String),
-        }),
-      },
-    });
-    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
-      taskRunId: "TR-MCP-ROUTE-EXIT",
-      threadId: "thread-external",
-    }));
-    expect(autonomous.create).not.toHaveBeenCalled();
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: {
-        taskRunId: "TR-MCP-ROUTE-EXIT",
-        status: "completed",
-        idempotentReplay: true,
-        resumedFromTerminalWriterWait: true,
-      },
-    });
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: "TR-MCP-ROUTE-EXIT", idempotentReplay: true } });
   });
 
   it("does not reopen a completed review without persisted successful reader evidence", async () => {
@@ -278,7 +102,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-08-28T07:19:00.000Z",
         },
@@ -298,7 +122,10 @@ describe("terminal writer resumption", () => {
     });
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt, userId: "user-1", currentAgentId: params.agentId,
+      a2aMetadata: metadata,
+    });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "build-specialist",
       displayName: "Build Lead",
@@ -365,7 +192,10 @@ describe("terminal writer resumption", () => {
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt, userId: "user-1", currentAgentId: params.agentId,
+      a2aMetadata: metadata,
+    });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
       executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
@@ -374,7 +204,7 @@ describe("terminal writer resumption", () => {
     const outcome = await submit("PAT-WRITER-ZERO-READER");
 
     if (historyKind !== "none" && historyKind !== "invalid-cursors") {
-      expect(autonomous.executeTool).not.toHaveBeenCalled();
+      expect(autonomous.workToolMock).not.toHaveBeenCalled();
       expect(autonomous.execute).not.toHaveBeenCalled();
       expect(autonomous.create).not.toHaveBeenCalled();
       expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
@@ -388,8 +218,8 @@ describe("terminal writer resumption", () => {
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-ZERO-READER", status: "input-required", updatedAt },
     }));
-    expect(autonomous.executeTool).toHaveBeenCalledTimes(2);
-    expect(autonomous.executeTool).toHaveBeenCalledWith(expect.objectContaining({
+    expect(autonomous.workToolMock).toHaveBeenCalledTimes(2);
+    expect(autonomous.workToolMock).toHaveBeenCalledWith(expect.objectContaining({
       toolName: "read_source_at_version",
       taskRunId: "TR-MCP-ZERO-READER",
       args: {
@@ -434,7 +264,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-08-31T03:04:00.000Z",
         },
@@ -446,15 +276,16 @@ describe("terminal writer resumption", () => {
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
-    autonomous.executeTool.mockResolvedValue({
+    autonomous.workToolMock.mockResolvedValue({
       success: false,
       message: "The exact immutable source could not be read.",
       error: "provider-unavailable",
     });
 
+    db.findUnique.mockResolvedValue({ status: "working", userId: "user-1", currentAgentId: params.agentId, a2aMetadata: metadata });
     const outcome = await submit("PAT-WRITER-ZERO-READER-FAIL");
 
-    expect(autonomous.executeTool).toHaveBeenCalledTimes(1);
+    expect(autonomous.workToolMock).toHaveBeenCalledTimes(1);
     expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(db.updateMany).toHaveBeenCalledWith({
@@ -490,6 +321,10 @@ describe("terminal writer resumption", () => {
     const exhaustedParams = { ...params, idempotencyKey: "missing-writer-resume-exhausted" };
     const metadata = await persistedMetadata("PAT-WRITER-EXHAUSTED", exhaustedParams);
     vi.clearAllMocks();
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt: new Date("2026-08-28T07:25:00.000Z"),
+      userId: "user-1", currentAgentId: params.agentId, a2aMetadata: metadata,
+    });
     db.findFirst.mockResolvedValue({
       id: "task-internal",
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",
@@ -502,7 +337,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 2,
           observedAt: "2026-08-28T07:24:00.000Z",
         },
@@ -584,7 +419,7 @@ describe("terminal writer resumption", () => {
         persistedEvidenceAvailable: true,
       }),
     }));
-    expect(autonomous.executeTool).toHaveBeenCalledWith(expect.objectContaining({
+    expect(autonomous.workToolMock).toHaveBeenCalledWith(expect.objectContaining({
       toolName: "read_source_at_version",
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",
       args: expect.objectContaining({
@@ -649,7 +484,7 @@ describe("terminal writer resumption", () => {
       progressPayload: {
         terminalWriterWait: {
           schemaVersion: 1, kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 3,
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3,
           observedAt: "2026-09-01T02:22:19.237Z",
         },
         terminalWriterEscalation: {
@@ -665,7 +500,7 @@ describe("terminal writer resumption", () => {
     const outcome = await submit("PAT-WRITER-ALREADY-ESCALATED", exhaustedParams);
 
     expect(db.updateMany).not.toHaveBeenCalled();
-    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.workToolMock).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",
@@ -697,7 +532,7 @@ describe("terminal writer resumption", () => {
       progressPayload: {
         terminalWriterWait: {
           schemaVersion: 1, kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 2,
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 2,
           observedAt: "2026-09-01T01:18:33.353Z",
         },
         terminalWriterContextFailure: {
@@ -712,7 +547,7 @@ describe("terminal writer resumption", () => {
     const outcome = await submit("PAT-WRITER-CONTEXT-TRUNCATED", truncatedParams);
 
     expect(db.updateMany).not.toHaveBeenCalled();
-    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.workToolMock).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",
@@ -749,7 +584,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 2,
           observedAt: "2026-08-28T07:24:00.000Z",
         },
@@ -781,7 +616,7 @@ describe("terminal writer resumption", () => {
 
     const outcome = await submit("PAT-WRITER-UNRELATED-DECLINE", exhaustedParams);
 
-    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.workToolMock).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",

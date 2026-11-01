@@ -10,6 +10,65 @@ Runtime topology is capability-driven. See [Capability-driven runtime profiles](
 
 That sentence is the whole contract for non-technical contributors. Everything below is for operators who need to diagnose a degraded state.
 
+## Linux pilot and private startup state
+
+The [Linux guide](../install/linux.md) owns the recommended host, prerequisites
+and acceptance status. The first target is Ubuntu Server 24.04 LTS x86-64 with
+native Docker Engine and Compose v2. Keep source verification, released assets
+and a successful customer installation as separate evidence.
+
+Both customer installers prepare the actual Compose-mounted runtime state
+before starting PKI or the portal. They reuse the canonical runtime-transition
+key initializer, preserve an existing valid key and stop on malformed material
+or an active transition. Compose resolves the mount, including process and
+`.env` overrides; the lifecycle/XDG directory is not assumed to be that mount.
+Fresh federation directories are created privately by the host user, including
+`federation/pki`, so Docker does not create root-owned directories that prevent
+later authorized cleanup. Unsafe existing ownership stops preparation; it does
+not trigger recursive ownership changes or data deletion. Back up and review
+that specific directory under the installation's recovery procedure.
+
+The PKI bootstrap transfers its private password over stdin into the existing
+CA volume as the image's non-root user. It preserves matching material and
+refuses mismatch. First initialization captures the upstream password-bearing
+output; normal service startup uses the resulting configuration. POSIX
+certificate clients use the host user's UID/GID when writing private host files.
+Rerun the updated bootstrap under the operating procedure to converge an
+existing install; a source merge alone does not change its host state.
+
+## Qualified Mac inference opt-in
+
+The existing native Edge installer owns managed inference provisioning. It is an
+explicit opt-in for the physically qualified Apple M5 Max profile. Other Macs,
+Windows and Linux keep their existing engine and host-upkeep paths.
+
+For an approved existing-install convergence, the operator sets
+`DPF_MANAGED_INFERENCE_ENABLED=1` and an exact published
+`DPF_MANAGED_INFERENCE_SOURCE_SHA`. The existing native Edge install function
+receives the qualified package directory and report in
+`DPF_MANAGED_INFERENCE_RUNTIME_PACKAGE` and `DPF_MANAGED_INFERENCE_REPORT`, with
+their pinned `DPF_MANAGED_INFERENCE_RUNTIME_SHA256` manifest digest and
+`DPF_MANAGED_INFERENCE_REPORT_SHA256`. Node and Go, the enrolled host identity
+and the complete existing machine trust bundle must already be present. The
+source must be on the published main history; worktree helpers cannot substitute
+for a released installer procedure.
+
+The installer stages and verifies the immutable controller and host-bound model
+qualification before stopping the old Edge service. An exact retry verifies the
+Git closure and Node identity before reusing a bundle. A failed host upgrade
+retains its prior binary and environment for restoration. Ordinary later host
+upgrades retain the explicit opt-in.
+
+Provisioning starts no model engine, changes no provider selection and grants no
+action permission. Activation and rollback use the concrete control on the Local
+provider page, an approved change, the exact enabled host procedure and a current
+owned inference reservation and drain. The optional `managedInference` state
+record is validated by the current install-state schema and its canonical
+mirror; an uncertain transition fences local requests. A portal upgrade alone
+cannot establish native host installation or faster inference. See the
+[engine qualification record](mac-inference-engine.md) and
+[provider controls](../user-guide/ai-workforce/connecting-providers.md#managed-engine-on-a-qualified-mac).
+
 ## Capability-resolved runtime profiles
 
 Every install, restart, autostart, setup, and governed promotion resolves its
@@ -17,6 +76,31 @@ Compose profiles through `scripts/lib/resolve-capability-compose-profiles.mjs`.
 The persisted snapshot uses the canonical fields `enabledRuntimeCapabilities`,
 `capabilityCatalogHash`, and `capabilityStateVersion`; an unknown capability or
 a mismatched catalog/state hash fails closed before Compose changes the stack.
+
+The snapshot also records, in the optional `runtimeCapabilityDecisions` map,
+whether a person chose each operator-controlled capability: `decision`
+(`enabled`, `disabled` or `undecided`), `source` and `decidedAt`. Monitoring
+(`runtime:deep-observability`) is the first such capability. A state without a
+recorded decision is written as `undecided` / `upgrade-carried` the next time
+the installer or `dpf-start` resolves profiles, and its enabled capabilities
+are left exactly as they were, so the portal can offer the choice instead of
+silently changing the install (BI-83260BB3). A self-upgrade does not add the
+record: its install-state migration must stay byte-deterministic for the signed
+handoff. Until the record exists, Settings → Monitoring treats it as undecided.
+
+On a fresh install, and on a re-run where no choice is recorded yet, both
+installers ask one question before the platform first starts: turn monitoring
+(Prometheus + Grafana) on? The prompt states the memory and CPU monitoring
+uses, summed from `config/install-resource-budgets.json`, and defaults to no.
+`-Monitoring On|Off` (`install-dpf.ps1`) or `--monitoring on|off`
+(`install-dpf.sh`) answers it without a prompt, recorded with source
+`installer-flag`; an answered prompt is recorded as `installer-prompt`. A
+headless run without the flag does not ask: monitoring stays off and the
+decision is `undecided` / `headless-default`, so the portal offers the choice.
+The answer is written before the capability profiles resolve, so the first
+`compose up` already includes or omits monitoring. A recorded `enabled` or
+`disabled` decision is never asked again or overwritten by the installer; change
+it in Settings → Monitoring (BI-31F11C37).
 
 When upgrading a previous-release state that predates these fields, the adapter
 preserves the capabilities that were active in that release: core, build,
@@ -99,6 +183,17 @@ simple prompts measure the selected model, so another provider cannot substitute
 for it. The exact
 bundled Qwen 3.8 27B model carries a low-confidence provisional routing floor;
 smaller generic Qwen models do not inherit it.
+
+Local inference waits in the shared admission queue before checking host GPU and
+lease availability. Contention from another host process still defers dispatch.
+Deliberation jobs retain completed branch answers across capacity waits; after a
+bounded retry window, owned tasks request intervention rather than inventing a
+verdict. Empty or truncated answers are failed branch evidence, and a model's
+reasoning channel is never substituted for its answer.
+
+Build Studio's Automatic engine policy considers eligible alternative providers
+when a saved preference is unavailable. Explicit provider and engine pins retain
+their restrictions, and all alternatives must meet the phase capability floor.
 
 Decision Concierge records why it skips a case in the standing governance room.
 An empty action question, an unfinished panel or an unchanged completed case does
@@ -322,3 +417,73 @@ per site, so each estate stays separate.
 Start with the [edge node deployment topology guide](../edge-node/deployment-topology.md),
 which covers where a node can run and how it connects. For many nodes at once,
 see [fleet operations](../edge-node/fleet-operations.md).
+
+
+## Routine development client permissions
+
+Toolchain refresh validates the entire Codex TOML candidate before saving it,
+including dry-run. Quoted keys from permission setup retain the same meaning
+as bare keys. Invalid candidates leave the previous file intact; valid TOML
+updates use staged atomic replacement. Python 3.11+ (or `tomli`) is required
+for this validation. If parsing is unavailable, Codex configuration and native
+plugin mutation are refused and reported as failed; other clients can continue.
+Do not treat that result as a completed Codex update.
+
+
+The source bootstrap converges routine Codex, Claude and Grok permissions through
+one delivered policy, `packages/dpf-skill-pack/contracts/client-permission-baseline.json`,
+and the existing signed toolchain updater. It targets the explicitly named DPF
+source project; installed runtime assets remain administered through MCP.
+
+For an existing installation, the updater's `--permissions-only --project-root <source>`
+route changes only scoped permission configuration and native project trust.
+It does not refresh plugins, credentials or connectors. Both bootstrap adapters
+call that same writer. An ordinary updater run with a DPF source project also
+uses it; the updater retains its existing behavior for other projects.
+
+Missing settings receive workspace-write/automatic review for Codex, acceptEdits
+for Claude and automatic permission review for Grok. Existing explicit restrictive
+choices, deny/ask rules, managed requirements, hooks and model/provider selections
+remain effective. Grok sandboxing is reported separately: Windows has no supported
+kernel sandbox profile in this baseline, so an absent profile is explicitly off;
+other supported hosts default an absent profile to workspace. An explicit existing
+profile is retained. No client allowlist supplies platform authority.
+
+The scoped writer plans all files first, rejects malformed or linked targets,
+backs up changed existing files beside their originals and writes atomically.
+A dry-run writes no client configuration or trust decision; an explicitly requested
+JSON report is still produced. A second run is a no-op when inputs are unchanged.
+Backups may contain the original user's secrets; keep them local and do not attach
+them to issues or reports. Restore only the intended backup after checking for
+later operator edits.
+
+`--report-json <path>` extends the existing convergence report with a permission
+scope per client, installed CLI versions, configured posture, rule counts,
+planned paths/backups, native trust/managed observations and restart state. It
+never copies raw remembered rules or credentials. Configuration evidence is
+separate from `sessionVerified`, which remains false until the actual client
+session is exercised. An absent CLI or unresolved trust is reported as unrun.
+An existing managed Codex chat can retain host-imposed workspace roots and review
+policy; editing a saved file cannot widen it. A selected Codex config or permission
+profile keeps its posture instead of receiving conflicting defaults. Per-invocation
+CLI profile/approval/sandbox overrides remain the caller's responsibility and must
+be included when checking the actual session; configuration convergence cannot
+establish their effective value. Open future source sessions in the
+source project/governed worktree and verify their effective writable roots.
+
+Native checks use Codex's parser/`execpolicy check` and Grok `inspect --json`.
+Grok's documented `--trust` is used only for this named project when it has no
+prior explicit untrusted decision. No model turn, provider login or provider
+spend is part of configuration convergence. External-provider consent, new spend
+and actions beyond the current delegation retain their owner gates.
+
+Permission convergence needs Python 3.11+ or an already available `tomli` parser.
+On older Python without that parser, permission-only execution reports unrun
+before changing configuration; the existing bootstrap/updater still converges
+its skills and connectors and reports the permission scope as unverified. Agents
+should select an available supported Python runtime before claiming this baseline.
+The updater does not silently install an undeclared dependency.
+
+An existing explicit user full-access choice remains inherited for Codex; the
+writer neither creates a project full-access directive nor replaces that choice
+with a restricted sandbox paired with a non-escalating approval policy.

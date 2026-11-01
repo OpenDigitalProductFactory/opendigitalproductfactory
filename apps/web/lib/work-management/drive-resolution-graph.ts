@@ -70,11 +70,11 @@
  * throws DriveConstructNotImplementedError; this planner turns it into the
  * same fail-closed pause, so the drive never throws for a room.
  */
-import { constructsUsedBy } from "@/lib/gpp/shape-language/constructs-used-by";
-import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
-import { CONSTRUCT_EXECUTABLE } from "@/lib/gpp/shape-language/executable-constructs";
+import { constructsUsedBy } from "@dpf/validators/gpp/constructs-used-by";
+import { stageElementId } from "@dpf/validators/gpp/element-ids";
+import { CONSTRUCT_EXECUTABLE } from "@dpf/validators/gpp/executable-constructs";
 
-import type { DriveAction, DrivePlan, DriveResolutionInput } from "./drive-resolution";
+import type { DriveAction, DrivePlan, DriveResolutionInput, DriveTokenPlan } from "./drive-resolution";
 import {
   DriveConstructNotImplementedError,
   gateHolds,
@@ -89,8 +89,7 @@ import {
   type DriveGateVerdictKind,
   type DriveMarking,
   type DriveStepResult,
-  type DriveTokenPlan,
-} from "./drive-marking";
+} from "@dpf/validators/workroom/marking";
 import {
   cycleCompleted,
   emptyPlan,
@@ -101,13 +100,13 @@ import {
   workroomDriveBranchTaskId,
   workroomDriveTaskId,
 } from "./drive-plan-stage";
-import { raiseDueDeadlines } from "./drive-deadlines";
+import { raiseDueDeadlines } from "@dpf/validators/workroom-policy/drive-deadlines";
 import { hasSubShapeEffects, liveSubShapeChildren, subShapeEffects, subShapeTokenState, type SubShapeTokenState } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
 import { STAGE_DECISION_EVIDENCE_KINDS } from "./workroom-stage-decision";
-import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
+import { isCompletingWorkroomDriveReceiptAt } from "@dpf/validators/workroom/receipts";
 
 /** Aggregate precedence, highest first (design §4.3). */
 const ACTION_PRECEDENCE: readonly DriveAction[] = ["stop", "escalate", "pause", "dispatch_agent", "attention", "do_not_wake"];
@@ -383,7 +382,10 @@ function planGraphDrive(input: DriveResolutionInput & { definition: WorkShapeDef
     const token = stageToken(stepped.marking, stageKey);
     if (!stage || !token) continue;
     const iteration = iterationOf(stepped.marking, stageKey);
-    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration, runKey: stepped.marking.cycleKey });
+    const observed = input.stageRunsByTask?.[token.taskId ?? workroomDriveTaskId(input.roomId, definition.key)];
+    const approvalWait = observed?.lastStatus === "proposed" && observed.approvalOutcome !== "executed";
+    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration,
+      runKey: stepped.marking.cycleKey, ...(approvalWait ? { run: observed } : {}) });
     // A gate holding a completed stage (PR-3c-3) waits on a person, never on a re-dispatch:
     // a refuse with no route is `gate_refused`; no verdict, hold or escalate stays a governed decision.
     const gateHold = holds.get(stageKey);

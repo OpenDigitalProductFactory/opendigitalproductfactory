@@ -75,6 +75,28 @@ describe("approved coworker identity", () => {
   });
 });
 
+describe("new headless client eligibility", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    identityDb.agent.findMany.mockResolvedValue([]);
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false,
+      groups: [{ platformRole: { roleId: "HR-300" } }] });
+  });
+  it("offers only approved external roles without an invented client/resource delegation", async () => {
+    await eligibleOAuthCoworkers("human", null, null);
+    const query = identityDb.agent.findMany.mock.calls[0][0];
+    expect(query.where.OR).toEqual([{ agentId: { in: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] } }]);
+    expect(query.where).toMatchObject({ status: "active", archived: false });
+    expect(JSON.stringify(query)).not.toContain("delegation");
+  });
+  it("cannot borrow another client's delegation when the human lacks the approved build role", async () => {
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false,
+      groups: [{ platformRole: { roleId: "HR-600" } }] });
+    await eligibleOAuthCoworkers("human", null, null);
+    expect(identityDb.agent.findMany.mock.calls[0][0].where.OR).toEqual([]);
+  });
+});
+
 describe("current OAuth execution authority", () => {
   const token = { kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
     userId: "human", agentId: "AGT-EXT-CODEX", authorityBindingId: "binding", oauthClientId: "client",

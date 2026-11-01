@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { bodyCriteriaVersion } from "./body-baseline-version";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const mocks = vi.hoisted(() => ({
   itemFindUnique: vi.fn(),
@@ -9,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   transaction: vi.fn(),
   loadCapsuleLivenessInventory: vi.fn(),
+  resolveAgentWorkroomAccess: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -23,6 +26,9 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/lib/work-capsules/liveness-inventory", () => ({
   loadCapsuleLivenessInventory: mocks.loadCapsuleLivenessInventory,
+}));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveAgentWorkroomAccess: mocks.resolveAgentWorkroomAccess,
 }));
 
 import {
@@ -156,6 +162,7 @@ function transactionDb(evidence = [{
     },
     workroom: {
       findUnique: vi.fn().mockResolvedValue({
+        id: "room-row-1",
         capsuleId: "WC-PLATFORM",
         backlogItemId: "BI-PLATFORM",
         repositoryFullName,
@@ -230,6 +237,7 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
       capsulesAll: [{ capsuleId: "WC-PLATFORM", isLive: true }],
       livenessSummary: {},
     });
+    mocks.resolveAgentWorkroomAccess.mockResolvedValue({ decision: { level: "content" } });
     mocks.transaction.mockImplementation(async (work) => work(transactionDb()));
   });
 
@@ -246,6 +254,91 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
         }),
       }),
     });
+  });
+
+  function bodyWriterFixture(authorPrincipalId = "principal-author") {
+    const body = "## Acceptance\n- Verify independent delivery.";
+    const version = bodyCriteriaVersion(body)!;
+    const artifactRef = { kind: "document-version" as const, repositoryFullName,
+      versionId: "version-body", valueDigest: "sha256:retained-body" };
+    const binding = { ...objectiveMappingBinding(), artifactRef };
+    const packet = { targetAgent: "agent-1", objective: "Map every current objective to bounded evidence.",
+      questionPacketSummary: "Objective mapping for BI-PLATFORM",
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"], binding };
+    const run = persistedTaskRun({ a2aMetadata: { trigger: "external-mcp", requestedAgentId: "agent-1",
+      requestObjective: packet.objective, idempotencyKey: createObjectiveMappingRequestKey(packet), initiativeReviewBinding: binding } });
+    const base = baselineActivity();
+    const baseline = { ...base, payload: { ...base.payload, origin: "item-body", artifactRef,
+      authoritySnapshot: { organizationId: "platform" }, criteriaDigest: version.criteriaDigest,
+      sourceIdentity: { repositoryFullName, headSha }, bodyAuthorPrincipalId: "author-row",
+      sourceAuthorPrincipalId: "author-row", authorAgentId: "author-agent",
+      objectiveStatements: [], acceptanceStatements: version.acceptanceStatements } };
+    const tx = { ...transactionDb(undefined, { taskRun: run, baseline: baseline as never }),
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({ itemId: "BI-PLATFORM", organizationId: null, body }) },
+      principal: { findMany: vi.fn().mockResolvedValue([{ principalId: authorPrincipalId }]) } };
+    const args = { ...proposalArgs(), mappings: [{ objectiveId: "AC-BODY-001", evidenceRefs: ["E-1"] }] };
+    mocks.itemFindUnique.mockResolvedValue({ id: "row-1", itemId: "BI-PLATFORM", organizationId: null, body });
+    mocks.transaction.mockImplementation(async (work) => work(tx));
+    return { tx, args, baseline };
+  }
+
+  it("writes an independently bound retained-body mapping and reuses an exact retry", async () => {
+    const { tx, args, baseline } = bodyWriterFixture();
+    const first = await recordInitiativeObjectiveMappingProposal(args);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error);
+    tx.backlogItemActivity.findMany.mockImplementation(async (query) => query.where?.kind === "initiative_objective_mapping"
+      ? [{ id: first.proposalId, backlogItemId: "row-1", kind: "initiative_objective_mapping",
+        recordedAt: new Date("2026-09-04T12:02:00.000Z"), payload: first.proposal }]
+      : query.where?.kind === "evidence"
+        ? [{ id: "E-1", backlogItemId: "row-1", kind: "evidence", recordedAt: new Date("2026-09-04T12:01:00.000Z"), payload: { evidenceKind: "test_pass" } }]
+        : [baseline as never]);
+    const retry = await recordInitiativeObjectiveMappingProposal(args);
+    expect(retry).toMatchObject({ ok: true, proposalId: first.proposalId });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])("requires exact merged source proof for archived body author (valid=%s)", async valid => {
+    const { tx, args } = bodyWriterFixture();
+    const room = { id: "room-row-1", capsuleId: "WC-PLATFORM", backlogItemId: "BI-PLATFORM",
+      repositoryFullName, headBranch: "fix/objective-mapping", headSha, baseSha: "b".repeat(40),
+      createdByPrincipalId: "author-row", status: "archived", pullRequestNumber: 6265,
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
+    tx.workroom.findUnique.mockResolvedValue(room);
+    const db = { ...tx, workroom: { ...tx.workroom,
+      findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },
+      contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: createPullRequestObservation({
+        repositoryFullName, number: 6265, url: `https://github.com/${repositoryFullName}/pull/6265`, title: "repair",
+        headBranch: room.headBranch, headSha: valid ? headSha : "f".repeat(40), state: "merged", isDraft: false,
+        mergeStateStatus: null, mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-16T05:00:00Z",
+        providerUpdatedAt: "2026-10-16T05:00:00Z", observedAt: "2026-10-16T05:01:00Z" }) }]) } };
+    mocks.transaction.mockImplementation(async work => work(db));
+    mocks.loadCapsuleLivenessInventory.mockResolvedValue({ capsulesAll: [{ isLive: false }] });
+    const result = await recordInitiativeObjectiveMappingProposal(args);
+    expect(result.ok).toBe(valid);
+    if (!valid) expect(mocks.create).not.toHaveBeenCalled();
+    expect(room.status).toBe("archived");
+  });
+
+  it("rejects the retained criteria or source author at the receipt writer", async () => {
+    const { args } = bodyWriterFixture("principal-1");
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked paired Workroom admission after criteria were read", async () => {
+    const { args } = bodyWriterFixture();
+    mocks.resolveAgentWorkroomAccess.mockResolvedValue({ decision: { level: "header" } });
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.resolveAgentWorkroomAccess).toHaveBeenCalledWith({ userId: "user-1", agentId: "agent-1", workroomId: "room-row-1", requested: "content" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects changed body criteria again under the receipt transaction lock", async () => {
+    const { tx, args } = bodyWriterFixture();
+    tx.backlogItem.findUnique.mockResolvedValue({ itemId: "BI-PLATFORM", organizationId: null, body: "## Acceptance\n- Changed requirement." });
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "OBJECTIVE_BASELINE_CONFLICT" });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("rejects a direct call without a bound executing TaskRun", async () => {

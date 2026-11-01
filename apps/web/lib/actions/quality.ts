@@ -1,5 +1,6 @@
 "use server";
 
+import { composeIntakeBody, issueReportOutcome } from "@/lib/backlog/intake-outcome";
 import * as crypto from "crypto";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -298,7 +299,8 @@ export async function sendIssueReportToBuildStudioAsFix(
       data: {
         itemId: newItemId,
         title: report.title,
-        body: bodyParts.join("\n\n"),
+        // BI-458CCA8D: the reported problem stops happening.
+        body: composeIntakeBody({ outcome: issueReportOutcome(report), body: bodyParts.join("\n\n") }),
         status: "open",
         type: report.digitalProductId ? "product" : "portfolio",
         // Operator clicked the admin "Send to Build Studio as a fix" action —

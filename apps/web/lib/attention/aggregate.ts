@@ -10,13 +10,16 @@ import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadWorkroomStallItems } from "./sources/workroom-stall";
+import { loadWorkroomOverseerItems } from "./sources/workroom-overseer";
 import { loadWorkroomRebindItems } from "./sources/workroom-rebind";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
+import { loadScheduledJobAttentionItems, type ScheduledJobAttentionDb } from "./sources/scheduled-job";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
 import { loadOrphanedApprovalItems } from "./sources/orphaned-approval";
 import { loadPlatformHealthItems } from "./sources/platform-health";
+import { loadAgentToolchainItems } from "./sources/agent-toolchain";
 import {
   loadCoworkerMemoryItems,
   type CoworkerMemoryAttentionDb,
@@ -34,6 +37,7 @@ import {
   loadOutboundItems,
   loadBillItems,
   loadExpenseItems,
+  loadLeaveApprovalItems,
   loadRegulatoryItems,
   loadResearchItems,
 } from "./sources/business-approvals";
@@ -93,6 +97,8 @@ export function filterAttentionForAudience(
 /** Options every caller resolves from the authenticated session. Both ids are
  *  the READING user: attention is projected for one person at a time. */
 export type AttentionLoadOptions = {
+  /** Inbox supplies its bounded envelope page separately, with total and cursor. */
+  includeCoworkerEnvelopes?: boolean;
   aiReadinessUserId?: string;
   /** The reader's user id, used to scope CoworkerActionEnvelope proposals to
    *  their delegating user. Omitted → the envelope source is not registered at
@@ -116,17 +122,23 @@ export function attentionSourceLoaders(
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
     { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
+    // What the drive's per-room overseer duty could not resolve itself (BI-8E1486FA).
+    { source: "workroom-stall", load: () => loadWorkroomOverseerItems(db) },
     { source: "workroom-rebind", load: () => loadWorkroomRebindItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
+    // Cron-backed ScheduledJob failures and an uncommissioned issue intake (BI-FD40397B).
+    { source: "scheduled-task", load: () => loadScheduledJobAttentionItems(db as unknown as ScheduledJobAttentionDb) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
     { source: "skill-proposal", load: () => loadSkillProposalItems(db) },
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
     { source: "approval-bill", load: () => loadBillItems(db) },
     { source: "approval-expense", load: () => loadExpenseItems(db) },
+    { source: "approval-leave", load: () => loadLeaveApprovalItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
+    { source: "agent-toolchain", load: () => loadAgentToolchainItems(db) },
     { source: "business-journey", load: () => loadBusinessJourneyItems(db) },
     { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
     {
@@ -147,7 +159,7 @@ export function attentionSourceLoaders(
     {
       source: "provider-credential",
       load: async () => [
-        ...(await loadProviderCredentialItems()),
+        ...(await loadProviderCredentialItems(db)),
         ...(await loadProviderSuitabilityDriftItems(db)),
       ],
     },
@@ -161,7 +173,7 @@ export function attentionSourceLoaders(
         ),
     });
   }
-  if (opts.delegatingUserId) {
+  if (opts.delegatingUserId && opts.includeCoworkerEnvelopes !== false) {
     loaders.push({
       source: "coworker-envelope",
       load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),

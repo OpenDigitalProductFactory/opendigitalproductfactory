@@ -1,3 +1,9 @@
+export type RuntimeCoordinationActor = {
+  userId?: string | null;
+  agentId?: string | null;
+  principalId?: string | null;
+};
+
 export const RUNTIME_TARGET_KINDS = [
   "root-portal",
   "dev-portal",

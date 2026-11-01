@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 export const NONPROD_WAIT_SCHEMA_VERSION = 1 as const;
 
@@ -49,6 +50,7 @@ type DurableWaitDb = {
     findUnique(args: unknown): Promise<TaskRunRow | null>;
     findMany(args: unknown): Promise<TaskRunRow[]>;
     update(args: unknown): Promise<unknown>;
+    updateMany?(args: unknown): Promise<{ count: number }>;
   };
   nonProductionEnvironmentLease: {
     updateMany(args: unknown): Promise<unknown>;
@@ -58,6 +60,7 @@ type DurableWaitDb = {
 };
 
 type WaitLease = {
+  status?: string;
   id: string;
   leaseId: string;
   claimKey: string | null;
@@ -152,11 +155,71 @@ function waitPayload(existing: unknown, wait: NonprodLeaseWaitProjection) {
       : wait.state === "capacity-available"
         ? `Capacity may be available for ${wait.environmentKey}; re-read this task and make one fresh claim.`
         : wait.state === "admitted"
-          ? `Lease ${wait.leaseId} was admitted after durable waiting.`
+          ? `Lease ${wait.leaseId} was admitted.`
           : `Lease ${wait.leaseId} reached a terminal state.`,
     nonprodLeaseWait: wait,
   };
 }
+
+function leaseWaitProjection(input: {
+  lease: WaitLease; waitDeadlineAt: Date; now: Date;
+  state: "waiting" | "admitted"; queuePosition: number | null;
+}): NonprodLeaseWaitProjection {
+  return {
+    schemaVersion: NONPROD_WAIT_SCHEMA_VERSION, kind: "nonprod-lease-wait",
+    state: input.state, leaseId: input.lease.leaseId, claimKey: input.lease.claimKey,
+    environmentKey: input.lease.environmentKey, ownerProvider: input.lease.ownerProvider,
+    ownerSessionId: input.lease.ownerSessionId, worktreePath: input.lease.worktreePath,
+    branchName: input.lease.branchName, queuePosition: input.queuePosition,
+    waitDeadlineAt: input.waitDeadlineAt.toISOString(), lastTransitionAt: input.now.toISOString(),
+    eventId: null, eventConsumed: input.state === "admitted",
+  };
+}
+
+/** Only the fresh admission transaction may establish immediate or queued owner provenance.
+ * Never backfill an old active lease or overwrite a caller's existing Task. */
+export async function checkpointFreshNonprodLeaseAdmission(input: {
+  db: Pick<DurableWaitDb, "nonProductionEnvironmentLease"> & {
+    taskRun: Pick<NonNullable<DurableWaitDb["taskRun"]>, "upsert">;
+  };
+  userId: string; lease: WaitLease; waitDeadlineAt: Date; now: Date;
+  previewOwner?: { schemaVersion: 1; userId: string; agentId: string; binding: Record<string, unknown> };
+  queuePosition?: number;
+}): Promise<string> {
+  if (!input.userId.trim() || input.lease.taskRunId) throw new Error("nonprod_immediate_admission_identity_invalid");
+  const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
+  const queued = input.lease.status === "queued" && !!input.previewOwner;
+  const wait = leaseWaitProjection({ ...input, state: queued ? "waiting" : "admitted",
+    queuePosition: queued ? input.queuePosition ?? null : null });
+  const task = record(await input.db.taskRun.upsert({
+    where: { taskRunId },
+    create: {
+      taskRunId, userId: input.userId, title: `Admission to ${input.lease.environmentKey}`,
+      objective: `Retain authenticated ownership of lease ${input.lease.leaseId}.`,
+      source: "proactive", status: queued ? "submitted" : "completed", completedAt: queued ? null : input.now,
+      initiatingAgentId: input.previewOwner?.agentId ?? input.lease.ownerProvider,
+      repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
+      a2aMetadata: { kind: "nonprod-lease-wait", leaseId: input.lease.leaseId, claimKey: input.lease.claimKey },
+      progressPayload: { ...waitPayload(null, wait),
+        ...(input.previewOwner ? { nonprodPreviewOwner: input.previewOwner } : {}) }, lastHeartbeatAt: null,
+    },
+    update: {},
+  }));
+  const storedWait = parseNonprodLeaseWait(task?.["progressPayload"]);
+  if (!task || task["taskRunId"] !== taskRunId || task["userId"] !== input.userId
+    || !storedWait || Object.entries(wait).some(([key, value]) => storedWait[key as keyof NonprodLeaseWaitProjection] !== value)
+    || (input.previewOwner && (task["initiatingAgentId"] !== input.previewOwner.agentId
+      || !isDeepStrictEqual(record(task["progressPayload"])?.["nonprodPreviewOwner"], input.previewOwner)))) {
+    throw new Error("nonprod_immediate_admission_provenance_conflict");
+  }
+  const linked = record(await input.db.nonProductionEnvironmentLease.updateMany({
+    where: { id: input.lease.id, status: queued ? "queued" : "active", taskRunId: null }, data: { taskRunId },
+  }));
+  if (linked?.["count"] !== 1) throw new Error("nonprod_immediate_admission_link_conflict");
+  return taskRunId;
+}
+
+export const checkpointImmediateNonprodLeaseAdmission = checkpointFreshNonprodLeaseAdmission;
 
 export async function checkpointNonprodLeaseWait(input: {
   db: DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> };
@@ -168,23 +231,16 @@ export async function checkpointNonprodLeaseWait(input: {
 }): Promise<{ taskRunId: string; wait: NonprodLeaseWaitProjection }> {
   const now = input.now ?? new Date();
   const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
-  const wait: NonprodLeaseWaitProjection = {
-    schemaVersion: NONPROD_WAIT_SCHEMA_VERSION,
-    kind: "nonprod-lease-wait",
-    state: "waiting",
-    leaseId: input.lease.leaseId,
-    claimKey: input.lease.claimKey,
-    environmentKey: input.lease.environmentKey,
-    ownerProvider: input.lease.ownerProvider,
-    ownerSessionId: input.lease.ownerSessionId,
-    worktreePath: input.lease.worktreePath,
-    branchName: input.lease.branchName,
-    queuePosition: input.queuePosition,
-    waitDeadlineAt: input.waitDeadlineAt.toISOString(),
-    lastTransitionAt: now.toISOString(),
-    eventId: null,
-    eventConsumed: false,
-  };
+  const wait = leaseWaitProjection({ ...input, now, state: "waiting" });
+  if (input.lease.environmentKey === "active-candidate" && input.lease.taskRunId
+    && input.lease.taskRunId !== taskRunId) {
+    const linked = await input.db.taskRun.findUnique({ where: { taskRunId: input.lease.taskRunId } });
+    if (record(linked?.progressPayload)?.["nonprodPreviewOwner"] !== undefined) {
+      throw new Error("nonprod_preview_ownership_conflict");
+    }
+  }
+  const existing = await input.db.taskRun.findUnique({ where: { taskRunId } });
+  const progressPayload = waitPayload(existing?.progressPayload, wait);
   await input.db.taskRun.upsert({
     where: { taskRunId },
     create: {
@@ -201,7 +257,7 @@ export async function checkpointNonprodLeaseWait(input: {
         leaseId: input.lease.leaseId,
         claimKey: input.lease.claimKey,
       },
-      progressPayload: waitPayload(null, wait),
+      progressPayload,
       lastHeartbeatAt: null,
     },
     update: {
@@ -209,7 +265,7 @@ export async function checkpointNonprodLeaseWait(input: {
       completedAt: null,
       lastHeartbeatAt: null,
       repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
-      progressPayload: waitPayload(null, wait),
+      progressPayload,
     },
   });
   await input.db.nonProductionEnvironmentLease.updateMany({
@@ -234,7 +290,7 @@ export async function applyNonprodCapacityEvent(input: {
   const task = await input.db.taskRun.findUnique({ where: { taskRunId: input.event.taskRunId } });
   if (!task) return { applied: false, reason: "missing" };
   const wait = parseNonprodLeaseWait(task.progressPayload);
-  if (!wait || !["waiting", "capacity-available"].includes(wait.state)) {
+  if (task.status !== "submitted" || !wait || !["waiting", "capacity-available"].includes(wait.state)) {
     return { applied: false, reason: "not-waiting" };
   }
   if (!eventMatches(wait, input.event)) return { applied: false, reason: "binding-mismatch" };
@@ -246,11 +302,15 @@ export async function applyNonprodCapacityEvent(input: {
     eventId: input.event.eventId,
     eventConsumed: false,
   };
-  await input.db.taskRun.update({
-    where: { taskRunId: input.event.taskRunId },
+  // Capacity delivery races expiry and admission outside the environment
+  // transaction. Never revive a wait from the snapshot read above.
+  if (!input.db.taskRun.updateMany) return { applied: false, reason: "not-waiting" };
+  const result = await input.db.taskRun.updateMany({
+    where: { taskRunId: input.event.taskRunId, status: "submitted",
+      progressPayload: { equals: task.progressPayload } },
     data: { status: "submitted", progressPayload: waitPayload(task.progressPayload, next) },
   });
-  return { applied: true };
+  return result.count === 1 ? { applied: true } : { applied: false, reason: "not-waiting" };
 }
 
 export async function publishNonprodCapacityForHead(input: {
@@ -319,16 +379,40 @@ export async function publishNonprodCapacityForHead(input: {
   return { notified, headLeaseId: head.leaseId };
 }
 
-export async function settleNonprodLeaseWait(input: {
+type SettleNonprodLeaseWaitInput = {
   db: DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> };
   taskRunId: string;
   leaseId: string;
   state: "admitted" | "terminal";
+  /** Automatic expiry validates all persisted ownership fields and uses CAS. */
+  expiredLease?: WaitLease;
   now?: Date;
-}): Promise<{ settled: boolean }> {
+};
+
+export async function settleNonprodLeaseWait(input: SettleNonprodLeaseWaitInput): Promise<{ settled: boolean }> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await settleNonprodLeaseWaitOnce(input);
+    if (!result.retryable) return { settled: result.settled };
+  }
+  // Automatic expiry runs inside the lease transaction. Persistent contention
+  // must roll it back, leaving the active/queued row visible for a later pass.
+  throw new Error("nonprod_expiry_wait_settlement_contended");
+}
+
+async function settleNonprodLeaseWaitOnce(input: SettleNonprodLeaseWaitInput): Promise<{ settled: boolean; retryable?: boolean }> {
   const task = await input.db.taskRun.findUnique({ where: { taskRunId: input.taskRunId } });
   const wait = parseNonprodLeaseWait(task?.progressPayload);
   if (!task || !wait || wait.leaseId !== input.leaseId) return { settled: false };
+  if (input.expiredLease) {
+    const lease = input.expiredLease;
+    if (task.taskRunId !== lease.taskRunId
+      || wait.claimKey !== lease.claimKey
+      || wait.environmentKey !== lease.environmentKey
+      || wait.ownerProvider !== lease.ownerProvider
+      || wait.ownerSessionId !== lease.ownerSessionId
+      || wait.worktreePath !== lease.worktreePath
+      || wait.branchName !== lease.branchName) return { settled: false };
+  }
   // A release retry closes no new wait and must not rewrite admission history
   // or its clock. Completion here concerns the wait, never command execution.
   if (task.status === "completed" && wait.eventConsumed
@@ -341,15 +425,40 @@ export async function settleNonprodLeaseWait(input: {
     lastTransitionAt: now.toISOString(),
     eventConsumed: true,
   };
-  await input.db.taskRun.update({
-    where: { taskRunId: input.taskRunId },
-    data: {
+  const data = {
       status: "completed",
       completedAt: now,
       progressPayload: waitPayload(task.progressPayload, next),
-    },
-  });
+  };
+  if (input.expiredLease) {
+    if (task.status !== "submitted" || !input.db.taskRun.updateMany) return { settled: false };
+    const result = await input.db.taskRun.updateMany({
+      where: { taskRunId: input.taskRunId, status: task.status,
+        progressPayload: { equals: task.progressPayload } },
+      data,
+    });
+    return { settled: result.count === 1, retryable: result.count === 0 };
+  }
+  await input.db.taskRun.update({ where: { taskRunId: input.taskRunId }, data });
   return { settled: true };
+}
+
+/** Called only inside the transaction that expires these exact lease rows. */
+export async function settleExpiredNonprodLeaseWaits(input: {
+  db: DurableWaitDb;
+  leaseIds: string[];
+  now: Date;
+}): Promise<void> {
+  if (!input.db.taskRun || !input.db.nonProductionEnvironmentLease.findMany) return;
+  const expired = await input.db.nonProductionEnvironmentLease.findMany({
+    where: { id: { in: input.leaseIds }, status: "expired", releasedAt: input.now },
+  });
+  for (const lease of expired) {
+    if (!lease.taskRunId) continue;
+    await settleNonprodLeaseWait({ db: input.db as DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> },
+      taskRunId: lease.taskRunId, leaseId: lease.leaseId, state: "terminal",
+      expiredLease: lease, now: input.now });
+  }
 }
 
 export async function afterNonprodLeaseRelease(input: {

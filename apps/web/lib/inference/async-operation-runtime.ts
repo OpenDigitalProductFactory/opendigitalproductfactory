@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import { callProvider } from "./ai-inference";
 import {
@@ -167,12 +167,22 @@ function authorityDatabase(): AsyncOperationAuthorityDatabase {
 async function admitPrismaDurableAsyncOperationDirect(
   input: AdmitDurableAsyncOperationInput & DurableAsyncOperationAuthority,
 ): Promise<{ operationId: string; replayed: boolean }> {
-  const store = createStore();
+  const store = new PrismaAsyncOperationStore(prisma as unknown as AsyncOperationDatabase,
+    input.request.kind === "workroom" ? { beforeAdmission: async (tx, admission) => {
+      const currentTx = tx as unknown as Prisma.TransactionClient;
+      await currentTx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${admission.binding.kind === "workroom" ? admission.binding.workroomId : ""} FOR UPDATE`;
+      const binding = await resolveServerOwnedAsyncOperationBinding({ request: input.request, actor: input.actor,
+        db: tx as unknown as AsyncOperationAuthorityDatabase, requested: "action" });
+      if (binding.kind !== "workroom" || admission.binding.kind !== "workroom" || binding.workroomId !== admission.binding.workroomId) {
+        throw new Error("ASYNC_OPERATION_AUTHORITY_CHANGED");
+      }
+    } } : undefined);
   return admitDurableAsyncOperation(input, {
     resolveBinding: () => resolveServerOwnedAsyncOperationBinding({
       request: input.request,
       actor: input.actor,
       db: authorityDatabase(),
+      requested: "action",
     }),
     store,
     enqueue: input.deferInitialWake

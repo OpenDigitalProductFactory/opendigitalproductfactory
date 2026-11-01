@@ -168,8 +168,14 @@ dpf_state_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi
 }
 
+# fsync this file only. A bare sync flushes every filesystem and wedges a
+# FUSE-mounted Docker Desktop worktree. Node is already required.
 dpf_state_flush_file() {
-  if command -v python3 >/dev/null 2>&1; then python3 -c 'import os,sys; f=open(sys.argv[1],"r+b"); os.fsync(f.fileno()); f.close()' "$1"; else sync; fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import os,sys; f=open(sys.argv[1],"r+b"); os.fsync(f.fileno()); f.close()' "$1"
+  else
+    node -e 'const fs=require("node:fs");const fd=fs.openSync(process.argv[1],"r+");try{fs.fsyncSync(fd)}finally{fs.closeSync(fd)}' -- "$1"
+  fi
 }
 
 dpf_state_commit_candidate() {
@@ -438,6 +444,30 @@ dpf_resolve_capability_compose_profiles() {
   [ "${DPF_DRY_RUN:-0}" = "1" ] && write_arg=""
   node "$root/scripts/lib/resolve-capability-compose-profiles.mjs" \
     --state "$(dpf_state_path)" --host "$host" --migrate ${write_arg:+$write_arg} "$@"
+}
+
+# Installer monitoring question (BI-31F11C37, design 2026-10-13 §4-5). The Node
+# helper owns the cost arithmetic and the decision record; shell only transports
+# its results. dpf_monitoring_choice_apply must run BEFORE the capability
+# profiles resolve so the first compose up honours the choice.
+# Usage: dpf_monitoring_cost_text <root>   -> "about 1.6 GB memory and 1.75 CPU"
+dpf_monitoring_cost_text() {
+  local root="${1:-${REPO_ROOT:-$(pwd)}}"
+  node "$root/scripts/installer/monitoring-choice.mjs" cost --text
+}
+
+# Usage: dpf_monitoring_prompt_needed <root>   (exit 0 = ask, 1 = already chosen)
+dpf_monitoring_prompt_needed() {
+  local root="${1:-${REPO_ROOT:-$(pwd)}}" answer
+  [ -f "$(dpf_state_path)" ] || return 0
+  answer="$(node "$root/scripts/installer/monitoring-choice.mjs" needs-prompt --state "$(dpf_state_path)")" || return 2
+  [ "$answer" = "true" ]
+}
+
+# Usage: dpf_monitoring_choice_apply <root> <on|off|none> <installer-prompt|installer-flag|headless-default>
+dpf_monitoring_choice_apply() {
+  local root="${1:-${REPO_ROOT:-$(pwd)}}" choice="$2" source="$3"
+  node "$root/scripts/installer/monitoring-choice.mjs" apply --state "$(dpf_state_path)" --choice "$choice" --source "$source" >/dev/null
 }
 
 # Resolve whether the bundled local Edge Node overlay should be active for

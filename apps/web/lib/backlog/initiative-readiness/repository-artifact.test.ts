@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import { readRepositoryProviderBlob, resolveRepositoryArtifact } from "./repository-artifact";
+import { commitRangeDigest } from "./repo-commit-range";
 
 const bytes = Buffer.from("canonical plan bytes\n", "utf8");
 const locator = {
@@ -128,6 +129,34 @@ describe("resolveRepositoryArtifact", () => {
       status: { notIn: ["abandoned", "cancelled"] },
     }) }));
     if (["missing", "branch", "head", "repository", "duplicate"].includes(drift)) expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("reads a merged repair's squash commit through its retired delivery room only with the server's merged-repair proof (BI-CE661173)", async () => {
+    const headSha = "c".repeat(40);
+    const workroomRef = { kind: "workroom-head" as const, workroomId: "WC-TEST0001",
+      repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha };
+    const store = db({ capsules: [capsule({ headSha })] });
+    const fetchImpl = providerFetch();
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef, mergedRepairProof: { workroomId: "WC-TEST0001", commitSha: locator.commitSha },
+      db: store as never, fetchImpl: fetchImpl as typeof fetch });
+    expect(result).toMatchObject({ ok: true, artifact: { bytes, authorPrincipalId: "principal-author" } });
+    // The retired anchor room is admitted by capsule id; live capsules keep their filter.
+    expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      OR: [{ archivedAt: null, status: { notIn: ["abandoned", "cancelled"] } },
+        { capsuleId: "WC-TEST0001", status: { notIn: ["abandoned", "cancelled", "superseded"] } }],
+    }) }));
+    // The trunk commit is the delivered source: the branch head is not asked to carry the blob.
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${locator.commitSha}`), expect.anything());
+
+    // A proof for another room or another commit is ignored: the live-capsule rules apply.
+    for (const proof of [{ workroomId: "WC-OTHER", commitSha: locator.commitSha }, { workroomId: "WC-TEST0001", commitSha: "e".repeat(40) }]) {
+      const other = db({ capsules: [capsule({ headSha })] });
+      await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" }, workroomRef,
+        mergedRepairProof: proof, db: other as never, fetchImpl: providerFetch() as typeof fetch });
+      expect(other.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+        archivedAt: null, status: { notIn: ["abandoned", "cancelled"] } }) }));
+    }
   });
   it("resolves the unchanged historical plan through its exact current server-bound workroom", async () => {
     const headSha = "45eb029a53ffd593f08be48eb4a061488aaa735f";
@@ -699,5 +728,62 @@ describe("resolveRepositoryArtifact", () => {
       db: db() as never,
       fetchImpl: vi.fn(async () => { throw new Error("network unavailable"); }) as typeof fetch,
     })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+  });
+});
+
+// BI-46E344FE: a post-implementation review of the whole merged change.
+describe("resolveRepositoryArtifact for a merged commit range", () => {
+  const first = { baseSha: "1".repeat(40), headSha: "2".repeat(40) };
+  const second = { baseSha: "3".repeat(40), headSha: "4".repeat(40) };
+  const files = {
+    [first.headSha]: [{ filename: "apps/web/lib/a.ts", status: "modified", sha: "5".repeat(40), patch: "@@ -1 +1 @@" },
+      { filename: "apps/web/lib/b.ts", status: "added", sha: "6".repeat(40) }],
+    [second.headSha]: [{ filename: "apps/web/lib/a.ts", status: "modified", sha: "7".repeat(40) }],
+  } as Record<string, unknown[]>;
+  const rangeDigest = commitRangeDigest([
+    { range: first, files: [{ path: "apps/web/lib/a.ts", blobId: "5".repeat(40) }, { path: "apps/web/lib/b.ts", blobId: "6".repeat(40) }] },
+    { range: second, files: [{ path: "apps/web/lib/a.ts", blobId: "7".repeat(40) }] },
+  ]);
+  const rangeLocator = { kind: "repo-commit-range" as const, repositoryFullName: locator.repositoryFullName,
+    ranges: [first, second], digest: rangeDigest };
+  const anchored = { kind: "workroom-head" as const, workroomId: "WC-TEST0001",
+    repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha: second.headSha };
+  const proof = { workroomId: "WC-TEST0001", commitSha: second.headSha };
+  const rangeFetch = (signOff = "Signed-off-by: Author <author@example.com>") => vi.fn(async (url: string | URL | Request) => {
+    const text = String(url);
+    const compare = text.match(/\/compare\/([a-f0-9]{40})\.\.\.([a-f0-9]{40})$/);
+    if (compare) return new Response(JSON.stringify({ files: files[compare[2]!] ?? [] }), { status: 200 });
+    if (text.includes("/commits/")) return new Response(JSON.stringify({ commit: { message: `fix: repair\n\n${signOff}` } }), { status: 200 });
+    return new Response("{}", { status: 404 });
+  });
+
+  it("verifies every range at the provider and binds the change digest, through a headless retired room", async () => {
+    const store = db({ capsules: [capsule({ headSha: null })] });
+    const fetchImpl = rangeFetch();
+    const result = await resolveRepositoryArtifact({ locator: rangeLocator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: anchored, mergedRepairProof: proof, db: store as never, fetchImpl: fetchImpl as typeof fetch });
+    expect(result).toMatchObject({ ok: true, artifact: { digest: rangeDigest, authorPrincipalId: "principal-author" } });
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/commits/${first.headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/commits/${second.headSha}`), expect.anything());
+  });
+
+  it("refuses a range whose provider change differs from the bound digest", async () => {
+    const result = await resolveRepositoryArtifact({ locator: { ...rangeLocator, digest: `sha256:${"0".repeat(64)}` },
+      subject: { kind: "backlog-item", id: "BI-TEST" }, workroomRef: anchored, mergedRepairProof: proof,
+      db: db({ capsules: [capsule({ headSha: null })] }) as never, fetchImpl: rangeFetch() as typeof fetch });
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+  });
+
+  it("refuses a headless room without the server's merged-repair proof", async () => {
+    const result = await resolveRepositoryArtifact({ locator: rangeLocator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: anchored, db: db({ capsules: [capsule({ headSha: null })] }) as never, fetchImpl: rangeFetch() as typeof fetch });
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+  });
+
+  it("refuses a range commit signed off by someone other than the room's owner", async () => {
+    const result = await resolveRepositoryArtifact({ locator: rangeLocator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: anchored, mergedRepairProof: proof, db: db({ capsules: [capsule({ headSha: null })], emailPrincipalIds: ["principal-other"] }) as never,
+      fetchImpl: rangeFetch() as typeof fetch });
+    expect(result).toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
   });
 });

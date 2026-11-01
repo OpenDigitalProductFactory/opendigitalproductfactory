@@ -27,11 +27,11 @@ import { KNOWN_STAGE_TOOL_GAPS, stageToolGapKey } from "@/lib/work-management/st
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import type { GppDiagnostic } from "./diagnostics";
-import { runDesignRules } from "./drc";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import type { GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources, liveDirectExecuteSites } from "./resolve-sources";
 
 const PROOF_SCOPE = "outbound-customer-communication";
@@ -62,7 +62,8 @@ describe("the proof shape passes the DRC with a test-only ratified gate", () => 
     const findings = runDesignRules(document, await resolveShapeDocument(document, sources), { ratification: testTable, directSites });
     expect(actionable(findings)).toEqual([]);
     // The standing reports are still there: nothing is reported as passed that was not evaluated.
-    expect(findings.filter((finding) => finding.severity === "not-evaluated").map((finding) => finding.code).sort()).toEqual(["C-5", "C-7/SANDBOX-CONTAINMENT"]);
+    expect(findings.filter((finding) => finding.severity === "not-evaluated").map((finding) => finding.code).sort()).toEqual(["C-5"]);
+    expect(findings.find((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT")?.severity).toBe("info");
   });
 });
 

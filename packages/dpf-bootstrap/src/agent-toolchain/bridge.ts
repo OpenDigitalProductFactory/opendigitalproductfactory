@@ -12,8 +12,9 @@ import { mcpClientBearerHeaderRequired, type McpAuthMode, type McpClient } from 
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 
-import { planCodexConfig, type CodexConfigPlan } from "./codex-config";
+import { planCodexConfig, planCodexProjectConfig, type CodexConfigPlan } from "./codex-config";
 import {
   planMcpClientConfig,
   mcpClientConfigPaths,
@@ -155,9 +156,34 @@ export type ComputeAgentToolchainPlanOptions = {
   };
 };
 
+function normalizeMcpEndpoint(endpoint: string): string {
+  try {
+    const parsed = new URL(endpoint);
+    const credentialKeys = new Set([
+      "access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+      "authorization", "client_secret", "clientsecret", "secret", "password",
+    ]);
+    if (!/^https?:\/\/[^/]/i.test(endpoint) || endpoint.includes("\\")
+      || !["http:", "https:"].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password
+      || /\s/.test(endpoint) || [...parsed.searchParams.keys()].some(key => credentialKeys.has(key.toLowerCase().replaceAll("-", "_")))) {
+      throw new Error("Unsafe endpoint");
+    }
+    if (parsed.pathname === "/") {
+      parsed.pathname = "/api/mcp/v1";
+      return parsed.toString();
+    }
+    return endpoint;
+  } catch {
+    throw new Error("MCP endpoint must be a credential-free HTTP(S) URL");
+  }
+}
+
 export function computeAgentToolchainPlan(
   options: ComputeAgentToolchainPlanOptions,
 ): AgentToolchainPlan {
+  // Validate once, before reading any host configuration; every client and probe
+  // receives the same resource. A portal-origin shorthand is not an MCP route.
+  options = { ...options, mcpEndpoint: normalizeMcpEndpoint(options.mcpEndpoint) };
   const fs = options.fs ?? {};
   const _readFile =
     fs.readFileSync ?? ((p: string, e: BufferEncoding) => readFileSync(p, e));
@@ -182,6 +208,13 @@ export function computeAgentToolchainPlan(
       options.worktreeBase,
       options.authMode,
     );
+    const projectPath = join(options.repoRoot, ".codex", "config.toml");
+    if (resolve(projectPath) !== resolve(options.codexConfigPath) && _exists(projectPath)) {
+      const project = planCodexProjectConfig(_readFile(projectPath, "utf8"), projectPath, options.mcpEndpoint, options.authMode);
+      codex.writes.push(...project.writes);
+      codex.preservedUserIntent ||= project.preservedUserIntent;
+      codex.rationale += `; ${project.rationale}`;
+    }
   }
 
   // Claude plan (skipped when Claude CLI absent).

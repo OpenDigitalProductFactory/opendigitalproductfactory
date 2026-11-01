@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const recoveredWorker = vi.hoisted(() => vi.fn());
+vi.mock("./mcp-task-background-worker", () => ({ executePersistedRemoteTask: recoveredWorker }));
 const db = vi.hoisted(() => ({
   persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
@@ -510,4 +512,17 @@ describe("resource wait pacing", () => {
     // A wait written before pacing existed is due at once.
     expect(resourceWaitDue({ ...wait, nextAttemptAt: undefined }, now)).toBe(true);
   });
+});
+
+it("routes a transferred capacity wait through the canonical worker without reconstructing the expired origin", async () => {
+  const taskRunId = "TR-MCP-CAPACITY-TRANSFER";
+  db.findUnique.mockResolvedValue({ id: "row", taskRunId, userId: "user-1", status: "submitted",
+    progressPayload: { reviewExecutionAuthority: { tokenId: "current-token" }, resourceWait: { schemaVersion: 1,
+      kind: "provider-capacity", failureKind: "capacity", resumeMode: "same-taskrun", attempt: 1, observedAt: new Date().toISOString() } },
+    a2aMetadata: { apiTokenId: "expired-origin" },
+  });
+  recoveredWorker.mockResolvedValue({ taskRunId, status: "working", authority: "current" });
+  expect(await resumeRemoteCoworkerTaskById(taskRunId)).toMatchObject({ kind: "result", result: { taskRunId, status: "working", authority: "current" } });
+  expect(recoveredWorker).toHaveBeenCalledWith({ taskRunId });
+  expect(db.findMcpToken).not.toHaveBeenCalled(); expect(autonomous.execute).not.toHaveBeenCalled();
 });

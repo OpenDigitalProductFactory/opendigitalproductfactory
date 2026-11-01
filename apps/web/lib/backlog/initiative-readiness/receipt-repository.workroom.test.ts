@@ -6,12 +6,15 @@ vi.mock("./canonical-plan-source", async (importOriginal) => ({
   ...await importOriginal<typeof import("./canonical-plan-source")>(), loadCanonicalPlanSource: io.canonicalPlan,
 }));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: io.artifact }));
+const merged = vi.hoisted(() => ({ source: vi.fn() }));
+vi.mock("./merged-repair-source", () => ({ defaultLoadMergedRepairSource: merged.source }));
 vi.mock("./reviewer-identity", async (importOriginal) => ({
   ...await importOriginal<typeof import("./reviewer-identity")>(),
   resolveReviewerIdentity: async () => ({ principalId: "principal-reviewer", kind: "coworker" }),
 }));
 vi.mock("@dpf/db", () => ({ Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } }, prisma: {
   backlogItem: { findUnique: io.item }, authorizationDecisionLog: { findUnique: io.decision }, $transaction: io.transaction,
+  workroom: { findUnique: (...a: unknown[]) => io.room(...a) },
 } }));
 import { recordInitiativeGateReceipt } from "./receipt-repository";
 
@@ -95,6 +98,302 @@ describe("bound historical plan receipt publication", () => {
     io.artifact.mockResolvedValue({ ok: true, artifact: { ref: artifactRef, digest: `sha256:${"a".repeat(64)}`,
       authorPrincipalId: "principal-reviewer", authorAgentId: "AGT-WS-REVIEW", bytes: Buffer.from("plan") } });
     expect(await recordInitiativeGateReceipt(args)).toMatchObject({ ok: false });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+});
+
+describe("one terminal verdict for an authenticated bound review", () => {
+  const boundReviewTask = { taskRunId: "TR-MCP-BOUND", requestDigest: "9".repeat(64),
+    executionFence: { schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "9".repeat(64) } };
+  const boundArgs = { ...args, boundReviewTask };
+  type Activity = { id: string; backlogItemId: string; kind: string; gateKey?: string; payload: Record<string, unknown> };
+
+  function publication() {
+    const activities: Activity[] = [];
+    const task = { id: "task-row", taskRunId: boundReviewTask.taskRunId, userId: args.reviewerUserId,
+      currentAgentId: args.reviewerAgentId, status: "working", progressPayload: {} as Record<string, unknown>, a2aMetadata: {
+        trigger: "external-mcp", requestDigest: boundReviewTask.requestDigest,
+        initiativeReviewBinding: { writerToolName: args.actionKey, itemId: args.itemId, gate: args.gate,
+          artifactRef, workroomRef, expectedCurrentBaselineId: args.expectedCurrentBaselineId },
+      } };
+    io.decision.mockImplementation(async ({ where }: { where: { decisionId: string } }) => ({
+      decisionId: where.decisionId, decision: "allow", actionKey: args.actionKey,
+      policyVersion: "PV-1", organizationId: null, rationale: { taskRunId: task.taskRunId },
+    }));
+    const tx = { $queryRaw: io.lock, taskRun: { findUnique: vi.fn(async () => task) },
+      backlogItem: { findUnique: io.item }, workroom: { findUnique: io.room },
+      authorizationDecisionLog: { findUnique: io.decision },
+      coworkerActionEnvelope: { findMany: vi.fn(async (): Promise<Array<{ taskRunId: string | null }>> => []) },
+      backlogItemActivity: {
+        findUnique: vi.fn(async ({ where }: { where: { id: string } }) => activities.find((row) => row.id === where.id) ?? null),
+        findMany: vi.fn(async ({ where }: { where?: { kind?: string; gateKey?: string } }) => activities.filter((row) =>
+          (!where?.kind || row.kind === where.kind) && (!where?.gateKey || row.gateKey === where.gateKey))),
+        create: io.append.mockImplementation(async ({ data }: { data: Activity }) => {
+          activities.push(structuredClone(data)); return data;
+        }),
+      } };
+    // Queue transactions as the subject-row lock does; a serialization loser
+    // is exercised separately, rather than pretending this fake is PostgreSQL.
+    let prior: Promise<unknown> = Promise.resolve();
+    io.transaction.mockImplementation((work) => {
+      const next = prior.then(() => work(tx)); prior = next.catch(() => undefined); return next;
+    });
+    return { activities, task, tx };
+  }
+
+  it("returns one canonical winner for two racing calls with different allow decisions", async () => {
+    const state = publication();
+    const [first, second] = await Promise.all([
+      recordInitiativeGateReceipt(boundArgs),
+      recordInitiativeGateReceipt({ ...boundArgs, authorityDecisionId: "AUTH-2" }),
+    ]);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) throw new Error("Expected the qualified canonical result.");
+    expect(second.receiptId).toBe(first.receiptId);
+    expect(state.activities).toHaveLength(1);
+    expect(io.append).toHaveBeenCalledOnce();
+  });
+
+  it.each(["input-required", "completed", "failed", "stalled"])("does not append a new verdict for a %s execution", async (status) => {
+    const state = publication();
+    state.task.status = status;
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("does not append while the working task has an uncertain provider outcome", async () => {
+    const state = publication();
+    state.task.progressPayload.executionUncertainty = { schemaVersion: 1, settlement: "unknown" };
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+  });
+
+  it("refuses an unversioned callback instead of borrowing the current execution", async () => {
+    const state = publication();
+    expect(await recordInitiativeGateReceipt({ ...boundArgs, boundReviewTask: {
+      taskRunId: boundReviewTask.taskRunId, requestDigest: boundReviewTask.requestDigest,
+    } })).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+  });
+
+  it.each(["reservation", "dispatch"])("refuses a callback after its %s generation changes", async (change) => {
+    const state = publication();
+    if (change === "reservation") state.task.progressPayload.resumeReservedAt = "2026-10-16T20:00:00.000Z";
+    else state.task.progressPayload.dispatch = { claimedAt: "2026-10-16T20:00:00.000Z" };
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+  });
+
+  it("returns a genuine existing receipt after execution is held without appending another", async () => {
+    const state = publication();
+    const first = await recordInitiativeGateReceipt(boundArgs);
+    if (!first.ok) throw new Error("Expected a canonical receipt before the hold.");
+    state.task.status = "input-required";
+    state.task.progressPayload.executionUncertainty = { schemaVersion: 1, settlement: "unknown" };
+    io.append.mockClear();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: true, receiptId: first.receiptId, deduplicated: true });
+    expect(io.append).not.toHaveBeenCalled();
+    expect(state.activities).toHaveLength(1);
+  });
+
+  it("returns the original rejecting verdict instead of publishing a contradictory pass", async () => {
+    const state = publication();
+    const first = await recordInitiativeGateReceipt({ ...boundArgs, decision: "fail", findings: [
+      { issue: "Rollback is missing.", severity: "important" },
+    ] });
+    if (!first.ok) throw new Error("Expected the independently recorded rejection.");
+    const second = await recordInitiativeGateReceipt({ ...boundArgs, authorityDecisionId: "AUTH-2",
+      resolvedFindingRefs: first.receipt.findingRefs as string[] });
+    expect(second).toMatchObject({ ok: true, receiptId: first.receiptId, receipt: { decision: "fail" }, deduplicated: true });
+    expect(state.activities).toHaveLength(1);
+  });
+
+  it.each(["cancellation", "request", "artifact", "actor"])("appends nothing after bound %s changes", async (drift) => {
+    const state = publication();
+    if (drift === "cancellation") state.task.status = "canceled";
+    if (drift === "request") state.task.a2aMetadata.requestDigest = "8".repeat(64);
+    if (drift === "artifact") state.task.a2aMetadata.initiativeReviewBinding.artifactRef = { ...artifactRef, providerBlobId: "d".repeat(40) };
+    if (drift === "actor") state.task.currentAgentId = "AGT-OTHER";
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("refuses an allow decision bound to another task", async () => {
+    publication();
+    io.decision.mockResolvedValue({ decisionId: "AUTH-1", decision: "allow", actionKey: args.actionKey,
+      policyVersion: "PV-1", organizationId: null, rationale: { taskRunId: "TR-FOREIGN" } });
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a corrupted winner or replace it with another receipt", async () => {
+    const state = publication();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: true });
+    state.activities[0]!.payload.subject = { kind: "backlog-item", id: "BI-FOREIGN" };
+    io.append.mockClear();
+    expect(await recordInitiativeGateReceipt({ ...boundArgs, authorityDecisionId: "AUTH-2" })).toMatchObject({ ok: false });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("reuses a verified legacy random-ID verdict without minting a replacement", async () => {
+    const state = publication();
+    const legacy = await recordInitiativeGateReceipt(args);
+    if (!legacy.ok) throw new Error("Expected a legacy canonical receipt.");
+    expect(await recordInitiativeGateReceipt({ ...boundArgs, authorityDecisionId: "AUTH-2" }))
+      .toMatchObject({ ok: true, receiptId: legacy.receiptId, deduplicated: true });
+    expect(state.activities).toHaveLength(1);
+  });
+
+  it("refuses conflicting historical verdicts instead of choosing the latest", async () => {
+    const state = publication();
+    expect(await recordInitiativeGateReceipt(args)).toMatchObject({ ok: true });
+    const duplicate = structuredClone(state.activities[0]!);
+    duplicate.id = "initiative-duplicate";
+    duplicate.payload.receiptId = duplicate.id;
+    state.activities.push(duplicate);
+    io.append.mockClear();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it.each(["P2034", "P2002"])("reconciles the committed winner after %s without another append", async (code) => {
+    const state = publication();
+    const first = await recordInitiativeGateReceipt(boundArgs);
+    if (!first.ok) throw new Error("Expected a canonical verdict.");
+    io.transaction.mockRejectedValueOnce(Object.assign(new Error("Race loser."), { code }));
+    expect(await recordInitiativeGateReceipt({ ...boundArgs, authorityDecisionId: "AUTH-2" }))
+      .toMatchObject({ ok: true, receiptId: first.receiptId, deduplicated: true });
+    expect(state.activities).toHaveLength(1);
+  });
+
+  it("does not retry a write when a serialization loser has no visible winner", async () => {
+    const state = publication();
+    io.transaction.mockRejectedValueOnce(Object.assign(new Error("Race loser."), { code: "P2034" }));
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("accepts an exact durable envelope link but refuses conflicting task links", async () => {
+    const state = publication();
+    io.decision.mockResolvedValue({ decisionId: "AUTH-1", decision: "allow", actionKey: args.actionKey,
+      policyVersion: "PV-1", organizationId: null, rationale: {} });
+    state.tx.coworkerActionEnvelope.findMany.mockResolvedValue([{ taskRunId: boundReviewTask.taskRunId }]);
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: true });
+    state.tx.coworkerActionEnvelope.findMany.mockResolvedValue([
+      { taskRunId: boundReviewTask.taskRunId }, { taskRunId: "TR-FOREIGN" },
+    ]);
+    io.append.mockClear();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("refuses a prior receipt whose authority snapshot no longer matches its durable allow decision", async () => {
+    const state = publication();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: true });
+    (state.activities[0]!.payload.authoritySnapshot as Record<string, unknown>).policyVersion = "forged-policy";
+    io.append.mockClear();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+});
+
+// BI-CE661173: a merged repair's post-implementation review reads the squash
+// commit on the trunk through the delivery's retired room.
+describe("merged repair PIR receipt publication (BI-CE661173)", () => {
+  const mergedSha = "c".repeat(40);
+  const pirArgs = { ...args, allowedGates: ["post-implementation-review"] as const, gate: "post-implementation-review" as const,
+    actionKey: "record_initiative_post_implementation_review", expectedCurrentBaselineId: null,
+    artifactRef: { ...artifactRef, commitSha: mergedSha, path: "apps/web/lib/fix.ts" } };
+  const found = (overrides: Record<string, unknown> = {}) => ({ kind: "found", mergedCommitSha: mergedSha, parentSha: "d".repeat(40),
+    deliveryActorIds: ["AGT-AUTHOR"], room: { capsuleId: workroomRef.workroomId, backlogItemId: args.itemId,
+      repositoryFullName: workroomRef.repositoryFullName, baseSha: "e".repeat(40), headBranch: workroomRef.branchName,
+      headSha: workroomRef.headSha, isLive: false }, ...overrides });
+
+  beforeEach(() => {
+    io.decision.mockResolvedValue({ decisionId: "AUTH-1", decision: "allow", actionKey: pirArgs.actionKey,
+      policyVersion: "PV-1", organizationId: null, rationale: {} });
+    room = { ...room, archivedAt: new Date("2026-10-20T00:00:00Z"), status: "archived" };
+    merged.source.mockResolvedValue(found());
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: pirArgs.artifactRef, digest: `sha256:${"a".repeat(64)}`,
+      authorPrincipalId: "principal-author", authorAgentId: null, bytes: Buffer.from("repair") } });
+  });
+
+  it("publishes through the archived room with the server's merged-repair proof", async () => {
+    expect(await recordInitiativeGateReceipt(pirArgs)).toMatchObject({ ok: true });
+    expect(merged.source).toHaveBeenCalledWith({ itemId: args.itemId, refusedWorkroomId: workroomRef.workroomId });
+    expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({
+      mergedRepairProof: { workroomId: workroomRef.workroomId, commitSha: mergedSha } }));
+    expect(io.append).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["the trunk no longer names that commit", () => found({ mergedCommitSha: "f".repeat(40) })],
+    ["no merged repair is found", () => ({ kind: "unavailable", reason: "merged-delivery-not-found", nextAction: "none" })],
+    ["the anchor room moved", () => found({ room: { ...found().room, headSha: "f".repeat(40) } })],
+  ])("refuses when %s", async (_label, source) => {
+    merged.source.mockResolvedValue(source());
+    expect(await recordInitiativeGateReceipt(pirArgs)).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(io.artifact).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("refuses a delivery actor recording the review of its own repair", async () => {
+    merged.source.mockResolvedValue(found({ deliveryActorIds: [args.reviewerAgentId] }));
+    expect(await recordInitiativeGateReceipt(pirArgs)).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("keeps refusing an archived room for a review bound to the room's own head", async () => {
+    expect(await recordInitiativeGateReceipt({ ...pirArgs, artifactRef: { ...pirArgs.artifactRef, commitSha: workroomRef.headSha } }))
+      .toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(merged.source).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  // BI-46E344FE: the whole merged change, and a delivery room that never recorded its head.
+  const firstSha = "1".repeat(40);
+  const ranges = [{ baseSha: "0".repeat(40), headSha: firstSha }, { baseSha: "d".repeat(40), headSha: mergedSha }];
+  const rangeArgs = { ...pirArgs, artifactRef: { kind: "repo-commit-range" as const, repositoryFullName: workroomRef.repositoryFullName,
+    ranges, digest: `sha256:${"9".repeat(64)}` } };
+  const twoCommits = (overrides: Record<string, unknown> = {}) => found({
+    commits: [{ sha: firstSha, parentSha: "0".repeat(40) }, { sha: mergedSha, parentSha: "d".repeat(40) }], ...overrides });
+
+  it("publishes a range review when the trunk still names exactly those delivering commits", async () => {
+    merged.source.mockResolvedValue(twoCommits());
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: rangeArgs.artifactRef, digest: rangeArgs.artifactRef.digest,
+      authorPrincipalId: "principal-author", authorAgentId: null, bytes: Buffer.from("range") } });
+    expect(await recordInitiativeGateReceipt(rangeArgs)).toMatchObject({ ok: true });
+    expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({ locator: rangeArgs.artifactRef,
+      mergedRepairProof: { workroomId: workroomRef.workroomId, commitSha: mergedSha } }));
+    expect(io.append).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["one of the commits is no longer a delivery", () => found()],
+    ["the commits are in another order", () => found({ commits: [{ sha: mergedSha, parentSha: "d".repeat(40) }, { sha: firstSha, parentSha: "0".repeat(40) }] })],
+  ])("refuses a range review when %s", async (_label, source) => {
+    merged.source.mockResolvedValue(source());
+    expect(await recordInitiativeGateReceipt(rangeArgs)).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(io.artifact).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("publishes through a delivery room that never recorded its head, anchored to the merged head", async () => {
+    room = { ...room, headSha: null };
+    const anchored = { ...workroomRef, headSha: mergedSha };
+    merged.source.mockResolvedValue(found({ room: { ...found().room, headSha: mergedSha } }));
+    expect(await recordInitiativeGateReceipt({ ...pirArgs, workroomRef: anchored })).toMatchObject({ ok: true });
+    expect(merged.source).toHaveBeenCalledWith({ itemId: args.itemId, refusedWorkroomId: workroomRef.workroomId });
+    expect(io.append).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a headless room publish without the trunk's proof", async () => {
+    room = { ...room, headSha: null };
+    merged.source.mockResolvedValue({ kind: "unavailable", reason: "merged-delivery-not-found", nextAction: "none" });
+    expect(await recordInitiativeGateReceipt({ ...pirArgs, workroomRef: { ...workroomRef, headSha: mergedSha } }))
+      .toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
     expect(io.append).not.toHaveBeenCalled();
   });
 });

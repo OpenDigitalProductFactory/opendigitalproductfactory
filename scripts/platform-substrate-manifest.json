@@ -32,7 +32,8 @@
       "profiles": [],
       "ports": [],
       "volumes": [
-        "dpf-source-code:/workspace"
+        "dpf-source-code:/workspace",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
       ],
       "dependsOn": [
         "postgres"
@@ -679,7 +680,7 @@
         "runtime-external-ai"
       ],
       "ports": [
-        "11434:11434"
+        "127.0.0.1:11434:11434"
       ],
       "volumes": [
         "ollama_data:/root/.ollama"

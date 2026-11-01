@@ -10,15 +10,16 @@
 // outcome is always observable in the tool response (`ledger.recorded`),
 // per make-silent-failures-observable.
 
-import type { RetryAttemptRecord } from "@/lib/decision/uncertain-retry";
+import type { RetryAttemptRecord } from "@dpf/validators/judgment/uncertain-retry";
 import {
   readVerdict,
   VERDICT_RETRY_HINTS,
   verdictConfidence,
   type DecisionResult,
   type DecisionVerdictCause,
-} from "@/lib/decision/option-scoring";
+} from "@dpf/validators/judgment/option-scoring";
 import type { DecisionCallerContext } from "@/lib/decision/caller-context";
+import { withDecisionEscalation } from "@/lib/decision-perspective/decision-escalation";
 import {
   persistDecisionInteraction,
 } from "@/lib/decision-perspective/persistence";
@@ -380,7 +381,7 @@ export async function recordKernelConsultInteraction(input: {
     const { interactionId, shadowLedger } = await persistDecisionInteraction({
       db: input.db,
       build: null,
-      evaluation,
+      evaluation: withDecisionEscalation(evaluation),
       agentId,
       taskRunId: input.taskRunId ?? null,
       triggeredByUserId: input.triggeredByUserId ?? null,

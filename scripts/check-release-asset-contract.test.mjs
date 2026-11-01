@@ -28,7 +28,10 @@ import test from "node:test";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dockerfile = readFileSync(join(repoRoot, "Dockerfile"), "utf8");
-const psInstaller = readFileSync(join(repoRoot, "install-dpf.ps1"), "utf8");
+// The Windows installer plus the consumer start script it ships as a release
+// asset (BI-084F85E5): what the start script references is installer-referenced.
+const psInstaller = readFileSync(join(repoRoot, "install-dpf.ps1"), "utf8") +
+  readFileSync(join(repoRoot, "scripts", "installer", "dpf-start.consumer.ps1"), "utf8");
 const shInstaller = readFileSync(join(repoRoot, "install-dpf.sh"), "utf8");
 const promoteScript = readFileSync(join(repoRoot, "scripts/promote.sh"), "utf8");
 const agentPointerPath = "config/consumer-install/agent-pointer.md";
@@ -211,4 +214,26 @@ test("consumer installs ship a minimal AGENTS.md pointer before checksums", () =
     pointer.split(/\s+/).length < 200,
     "the pointer must stay a pointer, not grow into the contributor rulebook",
   );
+});
+
+// Exercise the shipped command with only its declared release-asset files.
+// The source checkout must not mask a missing transitive runtime import.
+test("bundled key rotation runs without a source checkout", async t => {
+  const { mkdtemp, mkdir, copyFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { spawnSync } = await import("node:child_process");
+  const root = await mkdtemp(join(tmpdir(), "dpf-release-key-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = ["scripts/rotate-runtime-transition-secret.mjs",
+    "scripts/installer/runtime-apply-lock.mjs", "scripts/installer/recovery-filesystem.mjs",
+    "scripts/lib/canonical-json.mjs", "scripts/lib/local-sandbox-fence.mjs", "scripts/lib/entry-module.mjs"];
+  for (const file of files) {
+    const target = `/dpf-release-assets/${dirname(file)}/`;
+    assert.ok(block.split("\n").some(line => line.trim().startsWith("cp ") && line.includes(file + " ") && line.includes(target)), `${file} must be copied into the consumer bundle`);
+    assert.ok(dockerfile.split("\n").some(line => line.startsWith("COPY ") && line.includes(file + " ") && line.includes(`./${dirname(file)}/`)), `${file} must enter the init stage`);
+    await mkdir(dirname(join(root, file)), { recursive: true });
+    await copyFile(join(repoRoot, file), join(root, file));
+  }
+  const result = spawnSync(process.execPath, [join(root, files[0]), "--initialize", "--state-dir", join(root, "state")], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
 });

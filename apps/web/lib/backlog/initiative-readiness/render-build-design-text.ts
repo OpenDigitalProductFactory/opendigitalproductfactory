@@ -81,18 +81,29 @@ function renderValue(value: unknown): string | null {
 const OBJECTIVE_ID = "OBJ-1";
 
 /**
- * Flatten a statement onto one line and neutralise the characters the manifest
- * grammar treats as structure.
- *
- * An acceptance cell is `[^|]*`, so a literal pipe inside a criterion ends the
- * cell early and silently truncates — or malforms — the row. A newline splits
- * one criterion across two lines and drops the remainder. Neither may be left to
- * corrupt a manifest a baseline is about to pin.
+ * Flatten a structured statement onto one line. Table escaping is applied only
+ * to table cells; a pipe in an objective is ordinary text.
  */
 function asStatement(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const flattened = value.replace(/\s+/g, " ").split("|").join("\|").trim();
+  const flattened = value.replace(/\s+/g, " ").trim();
   return flattened || null;
+}
+
+/**
+ * The acceptance ids a Build Studio design states, exactly as its scope
+ * manifest numbers them. The plan generator names these ids in each task's
+ * `satisfies`, and the plan coverage traces them against the baseline the
+ * spec approval minted from this same numbering (BI-6F2872FC).
+ */
+export function buildDesignAcceptanceCriteria(doc: Record<string, unknown>): Array<{ id: string; statement: string }> {
+  const criteria = Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [];
+  return criteria
+    .map(asStatement)
+    // Index the SURVIVING criteria: a criterion that renders to nothing must not
+    // leave a gap that shifts every later id and moves the baseline digest.
+    .filter((statement): statement is string => statement !== null)
+    .map((statement, index) => ({ id: `AC-${index + 1}`, statement }));
 }
 
 /**
@@ -107,13 +118,10 @@ function renderScopeManifest(doc: Record<string, unknown>): string | null {
   const objective = asStatement(doc.problemStatement);
   if (!objective) return null;
 
-  const criteria = Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [];
-  const rows = criteria
-    .map(asStatement)
-    // Index the SURVIVING criteria: a criterion that renders to nothing must not
-    // leave a gap that shifts every later id and moves the baseline digest.
-    .filter((statement): statement is string => statement !== null)
-    .map((statement, index) => `| AC-${index + 1} | ${OBJECTIVE_ID} | ${statement} |`);
+  const rows = buildDesignAcceptanceCriteria(doc).map(({ id, statement }) => {
+    const cell = statement.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+    return `| ${id} | ${OBJECTIVE_ID} | ${cell} |`;
+  });
   if (rows.length === 0) return null;
 
   return [

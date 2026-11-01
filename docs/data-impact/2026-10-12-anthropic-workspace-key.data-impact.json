@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": ["CredentialEntry client-safe projection", "Provider account configuration", "Authenticated provider request headers"],
+  "migration": { "name": "20261013021500_provider_workspace", "backfill": "None; nullable workspace preserves existing credentials. Rollback leaves the nullable column and reverts application readers/writers." },
+  "tests": ["apps/web/lib/inference/provider-workspace.test.ts", "apps/web/lib/inference/provider-account-discovery.test.ts", "apps/web/lib/actions/ai-providers.test.ts", "apps/web/components/platform/ProviderDetailForm.test.tsx"],
+  "changes": [{
+    "kind": "model", "assetId": "data:credential-entry", "prismaModel": "CredentialEntry",
+    "lifecycleDisposition": "Existing account-owned credential lifecycle; no new retention or deletion path.",
+    "fields": [{ "fieldId": "data:credential-entry#providerWorkspaceId", "resolution": "governed", "reason": "Bind Anthropic organization-key requests to the selected upstream workspace.", "provenance": "Authorized provider account configuration", "flags": [], "fieldPolicy": "Non-secret provider configuration; never grants clearance. Omission preserves, empty clears, invalid IDs fail before persistence." }]
+  }]
+}

@@ -20,6 +20,8 @@ import { PET_RESCUE_PURPOSE_CONTRACTS } from "./pet-rescue";
 import { MAILROOM_PURPOSE_CONTRACTS } from "./mailroom";
 import { AREA_HOME_PURPOSE_CONTRACTS } from "./area-home";
 import { MARKET_FOOTPRINT_PURPOSE_CONTRACTS } from "./market-footprint";
+import { MONITORING_SETTINGS_PURPOSE_CONTRACTS } from "./monitoring-settings";
+import { GATE_EFFICACY_PURPOSE_CONTRACTS } from "./gate-efficacy";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
@@ -38,6 +40,8 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   MAILROOM_PURPOSE_CONTRACTS,
   AREA_HOME_PURPOSE_CONTRACTS,
   MARKET_FOOTPRINT_PURPOSE_CONTRACTS,
+  MONITORING_SETTINGS_PURPOSE_CONTRACTS,
+  GATE_EFFICACY_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

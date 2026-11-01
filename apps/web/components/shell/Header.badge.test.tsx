@@ -7,10 +7,11 @@ import "@testing-library/jest-dom/vitest";
 // the logo for all non-production instances", and the safety property behind it
 // is that production is the UNMARKED default. These tests pin both.
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/lib/i18n/use-t", () => ({ useT: () => () => "Account and help" }));
 vi.mock("@/components/docs/ContextualDocsButton", () => ({
   ContextualDocsButton: () => null,
 }));
@@ -34,6 +35,29 @@ const base = {
 } as const;
 
 describe("installation badge", () => {
+  it("opens account actions with a named control and returns focus on Escape", () => {
+    render(<Header {...base} installationBadge="NORTHWIND DEV" />);
+    const trigger = screen.getByRole("button", { name: "Account and help" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const panel = screen.getByRole("group", { name: "Account and help" });
+    expect(trigger).toHaveAttribute("aria-controls", panel.id);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+    expect(screen.getByTestId("installation-badge")).toHaveTextContent("NORTHWIND DEV");
+  });
+
+  it("dismisses account actions on an outside pointer without removing installation identity", () => {
+    render(<Header {...base} installationBadge="NORTHWIND DEV" />);
+    const trigger = screen.getByRole("button", { name: "Account and help" });
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("installation-badge")).toHaveAttribute("href", "/ops/installation");
+  });
+
   it("renders the estate and role on a development installation", () => {
     render(<Header {...base} installationBadge="NORTHWIND DEV" />);
     expect(screen.getByTestId("installation-badge")).toHaveTextContent("NORTHWIND DEV");

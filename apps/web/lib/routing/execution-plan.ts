@@ -9,7 +9,7 @@
 
 import { terminalWriterDispatchContract, type TerminalWriterDispatchContract } from "./execution-adapter-types";
 import type { RequestContract } from "./request-contract";
-import type { EndpointManifest } from "./types";
+import type { EndpointManifest, RouteDecision } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
 import { resolveSamplingProfile, type ResolvedSampling } from "./sampling-profile";
 import { effectiveSampling } from "./vendor-sampling-catalog";
@@ -73,7 +73,7 @@ export function terminalWriterDispatchContractForProvider(
 export type ParameterizationContext = Pick<
   EndpointManifest,
   "providerId" | "modelId" | "modelFamily" | "modelClass" | "maxOutputTokens" | "capabilities"
-> & { sampling?: import("./model-card-types").ModelCardSampling | null };
+> & { sampling?: import("./model-card-types").ModelCardSampling | null; localThinkingBudgetEvidence?: EndpointManifest["localThinkingBudgetEvidence"] };
 
 /**
  * Resolve effort and sampling for one call, and fold them into the plan.
@@ -90,10 +90,11 @@ function resolvePlanEffort(contract: RequestContract, ctx: ParameterizationConte
     capabilities: ctx.capabilities,
   });
 
-  return expressEffort(ctx.providerId, effort, ctx.capabilities, {
+  return { ...expressEffort(ctx.providerId, effort, ctx.capabilities, {
     modelClass: ctx.modelClass,
     isLocalNative: isLocalNativeProvider(ctx.providerId),
-  });
+    localThinkingBudgetEvidence: ctx.localThinkingBudgetEvidence,
+  }), requestedBudgetTokens: effort.budgetTokens };
 
 }
 
@@ -118,6 +119,8 @@ function applySituationalParameters(
   const next: RoutedExecutionPlan = {
     ...plan,
     providerSettings: { ...plan.providerSettings, ...expression.settings },
+    ...(expression.settings.thinking_budget_tokens !== undefined && ctx.localThinkingBudgetEvidence
+      ? { localThinkingBudgetEvidence: ctx.localThinkingBudgetEvidence } : {}),
     maxTokens: plan.maxTokens + expression.extraMaxTokens,
     sampling: {
       values: sampling.values,
@@ -127,6 +130,12 @@ function applySituationalParameters(
     },
     ...(expression.effortUnexpressed ? { effortUnexpressed: true } : {}),
   };
+  if (expression.settings.thinking_budget_tokens !== undefined && expression.requestedBudgetTokens !== null) {
+    next.localThinkingBudgetRequest = expression.requestedBudgetTokens;
+    const reserve = Math.min(next.maxTokens - 1, Math.max(2048, Math.ceil(next.maxTokens / 4)));
+    if (!Number.isSafeInteger(next.maxTokens) || next.maxTokens <= 1) throw new Error("Invalid local completion allowance");
+    next.providerSettings.thinking_budget_tokens = Math.min(expression.requestedBudgetTokens, next.maxTokens - reserve);
+  }
 
   // `temperature` stays the canonical top-level field the adapters already read;
   // the sampling record carries the rest plus provenance for the explanation.
@@ -296,9 +305,6 @@ export function activityBudgetExclusion(
     return "Invalid activity token envelope";
   }
   if (contract.estimatedInputTokens > maxInputTokens) return "Activity input allowance exceeded";
-  if (resolvePlanEffort(contract, endpoint).extraMaxTokens >= maxOutputTokens) {
-    return "Activity completion allowance leaves no room beyond fixed thinking budget";
-  }
   if (endpoint.maxOutputTokens === null || !Number.isSafeInteger(endpoint.maxOutputTokens) || endpoint.maxOutputTokens <= 0) {
     return "Activity completion capacity is unknown; refresh endpoint capacity evidence";
   }
@@ -311,6 +317,13 @@ export function activityBudgetExclusion(
   if (endpoint.maxContextTokens <
       Math.max(contract.minContextTokens ?? 0, contract.estimatedInputTokens + maxOutputTokens)) {
     return "Activity input and completion allowance exceeds known model context capacity";
+  }
+  // Admit the same bounded thinking settings that execution will use, not the
+  // larger proportional request before its final-output reserve is applied.
+  try {
+    bindActivityThinkingSettings(resolvePlanEffort(contract, endpoint).settings, maxOutputTokens);
+  } catch (error) {
+    return error instanceof Error ? error.message : "Invalid activity thinking allowance";
   }
   return null;
 }
@@ -337,6 +350,38 @@ export function attachHarnessRecipeToPlan(
   };
 }
 
+/** One total-completion/thinking contract for both admission and dispatch. */
+function bindActivityThinkingSettings(
+  settings: RoutedExecutionPlan["providerSettings"],
+  total: number,
+  localThinkingBudgetRequest?: number,
+): RoutedExecutionPlan["providerSettings"] {
+  if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Invalid activity completion allowance");
+  const reserve = Math.min(total - 1, Math.max(2048, Math.ceil(total / 4)));
+  const bounded = (value: unknown): number => {
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+      throw new Error("Invalid activity thinking allowance");
+    }
+    if (total <= 1) throw new Error("Activity completion allowance leaves no final output room");
+    return Math.min(value, total - reserve);
+  };
+  const providerSettings = { ...settings };
+  if (providerSettings.thinking_budget_tokens !== undefined) {
+    providerSettings.thinking_budget_tokens = bounded(localThinkingBudgetRequest ?? providerSettings.thinking_budget_tokens);
+  }
+  const thinking = providerSettings.thinking as { type?: string; budget_tokens?: unknown } | undefined;
+  if (thinking?.type === "enabled") {
+    const budget = bounded(thinking.budget_tokens);
+    if (budget < 1024) throw new Error("Activity allowance cannot accommodate provider minimum thinking budget");
+    providerSettings.thinking = { ...thinking, budget_tokens: budget };
+  }
+  const thinkingConfig = providerSettings.thinkingConfig as { thinkingBudget?: unknown } | undefined;
+  if (thinkingConfig?.thinkingBudget !== undefined) {
+    providerSettings.thinkingConfig = { ...thinkingConfig, thinkingBudget: bounded(thinkingConfig.thinkingBudget) };
+  }
+  return providerSettings;
+}
+
 /** Bind admitted activity execution settings and its governed harness together. */
 export function bindActivityExecutionPlan(
   plan: RoutedExecutionPlan,
@@ -347,8 +392,61 @@ export function bindActivityExecutionPlan(
   const harness = applyHarnessConfidenceOverride(
     bindHarnessRecipeForActivity(activity, hint), hint, overrides,
   );
+  const total = activity.tokenEnvelope.maxOutputTokens;
+  const providerSettings = bindActivityThinkingSettings(plan.providerSettings, total, plan.localThinkingBudgetRequest);
   return attachHarnessRecipeToPlan({
     ...plan,
-    maxTokens: activity.tokenEnvelope.maxOutputTokens,
+    providerSettings,
+    maxTokens: total,
+    completionAllowance: total,
+    responsePolicy: {
+      ...plan.responsePolicy,
+      strictSchema: plan.responsePolicy.strictSchema || harness.responsePolicy.strictSchema || activity.successShape === "json",
+    },
   }, harness);
+}
+
+function buildFallbackProviderSettings(
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan["providerSettings"] {
+  const settings = sourcePlan?.providerSettings ?? {};
+  const effort = (settings as Record<string, unknown>).effort;
+  return effort ? { effort } : {};
+}
+
+export function buildFallbackPlan(
+  entry: { providerId: string; modelId: string; providerConnectionId?: string; providerConnectionVersion?: string; accountAuthMethod?: string; executionChannel?: string },
+  decision: RouteDecision,
+  tools?: Array<Record<string, unknown>>,
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan {
+  const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {
+    ...(sourcePlan?.toolPolicy ?? {}),
+  };
+  if ((tools?.length ?? 0) > 0 && toolPolicy.toolChoice === undefined) {
+    toolPolicy.toolChoice = "auto";
+  }
+
+  const fallbackPlan: RoutedExecutionPlan = {
+    providerId: entry.providerId,
+    ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, providerConnectionVersion: entry.providerConnectionVersion, accountAuthMethod: entry.accountAuthMethod, executionChannel: entry.executionChannel } : {}),
+    modelId: entry.modelId,
+    recipeId: null,
+    contractFamily: sourcePlan?.contractFamily ?? decision.taskType,
+    executionAdapter: entry.executionChannel === "direct-api" && (usesCliAdapter(entry.providerId) || usesCodexCli(entry.providerId))
+      ? usesCodexCli(entry.providerId) ? "responses" : "chat"
+      : resolveDefaultExecutionAdapter(entry.providerId),
+    maxTokens: sourcePlan?.maxTokens ?? 4096,
+    providerSettings: buildFallbackProviderSettings(sourcePlan),
+    toolPolicy,
+    responsePolicy: sourcePlan?.responsePolicy ?? {},
+    ...(sourcePlan?.temperature !== undefined ? { temperature: sourcePlan.temperature } : {}),
+    ...(sourcePlan?.openRouterObligations
+      ? { openRouterObligations: sourcePlan.openRouterObligations }
+      : {}),
+  };
+  if (entry.providerId === "openrouter" && sourcePlan?.openRouterObligations) {
+    fallbackPlan.openRouterPolicy = compileOpenRouterExecutionPolicy(sourcePlan.openRouterObligations);
+  }
+  return fallbackPlan;
 }

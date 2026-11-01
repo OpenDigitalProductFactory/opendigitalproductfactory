@@ -291,9 +291,6 @@
       "docs/security/secrets-scan.md",
       "docs/testing/pre-pr-gate.md"
     ],
-    ".github/workflows/install-verification.yml": [
-      "docs/maintenance/staleness-report.md"
-    ],
     ".github/workflows/migration-safety-guard.yml": [
       "docs/architecture/orientation.md"
     ],
@@ -490,6 +487,9 @@
     "apps/web/components/workbooks/GridExportMenu.tsx": [
       "docs/user-guide/workspace/workbooks.md"
     ],
+    "apps/web/components/workbooks/WorkbookViewTabs.tsx": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
     "apps/web/components/workbooks/grid-office-export.ts": [
       "docs/user-guide/workspace/workbooks.md"
     ],
@@ -505,7 +505,13 @@
     "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx": [
+      "docs/user-guide/workspace/finite-delivery-agreements.md"
+    ],
     "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/components/workspace/workroom/WorkroomHeader.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
@@ -516,10 +522,12 @@
     ],
     "apps/web/instrumentation.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/maintenance/staleness-report.md",
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/actions/agent-task-scheduler.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
+      "docs/architecture/agent-standards-dpf-conformance.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/actions/build.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -602,14 +610,31 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/evaluate.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts": [
+      "docs/architecture/gated-permissions-process.md",
+      "docs/architecture/initiative-readiness-runbook.md",
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -620,9 +645,15 @@
     "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/types.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -647,11 +678,15 @@
       "docs/operations/build-cost-flags-activation-runbook.md"
     ],
     "apps/web/lib/build/claude-dispatch.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/build/coding-agent.ts": [
       "docs/architecture/build-gate-runbook.md",
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
+    "apps/web/lib/build/finalize-repair-routing.ts": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/finalize-stage-runner.ts": [
       "docs/architecture/build-gate-runbook.md"
@@ -677,8 +712,17 @@
     "apps/web/lib/build/pull-request-merged-signal.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
+    "apps/web/lib/build/sandbox/grok-governance-seed.ts": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "apps/web/lib/build/sandbox/sandbox.ts": [
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
+    "apps/web/lib/build/sandbox/test-scope-guard.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/scoped-test-failure.ts": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
       "docs/architecture/agent-client-capability-parity.md"
@@ -719,6 +763,9 @@
     ],
     "apps/web/lib/coworker/approved-request-run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/coworker/approved-request-run.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/coworker/authorized-surface-registry.ts": [
       "docs/architecture/orientation.md"
@@ -771,6 +818,9 @@
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "apps/web/lib/demand/duplicate-merge-consequence.ts": [
+      "docs/architecture/improvement-signal-intake.md"
+    ],
     "apps/web/lib/design-intelligence.ts": [
       "docs/architecture/operational-precedent-corpus.md"
     ],
@@ -789,7 +839,13 @@
     "apps/web/lib/documents/generation/brand-master.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
+    "apps/web/lib/documents/generation/create-family-documents.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/documents/generation/create-presentation.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/family-document.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/documents/generation/render-flat.ts": [
@@ -814,8 +870,7 @@
     ],
     "apps/web/lib/ea/ai-routing-architecture-registry.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
-      "docs/architecture/ai-routing-document-map.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/ai-routing-document-map.md"
     ],
     "apps/web/lib/ea/diagram-import/parse-flat-odg.ts": [
       "docs/architecture/document-generation-facility.md"
@@ -865,6 +920,9 @@
       "docs/design/golden-triangle-vector-reference.md",
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
+    "apps/web/lib/golden-triangle/index.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/golden-triangle/receipt.ts": [
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
@@ -876,6 +934,12 @@
     ],
     "apps/web/lib/govern/auth.ts": [
       "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
+    ],
+    "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
+    ],
+    "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -906,7 +970,7 @@
     "apps/web/lib/gpp/permit-carriage.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
-    "apps/web/lib/gpp/shape-language/executable-constructs.ts": [
+    "apps/web/lib/gpp/shape-language/dpf-toolkit.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/gpp/shape-language/gate-ratification.ts": [
@@ -953,6 +1017,9 @@
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/inference/local-model-context-reconcile.ts": [
+      "docs/user-guide/ai-workforce/provider-developer-notes.md"
+    ],
     "apps/web/lib/inference/local-model-operations.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -995,7 +1062,8 @@
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
     ],
     "apps/web/lib/marketing/scheduler.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/marketing/utm.ts": [
       "docs/architecture/unified-connector-kernel.md"
@@ -1008,14 +1076,23 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp-task-persisted-request.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mcp-task-submit-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp-tool-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/backlog-recovery-read.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/mcp/improvement-draft.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1035,6 +1112,9 @@
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/packs/document-family-tools.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/mcp/packs/feedback-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1047,15 +1127,18 @@
     "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/packs/scheduled-agent-task-pack.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
     "apps/web/lib/mcp/packs/surface-pack.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md"
+      "docs/architecture/mcp-tool-packs.md",
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/mcp/protocol-versions.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -1071,12 +1154,18 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/mcp/toolchain-floor.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mdm/domain-registry.ts": [
       "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md"
     ],
     "apps/web/lib/navigation/section-nav-model.ts": [
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
+    ],
+    "apps/web/lib/nonprod/environment-lease-preview-yield.ts": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/nonprod/gate-client-revision.ts": [
       "docs/architecture/dpf-patterns.md",
@@ -1115,8 +1204,17 @@
     "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
+    "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-authority.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-run.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
+    "apps/web/lib/operate/tool-defect-origin.ts": [
+      "docs/architecture/improvement-signal-intake.md"
     ],
     "apps/web/lib/org-locale/locale-context.ts": [
       "docs/architecture/localization-runbook.md"
@@ -1141,8 +1239,7 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
-      "docs/architecture/capability-driven-runtime-profiles.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/proactivity/proactivity-roster.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
@@ -1202,6 +1299,9 @@
     "apps/web/lib/queue/functions/workroom-drive-deadlines.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/queue/functions/workroom-drive-stage-run.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
@@ -1217,11 +1317,15 @@
     "apps/web/lib/routes.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/routing/ai-capacity-watch.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/routing/anthropic-cache.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
     "apps/web/lib/routing/chat-adapter.ts": [
-      "docs/design/golden-triangle-design.md"
+      "docs/design/golden-triangle-design.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/routing/chat-message-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1262,9 +1366,7 @@
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
     ],
     "apps/web/lib/routing/request-contract.ts": [
-      "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
-      "docs/architecture/ai-routing-document-map.md",
       "docs/design/golden-triangle-design.md"
     ],
     "apps/web/lib/routing/task-requirements.email.test.ts": [
@@ -1304,6 +1406,9 @@
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
     ],
+    "apps/web/lib/self-upgrade/release-image-reference.ts": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "apps/web/lib/self-upgrade/run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1311,7 +1416,8 @@
       "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/shared/action-result.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/shared/coerce.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1372,7 +1478,8 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/agentic-loop.ts": [
-      "docs/design/golden-triangle-design.md"
+      "docs/design/golden-triangle-design.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/autonomous-work-run.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1420,7 +1527,8 @@
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
     "apps/web/lib/tak/scheduled-task-runs.ts": [
-      "docs/architecture/gated-permissions-process.md"
+      "docs/architecture/gated-permissions-process.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1476,6 +1584,9 @@
     "apps/web/lib/work-capsules.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
+    "apps/web/lib/work-capsules/authored-head.ts": [
+      "docs/architecture/failure-analysis-and-recovery.md"
+    ],
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
@@ -1484,6 +1595,9 @@
     ],
     "apps/web/lib/work-capsules/scope-claim-lease.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/work-capsules/work-capsule-store.ts": [
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
@@ -1498,14 +1612,9 @@
     "apps/web/lib/work-management/drive-child-rooms.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
-    "apps/web/lib/work-management/drive-deadlines.ts": [
-      "docs/architecture/gated-permissions-process.md"
-    ],
-    "apps/web/lib/work-management/drive-marking.ts": [
-      "docs/architecture/gated-permissions-process.md"
-    ],
     "apps/web/lib/work-management/human-accountability.ts": [
-      "docs/architecture/workroom-vocabulary-boundary.md"
+      "docs/architecture/workroom-vocabulary-boundary.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/work-management/portfolio-activity-projection.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
@@ -1537,7 +1646,18 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/work-management/room-stage-mandate.ts": [
+      "docs/architecture/gated-permissions-process.md",
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/work-management/room-types.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/workspace/finite-delivery-agreements.md"
+    ],
+    "apps/web/lib/work-management/source-inquiry-shape.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/work-management/stage-dispatch-answered.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
@@ -1564,16 +1684,14 @@
       "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
+      "docs/user-guide/workspace/finite-delivery-agreements.md",
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/lib/work-posture/derive.ts": [
-      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
-    ],
-    "apps/web/lib/work-posture/temporal-band.ts": [
-      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    "apps/web/lib/work-management/writeback-latch.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -1589,6 +1707,9 @@
     ],
     "apps/web/lib/workbooks/sheet-import.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
+    ],
+    "apps/web/lib/workbooks/workbook-authoring.ts": [
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/workforce/oversight-copy.ts": [
       "docs/platform-usability-standards.md"
@@ -1638,6 +1759,7 @@
     "docker-compose.edge.macvlan.yml": [
       "docs/edge-node/deployment-topology.md",
       "docs/edge-node/macvlan-deployment.md",
+      "docs/maintenance/staleness-report.md",
       "docs/user-guide/platform/edge-nodes.md"
     ],
     "docker-compose.edge.yml": [
@@ -1678,15 +1800,23 @@
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
+    "docs/ux-fit/2026-10-22-review-reassessment-restore-availability.ux-fit.json": [
+      "docs/audits/2026-10-22-review-reassessment-restore-availability.md"
+    ],
     "dpf-reinstall.ps1": [
       "docs/install/windows.md",
       "docs/operations/disaster-recovery.md"
     ],
     "dpf-start.ps1": [
+      "docs/install/windows.md",
+      "docs/operations/remote-action-edge-dispatch.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "e2e/managed-inference-control.spec.ts": [
+      "docs/testing/ci-evidence.md"
     ],
     "monitoring/prometheus/prometheus.yml": [
       "docs/architecture/platform-overview.md",
@@ -1708,7 +1838,8 @@
     "packages/db/prisma/schema/ai-coworker.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
-      "docs/architecture/gated-permissions-process.md"
+      "docs/architecture/gated-permissions-process.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -1719,7 +1850,8 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/db/prisma/schema/work-coordination.prisma": [
-      "docs/architecture/dpf-patterns.md"
+      "docs/architecture/dpf-patterns.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "packages/db/scripts/apply-model-metadata-comments.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1837,8 +1969,10 @@
     ],
     "packages/db/src/regulation-applicability.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
-      "docs/maintenance/staleness-report.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "packages/db/src/relation-vocabulary-entries.ts": [
+      "docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md"
     ],
     "packages/db/src/seed-decision-perspective.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1890,11 +2024,26 @@
     "packages/db/src/workforce-staffing-posture.test.ts": [
       "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
     ],
+    "packages/dpf-skill-pack/client-capabilities.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/client-hook-planes.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
     ],
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/dpf-skill-pack/hooks/hooks.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/lib/hook-io.mjs": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs": [
       "docs/architecture/build-gate-runbook.md"
@@ -1926,11 +2075,20 @@
     "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
+    "packages/dpf-skill-pack/scripts/grok_credential.py": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/scripts/toolchain_convergence.py": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1": [
       "docs/operations/install.md"
     ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
+    ],
+    "packages/dpf-skill-pack/scripts/update_agent_toolchain.py": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "packages/i18n/src/catalog.ts": [
       "docs/architecture/localization-runbook.md"
@@ -1962,7 +2120,6 @@
     ],
     "packages/storefront-templates/src/archetypes/index.ts": [
       "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
-      "docs/maintenance/staleness-report.md",
       "docs/testing/archetype-audit-plan.md"
     ],
     "packages/storefront-templates/src/archetypes/retail-goods.ts": [
@@ -1987,13 +2144,33 @@
       "docs/architecture/package-boundaries.md"
     ],
     "packages/validators/src/field-dispatch.ts": [
-      "docs/architecture/field-service-work-item.md"
+      "docs/architecture/field-service-work-item.md",
+      "docs/maintenance/staleness-report.md"
+    ],
+    "packages/validators/src/gpp/browser.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "packages/validators/src/gpp/compiler.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "packages/validators/src/gpp/executable-constructs.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "packages/validators/src/gpp/work-shape-contracts.ts": [
+      "docs/architecture/gated-permissions-process.md",
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "packages/validators/src/gpp/work-vocabulary.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "packages/validators/src/guards.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/validators/src/hostile-content-fixtures.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "packages/validators/src/operating-composition/legacy-fingerprint.ts": [
+      "docs/architecture/ai-agent-meta-model.md"
     ],
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
@@ -2002,16 +2179,31 @@
       "docs/architecture/data-model-stewardship-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "packages/validators/src/workroom-policy/derive.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "packages/validators/src/workroom-policy/drive-deadlines.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "packages/validators/src/workroom-policy/temporal-band.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "packages/validators/src/workroom/marking.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "pnpm-lock.yaml": [
       "docs/architecture/build-gate-runbook.md",
       "docs/architecture/dependency-reduction-routine.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/audit-typescript-checker-currency.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
-    "scripts/bind-worktree-cli.mjs": [
-      "docs/architecture/delivery-surfaces-runbook.md"
+    "scripts/branch-reaper.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
     ],
     "scripts/build-docs-staleness.mjs": [
       "docs/maintenance/README.md",
@@ -2120,8 +2312,7 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-module-size.mjs": [
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "scripts/check-no-adhoc-mcp-protocol-versions.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -2173,6 +2364,7 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-private-identity.mjs": [
+      "docs/maintenance/staleness-report.md",
       "docs/operations/oss-repo-identity-hygiene.md"
     ],
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
@@ -2238,6 +2430,9 @@
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
     ],
+    "scripts/check-web-src-script-imports.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/ci-change-scope.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -2272,10 +2467,10 @@
     ],
     "scripts/dpf-compose.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
-      "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
     ],
     "scripts/fresh-install.ps1": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/install/scratch-install-rehearsal.md",
       "docs/operations/disaster-recovery.md",
       "docs/testing/archetype-audit-plan.md"
@@ -2322,8 +2517,14 @@
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
     ],
+    "scripts/installer/autostart-bridge.mjs": [
+      "docs/operations/remote-action-edge-dispatch.md"
+    ],
     "scripts/installer/doctools-prepull.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
@@ -2338,8 +2539,17 @@
     "scripts/installer/lib/docker.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "scripts/installer/lib/host-convergence.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
+    ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/native-edge-host.ps1": [
+      "docs/operations/mac-inference-engine.md"
+    ],
+    "scripts/installer/native-edge-host.sh": [
+      "docs/operations/mac-inference-engine.md"
     ],
     "scripts/issue-authority-tls-cert.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -2352,6 +2562,10 @@
     ],
     "scripts/lib/canonical-json.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/lib/ci-evidence-plan.mjs": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
@@ -2422,8 +2636,11 @@
     ],
     "scripts/lib/resolve-capability-compose-profiles.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
-      "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
+    ],
+    "scripts/lib/worktree-provision.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md",
+      "docs/architecture/delivery-surfaces-runbook.md"
     ],
     "scripts/local-ci-durable-wait-resumer.mjs": [
       "docs/architecture/dpf-patterns.md"
@@ -2465,15 +2682,14 @@
       "docs/architecture/platform-substrate-boundaries.md"
     ],
     "scripts/portal-migrate-boot.sh": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/pr-health.mjs": [
-      "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/pr-health.test.mjs": [
-      "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md"
     ],
     "scripts/pre-push-dco-check.mjs": [
@@ -2507,11 +2723,16 @@
       "docs/architecture/agent-skill-index.md",
       "docs/architecture/contributor-procedure-runbook.md"
     ],
+    "scripts/release-image-reference.docker.test.mjs": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "scripts/restore-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
     "scripts/run-tsc.mjs": [
-      "docs/architecture/dependency-reduction-routine.md"
+      "docs/architecture/contributor-procedure-runbook.md",
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
@@ -2567,6 +2788,7 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/setup.sh": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/install/macos.md",
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2602,7 +2824,8 @@
       "docs/install/edge-node-air-gapped.md"
     ],
     "services/edge-node/src/collectors/unifi.ts": [
-      "docs/edge-node/unifi-adapter.md"
+      "docs/edge-node/unifi-adapter.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "services/edge-node/src/metrics-loop.ts": [
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md"
@@ -2850,7 +3073,6 @@
       "apps/web/lib/ea/ai-routing-architecture-registry.ts",
       "apps/web/lib/marketing/channels/email-postmark/responder.ts",
       "apps/web/lib/routing/request-contract.email.test.ts",
-      "apps/web/lib/routing/request-contract.ts",
       "apps/web/lib/routing/task-requirements.email.test.ts",
       "apps/web/lib/routing/task-requirements.ts",
       "packages/db/src/seed-ea-sysml2.test.ts"
@@ -2915,12 +3137,21 @@
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/investment-admission.ts",
+      "apps/web/lib/build/sandbox/grok-governance-seed.ts",
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/deliberation/external-review-activation.ts",
       "apps/web/lib/routing/anthropic-cache.ts",
       "e2e/fixtures/evidence.ts",
-      "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs"
+      "packages/dpf-skill-pack/client-capabilities.json",
+      "packages/dpf-skill-pack/hooks/client-hook-planes.json",
+      "packages/dpf-skill-pack/hooks/hooks.json",
+      "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs",
+      "packages/dpf-skill-pack/hooks/lib/hook-io.mjs",
+      "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
+      "packages/dpf-skill-pack/scripts/grok_credential.py",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/dpf-skill-pack/scripts/update_agent_toolchain.py"
     ],
     "docs/architecture/agent-client-governance.md": [
       "apps/web/lib/change-review/semantic-change-review.ts"
@@ -2935,7 +3166,9 @@
       "apps/web/lib/autonomy/regulatory-ceiling.ts",
       "apps/web/lib/autonomy/trust-graduation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
+      "apps/web/lib/golden-triangle/index.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
+      "apps/web/lib/mcp/backlog-recovery-read.ts",
       "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
       "apps/web/lib/performance/business-analysis-watch-run.ts",
@@ -2960,7 +3193,8 @@
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/identity/principal-linking.ts",
       "apps/web/lib/mcp-governed-execute.ts",
-      "packages/db/src/seed-ea-sysml-agent-authority.ts"
+      "packages/db/src/seed-ea-sysml-agent-authority.ts",
+      "packages/validators/src/operating-composition/legacy-fingerprint.ts"
     ],
     "docs/architecture/ai-routing-document-map.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -2968,8 +3202,7 @@
       "apps/web/lib/ea/reconcile-ai-routing-architecture.ts",
       "apps/web/lib/govern/data/policy-decision.ts",
       "apps/web/lib/govern/data/policy-enforcement.ts",
-      "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/routing/request-contract.ts"
+      "apps/web/lib/inference/routed-inference.ts"
     ],
     "docs/architecture/application-boundaries.md": [
       "scripts/check-application-boundaries.mjs"
@@ -3011,18 +3244,24 @@
     "docs/architecture/branch-and-worktree-runbook.md": [
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
       "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
+      "scripts/branch-reaper.mjs",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
       "scripts/hooks/session-reaper.sh",
+      "scripts/lib/worktree-provision.mjs",
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/build/finalize-repair-routing.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
+      "apps/web/lib/build/sandbox/test-scope-guard.ts",
+      "apps/web/lib/build/scoped-test-failure.ts",
+      "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
@@ -3032,6 +3271,7 @@
       "scripts/check-stuck-auto-merge.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
@@ -3088,7 +3328,8 @@
       "packages/db/src/agent-identity.test.ts",
       "packages/db/src/agent-identity.ts",
       "scripts/check-override-comments.mjs",
-      "scripts/regen-lockfile.mjs"
+      "scripts/regen-lockfile.mjs",
+      "scripts/run-tsc.mjs"
     ],
     "docs/architecture/customer-zero-and-use-case-zero.md": [
       "apps/web/lib/decision-perspective/weight-inference.ts",
@@ -3148,9 +3389,9 @@
       "apps/web/lib/operate/db-continuity.ts",
       "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
-      "scripts/bind-worktree-cli.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
+      "scripts/lib/worktree-provision.mjs",
       "scripts/new-dev-worktree.sh"
     ],
     "docs/architecture/dependency-reduction-routine.md": [
@@ -3176,7 +3417,9 @@
     "docs/architecture/document-generation-facility.md": [
       "apps/web/lib/documents/document-previews.ts",
       "apps/web/lib/documents/generation/brand-master.ts",
+      "apps/web/lib/documents/generation/create-family-documents.ts",
       "apps/web/lib/documents/generation/create-presentation.ts",
+      "apps/web/lib/documents/generation/family-document.ts",
       "apps/web/lib/documents/generation/render-flat.ts",
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
@@ -3184,6 +3427,7 @@
       "apps/web/lib/documents/preview-manifest.ts",
       "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
       "apps/web/lib/ea/view-drawing.ts",
+      "apps/web/lib/mcp/packs/document-family-tools.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
@@ -3216,12 +3460,17 @@
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/check-web-src-script-imports.mjs",
+      "scripts/fresh-install.ps1",
       "scripts/lib/git-changed-files.mjs",
       "scripts/lib/mermaid-renderer.mjs",
-      "scripts/lib/published-doc-roots.mjs"
+      "scripts/lib/published-doc-roots.mjs",
+      "scripts/portal-migrate-boot.sh",
+      "scripts/setup.sh"
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
       "apps/web/lib/change-review/failure-analysis.ts",
+      "apps/web/lib/work-capsules/authored-head.ts",
       "scripts/pregate-preflight.mjs"
     ],
     "docs/architecture/field-service-work-item.md": [
@@ -3238,21 +3487,22 @@
     ],
     "docs/architecture/gated-permissions-process.md": [
       "apps/web/lib/actions/build.ts",
+      "apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts",
       "apps/web/lib/build/plan-to-build-transition-core.ts",
       "apps/web/lib/ea/reconcile-sysml-projections.ts",
       "apps/web/lib/explore/build-process-matrix.ts",
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/bindings.ts",
-      "apps/web/lib/gpp/shape-language/executable-constructs.ts",
+      "apps/web/lib/gpp/shape-language/dpf-toolkit.ts",
       "apps/web/lib/gpp/shape-language/gate-ratification.ts",
       "apps/web/lib/gpp/stage-permit-revocation.ts",
       "apps/web/lib/queue/functions/workroom-drive-children.ts",
       "apps/web/lib/queue/functions/workroom-drive-deadlines.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/drive-child-rooms.ts",
-      "apps/web/lib/work-management/drive-deadlines.ts",
-      "apps/web/lib/work-management/drive-marking.ts",
+      "apps/web/lib/work-management/room-stage-mandate.ts",
+      "apps/web/lib/work-management/source-inquiry-shape.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
@@ -3261,18 +3511,32 @@
       "apps/web/scripts/build-gpp-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma",
+      "packages/validators/src/gpp/browser.ts",
+      "packages/validators/src/gpp/compiler.ts",
+      "packages/validators/src/gpp/executable-constructs.ts",
+      "packages/validators/src/gpp/work-shape-contracts.ts",
+      "packages/validators/src/workroom-policy/drive-deadlines.ts",
+      "packages/validators/src/workroom/marking.ts",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
-      "apps/web/lib/improvement-flywheel/signals.ts"
+      "apps/web/lib/demand/duplicate-merge-consequence.ts",
+      "apps/web/lib/improvement-flywheel/signals.ts",
+      "apps/web/lib/operate/tool-defect-origin.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
+      "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
+      "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts",
+      "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts",
+      "apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts",
+      "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
       "apps/web/lib/kernel/governing-principles.ts",
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
@@ -3302,7 +3566,9 @@
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
+      "apps/web/lib/mcp-task-persisted-request.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
+      "apps/web/lib/mcp/toolchain-floor.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-result-provenance.ts",
@@ -3322,6 +3588,7 @@
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/ai-readiness/readiness-summary-types.ts",
+      "apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts",
       "apps/web/lib/coworker/approved-request-run-types.ts",
       "apps/web/lib/mcp-governed-execute-types.ts",
       "apps/web/lib/mcp-task-submit-types.ts",
@@ -3338,6 +3605,7 @@
       "apps/web/lib/routing/chat-message-types.ts",
       "apps/web/lib/self-upgrade/run-types.ts",
       "apps/web/lib/tak/precondition-ordering-types.ts",
+      "apps/web/lib/work-capsules/work-capsule-store.ts",
       "scripts/check-mcp-tool-pack.mjs",
       "scripts/check-module-size.mjs",
       "scripts/check-no-web-import-cycle-growth.mjs",
@@ -3441,7 +3709,10 @@
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/stage-dispatch-answered.ts",
       "apps/web/lib/work-management/work-shapes.ts",
+      "packages/validators/src/gpp/work-shape-contracts.ts",
+      "packages/validators/src/gpp/work-vocabulary.ts",
       "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
@@ -3450,6 +3721,9 @@
       "apps/web/lib/work-management/portfolio-activity-projection.ts",
       "apps/web/lib/work-management/worker-rollup.ts",
       "scripts/check-prose-lint.ts"
+    ],
+    "docs/audits/2026-10-22-review-reassessment-restore-availability.md": [
+      "docs/ux-fit/2026-10-22-review-reassessment-restore-availability.ux-fit.json"
     ],
     "docs/design/golden-triangle-design.md": [
       "apps/web/lib/queue/functions/deliberation-run.ts",
@@ -3517,7 +3791,11 @@
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
     ],
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
+    ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
+      "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts",
       "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/work-management/delivery-shapes.ts"
@@ -3527,6 +3805,9 @@
     ],
     "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md": [
       "apps/web/lib/kernel/runtime-gate.ts"
+    ],
+    "docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md": [
+      "packages/db/src/relation-vocabulary-entries.ts"
     ],
     "docs/founder-kernel/wiki/principles/universal-work-formula.md": [
       "apps/web/lib/work-management/work-unit.ts"
@@ -3611,7 +3892,8 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/windows.md": [
-      "dpf-reinstall.ps1"
+      "dpf-reinstall.ps1",
+      "dpf-start.ps1"
     ],
     "docs/install/worktree-janitor-schedule.md": [
       "scripts/install-worktree-janitor-schedule.sh",
@@ -3625,24 +3907,25 @@
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
-      ".github/workflows/install-verification.yml",
       ".github/workflows/security-inflow-gate.yml",
       "apps/web/components/shell/SectionNav.tsx",
-      "apps/web/lib/ea/ai-routing-architecture-registry.ts",
+      "apps/web/instrumentation.ts",
+      "apps/web/lib/build/claude-dispatch.ts",
       "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/mcp/packs/work-capsules-pack.ts",
+      "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/navigation/section-nav-model.ts",
-      "apps/web/lib/platform-runtime/operational-state.ts",
-      "packages/db/src/regulation-applicability.ts",
-      "packages/storefront-templates/src/archetypes/index.ts",
+      "apps/web/lib/routing/chat-adapter.ts",
+      "apps/web/lib/shared/action-result.ts",
+      "apps/web/lib/work-management/human-accountability.ts",
+      "docker-compose.edge.macvlan.yml",
+      "packages/db/prisma/schema/ai-coworker.prisma",
+      "packages/db/prisma/schema/work-coordination.prisma",
+      "packages/validators/src/field-dispatch.ts",
       "scripts/build-docs-staleness.mjs",
-      "scripts/check-module-size.mjs",
+      "scripts/check-no-private-identity.mjs",
       "scripts/check-style-drift.mjs",
-      "scripts/dpf-compose.mjs",
       "scripts/lib/ci-policy-guards.mjs",
-      "scripts/lib/resolve-capability-compose-profiles.mjs",
-      "scripts/pr-health.mjs",
-      "scripts/pr-health.test.mjs"
+      "services/edge-node/src/collectors/unifi.ts"
     ],
     "docs/marketing/archetype-owner-quick-guide.md": [
       "apps/web/lib/marketing/buyer-archetype-value.ts"
@@ -3677,6 +3960,10 @@
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],
+    "docs/operations/mac-inference-engine.md": [
+      "scripts/installer/native-edge-host.ps1",
+      "scripts/installer/native-edge-host.sh"
+    ],
     "docs/operations/mobile-store-launch-runbook.md": [
       "apps/mobile/eas.json"
     ],
@@ -3684,6 +3971,7 @@
       "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
+      "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
@@ -3693,7 +3981,11 @@
       "scripts/check-no-private-identity.mjs"
     ],
     "docs/operations/remote-action-edge-dispatch.md": [
-      "docker-compose.edge-actions.yml"
+      "docker-compose.edge-actions.yml",
+      "dpf-start.ps1",
+      "scripts/installer/autostart-bridge.mjs",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/lib/host-convergence.sh"
     ],
     "docs/operations/runtime-glossary.md": [
       "docker-compose.dev-against-live-db.yml",
@@ -3771,7 +4063,9 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
-      "dpf-start.ps1"
+      "apps/web/lib/self-upgrade/release-image-reference.ts",
+      "dpf-start.ps1",
+      "scripts/release-image-reference.docker.test.mjs"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
       ".github/workflows/ci.yml",
@@ -3884,6 +4178,7 @@
       "apps/web/lib/runtime/measurement-runtime.ts",
       "apps/web/lib/ux-budget/scope.ts",
       "docs/testing/ci-observation-baseline.json",
+      "e2e/managed-inference-control.spec.ts",
       "scripts/ci-evidence-plan.mjs",
       "scripts/ci-shadow-selection.mjs"
     ],
@@ -3930,6 +4225,7 @@
       "apps/web/lib/tools/integration-settings-href.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/audit-typescript-checker-currency.mjs",
       "scripts/check-agent-principal-convergence-wired.mjs",
       "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",
@@ -3943,6 +4239,7 @@
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
       "scripts/hooks/converge-git-hooks.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/ci-policy-guards.mjs",
       "scripts/lib/converge-hooks-dir.mjs",
       "scripts/lib/hooks-dir.mjs",
@@ -3951,6 +4248,7 @@
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/pregate-status.mjs",
+      "scripts/run-tsc.mjs",
       "scripts/set-hooks-path.mjs",
       "tests/release/local-ci-gate-contract.test.mjs"
     ],
@@ -3968,6 +4266,11 @@
     "docs/user-guide/ai-workforce/coworker-proactivity.md": [
       "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx",
       "apps/web/components/proactivity/ProactivityRosterList.tsx",
+      "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts",
+      "apps/web/lib/mcp/improvement-draft.ts",
+      "apps/web/lib/mcp/packs/scheduled-agent-task-pack.ts",
+      "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-authority.ts",
+      "apps/web/lib/operate/scheduled-jobs/scheduled-reporting-run.ts",
       "apps/web/lib/proactivity/proactivity-roster.ts"
     ],
     "docs/user-guide/ai-workforce/decision-perspective.md": [
@@ -3981,8 +4284,8 @@
       "apps/web/lib/work-management/room-participant-invitation-preflight.server.ts",
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
-      "apps/web/lib/work-posture/derive.ts",
-      "apps/web/lib/work-posture/temporal-band.ts"
+      "packages/validators/src/workroom-policy/derive.ts",
+      "packages/validators/src/workroom-policy/temporal-band.ts"
     ],
     "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
       "docker-entrypoint.sh"
@@ -4003,6 +4306,7 @@
       "apps/web/app/auth/callback/route.ts",
       "apps/web/app/callback/route.ts",
       "apps/web/lib/actions/provider-oauth.ts",
+      "apps/web/lib/inference/local-model-context-reconcile.ts",
       "apps/web/lib/provider-oauth.ts"
     ],
     "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md": [
@@ -4036,10 +4340,24 @@
     "docs/user-guide/platform/edge-nodes.md": [
       "docker-compose.edge.macvlan.yml"
     ],
+    "docs/user-guide/workroom-approval-recovery.md": [
+      "apps/web/lib/actions/agent-task-scheduler.ts",
+      "apps/web/lib/coworker/approved-request-run.ts",
+      "apps/web/lib/queue/functions/workroom-drive-stage-run.ts",
+      "apps/web/lib/tak/agentic-loop.ts",
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/room-stage-mandate.ts",
+      "apps/web/lib/work-management/writeback-latch.ts"
+    ],
     "docs/user-guide/workspace/attention-inbox.md": [
       "apps/web/components/attention/AttentionInbox.tsx",
       "apps/web/components/attention/OwnerDecisionCards.tsx",
       "apps/web/lib/attention/owner-projection.ts"
+    ],
+    "docs/user-guide/workspace/finite-delivery-agreements.md": [
+      "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx",
+      "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/workspace-case-loader.ts"
     ],
     "docs/user-guide/workspace/supported-file-formats.md": [
       "apps/web/lib/shared/file-parsers.ts",
@@ -4056,6 +4374,7 @@
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
       "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
       "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
+      "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
       "apps/web/lib/work-management/room-ai-spend.ts",
@@ -4067,9 +4386,12 @@
     ],
     "docs/user-guide/workspace/workbooks.md": [
       "apps/web/components/workbooks/GridExportMenu.tsx",
+      "apps/web/components/workbooks/WorkbookViewTabs.tsx",
       "apps/web/components/workbooks/grid-office-export.ts",
+      "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/workbooks/export-fods.ts",
-      "apps/web/lib/workbooks/export-workbook.ts"
+      "apps/web/lib/workbooks/export-workbook.ts",
+      "apps/web/lib/workbooks/workbook-authoring.ts"
     ]
   }
 }

@@ -152,6 +152,38 @@ Closing or archiving an outcome preserves its observations and work links.
 Product-line outcome posture is derived from its real Products; no second
 product-line outcome ledger is created.
 
+#### Outcomes of delivered platform work
+
+Every backlog item carries its own outcome: what will be true, and for whom,
+once it is done. When nobody states one, DPF writes a draft from the item's
+title and marks it **derived**. Correct a derived draft whenever it is wrong,
+and it becomes **stated**. A Workroom shows the outcome of the item it carries.
+
+DPF records whether each delivered platform item achieved its outcome, with
+no one recording it by hand. Turn this on by designating the business Product
+that your platform development work serves. An agent does this with
+`designate_platform_work_product`, citing the business decision that chose
+the Product. DPF never guesses the Product. Until one is designated, it
+records nothing.
+
+Once a Product is designated, its outcomes list two kinds of objective:
+
+- **Delivered platform work achieves its outcomes** is the designation. It
+  also collects work that belongs to no epic.
+- **Item outcomes hold: _epic title_** objectives appear on their own when the
+  first item in an epic is delivered.
+
+Each observation is about one item and names the outcome it measured:
+
+- **Delivered:** achieved (100).
+- **Reopened after it was done:** regressed (0).
+- **Failing evidence recorded while it is done:** not achieved (0).
+
+An objective's rate is the average of its items' observations. Nobody enters
+it separately. Recording never blocks a delivery. Work scoped to an archetype
+or to a business Product is not counted, because it belongs to that Product's
+own outcomes.
+
 ### Read the evidence-derived roadmap
 
 Open a business Product and choose **Direction → Roadmap**. A product line also
@@ -370,6 +402,8 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
 - Append quantitative or qualitative observations with source provenance and
   correction history
 - Link only real, same-product backlog work to the outcome it contributes to
+- See, without anyone recording it by hand, whether delivered platform work
+  held, once the Product it serves is designated
 - Compare product-line sales evidence and drill into a business Product's
   Direction brief
 - Switch between guided and professional density without forking product truth

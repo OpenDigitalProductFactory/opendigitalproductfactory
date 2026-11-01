@@ -1,6 +1,8 @@
 "use server";
 
 import * as crypto from "crypto";
+import { OUTCOME_MAX_LENGTH, resolveItemOutcome } from "@/lib/backlog/intake-outcome";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 import { prisma, attributeBacklogPortfolio } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
@@ -133,7 +135,10 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     archetypeIds:        cleanStringArray(input.archetypeIds),
     scopeRationale:      input.scopeRationale?.trim() || null,
     lifecycleTags:       cleanStringArray(input.lifecycleTags),
-    ...(input.body !== undefined && { body: input.body.trim() || null }),
+    // BI-8DE5429B: the outcome is the item's own field; with none given, a
+    // draft is derived and marked derived. The item is always filed.
+    ...resolveItemOutcome({ outcome: input.outcome, body: input.body, title: input.title.trim(), workType: input.workType }),
+    ...(input.body !== undefined ? { body: input.body?.trim() || null } : {}),
     ...deferralProjection,
   };
   const created = await prisma.$transaction(async (tx) => {
@@ -167,6 +172,9 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   const existing = await prisma.backlogItem.findUnique({
     where: { id },
     select: {
+      itemId: true,
+      body: true,
+      outcome: true,
       status: true,
       scopeKind: true,
       archetypeCategories: true,
@@ -182,6 +190,9 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   if (input.status === "retired" && existing?.status !== "retired") {
     throw new Error("Use the governed retirement action so the retirement rationale is audited");
   }
+  // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+  const peerOwned = existing && input.status !== existing.status ? peerOwnedStatusRefusal(existing.itemId, existing.body) : null;
+  if (peerOwned) throw new Error(peerOwned.message);
   const isNowDone = input.status === "done" || input.status === "retired";
   const wasDone = existing?.status === "done" || existing?.status === "retired";
   const deferralProjection = input.status === "deferred"
@@ -193,7 +204,13 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
       }
     : CLEAR_DEFERRAL_PROJECTION;
 
+  // BI-8DE5429B: an edited outcome is stated; a blank field never clears it.
+  const editedOutcome = input.outcome?.trim();
+  const outcomeEdit = editedOutcome && editedOutcome !== existing?.outcome
+    ? { outcome: editedOutcome.slice(0, OUTCOME_MAX_LENGTH), outcomeSource: "stated" }
+    : {};
   const updateData = {
+    ...outcomeEdit,
     title:            input.title.trim(),
     type:             input.type,
     workType:         input.workType,
@@ -325,9 +342,14 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
 
   const existing = await prisma.backlogItem.findUnique({
     where: { id },
-    select: { status: true, type: true, digitalProductId: true, epicId: true, organizationId: true },
+    select: { itemId: true, body: true, status: true, type: true, digitalProductId: true, epicId: true, organizationId: true },
   });
   if (!existing) throw new Error("Backlog item not found");
+  // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+  if (patch.status !== undefined && patch.status !== existing.status) {
+    const peerOwned = peerOwnedStatusRefusal(existing.itemId, existing.body);
+    if (peerOwned) throw new Error(peerOwned.message);
+  }
 
   // Validate ONLY the fields actually being changed.
   if (patch.title !== undefined && !patch.title.trim()) throw new Error("Title is required");

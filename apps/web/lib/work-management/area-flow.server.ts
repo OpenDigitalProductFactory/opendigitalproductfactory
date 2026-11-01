@@ -12,15 +12,18 @@
 import { prisma } from "@dpf/db";
 
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { addAiUse, NO_AI_USE, type AiUse } from "@/lib/portfolio/ai-resource";
 import { loadPortfolioInvestment } from "@/lib/portfolio/investment-read-model";
 import { PORTFOLIO_SLUG_BY_ROLE, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 
 import { computePortfolioFlow, FLOW_WINDOW_DAYS, type PortfolioFlow } from "./portfolio-flow";
-import { loadRoomAiSpend } from "./room-ai-spend.server";
+import { loadRoomAiUse } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
-import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion, listWorkShapes, type WorkShapeDefinition } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
+import { computeFlowReviewHistory, liveStageHolds, type FlowReviewHistory } from "./flow-review-receipt";
+import { computeShapeStepMeasures, typicalStepWaitMs, type ShapeStepMeasures, type StepSnapshot } from "./shape-step-measures";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
@@ -37,8 +40,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type PortfolioFlowWithCost = PortfolioFlow & {
   /** Points from the quarter's investment read model; null for the unplaced bucket. */
   points: { inFlight: number; delivered: number } | null;
-  /** AI spend on this bucket's rooms over the flow window (F6, exact by thread). Null when the read failed. */
-  aiUsd: number | null;
+  /** AI use on this bucket's rooms over the flow window (F6, exact by thread). Null when the read failed. */
+  ai: AiUse | null;
 };
 
 const ROW_SELECT = { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true } as const;
@@ -72,25 +75,25 @@ export async function loadPortfolioFlowView(now: Date = new Date()): Promise<Por
     }) as Promise<QueueTelemetryRow[]>,
     loadPortfolioInvestment(prisma as never, now).catch(() => null),
     prisma.portfolio.findMany({ select: { id: true, slug: true } }),
-    loadRoomAiSpend({ since: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS), until: now }).catch(() => null),
+    loadRoomAiUse({ since: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS), until: now }).catch(() => null),
   ]);
   const flows = computePortfolioFlow({ rooms, rows, now });
-  const aiByBucket = new Map<string, number>();
+  const aiByBucket = new Map<string, AiUse>();
   if (aiByRoom) {
     for (const room of rooms) {
-      const usd = aiByRoom.get(room.capsuleId);
-      if (!usd) continue;
+      const use = aiByRoom.get(room.capsuleId);
+      if (!use) continue;
       const bucket = room.portfolioRole && flows.some((f) => f.key === room.portfolioRole) ? room.portfolioRole : "unplaced";
-      aiByBucket.set(bucket, (aiByBucket.get(bucket) ?? 0) + usd);
+      aiByBucket.set(bucket, addAiUse(aiByBucket.get(bucket) ?? NO_AI_USE, use));
     }
   }
-  const aiUsdFor = (key: string) => (aiByRoom ? aiByBucket.get(key) ?? 0 : null);
+  const aiFor = (key: string) => (aiByRoom ? aiByBucket.get(key) ?? NO_AI_USE : null);
   const slugById = new Map(portfolios.map((p) => [p.id, p.slug]));
   return flows.map((flow) => {
-    if (flow.key === "unplaced" || !investment) return { ...flow, points: null, aiUsd: aiUsdFor(flow.key) };
+    if (flow.key === "unplaced" || !investment) return { ...flow, points: null, ai: aiFor(flow.key) };
     const slug = PORTFOLIO_SLUG_BY_ROLE[flow.key as PortfolioRoleKey];
     const row = investment.rows.find((candidate) => candidate.portfolioId && slugById.get(candidate.portfolioId) === slug);
-    return { ...flow, points: row ? { inFlight: row.inFlightPoints, delivered: row.deliveredPoints } : { inFlight: 0, delivered: 0 }, aiUsd: aiUsdFor(flow.key) };
+    return { ...flow, points: row ? { inFlight: row.inFlightPoints, delivered: row.deliveredPoints } : { inFlight: 0, delivered: 0 }, ai: aiFor(flow.key) };
   });
 }
 
@@ -101,7 +104,30 @@ export type ShapeFlowView = {
   /** Versions of this shape with stage data, newest first, for before/after. */
   versions: string[];
   roomsAtStep: ShapeRoomAtStep[] | null;
+  /** Per-step data boxes, timeline ladder and heat (F4, spec §4 VSM). */
+  stepMeasures: ShapeStepMeasures;
+  /** Baseline and the reviews at each review point (F8b, spec §8). */
+  reviews: FlowReviewHistory;
+  reviewEveryDays: number;
 };
+
+/**
+ * Typical wait per held step for the given shape versions, keyed by stage
+ * queue key: what the home's bottleneck sentence ranks on (BI-9148060C).
+ */
+export async function loadStageWaits(shapeRefs: readonly string[], now: Date = new Date()): Promise<Map<string, number | null>> {
+  if (shapeRefs.length === 0) return new Map();
+  const rows = await prisma.queueMetricSnapshot.findMany({
+    where: {
+      OR: shapeRefs.map((shapeRef) => ({ queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } })),
+      period: { gte: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10) },
+    },
+    select: { queueKey: true, period: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
+  });
+  const byKey = new Map<string, StepSnapshot[]>();
+  for (const row of rows) byKey.set(row.queueKey, [...(byKey.get(row.queueKey) ?? []), row]);
+  return new Map([...byKey].map(([queueKey, snapshots]) => [queueKey, typicalStepWaitMs(snapshots)]));
+}
 
 export async function loadShapeFlowView(input: {
   shapeKey: string;
@@ -116,19 +142,24 @@ export async function loadShapeFlowView(input: {
   if (!definition) return null;
   const shapeRef = `${definition.key}@${definition.version}`;
 
-  const [rooms, snapshots, keyed] = await Promise.all([
+  const [rooms, snapshots, keyed, history] = await Promise.all([
     loadRooms(),
     prisma.queueMetricSnapshot.findMany({
       where: {
         queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` },
         period: { gte: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10) },
       },
-      select: { queueKey: true, cycleP50Ms: true, throughput: true },
+      select: { queueKey: true, period: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
     }),
     prisma.queueMetricSnapshot.findMany({
       where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${definition.key}@` } },
       select: { queueKey: true },
       distinct: ["queueKey"],
+    }),
+    // The version's whole history: its baseline is its first four weeks.
+    prisma.queueMetricSnapshot.findMany({
+      where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } },
+      select: { queueKey: true, period: true, depth: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
     }),
   ]);
 
@@ -161,5 +192,52 @@ export async function loadShapeFlowView(input: {
       })
     : null;
 
-  return { model, versions, roomsAtStep };
+  const stepMeasures = computeShapeStepMeasures({
+    shapeRef,
+    stages: model.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+    snapshots,
+    liveCounts,
+    now,
+  });
+
+  const reviews = computeFlowReviewHistory({
+    shapeRef,
+    stages: model.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+    snapshots: history,
+    everyDays: definition.reviewPoint.everyDays,
+    // Snapshots are per shape version, so the cause reads every room on it, not this area's.
+    liveHolds: liveStageHolds(rooms.filter((room) => room.shapeRef === shapeRef)),
+    now,
+  });
+
+  return { model, versions, roomsAtStep, stepMeasures, reviews, reviewEveryDays: definition.reviewPoint.everyDays };
+}
+
+/**
+ * The flow reviews of every current shape version with stage data, newest
+ * first: what the daily flow review records and escalates (BI-3EC4722F). The
+ * latest review's cause reads every live room on the version, as in the
+ * drill-in.
+ */
+export async function loadCurrentFlowReviews(now: Date = new Date()): Promise<{ definition: WorkShapeDefinition; shapeRef: string; history: NonNullable<FlowReviewHistory> }[]> {
+  const rooms = await loadRooms();
+  const out: { definition: WorkShapeDefinition; shapeRef: string; history: NonNullable<FlowReviewHistory> }[] = [];
+  for (const definition of listWorkShapes()) {
+    const shapeRef = `${definition.key}@${definition.version}`;
+    const snapshots = await prisma.queueMetricSnapshot.findMany({
+      where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } },
+      select: { queueKey: true, period: true, depth: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
+    });
+    if (snapshots.length === 0) continue;
+    const history = computeFlowReviewHistory({
+      shapeRef,
+      stages: definition.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+      snapshots,
+      everyDays: definition.reviewPoint.everyDays,
+      liveHolds: liveStageHolds(rooms.filter((room) => room.shapeRef === shapeRef)),
+      now,
+    });
+    if (history) out.push({ definition, shapeRef, history });
+  }
+  return out;
 }

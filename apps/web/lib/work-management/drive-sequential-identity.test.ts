@@ -495,15 +495,25 @@ describe("AC-3C-SEQ-IDENTICAL: sequential rooms are byte-identical to the pre-3c
     // A review stage's unsendable reviewer request (BI-2C8750FC) is reached only
     // through the readiness review overlay, which this golden harness does not
     // compose; workroom-drive-review-stages.test.ts reaches it.
-    const reviewStageOnly = new Set<string>(["reviewer_dispatch_unavailable"]);
+    // A provider hold (BI-2B6A8A74) is reached only with a stored queueHold, which
+    // this harness does not compose; workroom-drive.test.ts reaches it on both paths.
+    const reviewStageOnly = new Set<string>(["reviewer_dispatch_unavailable", "provider_held"]);
+    // A room whose backlog item is not live work (BI-72679FE0) is stood down by
+    // the drive job after resolution (drive-work-item-gate.ts), which this golden
+    // harness does not compose; drive-work-item-gate.test.ts reaches it.
+    // A room past the tick's agent capacity (BI-7C0B2BD6) is capped by the job
+    // after resolution; this harness supplies its own rooms, which are uncapped.
+    // drive-dispatch-cap.test.ts and workroom-drive-writeback-run.test.ts reach it.
+    const jobGateOnly = new Set<string>(["work_item_inactive", "awaiting_agent_capacity"]);
     const expected = [
       ...Object.values(DRIVE_REASONS_BY_ACTION).flat(),
       "executor_writeback_unavailable",
       "cycle_complete",
-    ].filter((reason) => !graphOnly.has(reason) && !reviewStageOnly.has(reason));
+    ].filter((reason) => !graphOnly.has(reason) && !reviewStageOnly.has(reason) && !jobGateOnly.has(reason));
     expect(expected.filter((reason) => !reached.has(reason))).toEqual([]);
     expect([...graphOnly].filter((reason) => reached.has(reason))).toEqual([]);
     expect([...reviewStageOnly].filter((reason) => reached.has(reason))).toEqual([]);
+    expect([...jobGateOnly].filter((reason) => reached.has(reason))).toEqual([]);
   }, 300_000);
 
   it("no persisted sequential snapshot carries a marking or pendingAttentions key", async () => {

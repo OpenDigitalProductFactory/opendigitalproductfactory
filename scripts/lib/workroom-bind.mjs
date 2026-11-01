@@ -27,6 +27,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { mcpCall } from "./mcp-client.mjs";
+import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./mcp-credential.mjs";
+import { gitTextOrNull } from "./git.mjs";
+import { isMcpCredentialRefusal } from "../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs";
 
 export const DEFAULT_MCP_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 /** Must match packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs. */
@@ -42,6 +45,37 @@ export const BIND_TIMEOUT_MS = 8_000;
  *  is easy to mangle when this file is generated or patched. */
 export function toPosixPath(p) {
   return String(p ?? "").split("\\").join("/");
+}
+
+/** Observe source only on the caller's host; never ask the server to open its path. */
+export function resolveWorktreeSourceIdentity(worktreePath, { baseBranch = "main", readGit = gitTextOrNull, now = () => performance.now() } = {}) {
+  const deadline = now() + 10000;
+  const read = args => {
+    const remaining = Math.floor(deadline - now());
+    return remaining > 0 ? readGit(["-C", worktreePath, ...args], { cwd: worktreePath, timeout: remaining }) : null;
+  };
+  const branch = read(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const root = read(["rev-parse", "--show-toplevel"]);
+  const remote = read(["config", "--get", "remote.origin.url"]);
+  const repository = String(remote ?? "").match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
+  const headSha = read(["rev-parse", "--verify", "HEAD^{commit}"]);
+  const baseSha = read(["merge-base", "HEAD", `refs/remotes/origin/${baseBranch}`]);
+  if (now() >= deadline || !branch || !root || !repository || !/^[0-9a-f]{40}$/i.test(headSha ?? "") || !/^[0-9a-f]{40}$/i.test(baseSha ?? "")) {
+    return { ok: false, reason: "Source identity unavailable: verify the branch, origin repository and fetched base history before adoption." };
+  }
+  return { ok: true, identity: { branch, worktreePath: toPosixPath(root), repositoryFullName: repository[1], baseBranch, baseSha, headSha } };
+}
+
+function sameSourcePath(left, right) {
+  const normalize = value => {
+    let observed = value;
+    if (typeof value === "string") {
+      try { observed = fs.realpathSync.native(value); } catch { /* Remote readback may not be accessible here. */ }
+    }
+    const result = toPosixPath(observed).replace(/\/$/, "");
+    return /^[a-z]:\//i.test(result) ? result.toLowerCase() : result;
+  };
+  return normalize(left) === normalize(right);
 }
 
 /**
@@ -66,11 +100,28 @@ export function toPosixPath(p) {
 export function resolveSessionRef({ worktreePath, env = process.env } = {}) {
   return (
     env.DPF_SESSION_REF
+    // Claude Code exports CLAUDE_CODE_SESSION_ID, the same id a Claude agent
+    // passes to claim_backlog_item_for_work. Without it the bind sent the
+    // worktree fallback, the server saw another session, and refused the
+    // caller's own claim (BI-144E4F92, BI-4BEEC539).
+    || env.CLAUDE_CODE_SESSION_ID
     || env.CLAUDE_SESSION_ID
     || env.CODEX_SESSION_ID
     || env.GROK_SESSION_ID
     || (worktreePath ? `worktree:${toPosixPath(worktreePath)}` : null)
   );
+}
+
+/**
+ * Every identity this session may truthfully claim under, in preference order:
+ * the host's own session id, then the worktree form. A claim made with
+ * claim_backlog_item_for_work may carry either (BI-EFCDE989), and the server
+ * reuses a capsule only for the session that holds it.
+ */
+export function sessionRefCandidates({ worktreePath, env = process.env } = {}) {
+  const preferred = resolveSessionRef({ worktreePath, env });
+  const worktreeRef = worktreePath ? `worktree:${toPosixPath(worktreePath)}` : null;
+  return [...new Set([preferred, worktreeRef].filter(Boolean))];
 }
 
 export function activityKindForBranch(branch) {
@@ -87,7 +138,7 @@ export function activityKindForBranch(branch) {
  * than pretending to a specificity nobody supplied.
  * @param {{ branch: string, worktreePath: string, repositoryFullName: string, headSha?: string|null, baseBranch?: string }} input
  */
-export function planAdoption({ branch, worktreePath, repositoryFullName, headSha = null, baseBranch = "main", sessionRef = null }) {
+export function planAdoption({ branch, worktreePath, repositoryFullName, headSha = null, baseSha = null, baseBranch = "main", sessionRef = null }) {
   const slug = String(branch).split("/").slice(1).join("/") || String(branch);
   const words = slug.replace(/[-_]+/g, " ").trim();
   const title = words ? words.charAt(0).toUpperCase() + words.slice(1) : branch;
@@ -98,6 +149,7 @@ export function planAdoption({ branch, worktreePath, repositoryFullName, headSha
     headBranch: branch,
     worktreePath: toPosixPath(worktreePath),
     baseBranch,
+    ...(baseSha ? { baseSha } : {}),
     ...(headSha ? { headSha } : {}),
     executorKind: "claude-desktop",
     ...(sessionRef ? { sessionRef } : {}),
@@ -135,11 +187,17 @@ export function markerFromAdoption(payload, branch) {
   };
 }
 
-/** Endpoint + token from the environment, or null when binding cannot run. */
+/** Reuse the gate's credential policy; never copy an interactive client token. */
 export function resolveMcpAccess(env = process.env) {
-  const bearerToken = env.DPF_MCP_BEARER_TOKEN;
-  if (!bearerToken) return null;
-  return { mcpUrl: env.DPF_MCP_ENDPOINT || DEFAULT_MCP_ENDPOINT, bearerToken };
+  const mcpUrl = env.DPF_MCP_ENDPOINT || DEFAULT_MCP_ENDPOINT;
+  try {
+    const { bearer } = resolveMcpCredential({ mcpUrl, env });
+    return { mcpUrl, bearerToken: bearer };
+  } catch {
+    // A malformed credential must not fall back to broader legacy authority.
+    // Parser exceptions can contain input bytes, so never expose them here.
+    return null;
+  }
 }
 
 // ── effectful ────────────────────────────────────────────────────────────────
@@ -164,27 +222,73 @@ export async function bindWorktreeToWorkroom({
   gitDir,
   repositoryFullName,
   headSha = null,
+  baseSha = null,
   baseBranch = "main",
+  captureSourceIdentity = false,
+  observeIdentity = resolveWorktreeSourceIdentity,
   env = process.env,
   call = mcpCall,
   writeMarker = writeClaimMarker,
 }) {
   const access = resolveMcpAccess(env);
-  if (!access) return { status: "unavailable", reason: "DPF_MCP_BEARER_TOKEN is not set" };
+  if (!access) return { status: "unavailable", reason: MCP_CREDENTIAL_HELP };
 
-  let payload;
-  try {
-    payload = await call("adopt_worktree", planAdoption({ branch, worktreePath, repositoryFullName, headSha, baseBranch, sessionRef: resolveSessionRef({ worktreePath, env }) }), {
-      ...access,
-      timeoutMs: BIND_TIMEOUT_MS,
-    });
-  } catch (err) {
-    return { status: "unavailable", reason: err?.message ?? String(err) };
+  let sourceIdentity = null;
+  if (captureSourceIdentity) {
+    let observation;
+    try { observation = observeIdentity(worktreePath, { baseBranch }); }
+    catch { return { status: "unavailable", reason: "Local source identity observation failed before adoption." }; }
+    if (!observation?.ok || observation.identity?.branch !== branch || !sameSourcePath(observation.identity?.worktreePath, worktreePath)) {
+      return { status: "unavailable", reason: observation?.reason ?? "Observed source branch or worktree conflicts with the requested binding." };
+    }
+    sourceIdentity = observation.identity;
+    ({ repositoryFullName, baseBranch, baseSha, headSha } = sourceIdentity);
   }
 
-  if (payload?.success === false || payload?.error) {
-    // branch_occupied and friends are real answers, not failures to retry.
-    return { status: "refused", reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
+  // Try each identity this session can truthfully present, host session first.
+  // Only an occupancy refusal moves on to the next one: the claim may have been
+  // recorded under the other identity (BI-EFCDE989). Every other refusal is a
+  // real answer and is returned as-is.
+  let payload;
+  let refusal = null;
+  for (const sessionRef of sessionRefCandidates({ worktreePath, env })) {
+    try {
+      payload = await call("adopt_worktree", planAdoption({ branch, worktreePath, repositoryFullName, headSha, baseSha, baseBranch, sessionRef }), {
+        ...access,
+        timeoutMs: BIND_TIMEOUT_MS,
+      });
+    } catch (err) {
+      // HTTP denials prove the authority answered; recovery must not treat
+      // them as an outage and enter the provisioning break-glass path.
+      if (isMcpCredentialRefusal(err)) {
+        return { status: "refused", code: err.code, reason: "The existing MCP identity was refused; use its governed credential or grant remedy." };
+      }
+      return { status: "unavailable", reason: err?.message ?? String(err) };
+    }
+    if (!(payload?.success === false || payload?.error)) {
+      refusal = null;
+      break;
+    }
+    // The code lets a caller tell an authorization answer (e.g.
+    // worktree_provision_not_admitted, BI-D1FB8C4D) from an outage.
+    refusal ??= { status: "refused", code: payload.error ?? null, reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
+    if (payload.error !== "branch_occupied") break;
+  }
+  if (refusal) return refusal;
+
+  if (sourceIdentity) {
+    const returned = payload?.data?.capsule ?? payload?.capsule ?? payload?.data ?? payload;
+    if (returned?.repositoryFullName !== repositoryFullName || returned?.headBranch !== branch
+      || returned?.baseBranch !== baseBranch || returned?.baseSha !== baseSha || returned?.headSha !== headSha
+      || !sameSourcePath(returned?.worktreePath, worktreePath)) {
+      return { status: "error", reason: "Adoption returned incomplete or conflicting source identity; binding was not cached. Inspect the recorded Workroom before retrying." };
+    }
+    let current;
+    try { current = observeIdentity(worktreePath, { baseBranch }); } catch { current = null; }
+    if (!current?.ok || ["branch", "repositoryFullName", "baseBranch", "baseSha", "headSha"].some(key => current.identity?.[key] !== sourceIdentity[key])
+      || !sameSourcePath(current.identity?.worktreePath, sourceIdentity.worktreePath)) {
+      return { status: "error", reason: "Source identity changed or became unavailable during adoption; binding was not cached. Inspect the recorded Workroom before retrying." };
+    }
   }
 
   const marker = markerFromAdoption(payload, branch);
@@ -195,7 +299,9 @@ export async function bindWorktreeToWorkroom({
   } catch (err) {
     // The claim EXISTS; only the cache failed. Say so rather than reporting a
     // failure to bind — the guard will simply re-derive it.
-    return { status: "bound", capsuleId: marker.capsuleId, reason: `claim recorded, marker not cached: ${err?.message ?? err}` };
+    return { status: "bound", capsuleId: marker.capsuleId, marker, reason: `claim recorded, marker not cached: ${err?.message ?? err}` };
   }
-  return { status: "bound", capsuleId: marker.capsuleId };
+  // The marker is returned so a caller that bound before the worktree existed
+  // (no gitDir yet) can cache it once the checkout is created.
+  return { status: "bound", capsuleId: marker.capsuleId, marker };
 }

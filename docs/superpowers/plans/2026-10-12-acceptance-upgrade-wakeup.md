@@ -329,3 +329,90 @@ terminal CAS-conflict audit retry, with simulated transaction rollback and
 expiry/takeover between attempts. Removing ownership checks made both stale
 retry tests fail; restoring them made the tests pass. This source-local
 coverage does not replace the still-unrun PostgreSQL qualification.
+
+## Retained reviewer/runtime binding continuation — October 16
+
+Continue EXISTING BI-E3B918C2 / WC-DC780E03 after the inactive author's explicit
+handoff, preserving branch fix/acceptance-upgrade-wakeup, original 37a75a5 source,
+merged 6230/dfa821e and evidence. Normal Large DESIGN IRD-F897407D4838 permits
+preparation only. Implementation is unadmitted. Old exhausted reviews and
+generic PortfolioAgent notes are not approvals.
+
+The authoritative interface is the October 16 addendum in
+[delivery closeout](../specs/2026-09-04-delivery-closeout-cost-efficiency-design.md),
+CT-DC-ACCEPTANCE, OBJ-DC-3/4 and AC-DC-6. Kernel DI-AF2BCA4787FD chose the existing
+RuntimeVerification home; DI-CC29314E6113 chose independent final criteria adoption
+instead of a separate Small plan approval. Both are autonomous DESIGN choices
+with grade-C estimates, not Large approval or acceptance. Grouped check execution
+and full E3 campaign acceptance remain outside this slice.
+
+At inspected ca812ae29d364fff864ae8271532a4a8f5a45090, Done work reaches
+retainedAcceptanceWithoutBinding before owner selection. Objective mappings omit
+applicable runtime binding; general runtime results have none. Small D33 cannot
+use 6451's Medium criteria route. The first two-document draft 997d3710 received
+seven concrete client advisory findings; the canonical addendum now specifies
+the interfaces to resolve them, pending reassessment.
+
+1. Obtain normal canonical design/spec/architecture approval, exact plan coverage
+   and review, then Large implementation admission. Resolve graph-related tests
+   and precise source claims first. No borrowed Small/Medium classification,
+   native receipt from a client advisory, exhausted review replay or new key.
+2. Implement immutable managed DocumentVersion preparation through a typed
+   acceptance-plan operation on existing record_initiative_evidence. Extract the
+   shared DB-only append port from saveManagedDocument; preserve author/version
+   history, idempotency and post-commit projections. Small's final independent
+   verifier adopts adequate frozen criteria AND observes behavior in one receipt.
+   Missing original provenance has an owning remedy, not fabricated history or
+   a new Small plan-approval gate. E3's own Large gates remain separate.
+3. Implement the explicit acceptance-verification 1.2.0 successor, exact effective
+   grant ceiling, normal pinned-room remedy and retained-runtime packet. Reuse
+   steward identity/latest sweep packet/HMAC/sourceRef/role checks, extend the
+   actual scheduled-run authority resolver and propagate ToolContext.taskRunId
+   into the runtime writer. Existing baseline mapping stays unchanged. Prove
+   missing grants, old shapes and public result-field forgery refuse.
+4. Extract shared reviewer scheduled-task ownership from the current acceptance
+   lease protocol without using the finished global sweep's token. Require the
+   real serializable writer transaction and the specified lock order. Fence
+   canonical swaps through portal.quiescence and actual upgrade generation;
+   check exact authority rows, expiry and canonical human/agent author exclusions.
+   Test stale writers, live revocation and preparation-to-commit swap races.
+   Serialize packet replacement/withdrawal/completion on the same steward room
+   row; test real PostgreSQL races and global-sweep/reviewer lock ordering.
+5. Add the authenticated closure-only attachment path, server-owned deterministic
+   verification identity, semantic equal/conflicting completion and atomic
+   fulfillment pointer. Keep canonical results in RuntimeVerification. Preserve
+   accepted history after later revocation/key rotation; unrelated N+1 does not
+   reopen N's fulfilled obligation or certify N+1.
+6. Implement exact-ID reads and indexed bounded closure history with strict tuple
+   cursors, continuation and generation recheck. Qualify the forward-only index
+   and real query plan at 10,000 receipts/equal timestamps. New unrelated rows or
+   an incomplete page must not hide relevant outcomes. Preserve the existing 601
+   obligation/continuous-arrival cursor behavior and name unresolved overflow.
+   Fence current-through projections with the steward activitySequence, updated
+   by all relevant typed writers. Test a known pointer plus new relevant failure,
+   delayed older observations, concurrent projection/result and interrupted scan.
+7. Use the same validator in the retained sweep and Task Hub projection. Show
+   Verified on N versus current applicability, genuine pending/failed/unresolved
+   states, actual owner/event, themes, keyboard and narrow layouts. Preserve
+   original Done delivery, panel fail/incomplete, rounds and old Task identities.
+8. Run affected suites, official types, real PostgreSQL/issuer/native adapters,
+   concurrency/revocation/rollback/unknown-version cases, 601 obligations and the
+   10,000-receipt fixture. Obtain independent exact-source assessment, governed
+   gate, DCO/protected CI/queue and one canonical containing release. Independently
+   verify D33 behavior and typed result consumption; code, docs, merge or deploy
+   alone are not that acceptance.
+
+Reserve roughly 20% of implementation effort for shared identity, ownership,
+criteria/runtime binding, transaction ports and read-model eligibility instead
+of cloned baseline semantics. No new table, scheduler, reviewer override or
+parallel ledger. Rollback preserves receipts and pending obligations.
+
+The initial source refresh required the official locked dependency bootstrap
+after TypeScript7 was missing; that infrastructure failure was not a product
+type error. Normal retry then passed web/both programs, database and bootstrap
+types plus secret/private-identity/schema/migration guards. Those checks qualify
+documentation/source reconciliation only; no new runtime implementation exists.
+
+Native approvals, coverage receipt, implementation admission, new code/tests,
+index migration and live acceptance for this continuation remain UNRUN. Earlier
+wakeup/fencing delivery and historical gates retain their original attribution.

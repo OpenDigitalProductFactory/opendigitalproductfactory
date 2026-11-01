@@ -74,6 +74,8 @@ const gitUtils = vi.hoisted(() => ({
 vi.mock("@/lib/git-utils", () => gitUtils);
 
 const endpointRunner = vi.hoisted(() => ({ runEndpointTests: vi.fn() }));
+const fidelityRunner = vi.hoisted(() => ({ runLocalToolFidelityDiagnostic: vi.fn() }));
+vi.mock("@/lib/operate/tool-fidelity-runner", () => fidelityRunner);
 vi.mock("@/lib/endpoint-test-runner", () => endpointRunner);
 
 const selfAbandon = vi.hoisted(() => ({ abandonOwnStalledBuild: vi.fn() }));
@@ -234,6 +236,67 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     expect(endpointRunner.runEndpointTests).toHaveBeenCalledWith(
       expect.objectContaining({ endpointId: "openai", triggeredBy: "u1" }),
     );
+  });
+
+  it("uses the existing diagnostic entry for an explicit fidelity selection and original context", async () => {
+    const context = { agentId: "agent", threadId: "thread" };
+    fidelityRunner.runLocalToolFidelityDiagnostic.mockResolvedValue({ success: true, message: "observed" });
+    const selection = { endpointId: "local", modelId: "ai/model", providerConnectionId: "local-account",
+      fidelityObservationIndex: 3, fidelityRunId: "fidelity-server-issued" };
+    const result = await buildOpsPack.handlers.run_endpoint_tests({ ...selection, fidelityOnly: true }, "u1", context);
+    expect(result.success).toBe(true);
+    expect(fidelityRunner.runLocalToolFidelityDiagnostic).toHaveBeenCalledWith(selection, "u1", context);
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
+  it.each([{ allModels: true }, { allEndpoints: true }, { concurrencyOnly: true },
+    { probesOnly: true }, { taskType: "code-gen" }])("rejects fidelity mode mixed with other diagnostic scopes", async option => {
+    const result = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "local", modelId: "ai/model",
+      providerConnectionId: "local-account", fidelityOnly: true, ...option }, "u1", {});
+    expect(result.success).toBe(false);
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(fidelityRunner.runLocalToolFidelityDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it("reports an unverified sign-in probe without inventing a capacity hold", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([
+      { endpointId: "chatgpt", probes: [{ name: "p", outcome: "deferred", reason: "Deferred: Auth failed" }], scenarios: [], instructionFollowing: null },
+    ]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "chatgpt", modelId: "selected" }, "u1", {});
+    expect(res.message).toContain("unverified");
+    expect(res.message).toContain("Auth failed");
+    expect(res.message).not.toContain("capacity held");
+  });
+
+  it.each([
+    { modelId: "selected" }, { endpointId: "local" },
+    { endpointId: "openai", modelId: "selected" },
+    { endpointId: "local", modelId: "default" },
+    { endpointId: "local", modelId: "selected", allModels: true },
+    { endpointId: "local", modelId: "selected", allEndpoints: true },
+    { endpointId: "local", modelId: "selected", taskType: "code-gen" },
+    { endpointId: "local", modelId: "selected", probesOnly: true },
+  ])("refuses incompatible concurrency mode without calls: %j", async selection => {
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ ...selection, concurrencyOnly: true }, "u1", { routeContext: "/operate/ai/providers/local" });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("Concurrency diagnostics");
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("passes explicit concurrency selection and reports deferred evidence without ordinary probe claims", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([{ endpointId: "local", modelId: "selected",
+      probes: [], scenarios: [], instructionFollowing: null, codingCapability: null,
+      concurrency: { outcome: "deferred", reason: "Contention unverified", contentionObserved: false, callers: [], events: [] },
+    }]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "local", modelId: "selected", concurrencyOnly: true }, "u1", {});
+    expect(res.success).toBe(true);
+    expect(endpointRunner.runEndpointTests).toHaveBeenCalledWith({ endpointId: "local", modelId: "selected", concurrencyOnly: true, triggeredBy: "u1" });
+    expect(res.message).toContain("Concurrency: deferred");
+    expect(res.message).toContain("Contention unverified");
+    expect(res.message).not.toContain("Probes 0/0 passed");
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
   });
 
   it("promote_to_build_studio promotes a triaged item through the transaction", async () => {

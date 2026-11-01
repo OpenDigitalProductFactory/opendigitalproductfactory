@@ -32,6 +32,7 @@ import {
 import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
 import { findQueueWaiter } from "./lib/local-queue-observer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { guardReceiptDirectory, observeGuardReceipt, reconcileGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 
 function gitText(args, cwd) {
   return gitTextOrNull(args, { cwd: cwd ?? process.cwd() }) ?? "";
@@ -127,6 +128,36 @@ export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = 
   }).filter(Boolean);
 }
 
+export function collectHostPreflightStatus(context, { reconcile = false, directory = guardReceiptDirectory(context.worktreePath) } = {}) {
+  const read = reconcile ? reconcileGuardReceipt : observeGuardReceipt;
+  const observed = read({ directory, stage: "pregate-preflight" });
+  const { receipt, ...projection } = observed;
+  return { ...projection, sourceIdentity: receipt?.identity ?? null, startedAt: receipt?.startedAt ?? null,
+    lastHeartbeatAt: receipt?.lastHeartbeatAt ?? null, completedAt: receipt?.completedAt ?? null,
+    lastProgress: receipt?.observations?.at(-1) ?? null };
+}
+
+export function projectGateStatus(result, context, hostPreflight) {
+  return {
+      verdict: result.verdict,
+      reason: result.reason,
+      headBranch: context.headBranch,
+      headSha: context.headSha,
+      boundSha: result.boundSha ?? "",
+      boundBranch: result.boundBranch ?? "",
+      candidateSha: result.candidateSha ?? "",
+      staleness: result.staleness ?? "",
+      gateStatus: result.gateStatus ?? "",
+      testStub: result.testStub === true,
+      evidenceId: result.evidenceId ?? "",
+      recordedAt: result.recordedAt ?? "",
+      slot: result.slot,
+      logFile: result.logFile ?? "",
+      worktreePath: context.worktreePath,
+      ...(hostPreflight ? { hostPreflight } : {}),
+  };
+}
+
 function main() {
   installBrokenPipeTolerance();
   const asJson = process.argv.slice(2).includes("--json");
@@ -138,6 +169,7 @@ function main() {
   }
 
   const slots = collectSlotVerdicts(context);
+  const hostPreflight = collectHostPreflightStatus(context, { reconcile: process.argv.includes("--reconcile-host-receipt") });
   const result = slots.length > 0
     ? reconcileSlots(slots)
     : {
@@ -147,27 +179,13 @@ function main() {
     };
 
   if (asJson) {
-    process.stdout.write(`${JSON.stringify({
-      verdict: result.verdict,
-      reason: result.reason,
-      headBranch: context.headBranch,
-      headSha: context.headSha,
-      boundSha: result.boundSha ?? "",
-      boundBranch: result.boundBranch ?? "",
-      candidateSha: result.candidateSha ?? "",
-      staleness: result.staleness ?? "",
-      testStub: result.testStub === true,
-      evidenceId: result.evidenceId ?? "",
-      recordedAt: result.recordedAt ?? "",
-      slot: result.slot,
-      logFile: result.logFile ?? "",
-      worktreePath: context.worktreePath,
-    }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(projectGateStatus(result, context, hostPreflight), null, 2)}\n`);
   } else {
     process.stdout.write(`${formatStatusReport(result, {
       headBranch: context.headBranch,
       headSha: context.headSha,
     }).join("\n")}\n`);
+    if (hostPreflight.status !== "absent") process.stdout.write(`Host preflight (separate from gate): ${hostPreflight.status}; receipt ${hostPreflight.receiptPath}; attempt ${hostPreflight.attemptId ?? "unknown"}\nMissing proof: ${hostPreflight.missingProof.join(", ") || "none observed"}\nNext: ${hostPreflight.nextAction}\n`);
   }
 
   process.exit(exitCodeForVerdict(result.verdict));

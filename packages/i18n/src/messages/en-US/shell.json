@@ -4,9 +4,18 @@
     "teamEmpty": "No one is assigned to this area yet.",
     "setupEmpty": "Your role has no settings to change in this area.",
     "activityHeading": "Activity by portfolio",
-    "reviewLive": "Review live Workrooms"
+    "reviewLive": "Review current work"
   },
   "finance": {
+    "ownExpensesDescription": "Enter expenses, save drafts, and submit for approval.",
+    "ownSubmittedClaims": "My submitted claims",
+    "ownExpensesLink": "My Expenses",
+    "expenseReviewDescription": "Review claims.",
+    "expenseEntrySummary": "Receipt links are optional.",
+    "expenseEntryHelp": "What to prepare",
+    "expenseEntryDetails": "Use a title and at least one expense with a date, category, description, and positive amount. Add a receipt URL if available. Save as Draft keeps it for later; Submit for Approval requests review without moving money.",
+    "expenseProfileRequired": "You need an employee profile linked to your sign-in. Ask your People administrator to check it.",
+    "openPeople": "Open People",
     "mileageTitle": "Mileage",
     "mileageDescription": "Log business trips so they can be claimed and reported."
   },
@@ -20,6 +29,31 @@
     "promotionAudit": "Promotion Audit"
   },
   "nav": {
+    "accountHelp": "Account and help",
     "moreTools": "More tools"
+  },
+  "monitoring": {
+    "offLabel": "Monitoring is off on this install",
+    "offBody": "Prometheus and Grafana are not running, so metrics and metric alerts are not collected. Logs are still captured.",
+    "offLink": "See runtime services",
+    "offAlertsNote": "Log alerts only — metric monitoring is off."
+  },
+  "calendarFeed": {
+    "heading": "Subscribe from another calendar app",
+    "create": "Create link",
+    "replace": "Replace link",
+    "turnOff": "Turn off",
+    "copy": "Copy",
+    "activeSince": "A private link is active since {$date}. It shows only what your role can see. Anyone with the link can read it.",
+    "inactive": "Create a private link to see this calendar in Google Calendar, Outlook or Apple Calendar. Older links that used your account id no longer work.",
+    "linkLabel": "Private calendar subscription link",
+    "shownOnce": "Copy it now. For your security it is shown only once.",
+    "copied": "Link copied",
+    "copyFailed": "Copy failed: select the link and copy it",
+    "turnedOff": "Subscription link turned off",
+    "replaceTitle": "Replace subscription link",
+    "replaceMessage": "Calendar apps using the current link stop updating. You will need to add the new link to them.",
+    "turnOffTitle": "Turn off subscription link",
+    "turnOffMessage": "Calendar apps using this link stop updating."
   }
 }

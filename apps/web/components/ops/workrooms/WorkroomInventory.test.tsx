@@ -1,34 +1,109 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import type { ReactNode } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { WorkroomInventory, type WorkroomInventoryRow } from "./WorkroomInventory";
+import { projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 
-import { WorkroomInventory } from "./WorkroomInventory";
+afterEach(cleanup);
+const renderInventory = (node: ReactNode) => render(<MessagesProvider locale="en-US"
+  messages={{ workrooms: namespaceMessages("en-US", "workrooms") }}>{node}</MessagesProvider>);
+const summary = { scanned: 3, live: 2, working: 1, history: 1, reapable: 1, byLiveness: {},
+  heavyLane: { executing: 1, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } };
+const row = (capsuleId: string, liveness: string, title: string): WorkroomInventoryRow => ({
+  capsuleId, backlogItemId: null, title, status: "working",
+  portfolioRole: "foundational", pullRequestUrl: null,
+  liveness, isLive: liveness !== "lease-expired", accountableName: "Dana Reyes",
+});
+const rows = [row("WC-NOW", "live", "Prepare adoption event"), row("WC-WAIT", "paused", "Update user guide"), row("WC-OLD", "lease-expired", "Stopped review")];
 
-describe("WorkroomInventory", () => {
-  it("separates live work from history and drills into the canonical activity view", () => {
-    const html = renderToStaticMarkup(<WorkroomInventory
-      summary={{ scanned: 3, live: 1, working: 1, history: 2, reapable: 1, byLiveness: {}, heavyLane: { executing: 1, nextReady: 1, dormant: 2 }, progressSlo: { oldestWaitMs: 7_200_000, maxNoTransitionMs: 7_200_000 } }}
-      workrooms={[
-        { capsuleId: "WC-LIVE", backlogItemId: "BI-LIVE", title: "Live rescue intake", status: "working", source: "manual", executorKind: "human", attribution: { executor: "human", invocation: "session-human" }, portfolioRole: "manufactureAndDeliver", headBranch: null, pullRequestUrl: null, updatedAt: "2026-08-24T18:00:00.000Z", liveness: "live", isLive: true, isReapable: false, livenessReason: "Lease valid.", trueLivenessAt: "2026-08-24T19:00:00.000Z" },
-        { capsuleId: "WC-OLD", backlogItemId: null, title: "Expired review", status: "working", source: "external-adoption", executorKind: "codex-desktop", attribution: { executor: "codex-desktop", invocation: "A2A: caller → callee · TR-1" }, portfolioRole: "foundational", headBranch: "fix/old", pullRequestUrl: null, updatedAt: "2026-08-20T18:00:00.000Z", liveness: "lease-expired", isLive: false, isReapable: true, livenessReason: "Lease expired.", trueLivenessAt: "2026-08-20T19:00:00.000Z" },
-      ]}
-    />);
-
-    expect(html).toContain("session-human");
-    expect(html).toContain("A2A: caller → callee · TR-1");
-    expect(html).not.toContain("Unassigned");
-    expect(html).toContain("Live Workrooms");
-    expect(html).toContain("Executor");
-    expect(html).toContain("Active.");
-    expect(html).toContain("Retained for audit.");
-    expect(html).toContain("History");
-    expect(html).toContain(">1</");
-    expect(html).toContain("2 inactive");
-    expect(html).toContain("Ready");
-    expect(html).toContain("Wait");
-    expect(html).toContain("2h");
-    expect(html).toContain('href="/workspace/cases/backlog-item%3ABI-LIVE"');
-    expect(html).toContain('href="/workspace/cases/work-capsule%3AWC-OLD"');
-    expect(html).toContain("Manufacture &amp; Deliver");
-    expect(html).not.toContain("3 active");
+it("retains the owner-setup instruction when a worker is already assigned", () => {
+  const room = row("WC-OWNER-MISSING", "live", "Unowned work");
+  const operator = projectWorkroomOperatorSummary({ ...room, executorKind: "codex-desktop", accountability: {
+    state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null,
+  } });
+  renderInventory(<WorkroomInventory workrooms={[{ ...room, accountableName: null, operator }]} summary={summary} />);
+  expect(screen.getByText(/Assign an accountable person in the room/)).toBeVisible();
+  expect(screen.queryByText(/Check the worker's recorded result/)).toBeNull();
+  expect(screen.getByRole("link", { name: "Unowned work" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-OWNER-MISSING");
+});
+describe("operator Workrooms inventory", () => {
+  it("shows actual progress first without mounting history or exposing diagnostic text", () => {
+    renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
+    expect(screen.getByRole("table", { name: "Working now" })).toBeVisible();
+    expect(screen.queryByText("Stopped review")).toBeNull();
+    expect(screen.getByText("Dana Reyes")).toBeVisible();
+    expect(screen.queryByText("private-session-id", { exact: false })).toBeNull();
+    expect(screen.getByRole("link", { name: "View recorded evidence in the room", hidden: true }))
+      .toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
+    expect(screen.getByRole("link", { name: "Prepare adoption event" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
+  });
+  it("puts paused workers in Waiting rather than Working now", () => {
+    renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
+    fireEvent.click(screen.getByRole("button", { name: "Waiting · 1" }));
+    expect(screen.getByRole("link", { name: "Update user guide" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Prepare adoption event" })).toBeNull();
+    expect(screen.getByText("Worker paused")).toBeVisible();
+  });
+  it("mounts retained records only when history is requested, and removes them on close", () => {
+    renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
+    const details = screen.getByText("History · 1 retained rooms").closest("details")!;
+    details.open = true; fireEvent(details, new Event("toggle"));
+    expect(screen.getByRole("link", { name: "Stopped review" })).toBeVisible();
+    details.open = false; fireEvent(details, new Event("toggle"));
+    expect(screen.queryByText("Stopped review")).toBeNull();
+  });
+  it("prioritizes a blocked room and is honest about missing accountability", () => {
+    renderInventory(<WorkroomInventory workrooms={[...rows, { ...row("WC-BLOCK", "live", "Restore failed review"), status: "blocked", accountableName: null }]} summary={summary} />);
+    expect(screen.getByRole("table", { name: "Needs attention" })).toBeVisible();
+    expect(screen.getByText("Not assigned")).toBeVisible();
+    expect(screen.getByText(/Actor not recorded.*Action not recorded/)).toBeVisible();
+  });
+  it("shows a shared hold once instead of repeating it as an individual row", () => {
+    const blocked = { ...row("WC-BLOCK", "live", "Repeated review"), status: "blocked" };
+    renderInventory(<WorkroomInventory workrooms={[blocked]} summary={summary} heldCapsuleIds={["WC-BLOCK"]}
+      attentionContent={<p>One shared recovery issue</p>} />);
+    expect(screen.getByText("One shared recovery issue")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Repeated review" })).toBeNull();
+  });
+  it("starts with attention when shared recovery is outside the recent inventory", () => {
+    renderInventory(<WorkroomInventory workrooms={[]} summary={summary} heldCapsuleIds={["WC-OLDER-HELD"]}
+      attentionContent={<p>One older recovery issue</p>} />);
+    expect(screen.getByRole("button", { name: "Needs attention · 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("One older recovery issue")).toBeVisible();
+  });
+  it("retains an individual held room when no shared-recovery replacement is supplied", () => {
+    const blocked = { ...row("WC-BLOCK", "live", "Retained review"), status: "blocked" };
+    renderInventory(<WorkroomInventory workrooms={[blocked]} summary={summary} heldCapsuleIds={["WC-BLOCK"]} />);
+    expect(screen.getByRole("link", { name: "Retained review" })).toBeVisible();
+  });
+  it("keeps COO cycle, wake, span and escalation inside details and routes the action to the room case", () => {
+    const coo = {
+      lastCycleKey: "shape@1:2026-10-26", lastAction: "dispatch_agent", lastReason: "agent_stage",
+      ticksSinceAdvance: 3, nextWakeAt: "2026-10-26T13:15:00.000Z", spanOfControl: 8, overSpan: true,
+      unowned: false, paused: false, ownerIsSuggestion: true, escalationLabel: "PRN-human",
+      missingAckCount: 1, actionHref: "/workspace/cases/work-capsule%3AWC-NOW",
+    };
+    renderInventory(<WorkroomInventory workrooms={[{ ...row("WC-NOW", "live", "Prepare adoption event"), coo }]}
+      summary={summary} supervision={{ unownedCount: 1, pausedCount: 2, missingAckCount: 1,
+        overSpanOwners: [{ principalId: "PRN-busy", displayName: "Busy", roomCount: 8 }] }} />);
+    expect(screen.getByText("Last action: dispatch_agent")).not.toBeVisible();
+    expect(screen.getByText("Last cycle: shape@1:2026-10-26")).not.toBeVisible();
+    expect(screen.getByText("Supervision")).toBeVisible();
+    const technical = screen.getByText("Technical evidence").closest("details")!;
+    technical.open = true; fireEvent(technical, new Event("toggle"));
+    expect(screen.getByText("Last action: dispatch_agent")).toBeVisible();
+    expect(screen.getByText("3 ticks since advance")).toBeVisible();
+    expect(screen.getByText("Next wake 2026-10-26T13:15:00.000Z")).toBeVisible();
+    expect(screen.getByText("Over span of control")).toBeVisible();
+    expect(screen.getByText("Escalation: PRN-human")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Open room" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Prepare adoption event" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
+    const supervision = screen.getByText("Supervision").closest("details")!;
+    supervision.open = true; fireEvent(supervision, new Event("toggle"));
+    expect(screen.getByText("Busy · 8")).toBeVisible();
   });
 });

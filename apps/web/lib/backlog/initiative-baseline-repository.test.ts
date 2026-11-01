@@ -34,8 +34,13 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { recordInitiativeSpecApproval } from "./initiative-readiness/baseline-repository";
+import { recordInitiativeGateReceipt } from "./initiative-readiness/receipt-repository";
+import { createHash } from "node:crypto";
 
 const canonical = `**OBJ-TEST-001:** Preserve the approved objective.
+
+| ID | Objectives | Criterion | Evidence |
+| --- | --- | --- | --- |
 | AC-TEST-001 | OBJ-TEST-001 | Completion proves the objective. | test |
 `;
 const locator = {
@@ -46,11 +51,20 @@ const locator = {
   providerBlobId: "b".repeat(40),
 };
 
+const boundTask = { taskRunId: "TR-MCP-SPEC-BOUND", requestDigest: "9".repeat(64), executionFence: {
+  schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "9".repeat(64),
+} };
+const boundApproval = { itemId: "BI-TEST", profile: "feature" as const, artifactRole: "design-spec" as const,
+  artifactRef: locator, expectedCurrentBaselineId: null, supersessionDispositions: [], resolvedFindingRefs: [],
+  reason: "Independent review.", reviewerUserId: "user-reviewer", reviewerAgentId: "agent-reviewer",
+  authorityDecisionId: "decision-1", tokenScope: "write", boundReviewTask: boundTask };
+
 function tx() {
   return {
     $queryRaw: vi.fn(async () => []),
     backlogItem: {
       findUnique: vi.fn(async () => ({
+        organizationId: "org-1",
         type: "feature",
         source: null,
         workType: null,
@@ -76,6 +90,47 @@ function tx() {
       create: mocks.pinCreate.mockImplementation(async ({ data }) => data),
     },
   };
+}
+
+function boundPublication() {
+  const digest = createHash("sha256").update(canonical).digest("hex");
+  type Activity = { id: string; backlogItemId: string; kind: string; gateKey?: string; payload: Record<string, unknown> };
+  const activities: Activity[] = [];
+  const pins: Record<string, unknown>[] = [];
+  mocks.resolveArtifact.mockResolvedValue({ ok: true, artifact: { ref: locator, digest: `sha256:${digest}`,
+    authorPrincipalId: "principal-author", authorAgentId: "agent-author", bytes: Buffer.from(canonical) } });
+  mocks.writeBlob.mockResolvedValue({ sha256: digest, storageKey: "documents/sha256/provider", sizeBytes: canonical.length });
+  mocks.authorizationDecisionFind.mockImplementation(async ({ where }: { where: { decisionId: string } }) => ({
+    decisionId: where.decisionId, decision: "allow", actionKey: "record_initiative_design_review",
+    policyVersion: "authority-v1", organizationId: "org-1", rationale: { taskRunId: boundTask.taskRunId },
+  }));
+  const task = { id: "task-row", taskRunId: boundTask.taskRunId, userId: boundApproval.reviewerUserId,
+    currentAgentId: boundApproval.reviewerAgentId, status: "working", progressPayload: {} as Record<string, unknown>, a2aMetadata: {
+      trigger: "external-mcp", requestDigest: boundTask.requestDigest, initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review", itemId: boundApproval.itemId, gate: "spec-approval",
+        artifactRef: locator, expectedCurrentBaselineId: null,
+      },
+    } };
+  const base = tx();
+  const db = { ...base, taskRun: { findUnique: vi.fn(async () => task) },
+    authorizationDecisionLog: { findUnique: mocks.authorizationDecisionFind },
+    coworkerActionEnvelope: { findMany: vi.fn(async () => []) },
+    backlogItemActivity: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => activities.find((row) => row.id === where.id) ?? null),
+      findMany: vi.fn(async ({ where }: { where?: { kind?: string; gateKey?: string } }) => activities.filter((row) =>
+        (!where?.kind || row.kind === where.kind) && (!where?.gateKey || row.gateKey === where.gateKey))),
+      create: mocks.activityCreate.mockImplementation(async ({ data }: { data: Activity }) => {
+        activities.push(structuredClone(data)); return data;
+      }),
+    },
+    initiativeArtifactRetentionPin: {
+      create: mocks.pinCreate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => { pins.push(data); return data; }),
+      findUnique: vi.fn(async ({ where }: { where: { baselineActivityId: string } }) =>
+        pins.find((pin) => pin.baselineActivityId === where.baselineActivityId) ?? null),
+    },
+  };
+  mocks.transaction.mockImplementation(async (work) => work(db));
+  return { activities, pins, task, db };
 }
 
 describe("recordInitiativeSpecApproval", () => {
@@ -115,6 +170,78 @@ describe("recordInitiativeSpecApproval", () => {
     });
     mocks.writeBlob.mockResolvedValue({ sha256: "provider", storageKey: "documents/sha256/provider", sizeBytes: canonical.length });
     mocks.transaction.mockImplementation(async (work) => work(tx()));
+  });
+
+  it("reuses the exact bound approval and retained baseline without archiving a second copy", async () => {
+    const state = boundPublication();
+    const first = await recordInitiativeSpecApproval(boundApproval);
+    expect(first).toMatchObject({ ok: true });
+    const second = await recordInitiativeSpecApproval({ ...boundApproval, authorityDecisionId: "decision-2" });
+    expect(second).toMatchObject(first);
+    expect(state.activities.filter((row) => row.kind === "initiative_scope_baseline")).toHaveLength(1);
+    expect(mocks.documentCreate).toHaveBeenCalledOnce();
+    expect(mocks.pinCreate).toHaveBeenCalledOnce();
+  });
+
+  it.each(["input-required", "completed", "failed"])("does not append a baseline for a %s task", async (status) => {
+    const state = boundPublication();
+    state.task.status = status;
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(mocks.documentCreate).not.toHaveBeenCalled();
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+  });
+
+  it.each(["uncertainty", "reservation", "dispatch", "authority"])("refuses a baseline after its execution %s changes", async (change) => {
+    const state = boundPublication();
+    if (change === "uncertainty") state.task.progressPayload.executionUncertainty = { settlement: "unknown" };
+    if (change === "reservation") state.task.progressPayload.resumeReservedAt = "later";
+    if (change === "dispatch") state.task.progressPayload.dispatch = { claimedAt: "later" };
+    if (change === "authority") state.task.progressPayload.reviewExecutionAuthority = { schemaVersion: 1, tokenId: "later" };
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+  });
+
+  it("reads a genuine retained baseline after a task hold without creating another effect", async () => {
+    const state = boundPublication();
+    const first = await recordInitiativeSpecApproval(boundApproval);
+    if (!first.ok) throw new Error("Expected an original retained baseline.");
+    state.task.status = "input-required";
+    state.task.progressPayload.executionUncertainty = { settlement: "unknown" };
+    mocks.activityCreate.mockClear(); mocks.pinCreate.mockClear(); mocks.documentCreate.mockClear();
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: true, baselineId: first.baselineId, deduplicated: true });
+    expect(mocks.activityCreate).not.toHaveBeenCalled();
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+    expect(mocks.documentCreate).not.toHaveBeenCalled();
+  });
+
+  it("preserves a rejecting spec verdict instead of creating an approval baseline", async () => {
+    const state = boundPublication();
+    const rejected = await recordInitiativeGateReceipt({ ...boundApproval, allowedGates: ["spec-approval"],
+      requiredCapability: "manage_backlog", requiredGrant: "initiative_design_review", actionKey: "record_initiative_design_review",
+      gate: "spec-approval", decision: "fail", requiresIndependentReviewer: true,
+      findings: [{ issue: "Acceptance is incomplete.", severity: "important" }],
+    });
+    if (!rejected.ok) throw new Error("Expected a canonical rejecting review.");
+    const result = await recordInitiativeSpecApproval({ ...boundApproval, authorityDecisionId: "decision-2",
+      resolvedFindingRefs: rejected.receipt.findingRefs as string[] });
+    expect(result).toMatchObject({ ok: true, receiptId: rejected.receiptId, baselineId: null,
+      deduplicated: true, receipt: { decision: "fail" } });
+    expect(state.activities).toHaveLength(1);
+    expect(mocks.documentCreate).not.toHaveBeenCalled();
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+  });
+
+  it.each(["pin", "baseline", "cancellation"])("refuses an incomplete or changed bound %s winner", async (drift) => {
+    const state = boundPublication();
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: true });
+    if (drift === "pin") state.pins.length = 0;
+    if (drift === "baseline") state.activities.find((row) => row.kind === "initiative_scope_baseline")!.payload.artifactDigest = "sha256:foreign";
+    if (drift === "cancellation") state.task.status = "canceled";
+    mocks.activityCreate.mockClear();
+    expect(await recordInitiativeSpecApproval({ ...boundApproval, authorityDecisionId: "decision-2" })).toMatchObject({ ok: false });
+    expect(mocks.activityCreate).not.toHaveBeenCalled();
   });
 
   it("commits approval receipt, baseline, archive, and permanent pin through one serializable transaction", async () => {

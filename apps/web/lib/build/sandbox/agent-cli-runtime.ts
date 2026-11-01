@@ -71,7 +71,8 @@ Write for the audience that consumes the change. Use docs/user-guide for operato
 Before finishing, verify changed links where practical and report any large follow-up doc debt as a backlog item instead of burying it in prose.`,
 
   "qa-engineer": `You are a QA engineer verifying the build.
-- Run tests: pnpm exec vitest run --reporter=verbose
+- Run tests SCOPED to this build: pnpm exec vitest run <the test files for the changed files> --reporter=verbose (from the package directory, e.g. apps/web).
+- Never run a test command that names no test files (bare "vitest run", "pnpm test", "jest"): the sandbox refuses it. The whole suite runs in cloud CI and the merge queue.
 - Run typecheck: pnpm exec tsc --noEmit
 - Check for runtime errors in the build output
 - Report specific failures with file paths and line numbers`,
@@ -263,23 +264,53 @@ export async function writeSandboxFile(params: {
   /** `chown node:node <path>` after writing (root-written file the node-user CLI
    *  must read, e.g. the per-call mcp-config). */
   chownNodeUser?: boolean;
+  /** Owner-only file, for credentials. The file is created under `umask 077` and
+   *  left at mode 600, so no other user can read it, not even between the
+   *  write and the chmod. Overrides `mode`. Pair with `chownNodeUser` when the
+   *  node-user CLI reads it, and with `credentialFileExports` so the runner
+   *  deletes it once read. */
+  ownerOnly?: boolean;
   timeoutMs?: number;
   mkdirParents?: string;   // optional `mkdir -p <dir> &&` prefix target
 }): Promise<void> {
-  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents } = params;
+  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents, ownerOnly } = params;
   const b64 = Buffer.from(content).toString("base64");
+  const umask = ownerOnly ? "umask 077 && " : "";
   const mkdir = mkdirParents ? `mkdir -p '${mkdirParents}' && ` : "";
   const chown = chownNodeUser ? ` && chown node:node '${path}'` : "";
-  const chmod = mode ? ` && chmod ${mode} '${path}'` : "";
+  const fileMode = ownerOnly ? "600" : mode;
+  const chmod = fileMode ? ` && chmod ${fileMode} '${path}'` : "";
   // Content flows over stdin (see dockerExecWriteStdin); the command string is
   // secret-free. `base64 -d` reads the payload from stdin when given no file arg.
   await dockerExecWriteStdin({
     containerId,
-    innerCommand: `${mkdir}base64 -d > '${path}'${chown}${chmod}`,
+    innerCommand: `${umask}${mkdir}base64 -d > '${path}'${chown}${chmod}`,
     input: b64,
     asNodeUser,
     timeoutMs: params.timeoutMs ?? 5_000,
   });
+}
+
+/**
+ * Runner-script lines that load a credential file into `envVar` and then
+ * delete the file. The CLI keeps the value in its environment; nothing left on
+ * disk can be read by a later process in the shared sandbox, including another
+ * build's agent.
+ */
+export function credentialFileExports(envVar: string, path: string): string[] {
+  return [`export ${envVar}="$(cat '${path}')"`, `rm -f '${path}'`];
+}
+
+/** Best-effort removal of sandbox files, e.g. a credential file whose runner
+ *  never started. Never throws: a failed cleanup must not fail the task. */
+export async function removeSandboxFiles(containerId: string, paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const quoted = paths.map((p) => `'${p}'`).join(" ");
+  try {
+    await sandboxExec()(`docker exec ${containerId} rm -f ${quoted}`, { timeout: 5_000 });
+  } catch {
+    // best-effort
+  }
 }
 
 /** Ensure /workspace is writable by the node user (uid 1000) and git is
@@ -292,6 +323,17 @@ export async function ensureSandboxNodeUser(containerId: string): Promise<void> 
     { timeout: 15_000 },
   );
 }
+
+/**
+ * Most stdout an agent CLI run may hand back. Every byte is held in the portal
+ * process, so a runaway writer in the sandbox (DSec, arXiv 2609.22978, saw
+ * `yes` fill tens of gigabytes) would otherwise grow the portal's memory until
+ * it is killed. A run that passes this is stopped and rejected.
+ */
+export const MAX_AGENT_CLI_STDOUT_CHARS = 32 * 1024 * 1024;
+
+/** Stderr is progress chatter; only its tail is kept, for error reports. */
+export const MAX_AGENT_CLI_STDERR_TAIL_CHARS = 1024 * 1024;
 
 export type SandboxCliRunResult = {
   stdout: string;
@@ -330,6 +372,8 @@ export function runSandboxAgentCli(params: {
   resolveOnlyOnZeroExit?: boolean;
   onStderrLine?: (line: string) => void;
   onStdoutChunk?: (chunk: string) => void;
+  /** Override MAX_AGENT_CLI_STDOUT_CHARS (tests). */
+  maxStdoutChars?: number;
 }): Promise<SandboxCliRunResult> {
   const {
     containerId,
@@ -351,16 +395,24 @@ export function runSandboxAgentCli(params: {
   return new Promise<SandboxCliRunResult>((resolve, reject) => {
     const proc = spawnCb("docker", execArgs);
 
+    const maxStdoutChars = params.maxStdoutChars ?? MAX_AGENT_CLI_STDOUT_CHARS;
     let stdout = "";
     let stderrBuf = "";
     let timedOut = false;
+    let outputExceeded = false;
     const timer = setTimeout(() => {
       timedOut = true;
       proc.kill("SIGTERM");
     }, timeoutMs);
 
     proc.stdout.on("data", (data: Buffer) => {
+      if (outputExceeded) return;
       const chunk = data.toString();
+      if (stdout.length + chunk.length > maxStdoutChars) {
+        outputExceeded = true;
+        proc.kill("SIGKILL");
+        return;
+      }
       stdout += chunk;
       onStdoutChunk?.(chunk);
     });
@@ -368,6 +420,9 @@ export function runSandboxAgentCli(params: {
     proc.stderr.on("data", (data: Buffer) => {
       const chunk = data.toString();
       stderrBuf += chunk;
+      if (stderrBuf.length > MAX_AGENT_CLI_STDERR_TAIL_CHARS) {
+        stderrBuf = stderrBuf.slice(-MAX_AGENT_CLI_STDERR_TAIL_CHARS);
+      }
       if (onStderrLine) {
         for (const line of chunk.split("\n")) {
           if (line) onStderrLine(line);
@@ -378,6 +433,15 @@ export function runSandboxAgentCli(params: {
     proc.on("close", (code: number | null) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startMs;
+      if (outputExceeded) {
+        // Not a timeout (callers read `killed` as one) and never a success,
+        // whatever was collected before the cap.
+        reject(Object.assign(
+          new Error(`Agent CLI output passed ${Math.round(maxStdoutChars / (1024 * 1024))} MiB; the run was stopped`),
+          { stdout: "", stderr: stderrBuf, code, outputLimitExceeded: true },
+        ));
+        return;
+      }
       if (timedOut) {
         reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, stderr: stderrBuf, killed: true }));
         return;

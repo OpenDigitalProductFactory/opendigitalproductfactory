@@ -413,6 +413,70 @@ the existing outcome pipeline. Resource/concurrency work owns higher throughput.
 An incident links escaped failure evidence and a scenario follow-up through the
 same outcome record; no fixed checklist proves exhaustive foresight.
 
+## Endpoint eligibility recovery repair — BI-DB4E6F81
+
+### Design grounding
+
+Extend routed-inference, the leaf inference-error contract, routing-exclusion-buckets,
+semantic-review-background checkpoints, recovery-policy/readback and the existing
+Tasks/Workroom recovery controls. No new scheduler, model permission or state table.
+Live TaskRun TR-GATE-6A2F39DE6AF2748BCF40D1CA remained input-required with
+provider-outcome-uncertain at 2026-10-16T03:11:57.092Z. On c38edb55c0d,
+the routing and recovery regressions fail: initial refusal lacks dispatch proof
+and safe diagnostics, and readback recommends another unchanged retry.
+
+The caller's internal floor does not establish effective screened sensitivity.
+Provider reconciliation can follow a provider attempt and finish with an eligibility
+refusal; therefore the final exception type alone cannot prove zero dispatch.
+Preserve screening, clearance, residency, complete diff and independent verdict.
+
+### Ordered atomic fix
+
+All steps map to BI-DB4E6F81. ELIGIBILITY-CONTRACT, ELIGIBILITY-FLOW,
+ELIGIBILITY-ACCEPTANCE and ELIGIBILITY-VERIFY are one delivery: readback without
+durable dispatch evidence would mislead, and checkpointing without recovery
+admission would permit pointless paid retries.
+
+1. ELIGIBILITY-VERIFY: retain failing routing/recovery tests; add direct typed,
+   wrapped, reconciliation-after-dispatch and mixed sibling regressions.
+2. ELIGIBILITY-CONTRACT: move the existing error class to the leaf error module,
+   keeping its public re-export. Only an initial routing refusal gains zero-dispatch
+   proof. Attach effective sensitivity/residency and bounded exclusion counts using
+   existing buckets; never persist prompts, endpoint identifiers or raw errors.
+3. ELIGIBILITY-FLOW: checkpoint proven refusals as inconclusive, preserve successful
+   siblings and ambiguous execution. Project safe diagnostics to Tasks/Workroom;
+   unchanged eligibility requires fresh scoped remediation evidence before retry.
+   Preserve the immutable packet, original deadline/attempt budget and existing
+   qualified expired-successor admission. No automatic retries or budget reset.
+4. ELIGIBILITY-ACCEPTANCE: run affected tests, typecheck, style and shared integration
+   gate; independently review and deliver through DCO PR/merge queue. Exercise
+   served Tasks and Workroom recovery after canonical deployment, and obtain an
+   independent verdict or record a precise remaining blocker. Source checks alone
+   do not close the item or its blocked deliveries.
+
+Risk: falsely proving zero dispatch can repeat paid work. Only the direct typed
+error from a routing call with no reconciliation is eligible; wrapped errors stay
+unknown. A failed checkpoint write stays unknown. Unknown exclusions remain
+explicitly other. Rollback removes the additive projection without erasing stored
+requests/checkpoints; unknown recovery metadata must remain fenced.
+
+### Backlog coverage and observed routing limits
+
+Atomic coverage: `cmvaf16ny37kb01rx56n3fvt1`, implementation parent BI-DB4E6F81,
+with ELIGIBILITY-CONTRACT / ELIGIBILITY-FLOW / ELIGIBILITY-ACCEPTANCE /
+ELIGIBILITY-VERIFY mapped together and no independent delivery dependency.
+Eligibility remediation uses the existing scoped health receipt with
+`semanticReviewRecovery.eligibilityVerified=true`; a transport-only check is
+insufficient. The admission and readback predicates share this interpretation.
+
+Read-only inspection of the original stored routing decision found 44 excluded
+endpoints: 28 for residency, seven for clearance, seven for structured output,
+one for model class and one for context (40,960 available versus 72,117 required).
+These are the recorded constraints of that occurrence, not claims that every
+current review has the same prompt or route. Historical uncertain TaskNodes are
+not retroactively relabeled from logs or timestamps. Native served acceptance
+must use current exact-request evidence, with screening and provider policy intact.
+
 ## Recovery repair — BI-8ECEC429
 
 Status: implementation plan, 2026-10-02. This extends the existing request,
@@ -520,6 +584,127 @@ unrun; transport health is not an independent review verdict.
 Coverage refresh: `cmut5p46zbh2c01jz92q7uyn8`, BI-8ECEC429, atomic recovery
 outcome; this remediation completes the acceptance workflow, not a new review
 identity or an expansion of its authority or budget.
+
+Workroom readback successor, BI-CAP-21C511CA (2026-10-16): the canonical
+`tasks/result` method already returns the owning caller's durable native
+receipt. Actual execution on served `b338f06e581e` returned the completed
+review and receipt for `TR-GATE-3256136A0BEA51AB05122665`. The remaining defect
+is that `get_workroom` projects only the optional direct `taskRun` relation;
+semantic reviews linked by capsule metadata disappear from its recovery view.
+
+Extend the existing `loadSemanticReviewRoomProjection` read model and
+`projectWorkroomRecovery`, rather than adding a status ledger, task reader,
+review scheduler or permission. The current immutable source's review must
+show its recorded state, heartbeat freshness, requester, budget, precise wait
+reason, canonical next action and final receipt summary. Historical requests
+cannot become the current verdict. Partial or unreadable review evidence stays
+explicitly unknown; it cannot produce an actionable or passing readiness claim.
+Missing source identity retains the existing repair packet and priority.
+
+Full receipts continue through `tasks/result` under its existing requester
+auth-context check. A Workroom summary never confers access to another caller's
+task details, provider payloads or failure analysis. This is an additive read
+projection over existing records, with no migration or authority change; rollback
+reverts that projection while preserving every request and receipt. Shared
+liveness and detail readbacks must use the same reducer. BI-7CCCA696 separately
+owns automatic continuation of proven pre-dispatch capacity waits; this successor
+does not retry inference or alter expired-review replacement BI-8ECEC429.
+
+The recovery view must survive the MCP route's existing result budget. Keep
+ordinary detail responses unchanged. For an oversized room, retain exact source,
+ownership/CAS fields and the recovery view, and explicitly list omitted bulk
+fields instead of allowing the route to replace the entire room with a preview.
+Never shorten a commit, owner, path or lease identity. If even those exact facts
+cannot fit, return a bounded refusal. An oversized activity page is explicitly
+incomplete and cannot advance its cursor; full large-activity detail remains
+BI-3CE72645, not a fabricated empty or completed page.
+
+## Automatic pre-dispatch capacity continuation — BI-7CCCA696
+
+Extend the recovery mechanism above within its original immutable request and
+budget. This repair is separate from BI-8ECEC429's explicitly authorized expired
+successors and BI-DB4E6F81's endpoint-eligibility remediation. The latter's
+no-dispatch eligibility proof does not authorize automatic capacity recovery.
+BI-CAP-21C511CA remains the Workroom receipt/readback owner. Canonical identity
+BI-CAP-437F7745 and role/room configuration BI-56E9CEC2 are dependencies, not
+additional scope here.
+
+### Reproduction and alternatives
+
+On `86e552f4d8ebc6dae30e22438c35293b6bef023b`, checkpointBranch accepts a
+capacity error by name and the reconciler excludes input-required tasks. The
+existing explicit recovery route requires a client even after capacity returns.
+The new worker regression first failed because an ordinary Error with a copied
+capacity name was recorded as a completed pre-dispatch refusal. Baseline worker,
+request and recovery-policy suites passed110 tests before this regression.
+Recorded logs and source provenance live in WC-82EAA947.
+
+Choose positive checkpoint proof and the existing reconciler over two rejected
+alternatives: automatically retrying every inconclusive review risks duplicate
+paid execution; adding a client timer or second queue cannot provide the
+server-owned recovery guarantee. Existing typed capacity policy, immutable
+request, transactional generation fences, outbox and checkpoint store already
+provide the necessary substrate. This bug repair adds no dependency or schema.
+
+### Ordered repair and acceptance
+
+Implement the single atomic outcome through
+`docs/superpowers/plans/2026-10-16-semantic-capacity-auto-resume.md`, whose
+AC-AUTO-1 through AC-AUTO-5 quote the live item criteria. CT-CAPACITY-PROOF and
+FLOW-SETTLE require the real LocalProviderCapacityDeferredError class; copied
+names, wrapped causes and model strings remain uncertain. Persist a versioned,
+request-bound no-provider-started proof only after the real refusal settles.
+
+CT-CHECKPOINT-SET and FLOW-ELIGIBILITY require the complete expected branch set,
+passing siblings, at least one proven refusal and no unfinished, foreign,
+failed or unsupported outcome. Unknown legacy checkpoints stay manual.
+CT-BOUNDED-RESUME and FLOW-RECONCILE extend the bounded existing reconciler:
+cheap capacity observation, persisted bounded backoff, original deadline and
+consumed attempt counters, current authority/source/failure-evidence checks,
+quiescence, and one CAS-admitted generation. Capacity remains advisory; actual
+dispatch still enforces its admission policy. A concurrent refusal can become
+another bounded wait, never a reason to clear counters or renew the window.
+
+CT-OBSERVED-RECOVERY and FLOW-READBACK project that persisted wait and final
+native receipt through existing task/Workroom readers. Preserve explicit retry,
+expired successors and independent verdicts. At least20% relevant refactoring
+consolidates checkpoint/budget/readback eligibility rather than duplicating it.
+
+VC-TYPED-DEFERRAL, VC-NO-REPLAY, VC-SINGLE-GENERATION and VC-TRUTHFUL-STATE
+cover lookalike/wrapped errors, unavailable-then-recovered capacity, retained
+passing siblings, final receipt, concurrent reconciliation, unknown execution,
+actual fail, cancellation, stale source/evidence, authority loss, quiescence and
+budget exhaustion. Denied cases make zero provider calls. Run affected tests,
+typechecks and policy guards, independent review, DCO and protected merge queue.
+Deploy canonically before recording served automatic-continuation acceptance.
+No historical uncertain task is replayed to prove this repair.
+
+Rollback through a signed revert, preserving requests, checkpoints, deadlines,
+attempt history and receipts. Unsupported proof versions stay ineligible.
+Source delivery is not deployed verification; an unavailable check stays unrun.
+
+### Homogeneous aggregate reasons — BI-7415E648
+
+A fresh operator-install review exposed a regression:
+two required branches each recorded a direct capacity refusal, but aggregation
+returned `review-capacity-deferred,review-capacity-deferred`. The worker's
+canonical-reason check therefore left capacityRecovery null. Existing PR6446
+and BI-7CCCA696 remain delivered; this narrow repair reuses their proof and
+reconciler, without reopening or replaying historical uncertain execution.
+
+Normalize repeated reason identities in the existing aggregate. Homogeneous
+waits retain one canonical reason; heterogeneous, unsupported and unknown
+reasons remain distinct. The reason alone grants no recovery: the existing
+complete checkpoint proof, authority, source/evidence, deadline, budget,
+quiescence and generation guards still decide eligibility.
+
+Ordered atomic repair: reproduce the aggregate mismatch and the missing worker
+marker through the real aggregator plus typed provider-refusal injection;
+deduplicate reasons; verify existing concurrent reconciliation resumes exactly
+one generation and retains the deadline/attempts; run mixed/unknown/failure and
+passing-sibling controls, both typechecks and exact gate before protected DCO
+delivery. Served recovery remains unrun until canonical deployment and a new
+permitted request demonstrate it. No new timer, ledger, provider or authority.
 
 ## Non-goals
 

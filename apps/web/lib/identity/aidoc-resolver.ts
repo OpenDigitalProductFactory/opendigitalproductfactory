@@ -1,7 +1,9 @@
 import { prisma } from "@dpf/db";
 
-import { expandGrants, getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { expandGrants, getToolGrantMapping, persistedAgentToolGrants } from "@/lib/tak/agent-grants";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { computeMetadataHash } from "@/lib/routing/metadata-hash";
+import { deriveLegacyPromptClassRefs, legacyOperatingProfileMaterial } from "@dpf/validators/operating-composition/legacy-fingerprint";
 
 import {
   mapLocalPolicyToPortableClasses,
@@ -15,6 +17,7 @@ type AIDocDb = Pick<typeof prisma, "principalAlias" | "agent" | "agentModelConfi
 export type AIDocProjectionSource = {
   gaid: string;
   principalRef: string;
+  authorityGrants?: string[];
   agent: {
     agentId: string;
     name: string;
@@ -41,6 +44,7 @@ export type AIDocProjectionSource = {
     toolGrants: Array<{
       grantKey: string;
     }>;
+    toolGrantRevocations: Array<{ grantKey: string }>;
   };
   modelConfig: {
     minimumTier: string | null;
@@ -105,33 +109,12 @@ function deriveToolSurface(grantKeys: string[]): string[] {
     .sort();
 }
 
-function derivePromptClassRefs(
-  skills: Array<{ label: string; taskType: string | null }>,
-): string[] {
-  return skills
-    .map((skill) => `${skill.taskType ?? "conversation"}:${skill.label}`)
-    .sort();
-}
-
-function buildOperatingProfileFingerprint(input: {
-  modelBinding: InternalAIDoc["model_binding"];
-  grantKeys: string[];
-  promptClassRefs: string[];
-  hitlDefault: number;
-  sensitivity: string;
-}): string {
-  return computeMetadataHash({
-    hitl_default: input.hitlDefault,
-    model_binding: input.modelBinding,
-    prompt_class_refs: [...input.promptClassRefs].sort(),
-    sensitivity: input.sensitivity,
-    tool_grants_sorted: [...input.grantKeys].sort(),
-  });
-}
-
 export function projectInternalAIDoc(source: AIDocProjectionSource): InternalAIDoc {
-  const grantKeys = source.agent.toolGrants.map((grant) => grant.grantKey).sort();
-  const promptClassRefs = derivePromptClassRefs(source.agent.skills);
+  const grantKeys = [...new Set(source.authorityGrants ?? (
+    coworkerAuthorityAgentId(source.agent.agentId) === source.agent.agentId
+      ? persistedAgentToolGrants(source.agent) : []
+  ))].sort();
+  const promptClassRefs = deriveLegacyPromptClassRefs(source.agent.skills);
   const modelBinding: InternalAIDoc["model_binding"] = {
     default_model_id: source.agent.executionConfig?.defaultModelId ?? null,
     pinned_provider_id: source.modelConfig?.pinnedProviderId ?? null,
@@ -165,19 +148,20 @@ export function projectInternalAIDoc(source: AIDocProjectionSource): InternalAID
     prompt_class_refs: promptClassRefs,
     tool_surface: deriveToolSurface(grantKeys),
     authorization_classes: mapLocalPolicyToPortableClasses(grantKeys),
-    operating_profile_fingerprint: buildOperatingProfileFingerprint({
+    operating_profile_fingerprint: computeMetadataHash(legacyOperatingProfileMaterial({
       modelBinding,
       grantKeys,
       promptClassRefs,
       hitlDefault: source.agent.hitlTierDefault,
       sensitivity: source.agent.sensitivity,
-    }),
+    })),
   };
 }
 
 export async function resolveInternalAIDoc(
   gaid: string,
   db: AIDocDb = prisma,
+  authorityGrants?: string[],
 ): Promise<InternalAIDoc | null> {
   const gaidAlias = await db.principalAlias.findFirst({
     where: {
@@ -251,11 +235,22 @@ export async function resolveInternalAIDoc(
           grantKey: true,
         },
       },
+      toolGrantRevocations: { select: { grantKey: true } },
     },
   });
 
   if (!agent) {
     return null;
+  }
+
+  let resolvedAuthorityGrants = authorityGrants;
+  if (resolvedAuthorityGrants === undefined) {
+    const ownerId = coworkerAuthorityAgentId(agent.agentId);
+    const owner = ownerId === agent.agentId ? agent : await db.agent.findUnique({
+      where: { agentId: ownerId },
+      select: { toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
+    });
+    resolvedAuthorityGrants = persistedAgentToolGrants(owner);
   }
 
   const modelConfig = await db.agentModelConfig.findUnique({
@@ -271,6 +266,7 @@ export async function resolveInternalAIDoc(
   return projectInternalAIDoc({
     gaid,
     principalRef: gaidAlias.principal.principalId,
+    authorityGrants: resolvedAuthorityGrants,
     agent,
     modelConfig,
   });
@@ -279,6 +275,7 @@ export async function resolveInternalAIDoc(
 export async function resolveAIDocForAgent(
   agentId: string,
   db: AIDocDb = prisma,
+  authorityGrants?: string[],
 ): Promise<InternalAIDoc | null> {
   const agentAlias = await db.principalAlias.findFirst({
     where: {
@@ -310,5 +307,5 @@ export async function resolveAIDocForAgent(
     return null;
   }
 
-  return resolveInternalAIDoc(gaidAlias.aliasValue, db);
+  return resolveInternalAIDoc(gaidAlias.aliasValue, db, authorityGrants);
 }

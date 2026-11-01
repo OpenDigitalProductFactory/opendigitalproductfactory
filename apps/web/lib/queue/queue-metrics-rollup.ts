@@ -317,13 +317,8 @@ export async function defaultRollupDeps(): Promise<RollupDeps> {
       }
       // Workroom stages (EP-B70E718D F2): a room sitting at a stage is that
       // stage's WIP; one that is not being worked is its depth (queue).
-      const { workroomStageLiveCounts } = await import("@/lib/work-management/workroom-stage-telemetry");
-      const { TERMINAL_WORKROOM_STATUSES } = await import("@/lib/work-management/standing-room-nesting");
-      const rooms = await prisma.workroom.findMany({
-        where: { archivedAt: null, status: { notIn: [...TERMINAL_WORKROOM_STATUSES] } },
-        select: { scopeClaims: true, workspaceState: true },
-      });
-      for (const [queueKey, counts] of workroomStageLiveCounts(rooms)) map.set(queueKey, counts);
+      const { loadWorkroomStageLiveCounts } = await import("@/lib/work-management/workroom-stage-telemetry");
+      for (const [queueKey, counts] of await loadWorkroomStageLiveCounts()) map.set(queueKey, counts);
       return map;
     },
     upsertSnapshot: async (row) => {

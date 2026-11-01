@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachHarnessRecipeToPlan,
+  bindActivityExecutionPlan,
   activityBudgetExclusion,
   buildPlanFromRecipe,
   buildDefaultPlan,
@@ -161,6 +162,51 @@ function makeActivity(overrides: Partial<ActivityContract> = {}): ActivityContra
 }
 
 // ── buildPlanFromRecipe ───────────────────────────────────────────────────────
+
+describe("activity completion contract", () => {
+  const hint = { providerId: "local", modelId: "qwen", executionAdapter: "chat" };
+  it("reserves final output inside the actual activity total", () => {
+    const plan = buildDefaultPlan(makeEndpoint({ providerId: "local", modelId: "qwen" }), makeContract());
+    plan.providerSettings = { thinking_budget_tokens: 15000 };
+    const bound = bindActivityExecutionPlan(plan, makeActivity({
+      successShape: "json", tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 16384, compression: "strict-packet" },
+    }), hint);
+    expect(bound.maxTokens).toBe(16384);
+    expect(bound.providerSettings.thinking_budget_tokens).toBe(12288);
+    expect(bound.responsePolicy.strictSchema).toBe(true);
+  });
+  it.each([0, -1, 1.5, NaN, Infinity])("rejects malformed activity totals: %s", total => {
+    expect(() => bindActivityExecutionPlan(buildDefaultPlan(makeEndpoint(), makeContract()), makeActivity({
+      tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: total, compression: "none" },
+    }), hint)).toThrow(/completion allowance/i);
+  });
+  it.each([0, -1, 1.5, NaN, Infinity, "1000"])("rejects malformed local thinking allowances: %s", budget => {
+    const plan = buildDefaultPlan(makeEndpoint(), makeContract());
+    plan.providerSettings = { thinking_budget_tokens: budget };
+    expect(() => bindActivityExecutionPlan(plan, makeActivity(), hint)).toThrow(/thinking allowance/i);
+  });
+  it("keeps a smaller local total and leaves final space", () => {
+    const plan = buildDefaultPlan(makeEndpoint(), makeContract());
+    plan.providerSettings = { thinking_budget_tokens: 15000 };
+    const bound = bindActivityExecutionPlan(plan, makeActivity({
+      tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 4096, compression: "none" },
+    }), hint);
+    expect(bound.maxTokens).toBe(4096);
+    expect(bound.providerSettings.thinking_budget_tokens).toBe(2048);
+  });
+  it("recompiles the original proportional request after learning the larger activity total", () => {
+    const endpoint = makeEndpoint({ providerId: "local", maxOutputTokens: 32768,
+      localThinkingBudgetEvidence: { dialect: "llama.cpp-b9879", modelDigest: "digest", engineIdentity: "engine", templateDigest: "template", configDigest: "config", observedAt: Date.now() },
+    });
+    const plan = buildDefaultPlan(endpoint, makeContract({ reasoningDepth: "high", estimatedInputTokens: 20000 }));
+    expect(plan.providerSettings.thinking_budget_tokens).toBe(2048);
+    const bound = bindActivityExecutionPlan(plan, makeActivity({
+      tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 16384, compression: "none" },
+    }), hint);
+    expect(bound.localThinkingBudgetRequest).toBe(15000);
+    expect(bound.providerSettings.thinking_budget_tokens).toBe(12288);
+  });
+});
 
 describe("buildPlanFromRecipe", () => {
   it("extracts maxTokens from providerSettings.max_tokens", () => {
@@ -602,14 +648,55 @@ describe("activity fixed thinking admission", () => {
       .toBe("Activity completion allowance exceeds known model output capacity");
   });
 
-  it.each(["anthropic", "google"])("rejects %s thinking that consumes the completion allowance", (providerId) => {
-    const endpoint = makeEndpoint({ providerId, maxOutputTokens: 32768, maxContextTokens: 65536,
+  it.each(["anthropic", "google"])("admits the bounded %s thinking plan for a large high-effort request", (providerId) => {
+    const endpoint = makeEndpoint({ providerId, maxOutputTokens: 65536, maxContextTokens: 128000,
       capabilities: { ...EMPTY_CAPABILITIES, thinking: true } });
-    const contract = makeContract({ reasoningDepth: "high", estimatedInputTokens: 20000 });
+    const contract = makeContract({ reasoningDepth: "high", estimatedInputTokens: 50000 });
     const activity = makeActivity();
-    activity.tokenEnvelope = { maxInputTokens: 24000, maxOutputTokens: 8192, compression: "none" };
-    expect(activityBudgetExclusion(endpoint, contract, activity)).toMatch(/thinking/i);
-    activity.tokenEnvelope.maxOutputTokens = 16384;
+    for (const [total, thinkingBudget] of [[8192, 6144], [16384, 12288]]) {
+      activity.tokenEnvelope.maxOutputTokens = total;
+      expect(activityBudgetExclusion(endpoint, contract, activity)).toBeNull();
+      for (const plan of [
+        buildDefaultPlan(endpoint, contract),
+        buildPlanFromRecipe(makeRecipe({ providerId }), contract, endpoint),
+      ]) {
+        const bound = bindActivityExecutionPlan(plan, activity, {
+          providerId, modelId: endpoint.modelId,
+        });
+        expect(bound.maxTokens).toBe(total);
+        expect(bound.completionAllowance).toBe(total);
+        expect(bound.effortUnexpressed).not.toBe(true);
+        expect(bound.providerSettings).toMatchObject(providerId === "anthropic"
+          ? { thinking: { type: "enabled", budget_tokens: thinkingBudget } }
+          : { thinkingConfig: { thinkingBudget } });
+      }
+    }
+  });
+
+  it("refuses an activity that cannot fit Anthropic's minimum thinking budget and final output", () => {
+    const endpoint = makeEndpoint({ providerId: "anthropic", maxOutputTokens: 65536,
+      capabilities: { ...EMPTY_CAPABILITIES, thinking: true } });
+    const contract = makeContract({ reasoningDepth: "high", estimatedInputTokens: 50000 });
+    const activity = makeActivity({
+      tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 3071, compression: "none" },
+    });
+    expect(activityBudgetExclusion(endpoint, contract, activity))
+      .toBe("Activity allowance cannot accommodate provider minimum thinking budget");
+    expect(() => bindActivityExecutionPlan(buildDefaultPlan(endpoint, contract), activity, {
+      providerId: endpoint.providerId, modelId: endpoint.modelId,
+    })).toThrow("Activity allowance cannot accommodate provider minimum thinking budget");
+    activity.tokenEnvelope.maxOutputTokens = 3072;
     expect(activityBudgetExclusion(endpoint, contract, activity)).toBeNull();
+  });
+
+  it.each(["anthropic", "google"])("still refuses %s when input plus the bounded total exceeds capacity", providerId => {
+    const endpoint = makeEndpoint({ providerId, maxOutputTokens: 65536, maxContextTokens: 65536,
+      capabilities: { ...EMPTY_CAPABILITIES, thinking: true } });
+    const contract = makeContract({ reasoningDepth: "high", estimatedInputTokens: 50000 });
+    const activity = makeActivity({
+      tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 16384, compression: "none" },
+    });
+    expect(activityBudgetExclusion(endpoint, contract, activity))
+      .toBe("Activity input and completion allowance exceeds known model context capacity");
   });
 });

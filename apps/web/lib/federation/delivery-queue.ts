@@ -14,6 +14,10 @@ export interface FederationDeliveryQueueDb {
     upsert(args: unknown): Promise<{ itemId: string }>;
     update(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
+    /** Reads the job's current status so scheduling records `enqueued` only on
+     *  a real transition (BI-1A8887C7). Prisma always provides it; a store
+     *  without it keeps the old always-record behaviour. */
+    findUnique?(args: unknown): Promise<{ itemId: string; status: string } | null>;
     findMany?(args: unknown): Promise<Array<{
       itemId: string;
       sourceId: string | null;
@@ -108,11 +112,20 @@ export async function scheduleFederationDeliveryJob(
   now = new Date(),
   telemetry: TelemetryWriter = recordQueueTransition,
 ): Promise<{ itemId: string }> {
+  const sourceKey = `federation-demand:${mirrorId}`;
+  // BI-1A8887C7: telemetry records state transitions, not repeated schedules.
+  // A job that is already queued stays queued, so re-scheduling it (a content
+  // change the queued job will pick up anyway) is not an `enqueued` event.
+  // Recording it anyway wrote ~700K rows/day while one link's backlog could
+  // not drain.
+  const prior = db.workItem.findUnique
+    ? await db.workItem.findUnique({ where: { sourceKey }, select: { itemId: true, status: true } })
+    : null;
   const queue = await ensureFederationDeliveryQueue(db);
   const item = await db.workItem.upsert({
-    where: { sourceKey: `federation-demand:${mirrorId}` },
+    where: { sourceKey },
     create: {
-      sourceKey: `federation-demand:${mirrorId}`,
+      sourceKey,
       sourceType: "federation-demand-delivery",
       sourceId: mirrorId,
       title: `Deliver federated demand ${mirrorId}`,
@@ -132,6 +145,7 @@ export async function scheduleFederationDeliveryJob(
     },
     select: { itemId: true },
   });
+  if (prior?.status === "queued") return item;
   await telemetry({
     queueKey: FEDERATION_DELIVERY_QUEUE_KEY,
     itemKind: "federation-demand",
@@ -148,13 +162,35 @@ export async function finishFederationDeliveryJob(
   input: {
     itemId: string;
     attemptCount: number;
-    outcome: "success" | "retry" | "dead-letter";
+    /** `withdrawn`: nothing is left to deliver (link revoked, envelope no longer
+     *  pending). No attempt was made, so the attempt count is not advanced. */
+    outcome: "success" | "retry" | "dead-letter" | "withdrawn";
     error?: string | null;
     now: Date;
     nextAttemptAt?: Date | null;
   },
   telemetry: TelemetryWriter = recordQueueTransition,
 ): Promise<void> {
+  if (input.outcome === "withdrawn") {
+    await db.workItem.update({
+      where: { itemId: input.itemId },
+      data: {
+        status: "cancelled",
+        nextAttemptAt: null,
+        lastError: input.error?.slice(0, 1_000) ?? null,
+        completedAt: input.now,
+      },
+    });
+    await telemetry({
+      queueKey: FEDERATION_DELIVERY_QUEUE_KEY,
+      itemKind: "federation-demand",
+      itemId: input.itemId,
+      transition: "cancelled",
+      actorType: "system",
+      occurredAt: input.now,
+    });
+    return;
+  }
   const attempts = input.attemptCount + 1;
   const retry = input.outcome === "retry";
   await db.workItem.update({
@@ -176,5 +212,20 @@ export async function finishFederationDeliveryJob(
     outcome: input.outcome === "success" ? "success" : "failed",
     actorType: "system",
     occurredAt: input.now,
+  });
+}
+
+/**
+ * Push a job that cannot be attempted yet (its link is quarantined or not yet
+ * trusted) out of the due window without spending an attempt. Counting it as an
+ * attempt would carry a dead-letter budget the peer never consumed.
+ */
+export async function holdFederationDeliveryJob(
+  db: FederationDeliveryQueueDb,
+  input: { itemId: string; nextAttemptAt: Date },
+): Promise<void> {
+  await db.workItem.update({
+    where: { itemId: input.itemId },
+    data: { status: "queued", nextAttemptAt: input.nextAttemptAt },
   });
 }

@@ -16,6 +16,10 @@ const principalLinking = vi.hoisted(() => ({
   syncUserPrincipal: vi.fn(),
 }));
 vi.mock("@/lib/identity/principal-linking", () => principalLinking);
+// BI-957915CB: every document tool resolves the person it acts for.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
 
 import { documentPack } from "./document-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -35,10 +39,14 @@ const EXPECTED_TOOLS = [
   "doc_state_change",
   "doc_list_references",
   "create_presentation",
+  "create_report",
+  "create_letter",
+  "create_sheet",
+  "create_drawing",
 ];
 
 describe("document pack — registration", () => {
-  it("exposes exactly the seven managed-document tools and create_presentation", () => {
+  it("exposes exactly the seven managed-document tools and the five render-family tools", () => {
     const names = documentPack.definitions.map((d) => d.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());
     for (const name of EXPECTED_TOOLS) {
@@ -56,6 +64,10 @@ describe("document pack — registration", () => {
       doc_state_change: ["document_publish", "registry_write"],
       doc_list_references: ["document_read", "registry_read"],
       create_presentation: ["document_write"],
+      create_report: ["document_write"],
+      create_letter: ["document_write"],
+      create_sheet: ["document_write"],
+      create_drawing: ["document_write", "ea_drawing_export"],
     });
     // The gating source agrees with the co-located mirror.
     expect(isToolAllowedByGrants("doc_save", ["document_write"])).toBe(true);
@@ -119,7 +131,7 @@ describe("document pack — handler envelopes", () => {
     expect(result.success).toBe(true);
     expect(result.message).toContain("DOC-001");
     expect(documentStore.searchManagedDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "hybrid", query: "brief" }),
+      expect.objectContaining({ mode: "hybrid", query: "brief", viewer: { principalId: "principal-user-1" } }),
     );
   });
 
@@ -164,10 +176,10 @@ describe("document pack — handler envelopes", () => {
     const versions = await documentPack.handlers.doc_version_list!({ documentId: "DOC-001" }, "user-1");
     expect(versions.success).toBe(true);
     expect(versions.message).toContain("2 document versions");
-    expect(documentStore.listManagedDocumentVersions).toHaveBeenCalledWith("DOC-001");
+    expect(documentStore.listManagedDocumentVersions).toHaveBeenCalledWith("DOC-001", { principalId: "principal-user-1" });
 
     const refs = await documentPack.handlers.doc_list_references!({ documentId: "DOC-001" }, "user-1");
     expect(refs.success).toBe(true);
-    expect(documentStore.listManagedDocumentReferences).toHaveBeenCalledWith("DOC-001");
+    expect(documentStore.listManagedDocumentReferences).toHaveBeenCalledWith("DOC-001", { principalId: "principal-user-1" });
   });
 });

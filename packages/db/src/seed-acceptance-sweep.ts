@@ -21,8 +21,9 @@ import {
   ACCEPTANCE_SWEEP_TASK_KIND,
   ACCEPTANCE_SWEEP_TASK_TITLE,
 } from "./acceptance-sweep-config";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -46,12 +47,8 @@ export async function ensureAcceptanceSweepScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findTaskOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed acceptance-sweep scheduled task");
   }
 
@@ -90,7 +87,7 @@ export async function ensureAcceptanceSweepScheduledTask(
         schedule: ACCEPTANCE_SWEEP_SCHEDULE,
         timezone,
         taskKind: ACCEPTANCE_SWEEP_TASK_KIND,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

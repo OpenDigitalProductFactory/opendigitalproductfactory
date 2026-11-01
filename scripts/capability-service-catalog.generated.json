@@ -314,6 +314,7 @@
           "service": "portal-init",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
+            "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
             "dpf-source-code:/workspace"
           ]
         },
@@ -1076,7 +1077,7 @@
             "linux"
           ],
           "ports": [
-            "11434:11434"
+            "127.0.0.1:11434:11434"
           ],
           "profiles": [
             "runtime-external-ai"
@@ -1135,7 +1136,7 @@
       ]
     }
   ],
-  "catalogHash": "52358eb9e4f8442f3b870a37ed46e9cba184e04ad811520842858d0833f2b6d9",
+  "catalogHash": "c41a8c22e60fb47c03a82468f29c700d90bfd511980c8b3d0aaf7a3801762120",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

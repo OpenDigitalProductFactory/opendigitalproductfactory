@@ -5,7 +5,8 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
-import { resolveAgentIdentity } from "./agent-identity.js";
+import { resolveAgentIdentity, resolveCanonicalAgentId } from "./agent-identity.js";
+import { assertInteractiveAgentPermissionState, seedCanonicalAgentToolGrants } from "./seed-agent-tool-grants.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
 import { convergeAgentPrincipals, type AgentPrincipalDb } from "./agent-principal-convergence.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
@@ -82,6 +83,8 @@ import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle.js
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review.js";
 import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep.js";
 import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward.js";
+import { ensureClientCapabilityReverifyScheduledTask } from "./seed-client-capability-reverify.js";
+import { ensureHarnessEvolutionLoopScheduledTask } from "./seed-harness-evolution-loop.js";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
@@ -327,16 +330,7 @@ async function seedAgents(): Promise<void> {
       });
 
       // Seed AgentToolGrant rows from tool_grants array
-      if (cp.tool_grants) {
-        for (const grantKey of cp.tool_grants) {
-          if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
-          await prisma.agentToolGrant.upsert({
-            where: { agentId_grantKey: { agentId: agent.id, grantKey } },
-            update: {},
-            create: { agentId: agent.id, grantKey },
-          });
-        }
-      }
+      if (cp.tool_grants) await seedCanonicalAgentToolGrants(prisma, agent, cp.tool_grants, revokedGrants);
     }
   }
   console.log(`Seeded ${seen.size} agents (skipped ${registry.agents.length - seen.size} duplicates)`);
@@ -1206,7 +1200,11 @@ async function seedCoworkerAgents(): Promise<void> {
       );
     }
 
-    const grants = HARDCODED_COWORKER_GRANTS[agentId];
+    // Execution aliases retain their Agent row, skills and FK consumers, but
+    // never receive a second permission authority. Do not union alias defaults
+    // into canonical defaults: that would widen access on existing installs.
+    const grants = resolveCanonicalAgentId(agent.agentId) === agent.agentId
+      ? HARDCODED_COWORKER_GRANTS[agentId] : undefined;
     if (grants) {
       for (const grantKey of grants) {
         if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
@@ -1237,6 +1235,7 @@ async function seedCoworkerAgents(): Promise<void> {
   for (const [agentId, grants] of Object.entries(ONBOARDING_AGENT_GRANTS)) {
     const agent = await prisma.agent.findUnique({ where: { agentId } });
     if (!agent) continue; // Not yet bootstrapped — first-run flow will seed it with grants
+    if (resolveCanonicalAgentId(agent.agentId) !== agent.agentId) continue;
     for (const grantKey of grants) {
       if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
       await prisma.agentToolGrant.upsert({
@@ -2575,6 +2574,10 @@ async function main(): Promise<void> {
   await step("decisionEngineReviewScheduledTask", () => ensureDecisionEngineReviewScheduledTask(prisma));
   await step("acceptanceSweepScheduledTask", () => ensureAcceptanceSweepScheduledTask(prisma));
   await step("demandScoringStewardScheduledTask", () => ensureDemandScoringStewardScheduledTask(prisma));
+  // BI-64795FD0: weekly client-capability re-verification (proposals only).
+  await step("clientCapabilityReverifyScheduledTask", () => ensureClientCapabilityReverifyScheduledTask(prisma));
+  // BI-49BC21C1: the daily harness evolution loop (ranked, evidence-backed harness-edit candidates).
+  await step("harnessEvolutionLoopScheduledTask", () => ensureHarnessEvolutionLoopScheduledTask(prisma));
   await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
   await step("selfOptimizationSweepScheduledTask", () => ensureSelfOptimizationSweepScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
@@ -2849,31 +2852,13 @@ async function assertAnthropicSubToolCapability(): Promise<void> {
 }
 
 /**
- * Every coworker and onboarding agent the user can talk to must have at least
- * one tool grant. Without grants, isToolAllowedByGrants() denies every tool
- * and the agent can only hallucinate tool calls (it will claim reviews passed,
- * claim evidence was saved, etc. — all with no DB effect). Fail the seed
- * loudly rather than ship a broken configuration.
+ * Interactive identities must resolve to a provisioned canonical authority.
+ * Retained revocations and unresolved alias decisions may intentionally leave
+ * no effective tools. Report missing provisioning without restoring access or
+ * requiring duplicate grants on execution aliases.
  */
 async function assertCoworkerAgentsHaveGrants(): Promise<void> {
-  const offenders = await prisma.agent.findMany({
-    where: {
-      type: { in: ["coworker", "onboarding"] },
-      archived: false,
-    },
-    select: { agentId: true, name: true, type: true, toolGrants: { select: { id: true } } },
-  });
-  const missing = offenders.filter((a) => a.toolGrants.length === 0);
-  if (missing.length > 0) {
-    const list = missing.map((a) => `${a.agentId} (${a.name}, type=${a.type})`).join(", ");
-    throw new Error(
-      `Seed invariant violated: ${missing.length} interactive agent(s) without tool grants: ${list}. ` +
-        `Without grants these agents will silently fail every tool call and hallucinate successful outcomes. ` +
-        `Add grants to HARDCODED_COWORKER_GRANTS in seedCoworkerAgents() (for hardcoded coworkers), ` +
-        `to seedOnboardingAgent() in apps/web/lib/inference/bootstrap-first-run.ts (for onboarding agents), ` +
-        `or to tool_grants in packages/db/data/agent_registry.json (for registry agents).`,
-    );
-  }
+  await assertInteractiveAgentPermissionState(prisma);
 }
 
 main()

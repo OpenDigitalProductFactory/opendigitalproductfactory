@@ -40,11 +40,13 @@ import {
   coworkerEnvelopesExpiredUnactioned,
 } from "@/lib/operate/metrics";
 import { immutableArtifactIdentity, parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 
 import { attentionAuthorForAgent } from "../attribution";
 import {
   envelopeIdFromExecutionResult,
   summarizeCoworkerEnvelopeDecision,
+  originalToolParameters,
 } from "../coworker-envelope-decision";
 import type {
   AttentionEnvelopeApproval,
@@ -73,12 +75,51 @@ export type CoworkerEnvelopeRow = {
   proposedParameters?: unknown;
   /** The tool's declared consequence, resolved from the tool registry. */
   consequence?: string | null;
+  targetLabel?: string;
   taskRun: { a2aMetadata: unknown } | null;
 };
 
 /** The one status that can still be decided. Every other value in the
  *  envelope state machine is either mid-flight or terminal. */
 const DECIDABLE_STATUS = "proposed";
+const APPROVAL_PAGE_SIZE = 25;
+
+/** A cursor is only a position: every query still checks the reading owner. */
+function approvalCursor(value: string): { createdAt: Date; id: string } {
+  if (value.length > 160) throw new Error("Invalid approval cursor.");
+  const [iso, id, extra] = value.split("|");
+  const createdAt = new Date(iso ?? "");
+  if (extra !== undefined || !id || !/^[\w-]{1,128}$/.test(id)
+    || !Number.isFinite(createdAt.getTime()) || createdAt.toISOString() !== iso) {
+    throw new Error("Invalid approval cursor. Open the latest requests to continue.");
+  }
+  return { createdAt, id };
+}
+
+export type ApprovalQueuePage = { items: AttentionItem[]; total: number; nextCursor: string | null };
+
+/** Bounded owner-scoped traversal, independent of whether the anchor still exists. */
+export async function loadCoworkerEnvelopePage(
+  db: Db, delegatingUserId: string | undefined, nowMs: number = Date.now(), before?: string,
+): Promise<ApprovalQueuePage> {
+  if (!delegatingUserId) return { items: [], total: 0, nextCursor: null };
+  const position = before === undefined ? undefined : approvalCursor(before);
+  const [loaded, total] = await Promise.all([
+    loadCoworkerEnvelopeItems(db, delegatingUserId, nowMs, undefined, { position }),
+    db.coworkerActionEnvelope.count({ where: {
+      delegatingUserId, status: DECIDABLE_STATUS,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date(nowMs) } }],
+    } }),
+  ]);
+  const live = loaded.filter(item => item.envelope?.actionable);
+  const shown = live.slice(0, APPROVAL_PAGE_SIZE);
+  const last = shown.at(-1);
+  return {
+    items: [...shown, ...loaded.filter(item => !item.envelope?.actionable)], total,
+    nextCursor: live.length > APPROVAL_PAGE_SIZE && last
+      ? `${last.createdAtIso}|${last.envelope!.envelopeId}` : null,
+  };
+}
 
 const EXPIRED_COPY = SOURCE_CATALOG.approvals.expiredUnanswered;
 
@@ -146,6 +187,7 @@ export function coworkerEnvelopeToAttentionItem(
     authorizerUserId: row.delegatingUserId,
     consequence: row.consequence ?? null,
     rationale: row.rationale,
+    targetLabel: row.targetLabel,
   });
   const approval: AttentionEnvelopeApproval = {
     envelopeId: row.id,
@@ -251,6 +293,7 @@ export async function loadCoworkerEnvelopeItems(
   delegatingUserId: string | undefined,
   nowMs: number = Date.now(),
   envelopeId?: string,
+  page?: { position?: { createdAt: Date; id: string } },
 ): Promise<AttentionItem[]> {
   if (!delegatingUserId) return [];
   const now = new Date(nowMs);
@@ -260,9 +303,13 @@ export async function loadCoworkerEnvelopeItems(
       ...(envelopeId ? { id: envelopeId } : {}),
       status: DECIDABLE_STATUS,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      ...(page?.position ? { AND: [{ OR: [
+        { createdAt: { lt: page.position.createdAt } },
+        { createdAt: page.position.createdAt, id: { lt: page.position.id } },
+      ] }] } : {}),
     },
-    orderBy: { createdAt: "desc" },
-    take: 25,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: page ? APPROVAL_PAGE_SIZE + 1 : APPROVAL_PAGE_SIZE,
     select: {
       id: true,
       coworkerAgentId: true,
@@ -284,6 +331,7 @@ export async function loadCoworkerEnvelopeItems(
     ...lapsed.filter((row) => !liveIds.has(row.id)),
   ];
   const proposedByEnvelopeId = await loadProposedParameters(db, allRows);
+  const targetLabels = await loadTargetLabels(db, allRows, proposedByEnvelopeId, delegatingUserId);
   const consequenceByTool = await loadDeclaredConsequences(
     allRows.map((row) => row.manifestActionId),
   );
@@ -328,10 +376,115 @@ export async function loadCoworkerEnvelopeItems(
           ? { proposedParameters: proposedByEnvelopeId.get(row.id) }
           : {}),
         consequence: consequenceByTool.get(row.manifestActionId) ?? null,
+        targetLabel: targetLabels.get(row.id),
       },
       nowMs,
     ),
   );
+}
+
+/**
+ * BI-7BCC87BB (plan B8, AC-OVERRIDE; WWMD DI-18258852EB33): another person's
+ * waiting request, opened by an admin through its exact link. The caller (the
+ * inbox page) has already checked the user-management capability; this only
+ * loads the one request, never a list, so the delegate-isolation rule above
+ * still holds for every queue. The card it projects offers "Decide on their
+ * behalf" instead of Authorize / Decline, and names the owner as the
+ * accountable authorizer.
+ */
+export async function loadOnBehalfEnvelopeItem(
+  db: Db,
+  envelopeId: string,
+  readerUserId: string,
+  nowMs: number = Date.now(),
+): Promise<AttentionItem[]> {
+  const now = new Date(nowMs);
+  const row = await db.coworkerActionEnvelope.findFirst({
+    where: {
+      id: envelopeId,
+      status: DECIDABLE_STATUS,
+      NOT: { delegatingUserId: readerUserId },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    select: {
+      id: true, coworkerAgentId: true, delegatingUserId: true, manifestActionId: true, rationale: true,
+      status: true, taskRunId: true, expiresAt: true, createdAt: true, argsJson: true,
+      taskRun: { select: { a2aMetadata: true } },
+    },
+  }) as unknown as CoworkerEnvelopeRow | null;
+  if (!row) return [];
+  const [owner, proposed, consequences] = await Promise.all([
+    db.user.findUnique({ where: { id: row.delegatingUserId }, select: { email: true } }).catch(() => null),
+    loadProposedParameters(db, [row]),
+    loadDeclaredConsequences([row.manifestActionId]),
+  ]);
+  const ownerLabel = owner?.email ?? row.delegatingUserId;
+  const targetLabels = await loadTargetLabels(db, [row], proposed, readerUserId);
+  const item = coworkerEnvelopeToAttentionItem({
+    ...row,
+    ...(proposed.has(row.id) ? { proposedParameters: proposed.get(row.id) } : {}),
+    consequence: consequences.get(row.manifestActionId) ?? null,
+    targetLabel: targetLabels.get(row.id),
+  }, nowMs);
+  if (!item.envelope) return [item];
+  return [{
+    ...item,
+    envelope: { ...item.envelope, onBehalf: { ownerLabel }, decision: { ...item.envelope.decision, authorizerLabel: ownerLabel } },
+  }];
+}
+
+/** Names enrich presentation only, after the actual viewer's room policy passes. */
+async function loadTargetLabels(db: Db, rows: CoworkerEnvelopeRow[], proposed: Map<string, unknown>, userId: string) {
+  const labels = new Map<string, string>();
+  const refs = rows.flatMap(row => {
+    const params = originalToolParameters(proposed.get(row.id)) ?? originalToolParameters(row.argsJson);
+    const roomTarget = ["record_workroom_evidence", "reassign_workroom_executor"].includes(row.manifestActionId);
+    const itemTarget = ["record_execution_evidence", "record_initiative_evidence"].includes(row.manifestActionId);
+    const value = roomTarget ? params?.capsuleId : itemTarget ? params?.itemId ?? reviewBindingOf(row)?.itemId : undefined;
+    return typeof value === "string" && value.trim() ? [{ envelopeId: row.id, kind: roomTarget ? "room" : "item", value: value.trim() }] : [];
+  });
+  if (!refs.length) return labels;
+  try {
+    const roomKeys = refs.filter(ref => ref.kind === "room").map(ref => ref.value);
+    const itemKeys = refs.filter(ref => ref.kind === "item").map(ref => ref.value);
+    // Workroom.backlogItemId intentionally supports both historical key forms.
+    const identities = itemKeys.length ? await db.backlogItem.findMany({
+      where: { OR: [{ id: { in: itemKeys } }, { itemId: { in: itemKeys } }] }, select: { id: true, itemId: true },
+    }) : [];
+    const expandedItemKeys = [...new Set([...itemKeys, ...identities.flatMap(item => [item.id, item.itemId])])];
+    const rooms = await db.workroom.findMany({
+      where: { OR: [{ id: { in: roomKeys } }, { capsuleId: { in: roomKeys } }, { backlogItemId: { in: expandedItemKeys } }] },
+      orderBy: { updatedAt: "desc" }, take: 100,
+      select: { id: true, capsuleId: true, backlogItemId: true },
+    });
+    const readable: typeof rooms = [];
+    for (let offset = 0; offset < rooms.length; offset += 4) {
+      const admitted = await Promise.all(rooms.slice(offset, offset + 4).map(async room => {
+        const access = await resolveHumanWorkroomAccess({ userId, workroomId: room.id, requested: "content" }, db);
+        return access.decision.level === "content" ? room : null;
+      }));
+      readable.push(...admitted.filter(room => room !== null));
+    }
+    const backlogKeys = readable.flatMap(room => room.backlogItemId ? [room.backlogItemId] : []);
+    const namedRooms = readable.length ? await db.workroom.findMany({
+      where: { id: { in: readable.map(room => room.id) } }, select: { id: true, title: true },
+    }) : [];
+    const namedItems = backlogKeys.length ? await db.backlogItem.findMany({
+      where: { OR: [{ id: { in: backlogKeys } }, { itemId: { in: backlogKeys } }] }, select: { id: true, itemId: true, title: true },
+    }) : [];
+    for (const ref of refs) {
+      const identity = identities.find(item => item.id === ref.value || item.itemId === ref.value);
+      const keys = new Set([ref.value, ...(identity ? [identity.id, identity.itemId] : [])]);
+      const room = readable.find(room => ref.kind === "room" ? keys.has(room.id) || keys.has(room.capsuleId) : !!room.backlogItemId && keys.has(room.backlogItemId));
+      if (!room) continue;
+      const item = namedItems.find(item => item.id === room.backlogItemId || item.itemId === room.backlogItemId);
+      const name = (item?.title ?? namedRooms.find(named => named.id === room.id)?.title ?? "").trim();
+      if (name && !/\b(?:BI|WC|AGT|TR)-[\w-]+\b/.test(name)) labels.set(ref.envelopeId, name);
+    }
+  } catch {
+    // Missing enrichment never grants access or prevents the original decision.
+  }
+  return labels;
 }
 
 /**

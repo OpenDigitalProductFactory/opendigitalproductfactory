@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
-import { resolveDeploymentClosureProof } from "./deployment-closure";
+import { resolveDeploymentClosureProof, resolveFeatureBuildDeploymentClosure } from "./deployment-closure";
 
 const sha = (c: string) => c.repeat(40);
 const room = { repositoryFullName: "owner/repo", headSha: sha("a"), pullRequestNumber: 42 };
@@ -50,5 +50,16 @@ describe("delivery and acceptance decision separation", () => {
     expect(decision.verdict).toBe("denied");
     expect(decision.blockers).toEqual([authorization, conflict]);
     expect(decision.satisfied[0]?.state).toBe("not-applicable");
+  });
+});
+
+// BI-1CDA479D: a Build Studio build proves delivery through its own room.
+describe("feature build deployment closure", () => {
+  it("reads the build's newest room that carries a PR, not a backlog item's", async () => {
+    const findFirst = vi.fn(async () => null);
+    const db = { workroom: { findFirst }, selfUpgradeRun: { findFirst: vi.fn() }, contributorInventorySnapshot: { findMany: vi.fn() } };
+    const result = await resolveFeatureBuildDeploymentClosure({ featureBuildRowId: "row-1", workType: null, roots: [], db: db as never });
+    expect(result.kind).toBe("unavailable");
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { featureBuildId: "row-1", pullRequestNumber: { not: null } } }));
   });
 });

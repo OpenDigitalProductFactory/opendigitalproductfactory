@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
-import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
+import { immutableArtifactIdentity, type InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { formatInitiativeReviewObjective } from "./tak/initiative-review-objective";
 
@@ -189,6 +189,9 @@ function exactArtifactMatches(
   current: ObjectiveMappingBinding["artifactRef"],
   historical: InitiativeReviewBinding["artifactRef"],
 ): boolean {
+  if (current.kind === "document-version" && historical.kind === "document-version") {
+    return canonicalJson(immutableArtifactIdentity(current)) === canonicalJson(immutableArtifactIdentity(historical));
+  }
   const left = repoBlob(current);
   const right = repoBlob(historical);
   return left !== null && right !== null
@@ -254,6 +257,7 @@ function sameArtifactCorpus(
   current: ObjectiveMappingBinding["artifactRef"],
   historical: InitiativeReviewBinding["artifactRef"],
 ): boolean {
+  if (current.kind === "document-version" && historical.kind === "document-version") return exactArtifactMatches(current, historical);
   const left = repoBlob(current);
   const right = repoBlob(historical);
   return left !== null && right !== null
@@ -299,27 +303,33 @@ export function authorizeObjectiveMappingRequestKeyEvolution(input: {
   providerProvenImpossibleTaskRunProofs?: ReadonlyMap<string, string>;
   /** Prospective token-bound TaskRun identity for action-time creation. */
   expectedTaskRunId?: string;
+  /** Server-resolved current/ancestor body baseline and evidence evolution proofs. */
+  serverProvenStaleBodyTaskRunProofs?: ReadonlyMap<string, string>;
 }): ObjectiveMappingEvolutionResult {
   if (!validateObjectiveMappingRequestKey(input.packet)) {
     return { authorized: false, reason: "invalid-server-request-key" };
   }
 
   for (const historical of input.history) {
+    const staleBody = input.packet.binding.artifactRef.kind === "document-version"
+      && historical.binding.artifactRef.kind === "document-version"
+      && input.serverProvenStaleBodyTaskRunProofs?.get(historical.taskRunId)
+        === objectiveMappingHistoricalProviderProofDigest(historical);
     const originalObjectiveMatches = originalObjectiveTemplateMatches(input.packet, historical);
     // Structural authority is never relaxed by a provider disposition. The
     // disposition can release only the baseline/blob identity that the server
     // independently proved impossible; it cannot mask a different item, tool,
     // Workroom, repository, or path.
-    if (historical.targetAgent !== input.packet.targetAgent.trim()
-      || (!originalObjectiveMatches && historical.objective.trim() !== input.packet.objective.trim())
+    if ((!staleBody && historical.targetAgent !== input.packet.targetAgent.trim())
+      || (!staleBody && !originalObjectiveMatches && historical.objective.trim() !== input.packet.objective.trim())
       || historical.questionPacketSummary.trim() !== input.packet.questionPacketSummary.trim()
       || !exactToolNamesMatch(historical.requiredToolNames, input.packet.requiredToolNames)
       || historical.binding.itemId !== input.packet.binding.itemId
       || historical.binding.gate !== "objective-mapping"
       || historical.binding.writerToolName !== input.packet.binding.writerToolName
       || (!originalObjectiveMatches && !historicalWorkroomMatches(input.packet, historical))
-      || !sameArtifactCorpus(input.packet.binding.artifactRef, historical.binding.artifactRef)
-      || (!isLegacyInvalidBinding(historical.binding)
+      || (!staleBody && !sameArtifactCorpus(input.packet.binding.artifactRef, historical.binding.artifactRef))
+      || (!staleBody && !isLegacyInvalidBinding(historical.binding)
         && !exactToolNamesMatch(
           historical.binding.eligibleEvidenceActivityIds ?? [],
           input.packet.binding.eligibleEvidenceActivityIds,
@@ -335,7 +345,7 @@ export function authorizeObjectiveMappingRequestKeyEvolution(input: {
       historical,
       input.providerProvenImpossibleTaskRunProofs ?? new Map(),
     );
-    if (!exactIdentity && !providerProvenImpossibleLegacy) {
+    if (!exactIdentity && !providerProvenImpossibleLegacy && !staleBody) {
       return { authorized: false, reason: "immutable-identity-conflict", taskRunId: historical.taskRunId };
     }
 
@@ -346,13 +356,13 @@ export function authorizeObjectiveMappingRequestKeyEvolution(input: {
       continue;
     }
 
-    if (historical.actionEnvelopeStatuses.some((status) => ACTIVE_ENVELOPE_STATUSES.has(status))) {
+    if (!staleBody && historical.actionEnvelopeStatuses.some((status) => ACTIVE_ENVELOPE_STATUSES.has(status))) {
       return { authorized: false, reason: "prior-authority-active", taskRunId: historical.taskRunId };
     }
 
     const quiescentLegacyWait = historical.status === "input-required"
       && isLegacyInvalidBinding(historical.binding);
-    if (!providerProvenImpossibleLegacy
+    if (!staleBody && !providerProvenImpossibleLegacy
       && !quiescentLegacyWait
       && ACTIVE_TASK_RUN_STATUSES.has(historical.status)) {
       return { authorized: false, reason: "prior-authority-active", taskRunId: historical.taskRunId };
@@ -361,7 +371,7 @@ export function authorizeObjectiveMappingRequestKeyEvolution(input: {
     // A writer from a packet that never carried the required evidence or
     // Workroom identity is retained for audit, but is not authoritative for
     // the now-valid packet. This is the exact BI-2B live fixture.
-    if ((originalObjectiveMatches || providerProvenImpossibleLegacy || !isLegacyInvalidBinding(historical.binding))
+    if (!staleBody && (originalObjectiveMatches || providerProvenImpossibleLegacy || !isLegacyInvalidBinding(historical.binding))
       && historical.writerExecutions.some((execution) => execution.success || execution.hasReceipt)) {
       return { authorized: false, reason: "authoritative-output-exists", taskRunId: historical.taskRunId };
     }

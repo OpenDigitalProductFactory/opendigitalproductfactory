@@ -2,7 +2,7 @@ import { instrumentOperationsReadClient } from "./operations-source-client";
 import type {
   OperationsDegradedSource,
   OperationsSourceWatermark,
-} from "./operations-snapshot";
+} from "@dpf/storefront-templates/operations";
 
 export interface OperationsProjectionDiagnostics {
   degradedSources: OperationsDegradedSource[];

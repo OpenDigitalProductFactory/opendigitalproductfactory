@@ -1,5 +1,7 @@
 import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
+import { parsePresentReassessmentRelation, type PresentReassessmentRelation } from "./mcp-task-reassessment-policy";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { parseRepoCommitRangeRef, type RepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
 import {
   IMMUTABLE_PAGE_READER_TOOLS,
   immutablePageReaderForArtifact,
@@ -13,6 +15,7 @@ export type InitiativeReviewBinding = {
   gate: string;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: string[];
+  presentReassessment?: PresentReassessmentRelation;
   workroomRef?: {
     kind: "workroom-head";
     workroomId: string;
@@ -47,6 +50,12 @@ export function immutableArtifactIdentity(ref: InitiativeReviewArtifactRef) {
 
 export type InitiativeReviewArtifactRef =
   | {
+    kind: "document-version";
+    repositoryFullName: string;
+    versionId: string;
+    valueDigest: string;
+  }
+  | {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
     commitSha: string;
@@ -58,7 +67,9 @@ export type InitiativeReviewArtifactRef =
     repositoryFullName: string;
     revisionId: string;
     valueDigest: string;
-  };
+  }
+  // BI-46E344FE: a merged repair's whole change, bound only by a post-implementation review.
+  | RepoCommitRangeRef;
 
 const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
 
@@ -102,20 +113,16 @@ function explicitlyRequestsObjectiveMapping(prompt: string | undefined): boolean
     && /\boperation\s*(?:=|:)\s*['"]objective-mapping['"]/i.test(prompt);
 }
 
-export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
+/** Shared artifact decoder for issuer, admission, history and receipt writer. */
+export function parseInitiativeReviewArtifactRef(value: unknown): InitiativeReviewArtifactRef | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const binding = value as Record<string, unknown>;
-  const artifact = binding["artifactRef"];
-  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) return null;
-  const artifactRef = artifact as Record<string, unknown>;
-  const writerToolName = optionalString(binding["writerToolName"]);
-  const itemId = optionalString(binding["itemId"]);
-  const gate = optionalString(binding["gate"]);
+  const artifactRef = value as Record<string, unknown>;
   const repositoryFullName = optionalString(artifactRef["repositoryFullName"]);
   const commitSha = optionalString(artifactRef["commitSha"]);
   const path = optionalString(artifactRef["path"]);
   const providerBlobId = optionalString(artifactRef["providerBlobId"]);
   const revisionId = optionalString(artifactRef["revisionId"]);
+  const versionId = optionalString(artifactRef["versionId"]);
   const valueDigest = optionalString(artifactRef["valueDigest"]);
   const repoBlobRef = artifactRef["kind"] === "repo-blob-at-commit" && repositoryFullName && commitSha && path && providerBlobId
     ? { kind: "repo-blob-at-commit" as const, repositoryFullName, commitSha, path, providerBlobId }
@@ -123,8 +130,23 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const revisionRef = artifactRef["kind"] === "feature-build-revision" && repositoryFullName && revisionId && valueDigest
     ? { kind: "feature-build-revision" as const, repositoryFullName, revisionId, valueDigest }
     : null;
-  const parsedArtifactRef: InitiativeReviewArtifactRef | null = repoBlobRef ?? revisionRef;
+  const documentRef = artifactRef["kind"] === "document-version" && repositoryFullName && versionId && valueDigest
+    ? { kind: "document-version" as const, repositoryFullName, versionId, valueDigest }
+    : null;
+  return repoBlobRef ?? revisionRef ?? documentRef ?? parseRepoCommitRangeRef(artifactRef);
+}
+
+export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  const parsedArtifactRef = parseInitiativeReviewArtifactRef(binding.artifactRef);
+  const repositoryFullName = parsedArtifactRef?.repositoryFullName;
+  const writerToolName = optionalString(binding["writerToolName"]);
+  const itemId = optionalString(binding["itemId"]);
+  const gate = optionalString(binding["gate"]);
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  const rawPresent = binding["presentReassessment"];
+  const presentReassessment = rawPresent === undefined ? undefined : parsePresentReassessmentRelation(rawPresent);
   const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
   const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined
     ? undefined
@@ -142,6 +164,8 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
     || !itemId?.startsWith("BI-")
     || !gate
     || !parsedArtifactRef
+    || (rawPresent !== undefined && (!presentReassessment || !["design-spec", "spec-approval"].includes(gate)
+      || parsedArtifactRef.kind !== "repo-blob-at-commit" || writerToolName !== "record_initiative_design_review"))
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -164,6 +188,7 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(presentReassessment ? { presentReassessment } : {}),
     ...(workroomRef && workroomId && workroomRepositoryFullName && branchName && headSha
       ? {
         workroomRef: {
@@ -201,19 +226,10 @@ export function validateInitiativeReviewAuthorityScope(
   return null;
 }
 
-export function narrowInitiativeReviewTools<T extends {
-  tools: ToolDefinition[];
-  toolsForProvider: Array<Record<string, unknown>>;
-  deferredTools: ToolDefinition[];
-}>(
-  input: T,
-  requiredNames: readonly string[],
-  binding: InitiativeReviewBinding | undefined,
-  prompt?: string,
-  authoritativeProfile?: string | null,
-): T {
-  if (!binding) return input;
-  const exactNames = new Set(requiredNames);
+/** One variable-argument contract for the provider schema and the actual
+ * restricted dispatcher. Binding identity is injected by the canonical writer
+ * from the accepted task; these are the fields the assessment may supply. */
+export function initiativeReviewWriterArgumentContract(binding: InitiativeReviewBinding, prompt?: string) {
   const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
   const eligibleEvidenceActivityIds = binding.eligibleEvidenceActivityIds ?? [];
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
@@ -239,6 +255,24 @@ export function narrowInitiativeReviewTools<T extends {
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
+  return { writerPropertyNames, requiredWriterNames, objectiveMappingProposal, currentBaselineId, eligibleEvidenceActivityIds };
+}
+
+export function narrowInitiativeReviewTools<T extends {
+  tools: ToolDefinition[];
+  toolsForProvider: Array<Record<string, unknown>>;
+  deferredTools: ToolDefinition[];
+}>(
+  input: T,
+  requiredNames: readonly string[],
+  binding: InitiativeReviewBinding | undefined,
+  prompt?: string,
+  authoritativeProfile?: string | null,
+): T {
+  if (!binding) return input;
+  const exactNames = new Set(requiredNames);
+  const { writerPropertyNames, requiredWriterNames, objectiveMappingProposal, currentBaselineId, eligibleEvidenceActivityIds }
+    = initiativeReviewWriterArgumentContract(binding, prompt);
   const narrowSchema = (schema: Record<string, unknown>) => {
     const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
       ? schema.properties as Record<string, unknown>

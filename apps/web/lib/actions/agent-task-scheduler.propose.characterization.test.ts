@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // Approval convergence A1 characterisation (BI-C8EC05C9), creation site S2 in
 // the scheduler. Pins how a scheduled run treats a call that propose-
 // interception diverted, TODAY (spec D2 S2, named delta (a)):
@@ -10,7 +11,7 @@
 //     with the SAME TaskRun, through the governed executor — the collision PR-A's
 //     no-pause rule exists for.
 // PR-B's only named delta here: a grant/identity refusal under the boundary
-// becomes `success: false` and so counts toward `partial`.
+// becomes `success: false` and so counts toward `partial` (covered below).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -122,7 +123,7 @@ import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test
   // overrides simulate losing the claim.
@@ -192,6 +193,53 @@ function playbookOutcome(): unknown {
 }
 
 describe("S2 in the scheduler — the playbook verdict for a diverted call (characterisation)", () => {
+  it("keeps a pending completed-report approval visible beside a successful blocked report from the same tool", async () => {
+    const task = { ...PLAYBOOK_TASK, taskKind: null, prompt: "Record the result with record_workroom_evidence.", taskConfig: {
+      workroomStage: { shapeKey: "delivery-medium", shapeVersion: "1.0.0", stageKey: "implement", tools: [] },
+    } };
+    arrangeCommon(task);
+    mocks.getAvailableTools.mockResolvedValue([{ name: "record_workroom_evidence", description: "Record", inputSchema: {}, sideEffect: true }]);
+    mocks.runAgenticLoop.mockResolvedValue({ content: "The completed report needs approval; recorded the blocker.", executedTools: [
+      { name: "record_workroom_evidence", args: { outcome: "completed" }, result: { success: false, error: "approval_required" } },
+      { name: "record_workroom_evidence", args: { outcome: "blocked" }, result: { success: true } },
+    ] });
+    await executeScheduledAgentTask(task.taskId);
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastStatus: "proposed", nextRunAt: null }),
+    }));
+  });
+  it("persists the current scheduled run before the coworker can use its stage reporting mandate", async () => {
+    arrangePlaybook({ success: true });
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    const binding = mocks.prisma.scheduledAgentTask.update.mock.calls.findIndex(([arg]) => arg.data?.taskRunId === "TR-SCHED-PROP1");
+    expect(binding).toBeGreaterThanOrEqual(0);
+    expect(mocks.prisma.scheduledAgentTask.update.mock.invocationCallOrder[binding]).toBeLessThan(mocks.runAgenticLoop.mock.invocationCallOrder[0]!);
+  });
+  it.each([true, false])("parks a proposed required write only for a Workroom stage: %s", async (workroomStage) => {
+    arrangePlaybook(buildProposalToolResult("update_roadmap_item", "prop-1") as unknown as Record<string, unknown>);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({ ...PLAYBOOK_TASK, prompt: "Use update_roadmap_item to record the change.",
+      taskConfig: { ...PLAYBOOK_TASK.taskConfig, ...(workroomStage ? {
+        workroomStage: { shapeKey: "delivery-medium", shapeVersion: "1.0.0", stageKey: "implement", tools: [] },
+      } : {}) } });
+    if (workroomStage) {
+      mocks.getAvailableTools.mockResolvedValue([
+        { name: "update_roadmap_item", description: "Update", inputSchema: {}, sideEffect: true },
+        { name: "record_workroom_evidence", description: "Record", inputSchema: {}, sideEffect: true },
+      ]);
+      mocks.runAgenticLoop.mockResolvedValue({ content: "Proposed the change and recorded the blocker.", executedTools: [
+        { name: "update_roadmap_item", args: { id: "R-1" }, result: buildProposalToolResult("update_roadmap_item", "prop-1") },
+        { name: "record_workroom_evidence", args: {}, result: { success: true } },
+      ] });
+    }
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastStatus: "proposed", nextRunAt: workroomStage ? null : expect.any(Date) }),
+    }));
+    expect(mocks.prisma.scheduledJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ nextRunAt: workroomStage ? null : expect.any(Date) }),
+    }));
+  });
+
   it("a diverted call is a success: the playbook run is completed", async () => {
     arrangePlaybook(buildProposalToolResult("update_roadmap_item", "prop-1") as unknown as Record<string, unknown>);
     await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
@@ -212,6 +260,23 @@ describe("S2 in the scheduler — the playbook verdict for a diverted call (char
   });
 });
 
+// PR-B named delta (a) (BI-7BCC87BB; spec D2 S2): a grant or identity refusal
+// under the boundary is a not-run success: false, so it now counts toward
+// `partial`, exactly as a failed divert did.
+describe("S2 in the scheduler — a refusal under the boundary (PR-B delta)", () => {
+  it("a monitor refusal is not run and makes the playbook run partial", async () => {
+    arrangePlaybook({ success: false, error: "authority_denied", message: "update_roadmap_item rejected: no grant. It was not run." });
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    expect(playbookOutcome()).toBe("partial");
+  });
+
+  it("an approval request raised for the call is a success: completed", async () => {
+    arrangePlaybook(buildProposalToolResult("update_roadmap_item", "env-1", "2026-10-14T08:00:00.000Z") as unknown as Record<string, unknown>);
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    expect(playbookOutcome()).toBe("completed");
+  });
+});
+
 describe("S2 — detectScheduledRunFailure for a diverted required write (characterisation)", () => {
   const authorizedTools = [{ name: "record_workroom_evidence", sideEffect: true }];
   const prompt = "Record the stage evidence with record_workroom_evidence.";
@@ -224,7 +289,8 @@ describe("S2 — detectScheduledRunFailure for a diverted required write (charac
   it("a failed divert is not counted as the write having run", () => {
     const executedTools = [{ name: "record_workroom_evidence", result: { success: false } }];
     expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools, content: "Could not." }))
-      .toBe("required governed tool record_workroom_evidence executed zero times");
+      // BI-CAP-B5F50D1F: still a failure, but named as the refusal it was.
+      .toBe("required governed tool record_workroom_evidence was called 1 time and refused every time (no error code)");
   });
 });
 

@@ -16,6 +16,8 @@ import { adoptWorktreeCapsule } from "./work-capsule-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { describeRoomOwnership, establishRoomOwnership, resolveRoomOwnershipPrincipals } from "./room-ownership";
 import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
+import { invalidSourceCommitField } from "./work-capsule-branch-identity";
+import { refuseUnlessAdoptionProvisions } from "./worktree-provision-gate";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
 
@@ -58,6 +60,10 @@ export async function adoptWorktree(args: {
       message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
     };
   }
+  const invalidCommitField = invalidSourceCommitField(params);
+  if (invalidCommitField) {
+    return { success: false, error: "invalid_input", message: `${invalidCommitField} must be a full 40-character commit SHA. Omit it only for source-less design or planning; capture the actual local Git identity before implementation.` };
+  }
   if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
     return {
       success: false,
@@ -73,6 +79,16 @@ export async function adoptWorktree(args: {
   } catch (error) {
     return invalidScopeResult(error);
   }
+
+  // GPP admission (BI-D1FB8C4D): a read-only room, or a session holding one,
+  // cannot bind a worktree. Checked before any write.
+  const provisionRefusal = await refuseUnlessAdoptionProvisions(args.db, {
+    repositoryFullName,
+    headBranch,
+    sessionRef: stringParam(params, "sessionRef") ?? null,
+    requestedWorkShape: stringParam(params, "workShape") ?? null,
+  }, "adopt_worktree");
+  if (provisionRefusal) return provisionRefusal;
 
   const binding = await resolveAdoptionBacklogBinding(args.bindingReader, params);
   if (!binding.bound) return binding.refusal;

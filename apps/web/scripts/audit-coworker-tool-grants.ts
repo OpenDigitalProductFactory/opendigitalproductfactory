@@ -140,6 +140,11 @@ function loadToolToGrants(): Record<string, string[]> {
       pattern: /DOCUMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
     {
+      // Workbook data and schema-authoring tools (BI-FE8DF004), spread into TOOL_TO_GRANTS.
+      path: "apps/web/lib/tak/workbook-tool-grants.ts",
+      pattern: /WORKBOOK_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
       // Contributor inventory reads (BI-EBF0F6EE), spread into TOOL_TO_GRANTS.
       path: "apps/web/lib/tak/contributor-inventory-tool-grants.ts",
       pattern: /CONTRIBUTOR_INVENTORY_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
@@ -153,6 +158,11 @@ function loadToolToGrants(): Record<string, string[]> {
       // Provider controls retain their shared management grant after extraction.
       path: "apps/web/lib/tak/provider-management-tool-grants.ts",
       pattern: /PROVIDER_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
+      // Platform updates and explicit reconciliation share this canonical map.
+      path: "apps/web/lib/tak/platform-update-tool-grants.ts",
+      pattern: /PLATFORM_UPDATE_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
   ];
 

@@ -214,3 +214,10 @@ describe("ContributorMcpReadinessCard", () => {
     expect(screen.getByText(/bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"/)).toBeTruthy();
   });
 });
+
+it("names a coworker authority gap without offering token rotation as its remedy", () => {
+  renderCard(readiness({ status: "needs_grants", permissionLayer: "coworker", recommendedAction: "none",
+    identityBinding: "bound", missingGrants: ["coworker_catalog_read", "coworker_engagement_write"] }));
+  expect(screen.getByText(/acting coworker needs approved delivery permissions/i)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /rotate/i })).toBeNull();
+});

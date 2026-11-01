@@ -5,14 +5,34 @@
   "license": "Apache-2.0",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./judgment": "./src/judgment/index.ts",
+    "./judgment/*": "./src/judgment/*.ts",
+    "./decision-scopes": "./src/decision-scopes.ts",
+    "./workroom": "./src/workroom/index.ts",
+    "./workroom/*": "./src/workroom/*.ts",
+    "./gpp/*": "./src/gpp/*.ts",
+    "./action-result": "./src/action-result.ts",
+    "./operating-composition": "./src/operating-composition/index.ts",
+    "./operating-composition/*": "./src/operating-composition/*.ts",
+    "./workroom-policy": "./src/workroom-policy/index.ts",
+    "./workroom-policy/*": "./src/workroom-policy/*.ts",
+    "./policy-types": "./src/policy-types.ts",
+    "./commons": "./src/commons/index.ts",
+    "./commons/*": "./src/commons/*.ts",
+    "./*": "./*"
+  },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node ../../scripts/run-tsc.mjs --noEmit"
   },
   "dependencies": {
+    "@dpf/integration-shared": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "typescript": "catalog:"
   }
 }

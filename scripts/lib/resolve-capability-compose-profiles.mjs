@@ -25,6 +25,20 @@ export const PRE_PROFILE_COMPATIBILITY_CAPABILITIES = Object.freeze([
 ]);
 
 const sortedUnique = (values) => [...new Set(values)].sort();
+
+// Operator-controlled capabilities whose on/off state a person should choose
+// (BI-83260BB3). An install-state without a recorded decision is carried as
+// "undecided" so the portal asks; the enabled set itself is never changed here.
+// Only schema v2+ states carry the map; a v1 state gains it once migrated.
+export const OPERATOR_DECIDED_CAPABILITIES = Object.freeze(["runtime:deep-observability"]);
+
+export function carryRuntimeCapabilityDecisions(state, now = new Date().toISOString()) {
+  const decisions = { ...(state?.runtimeCapabilityDecisions ?? {}) };
+  for (const capabilityId of OPERATOR_DECIDED_CAPABILITIES) {
+    if (!decisions[capabilityId]) decisions[capabilityId] = { decision: "undecided", source: "upgrade-carried", decidedAt: now };
+  }
+  return decisions;
+}
 export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform, overlays = [], aliases = [], composeProfiles = "", migrate = false }) {
   if (!catalog || !Array.isArray(catalog.capabilities) || typeof catalog.catalogHash !== "string") throw new Error("invalid_capability_service_catalog");
   if (hostPlatform !== undefined && !HOSTS.has(hostPlatform)) throw new Error(`invalid_host_platform:${hostPlatform}`);
@@ -186,7 +200,7 @@ async function main() {
       const { updateInstallState } = await import("../installer/install-state-transaction.mjs");
       await updateInstallState(statePath, current => {
         projection = resolveCapabilityComposeProfiles({ catalog, state: current, ...args });
-        return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };
+        return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion, ...(current.schemaVersion >= 2 ? { runtimeCapabilityDecisions: carryRuntimeCapabilityDecisions(current) } : {}) };
       });
     }
     process.stdout.write(`${JSON.stringify(projection)}\n`);

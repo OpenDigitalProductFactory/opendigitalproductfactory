@@ -8,10 +8,12 @@ import {
   collectToolchainFingerprint,
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
+  projectLocalCiEvidence,
   dockerBuildTag,
   executeLocalIntegrationPlan,
   resolveGitRevision,
 } from "./lib/local-integration-ci.mjs";
+import { changedFilesAgainst } from "./lib/local-ci-vitest-selection.mjs";
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 
 // strict: false keeps the old tolerance: flags this script does not read are ignored.
@@ -140,6 +142,9 @@ if (metadataOut) {
         nextBuildId,
       })
     : null;
+  const coverage = projectLocalCiEvidence({ evidencePlan, evidencePlanPath: evidencePlanOut,
+    vitestReceipt: vitestDiagnostics, integrationTreeSha: synthesizedTreeSha,
+    baseRef, changedFiles: changedFilesAgainst(baseRef), initialWorkers: plan.testProfile.initialWorkers });
   const payload = {
     schemaVersion: 3,
     bi: "BI-76551B2D",
@@ -159,7 +164,7 @@ if (metadataOut) {
     integrationCommitSha,
     synthesizedTreeSha,
     buildStrategy: plan.buildStrategy,
-    executionLane: evidencePlan?.executionLane ?? plan.executionLane,
+    plannedExecutionLane: coverage.plannedExecutionLane,
     productionArtifact,
     execution: {
       status: execution.status === 0 ? "passed" : "failed",
@@ -167,19 +172,15 @@ if (metadataOut) {
       completedCommandCount: execution.completedCommandCount,
       failedCommand: execution.failedCommand?.join(" ") ?? null,
       failureDiagnostics: execution.diagnostics,
+      // BI-FCC1DCB2: the paths a candidate merge left unmerged, so the gate
+      // and pregate:status can name them. Null when the merge succeeded.
+      mergeConflict: execution.mergeConflict ?? null,
       typecheck: typecheckDiagnostics,
       vitest: vitestDiagnostics,
+      vitestCoverage: coverage.vitestCoverage,
       productionBuild: buildDiagnostics,
     },
-    evidencePlan: evidencePlan ? {
-      path: evidencePlanOut,
-      digest: evidencePlan.digest,
-      plannerVersion: evidencePlan.plannerVersion,
-      policyVersion: evidencePlan.policyVersion,
-      evidenceTier: evidencePlan.evidenceTier,
-      executionLane: evidencePlan.executionLane,
-      fullSuite: evidencePlan.fullSuite,
-    } : null,
+    evidencePlan: coverage.evidencePlan,
     ...collectToolchainFingerprint({ buildStrategy: plan.buildStrategy }),
     commands: plan.commands.map((command) => command.join(" ")),
     startedAt,

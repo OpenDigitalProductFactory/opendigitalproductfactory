@@ -19,6 +19,29 @@ beforeEach(() => {
 });
 
 describe("routed semantic review", () => {
+  it("retains the canonical capacity reason when both required branches defer", async () => {
+    const result = await dispatchRoutedSemanticReview("immutable diff", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
+    }, async () => ({ decision: "inconclusive", issues: [], summary: "No provider work began.",
+      inconclusiveReason: "review-capacity-deferred" }));
+    expect(result).toMatchObject({ decision: "inconclusive", inconclusiveReason: "review-capacity-deferred" });
+    expect(result.summary).toContain("2 required semantic review branches");
+    expect(routeAndCall).not.toHaveBeenCalled();
+  });
+
+  it.each(["unparseable-review-response", "review-branch-incomplete", "review-endpoint-ineligible"])(
+    "preserves a mixed %s reason rather than qualifying it as capacity-only", async reason => {
+      const result = await dispatchRoutedSemanticReview("immutable diff", {
+        strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
+      }, async agent => ({ decision: "inconclusive", issues: [], summary: "Required branch remains unresolved.",
+        inconclusiveReason: agent === "change-reviewer" ? "review-capacity-deferred" : reason }));
+      expect(result.decision).toBe("inconclusive");
+      expect(result.inconclusiveReason).not.toBe("review-capacity-deferred");
+      expect(result.inconclusiveReason).toContain(reason);
+      expect(routeAndCall).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["external", "build-studio"] as const)("protects ordinary source without authoritative classification on %s", async (surface) => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
@@ -27,6 +50,10 @@ describe("routed semantic review", () => {
       strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface,
     });
     expect(routeAndCall).toHaveBeenCalledTimes(2);
+    for (const call of vi.mocked(routeAndCall).mock.calls) {
+      expect(call[3]?.activityContract?.successShape).toBe("json");
+      expect(call[3]?.activityContract?.tokenEnvelope.maxOutputTokens).toBe(16384);
+    }
     for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
       const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
       expect(screened.receipt.classifiedDataClasses).toContain("source-code");

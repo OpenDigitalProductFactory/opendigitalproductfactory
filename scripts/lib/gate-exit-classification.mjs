@@ -23,11 +23,17 @@ export const GATE_EXIT = Object.freeze({
   EVIDENCE_PENDING: 4,
   CONTROL_PLANE_STARVATION: 5,
   SLOT_SUBSTRATE_UNAVAILABLE: 9,
+  MERGE_CONFLICT_WITH_BASE: 10,
+  // BI-4BCD269B: pregate refused to run because it was not the sole foreground
+  // command. Not a verdict about the diff, and retrying the same wrap fails
+  // the same way.
+  WRAPPED_INVOCATION: 11,
   ABANDONED_OR_UNRECORDED: 7,
   DURABLE_WAIT: 75,
   WAIT_CANCELLED: 81,
   SOURCE_DRIFT: 82,
   CHILD_SIGNAL_DEATH: 87,
+  HOST_CONNECTION_UNAVAILABLE: 88,
   INTERRUPTED: 130,
 });
 
@@ -53,6 +59,16 @@ const INFRA_TEXT = [
  * @returns {{ kind: string, retry: boolean, verdict: "pass"|"fail"|"none", summary: string, next?: string }}
  */
 export function classifyGateExit({ code, output = "" }) {
+  // BI-2FFDBE62: spawnSync reports a process that never started as status null.
+  // That used to fall through to `gate failed (exit null)`, a product FAIL.
+  if (code === null || code === undefined) {
+    return {
+      kind: "spawn-failed",
+      retry: false,
+      verdict: "none",
+      summary: "pregate did not start (spawn failed; exit null) — infrastructure, not a verdict about the diff",
+    };
+  }
   const text = String(output);
   switch (code) {
     case GATE_EXIT.PASS:
@@ -79,6 +95,10 @@ export function classifyGateExit({ code, output = "" }) {
       };
     case GATE_EXIT.INTERRUPTED:
       return { kind: "interrupted", retry: false, verdict: "none", summary: "interrupted" };
+    case GATE_EXIT.HOST_CONNECTION_UNAVAILABLE:
+      return { kind: "host-connection-unavailable", retry: false, verdict: "none",
+        summary: "host prerequisites or verified transport unavailable; gate unrun",
+        next: "correct the reported host configuration or transport problem, then run the same gate" };
     // BI-D35B85BF: both are final and unrun. Re-running the same command would
     // override a cancellation or test source nobody queued.
     case GATE_EXIT.WAIT_CANCELLED:
@@ -95,11 +115,25 @@ export function classifyGateExit({ code, output = "" }) {
         summary: "BLOCKED — slot substrate unavailable: no local-CI slot PostgreSQL container can run, so nothing was claimed",
         next: "read pnpm pregate:status for the container and Docker's refusal; gating again changes nothing until it runs",
       };
+    // BI-FCC1DCB2: the candidate does not merge onto origin/main. A verdict
+    // about the branch; every retry fails identically until the author merges.
+    case GATE_EXIT.MERGE_CONFLICT_WITH_BASE:
+      return {
+        kind: "merge-conflict-with-base", retry: false, verdict: "fail",
+        summary: "the candidate does not merge cleanly onto origin/main — nothing was graded",
+        next: "merge origin/main into your branch and resolve the paths pnpm pregate:status names, then gate the new commit",
+      };
     case GATE_EXIT.SOURCE_DRIFT:
       return {
         kind: "source-drift", retry: false, verdict: "none",
         summary: "the resumed gate's worktree no longer holds the queued commit; nothing ran",
         next: "commit or restore the work, then run pregate again",
+      };
+    case GATE_EXIT.WRAPPED_INVOCATION:
+      return {
+        kind: "wrapped", retry: false, verdict: "none",
+        summary: "pregate stopped because it is not the sole foreground command",
+        next: "run pnpm run pregate in the foreground, or use pnpm gate:wait",
       };
     default:
       break;

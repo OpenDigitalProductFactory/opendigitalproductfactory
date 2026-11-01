@@ -8,6 +8,7 @@ import type { Prisma } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
 import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
+import { toolDefectOrigin } from "@/lib/operate/tool-defect-origin";
 import type { BacklogWorkType } from "@/lib/explore/backlog";
 
 export const SIGNAL_BACKLOG_THRESHOLD = 3;
@@ -35,6 +36,11 @@ export type CreateOrTouchImprovementSignalInput = {
   toolName?: string | null;
   suspectedRootCause?: string | null;
   objectiveImpactHypothesis?: string | null;
+  /**
+   * The source id names one observation, so a repeat delivery only touches it:
+   * no recurrence, never filed. platform_issue_report is always immutable.
+   */
+  immutable?: boolean;
 };
 
 export type CreateOrTouchImprovementSignalResult = {
@@ -55,6 +61,7 @@ export type FileSignalBacklogItemFn = (input: {
   recurrenceCount: number;
   routeContext?: string | null;
   agentId?: string | null;
+  evidence?: unknown;
 }) => Promise<{ itemId: string } | null>;
 
 export type ImprovementSignalDeps = { fileBacklogItem?: FileSignalBacklogItemFn };
@@ -63,6 +70,8 @@ const filePersistentSignal: FileSignalBacklogItemFn = async (signal) => {
   try {
     const result = await ingestBacklogItem({
       title: signal.title,
+      // BI-458CCA8D: a persistent signal is done when it stops recurring.
+      outcome: `"${signal.title.trim()}" stops recurring: no new ${signal.sourceType} observation of it after the fix ships.`,
       body: [
         signal.description,
         signal.suspectedRootCause ? `Suspected root cause: ${signal.suspectedRootCause}` : null,
@@ -74,7 +83,9 @@ const filePersistentSignal: FileSignalBacklogItemFn = async (signal) => {
       source: "automated-detection",
       itemIdPrefix: "SIG",
       agentId: signal.agentId ?? null,
-      origin: { kind: "improvement-signal", id: signal.signalId },
+      // A repeated tool failure files under its tool, not this per-agent+route
+      // signal, so every coworker's observation lands on one item (BI-891E4E11).
+      origin: toolDefectOrigin(signal.evidence) ?? { kind: "improvement-signal", id: signal.signalId },
     });
     return { itemId: result.itemId };
   } catch (error) {
@@ -94,7 +105,7 @@ export async function createOrTouchImprovementSignal(
   deps?: ImprovementSignalDeps,
 ): Promise<CreateOrTouchImprovementSignalResult> {
   const signalId = `IS-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const immutableSource = input.sourceType === "platform_issue_report";
+  const immutableSource = input.immutable === true || input.sourceType === "platform_issue_report";
   const where = { sourceType_sourceId: { sourceType: input.sourceType, sourceId: input.sourceId } };
   const update = {
     lastSeenAt: new Date(),
@@ -129,11 +140,18 @@ export async function createOrTouchImprovementSignal(
   });
   let backlogItemId = row.backlogItemId ?? undefined;
   if (!immutableSource && !backlogItemId && row.recurrenceCount >= SIGNAL_BACKLOG_THRESHOLD) {
-    const filed = await (deps?.fileBacklogItem ?? filePersistentSignal)({ ...input, signalId: row.signalId, recurrenceCount: row.recurrenceCount });
-    if (filed?.itemId) {
-      backlogItemId = filed.itemId;
-      await prisma.improvementSignal.update({ where, data: { backlogItemId } });
-    }
+    // Concurrent touches can all read a null backlink here (BI-13C8F888). A
+    // per-signal lock makes filing one critical section: whoever holds it
+    // re-reads the link and files only when it is still empty.
+    backlogItemId = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`improvement-signal:${row.signalId}`}, 0))`;
+      const current = await tx.improvementSignal.findUnique({ where, select: { backlogItemId: true } });
+      if (current?.backlogItemId) return current.backlogItemId;
+      const filed = await (deps?.fileBacklogItem ?? filePersistentSignal)({ ...input, signalId: row.signalId, recurrenceCount: row.recurrenceCount });
+      if (!filed?.itemId) return undefined;
+      await tx.improvementSignal.update({ where, data: { backlogItemId: filed.itemId } });
+      return filed.itemId;
+    }, { timeout: 30_000 });
   }
   return {
     signalId: row.signalId,

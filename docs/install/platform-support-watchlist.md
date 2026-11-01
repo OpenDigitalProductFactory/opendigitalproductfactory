@@ -1,5 +1,209 @@
 # Platform Support Watch-List (living document)
 
+**Expired authority-host Edge action client (BI-AFDB58C8).**
+
+On October 29 an enrolled Mac still heartbeated while its separate mTLS action
+client had expired on October 18. Existing certificate files and a live native
+service did not prove that the protected action channel worked. The root CA
+remained valid. Check actual certificate validity and registration separately.
+
+The existing authority PKI owner now distinguishes renewal from expired-client
+reissuance, validates the expected public identity and root, stages the pair
+privately, and retains prior credentials on a failed replacement. Bash and
+PowerShell consume one public-certificate validator; the normal release assets
+carry it and both bootstrap adapters. This does not enable an explicit disabled
+channel, alter node grants or permit expired authentication. Unknown interrupted
+repair checkpoints require reconciliation before another attempt. Native Windows
+execution, live certificate repair and inference activation remain separate
+evidence; passing source fixtures cannot establish them.
+
+Independent review also found that first issuance on PowerShell could suppress a
+rollback deletion error, then discard its checkpoint and lock with a partial key
+still published. Cleanup now requires confirmed removal, and retains recovery
+state on any uncertainty. A fixture executing the production PowerShell owner
+reproduced the failure and verified the correction under PowerShell 7.6.9 on
+macOS, with fake issuer and file-failure adapters. This is not native Windows or
+PowerShell 5.1 execution evidence. The fixture runs when a PowerShell runtime is
+available and explicitly reports a skip otherwise.
+
+**Windows foreground gate cancellation.**
+
+BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows
+`pnpm.cmd` entry point. A controlled Ctrl-C after admission previously stopped
+the owned processes while leaving the native gate record `running` without
+lease release. The termination journal proved cleanup started; it did not prove
+that the final-state writer ran. This reproduction does not establish the cause
+of an earlier interrupted host run.
+
+The existing pregate wrapper and saved-CA startup re-exec share a bounded
+foreground wait. Cancellation listeners remain until the child closes and
+interrupted-state recovery finishes. The HTTPS fixture loads a valid isolated
+CA into the fresh Node process; hostname and certificate validation remain on.
+Explicit cancellation does not revive queued work. Windows receives one console
+Ctrl-C; forwarding `child.kill("SIGINT")` would forcibly terminate the child.
+If normal cancellation cannot close it within 30 seconds, the wrapper terminates
+only its owned child and waits another 10 seconds for closure. Unobserved closure
+remains an error and cannot trigger terminal recovery or lease release.
+The enclosing saved-CA startup owner allows 60 seconds before termination so it
+cannot preempt the inner close budget and existing recovery, then retains the
+same 10-second closure bound.
+
+The Windows console regression runs in the existing Gate Executor Liveness
+guard. Its isolated fixture tests normal completion, admitted cancellation on
+direct and saved-CA routes, and an actual nonzero child exit. Cancellation must retain native nonpass state,
+release the exact fixture lease and leave no owned process requiring harness
+cleanup; completed failures remain failures. Fixture receipts are never platform
+canonical evidence or deployed acceptance. A cancelled Windows Job may have no
+completed execution checkpoint; do not manufacture one or finalize it as a pass.
+`pregate:status` remains read-only. Whole-chain loss still requires reconciliation
+of the original durable task and retained evidence before another attempt.
+
+The driver retains its early two-second closure snapshot, then releases only
+observation handles. The launcher observes its enclosing Windows Job for up to
+ten seconds before the first destructive cleanup, including when the driver
+failed. Driver console closure alone does not prove that every Job member has
+exited. Cleanup outcomes and exceptions remain recorded separately from natural
+settlement; a later empty Job never clears a driver failure. The shared Job query retains initial and final active
+counts, available PID/creation identities, elapsed time, budget and bounded
+progress snapshots. Only verified natural emptiness within that budget passes;
+timeout, query or identity failure, and emergency termination remain failures.
+The Job handle owns containment, so diagnostic PIDs never become kill authority.
+Native regression probes cover an empty Job, a short-lived non-console child,
+a persistent child, missing Job handles, query/identity failures, and a failed
+driver whose descendants close naturally. A controlled delayed lease response
+crosses the early snapshot boundary: native cancellation must still write one
+non-success result, release once, close naturally and leave the outside sentinel
+running. A response held beyond final settlement remains unverified and requires
+explicit containment; it must not produce a passing result. This extends the documented
+[Job member query](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+and [handle membership check](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob).
+The earlier saved-CA fixture recorded emergency cleanup without the residual
+member identity; its cause remains unknown and its failed result is retained.
+
+The documentation-anchor preflight uses the same configured MCP URL and
+refreshable client credential as the gate, retaining the legacy endpoint and
+PAT fallback. A stale ambient legacy connection must not override an explicitly
+configured client file and URL. Unavailable authority evidence remains an
+unverified citation with a warning; it is neither a missing item nor a verified
+anchor. No credential export or switch of identity is needed for this check.
+
+## Saved host CA trust and stale clients
+
+The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
+
+The supported Node gate launch (`pnpm run pregate`, including its native gate
+entry) reads existing authorized endpoint/trust through the installer client-env
+resolver. A desktop client can remain open after setup persists the Windows
+User environment or macOS/Linux managed environment. Its process can therefore
+lack `NODE_EXTRA_CA_CERTS`. Launch resolves the saved setting and starts a fresh
+Node process when the selected roots were not loaded at startup. Child gates
+inherit that environment. Shared native MCP and source OAuth requests also apply
+the selected bundle per request alongside Node's effective default roots.
+
+Trust precedence is explicit `DPF_MCP_CA_FILE`, explicit `DPF_PKI_TRUST_BUNDLE`,
+process `NODE_EXTRA_CA_CERTS`, install bundle, saved user bundle, then the
+existing managed root when present. A selected missing/invalid/expired bundle
+stops with its own diagnostic; it never silently falls back to a different CA.
+Without a managed bundle, ordinary public CA verification remains in effect.
+No certificate is harvested from the endpoint or installed by launch.
+
+A bounded verified TLS handshake precedes host guards, authentication and lease
+admission. It sends no HTTP request or credential. Hostname mismatch, expired
+server certificates, unverified issuer and connectivity errors identify separate
+remedies. HTTP401/403 remain authentication/authorization failures, and a
+confirmed drain retains the existing quiescence wait. Transport/prerequisite
+failure exits 88 with no verdict about the diff. Repair the named configuration
+or managed PKI problem before re-running the gate; do not disable verification.
+A slow quiescence read remains inconclusive after transport verification;
+the existing authoritative late admission still governs writes.
+
+Windows uses the User environment through PowerShell 5.1+. macOS/Linux use the
+existing managed environment reader through Bash, without sourcing saved text.
+Windows launch and fixture tests establish local behavior; adapter simulations
+and shell twin tests do not establish native macOS/Linux execution.
+
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5, BI-81AF5884)
+
+The Windows host records the admitted worktree as a drive-absolute path while
+Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
+The preview supervisor and Linux-hosted sign-in issuer share the same path
+comparison. Translation applies only to a Windows admission; another drive,
+another worktree, relative paths and traversal fail closed. Source SHA, lease,
+loopback port, environment class and current ownership checks remain required.
+Regression fixtures cover both verification adapters; a failed initialization
+or binding check never earns a served UX pass.
+
+Desktop may report an admitted POSIX `/Users/...` bind as `/host_mnt/Users/...`.
+Both adapters first preserve direct path equality, then permit this one leading
+namespace translation only when a fresh read from the inspected Docker daemon
+reports `OperatingSystem` exactly `Docker Desktop`. The read is bounded to ten
+seconds and repeated during keeper renewal checks. Missing, failed or native
+Linux metadata supplies no alias authority; existing direct POSIX and Windows
+comparisons remain valid. Case, root, NUL/CR/LF, traversal and prefix lookalikes
+still cannot establish another worktree's identity. Host-only source changes
+cannot update the canonical sign-in issuer; the reviewed release and separately
+authorized install advance must deliver both consumers before served acceptance.
+
+The full local-CI runner also reuses the verified native shell adapter for its
+child environment. Windows fixtures that invoke `sh` must not inherit WSL or
+depend on an agent manually extending PATH. A missing compatible shell is an
+unavailable prerequisite (exit 88), not a failing product test. The parent
+environment, worker limits, test deadlines and lease fences stay unchanged.
+
+Contributor preview declaration isolation (BI-6B109903) binds a private regular
+host file directly at `/workspace/apps/web/next-env.d.ts`; a host file placed
+under node_modules would be hidden by existing named output volumes. Exact
+Windows/Desktop path matching also applies to this file, with fresh daemon
+qualification. Compose omits `read_only: false` in normalized config; actual
+inspection still requires `RW: true`, and `create_host_path: false` prevents a
+missing file from becoming a directory. A native governed preview must verify
+the bind; a simulated filesystem projection establishes only writer isolation.
+
+## Literal Windows package-manager arguments (BI-263055E3)
+
+The shared host command resolver launches pnpm/Corepack JavaScript entrypoints
+with Node and a literal argument array; native pnpm executables run directly.
+It honors the selected installation and PATH precedence, supports npm global
+and workspace bin layouts, and refuses unsupported shims without a shell
+fallback. The observed process runner uses the same boundary with shell mode
+disabled. Local-CI version pinning supplies a JavaScript forwarding entrypoint
+so percent expansion, quotes and command separators remain argument data.
+POSIX executable selection is unchanged.
+
+## Capability reconciliation on release installs (BI-5ACBAC50)
+
+The portal's Linux container is not the host platform. Explicit v2 runtime
+reconciliation filters service eligibility using the signed installation's
+Windows, macOS or Linux identity on both server and packaged actuator. Preserve
+the recorded release Compose overlays and canonical environment file through
+initial execution and signed recovery. Base-only Compose can reintroduce source
+builds on a source-free consumer install. The actuator's packaged catalog remains
+bound to the signed catalog hash. Source fixtures cover the platform matrix and
+release context; live host application requires a qualified containing release.
+
+## Host process inventory before admission (BI-6DE5A3B6)
+
+Windows process inventory uses explicit UTF-8, terminating PowerShell errors,
+and a bounded producer. Both Windows and POSIX responses must be complete and
+have valid process identities. Producer failure, timeout, output exhaustion and
+malformed responses stop before resource admission as `host_inventory_unavailable`
+(exit 88, command unrun). Diagnostics contain reason and byte count, never raw
+command lines or parser excerpts. Retry the original governed command after
+collection recovers. The intermittent live parsing cause remains unproven;
+these safeguards address independently reproduced failure handling.
+
+## Host claim transport and Windows command launch (BI-091A2DCF)
+
+Host admission uses the existing lease-call allowance rather than the generic
+10-second probe budget. Whole-response deadlines include trickling replies.
+Timeout recovery reconciles the exact immutable claim key before one bounded
+same-key replacement; a lost response is not proof no lease exists. A changed
+source or foreign/active process identity cannot inherit authority. Uncertain
+admission and missing executable return redacted unrun88; an actual nonzero
+child exit retains its code result. Windows pnpm shims use the shared command
+resolver. Reports of the original live claim latency remain reproduction leads;
+mock response-loss and native Windows launch fixtures prove these boundaries.
+
 ## Windows host guard interpreters (BI-BA5F777A)
 
 Windows may resolve `bash` to the WSL launcher while `sh` is absent. Native
@@ -13,6 +217,19 @@ not a passing test or a product validation failure. Host PATH is unchanged.
 Git isolation fixtures write files through Node instead of invoking a shell.
 PKI rejection assertions and existing POSIX permission checks remain intact.
 
+## macOS Docker memory allocation (BI-DC4352E8)
+
+An oversized Docker VM can compete with native applications and models even
+when container usage is modest. The installer now bounds local Desktop memory
+to a quarter of host RAM (8 GiB floor, 32 GiB cap), preserving valid smaller
+allocations. It verifies the running VM, backs up settings, restarts gracefully
+with consent for running containers or enabled Docker AI, and restores the
+previously running containers. Missing, malformed, symlinked or managed settings
+fail before shutdown. See [the Mac guide](macos.md#docker-memory-during-installation).
+This is installer convergence, not an automatic migration of existing installs
+or proof of the cause of historical Chatterbox growth. Native model memory is
+outside the Docker VM allocation.
+
 A running tally of **platform-specific gotchas** to watch for when supporting
 DPF's target environments. This is the operational companion to the canonical
 design docs — it tracks *symptoms and recurring traps*, not contracts:
@@ -24,6 +241,21 @@ design docs — it tracks *symptoms and recurring traps*, not contracts:
 If a rule is *universal* across deployments, it belongs in the deployment
 contracts, not here. This file is for "when you touch X on platform Y, watch
 out for Z."
+
+## Repository-local Codex endpoint overrides (BI-9F258707)
+
+A trusted project's `.codex/config.toml` overrides the user's connector settings.
+Updating only the global file can leave the root checkout on HTTP while a new
+worktree uses HTTPS. Bootstrap now converges an existing project DPF block to
+its resolved endpoint; it does not create project overrides or scan other repos.
+Both repository updater wrappers pass the project explicitly to the standalone
+fallback. Disabled connections and custom credentials remain unchanged.
+
+Malformed project TOML stops convergence. The standalone fallback validates it
+with Python 3.11's `tomllib`, or `tomli` when already available on older Python;
+without either parser it refuses the write. The normal TypeScript planner uses
+its bundled TOML parser. Windows native and certificate-renewal acceptance need
+separate runtime evidence; passing Mac source tests does not establish them.
 
 ## Target environments
 
@@ -106,7 +338,7 @@ bootstrap runs with the system interpreter.
 | S4 | `Path.write_text(newline="\n")` raises `TypeError: unexpected keyword argument` — the kwarg was added in Python 3.10 | macOS (system python3 can be 3.9) | ✅ `packages/dpf-skill-pack/scripts/update_agent_toolchain.py` writes bytes (`write_bytes(content.encode("utf-8"))`) to keep LF endings; crashed `dpf-bootstrap-agent-toolchain.sh` during `ensure_codex_marketplace`. Locked by `update_agent_toolchain_test.py`. | Any Python invoked via bare `python3` from installer/bootstrap scripts must run on 3.9: no `match`, no `tomllib` (3.11+, test-only), no 3.10+ stdlib kwargs. CI runs 3.11+, so a 3.9 break won't show there — check `docs.python.org` "Changed in version" notes when touching these scripts. |
 | S5 | A synchronous Bash contract test crosses Vitest's timeout, later reports status 127, or shifts the timeout to another case | Windows contributors using Git Bash | ✅ `portal-migrate-boot.test.ts` gives every real-script subprocess its own process-group deadline, captures command/status/signal/stdout/stderr, and retains a non-GNU watchdog fallback for macOS. Repeated `--maxWorkers=4` coverage locks the boundary. | Vitest's timer cannot interrupt a blocked `spawnSync`. Any synchronous shell-contract test needs a subprocess-owned deadline shorter than the test timeout; do not assume GNU `timeout` exists on stock macOS. |
 | S6 | Local-CI FIFO remains frozen on `dependency-convergence-active` after the convergence owner exits | Windows (also applicable cross-platform) | ✅ Convergence locks now carry PID + process-start identity. Admission reconciles a dead/recycled owner atomically, keeps a live or unmeasurable owner fail-closed, and retains a bounded legacy-empty-lock compatibility path. Locked by `local-convergence-lock.test.mjs` and host-pressure acceptance. | A directory's existence or mtime is not owner liveness. Use the shared convergence-lock helper; never delete the lock manually or weaken active-install exclusion. |
-| S7 | Managed worktree bootstrap reports `node_modules_missing` even though `pnpm` is installed | Windows | ✅ Host command resolution now launches the `pnpm` cmd shim through `ComSpec` (without global shell mode), and bootstrap launch/install failures surface structured `managed_install_failed` evidence. Locked by `host-command-invocation.test.mjs` and `bootstrap-worktree-deps.test.mjs`. | Node child-process APIs can return ENOENT for `pnpm` and EINVAL for direct `pnpm.cmd` execution. Reuse `resolveHostCommandInvocation`; do not add another executable-name fallback chain. |
+| S7 | Managed worktree bootstrap reports `node_modules_missing` even though `pnpm` is installed | Windows | ✅ Host command resolution launches the installed pnpm/Corepack JavaScript entrypoint through Node with literal argument arrays and no shell. Managed bootstrap and `gate:wait` reuse this adapter; bootstrap failures retain `managed_install_failed`, while a failed gate launch remains unrun with its diagnostic and no retry. Locked by actual child execution in `host-command-invocation.test.mjs`, `bootstrap-worktree-deps.test.mjs` and `gate-wait.test.mjs` (BI-2FFDBE62). | Node child-process APIs can return ENOENT for `pnpm` and EINVAL for direct `pnpm.cmd` execution. Reuse `resolveHostCommandInvocation`; do not add another executable-name fallback chain. |
 | S8 | Local-CI aborts convergence or rewrites pnpm policy when an agent host injects a newer pnpm than the repository pin | macOS/Linux contributor hosts (observed with pnpm 11 over repository pnpm 10) | ✅ The admitted runner checks `package.json#packageManager`; a mismatch is shadowed by a slot-local shim that invokes the exact repository pin through the available host pnpm. Matching hosts stay unchanged. Locked by `local-ci-runner.test.mjs`. | Never trust contributor `PATH` as the package-manager version contract. Keep the repository pin in force for convergence, Prisma generation, tests, typecheck, and build. |
 | S9 | `git`, `docker` and `prisma` all fail with `dpf-shell-guard.ps1: Parameter cannot be processed because the parameter name '' is ambiguous` — for the whole user account, in every terminal, persisting across reboots; the installer itself then dies at "Step 7: Starting the platform" | Windows | ✅ The generated `safety-bin\*.cmd` shims no longer pass a `--` separator (`pwsh -File` parses `--` as a parameter prefix with an empty name), and `dpf-shell-guard.ps1` is a **simple** script — no `[Parameter()]` attributes, no `[CmdletBinding()]`, reading pass-through args from the automatic `$args`. Locked by `check-shell-guard-shim-contract.test.mjs` (policy guard `shell-guard-shim-contract`). | Step 6 prepends `safety-bin` to the **user PATH in the registry**, so any binding bug there breaks the user's real toolchain, not just DPF. Never make the guard an advanced script: common parameters reappear and forwarded flags prefix-match them (`docker compose up -d` → `-Debug`, `docker compose -f` → a `-ForwardedArgs`-style param). Never name a parameter `$Args` (collides with the automatic `$args`). |
 | S10 | A Node ESM entry script exits 0 silently — no output, `main()` never ran — when invoked through a symlinked path spelling; on macOS this broke the Janitor Tests bundle because `os.tmpdir()` is `/var/folders/…` → `/private/var/…`, so a contract test staging `gate-worktree.mjs` into tmpdir got a false "pass" instead of the refusal exit | macOS (any host where the invocation path crosses a symlink) | ✅ Node realpath-resolves the ESM entry module, so `import.meta.url` and `process.argv[1]` can spell the same file differently and the naive `argv[1] === fileURLToPath(import.meta.url)` guard fails open. The pregate script family (`gate-worktree.mjs`, `pregate.mjs`, `pregate-status.mjs`, `local-ci-runner.mjs`) now shares `scripts/lib/entry-module.mjs` (`isEntryModule`), which compares realpaths. Locked by `entry-module.test.mjs` and a symlinked-invocation test in `tests/release/pregate-node-gate-contract.test.mjs`. | Never write a raw `argv[1] === THIS_FILE` guard in a new `.mjs` entry point — use `isEntryModule(import.meta.url)`. For a gate script this failure mode is the worst kind: it fails open with exit 0. Linux CI can't catch it (its tmpdir isn't a symlink), so a green PR proves nothing about this trap. |
@@ -133,13 +365,13 @@ bootstrap runs with the system interpreter.
 | D14 | Edge action polling is configured on one host but silently absent after restart or unreachable from its peer | Windows, macOS, Linux private-LAN installs | The action path spans host-owned certificate/key files, a native Edge process, a persisted Compose secret overlay, private DNS, and TCP `8443`; Docker Desktop cannot repair a missing host file or firewall rule. | ⚠️ The trust bundle is now all-or-none, normal start/install paths restore `docker-compose.edge-actions.yml`, and Caddy provides a dedicated mTLS listener. Physical Mac/Windows reachability and lifecycle acceptance remain in `BI-05EB708F`. | Never advertise `action.execute` from a partial trust bundle. Verify private-name resolution, TCP `8443`, certificate renewal, quarantine, and revocation on each supported host; do not fall back to bearer-only HTTP. |
 | D15 | Candidate promoter preparation silently falls back to Docker's deprecated legacy builder and a progressing cold-cache upgrade is killed after five minutes | Windows, macOS, Linux Docker installs | ✅ `BI-2B4EAFC7`: the portal runtime carries `docker-cli-buildx`, candidate and JIT promoter builds invoke `docker buildx build --load` explicitly, and candidate Docker operations use the governed `DPF_PROMOTER_TIMEOUT_MS` budget (25 minutes by default). | Never rely on Docker's legacy-builder fallback or give candidate preparation a shorter undocumented wall clock than the governed promoter budget. Retain cold-cache contract coverage and `--load`, because immutable digest inspection requires the built image in the local image store. |
 | D16 | Background-job registration reports `fetch failed` and an admitted self-upgrade never dispatches on a source-free install | Linux portal containers on all supported hosts | ✅ BI-3FD07259: with `APP_URL` unset, Node resolved `localhost` to `::1` while the Next listener was reachable only on IPv4; the dispatcher then tried Git target discovery that a release-artifact install does not have. Self-registration now defaults to the server-owned `127.0.0.1` listener, persists only the real PUT outcome, and reconciles a fingerprint-valid stored release binding without creating another run. | A container's `localhost` address family is not the listener contract. For server-to-self calls, use the known listener address; never let a null source resolver override an already authenticated release admission or authorize a Git-source fallback. |
-| D17 | Local-CI gate fences a GREEN run with `host-capacity-lost:host-memory-low` during image export (`#47 sending tarball`) | Windows (Docker Desktop, WSL2) | ✅ `scripts/lib/host-available-memory.mjs` adds the docker-desktop guest reclaimable cache (MemAvailable - MemFree) to `os.freemem()` on win32 (BI-E129F788; Windows twin of BI-EB6DBAF0). | A fence whose reason names memory while `wsl -d docker-desktop -e free -g` shows most memory as buff/cache. |
+| D17 | Host admission undercounts reclaimable memory; local-CI can fence a GREEN image export or queue work despite available capacity | macOS, Linux, Windows (Docker Desktop, WSL2) | ✅ `scripts/lib/host-available-memory.mjs` owns Darwin reclaimable pages, Linux MemAvailable, and the docker-desktop guest cache (MemAvailable - MemFree) added to host free memory on win32 (BI-E129F788; Windows twin of BI-EB6DBAF0). The residual generic runner source repair now reuses that reader under BI-EB6DBAF0: its real-entrypoint fixture went RED at 4 GiB versus 42 GiB expected, then GREEN after the caller change; failed-probe fallback stayed 4 GiB. ⚠️ Canonical delivery and a fresh normally governed runner/scheduler acceptance remain pending; see the existing [resilience design](../superpowers/specs/2026-08-15-resilient-concurrent-development-process.md#61-residual-host-memory-observation-repair--bi-eb6dbaf0). | Reuse the existing available-memory reader for every host claim; test the real claim payload and failed-probe fallback. Preserve profiles, reserves, queue order, leases and failure behavior. A fixture reading is not actual host capacity or runtime acceptance. |
 | D18 | Office documents do not convert, and `.docx`, `.xlsx` and `.pdf` are not read: `convertDocument` returns `converter-unavailable` | any host or target without a docker socket (cloud VM / TAPPaaS / edge shapes that do not mount `/var/run/docker.sock`), or an install with no pinned `doctoolsImage` | 📌 By design (BI-52E565DA). The portal runs `dpf-doctools` one-shot through the docker socket, like the promoter; with no socket or no pinned image (`name@sha256:`), `getConverterAvailability()` reports `no-docker-socket` / `not-configured`, ingestion degrades to the S0 typed-unsupported result, a saved office document or PDF gets no renditions (one `converter-unavailable` lifecycle event per version; a bounded rendition backfill, drained in passes of at most 100 with each pass's counts logged, is requested at portal start and on every pin change, debounced, BI-153EC72C, and also when the probe flips to available, which only fires where something scrapes `/api/metrics`, BI-9D43CBEF; a PDF owes only its `plain_text` rendition, BI-26CD1D1E), `renderDocument` (document generation, BI-3A0E5413) returns the same `converter-unavailable` without spawning, and `dpf_dependency_up{service="doctools"}` stays unset. Since BI-D1B40D43 (S9) the engine is also the only reader of `.docx`, `.xlsx` and `.pdf`: mammoth, read-excel-file and pdf-parse are gone and on the sbom deny list. On such a target a file upload or onboarding capture of one of them is stored with a typed unsupported result (`word-document`, `workbook`, `pdf`) whose reason names the file type and the fallback (plain text or CSV), a Workbooks or incumbent sheet import of an `.xlsx` is refused with the same reason, and brand-document extraction records an `upload-pdf-no-text` / `upload-docx-no-text` gap. CSV, TSV and plain-text files are read in-process and keep working, and the grid's data-only `.xlsx` export (`grid-xlsx.ts`) still writes files. A tag-only reference is refused (`image-unpinned`). The image resolves in this order: the `self_upgrade` row's `doctoolsImage`, then `DPF_DOCTOOLS_IMAGE` (source/dev), then, on a release install, the pin the portal resolves itself (BI-9A2EC54A). It gets that pin the way the promoter gets its own: at boot and every 20 min, `ghcr.io/<GHCR_OWNER>/dpf-doctools:<immutable DPF_IMAGE_TAG>` is resolved (the tag the running container was started from, not install-state's, which promote.sh commits only after the new portal is verified; every boot logs a `[doctools-image] boot:` line, BI-903D22D0) with `docker buildx imagetools inspect`, the same digest `publish-image.yml` records. The pin is stored in `self_upgrade.doctoolsImage` and then pulled by digest, and availability reports `image-missing` until the pull lands. That window is closed ahead of time (BI-698B7F9A): a self-upgrade pulls the TARGET release's `dpf-doctools:<tag>` in the candidate preflight, before the promoter and before the drain, and a pull that does not land fails the run as `doctools-prepull-failed` with nothing installed; the Windows consumer and Linux/macOS customer installers pull the same tag after the other release images and only warn if it fails. A release with no dpf-doctools manifest leaves the key unset and never blocks an upgrade or install, and a moving `latest` tag is not resolved. A customizable (source-built) install has no immutable `DPF_IMAGE_TAG`, so it resolves the same published image for the release tag its clone descends from, read from the `git describe` baked into the portal as `DPF_PLATFORM_VERSION`; a source upgrade re-stamps it, so the pin follows the upgrade (BI-4E18BC28). When no published image is reachable (offline, air-gapped, a lineage that predates dpf-doctools), it builds `Dockerfile.doctools` from a scratch copy of the clone's two build inputs and pins the local image id, then retries the published image on every tick. Its source upgrades pre-pull too: the candidate preflight describes the TARGET commit (`git describe --tags --always <target>`) and pulls that release's `dpf-doctools:<tag>` before the drain, but a pull that does not land only warns, because the install can still build the image after the swap. Compose stays free of any doctools reference (`scripts/doctools-image-contract.test.mjs`, AC-ODC-003), so the pin lives only in the portal's own state. Locked by `apps/web/lib/documents/conversion/*.test.ts`, `apps/web/lib/self-upgrade/doctools-release-image.test.ts`, `apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts`, `apps/web/lib/documents/document-engine-boot.test.ts`, `apps/web/lib/self-upgrade/preflight.test.ts`, `apps/web/lib/self-upgrade/doctools-source-lineage.test.ts` and `scripts/installer/doctools-prepull.test.mjs`. | Never "fix" this by bind-mounting host paths or adding the engine to compose (an optional pinned image there froze `promote-latest`, PR #5290); input and output travel over stdin/stdout only. |
 | D21 | An upgrade or build dies mid-way and every container shows the same start time | macOS and Windows (Docker Desktop) | Docker Desktop installs an update of its own and restarts the engine. Live 2026-10-02: `eventInstallingUpdate` at 14:28:41Z in `com.docker.backend.log`, every container (Postgres included) restarted at 14:29:10, and self-upgrade SUR-8782FCBD died mid-promotion. | ✅ BI-75ECED42: the boot reconciler compares the database server start time with the run start and records `engine-restarted` ("The computer restarted Docker during the update", retryable) instead of "orchestrator did not complete the swap"; `scripts/setup.sh` (macOS) and `scripts/setup.ps1` advise turning automatic updates off. | Turn off Docker Desktop automatic updates on an operated install, and update Docker deliberately between upgrades. When diagnosing, compare `pg_postmaster_start_time()` with the failed run's start before blaming the promoter. |
 | D19 | A spatial view shows "region pack missing" even though a pack was copied onto the host | all | 📌 By design (BI-814F86E1, `DI-63D94E36B0B0`). Map packs live in the `map_data` named volume mounted at `/var/lib/dpf/maps` on the portal (override with `DPF_MAP_DATA_DIR`); the image never carries one. A pack copied to a host directory is invisible until it is placed in that volume with its `<packId>.manifest.json`, and a manifest whose `byteLength` disagrees with the file is reported as invalid (`409`). | Never bind-mount a host map directory into the shared base compose file, and never fetch tiles from a remote host as a fallback. |
 | D20 | Maps stop drawing after a Content-Security-Policy is introduced | all | ⚠️ open (watch). DPF has no app-wide CSP today. MapLibre 6 builds its worker from the same-origin module `/api/map-assets/runtime/maplibre-gl-worker.mjs` (BI-814F86E1), so any future CSP must allow `worker-src 'self' blob:`. | When adding a CSP, include the worker directive and exercise a geographic view in light and dark themes. |
 | D23 | Coworker reviews end without a receipt (`spawn docker EAGAIN`, "Sandbox file write failed") and `docker exec` fails with "resource temporarily unavailable"; `docker stats` shows a container with tens of thousands of PIDs | all Docker hosts | ✅ BI-95BB9CB1: the sandbox's PID 1 is a shell entrypoint and portal-tls's is caddy; neither reaps orphaned children, so every git a build ran and every health-check probe left a zombie (75,868 and 11,573 measured on one install) until the Docker VM's process table was nearly full. Both services now set `init: true` with a `pids_limit` (#6020), and `scripts/compose-init-reaping.test.mjs` keeps the init in place. | Any new long-running service whose PID 1 is a shell script or an app that does not reap children (most are not init systems) must set `init: true`. Check `docker exec <c> sh -c 'ps -eo stat'` for Z states when a container's PID count climbs. |
-| D24 | An agent asks the operator a platform decision it could have put to the kernel (WWMD); the decision-routing guard never fires | Claude desktop app (Code tab), all OSes | ⚠️ open (BI-271B8EEC). The desktop app renders `AskUserQuestion` itself and does not invoke the project `PreToolUse` hook for it; other `PreToolUse` hooks fire. Live probe 2026-10-07: the guard binary denies the payload, the app showed it. See the decision-routing spec §15. | The operator is asked to choose between options with no `principle_decide` record in the session. |
+| D24 | An agent asks the operator a platform decision it could have put to the kernel (WWMD), or runs a command a guard should refuse; no `PreToolUse` guard blocks anything | Claude desktop app (Code tab, Claude Code 2.1.295 / app 2.31226.1), all OSes and permission modes | ✅ BI-E5C45F61 (2026-10-13). The host runs every `PreToolUse` hook, but it validates the output and accepts a top-level `decision` only as `approve`/`block`. The guards' shared deny carried Grok's `decision: "deny"` beside Claude's `hookSpecificOutput`, so the host discarded the whole output, logged a `hook_non_blocking_error` in the transcript, and ran the tool. Claude and Codex payloads now get `hookSpecificOutput` only (`hooks/lib/hook-io.mjs`, contract in `hooks/lib/claude-hook-contract.mjs`); plugin 0.2.9. Bypass mode, an unresolved `${CLAUDE_PROJECT_DIR}` and stale plugin copies were ruled out from the same transcript. The 2026-10-07 reading (BI-271B8EEC, "the app does not invoke the hook for `AskUserQuestion`") was wrong; see the decision-routing spec §15.1. **Probes**, all harmless: `docker compose up --help` (compose-guard), `npx tsc --noEmit` (raw-tool-guard), `npx prisma migrate dev` with no `DATABASE_URL` (lease-punt-guard), a two-option architecture `AskUserQuestion` naming a BI id (decision-routing-guard). Each must be refused. | SessionStart prints "PreToolUse guards inactive in this session" when a probe is not denied in the Claude contract or a declared guard command cannot run (`hooks/pretooluse-guard-selftest.mjs`). The transcript records a discarded verdict as `hook_non_blocking_error`. Client hooks only accelerate: the client-independent backstop is BI-271B8EEC Direction 2 (a decision reaches a person only with a qualifying kernel record), not built yet. |
 
 ## 4. Git / repo hygiene
 
@@ -192,3 +424,21 @@ A bootstrap launched from a worktree may have no install PUBLIC_URL and may inhe
 | Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
 | Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
 | All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |
+
+## Linux pilot startup repairs — 2026-10-03
+
+PR #5998 merged the Docker Engine/Compose prerequisite repair. Additional source
+repairs prepare the runtime signing key and host-owned federation directories
+(BI-DFF7346E), remove the PKI host-UID assumption and suppress first-init password
+output (BI-F3AD783E), and pin pnpm plus Ollama loopback exposure (BI-5282E468).
+The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns release
+and acceptance caveats. Confirm the selected release contains the changes;
+customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
+Historical root-owned directories are preserved and refused for scoped recovery.
+
+## Managed Mac inference qualification
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Qualified Apple M5 Max | A merged portal update is mistaken for a changed native engine; a package/report copied from another Mac is treated as local qualification. | Explicit native installer opt-in stages immutable source and a qualification bound to this enrolled host. A current signed action, owned drain and host inference reservation select it; verify actual mapped engine bytes and useful DPF results. Preserve Docker vendor files and the prior selection for owned rollback. |
+| Other macOS hardware, Windows and Linux | An unqualified acceleration package or native action is adopted automatically. | Native managed inference stays unregistered outside the qualified Apple Silicon procedure. Existing Windows, macOS and Linux native installer/host-upkeep behavior continues; no inference action is added to automatic host-upkeep policy. Qualify each additional hardware/runtime/model profile before offering activation. |

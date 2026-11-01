@@ -7,6 +7,16 @@ Trust comes from layered controls and observed outcomes.
 
 Every change review requires [failure analysis and recovery evidence](failure-analysis-and-recovery.md), beginning in design and refined against the final change. Server review and publication boundaries resolve executed evidence and require an independent adequacy assessment. Internal engineering coordinates technical recovery; the business owner retains genuine scope and risk-acceptance decisions.
 
+When a client cannot call the MCP task protocol directly, the review owner can
+call `get_workroom` with `capsuleId` and `reviewTaskRunId`. The optional
+`ownedReviewRecovery` response covers only that owner's native semantic review
+bound to that room, including historical source versions. It returns the same
+bounded recovery facts as `tasks/get`; it excludes provider output and does not
+authorize retry, establish settlement, or approve the current source. Other
+owners and rooms return `owned_review_unavailable`. An unavailable read returns
+an explicit error. Expired execution still follows the recorded reconciliation
+and `retry_semantic_review` procedure.
+
 ## The four governance altitudes
 
 | Altitude | Purpose | Authoritative mechanism |
@@ -84,6 +94,8 @@ compatibility adapter while external clients can construct the same receipt.
 
 A receipt is fresh only while all of its semantic identity remains unchanged:
 
+- requested artifact role;
+
 - Workroom;
 - base and head trees;
 - diff digest;
@@ -91,9 +103,10 @@ A receipt is fresh only while all of its semantic identity remains unchanged:
 - normalized specialist set.
 
 Changing any one of those inputs requires a new review. Reordering or repeating
-the same specialists does not. A genuinely low-risk change may auto-pass, but
-the auto-pass still emits a receipt with its rationale; review is never skipped
-silently.
+the same specialists does not. Freshness alone is insufficient for reuse: the
+receipt must be independently reviewed and not inconclusive. Historical automatic
+receipts trigger a new review, including for low-risk changes under the current
+mandatory failure-analysis review policy.
 
 The receipt reuses the existing `ExternalEvidenceRecord` and
 `WorkCapsuleActivity(kind="evidence-recorded")` streams. It does not create a
@@ -102,11 +115,11 @@ portal timelines, local hooks, CI, and promotion controls to project the same
 evidence in later rollout phases.
 
 External delivery surfaces invoke the native `review_semantic_change` operation
-only after the complete concern is committed locally and before pregate or the
-first push. Build Studio invokes the same operation contract once over the
+only after the complete concern is committed locally and has its required gate
+evidence, before the first push. Build Studio invokes the same operation contract once over the
 assembled task diff, before UX verification and promotion; its existing
-task-level reviews remain intact. Runtime code activates the Change Reviewer,
-while a docs-only low-risk change can receive an explicit auto-pass receipt.
+task-level reviews remain intact. Runtime code and docs-only changes both receive
+independent review with proportionate failure-analysis evidence.
 Content selects existing specialist branches (accessibility, data governance,
 SBOM, and architecture guardrail), and the normalized specialist set is part of
 freshness. Repair loops stop after two failed rounds and surface operator review
@@ -119,6 +132,15 @@ an immutable receipt before publication; `pnpm review:semantic-gate` then
 validates an exact-tree git-dir sidecar with no model, portal, database, or
 network call. Explicit exemptions are policy-versioned, evidence-linked, and
 expiry-bound.
+
+New requests use the role-bound v2 contract and emit v3 receipts. Legacy requests
+retain their original execution contract, and historical receipts remain readable
+for audit. They cannot satisfy the new contract. Publication supplies its expected
+artifact role independently: Git hooks expect `code-change`; document callers
+explicitly request their role when recording and validating a receipt. A spec or
+plan review cannot authorize code publication, even when the bytes match. The
+policy remains in shadow mode; activating the role contract does not change
+enforcement or grant authority.
 
 Reviewer execution status is not a semantic verdict. Capacity, admission,
 transport, or response-parsing failure produces `inconclusive` and a retry
@@ -176,7 +198,8 @@ then bounded by regulation and intrinsic authority.
 The platform asks for attention only when attention changes the outcome:
 
 - evidence is genuinely missing;
-- a newer failure invalidates an older pass;
+- a newer failure invalidates an older pass (in any dimension, on every close
+  path, merged or not; BI-4A222439);
 - repeated unsupported mutations suggest a runaway client;
 - a regulatory or authority ceiling requires a human; or
 - bounded autonomous recovery is exhausted.

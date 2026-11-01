@@ -1,31 +1,31 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 868,
-    "uniqueNames": 811,
-    "duplicatedNames": 55,
-    "excessInstances": 57,
-    "multiMajorNames": 25,
+    "resolvedComponents": 884,
+    "uniqueNames": 823,
+    "duplicatedNames": 59,
+    "excessInstances": 61,
+    "multiMajorNames": 29,
     "firstPartyDivergentNames": 0,
-    "directButTransitiveNames": 2,
+    "directButTransitiveNames": 3,
     "dedupeCandidateNames": 30,
     "directProdNames": 54,
     "directDevNames": 29,
     "workspaces": 16
   },
   "budgets": {
-    "resolvedComponents": 868,
-    "duplicatedNames": 55,
-    "excessInstances": 57,
-    "multiMajorNames": 25
+    "resolvedComponents": 884,
+    "duplicatedNames": 59,
+    "excessInstances": 61,
+    "multiMajorNames": 29
   },
   "lastBudgetRaise": {
-    "reason": "Vitest 5 and its mocker require magic-string ^1.2.3, while @tailwindcss/node 4.3.3 requires the incompatible 0.30.x line. The reviewed lock confirms both consumers; deduplication cannot satisfy both major ranges. The migration retires obsolete Vitest and Istanbul packages, leaving 879 total components with one additional development-only version instance.",
+    "reason": "BI-7F3E4389: retain merged PR6785 platform dependency reductions and its compatibility pins; mobile +1 undici component restores the integration-shared closure required by validators, with no new mobile duplication. Platform budgets remain 884/59/61/29 and mobile component budget is 950.",
     "budgets": {
-      "resolvedComponents": 879,
-      "duplicatedNames": 56,
-      "excessInstances": 59,
-      "multiMajorNames": 26
+      "resolvedComponents": 884,
+      "duplicatedNames": 59,
+      "excessInstances": 61,
+      "multiMajorNames": 29
     }
   },
   "firstPartyDivergent": [],
@@ -36,8 +36,8 @@
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",
       "totals": {
-        "resolvedComponents": 949,
-        "uniqueNames": 847,
+        "resolvedComponents": 950,
+        "uniqueNames": 848,
         "duplicatedNames": 86,
         "excessInstances": 102,
         "multiMajorNames": 46,
@@ -49,7 +49,7 @@
         "workspaces": 1
       },
       "budgets": {
-        "resolvedComponents": 949,
+        "resolvedComponents": 950,
         "duplicatedNames": 86,
         "excessInstances": 102,
         "multiMajorNames": 46

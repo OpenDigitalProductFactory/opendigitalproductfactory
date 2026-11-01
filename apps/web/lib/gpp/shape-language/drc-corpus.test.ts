@@ -28,13 +28,13 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import type { GppDiagnostic } from "./diagnostics";
-import { runDesignRules } from "./drc";
-import { CONSTRUCT_EXECUTABLE, GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs";
+import type { GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { CONSTRUCT_EXECUTABLE, GPP_CONSTRUCTS, type GppConstruct } from "@dpf/validators/gpp/executable-constructs";
 import { GATE_RATIFICATION, gateRatificationRefusals, type GateRatificationEntry } from "./gate-ratification";
-import { gppLayoutSchema } from "./gpp-layout-schema";
-import { parseShapeDocument } from "./parse";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { gppLayoutSchema } from "@dpf/validators/gpp/gpp-layout-schema";
+import { parseShapeDocument } from "@dpf/validators/gpp/parse";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources, liveDirectExecuteSites } from "./resolve-sources";
 
 const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");

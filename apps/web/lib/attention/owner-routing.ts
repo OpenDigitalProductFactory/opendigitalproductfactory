@@ -1,4 +1,4 @@
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { namesNoConcreteConsequence } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
@@ -80,6 +80,13 @@ export function classifyOwnerAttentionLane(
   }
   if (TECHNICAL_SOURCES.has(item.source)) {
     return decision("custodian", "The technical custodian owns platform recovery.", false, appliedLevel);
+  }
+  if (item.source === "workroom-stall" && item.triage.decideEffort !== "judgment") {
+    // A room whose coworker ran and left no result is recovery work: naming an
+    // owner cannot clear it, so asking the owner "who should own this?" is a
+    // question with no useful answer. On 2026-10-14 ~56 of 70 "Needs you" cards
+    // were exactly this (BI-72679FE0).
+    return decision("custodian", "Naming an owner cannot clear this; the technical custodian owns the recovery.", false, appliedLevel);
   }
   if (item.source === "research-proposal") {
     return appliedLevel === "quiet"

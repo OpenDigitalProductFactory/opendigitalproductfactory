@@ -3,6 +3,7 @@
  * Converts Prisma rows into the routing pipeline's type system.
  */
 import { prisma } from "@dpf/db";
+import { inCapturedProviderTransportScope, isCapturedNativeImageInputEvidence } from "../shared/captured-effect-store";
 import { providerHasConfiguredCredential } from "@/lib/ai-provider-internals";
 import { loadActiveRiskAcceptedClearances } from "@/lib/govern/clearance-overrides";
 import type {
@@ -49,7 +50,8 @@ interface LoaderCacheEntry<T> {
 export type LocalContextReader = (
   fetchImpl: typeof fetch | undefined,
   selected: { modelId: string; provider: { providerId: string; baseUrl: string | null; endpoint: string | null } },
-) => Promise<number | null>;
+) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence;
+  imageInputEvidence?: import("../shared/captured-effect-store").CapturedNativeImageInputEvidence }>;
 const unknownLocalContext: LocalContextReader = async () => null;
 let manifestsCache = new WeakMap<LocalContextReader, LoaderCacheEntry<EndpointManifest[]>>();
 let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
@@ -90,6 +92,7 @@ import {
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
 import { authEligibilityExclusionReason } from "./model-auth-eligibility";
+import { expandProviderAccountCandidates } from "./provider-account-candidates";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -149,6 +152,16 @@ export function resolveToolUse(
   return profile.provider.supportsToolUse ?? null;
 }
 
+/** Reconcile sparse model discovery with the transport's streaming declaration. */
+function resolveStreaming(profile: ProfileWithProvider): boolean | null {
+  const capabilities = profile.capabilities as unknown as ModelCardCapabilities | null;
+  if (profile.provider.supportsStreaming === false || capabilities?.streaming === false) return false;
+  if (capabilities?.streaming === true) return true;
+  // A provider's text-streaming default says nothing about an embedding/image/audio model.
+  if (!["chat", "reasoning", "code"].includes(profile.modelClass ?? "chat")) return null;
+  return profile.provider.supportsStreaming ?? null;
+}
+
 /**
  * Load all active/degraded endpoints as EndpointManifest objects.
  * Queries ModelProfile joined with ModelProvider — each manifest entry represents
@@ -164,6 +177,8 @@ export async function loadEndpointManifests(
   now: number = Date.now(),
   readLocalContext: LocalContextReader = unknownLocalContext,
 ): Promise<EndpointManifest[]> {
+  // Captured observations are request-bound facts, never a process cache entry.
+  if (inCapturedProviderTransportScope()) return queryEndpointManifests(readLocalContext);
   const cached = manifestsCache.get(readLocalContext);
   if (cached && now - cached.at < ROUTING_LOADER_TTL_MS) {
     return cached.value;
@@ -203,9 +218,17 @@ async function queryEndpointManifests(readLocalContext: LocalContextReader): Pro
   // explicitly created one, so this is inert on a default install.
   const riskAcceptedByProvider = await loadActiveRiskAcceptedClearances();
 
-  return Promise.all(profiles
-    .filter((profile) => readiness.get(profile.providerId) === true)
-    .map((profile) => profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider)));
+  const accounts = await prisma.aiProviderConnection.findMany({
+    where: { providerId: { in: [...providers.keys()] } },
+    select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+      credentialEntryId: true, updatedAt: true, credentialEntry: { select: { status: true, updatedAt: true } },
+      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
+  });
+  const candidates = await Promise.all(profiles.map(async profile => expandProviderAccountCandidates(
+    await profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider),
+    accounts, readiness.get(profile.providerId) === true, profile.capabilityOverrides,
+  )));
+  return candidates.flat();
 }
 
 type ProfileWithProvider = Awaited<
@@ -226,6 +249,7 @@ async function profileToManifest(
   statusOverride?: EndpointManifest["status"],
   riskAcceptedByProvider?: Map<string, SensitivityLevel[]>,
 ): Promise<EndpointManifest> {
+  const streaming = resolveStreaming(mp);
   // BI-7F2FBDA3: learned per-auth-mode eligibility first; the checked-in Codex
   // subscription set is only the seed when nothing has been learned yet.
   const eligibilityExclusionReason = authEligibilityExclusionReason({
@@ -237,10 +261,15 @@ async function profileToManifest(
 
   let maxContextTokens = mp.maxContextTokens ?? mp.provider.maxContextTokens;
   let maxOutputTokens = mp.maxOutputTokens ?? mp.provider.maxOutputTokens;
+  let localThinkingBudgetEvidence: EndpointManifest["localThinkingBudgetEvidence"];
+  let imageInputEvidence: unknown;
   if (mp.providerId === "local" && ["chat", "reasoning", "code"].includes(mp.modelClass ?? "chat")) {
-    const served = await readLocalContext(undefined, {
+    const observation = await readLocalContext(undefined, {
       modelId: mp.modelId, provider: mp.provider,
     });
+    imageInputEvidence = typeof observation === "object" && observation !== null ? observation.imageInputEvidence : undefined;
+    const served = typeof observation === "object" && observation !== null ? observation.contextTokens : observation;
+    localThinkingBudgetEvidence = typeof observation === "object" && observation !== null ? observation.thinkingBudgetEvidence : undefined;
     maxContextTokens = served !== null && Number.isSafeInteger(served) && served > 0 ? served : null;
     // DMR shares one window between input and completion. This is an upper
     // bound, not a requested allowance; activity admission still checks the sum.
@@ -248,6 +277,12 @@ async function profileToManifest(
       ? maxContextTokens : Math.min(maxOutputTokens, maxContextTokens);
   }
 
+  const capabilities = (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES;
+  const imageOverride = (mp.capabilityOverrides as Record<string, unknown> | null)?.imageInput;
+  const explicitlyFalse = (value: unknown) => value === false || value !== null && typeof value === "object"
+    && "support" in value && value.support === false;
+  const observedImage = mp.providerId === "local" && !explicitlyFalse(capabilities.imageInput) && !explicitlyFalse(imageOverride)
+    && isCapturedNativeImageInputEvidence(imageInputEvidence, mp.modelId);
   return {
     id: mp.id,
     providerId: mp.providerId,
@@ -267,7 +302,7 @@ async function profileToManifest(
     // ineligible for tool work with no recovery path (BI-DFC30977).
     supportsToolUse: resolveToolUse(mp),
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
-    supportsStreaming: mp.provider.supportsStreaming,
+    supportsStreaming: streaming === true,
     maxContextTokens,
     maxOutputTokens,
     modelRestrictions: mp.provider.modelRestrictions,
@@ -291,11 +326,12 @@ async function profileToManifest(
     // EP-INF-003: ModelCard fields
     modelClass: mp.modelClass ?? "chat",
     modelFamily: mp.modelFamily ?? null,
-    inputModalities: (mp.inputModalities as string[]) ?? ["text"],
+    inputModalities: observedImage ? [...new Set([...(mp.inputModalities as string[] ?? ["text"]), "image"])] : (mp.inputModalities as string[]) ?? ["text"],
     outputModalities: (mp.outputModalities as string[]) ?? ["text"],
-    capabilities: (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
+    capabilities: { ...capabilities, ...(observedImage ? { imageInput: true } : {}), streaming },
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
+    ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),
     deprecationDate: mp.deprecationDate ?? null,
     metadataSource: mp.metadataSource ?? "inferred",
     metadataConfidence: mp.metadataConfidence ?? "low",

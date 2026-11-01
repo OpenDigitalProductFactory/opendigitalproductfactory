@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: vi.fn(async () => 0) }));
 import {
   advanceStrandedBuildToReview,
   reconcileDeployedShipBuilds,
@@ -11,7 +12,6 @@ import {
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
 import { areOptionalStartupTasksEnabled, isInngestSelfSyncOnBootEnabled, isStartupModelRevalidationEnabled } from "@/lib/runtime/env-flags";
-
 const syncPlatformVersionConfigMock = vi.fn();
 const getDeployedShaMock = vi.fn();
 const completeRunMock = vi.fn();
@@ -710,7 +710,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-IDEATE", phase: "ideate", userId: "user-1" });
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-PLAN", phase: "plan", userId: "user-2" });
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-REVIEW", phase: "review", userId: "user-3" });
-    expect(buildActivityCreateMock).toHaveBeenCalledTimes(3); // one resume signal each
+    expect(buildActivityCreateMock).not.toHaveBeenCalled(); // BI-817413E1: the resumer's outcome row is the record
   });
 
   // BI-A009313E: age-out cap. A build created past the abandon threshold while

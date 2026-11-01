@@ -21,7 +21,13 @@ on:
   # STT Digest Watch re-pin PR) never trigger pull_request workflows, so the
   # bot dispatches this workflow onto its branch to post the required checks.
   # The `changes` fail-safe above applies here too: heavy jobs run.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      workroom_ingestion_scale:
+        description: Qualify Workroom ingestion at 10000 rooms and 100000 events on the CI-owned database
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -316,6 +322,58 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --filter web typecheck:tests
 
+  # Advisory parity reference while TypeScript 7 settles in as the checker
+  # (BI-2B8D67A9). The Typecheck jobs above run TS7 through scripts/run-tsc.mjs;
+  # this job runs the same programs on TypeScript 6 (DPF_TSC=6), the version
+  # the workspace still depends on as a library. A difference between the two
+  # verdicts is reported as a warning and never blocks a merge. Remove this job
+  # once the follow-up that retires TS6 as a checker lands.
+  typecheck-ts6-reference:
+    name: Typecheck (TS6 reference, advisory)
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: >-
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.heavy == 'true' &&
+      github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Typecheck all workspaces on TypeScript 6
+        id: ts6
+        continue-on-error: true
+        env:
+          DPF_TSC: "6"
+        run: pnpm typecheck
+
+      - name: Typecheck the web test program on TypeScript 6
+        id: ts6tests
+        continue-on-error: true
+        env:
+          DPF_TSC: "6"
+        run: pnpm --filter web typecheck:tests
+
+      - name: Report the TS6 reference verdict
+        env:
+          TS6: ${{ steps.ts6.outcome }}
+          TS6_TESTS: ${{ steps.ts6tests.outcome }}
+        run: |
+          {
+            echo "### TypeScript 6 reference (advisory)"
+            echo "- workspaces: ${TS6}"
+            echo "- web test program: ${TS6_TESTS}"
+            echo "Compare with the Typecheck jobs (TypeScript 7). Different verdicts are a TS7 parity finding for BI-2B8D67A9."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$TS6" != "success" ] || [ "$TS6_TESTS" != "success" ]; then
+            echo "::warning title=TS6 reference::TypeScript 6 failed where the TypeScript 7 Typecheck jobs decide merge. If those passed, this is a parity divergence."
+          fi
+
   # The single writer of the web tsbuildinfo warm-start cache (spec
   # 2026-09-30 web-runtime-import-cycle §6 PR-1). Every push to main saves an
   # entry keyed on its own SHA; PR and merge_group runs of the two Typecheck
@@ -392,6 +450,8 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime
       - name: Run named source policy guards
         run: node scripts/ci-policy-guards.mjs --profile source --results "$RUNNER_TEMP/policy-guards-source.json"
+      - name: Run Mac inference package source tests
+        run: node --test tools/mac-inference/*.test.mjs
       - name: Upload source policy results
         if: always()
         uses: actions/upload-artifact@v7
@@ -578,6 +638,56 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
 
+      # Reuse this job's service and normal migration chain. This is isolated
+      # SQL/Prisma data-path evidence, not native actor or installed acceptance.
+      # Ordinary PRs and merge candidates never opt into the scale workload.
+      - name: Qualify Workroom ingestion on the CI-owned PostgreSQL fixture
+        id: workroom-ingestion-scale
+        if: github.event_name == 'workflow_dispatch' && inputs.workroom_ingestion_scale == true && matrix.shard == 1
+        timeout-minutes: 35
+        env:
+          DPF_INGESTION_SCALE_QUALIFICATION: '1'
+          DPF_INGESTION_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          writeFileSync(join(process.env.RUNNER_TEMP, 'workroom-ingestion-scale-source.json'), JSON.stringify({
+            sourceSha: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'),
+            runId: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT,
+            event: process.env.GITHUB_EVENT_NAME, databaseOwner: 'this-job-postgres-service',
+            rooms: 10000, events: 100000, pageCap: 200, cycleCap: 1000,
+            experimentalDeadlineMinutes: 30, installedAcceptance: false, nativeAuthorityAcceptance: false,
+          }, null, 2));
+          NODE
+          pnpm --filter web exec vitest run lib/work-management/room-review-ingestion.scale.postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/workroom-ingestion-scale.json" 2>&1 | tee "$RUNNER_TEMP/workroom-ingestion-scale.log"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const report = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'workroom-ingestion-scale.json'), 'utf8'));
+          const scale = report.testResults.flatMap(suite => suite.assertionResults).find(result =>
+            result.fullName === 'admitted PostgreSQL ingestion scale qualification preserves bounded SQL pages, sparse turns and durable cursor/output effects at the declared load');
+          if (scale?.status !== 'passed' || report.numPendingTests !== 0 || report.numFailedTests !== 0) {
+            throw new Error('The actual PostgreSQL scale case did not execute and pass; auditor-only or skipped results cannot qualify scale');
+          }
+          NODE
+
+      - name: Retain Workroom scale qualification evidence
+        if: always() && steps.workroom-ingestion-scale.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: workroom-ingestion-scale-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/workroom-ingestion-scale-source.json
+            ${{ runner.temp }}/workroom-ingestion-scale.json
+            ${{ runner.temp }}/workroom-ingestion-scale.log
+          if-no-files-found: error
+          retention-days: 30
+
   test-packages:
     name: Unit Tests (packages)
     runs-on: ubuntu-latest
@@ -627,6 +737,16 @@ jobs:
       # --workspace-concurrency=1 keeps @dpf/db and the other DB-touching
       # suites from racing on this job's single Postgres (BI-335D7B54);
       # --no-bail keeps every suite's pass/fail visible even if one fails.
+      - name: Verify populated Workroom migration recovery
+        if: needs.changes.outputs.heavy == 'true'
+        env:
+          DPF_INGESTION_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: >-
+          node --test
+          packages/db/scripts/workroom-activity-migration-recovery.test.mjs
+          packages/db/scripts/workroom-activity-ingestion-recovery.postgres.test.mjs
+          packages/db/scripts/workroom-activity-recovery-prisma.postgres.test.mjs
+
       - name: Run non-web unit tests
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm -r --if-present --filter '!web' --filter '!dpf' --workspace-concurrency=1 --no-bail test
@@ -666,10 +786,10 @@ jobs:
   build:
     name: Production Build
     runs-on: ubuntu-latest
-    # BI-57582F89. Healthy PR-event jobs ~8–10m; merge_group cold compiles can
-    # hang or exceed 20–30m when Turbopack FS cache is enabled with an exact-key
-    # miss (overnight 2026-08-04: #3958 / #3963). Cap at 45m and disable the
-    # experimental Turbopack cache on merge_group (see build step env).
+    # BI-07BCDD1E: use the non-experimental production-build profile for every
+    # CI event. Repeated PR builds compiled then lost their hosted runner during
+    # page-data collection; the existing cache-OFF profile completed. Preserve
+    # the normal build command, required checks, artifact handoff and time bounds.
     #
     # BI-F75AADB7: this is the OUTER backstop only. The compile step carries its
     # own inner bound — see `timeout-minutes` on "Build web (Next.js production)".
@@ -696,22 +816,6 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
-      # Restore Turbopack's filesystem cache (written under .next/cache when
-      # DPF_TURBOPACK_BUILD_CACHE=1 enables experimental.turbopackFileSystemCacheForBuild).
-      # Key rolls on any web source change. Keep this exact-key only: broad
-      # restore-keys can hydrate stale multi-GB Turbopack caches on PRs, making
-      # the production build slower than a clean compile and vulnerable to
-      # hosted-runner cancellation before TypeScript completes. Exact-key hits
-      # still accelerate reruns of the same commit. The commit SHA is the
-      # source discriminator: GitHub evaluates hashFiles while rendering the
-      # workflow, and broad web-source globs can exceed the 120-second limit.
-      - name: Cache Turbopack build cache
-        if: needs.changes.outputs.heavy == 'true'
-        uses: actions/cache@v6
-        with:
-          path: ${{ github.workspace }}/apps/web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-
       - name: Build web (Next.js production)
         if: needs.changes.outputs.heavy == 'true'
         # BI-F75AADB7 — inner, fail-fast bound on the compile itself.
@@ -731,14 +835,11 @@ jobs:
         # cold compile does not. Timing out the STEP fails the job for real and
         # RETAINS this step's log.
         timeout-minutes: 15
-        # Experimental Turbopack FS cache on pull_request only. On merge_group
-        # exact-key misses have produced multi-tens-of-minutes hangs that eject
-        # otherwise-green PRs from the merge queue; webpack/default build is
-        # slower but finishes. Docker release never sets this env.
+        # Match the reliable merge-group/release profile; experimental cache OFF.
         env:
-          DPF_TURBOPACK_BUILD_CACHE: ${{ github.event_name == 'pull_request' && '1' || '' }}
+          DPF_TURBOPACK_BUILD_CACHE: '0'
         run: |
-          echo "[production-build] run=${{ github.run_id }} attempt=${{ github.run_attempt }} tree=${{ github.sha }} event=${{ github.event_name }} turbopack_cache=${{ github.event_name == 'pull_request' && '1' || '0' }} timeout=15m/step 45m/job command=pnpm --filter web build"
+          echo "[production-build] run=${{ github.run_id }} attempt=${{ github.run_attempt }} tree=${{ github.sha }} event=${{ github.event_name }} turbopack_cache=0 timeout=15m/step 45m/job command=pnpm --filter web build"
           pnpm --filter web build
 
       # BI-959F4F38. PR and merge-group UX runs consume this exact-tree output
@@ -891,6 +992,13 @@ jobs:
     # host and so runs out-of-band, not in CI.
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/edge-node-go/go.mod
+          cache-dependency-path: services/edge-node-go/go.sum
+      - name: Compile and test the native Edge release package
+        working-directory: services/edge-node-go
+        run: go test ./...
       - name: Assert edge-node image bill-of-materials stays minimal
         run: node scripts/check-edge-node-image-bom.mjs
 
@@ -942,6 +1050,15 @@ jobs:
         if: always()
         run: node scripts/dpf-compose.mjs --profile integration-test down --volumes
 
+  # Deployment-critical bootstrap checks are part of the required aggregate.
+  # Docs-only PRs may skip; merge_group/push/manual runs are exhaustive.
+  # Deliberately do not skip on exact-tree evidence reuse.
+  agent-toolchain-bootstrap:
+    name: Agent toolchain bootstrap
+    needs: [changes]
+    if: needs.changes.outputs.heavy == 'true'
+    uses: ./.github/workflows/agent-toolchain-bootstrap-smoke.yml
+
   # Stable repository-wide merge authority. Branch protection requires this
   # aggregate instead of coupling itself to dozens of implementation-level
   # jobs whose names and sharding may evolve. Every CI job must appear here;
@@ -956,6 +1073,7 @@ jobs:
       - exact-tree-evidence-shadow
       - typecheck
       - typecheck-tests
+      - typecheck-ts6-reference
       - typecheck-cache
       - policy-guards-source
       - policy-guards-workspace
@@ -971,6 +1089,7 @@ jobs:
       - compose-image-pins
       - edge-footprint-bom
       - adp-integration-tests
+      - agent-toolchain-bootstrap
     steps:
       - uses: actions/checkout@v7
       - name: Assert every CI dependency is merge-safe

@@ -13,8 +13,12 @@ import {
 import type { ReadinessProfile } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
+import { commitRangeHead, commitRangesEqual } from "./repo-commit-range";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
+import { boundReviewReceiptId, checkBoundReviewWriteExecution, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
+  type BoundReviewTask } from "./bound-review-effect";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -35,7 +39,7 @@ function currentOpenFindings(rows: ReceiptHistoryRow[], artifactDigest: string):
 }
 
 export type RecordInitiativeGateReceiptResult =
-  | { ok: true; receiptId: string; receipt: Record<string, unknown> }
+  | (ActionSuccess & { receiptId: string; receipt: Record<string, unknown>; deduplicated?: true })
   | { ok: false; code: string; error: string };
 
 export async function recordInitiativeGateReceipt(args: {
@@ -49,6 +53,7 @@ export async function recordInitiativeGateReceipt(args: {
   artifactRef: InitiativeArtifactRef;
   /** Trusted TaskRun context passed only by the governed tool handler. */
   workroomRef?: InitiativeReviewBinding["workroomRef"];
+  boundReviewTask?: BoundReviewTask;
   expectedCurrentBaselineId?: string | null;
   reason: string;
   findings: Array<{ issue: string; severity: "critical" | "important" }>;
@@ -130,13 +135,55 @@ export async function recordInitiativeGateReceipt(args: {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "The accepted plan review no longer matches the current canonical baseline and coverage. Reconcile the server-issued packet; do not substitute a different artifact under the original request key." };
   }
+  // BI-CE661173: a post-implementation review bound to a merged squash commit
+  // (not its room's recorded head) is accepted only when the trunk, read now,
+  // still names that commit as the item's delivery from that room.
+  // BI-46E344FE: a commit range binds a merged repair's whole change, and only
+  // a post-implementation review binds one. A room that never recorded its head
+  // is anchored to the merged head, so it too needs the trunk's proof.
+  const rangeArtifact = args.artifactRef.kind === "repo-commit-range" ? args.artifactRef : null;
+  if (rangeArtifact && args.gate !== "post-implementation-review") {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Only a post-implementation review binds a commit range." };
+  }
+  const artifactHead = args.artifactRef.kind === "repo-blob-at-commit" ? args.artifactRef.commitSha
+    : rangeArtifact ? commitRangeHead(rangeArtifact.ranges) : null;
+  const headlessAnchor = args.gate === "post-implementation-review" && args.workroomRef && artifactHead
+    ? (await prisma.workroom.findUnique({ where: { capsuleId: args.workroomRef.workroomId }, select: { headSha: true } }))?.headSha === null
+    : false;
+  const mergedRepairReview = args.gate === "post-implementation-review" && args.workroomRef && artifactHead
+    && (headlessAnchor || (rangeArtifact?.ranges.length ?? 1) > 1
+      || artifactHead.toLowerCase() !== args.workroomRef.headSha.toLowerCase());
+  let mergedRepairProof: { workroomId: string; commitSha: string } | undefined;
+  if (mergedRepairReview) {
+    const { defaultLoadMergedRepairSource } = await import("./merged-repair-source");
+    const source = await defaultLoadMergedRepairSource({ itemId: item.itemId, refusedWorkroomId: args.workroomRef!.workroomId });
+    const ref = args.workroomRef!;
+    const delivered = source.kind === "found"
+      ? (source.commits ?? [{ sha: source.mergedCommitSha, parentSha: source.parentSha }]).map((commit) => ({ baseSha: commit.parentSha.toLowerCase(), headSha: commit.sha.toLowerCase() })) : [];
+    const sameSource = source.kind === "found" && (rangeArtifact
+      ? commitRangesEqual(delivered, rangeArtifact.ranges.map((r) => ({ baseSha: r.baseSha.toLowerCase(), headSha: r.headSha.toLowerCase() })))
+      : delivered.length === 1 && delivered[0]!.headSha === artifactHead!.toLowerCase());
+    if (source.kind !== "found" || !sameSource
+      || source.room.capsuleId !== ref.workroomId || source.room.headBranch !== ref.branchName
+      || source.room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+        error: "The reviewed commit is no longer the item's merged repair from this Workroom on the trunk. Read get_backlog_item with recoveryGate \"post-implementation-review\" for the current request; do not substitute a commit." };
+    }
+    if (source.deliveryActorIds.includes(args.reviewerAgentId)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "A delivery actor cannot record the post-implementation review of its own repair." };
+    }
+    mergedRepairProof = { workroomId: ref.workroomId, commitSha: source.mergedCommitSha };
+  }
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
     workroomRef: args.workroomRef,
     canonicalPlanProof: canonicalPlanProof ?? undefined,
+    ...(mergedRepairProof ? { mergedRepairProof } : {}),
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
+    // BI-6F2872FC: a Build Studio plan review binds the build's plan revision.
+    acceptBuildPlan: args.gate === "plan-review",
   });
   if (!artifact.ok) return artifact;
   if (canonicalPlanProof && artifact.artifact.digest !== canonicalPlanProof.digest) {
@@ -152,7 +199,9 @@ export async function recordInitiativeGateReceipt(args: {
   if (findingRefs.length !== new Set(findingRefs).size || args.findings.some((finding) => !finding.issue.trim())) {
     return { ok: false, code: "malformed-receipt", error: "Findings require unique non-empty issues." };
   }
-  return prisma.$transaction(async (tx) => {
+  return publishBoundReviewEffect<RecordInitiativeGateReceiptResult>(Boolean(args.boundReviewTask), (winnerOnly) => prisma.$transaction(async (tx) => {
+    const taskLock = await lockBoundReviewEffect(tx, args, item.organizationId);
+    if (taskLock.refusal) return taskLock.refusal;
     // Every receipt writer for a subject serializes on the subject row. Without
     // this seam, a concurrent fail could introduce a blocker after a pass had
     // read history but before either append committed.
@@ -172,6 +221,9 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if ((lockedItem.organizationId ?? null) !== (item.organizationId ?? null)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+    }
     if (canonicalPlanProof) {
       // Coverage/baseline writers serialize on their scope owner's item row.
       // The reviewed child is already locked; pin its parent before re-reading.
@@ -184,7 +236,7 @@ export async function recordInitiativeGateReceipt(args: {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan baseline or coverage changed before receipt publication." };
       }
     }
-    if (args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit") {
+    if (args.workroomRef && (args.artifactRef.kind === "repo-blob-at-commit" || rangeArtifact)) {
       const ref = args.workroomRef;
       // Provider verification happens outside the transaction. Lock the exact
       // room before append so ownership/head cannot change underneath its proof.
@@ -193,9 +245,11 @@ export async function recordInitiativeGateReceipt(args: {
         backlogItemId: true, repositoryFullName: true, headBranch: true, headSha: true,
         archivedAt: true, status: true, createdByPrincipalId: true,
       } });
-      if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
+      if (!room || (room.archivedAt && !mergedRepairProof) || ["abandoned", "cancelled"].includes(room.status)
         || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
-        || room.headBranch !== ref.branchName || room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()
+        || room.headBranch !== ref.branchName
+        // A headless anchor room carries the trunk-proven merged head (BI-46E344FE).
+        || (room.headSha ?? (mergedRepairProof ? mergedRepairProof.commitSha : null))?.toLowerCase() !== ref.headSha.toLowerCase()
         || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
           error: "The accepted review's workroom or accountable owner changed before receipt publication. Reconcile the actual workroom and review packet." };
@@ -240,6 +294,14 @@ export async function recordInitiativeGateReceipt(args: {
         return { ok: false, code: "AUTHORIZATION_DENIED", error: "Author research evidence or current authority changed before publication." };
       }
     }
+    const winner = await findBoundReviewWinner(tx, args, artifact.artifact, item.id, item.organizationId, reviewerPrincipalId);
+    if (!winner.ok) return winner;
+    if (winner.receipt) return { ...ok(), receiptId: winner.receipt.receiptId,
+      receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
+    if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
+    const executionRefusal = await checkBoundReviewWriteExecution(args, taskLock.execution, tx);
+    if (executionRefusal) return executionRefusal;
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
@@ -271,7 +333,7 @@ export async function recordInitiativeGateReceipt(args: {
         ],
       })
       : null;
-    const receiptId = `initiative-${randomUUID()}`;
+    const receiptId = boundReviewReceiptId(args, artifact.artifact.digest) ?? `initiative-${randomUUID()}`;
     const validated = validateInitiativeGateReceiptDraft({
       gate: args.gate,
       decision: args.decision,
@@ -326,5 +388,5 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     return { ok: true, receiptId, receipt: validated.receipt as unknown as Record<string, unknown> };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }

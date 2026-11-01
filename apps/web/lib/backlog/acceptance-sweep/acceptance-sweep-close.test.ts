@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
+import { federatedWorkOriginMarker } from "@dpf/db/federated-work-contract";
+
 import { closeAllowedAcceptanceItem, type AcceptanceSweepCloseDb } from "./acceptance-sweep-close";
 import type { CloseAuthorisation } from "./close-authorisation";
 
@@ -36,7 +38,7 @@ function decision(verdict: InitiativeReadinessDecision["verdict"]): InitiativeRe
   } as InitiativeReadinessDecision;
 }
 
-function db(row: { status: string; organizationId: string | null } | null): AcceptanceSweepCloseDb {
+function db(row: { status: string; organizationId: string | null; body?: string | null } | null): AcceptanceSweepCloseDb {
   return { backlogItem: { findUnique: vi.fn(async () => row) } };
 }
 
@@ -90,6 +92,17 @@ describe("closeAllowedAcceptanceItem", () => {
       db: db({ status: "done", organizationId: null }), complete: complete as never,
     });
     expect(outcome).toEqual({ outcome: "skipped", reason: "status-changed" });
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("never closes a work-sync mirror owned by a peer installation (BI-C5794F1D)", async () => {
+    const complete = vi.fn();
+    const body = `Peer\n\n${federatedWorkOriginMarker(`inst_${"b".repeat(32)}`, "BI-1")}`;
+    const outcome = await closeAllowedAcceptanceItem({
+      item: ITEM, decision: decision("allowed"), authorisation: AUTH, agentId: "A", now: NOW,
+      db: db({ status: "awaiting-acceptance", organizationId: null, body }), complete: complete as never,
+    });
+    expect(outcome).toEqual({ outcome: "skipped", reason: "owned-by-peer-installation" });
     expect(complete).not.toHaveBeenCalled();
   });
 

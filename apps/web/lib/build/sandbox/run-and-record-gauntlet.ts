@@ -90,7 +90,24 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
       },
     }).catch(() => {});
   }
-  const outcome = await runGuardGauntlet({ exec: execInSandbox, containerId: build.sandboxId, workdir });
+
+  // A change to what grades it goes on the trail, and into the evidence the
+  // reviewer resolves, whatever the verdict (spec 2026-10-21, AC-7).
+  const { classifyGraderTouches, summarizeGraderTouches } = await import("./grader-touching-paths");
+  const graderTouches = classifyGraderTouches(diffPatch ?? "");
+  const graderSummary = summarizeGraderTouches(graderTouches);
+  if (graderSummary) {
+    await prisma.buildActivity.create({
+      data: { buildId: build.buildId, tool: "grader_touching", summary: graderSummary.slice(0, 1000) },
+    }).catch(() => {});
+  }
+
+  const outcome = await runGuardGauntlet({
+    exec: execInSandbox,
+    gitExec: (containerId, command) => execInSandbox(containerId, wrapSandboxGitCommand(command)),
+    containerId: build.sandboxId,
+    workdir,
+  });
   // Could-not-run is not a failing verdict, and must not be recorded as one.
   if (!outcome.ran) return { ran: false, reason: outcome.reason };
   if (!outcome.treeSha) {
@@ -125,15 +142,19 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
     mode: "single-branch",
     status: outcome.passed ? "passed" : "failed",
     summary: summarizeGauntlet({ passed: outcome.passed, failedGuards: outcome.failedGuards, treeSha: outcome.treeSha }),
-    evidence: buildGauntletEvidence({
-      identity,
-      workdir: outcome.workdir,
-      passed: outcome.passed,
-      failedGuards: outcome.failedGuards,
-      output: outcome.output,
-      durationMs: outcome.durationMs,
-      ...(binding ? { binding } : {}),
-    }),
+    evidence: {
+      ...buildGauntletEvidence({
+        identity,
+        workdir: outcome.workdir,
+        passed: outcome.passed,
+        failedGuards: outcome.failedGuards,
+        output: outcome.output,
+        durationMs: outcome.durationMs,
+        ...(binding ? { binding } : {}),
+      }),
+      graderBaseSha: outcome.graderBaseSha,
+      graderTouches,
+    },
   });
   return {
     ran: true,
@@ -158,6 +179,8 @@ export async function recordScopedTestsEvidence(input: {
   const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
   const { IN_PLATFORM_EVIDENCE_VALIDITY_MS } = await import("./guard-gauntlet-evidence");
   const passed = input.result.passed && input.result.typeCheckPassed;
+  const { classifyScopedTestResult, SCOPED_TEST_RUNNER_IDENTITY } = await import("../scoped-test-failure");
+  const verdict = classifyScopedTestResult(input.result);
   const completedAt = new Date();
   const ran = scopedTestsRunDescription(input.changedFiles, input.result);
   const record = await recordLocalIntegrationResult({
@@ -169,7 +192,7 @@ export async function recordScopedTestsEvidence(input: {
     candidateBranch: input.build.buildBranch ?? `build/${input.build.buildId}`,
     mode: "single-branch",
     status: passed ? "passed" : "failed",
-    summary: `Scoped tests ${passed ? "passed" : "failed"} (${input.result.scope ?? "full"}) for tree ${input.binding.headTreeHash.slice(0, 12)}`,
+    summary: `Scoped tests ${passed ? "passed" : "failed"} (${input.result.scope ?? "none"}) for tree ${input.binding.headTreeHash.slice(0, 12)}`,
     evidence: {
       tier: "in-platform-scoped-tests",
       coverage: ran.coverage,
@@ -180,6 +203,10 @@ export async function recordScopedTestsEvidence(input: {
       evidenceValidity: { expiresAt: new Date(completedAt.getTime() + IN_PLATFORM_EVIDENCE_VALIDITY_MS).toISOString() },
       passed,
       gatePassed: passed,
+      // BI-33B54E4B: what the run concluded, so an unchanged tree reuses it.
+      runner: SCOPED_TEST_RUNNER_IDENTITY,
+      failure: verdict.kind,
+      failingTests: "failingTests" in verdict ? verdict.failingTests : [],
     },
   });
   return (record as { id?: string } | null)?.id ?? null;
@@ -207,9 +234,9 @@ export function scopedTestsRunDescription(
         : "tsc --noEmit (apps/web) — none of the changed files are in apps/web, so it does not cover this change",
       unitTests
         ? `vitest run (${result.scopedTestsRun} test file(s) covering the changed files)`
-        : result.scope === "none"
-          ? "no tests ran: no test file covers the changed files"
-          : "full test suite (informational; not gated)",
+        : changedFiles.length === 0
+          ? "no tests ran: the build's changed files are unknown"
+          : "no tests ran: no test file covers the changed files",
     ],
   };
 }
