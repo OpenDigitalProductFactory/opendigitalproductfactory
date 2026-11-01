@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Exact-response routing feedback
@@ -83,6 +83,15 @@ Use Serializable isolation for the domain transaction, including saved message/b
 Any authorization removal, relationship change, missing actor or missing room admission denies the write without inference or provider-policy changes. The audit has its existing retention/lifecycle contract; telemetry expiry does not fabricate a still-actionable response rating.
 
 ## Compact UX and reporting
+
+### Inspect the answer from a routing decision
+
+The routing receipt can offer **Review answer** for an exact attempt with a recorded assistant-message id. This replaces the current inspector content in the same overlay; **Back to decision** restores its context and focus. It does not stack a second modal or navigate away from the provider/task/data/time scope.
+
+Before displaying answer text, a separate `getResponseFeedbackAnswer` read uses the same current identity, thread ownership, Workroom content admission, exact successful producer, uniqueness and stored-content digest checks as feedback eligibility. Its DTO contains only the authorized saved answer content and safe feedback state. The routine feedback-state read and general routing projection never include answer text. Refused, missing, edited, expired or ambiguous evidence exposes no answer and offers no rating. The message id is an untrusted locator, never authority.
+
+A thin authenticated portal action calls this read. The existing `get_response_feedback` tool gains explicit `includeAnswer: true` opt-in, default false, for parity through the same seam; its authorization is unchanged. The existing response-feedback authorized surface may expose this read explicitly. No new route, broad read capability, inference or policy writer is introduced. The operator can review the saved answer before choosing Kept / Needs revision in its context. Tests must cover unauthorized answer reads, changed digest/binding, explicit opt-in and overlay back/close keyboard focus. This clarification preserves OBJ-RF-1/2 and AC-1 through AC-6; independent current design/architecture/plan review is required before implementing this added reader.
+
 
 Show Kept / Needs revision beside an eligible saved response, with a visible selected state, saving/saved/error status and a correction/clear affordance. Use real buttons, pressed state, existing theme tokens and at least 44×44 targets. Announce status without moving focus. No confirmation popup or mandatory text form is needed for this reversible action. Raw IDs, provider details and correction history belong in the existing inspector disclosure. An unavailable control explains the bounded missing evidence; it does not invite the operator to guess a provider or choose a fallback row.
 
