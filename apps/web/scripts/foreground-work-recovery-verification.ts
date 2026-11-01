@@ -80,10 +80,13 @@ export async function verifyForegroundRecovery() {
     check(assetHash === createHash("sha256").update(readFileSync(assetFile)).digest("hex"), "Served static bytes differ from the declared build");
     evidence.servedAsset = { path: asset.pathname, sha256: assetHash };
     const open = page.getByRole("button", { name: "Open AI Coworker", exact: true });
-    if (await open.isVisible()) await open.click();
     const panel = page.getByRole("complementary", { name: "AI coworker panel", exact: true });
     // Workspace can own an inline main-room panel rather than the docked shell.
     const composer = page.locator("textarea:visible").last();
+    // DOMContentLoaded can precede the client launcher. Wait for either actual
+    // surface before deciding whether the dock needs to be opened.
+    await composer.or(open).first().waitFor({ state: "visible", timeout: 45_000 });
+    if (!await composer.isVisible()) await open.click();
     await composer.fill(prompt, { timeout: 45_000 });
     const acceptedResponse = page.waitForResponse(response => response.url().endsWith("/api/agent/send") && response.request().method() === "POST", { timeout: 45_000 });
     unresolvedClientSubmissions++;

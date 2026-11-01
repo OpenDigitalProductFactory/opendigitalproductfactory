@@ -347,3 +347,14 @@ success requires exactly all cases including settled cleanup. Missing, duplicate
 unexpected or empty coverage fails. Source controls first failed for missing
 selection, case completeness and mandatory workflow wiring, then passed. This
 source wiring is not itself evidence that any served scenario completed.
+
+Diagnostic41309326130 failed before composing or submitting a request. Its
+failure capture shows the closed dock and visible AI Coworker launcher; zero
+provider requests and no task snapshots/metadata comparison were recorded.
+Fixture settlement and cleanup completed. The harness had probed launcher
+visibility immediately after DOMContentLoaded and could skip opening the dock
+before its client launcher appeared. It now waits for either the actual composer
+or launcher, opens the dock only if needed, then fills the composer. This uses
+the installed Playwright locator.or/first visibility contract, not a fixed sleep.
+The precise413078 metadata mismatch remains unproven; a new served run must
+exercise the corrected launcher wait and the reviewed observer boundary.
