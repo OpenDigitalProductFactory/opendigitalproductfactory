@@ -20,7 +20,7 @@ import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
 import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
 import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
 import type { RemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
-import { foregroundExecutionContext } from "@/lib/agent/foreground-work-context";
+import { foregroundExecutionContext } from "@/lib/agent/foreground-work-execution-scope";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
