@@ -20,6 +20,10 @@ Extend [owner-attention convergence](2026-08-24-owner-attention-briefing-converg
 
 **OBJ-2:** Keep genuinely urgent owner decisions visible, truthful owner counts, existing audience filtering and quiet/zero-owner behavior.
 
+## Research & Benchmarking
+
+This bounded repair extends an existing product contract rather than adding a feature or adopting a product. The measured internal comparators are the native expense-entry form and the canonical owner-attention convergence design above. Adopt the form's single native entry route and existing requirements, and the convergence design's owner-only projection and silence at zero. Reject a separate Finance attention classifier, a new urgency score, and a second expense workflow. The native design-intelligence query for contextual task help returned no matching UX entry; no external benchmark or provider capability is claimed. Source inspection confirms `isOverrideTier` and `overrideReason` already own urgency, and the briefing loader already owns audience filtering. There is no public API, deployment contract, identity or data model change.
+
 ## Bounded behavior
 
 Recognize Finance only by the path `/finance` or its descendants, removing query and fragment for this check. Other surfaces retain existing behavior. Keep quiet and zero-item branches first: balanced zero remains silent, assertive all-clear remains unchanged.
@@ -42,3 +46,5 @@ On Spend and native expense routes, reuse existing localized catalog requirement
 ## Risks and verification
 
 The main risk is suppressing an urgent global decision; canonical override selection and reason tests guard that boundary. Another risk is counting the unshown headline as if it were shown; test both count branches. Retain the 51-custodian/zero-owner loader regression. Test query/fragment and Finance-prefix false positives, native link/catalog requirements, non-Finance behavior, and current-surface preference. Review the final change independently, then exercise the served portal with authorized isolated fixtures. No production expense or authority changes. Rollback is a source revert; no data rollback exists.
+
+The existing coworker bubble is the only presentation surface. Obtain an advisory critique from the catalog's UX Design Critic on the bounded bubble prototype and retain its actual outcome. Record a measured UX-fit manifest or recorded option choice before publication; neither this plan nor the independent source assessment is a native UX approval.
