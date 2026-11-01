@@ -137,12 +137,16 @@ export async function readEngagementPresentConfiguration(agentId: string, db?: P
   const matches = models.filter(m => canonicalLocalModelKey(m.modelId) === canonicalLocalModelKey(ENGAGEMENT_NATIVE_COMPOSITION.logicalModelRef));
   const model = matches.length === 1 ? matches[0] : null;
   const imageCapability = record(model?.capabilities).imageInput, overrides = record(model?.capabilityOverrides);
+  if (account?.providerId === "local" && account.status === "paused")
+    return refuse("local-account-paused: Resume the existing provider-default-local account using supported account controls");
+  if (provider?.status === "inactive")
+    return refuse("local-provider-inactive: Enable the existing local provider using supported account controls");
   if (!config || !["basic", "adequate", "strong"].includes(config.minimumTier) || config.pinnedProviderId && config.pinnedProviderId !== "local"
     || config.pinnedModelId && canonicalLocalModelKey(config.pinnedModelId) !== canonicalLocalModelKey(model?.modelId ?? "")
     || config.residencyPolicy && !["local_only", "any_enabled", "approved_cloud"].includes(config.residencyPolicy)
     || !provider || !["active", "degraded"].includes(provider.status) || provider.retiredAt || !provider.supportsToolUse
     || !account || account.status !== "active" || account.providerId !== "local" || account.executionChannel !== "local-runtime"
-    || account.authMethod !== "none" || account.credentialEntryId != null || !model || !["strong", "frontier"].includes(model.qualityTier ?? "")
+    || account.authMethod !== "local" || account.credentialEntryId != null || !model || !["strong", "frontier"].includes(model.qualityTier ?? "")
     || imageCapability === false || record(imageCapability).support === false || overrides.imageInput === false || record(overrides.imageInput).support === false
     || !model.supportsToolUse || budget.configuredPerTaskLimit <= 2048) return refuse("native-configuration-unavailable");
   const endpoint = provider.baseUrl ?? provider.endpoint;

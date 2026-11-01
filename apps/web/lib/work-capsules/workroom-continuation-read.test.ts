@@ -13,9 +13,9 @@ vi.mock("@/lib/work-management/workroom-shape-claim", () => ({ resolveWorkShapeC
 import { readWorkroomContinuation } from "./workroom-continuation-read.server";
 import { readWorkroomDetail } from "./workroom-detail-read.server";
 import { buildDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
-import { buildContinuationBrief, stageBriefInputFromDefinition } from "@/lib/work-management/stage-briefing";
+import { buildContinuationBrief, CONTINUATION_BRIEF_MAX_TOKENS, stageBriefInputFromDefinition } from "@/lib/work-management/stage-briefing";
 import { getWorkShape, readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
-import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
+import { countTokens } from "@/lib/tak/context-arbitrator";
 
 const now = new Date("2026-10-31T18:00:00Z");
 const expires = new Date("2026-10-31T18:30:00Z");
@@ -94,7 +94,7 @@ describe("bounded Workroom continuation", () => {
         resultPath: ["data", "capsule", "workspaceState", "executorCheckpoint"],
       },
     } } });
-    expect(clampToolResultForModel(result).truncated).toBe(false);
+    expect(countTokens(JSON.stringify(result))).toBeLessThanOrEqual(CONTINUATION_BRIEF_MAX_TOKENS);
     expect(db.scheduledAgentTask.findUnique).not.toHaveBeenCalled();
   });
 
@@ -143,10 +143,38 @@ describe("bounded Workroom continuation", () => {
       .toMatchObject({ success: true, data: { continuationVersion: first.data!.continuationVersion } });
   });
 
-  it("never truncates recorded next actions and risks to squeeze a manual checkpoint into the response", async () => {
+  it("returns a complete manual brief above 4000 characters when it fits the shared token budget", async () => {
+    const { recordedAt, recordedByPrincipalId, ...saved } = { ...executorCheckpoint(),
+      openRisks: ["Required unresolved risk ".repeat(100)] };
+    const shared = buildContinuationBrief({
+      brief: stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective, backlogItemKey: "BI-1",
+        shapeKey: shape.key, shapeVersion: shape.version, definition: readWorkShapeDefinitionContract(shape), stageKey: "sweep" }),
+      identity: { taskId: null, runKey: "run-1", cycleKey: "cycle-1", iteration: null },
+      source: { repositoryFullName: room.repositoryFullName, headSha: room.headSha },
+      owner: { principalId: room.leaseHolderPrincipalId, agentId: null },
+      state: { status: room.status, roomStatus: room.status, leaseExpiresAt: expires.toISOString(), stopReasons: [],
+        budgetUsage: [], nextAction: "review-room-checkpoint-before-stage-work" },
+      advisoryCheckpoint: { scope: "room", stageBinding: "unbound", sourceStatus: "head-matches", reason: null,
+        recordedAt, recordedByPrincipalId, checkpoint: saved,
+        reference: { kind: "executor-checkpoint", id: room.capsuleId, version: "a".repeat(64) },
+        resultPath: ["data", "capsule", "workspaceState", "executorCheckpoint"] },
+    });
+    expect(shared.success).toBe(true);
+    room.workspaceState.executorCheckpoint = { ...saved, recordedAt, recordedByPrincipalId };
+    const result = await readWorkroomContinuation(parameters, "reader", context);
+    expect(result).toMatchObject({ success: true, data: { continuation: {
+      advisoryCheckpoint: { checkpoint: saved }, outcome: "unknown", replay: "not-authorized-by-brief",
+    } } });
+    expect(JSON.stringify(result).length).toBeGreaterThan(4000);
+    expect(countTokens(JSON.stringify(result))).toBeLessThanOrEqual(CONTINUATION_BRIEF_MAX_TOKENS);
+  });
+
+  it("refuses oversized mandatory facts without truncating the manual next action or risks", async () => {
+    room.objective = "Mandatory objective ".repeat(150);
     room.workspaceState.executorCheckpoint = { ...executorCheckpoint(), openRisks: ["Required unresolved risk ".repeat(100)] };
-    expect(await readWorkroomContinuation(parameters, "reader", context))
-      .toMatchObject({ success: false, error: "continuation_budget_exceeded" });
+    const result = await readWorkroomContinuation(parameters, "reader", context);
+    expect(result).toMatchObject({ success: false, error: "continuation_budget_exceeded" });
+    expect(result).not.toHaveProperty("data.continuation");
   });
 
   it("withholds the manual checkpoint when admission is revoked during recovery", async () => {
@@ -176,7 +204,7 @@ describe("bounded Workroom continuation", () => {
     });
     if (!shared.success) throw new Error(shared.message);
     expect(result).toMatchObject({ success: true, data: { continuation: shared.brief } });
-    expect(clampToolResultForModel(result).truncated).toBe(false);
+    expect(countTokens(JSON.stringify(result))).toBeLessThanOrEqual(CONTINUATION_BRIEF_MAX_TOKENS);
   });
 
   it("requires an explicit current branch in a parallel room and uses its task checkpoint, not the room's latest", async () => {
@@ -290,19 +318,45 @@ describe("bounded Workroom continuation", () => {
   });
 
   it("keeps the full response bounded by deferring whole metadata records, never obligations", async () => {
-    db.workroomActivity.findMany.mockResolvedValue(Array.from({ length: 8 }, (_, index) => ({
-      id: `activity-${index}`, kind: "recorded-kind-".repeat(30), sequence: index, recordedAt: now,
-    })));
+    const activities = Array.from({ length: 8 }, (_, index) => ({
+      id: `activity-${index}`, kind: "recorded-kind-".repeat(120), sequence: index, recordedAt: now,
+    }));
+    db.workroomActivity.findMany.mockResolvedValue(activities);
     const result = await readWorkroomContinuation(parameters, "reader", context);
     expect(result.success).toBe(true);
-    expect(clampToolResultForModel(result).truncated).toBe(false);
+    expect(countTokens(JSON.stringify(result))).toBeLessThanOrEqual(CONTINUATION_BRIEF_MAX_TOKENS);
     const data = result.data as { continuation: { doneWhen: string; budgets: unknown; stageTools: unknown };
       activities: unknown[]; activityCoverage: unknown };
+    expect(data.activities.length).toBeGreaterThan(0);
     expect(data.activities.length).toBeLessThan(8);
+    expect(data.activities).toEqual(activities.slice(0, data.activities.length).map(activity => ({ ...activity,
+      recordedAt: now.toISOString(), payloadDeferred: true,
+      detail: { toolName: "get_workroom", arguments: { capsuleId: "WC-1", activityMode: "bounded", activityId: activity.id } },
+    })));
     expect(data.continuation).toMatchObject({ doneWhen: shape.stages.find(stage => stage.key === "sweep")!.advance.condition,
       budgets: shape.budgets, stageTools: shape.stages.find(stage => stage.key === "sweep")!.tools });
     expect(data.activityCoverage).toMatchObject({ complete: false,
       lookup: { toolName: "get_workroom", arguments: { capsuleId: "WC-1", activityMode: "bounded" } } });
+  });
+
+  it("counts response envelope overhead when deferring optional activity metadata", async () => {
+    const baseline = await readWorkroomContinuation(parameters, "reader", context);
+    expect(baseline.success).toBe(true);
+    const activity = { id: "activity-1", kind: "", sequence: 12, recordedAt: now };
+    const row = { ...activity, recordedAt: now.toISOString(), payloadDeferred: true,
+      detail: { toolName: "get_workroom", arguments: { capsuleId: "WC-1", activityMode: "bounded", activityId: activity.id } } };
+    const candidate = { ...baseline, data: { ...baseline.data, activities: [row],
+      activityCoverage: { complete: false, windowLimit: 8, returned: 1,
+        lookup: { toolName: "get_workroom", arguments: { capsuleId: "WC-1", activityMode: "bounded" } } } } };
+    // Calibrate at the estimator's four-character boundary: data alone fits,
+    // but the success/entity/message envelope takes the complete result over.
+    row.kind = "k".repeat(CONTINUATION_BRIEF_MAX_TOKENS * 4 - JSON.stringify(candidate.data).length);
+    expect(countTokens(JSON.stringify(candidate.data))).toBe(CONTINUATION_BRIEF_MAX_TOKENS);
+    expect(countTokens(JSON.stringify(candidate))).toBeGreaterThan(CONTINUATION_BRIEF_MAX_TOKENS);
+    db.workroomActivity.findMany.mockResolvedValue([{ ...activity, kind: row.kind }]);
+    const result = await readWorkroomContinuation(parameters, "reader", context);
+    expect(result).toMatchObject({ success: true, data: { activities: [], activityCoverage: { returned: 0 } } });
+    expect(countTokens(JSON.stringify(result))).toBeLessThanOrEqual(CONTINUATION_BRIEF_MAX_TOKENS);
   });
 
   it("uses current human admission when no agent identity is supplied", async () => {

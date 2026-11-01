@@ -37,6 +37,7 @@ export function buildStepTrigger(step: string, ctx: Record<string, string>): str
     "ai-providers": "AI Providers — choose a business-safe connection",
     "branding": "Branding — logo, colours, tagline",
     "business-context": "Your Business — describe what you do and who you serve",
+    "direction": "Your Direction — mission, vision and a few top-level outcomes",
     "operating-hours": "Operating Hours — when your business is open, and in what timezone",
     "storefront": "Storefront — customer-facing portal",
     "mailroom": "Mailroom — the mailboxes your business reads, and what happens to what arrives",
@@ -62,6 +63,13 @@ export function buildStepTrigger(step: string, ctx: Record<string, string>): str
       ? `${ctx.cooConversationalName} · AI COO`
       : "COO";
     return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace and introduce their standing coworker as ${cooName}. Make clear that the conversational name does not change the coworker's AI identity, permissions, authority, or the owner's accountability. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+  }
+
+  if (step === "direction") {
+    return `[Setup step: ${label}]
+${contextLine}
+
+Explain in plain language that this step records the organization's mission (why it exists), vision (where it wants to be in a few years) and one to three top-level outcomes, each with an optional "how we'll know". Every AI coworker and every business, platform and profession decision is weighed against them. Make clear these are the owner's own words: offer to help word them if asked, but never propose them as decided and never fill the form. Skipping is fine; one reminder stays in Needs you until they are set. Keep it to 2-3 sentences.`;
   }
 
   if (step === "monitoring") {

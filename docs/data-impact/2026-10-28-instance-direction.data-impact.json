@@ -1,0 +1,162 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "BusinessContext.vision and BusinessContext.mission, written only by saveDirectionAction (apps/web/lib/actions/organization-direction.ts) through saveOrganizationDirection (apps/web/lib/organization-direction/direction.ts); mission is still accepted by /api/business-context/setup for existing callers",
+    "InstanceOutcome rows, written only by saveOrganizationDirection; read by loadOrganizationDirection, the organization-direction attention source, buildOrgContextBundle (apps/web/lib/mcp/org-context-bundle.ts), loadOrgAlignmentCorpora (apps/web/lib/decision-perspective/org-business-gate.ts), the profession and principle_decide ledger fields",
+    "InstanceDirectionRevision rows, appended once per owner save; nothing updates or deletes them",
+    "The Block 0 company-mission PromptTemplate is re-rendered from the direction on each save (apply-mission-prompt.ts); it is a derived copy, not a second source"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: the organization's own statements of purpose and goals, written by its owner",
+    "dataSubjectRights": "Not applicable; the rows describe the organization's direction, not a person. changedByUserId is the saving account and is SET NULL if that user is removed.",
+    "reviewDisposition": "Owner-authored text only. No agent path writes it; fields start empty."
+  },
+  "migration": {
+    "name": "20261028220000_instance_direction",
+    "backfill": "None. Every install starts with an empty vision, no outcomes and no revisions; the owner fills them in. Existing missions are untouched and are cited as direction:mission@v0 until the first save.",
+    "rollback": "Forward-only and additive. Older code neither reads nor writes the column or the two tables."
+  },
+  "tests": [
+    "apps/web/lib/organization-direction/direction.test.ts",
+    "apps/web/lib/actions/organization-direction.test.ts",
+    "apps/web/lib/attention/sources/organization-direction.test.ts",
+    "apps/web/lib/mcp/org-context-bundle.test.ts",
+    "apps/web/lib/decision-perspective/org-business-gate.test.ts",
+    "apps/web/lib/mcp/packs/profession-decision-pack.test.ts",
+    "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+    "apps/web/components/admin/DirectionPanel.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:business-context",
+      "prismaModel": "BusinessContext",
+      "lifecycleDisposition": "Existing model; the column follows the organization's business context row.",
+      "fields": [
+        {
+          "fieldId": "data:business-context#vision",
+          "resolution": "governed",
+          "reason": "Where the organization is heading, in the owner's words; beside mission (WWMD DI-5C99BCBB0AF4).",
+          "provenance": "BI-916216E7",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:instance-outcome",
+      "prismaModel": "InstanceOutcome",
+      "lifecycleDisposition": "New model on the record lifecycle convention: a removed outcome becomes retired with lifecycleAt set and is never deleted, because Epic.servesInstanceOutcomeId (BI-7CD178F8) will reference it. Cascades with its organization.",
+      "fields": [
+        {
+          "fieldId": "data:instance-outcome#id",
+          "resolution": "governed",
+          "reason": "Semantic IO-XXXXXXXX id minted in app code; the epic link target.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-outcome#organizationId",
+          "resolution": "governed",
+          "reason": "Owning organization; indexed with lifecycle.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-outcome#statement",
+          "resolution": "governed",
+          "reason": "What will be true, and for whom.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-outcome#measure",
+          "resolution": "governed",
+          "reason": "Optional plain-language \"how we'll know\".",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-outcome#ordinal",
+          "resolution": "governed",
+          "reason": "Owner's order.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-outcome#lifecycle",
+          "resolution": "governed",
+          "reason": "RecordLifecycle; active or retired.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-outcome#lifecycleAt",
+          "resolution": "governed",
+          "reason": "When the outcome was retired.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:instance-direction-revision",
+      "prismaModel": "InstanceDirectionRevision",
+      "lifecycleDisposition": "New append-only history; one row per owner save, unique per (organizationId, version). Cascades with its organization.",
+      "fields": [
+        {
+          "fieldId": "data:instance-direction-revision#version",
+          "resolution": "governed",
+          "reason": "Monotonic per organization; decisions cite direction@vN.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-direction-revision#organizationId",
+          "resolution": "governed",
+          "reason": "Owning organization; indexed.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-direction-revision#mission",
+          "resolution": "governed",
+          "reason": "Mission as saved.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-direction-revision#vision",
+          "resolution": "governed",
+          "reason": "Vision as saved.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-direction-revision#outcomes",
+          "resolution": "governed",
+          "reason": "Snapshot of the active outcomes after the save.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-direction-revision#changedByUserId",
+          "resolution": "governed",
+          "reason": "The saving account; indexed, SET NULL on user removal.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        },
+        {
+          "fieldId": "data:instance-direction-revision#source",
+          "resolution": "governed",
+          "reason": "settings or setup; closed set by CHECK.",
+          "provenance": "BI-916216E7",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

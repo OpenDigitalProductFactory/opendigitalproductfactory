@@ -13,6 +13,7 @@ vi.mock("@/lib/performance/business-performance-provider", () => ({
   loadBusinessPerformance: vi.fn(),
 }));
 
+vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: async () => ({ language: "en-US", formatLocale: "en-US" }) }));
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
 }));
@@ -43,7 +44,7 @@ describe("PerformancePage", () => {
     expect(html).toContain("data-owner-first-next-action");
     expect(html).toContain("data-dpf-primary-action");
     expect(html).not.toContain(">0<");
-    expect(loadBusinessPerformance).toHaveBeenCalledWith({ userId: "user-owner" });
+    expect(loadBusinessPerformance).toHaveBeenCalledWith({ userId: "user-owner", formatLocale: "en-US" });
   });
 
   it("says the surface is unavailable (not pending) when the archetype has no metrics engine", async () => {
@@ -72,4 +73,14 @@ describe("PerformancePage", () => {
     expect(html).not.toContain("<nav");
     expect(html).not.toContain("data-component=\"app-rail\"");
   });
+});
+
+it("missing software history points to the supported month-specific Finance workflow without numeric results", async () => {
+  vi.mocked(auth).mockResolvedValue({ user: { id: "owner" } } as never);
+  vi.mocked(loadBusinessPerformance).mockResolvedValue({ status: "not-configured", applicable: true,
+    reason: "No eligible entries are recorded for this period.", asOf: null, metricValues: [], source: "business-performance-read-model",
+    nextAction: { href: "/finance/reports/general-ledger?period=2026-10", label: "Review finance records" } });
+  const html = renderToStaticMarkup(await PerformancePage());
+  expect(html).toContain('href="/finance/reports/general-ledger?period=2026-10"');
+  expect(html).toContain("Review finance records"); expect(html).not.toContain("$0");
 });

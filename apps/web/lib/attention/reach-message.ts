@@ -59,6 +59,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "agent-toolchain": "A computer's DPF tools have stopped updating",
   "provider-credential": "A connection needs reconnecting",
   "contribution-setup": "GitHub not connected",
+  "organization-direction": "Your mission, vision and outcomes are not set yet",
   "compliance-source-freshness": "Compliance evidence is going out of date",
   "workroom-stall": "A room full of work has stopped moving",
   "workroom-rebind": "A room is waiting for you to approve a newer version of its work",
