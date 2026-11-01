@@ -20,9 +20,9 @@
     "multiMajorNames": 29
   },
   "lastBudgetRaise": {
-    "reason": "thread-stream 4.2.0 floated by this lockfile refresh depends on real-require 1.0.0 while pino 10.3.1 still depends on real-require 0.2.0; those majors cannot be deduped. Same-major caniuse-lite and baseline-browser-mapping copies were deduped.",
+    "reason": "BI-7F3E4389: retain merged PR6785 platform dependency reductions and its compatibility pins; mobile +1 undici component restores the integration-shared closure required by validators, with no new mobile duplication. Platform budgets remain 884/59/61/29 and mobile component budget is 950.",
     "budgets": {
-      "resolvedComponents": 889,
+      "resolvedComponents": 884,
       "duplicatedNames": 59,
       "excessInstances": 61,
       "multiMajorNames": 29
@@ -36,8 +36,8 @@
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",
       "totals": {
-        "resolvedComponents": 949,
-        "uniqueNames": 847,
+        "resolvedComponents": 950,
+        "uniqueNames": 848,
         "duplicatedNames": 86,
         "excessInstances": 102,
         "multiMajorNames": 46,
@@ -49,7 +49,7 @@
         "workspaces": 1
       },
       "budgets": {
-        "resolvedComponents": 949,
+        "resolvedComponents": 950,
         "duplicatedNames": 86,
         "excessInstances": 102,
         "multiMajorNames": 46
