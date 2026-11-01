@@ -34,6 +34,21 @@ function workedExample(): JsonObject {
   return JSON.parse(readFileSync(WORKED_EXAMPLE_PATH, "utf8")) as JsonObject;
 }
 
+describe("registered camelCase tool compatibility (BI-D37B2C13)", () => {
+  it.each(["reviewDesignDoc", "reviewBuildPlan", "saveBuildEvidence", "run_sandbox_tests"])("preserves the exact registered name %s", (name) => {
+    const doc = workedExample();
+    (doc.stages as JsonObject[])[0].tools = [name];
+    const parsed = gppShapeDocumentSchema.parse(doc);
+    expect(parsed.stages[0].tools).toEqual([name]);
+  });
+
+  it.each(["../reviewDesignDoc", "review/DesignDoc", "review.DesignDoc", "review DesignDoc", "ReviewDesignDoc", "_reviewDesignDoc", "reviewDesignDoc;exit"])("rejects unsafe or unsupported name %s", (name) => {
+    const doc = workedExample();
+    (doc.stages as JsonObject[])[0].tools = [name];
+    expect(gppShapeDocumentSchema.safeParse(doc).success).toBe(false);
+  });
+});
+
 /** A document that carries every optional construct, so every object in §4.2 is present once. */
 function maximalDocument(): JsonObject {
   const doc = workedExample();
@@ -246,7 +261,7 @@ describe("GPP shape document schema", () => {
     expect(defs.slug.pattern).toBe("^[a-z0-9][a-z0-9-]*$");
     expect(defs.semver.pattern).toBe("^\\d+\\.\\d+\\.\\d+$");
     expect(defs.principalRef.pattern).toBe("^(agent|role|person):.+$");
-    expect(defs.toolName.pattern).toBe("^[a-z][a-z0-9_]*$");
+    expect(defs.toolName.pattern).toBe("^[a-z][a-zA-Z0-9_]*$");
     expect(defs.authority.enum).toEqual(["wwmd", "wwwd", "wsid"]);
     expect(((schema.properties as Record<string, JsonObject>).format).const).toBe("gpp-shape/0.1");
   });
