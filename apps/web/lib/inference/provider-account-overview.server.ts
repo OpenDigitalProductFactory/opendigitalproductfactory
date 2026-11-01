@@ -1,4 +1,6 @@
 import "server-only";
+import { projectAccountReadiness } from "./provider-account-readiness";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { prisma } from "@dpf/db";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 import { getT } from "@/lib/i18n/t.server";
@@ -9,6 +11,7 @@ import type { ProviderRoutingControlView } from "@/lib/routing/provider-routing-
 import { connectionPosture, loadBusinessSuitabilityContext, providerCatalogFacts } from "@/lib/routing/provider-suitability/provider-onboarding-data";
 import { PROVIDER_TRUST_CLAIM_KEYS, resolveProviderTrustEvidence } from "@/lib/routing/provider-suitability/evidence";
 import { resolveProviderTrustFacts } from "@/lib/routing/provider-suitability/provider-trust";
+import { resolveRuntimeConnectionStatus } from "@/lib/routing/provider-suitability/onboarding-recommendation";
 import { projectProviderConnectionReview } from "@/lib/routing/provider-suitability/provider-connection-review";
 import { loadProviderCapacitySnapshots } from "@/lib/routing/provider-capacity/store";
 import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-exclude";
@@ -53,7 +56,8 @@ export async function loadProviderAccountOverview(input: {
       records: source.trustEvidence, requiredClaims: [...PROVIDER_TRUST_CLAIM_KEYS], supplierContract: source.supplierContract ?? undefined, now }) : null;
     const review = source && resolved ? projectProviderConnectionReview({ ...business,
       facts: resolveProviderTrustFacts({ catalog: providerCatalogFacts(source.provider), connection: resolved.posture }) }) : null;
-    const control = account.isDefault ? input.controls.get(account.providerId) : undefined;
+    const providerControl = input.controls.get(account.providerId);
+    const control = account.isDefault ? providerControl : undefined;
     const ownedHealth = capacity?.get(accountRuntimeKey(account.providerId, account.connectionId));
     const ownedRestriction = capacityRoutingExclusionReason(ownedHealth, now.getTime());
     const providerLimit = capacity?.get(account.providerId);
@@ -61,7 +65,7 @@ export async function loadProviderAccountOverview(input: {
       && capacityRoutingExclusionReason(providerLimit, now.getTime()) ? providerLimit : null;
     const credentialNeedsRenewal = account.credential?.status === "expired"
       || Boolean(account.credential?.tokenExpiresAt && Date.parse(account.credential.tokenExpiresAt) <= now.getTime());
-    const additionalSharedControl = !account.isDefault ? input.controls.get(account.providerId) : undefined;
+    const additionalSharedControl = !account.isDefault ? providerControl : undefined;
     const sharedRestrictions = additionalSharedControl?.restrictions.filter(restriction =>
       ["quota", "quota-recovery", "local-only", "host-capacity"].includes(restriction.key)) ?? [];
     const recoveryAction = ownedHealth?.action === "reconnect" ? ["oauth", "oauth2_authorization_code"].includes(account.authMethod) ? input.copy.signIn : input.copy.reviewConnectionSettings
@@ -85,7 +89,32 @@ export async function loadProviderAccountOverview(input: {
     const catalogCount = summary?.totalModels;
     const modelSummary = account.modelsVerifiedAt ? `${accessible.length} ${input.copy.verifiedModels}`
       : catalogCount ? `${catalogCount} ${input.copy.catalogModels} · ${input.copy.notVerified}` : input.copy.notVerified;
+    const readinessStatus = account.isDefault && account.status === "unconfigured"
+      ? resolveRuntimeConnectionStatus(pw.provider.status, account.status) : account.status;
+    const readiness = projectAccountReadiness({ status: readinessStatus, providerStatus: pw.provider.status,
+      requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
+      hasCredential: Boolean(account.credential?.hasUsableMaterial || (account.isDefault && pw.credential?.hasUsableMaterial)),
+      verifiedModelCount: account.modelsVerifiedAt ? accessible.length : undefined,
+      credentialNeedsRenewal, healthAvailable: capacity !== null && Boolean(providerControl),
+      capacity: ownedHealth, sharedCapacity: account.isDefault ? providerLimit : sharedLimit ?? undefined,
+      control, sharedRestrictions, now: now.getTime(), copy: input.copy });
+    const authLabel = isLocalProviderId(account.providerId) ? input.copy.localConnection
+      : account.authMethod === "api-key" ? input.copy.apiKeyMethod
+        : account.authMethod === "workload-identity" ? input.copy.workloadMethod : input.copy.oauthMethod;
     return [{
+      readiness,
+      connectionSummary: `${authLabel} · ${isLocalProviderId(account.providerId) ? input.copy.localConnection
+        : account.credential?.hasUsableMaterial || (account.isDefault && pw.credential?.hasUsableMaterial) ? input.copy.connectionSaved : input.copy.needsSetup}`,
+      lastCheckedAt: ownedHealth?.observedAtMs ? new Date(ownedHealth.observedAtMs).toISOString() : null,
+      lastSucceededAt: ownedHealth?.lastSuccessAtMs ? new Date(ownedHealth.lastSuccessAtMs).toISOString() : null,
+      quotaRecheckAt: quotaView ? quotaView.nextCheckAt
+        : control?.restrictions.find(restriction => restriction.key === "quota-recovery")?.until ?? null,
+      eligibilitySummary: control?.eligibility.reason ?? (["temporary-wait", "paused", "action-required"].includes(readiness.state)
+        ? input.copy.notRouting : input.copy.accountEligibilityUnconfirmed),
+      nextActionLabel: recoveryAction ?? (control?.healthStatus === "billing" ? input.copy.reviewAccountBilling : readiness.state === "temporary-wait" ? input.copy.reviewAvailability
+        : readiness.state === "paused" ? input.copy.reviewPause
+          : readiness.state === "action-required" ? input.copy.reviewConnectionSettings
+            : readiness.state === "unverified" || !account.modelsVerifiedAt ? input.copy.reviewAndVerify : input.copy.viewAccount),
       connectionId: account.connectionId, providerId: account.providerId, isDefault: account.isDefault,
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,
       modelsVerifiedAt: account.modelsVerifiedAt, lastReviewedAt: account.lastReviewedAt, supplierContractId: account.supplierContractId,
@@ -111,6 +140,7 @@ export async function loadProviderAccountOverview(input: {
         models: quotaView?.models ?? [], selectedModelId: quotaView?.selectedModelId ?? summary?.representativeModelId ?? null,
         hourly: quotaView?.hourly ?? false,
         canCheck: account.isDefault && account.status === "active" && Boolean(account.credential?.hasUsableMaterial)
+          && ["active", "degraded"].includes(pw.provider.status)
           && Boolean(quotaView?.models.length) && !credentialNeedsRenewal && !(ownedHealth && isAccountCapacityState(ownedHealth.state)),
         lastCheckAt: quotaView?.lastCheckAt ?? null, nextCheckAt: quotaView?.nextCheckAt ?? null, lastResult: quotaView?.lastResult ?? null,
         checkedModelId: proof?.modelId ?? null, checkedAt: proof ? new Date(proof.observedAt).toISOString() : null,
