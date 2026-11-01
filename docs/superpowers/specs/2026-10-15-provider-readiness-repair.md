@@ -117,6 +117,10 @@ Tests were added before production edits: 12 failed while 17 controls passed. Af
 
 Served theme/mobile/keyboard measurements and the original UX engagement remain owed. The earlier quota-executor capture of a canonical-account versus legacy-control mismatch is historical negative evidence. The separate quota repair subsequently passed its isolated served fixture checks and merged in PR #6801; that does not establish real provider availability. The parent readiness and business-email acceptance remain open.
 
+### Mobile label completeness
+
+Exact-source cloud run 41294946163 passed on 3ac4cd66b796bc060b3a322ab31432c14486a330, including the production build, 216 eligible route measurements and 16 synthetic recovery scenarios. Visual inspection of its 320px mobile capture exposed truncation of the primary status and allowed-work badges. Page-width and accessibility checks did not detect that defect. Give both cells the existing DataTable `mobileFullWidth` layout, retaining the shared StatusBadge, desktop structure and all numeric budgets. Verify the resulting full labels in current-source mobile captures in both themes before handoff. Synthetic recovery evidence does not establish real subscription capacity or fulfill original engagement CE-9A18E31A.
+
 ## October 31 integration with delivered quota controls
 
 The quota repair merged as `10da4ec877fd362f0455a0865c9e2a9f3b853cf7` after protected CI `41259182040` passed. Its completed room WC-2CCBB706 was archived before the ordinary claims for the shared files were admitted to WC-80CD8A18. The first conflicting claim was refused and no force claim was used.

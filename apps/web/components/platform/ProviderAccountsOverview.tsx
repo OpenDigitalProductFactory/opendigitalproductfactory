@@ -68,13 +68,13 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
         && supportsAccount(catalogById.get(row.providerId)) &&
         <button type="button" className="block py-2 text-xs text-[var(--dpf-accent)] disabled:opacity-50" disabled={pending} onClick={event => beginAccount(catalogById.get(row.providerId)!, event.currentTarget)}>{copy.addAccount}</button>}
     </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
-    { key: "status", header: copy.status ?? copy.statusAndRouting ?? copy.readiness, cell: row => <div className="space-y-2">
+    { key: "status", header: copy.status ?? copy.statusAndRouting ?? copy.readiness, mobileFullWidth: true, cell: row => <div className="space-y-2">
       <StatusBadge domain="providerAccountReadiness" status={row.readiness?.state ?? "unverified"}
         label={row.readiness?.label ?? row.statusLabel} variant="solid" size="md" uppercase={false} />
       {row.readiness?.summary && <p className="m-0 text-sm">{row.readiness.summary}</p>}
       {row.eligibilitySummary && <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.eligibilitySummary}</p>}
     </div> },
-    { key: "allowed", header: copy.modelsAndWork ?? copy.allowedWork, cell: row => <div className="space-y-2">
+    { key: "allowed", header: copy.modelsAndWork ?? copy.allowedWork, mobileFullWidth: true, cell: row => <div className="space-y-2">
       <p className="m-0 text-sm">{row.modelSummary}</p>
       <StatusBadge intent="neutral" label={row.allowedWork} />
       <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</p>
