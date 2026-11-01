@@ -33,6 +33,19 @@ beforeEach(() => {
 });
 
 describe("searchSkillEvidence", () => {
+  it("excludes explicitly unverified diagnostic drafts from the positive evidence collection", async () => {
+    prismaMock.taskRun.findMany.mockResolvedValue([{ id: "task-row", taskRunId: "TR-current", threadId: "thread-current",
+      status: "failed", startedAt: dt("2026-10-31T12:00:00Z"), createdAt: dt("2026-10-31T12:00:00Z") }]);
+    prismaMock.taskArtifact.findMany.mockResolvedValue([
+      { id: "quarantine", taskRunId: "task-row", name: "Unverified draft", parts: [{ text: "UNVERIFIED_PRIVATE_DRAFT" }],
+        metadata: { kind: "unverified-evidence-draft" }, createdAt: dt("2026-10-31T12:01:00Z") },
+      { id: "normal", taskRunId: "task-row", name: "Ordinary evidence", description: "Recorded result", metadata: {}, createdAt: dt("2026-10-31T12:02:00Z") },
+    ]);
+    const results = await searchSkillEvidence({ taskRunId: "TR-current", limit: 10 });
+    expect(results.some(result => result.id === "normal")).toBe(true);
+    expect(JSON.stringify(results)).not.toContain("UNVERIFIED_PRIVATE_DRAFT");
+    expect(results.some(result => result.id === "quarantine")).toBe(false);
+  });
   it("returns normalized skill evidence newest-first across usage, tools, proposals, and revisions", async () => {
     prismaMock.skillUsageEvent.findMany.mockResolvedValue([
       {
