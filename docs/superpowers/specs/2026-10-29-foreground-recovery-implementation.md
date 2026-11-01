@@ -147,3 +147,22 @@ when that URL is absent; mocks are not database proof. Final exact gate,
 independent source reaffirmation and all owed UX/served business evidence remain
 required before delivery acceptance. The historical Finance request remains
 unbound and is not recovered by these new fixtures.
+
+November 1 verification ran all four actual PostgreSQL cases on source
+96c458fd869bcd1f950c3f310e33afee971894d6 in its admitted disposable preview.
+All four passed with no skips. The preview later lost its lease after
+initialization, before authenticated page and automatic-resume acceptance;
+those checks remain unrun. Keep database evidence separate from served UX.
+
+A distinct private COO draft on canonical7396 returned the requested agenda
+but also answered an older failed request. The historical run's settlement
+is unknown; that text does not prove it resumed. Actual sendMessage regression
+tests first failed for missing current-row pinning and missing historical
+context labels. Current input is now pinned once by persisted message ID after
+history compaction, with older user requests labelled as context. The prompt
+binds the assignment to that stable marker rather than final message position:
+later tool-failure hints are user-role messages too. An actual loop-continuation
+regression loses the binding when the positional behavior is restored and
+passes with the stable marker. This preserves existing current-input tool
+authority and does not invent outcomes for excluded historical failure notices.
+Real model behavior and the full workflow still require served verification.

@@ -239,12 +239,14 @@ import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 import { withForegroundWork } from "@/lib/agent/foreground-work-context";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 
 const mockPrisma = prisma as any;
 
 beforeEach(() => {
   setRoomAuthority({});
   vi.clearAllMocks();
+  vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(false);
   mockPrisma.$transaction = vi.fn(async (write: (db: unknown) => Promise<unknown>) => write(mockPrisma));
   mockPrisma.$queryRaw.mockResolvedValue([{ id: "run-record" }]);
   vi.mocked(auth).mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } } as never);
@@ -366,6 +368,31 @@ describe("retained foreground production response publication", () => {
     expect(result).toMatchObject({ error: expect.stringContaining("Build Studio") });
   });
 
+  it.each([[true, false], [false, false], [true, true], [false, true]])("pins the accepted assignment once and marks older unanswered requests as context (window contains current: %s, unified: %s)", async (includesCurrent, unified) => {
+    retainedTurn();
+    vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(unified);
+    const content = "Separate task: draft a private agenda only. Do not resume the earlier approval check.";
+    const accepted = { id: "user-msg-1", role: "user", content, taskRunId: "run-123", createdAt: new Date() };
+    mockPrisma.agentMessage.findFirst.mockResolvedValue(accepted);
+    mockPrisma.agentMessage.findMany.mockResolvedValue([
+      ...(includesCurrent ? [accepted] : []),
+      { id: "old-unanswered", role: "user", content: "Check the earlier approval." },
+    ]);
+    vi.mocked(routeAndCall).mockResolvedValueOnce({ content: "Private agenda", providerId: "ollama-local", modelId: "fixture",
+      inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {} } as never);
+
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/admin", acceptedUserMessageId: accepted.id }));
+
+    const [messages, prompt] = vi.mocked(routeAndCall).mock.calls[0]!;
+    expect(messages.at(-1)).toMatchObject({ role: "user", content: `${content}\n\nCurrent assignment [user-msg-1]` });
+    expect(messages.filter(message => String(message.content).endsWith("Current assignment [user-msg-1]"))).toHaveLength(1);
+    expect(messages.find(message => String(message.content).includes("Check the earlier approval."))?.content)
+      .toContain("Earlier user message (context only)");
+    expect(prompt).toContain("The user message marked Current assignment [user-msg-1] is the current assignment");
+    expect(prompt).toContain("do not infer that earlier work completed or resumed");
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
+
   it.each([true, false])("fences a retained special command's mutations and response together (%s)", async canceled => {
     const run = retainedTurn();
     mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content: "re-enable", taskRunId: "run-123", createdAt: new Date() });
@@ -382,6 +409,42 @@ describe("retained foreground production response publication", () => {
     expect(mockPrisma.agentMessage.create).toHaveBeenCalledTimes(canceled ? 0 : 1);
     expect(run.status).toBe(canceled ? "canceled" : "completed");
     if (!canceled) expect(failure).toBeUndefined();
+  });
+
+  it("keeps the accepted assignment identifiable after a real loop tool-failure hint is appended", async () => {
+    retainedTurn();
+    vi.mocked(getAvailableTools).mockResolvedValue([{ name: "read_fixture", description: "Read synthetic fixture",
+      inputSchema: {}, requiredCapability: "view_platform", executionMode: "immediate", sideEffect: false }] as never);
+    vi.mocked(governedExecuteTool).mockResolvedValueOnce({ success: false, error: "fixture_read_failed", message: "Synthetic read failed" } as never);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ content: "", providerId: "ollama-local", modelId: "fixture", inputTokens: 1, outputTokens: 1,
+        toolCalls: [{ id: "read-1", name: "read_fixture", arguments: {} }] } as never)
+      .mockResolvedValueOnce({ content: "The synthetic read failed; its outcome remains unknown.", providerId: "ollama-local", modelId: "fixture", inputTokens: 1, outputTokens: 1 } as never);
+
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" }));
+
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    const [messages, prompt] = vi.mocked(routeAndCall).mock.calls[1]!;
+    expect(messages.at(-1)).toMatchObject({ role: "user", content: expect.stringContaining("Session tool notes") });
+    expect(messages.filter(message => String(message.content).endsWith("Current assignment [user-msg-1]")))
+      .toEqual([{ role: "user", content: "Share it\n\nCurrent assignment [user-msg-1]" }]);
+    expect(prompt).toContain("The user message marked Current assignment [user-msg-1] is the current assignment");
+    expect(prompt).toContain("Later tool results and platform nudges do not replace it");
+  });
+
+  it("preserves a setup welcome's no-tool-nudge behavior through current-assignment assembly", async () => {
+    retainedTurn();
+    const content = "[Setup step: welcome] Brief text-only welcome. No tool calls.";
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content, taskRunId: "run-123", createdAt: new Date() });
+    vi.mocked(getAvailableTools).mockResolvedValue([{ name: "read_fixture", description: "Read synthetic fixture",
+      inputSchema: {}, requiredCapability: "view_platform", executionMode: "immediate", sideEffect: false }] as never);
+    vi.mocked(toolsToOpenAIFormat).mockReturnValue([{ type: "function", function: { name: "read_fixture", description: "Read fixture", parameters: {} } }] as never);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: "Welcome!", providerId: "anthropic", modelId: "fixture", inputTokens: 1, outputTokens: 1 } as never);
+
+    await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/admin", acceptedUserMessageId: "user-msg-1" }));
+
+    expect(routeAndCall).toHaveBeenCalledOnce();
+    expect(governedExecuteTool).not.toHaveBeenCalled();
   });
 
   it.each([true, false])("publishes the real production response only when cancellation has not won (%s)", async (canceled) => {

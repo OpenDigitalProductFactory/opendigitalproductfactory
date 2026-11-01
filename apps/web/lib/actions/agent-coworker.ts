@@ -15,7 +15,7 @@ import {
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
 import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { logTokenUsage } from "@/lib/ai-inference";
-import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
+import { buildCoworkerContextKey, buildCurrentTurnHistory, currentTurnInstruction } from "@/lib/agent-coworker-context";
 import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
 import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
 import {
@@ -470,9 +470,7 @@ export async function sendMessage(input: {
     where: {
       threadId: input.threadId,
       role: { in: ["user", "assistant"] },
-      ...(acceptedUserMsg?.taskRunId ? { AND: [withheld.windowWhere, {
-        OR: [{ createdAt: { lt: acceptedUserMsg.createdAt } }, { id: acceptedUserMsg.id }],
-      }] } : withheld.windowWhere),
+      AND: [withheld.windowWhere, { OR: [{ createdAt: { lt: userMsg.createdAt } }, { id: userMsg.id }] }],
     },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
@@ -492,7 +490,7 @@ export async function sendMessage(input: {
   }
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
   const withheldRecallExclusions = withheld.recallExclusions(windowMessageIds);
-  let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
+  let chatHistory: ChatMessage[] = trimmedMessages.filter(m => m.id !== userMsg.id).map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
   }));
@@ -507,7 +505,7 @@ export async function sendMessage(input: {
   }
 
   // Labels for what each message IS, moved with the messages (BI-40EF7C44).
-  let labelled = labelHistory(chatHistory);
+  let labelled = labelHistory(buildCurrentTurnHistory(chatHistory, trimmedContent, userMsg.id));
 
   // BI-FDECBE0A (EP-8C706944 P1): prepend the thread's durable rolling checkpoint
   // — a persisted running summary of every turn older than the recency window —
@@ -1188,6 +1186,8 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   });
 
+  populatedPrompt = `${populatedPrompt}\n\n${currentTurnInstruction(userMsg.id)}`;
+  systemPromptInstructionSpans.push(currentTurnInstruction(userMsg.id));
   // Merge and apply mode + build phase filtering
   const mergedTools = [...allPlatformTools, ...pageActions];
 
