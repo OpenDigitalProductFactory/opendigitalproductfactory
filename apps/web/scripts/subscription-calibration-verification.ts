@@ -68,8 +68,11 @@ export async function verifySubscriptionCalibrationHistory({ browser, db, fixtur
           await search.fill(fixture.modelId);
           const scores = page.getByRole("button", { name: /Routing Scores/ });
           check(await scores.count() === 1, "Synthetic model routing disclosure is missing or ambiguous");
-          await scores.click();
           const label = page.getByText("Source: Measurements", { exact: true });
+          await label.waitFor({ state: "visible" });
+          await scores.focus(); await page.keyboard.press("Enter");
+          await label.waitFor({ state: "hidden" });
+          await page.keyboard.press("Enter");
           await label.waitFor({ state: "visible" });
           const model = scores.locator("..").locator("..");
           check((await model.innerText()).includes(fixture.modelId), "Measurements label is not bound to the synthetic model");
