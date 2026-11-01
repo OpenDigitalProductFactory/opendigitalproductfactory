@@ -693,8 +693,10 @@ test("a correction proof survives a distinct publish-hook process but not a rele
   try {
     const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
     assert.equal(executions, 1);
+    const pathDelimiter = process.platform === "win32" ? ";" : ":";
+    const hookPrefix = process.platform === "win32" ? "C:/Program Files/Git/mingw64/libexec/git-core" : "/usr/lib/git-core";
     environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1",
-      PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${environment.PATH ?? environment.Path ?? ""}` };
+      PATH: `${hookPrefix}${pathDelimiter}${environment.PATH ?? environment.Path ?? ""}` };
     assert.deepEqual(guardResultEnvironment(environment), initialGuardEnvironment,
       "the hook wrapper must preserve the executable search identity");
     const inspection = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
@@ -727,13 +729,18 @@ test("guard-result identity retains semantic base and guard-runner selectors", (
 });
 
 test("guard-result identity ignores only the Git hook PATH prefix", () => {
-  const base = { CI: "true", PATH: "C:/toolchain/openssl-a;C:/toolchain/bash-a" };
-  const hook = { ...base, PATH: `C:/Program Files/Git/mingw64/libexec/git-core;${base.PATH}` };
-  const changedTool = { ...base, PATH: "C:/toolchain/openssl-b;C:/toolchain/bash-a" };
-  assert.deepEqual(guardResultEnvironment(hook), guardResultEnvironment(base),
-    "the known hook wrapper does not change executable resolution");
-  assert.notDeepEqual(guardResultEnvironment(changedTool), guardResultEnvironment(base),
-    "a different OpenSSL/Bash search path must not inherit an affected-check proof");
+  for (const [platform, delimiter, prefix] of [["win32", ";", "C:/Program Files/Git/mingw64/libexec/git-core"], ["linux", ":", "/usr/lib/git-core"]]) {
+    const base = { CI: "true", PATH: `/toolchain/openssl-a${delimiter}/toolchain/bash-a` };
+    const hook = { ...base, PATH: `${prefix}${delimiter}${base.PATH}` };
+    const changedTool = { ...base, PATH: `/toolchain/openssl-b${delimiter}/toolchain/bash-a` };
+    const options = { platform };
+    assert.deepEqual(guardResultEnvironment(hook, options), guardResultEnvironment(base, options),
+      `${platform}: the known hook wrapper does not change executable resolution`);
+    assert.notDeepEqual(guardResultEnvironment(changedTool, options), guardResultEnvironment(base, options),
+      `${platform}: a different OpenSSL/Bash search path must not inherit an affected-check proof`);
+  }
+  assert.notDeepEqual(guardResultEnvironment({ PATH: "/bin", Path: "/alternate" }, { platform: "linux" }), guardResultEnvironment({ PATH: "/bin" }, { platform: "linux" }),
+    "POSIX keeps distinct case-sensitive environment names");
 });
 
 test("a second unpushed correction retains the published head's receipt as its anchor", async () => {

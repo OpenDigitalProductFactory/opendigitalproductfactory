@@ -42,27 +42,27 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
 // environment from the shell that recorded a correction proof.  Keep only
 // inputs that select an executable or can change Node/CI guard behaviour.
 const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATH|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|BASE_SHA|BASE_REF|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:TEST_POWERSHELL|PREPUSH_BASE_REF|GUARD_SPAWN_RETRIES|SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
-const GIT_HOOK_PATH_PREFIX = /[\\/]Git[\\/]mingw64[\\/]libexec[\\/]git-core[\\/]*$/i;
-const PATH_DELIMITER = process.platform === "win32" ? ";" : ":";
+const GIT_HOOK_PATH_PREFIX = /(?:[\\/]Git[\\/]mingw64[\\/]libexec[\\/]git-core|[\\/]usr[\\/]lib[\\/]git-core|[\\/]usr[\\/]libexec[\\/]git-core)[\\/]*$/i;
 
-function guardPath(value) {
+function guardPath(value, platform) {
   // Git prepends this directory while invoking hooks. It resolves Git's own
   // helpers, not the OpenSSL/Bash/PowerShell tools executed by guard plans.
   // Preserve every other PATH entry because those tools are selected from it.
-  return String(value).split(PATH_DELIMITER).filter(entry => !GIT_HOOK_PATH_PREFIX.test(entry)).join(PATH_DELIMITER);
+  const delimiter = platform === "win32" ? ";" : ":";
+  return String(value).split(delimiter).filter(entry => !GIT_HOOK_PATH_PREFIX.test(entry)).join(delimiter);
 }
 
-export function guardResultEnvironment(env = process.env) {
+export function guardResultEnvironment(env = process.env, { platform = process.platform } = {}) {
   const selected = new Map();
   for (const [key, value] of Object.entries(env)) {
     if (!GUARD_RESULT_ENV.test(key)) continue;
-    // Windows treats names case-insensitively, while object-spread test and
-    // hook environments can expose both Path and PATH. Canonicalize before
-    // hashing so the hook's real PATH overrides the inherited spelling.
-    selected.set(key.toUpperCase(), value);
+    // Windows treats names case-insensitively, while POSIX intentionally does
+    // not. Canonicalize the Windows spelling so the hook's PATH overrides an
+    // inherited Path without collapsing distinct POSIX inputs.
+    selected.set(platform === "win32" ? key.toUpperCase() : key, value);
   }
   return [...selected]
-    .map(([key, value]) => [key, key === "PATH" ? guardPath(value) : value])
+    .map(([key, value]) => [key, key === "PATH" ? guardPath(value, platform) : value])
     .sort(([left], [right]) => left.localeCompare(right));
 }
 
