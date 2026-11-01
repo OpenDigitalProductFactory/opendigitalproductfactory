@@ -10,13 +10,15 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
 
 import type { ReassessmentBudgetConfiguration, ReassessmentRecordedBudgetLimits } from "../shared/reassessment-budget-contract";
 export type { ReassessmentBudgetConfiguration, ReassessmentRecordedBudgetLimits } from "../shared/reassessment-budget-contract";
 
+// Bundle the canonical roster, as coworker identity and grants already do.
+// Standalone installs have no exported @dpf/db/data subpath or source checkout.
 function currentRegistry(): unknown {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require(/* turbopackIgnore: true */ "@dpf/db/data/agent_registry.json");
+  return agentRegistryData;
 }
 
 function readRecordedLimits(input: {
@@ -273,8 +275,7 @@ let _registryCache: Record<string, number> | null = null;
 function getAgentDailyLimitFromRegistry(agentId: string): number {
   if (!_registryCache) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const registry = require(/* turbopackIgnore: true */ "@dpf/db/data/agent_registry.json") as {
+      const registry = currentRegistry() as {
         agents?: Array<{
           agent_name?: string;
           config_profile?: { token_budget?: { daily_limit?: number } };
