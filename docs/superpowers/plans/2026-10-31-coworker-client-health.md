@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Share connected-client facts with the Self-upgrade coworker
 
 Backlog: BI-7CE02DE9. Parent: BI-81AB897A. Workroom: WC-1443F68A.
