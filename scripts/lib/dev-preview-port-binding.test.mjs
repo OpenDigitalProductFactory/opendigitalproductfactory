@@ -9,7 +9,7 @@ import * as preview from './dev-preview-runtime.mjs';
 // A real Compose parser is required: object-only tests miss the port uniqueness
 // key's host IP component and can incorrectly retain broad inherited bindings.
 test('real Compose merge replaces every inherited preview binding, preserving other services', async t => {
-  try { execFileSync('docker', ['compose', 'version', '--short'], { stdio: 'pipe', timeout: 10000 }); }
+  try { execFileSync('docker', ['compose', 'version', '--short'], { stdio: 'pipe', timeout: 10000 }); } // ambient-host-guard: allow real Compose availability probe; absent CLI skips, no daemon or runtime is used.
   catch (error) {
     if (error.code !== 'ENOENT') throw error;
     t.skip('UNRUN: Docker CLI absent; qualification with real Compose is required.'); return;
@@ -26,7 +26,7 @@ test('real Compose merge replaces every inherited preview binding, preserving ot
   } }));
   const identity = { worktree: directory, sha: 'a'.repeat(40), leaseId: 'NPEL-PORT-FIXTURE' };
   await writeFile(override, preview.serializePreviewOverride(identity));
-  const config = JSON.parse(execFileSync('docker', ['compose', '-p', 'dpf-preview-port-test', '--project-directory', directory,
+  const config = JSON.parse(execFileSync('docker', ['compose', '-p', 'dpf-preview-port-test', '--project-directory', directory, // ambient-host-guard: allow real Compose merge regression on disposable files; config starts no services and needs no daemon.
     '-f', base, '-f', override, 'config', '--format', 'json'], {
     encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, COMPOSE_FILE: '', DPF_PREVIEW_AUTH_SECRET: 'disposable-fixture-only' },
