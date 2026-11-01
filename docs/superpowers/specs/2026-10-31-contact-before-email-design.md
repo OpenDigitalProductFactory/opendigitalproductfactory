@@ -119,4 +119,3 @@ These steps form one compatible delivery: admitting null data without updating
 its readers/auth boundaries is not independently safe to ship. No product code,
 migration, source test or served scenario has been run by this design-only work.
 The current worktree is source-only; local compile dependencies are absent.
-
