@@ -44,7 +44,15 @@ PRs. The earlier decision/shadow slices remain covered by BI-88341B5D.
    after emit failure, duplicate events and absent/fork PR arrays. Event payload
    contracts follow [GitHub's official reference](https://docs.github.com/en/webhooks/webhook-events-and-payloads).
 
-2. **Governed repair publication.** Resolve design section 8 with a controlled,
+2. **Governed repair publication.** First implement design §3.4's resolved
+   classification contract in the existing classifier and observation adapter.
+   Bind provider job/step diagnostics to the exact source/run/attempt, keep bare
+   `failure` and unavailable diagnostics unclassified, and exclude infrastructure
+   and unclassified checks from repair targets. Prove same-conclusion setup vs
+   product failures, mixed evidence, duplicate/crash delivery and ordinary
+   merge-group SHA differences without spending the wrong budget. Reuse existing
+   records and recovery bounds; no model call guesses a failure class.
+   Resolve the remaining design section 8 publication boundary with a controlled,
    owned disposable repair branch before wiring a real dispatcher. Reuse the
    Workroom runtime and existing sandbox workspace preparation. Prove the fetched
    repository, branch, expected head, clean workspace and owner lease match the

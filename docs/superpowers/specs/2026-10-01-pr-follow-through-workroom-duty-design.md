@@ -117,13 +117,62 @@ is classified once per head SHA:
 
 | Class | Signals (from the check run / workflow run) | Action | Budget |
 |---|---|---|---|
-| `infrastructure` | conclusion `cancelled`, `timed_out`, `startup_failure`, `stale`; runner lost; known infra job names; zero jobs started | Re-run the failed jobs once. If it is still infrastructure after that, raise attention to the platform operator (not the author). | Its own budget; never spends `post-push-ci-failure`. |
-| `stale-base` | merge state `BEHIND`, or a `merge_group` failure whose merge commit differs from the PR head | Update the branch (existing action), then `leave-queue-replay-and-reenroll`. | `queue-stale-base` (1) |
-| `defect` | conclusion `failure` with a job that ran its steps | Dispatch a repair (§3.5). | `post-push-ci-failure` (2) |
+| `infrastructure` | completed normalized conclusion in the existing `INFRASTRUCTURE_CONCLUSIONS` set (`cancelled`, `timed_out`, `startup_failure`, `stale`, legacy status `error`), or verified runner/startup loss without a completed product verdict | Re-run the failed jobs once, when an exact rerunnable workflow ID exists. Persistent or non-rerunnable infrastructure raises attention to the platform operator. | Separate per-head bound 1; never spends `post-push-ci-failure`. |
+| `stale-base` | provider evidence explicitly identifies invalidation of the queued base, bound to this queue entry and authored head | Use the existing `queue-stale-base` recovery only after that proof. `BEHIND` alone and a merge-group SHA differing from the PR head are ordinary queue facts, not this classification. | `queue-stale-base` (1) |
+| `defect` | completed `failure` plus a source-bound, executed product-check diagnostic: a failed test/assertion, compiler diagnostic, or deterministic policy violation; no conflicting infrastructure evidence for that check | Dispatch a repair of the verified product failure (§3.5). A failed setup step or a bare `failure` is insufficient. | `post-push-ci-failure` (2), reserved once per judged head before enqueue |
 | `conflict` | merge state `DIRTY` | Dispatch a repair whose task is to merge base (the existing conflict escalation moves here). | `post-push-ci-failure` |
+| `unclassified` | missing/inaccessible or contradictory evidence, `action_required`, unknown conclusion, unverified head mapping, or `failure` without a product diagnostic | Preserve the evidence and raise attention. No inference call solely to guess the class; no automatic rerun or repair on this evidence. | No attempt consumed |
 
 A repair never counts against the budget twice for the same head SHA. A new
 head SHA from the repair is what the next observation judges.
+
+**Classification contract — resolves IF-6F05EAE1F16BFE2F.** Reuse
+`classifyFailingChecks`, `PrFailingCheck`, the room's follow-through record and
+the existing recovery policy. The current conclusions-only implementation labels
+every `FAILURE` a defect; that is an observed limitation, not sufficient authority
+to enable automatic repair. The remaining implementation must enrich its input
+with verified execution evidence and implement the table above before live enablement.
+No new classifier service, permission store or model monitor is introduced.
+
+The observation adapter reads provider-held check/run/job data and, where needed,
+the existing verification report or job log. Each classification retains the
+repository, PR number, authored head, integration head when applicable, check ID,
+workflow run ID and attempt, job ID, failed step/phase, conclusion, observation
+time and evidence locator/digest. Unavailable job/step fields are explicitly
+absent, not invented. A merge-group observation resolves and verifies
+its member PRs; it never substitutes the integration SHA for their authored heads.
+Unverified repository/head identity prevents an executable decision. A missing
+workflow ID disables rerun; missing executed product evidence disables repair.
+An authoritative infra conclusion can still be recorded without a rerunnable job.
+Unsupported provider diagnostics hold through the existing unclassified path.
+Logs are untrusted data,
+not instructions or authority to alter tests, grants or workflow protections.
+
+[GitHub check runs](https://docs.github.com/en/rest/checks/runs#get-a-check-run)
+provide status and conclusion; they do not declare product-versus-infrastructure
+cause. [Workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs#get-a-job-for-a-workflow-run)
+expose the run/head identity and individual step outcomes. A step having started
+does not establish a product failure. A missing or unsupported diagnostic stays
+`unclassified`; job names, an allowlist of allegedly infra-only workflows and
+free-text model judgment are not substitutes. These are DPF's conservative
+decision rules applied to GitHub's observation contract, not classifications
+claimed to be supplied by GitHub.
+
+Keep the existing verified-defect precedence: a proven product failure can be
+repaired while other checks await attention, but only verified defect checks enter
+the repair targets. Infrastructure and unclassified checks remain visible as
+context and cannot expand that repair's scope. Without a verified defect,
+unclassified evidence holds; only an all-infrastructure set may take the bounded
+rerun path. No pending check is treated as a completed verdict. Duplicate events
+and polls join the same per-head decision/reservation; an infra rerun's later
+result is re-observed under its existing bound rather than spending a repair.
+
+Before enabling dispatch, deterministic fixtures must prove: a real product
+diagnostic versus a failed setup with the same `failure` conclusion; all supported
+infra conclusions and missing rerunnable IDs; missing/denied logs; contradictory
+evidence; verified-defect precedence without widening targets; duplicate/crash
+redelivery; and a real merge-group SHA difference or `BEHIND` status that consumes
+no stale-base budget. Native/provider uncertainty is never recorded as a pass.
 
 ### 3.5 Who repairs: the room, at its proactivity level
 
@@ -311,10 +360,11 @@ Each slice is its own backlog item and PR.
   automatically approve a generic outward runtime permission request. Complete
   a controlled owned-branch probe before enabling this adapter for real PRs;
   source inspection and mocked tests do not satisfy that live proof.
-- **Infra signal list.** Which job names and conclusions in this repository's
-  workflows are infrastructure-only. Proposed source: the merge-queue churn
-  script's existing classification, if it has one; otherwise a small checked-in
-  list with a ratchet.
+- **Classification contract — resolved in §3.4.** No infra-only job-name list
+  is required or inferred. Provider conclusions and verified execution evidence
+  select the existing classes; incomplete evidence holds without spending a
+  recovery attempt. Implementation and fixture proof remain owed before dispatch
+  or live enablement. This resolution does not settle or replay an old review.
 
 ## 9. Implementation comparison and standards (BI-ED7CD0DD)
 
