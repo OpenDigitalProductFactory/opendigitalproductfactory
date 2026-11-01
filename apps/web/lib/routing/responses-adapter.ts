@@ -287,10 +287,8 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     const startMs = Date.now();
     let res: Response;
-    // At most one narrowing retry: a provider that names an unsupported request
-    // parameter is asking for a narrower request, not refusing the work, so drop
-    // that one parameter and send again rather than turning catalog drift into
-    // a dead provider.
+    // Retry only the existing optional sampling setting. Required tools,
+    // instructions, state, storage and output bounds must survive unchanged.
     for (let attempt = 0; ; attempt += 1) {
       try {
         res = await request.fetchImpl(responsesUrl, {
@@ -310,7 +308,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
       if (res.ok) break;
       const errBody = await res.text().catch(() => "");
       const unsupported = unsupportedParameterName(res.status, errBody);
-      if (attempt === 0 && unsupported && unsupported in body) {
+      if (attempt === 0 && unsupported === "temperature" && unsupported in body) {
         console.warn(`[responses-adapter] ${providerId} rejected parameter "${unsupported}" — retrying once without it.`);
         delete body[unsupported];
         continue;
