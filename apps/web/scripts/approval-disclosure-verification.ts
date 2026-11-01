@@ -53,7 +53,7 @@ export function assertApprovalVerificationRuntime(env: Readonly<Record<string, s
   return { origin: target.origin, sourceSha, runKey: "ux-approval-" + runId + "-" + attempt };
 }
 
-type Case = { key: string; tool: string; args: Record<string, unknown>; expired?: boolean };
+type Case = { key: string; tool: string; args: Record<string, unknown>; expired?: boolean; primaryTitle?: string };
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/ux-route-sweep/approval-scenarios");
 function check(ok: unknown, message: string): asserts ok { if (!ok) throw new Error(message); }
@@ -113,6 +113,12 @@ export async function verifyApprovalDisclosure() {
     fixturesOwned = true;
     const long = "The release candidate was not supplied. " + "Internal verification detail. ".repeat(40);
     const cases: Case[] = [
+      { key: "app-update", tool: "request_self_upgrade", args: { reason: "Ready release batch" },
+        primaryTitle: "Request an update for this app?" },
+      { key: "merge-work", tool: "merge_backlog_items", args: { canonicalItemId: "BI-FIXTURE-KEEP", duplicateItemId: "BI-FIXTURE-DUP" },
+        primaryTitle: "Combine these duplicate work requests?" },
+      { key: "release-reservation", tool: "release_nonprod_environment_lease", args: { leaseId: "NPEL-FIXTURE" },
+        primaryTitle: "Release this shared test reservation?" },
       { key: "report", tool: "record_workroom_evidence", args: { capsuleId: roomId, kind: "assurance-finding",
         outcome: "blocked", summary: long, stageKey: "report", commandId: "fixture-internal-command" } },
       { key: "handover", tool: "reassign_workroom_executor", args: { capsuleId: roomId,
@@ -154,6 +160,15 @@ export async function verifyApprovalDisclosure() {
           value.key + ": complete input differs from the original proposal");
         check(await card.locator("script").count() === 0, "Proposal content became executable markup");
         const text = await card.innerText();
+        if (value.primaryTitle) {
+          check(await card.getByRole("heading", { name: value.primaryTitle, exact: true }).count() === 1,
+            value.key + ": operation missing from the initial question");
+          check(text.includes("Keep this on hold until its effect is clear."), value.key + ": unresolved-effect recommendation lost");
+          check(!text.includes("BI-FIXTURE-KEEP") && !text.includes("BI-FIXTURE-DUP") && !text.includes("NPEL-FIXTURE"),
+            value.key + ": technical identity leaked into the initial question");
+          if (value.key === "app-update") check(text.includes("This app") && text.includes("approval does not mean it is installed"),
+            "Update request presented as installed");
+        }
         if (value.key === "report") check(!text.includes("Internal verification detail.")
           && !text.includes(roomId) && !text.includes("fixture-internal-command"), "Internal evidence leaked into the default summary");
         if (value.key === "unknown") for (const fact of ["1250", "USD", "monthly", "supplier@example.test", "admin_write", "2026-11-01"]) {
@@ -256,8 +271,9 @@ export async function verifyApprovalDisclosure() {
     } finally { release(); }
     check(unexpectedDecisionPosts === 0, "An unexpected server decision was attempted during presentation checks");
     check(git("rev-parse", "HEAD") === runtime.sourceSha, "CI source changed during scenarios");
+    check(captures.length === cases.length * contexts.length, "Scenario captures do not cover every case, viewport and theme");
     execution = { status: "passed", sourceSha: runtime.sourceSha, runKey: runtime.runKey,
-      cases: 9, closedCaptures: captures.length, keyboardCaptures: 2, stateRetentionFaultInjection: "passed",
+      cases: cases.length, closedCaptures: captures.length, keyboardCaptures: 2, stateRetentionFaultInjection: "passed",
       interceptedDecisionPosts: interceptedPosts, serverAuthorizations: 0, fixtureCleanup: "completed", captures };
   } finally {
     try {
@@ -272,7 +288,7 @@ export async function verifyApprovalDisclosure() {
   check(execution, "No complete scenario result was produced");
   // A cleanup failure cannot leave a passing receipt or success message.
   writeFileSync(resolve(OUT, "execution.json"), JSON.stringify(execution, null, 2));
-  console.log("Approval scenarios passed: 9 cases, 36 viewport/theme captures, keyboard and retained-state checks; no server authorization.");
+  console.log(`Approval scenarios passed: ${execution.cases} cases, ${execution.closedCaptures} viewport/theme captures, keyboard and retained-state checks; no server authorization.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
