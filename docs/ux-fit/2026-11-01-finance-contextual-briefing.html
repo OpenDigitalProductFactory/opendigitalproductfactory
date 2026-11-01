@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Finance opening briefing — simulated design review</title>
+<style>
+:root { color-scheme: dark; --dpf-bg:#0d0c20; --dpf-surface-1:#17162d; --dpf-text:#ecebf6; --dpf-muted:#bab7cf; --dpf-border:#62618b; --dpf-accent:#9390ff; }
+body { margin:0; padding:24px; background:var(--dpf-bg); color:var(--dpf-text); font:16px/1.5 system-ui,sans-serif; }
+main { max-width:680px; margin:auto; } h1 { font-size:24px; } aside,article { padding:20px; border:1px solid var(--dpf-border); border-radius:12px; background:var(--dpf-surface-1); margin:20px 0; }
+button { font:inherit; padding:8px 12px; margin:4px; border:1px solid var(--dpf-border); border-radius:8px; background:var(--dpf-surface-1); color:var(--dpf-text); cursor:pointer; }
+button[aria-pressed=true] { outline:2px solid var(--dpf-accent); } a { color:var(--dpf-accent); } small { color:var(--dpf-muted); } :focus-visible { outline:3px solid var(--dpf-accent); }
+</style>
+<main>
+<h1>Finance Specialist · Spend</h1>
+<small>Simulated design review for BI-9F118032. These are fixture decisions, not business records. Links describe existing destinations; this prototype submits nothing.</small>
+<aside aria-label="Review scenarios">
+<button type="button" data-state="routine" aria-pressed="true">Routine work elsewhere</button>
+<button type="button" data-state="finance" aria-pressed="false">Finance decision</button>
+<button type="button" data-state="urgent" aria-pressed="false">Urgent global decision</button>
+<button type="button" data-state="empty" aria-pressed="false">No owner decisions</button>
+</aside>
+<article aria-label="Coworker opening" aria-live="polite" id="briefing"></article>
+<p id="explanation"></p>
+</main>
+<script>
+// Fixture-only presentation. Production reuses canonical owner projection and
+// isOverrideTier/overrideReason; no urgency rule or workflow lives in this file.
+const required = 'Use a title and at least one expense with a date, category, description, and positive amount. Add a receipt URL if available. Save as Draft keeps it for later; Submit for Approval requests review without moving money.';
+const expense = '<p><a href="#expense-destination">Enter an expense</a></p><p>'+required+'</p>';
+const states = {
+ routine: {html:expense+'<p>3 owner decisions are waiting in <a href="#inbox-destination">your Needs-you inbox</a>.</p>',why:'Routine unrelated decisions stay in the inbox. The current Finance job leads, and the count includes all 3 decisions.'},
+ finance: {html:'<p><strong>Most pressing:</strong> <a href="#finance-decision">Review the simulated supplier bill</a> — confirm the recorded discrepancy.</p>'+expense+'<p>2 more owner decisions are waiting in <a href="#inbox-destination">your Needs-you inbox</a>.</p>',why:'The relevant Finance decision leads. Its one headline plus 2 more decisions totals 3.'},
+ urgent: {html:'<p><strong>Urgent owner decision — deadline today:</strong> <a href="#urgent-decision">Decide the simulated time-critical release hold</a> — a recorded deadline requires your decision.</p>'+expense+'<p>2 more owner decisions are waiting in <a href="#inbox-destination">your Needs-you inbox</a>.</p>',why:'A genuine canonical urgent decision remains visible even outside Finance. The Finance task hint follows it.'},
+ empty: {html:'<p><em>No opening bubble.</em></p>',why:'The existing balanced posture remains silent with zero owner decisions. Native expense entry stays available on the Finance page.'}
+};
+function show(key) { const state=states[key]; document.getElementById('briefing').innerHTML=state.html; document.getElementById('explanation').textContent=state.why; document.querySelectorAll('button[data-state]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.state===key))); }
+document.querySelectorAll('button[data-state]').forEach(button=>button.addEventListener('click',()=>show(button.dataset.state)));
+show('routine');
+</script>
+</html>

@@ -67,9 +67,17 @@ export async function preflightEvidenceArtifact(args: {
       reviewerUserId: args.userId, reviewerAgentId: context.agentId,
     });
     if (!reviewer) return refusal("ARTIFACT_AUTHOR_REQUIRED", "Reviewer principal identity is unavailable. Link the authenticated reviewer to a Principal before requesting an evidence approval.");
+    const selectedSource = params.workroomId === undefined ? null
+      : params.gate === "research" && params.artifactRef.kind === "repo-blob-at-commit"
+        ? await (await import("@/lib/mcp/workroom-repository-source")).prepareWorkroomRepositorySource({
+          workroomId: params.workroomId, userId: args.userId, agentId: context.agentId, itemId: item.itemId,
+          target: { repositoryFullName: params.artifactRef.repositoryFullName, commitSha: params.artifactRef.commitSha },
+        }) : null;
+    if (params.workroomId !== undefined && !selectedSource) return refusal("AUTHORIZATION_DENIED", "The exact research Workroom source or actor admission could not be verified.");
     const artifact = await resolveInitiativeArtifact({
       locator: params.artifactRef, subject: { kind: "backlog-item", id: item.itemId },
       organizationId: item.organizationId, workroomRef: args.workroomRef,
+      sourceAdmission: selectedSource?.sourceAdmission,
       // The non-independent research writer can admit a human-authored build
       // only under its existing author policy. Do not prematurely reject that
       // possible path here; the final writer still proves the policy itself.

@@ -246,6 +246,48 @@ describe("responsesAdapter", () => {
     expect(result.text).toBe("Done.");
   });
 
+  it.each([
+    "tools", "tool_choice", "instructions", "input", "model", "store",
+    "max_output_tokens", "reasoning", "previous_response_id",
+  ])("does not narrow the request contract after unsupported %s", async (parameter) => {
+    mockFetch
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: `Unsupported parameter: ${parameter}` }), { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        output: [{ type: "message", content: [{ type: "output_text", text: "Synthetic text-only response." }] }],
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    const outcome = await responsesAdapter.execute(makeRequest({
+      plan: makePlan({ toolPolicy: { toolChoice: "required" } }),
+      previousResponseId: parameter === "previous_response_id" ? "resp_synthetic_prior" : undefined,
+      tools: [{ type: "function", function: { name: "read_synthetic_value", parameters: { type: "object", properties: {} } } }],
+    })).then(() => ({ rejected: false }), (error: unknown) => ({ rejected: true, error }));
+
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toHaveProperty(parameter);
+    expect(outcome).toMatchObject({ rejected: true, error: { code: "provider_error", statusCode: 400 } });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains tools and instructions during the optional temperature retry", async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('{"detail":"Unsupported parameter: temperature"}', { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        output: [{ type: "function_call", call_id: "synthetic-call", name: "read_synthetic_value", arguments: "{}" }],
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    const result = await responsesAdapter.execute(makeRequest({
+      plan: makePlan({ temperature: 0.2, toolPolicy: { toolChoice: "required" } }),
+      tools: [{ type: "function", function: { name: "read_synthetic_value", parameters: { type: "object", properties: {} } } }],
+    }));
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const first = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const second = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(first.temperature).toBe(0.2);
+    expect(second).not.toHaveProperty("temperature");
+    const expected = { ...first };
+    delete expected.temperature;
+    expect(second).toEqual(expected);
+    expect(result.toolCalls).toMatchObject([{ name: "read_synthetic_value", arguments: {} }]);
+  });
+
   it("uses the ChatGPT backend responses path for chatgpt subscription providers", async () => {
     stubFetchText([
       'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"Subscription OK."}]}],"usage":{"input_tokens":3,"output_tokens":2}}}',
