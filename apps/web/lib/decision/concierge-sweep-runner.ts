@@ -27,8 +27,6 @@ import { conductTriage, type TriageSubject } from "./triage-conductor";
 import { runGovernanceTriagePanel } from "./triage-panel-binding";
 import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 import type { ProposalClient } from "./resolution-proposal-store";
-import { objectRecord } from "@/lib/attention/coworker-envelope-decision";
-import { settleObsoleteLeaseReleaseEnvelopes, type ObsoleteReleaseDb, type ObsoleteReleaseSummary } from "@/lib/coworker/obsolete-lease-envelope";
 
 /** Stable identity of the standing governance room. */
 export const GOVERNANCE_ROOM_KEY = "decision-concierge-standing-room";
@@ -168,7 +166,7 @@ async function retireStaleProposals(): Promise<number> {
 }
 
 /** Append the pass to the standing room, convening it the first time. */
-async function recordPass(summary: SweepSummary, obsoleteReleaseApprovals?: ObsoleteReleaseSummary): Promise<void> {
+async function recordPass(summary: SweepSummary): Promise<void> {
   const room = await prisma.workroom.upsert({
     where: { idempotencyKey: GOVERNANCE_ROOM_KEY },
     update: { lastSyncedAt: new Date(), executorKind: "dpf-native", executorRef: "concierge-sweep" },
@@ -203,7 +201,6 @@ async function recordPass(summary: SweepSummary, obsoleteReleaseApprovals?: Obso
         unproductive: summary.unproductive,
         skipped: summary.skipped,
         retiredStaleProposals: summary.retiredStaleProposals,
-        obsoleteReleaseApprovals: obsoleteReleaseApprovals ?? null,
       },
     },
   });
@@ -217,25 +214,15 @@ export async function runConciergeSweepJob(input: {
   userId: string;
   limits?: SweepLimits;
 }): Promise<SweepSummary> {
-  let obsoleteReleaseApprovals: ObsoleteReleaseSummary | undefined;
   return runConciergeSweep(
     {
       candidates: loadCandidates,
       retireStale: async () => {
         const lapsed = await retireLapsedEnvelopes(new Date());
-        const last = await prisma.workroomActivity.findFirst({
-          where: { capsule: { idempotencyKey: GOVERNANCE_ROOM_KEY }, kind: "concierge-sweep" },
-          orderBy: [{ recordedAt: "desc" }, { id: "desc" }], select: { payload: true },
-        });
-        const checkpoint = objectRecord(objectRecord(last?.payload)?.obsoleteReleaseApprovals)?.nextCursor;
-        const cursor = typeof checkpoint === "string" && checkpoint.length <= 128 ? checkpoint : null;
-        obsoleteReleaseApprovals = await settleObsoleteLeaseReleaseEnvelopes(
-          prisma as unknown as ObsoleteReleaseDb, new Date(), cursor,
-        );
         const stale = await retireStaleProposals();
-        return lapsed + obsoleteReleaseApprovals.cancelled + stale;
+        return lapsed + stale;
       },
-      report: summary => recordPass(summary, obsoleteReleaseApprovals),
+      report: recordPass,
       conduct: async (subject) => {
         return conductTriage(
           {
