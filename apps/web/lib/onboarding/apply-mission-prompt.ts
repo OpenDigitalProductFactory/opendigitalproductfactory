@@ -13,14 +13,37 @@ import { invalidatePromptCache } from "@/lib/tak/prompt-loader";
 export const MISSION_PROMPT_CATEGORY = "platform-mission";
 export const MISSION_PROMPT_SLUG = "company-mission";
 
-/** Render the Block-0 mission content with the captured mission baked in. */
-export function renderMissionPromptContent(mission: string): string {
+/** The rest of the instance's direction (BI-8AB6B4F7), when the owner recorded it. */
+export type MissionPromptDirection = {
+  vision: string | null;
+  outcomes: Array<{ statement: string; measure: string | null }>;
+};
+
+function directionLines(direction: MissionPromptDirection | undefined): string[] {
+  if (!direction) return [];
+  const lines: string[] = [];
+  const vision = direction.vision?.trim();
+  lines.push(`Vision: ${vision || "not recorded yet"}`);
+  if (direction.outcomes.length === 0) {
+    lines.push("Top-level outcomes: not recorded yet");
+  } else {
+    lines.push("Top-level outcomes (the owner's own words; steer toward them):");
+    for (const o of direction.outcomes) {
+      lines.push(`- ${o.statement.trim()}${o.measure?.trim() ? ` (how we'll know: ${o.measure.trim()})` : ""}`);
+    }
+  }
+  return lines;
+}
+
+/** Render the Block-0 mission content with the captured mission (and direction) baked in. */
+export function renderMissionPromptContent(mission: string, direction?: MissionPromptDirection): string {
   return [
     "COMPANY MISSION CONTEXT",
     "",
     "This section defines the overarching mission that governs all work — whether performed by humans or AI coworkers. Every action, recommendation, and decision should align with this mission.",
     "",
-    `Mission: ${mission.trim()}`,
+    `Mission: ${mission.trim() || "not recorded yet"}`,
+    ...directionLines(direction),
     "",
     "Values:",
     "- Quality over speed — deliver work that meets professional standards",
@@ -39,6 +62,10 @@ export type ApplyMissionPromptClient = {
 
 export type ApplyMissionPromptInput = {
   mission: string | null | undefined;
+  /** Vision and outcomes, when known (the owner's Direction save passes them). */
+  direction?: MissionPromptDirection;
+  /** Who caused the write; recorded on the template. Defaults to "setup". */
+  updatedBy?: "setup" | "owner";
   /** Defaults to the shared prisma client. */
   db?: ApplyMissionPromptClient;
   /** Invalidate the prompt cache after writing. Defaults to true. */
@@ -48,17 +75,18 @@ export type ApplyMissionPromptInput = {
 export type ApplyMissionPromptResult = { applied: boolean };
 
 /**
- * Upsert the company-mission prompt from the captured mission. No-op when the
- * mission is blank (we never overwrite the editable default with emptiness).
+ * Upsert the captured direction, including explicit missing values after an
+ * owner clears it. Legacy setup calls without direction keep their blank no-op.
  */
 export async function applyMissionPrompt(
   input: ApplyMissionPromptInput,
 ): Promise<ApplyMissionPromptResult> {
   const mission = (input.mission ?? "").trim();
-  if (mission.length === 0) return { applied: false };
+  if (mission.length === 0 && !input.direction) return { applied: false };
 
   const db = input.db ?? (prisma as unknown as ApplyMissionPromptClient);
-  const content = renderMissionPromptContent(mission);
+  const content = renderMissionPromptContent(mission, input.direction);
+  const updatedBy = input.updatedBy ?? "setup";
 
   await db.promptTemplate.upsert({
     where: {
@@ -67,7 +95,7 @@ export async function applyMissionPrompt(
     update: {
       content,
       isOverridden: true,
-      updatedBy: "setup",
+      updatedBy,
     },
     create: {
       category: MISSION_PROMPT_CATEGORY,
@@ -78,7 +106,7 @@ export async function applyMissionPrompt(
       content,
       contentFormat: "markdown",
       isOverridden: true,
-      updatedBy: "setup",
+      updatedBy,
     },
   });
 

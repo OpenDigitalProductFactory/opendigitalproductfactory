@@ -751,6 +751,11 @@ export async function runPrincipleDecision(
     // the decision into the append-only hash chain (BI-EA97E5CD / BI-81CC5D8E).
     ...ledgerArgs,
     policyProjection: policyProjection ?? null,
+    // BI-8AB6B4F7: an organization-scoped consult records the direction it read.
+    ...(governingProfile.governingProfileKind === "organization" && organizationId
+      ? await import("@/lib/organization-direction/direction").then(async (m) =>
+          m.directionLedgerFields(await m.loadOrganizationDirection(prisma as never, organizationId).catch(() => null)))
+      : {}),
   });
 
   return {

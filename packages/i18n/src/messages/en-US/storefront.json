@@ -10,5 +10,48 @@
       "subheading": { "label": "Subheading", "placeholder": "Defaults to your tagline" },
       "body": { "label": "Text", "placeholder": "Who you are and how you work" }
     }
+  },
+
+  "direction": {
+    "heading": "Your direction",
+    "intro": "What your {$noun} is working towards, in your own words. Every AI coworker reads it, and decisions are weighed against it. You can skip any part and come back later.",
+    "notSet": "Not set yet",
+    "mission": {
+      "title": "Mission",
+      "label": "Why does your {$noun} exist?",
+      "placeholder": "The difference you set out to make, in a sentence",
+      "suggest": "Suggest a starter"
+    },
+    "vision": {
+      "title": "Vision",
+      "label": "Where is your {$noun} heading?",
+      "hint": "What things look like in a few years if it goes well."
+    },
+    "outcomes": {
+      "title": "Top-level outcomes",
+      "setupHint": "Start with one to three results you are working towards. You can add more later, up to five.",
+      "settingsHint": "The few results you are working towards, up to {$max}. Epics and work items link up to these.",
+      "label": "Outcome {$n}",
+      "measureLabel": "How we'll know",
+      "measureHint": "A number or a sign you would see, e.g. repeat customers double.",
+      "remove": "Remove outcome {$n}",
+      "add": "Add an outcome"
+    },
+    "save": "Save direction",
+    "saving": "Saving…",
+    "saved": "Saved. This is version {$version} of your direction.",
+    "saveFailed": "Could not save your direction. Try again.",
+    "summary": {
+      "missing": "{$parts} missing",
+      "complete": "Mission, vision and {$count} outcomes",
+      "set": "Set direction",
+      "edit": "Edit direction"
+    },
+    "gap": {
+      "mission": "Mission",
+      "vision": "Vision",
+      "outcomes": "Outcomes"
+    },
+    "editRest": "Edit the rest of your {$noun} profile"
   }
 }
