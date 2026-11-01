@@ -76,6 +76,7 @@ vi.mock("@/lib/routing/provider-suitability/provider-onboarding-data", () => ({
 }));
 
 import { routeAndCall } from "./routed-inference";
+import { createResponseProducer } from "../routing/response-producer";
 
 // BI-CCF1ACBB: RouteAndCallOptions already carried threadId; this is the site
 // that built the fallback-chain attribution without it, so every telemetry row
@@ -239,6 +240,17 @@ describe("routeAndCall thread attribution", () => {
     expect(mintReadOnlySession).not.toHaveBeenCalled();
     // callWithFallbackChain(decision, messages, systemPrompt, tools, plan, previousResponseId, mcpSession, attribution)
     expect(mocks.callWithFallbackChain.mock.calls[0]?.[7]).toMatchObject({ agentId: "agt_1", threadId: "thread-42" });
+  });
+
+  it.each(["sync", "background"] as const)("retains the exact producer through the %s result mapping", async interactionMode => {
+    const content = "The actual model response.";
+    const responseProducer = createResponseProducer({ attemptId: "actual-attempt", providerId: "openai", modelId: "gpt-4o-mini", content });
+    mocks.callWithFallbackChain.mockResolvedValueOnce({ providerId: "openai", modelId: "gpt-4o-mini", content, responseProducer,
+      toolCalls: [], tokenUsage: { inputTokens: 12, outputTokens: 4 }, inferenceMs: 10, downgraded: false, downgradeMessage: null });
+    const result = await routeAndCall([{ role: "user", content: "Summarize this transcript." }], "You summarize.", "internal",
+      { taskType: "summarization", budgetClass: "minimize_cost", persistDecision: false, interactionMode, agentMessageId: "assistant-id", threadId: "thread-id" });
+    expect(result.responseProducer).toEqual(responseProducer);
+    expect(mocks.callWithFallbackChain.mock.calls[0]?.[7]).toMatchObject({ agentMessageId: "assistant-id", threadId: "thread-id" });
   });
 
   it("passes threadId as null when the caller does not know the thread", async () => {

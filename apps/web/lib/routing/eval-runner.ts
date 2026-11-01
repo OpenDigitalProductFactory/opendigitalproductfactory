@@ -469,7 +469,8 @@ export async function runDimensionEval(
     // still correctly avoids retiring the model.
     const endpointUnusable =
       result.inconclusive &&
-      result.testResults.some((t) => t.score === null || errorEndsEvalCycle(t.error ?? null));
+      result.testResults.some((t) => t.scoring !== "orchestrator"
+        && (t.score === null || errorEndsEvalCycle(t.error ?? null)));
     if (endpointUnusable) {
       console.warn(
         `[eval-runner] ${providerId}/${modelId}: ${result.testResults.some(t => t.score === null) ? "generation incomplete" : "endpoint unusable"} this cycle — skipping remaining dimensions`,
@@ -480,7 +481,7 @@ export async function runDimensionEval(
 
   // A partial generation cannot conclude this selected run, including metadata
   // computed from earlier dimensions. Its actual observations remain recorded.
-  const generationIncomplete = dimensions.some(d => d.testResults.some(t => t.score === null));
+  const generationIncomplete = dimensions.some(d => d.testResults.some(t => t.score === null && t.scoring !== "orchestrator"));
   if (generationIncomplete) {
     for (const dimension of dimensions) dimension.newScore = dimension.previousScore;
   }
@@ -502,6 +503,9 @@ export async function runDimensionEval(
   // profileSource would lock the seed out from correcting stale catalog values.
   const allInconclusive = dimensions.every((d) => d.inconclusive);
   const hasRealScores = Object.keys(scoreUpdates).length > 0;
+  const fullCohortVerified = dimensions.length === BUILTIN_DIMENSIONS.length && dimensions.every(d => !d.inconclusive);
+  const unsupportedOnly = dimensions.length > 0 && dimensions.every(d => d.testResults.length > 0
+    && d.testResults.every(t => t.scoring === "orchestrator" && t.score === null));
 
   // Calibrate half of attempt-and-calibrate (BI-DFC30977): the routing gates read
   // the supportsToolUse BOOLEAN, so a measured toolFidelity must be projected onto
@@ -526,14 +530,14 @@ export async function runDimensionEval(
 
   // BI-91F0E312: an inconclusive cycle measured nothing — bumping evalCount /
   // profileConfidence would dampen the next REAL measurement. lastEvalAt stamps.
-  await prisma.modelProfile.update({
+  if (!unsupportedOnly && !generationIncomplete) await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
       ...toolUseUpdate,
-      ...(hasRealScores
+      ...(hasRealScores ? { profileSource: "evaluated" as const } : {}),
+      ...(hasRealScores && fullCohortVerified
         ? {
-            profileSource: "evaluated" as const,
             profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
             evalCount: { increment: 1 },
           }
@@ -549,13 +553,16 @@ export async function runDimensionEval(
   await prisma.endpointTestRun.update({
     where: { runId },
     data: {
-      status: generationIncomplete || allInconclusive ? "incomplete" : "completed",
+      status: generationIncomplete || allInconclusive || !fullCohortVerified ? "incomplete" : "completed",
       completedAt: new Date(),
-      avgScore: !generationIncomplete && conclusiveDimensions.length > 0
+      avgScore: !generationIncomplete && fullCohortVerified && conclusiveDimensions.length > 0
         ? conclusiveDimensions.reduce((a, d) => a + d.rawScore, 0) / conclusiveDimensions.length
         : null,
       results: {
-        ...(generationIncomplete ? { qualityWritesApplied: false } : {}),
+        qualityWritesApplied: !generationIncomplete && hasRealScores,
+        measurementScope: { fullCohortVerified,
+          measuredDimensions: generationIncomplete ? [] : conclusiveDimensions.map(d => d.dimension),
+          unverifiedDimensions: BUILTIN_DIMENSIONS.filter(d => generationIncomplete || !conclusiveDimensions.some(c => c.dimension === d)) },
         dimensions: dimensions.map((d) => ({
           dimension: d.dimension,
           rawScore: d.rawScore,
@@ -609,7 +616,7 @@ export async function runDimensionEval(
     : [];
 
   if (
-    !generationIncomplete && allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap &&
+    !unsupportedOnly && !generationIncomplete && allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap &&
     strandedClasses.length === 0
   ) {
     await prisma.modelProfile.update({
@@ -621,7 +628,7 @@ export async function runDimensionEval(
       },
     });
     console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: all tests failed — ${firstError.slice(0, 100)}`);
-  } else if (!generationIncomplete && allInconclusive && firstError && strandedClasses.length > 0) {
+  } else if (!unsupportedOnly && !generationIncomplete && allInconclusive && firstError && strandedClasses.length > 0) {
     await prisma.modelProfile.update({
       where: { providerId_modelId: { providerId, modelId } },
       data: { modelStatus: "degraded" },

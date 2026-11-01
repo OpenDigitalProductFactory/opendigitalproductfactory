@@ -1,3 +1,4 @@
+import type { ResponseProducer } from "../routing/response-producer";
 /**
  * EP-INF-009b: Unified V2 routing + inference dispatch.
  *
@@ -83,6 +84,7 @@ export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
 export interface RoutedInferenceResult {
+  responseProducer?: ResponseProducer;
   providerId: string;
   providerConnectionId?: string;
   quotaScopeKey?: string;
@@ -690,6 +692,7 @@ async function routeAndCallAttempt(
       quotaScopeKey: result.quotaScopeKey,
       modelId: result.modelId,
       content: result.content,
+      responseProducer: result.responseProducer,
       toolCalls: result.toolCalls,
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
@@ -772,6 +775,7 @@ async function routeAndCallAttempt(
     quotaScopeKey: result.quotaScopeKey,
     modelId: result.modelId,
     content: result.content,
+    responseProducer: result.responseProducer,
     toolCalls: result.toolCalls,
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,

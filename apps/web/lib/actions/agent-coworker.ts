@@ -1,4 +1,6 @@
 "use server";
+import { persistCoworkerResponse } from "./coworker-response-persistence";
+import { RESPONSE_FEEDBACK_BINDING_SELECT, type ResponseProducer } from "../routing/response-producer";
 import { randomUUID } from "node:crypto";
 import { buildAttachmentContext } from "@/lib/tak/attachment-context";
 import { prisma } from "@dpf/db";
@@ -271,7 +273,7 @@ export async function getThreadSnapshotById(input: {
       routeContext: true,
       providerId: true,
       modelId: true,
-      createdAt: true,
+      ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
       attachments: {
         select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
       },
@@ -325,7 +327,7 @@ export async function getOrCreateThreadSnapshot(input: {
       routeContext: true,
       providerId: true,
       modelId: true,
-      createdAt: true,
+      ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
       attachments: {
         select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
       },
@@ -1733,6 +1735,7 @@ export async function sendMessage(input: {
   }
 
   let responseContent = "";
+  let responseProducer: ResponseProducer | undefined;
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;
   let responseIsSystemFailure = false;
@@ -2004,6 +2007,7 @@ export async function sendMessage(input: {
     // The Golden Triangle review already ran inside executeAutonomousAgenticLoop.
     const result = {
       content: agenticResult.content,
+      responseProducer: agenticResult.responseProducer,
       providerId: agenticResult.providerId,
       modelId: agenticResult.modelId,
       downgraded: agenticResult.downgraded,
@@ -2022,6 +2026,7 @@ export async function sendMessage(input: {
       authoritativeSurfaceEvidence: agenticResult.authoritativeSurfaceEvidence,
       suppliedSourceEvidence: !responseIsSystemFailure && agenticResult.suppliedSourceEvidence,
     });
+    responseProducer = result.responseProducer;
     responseProviderId = result.providerId;
     responseModelId = result.modelId;
     // ── Scout research dispatch: runs BEFORE ideate research ──
@@ -2088,6 +2093,7 @@ export async function sendMessage(input: {
       });
       const execState = buildForResearch?.buildExecState as Record<string, unknown> | null;
       if (execState?.ideateResearchRequested) {
+        responseProducer = undefined; // Operational research summary has no exact chat producer.
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
 
@@ -2278,6 +2284,7 @@ export async function sendMessage(input: {
   } catch (e) {
     if (e instanceof NoEligibleEndpointsError || e instanceof NoAllowedProvidersForSensitivityError) {
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
+      responseProducer = undefined;
 
       const sysMsg = await prisma.agentMessage.create({
         data: {
@@ -2300,6 +2307,7 @@ export async function sendMessage(input: {
       });
 
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
+      responseProducer = undefined;
 
       const sysContent = formatProviderUnavailableMessage({
         attempts: e.attempts,
@@ -2329,61 +2337,7 @@ export async function sendMessage(input: {
     formAssistUpdate = extracted.fieldUpdates ?? undefined;
   }
 
-  // Sanitize: strip only agent self-talk that is never useful to the user.
-  // The agentic loop's continuation nudge handles "narrate instead of act" — so
-  // we only strip filler/apologies here, NOT action-intent language.
-  const rawResponseBeforeSanitize = responseContent;
-  responseContent = responseContent
-    // "Action: tool_name(...)" — raw tool-call narration leaked as text
-    .replace(/^Action:?\s*\w+\([^\n]*$/gm, "")
-    // "Self-correction:" — agent internal monologue
-    .replace(/^Self-correction:?\s*[^\n]*$/gim, "")
-    // Filler apologies
-    .replace(/^(?:I (?:apologize|appreciate)|My apologies|I'm sorry)[^\n]*$/gim, "")
-    // Stalling ("Give me a moment", "This will take...")
-    .replace(/^(?:Give me|Let me take|This (?:will|may|might) take)[^\n]*$/gim, "")
-    // Clean up excessive whitespace
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  // Quality gate: if the response was almost entirely stripped (agent was all questions/narration),
-  // replace with an honest fallback rather than showing empty or useless text.
-  if (responseContent.length < 20) {
-    // CodeQL js/log-injection: .length values are numeric but CodeQL
-    // tracks them as tainted via the source string. Number() coercion is
-    // a recognised sanitiser.
-    console.warn(
-      `[quality-gate] Response too short (${Number(responseContent.length)} chars). ` +
-      `Raw from loop (${Number(rawResponseBeforeSanitize.length)} chars): ${JSON.stringify(rawResponseBeforeSanitize.slice(0, 500))} | ` +
-      `After sanitize: ${JSON.stringify(responseContent)} | ` +
-      `Provider: ${JSON.stringify(responseProviderId)}/${JSON.stringify(responseModelId)} | ` +
-      `Route: ${JSON.stringify(input.routeContext)}`,
-    );
-    const providerHint = responseProviderId
-      ? `Provider ${responseProviderId}/${responseModelId} returned an empty response.`
-      : "No AI provider was matched by the routing pipeline.";
-    responseContent = `**Unable to process this request.** ${providerHint} Check AI Workforce settings (Platform > AI) to verify provider configuration.`;
-  }
-
-  // BI-F0005EB0 — never persist a raw provider/CLI error string as a
-  // user-visible assistant message. When the loop smuggled a raw error into
-  // `content` (e.g. `API Error: Unable to connect to API (ConnectionRefused)`),
-  // replace it with provider-detail-free copy; the raw string stays in server
-  // logs for engineers. The sanitized copy is still classifiable, so the
-  // progress-visibility signal + "Retry the AI call" affordance still fire.
-  {
-    const { isRawProviderError, classifyInferenceFailure, friendlyInferenceFailureMessage } =
-      await import("@/lib/build/inference-failure");
-    if (isRawProviderError(responseContent)) {
-      const kind = classifyInferenceFailure(responseContent) ?? "provider-unavailable";
-      console.warn(
-        `[coworker] raw inference error hidden from user (kind=${kind}, route=${JSON.stringify(input.routeContext)}): ${JSON.stringify(responseContent.slice(0, 300))}`,
-      );
-      responseContent = friendlyInferenceFailureMessage(kind);
-    }
-  }
-
-  const agentMsg = await prisma.agentMessage.create({
+  const persistedResponse = await persistCoworkerResponse({
     data: {
       id: pendingAgentMessageId,
       threadId: input.threadId,
@@ -2398,15 +2352,13 @@ export async function sendMessage(input: {
       routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
       contextTrace, // BI-3E218D80 — plain-response path (see also the pending-approval write)
     },
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      createdAt: true,
-    },
+    responseProducer: responseIsSystemFailure ? undefined : responseProducer,
+    scope: { userId: user.id!, threadId: input.threadId, taskRunId: currentTaskRun?.taskRunId ?? null,
+      requestedWorkroomId: portalContextPromptContext?.envelope.work?.capsule?.capsuleId ?? roomAuthority.workroomId,
+      serverContextResolved: portalContextPromptContext !== null },
   });
+  const agentMsg = persistedResponse.message;
+  responseContent = persistedResponse.content;
 
   await persistCoworkerResponseArtifact({
     taskRunId: currentTaskRun?.taskRunId ?? null,
@@ -2530,7 +2482,7 @@ export async function loadEarlierMessages(input: {
       content: true,
       agentId: true,
       routeContext: true,
-      createdAt: true,
+      ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
     },
   });
 

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-test("grant audit recognizes provider controls composed into the authorization map", () => {
+test("grant audit recognizes domain controls composed into the authorization map", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const result = spawnSync(process.execPath, [
     "apps/web/scripts/audit-coworker-tool-grants.ts",
@@ -17,7 +17,8 @@ test("grant audit recognizes provider controls composed into the authorization m
   assert.deepEqual(providerErrors, [], "existing provider controls retain their authorization");
   for (const tool of ["get_provider_accounts", "manage_provider_account",
     "apply_platform_update", "summarize_upgrade_impact",
-    "preview_runtime_capability_reconciliation", "reconcile_runtime_capabilities"]) {
+    "preview_runtime_capability_reconciliation", "reconcile_runtime_capabilities",
+    "get_child_threads", "get_thread_result", "spawn_work_thread", "cancel_thread"]) {
     assert.equal(report.findings.some(finding => finding.invariantId === "GRANT-002"
       && finding.summary.includes(`'${tool}'`)), false, `${tool} must resolve its declared grant`);
   }

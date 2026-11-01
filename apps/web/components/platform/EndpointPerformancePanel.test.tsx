@@ -15,6 +15,17 @@ vi.mock("@/lib/actions/endpoint-performance", () => ({
 
 describe("EndpointPerformancePanel", () => {
   afterEach(cleanup);
+  it("shows the recorded partial measurement summary without claiming a complete-model score", () => {
+    const summary = "Six dimensions measured; conversational quality remains unverified.";
+    render(<EndpointPerformancePanel endpointId="chatgpt" performances={[]} recentEvals={[]}
+      profile={null} testRuns={[{ runId: "DE-partial", modelId: "selected", probesPassed: 0, probesFailed: 0,
+        scenariosPassed: 0, scenariosFailed: 0, avgScore: null, startedAt: "2026-10-14T10:00:00Z", status: "incomplete",
+        results: { dimensions: [], summary } }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Test Runs/ }));
+    expect(screen.getByText(summary)).toBeTruthy();
+    expect(screen.getByText("incomplete")).toBeTruthy();
+    expect(screen.queryByText(/Avg score:/)).toBeNull();
+  });
   it("uses the recorded evaluation kind for score scale and omits absent probes", () => {
     const common = { modelId: null, probesPassed: 0, probesFailed: 0, scenariosPassed: 0,
       scenariosFailed: 0, startedAt: "2026-10-14T10:00:00Z", status: "completed" };
