@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ capture: vi.fn(), proof: vi.fn(), db: {} as any }));
 vi.mock("@dpf/db", () => ({ prisma: new Proxy({}, { get: (_, key) => m.db[key] }), Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } } }));
 vi.mock("./provider-capacity/execution-proof.server", () => ({ captureExecutionProofBinding: m.capture, readCurrentExecutionProof: m.proof }));
@@ -6,11 +6,13 @@ import { calibrationCorpus, calibrationCorpusHash, calibrationJobId, commissionS
 const proof = () => ({ version: 1, providerId: "chatgpt", connectionId: "provider-default-chatgpt", modelId: "selected", adapter: "responses",
   accountVersion: "a".repeat(64), credentialRevision: "b".repeat(64), modelRevision: "c".repeat(64), endpointRevision: "d".repeat(64), quotaRevision: "e".repeat(64),
   observedAt: Date.now(), expiresAt: Date.now() + 3600_000 });
+afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   vi.resetAllMocks();
   m.db = { $queryRaw: vi.fn().mockResolvedValue([]), $transaction: (fn: any) => fn(m.db),
     user: { findUnique: vi.fn().mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] }) },
     principal: { findFirst: vi.fn().mockResolvedValue({ id: "principal" }) },
+    modelProfile: { findUnique: vi.fn().mockResolvedValue({ modelClass: "chat", outputModalities: ["text"] }) },
     aiProviderConnection: { findUnique: vi.fn().mockResolvedValue({ id: "account", credentialEntryId: "credential", executionChannel: "direct-api", organizationId: null,
       capacityStatus: { executionProof: proof() } }) },
     scheduledJob: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
@@ -19,6 +21,17 @@ beforeEach(() => {
   const p = proof(); m.proof.mockResolvedValue(p);
 });
 describe("current owned calibration commissioning", () => {
+  it("captures one immutable ten-minute allowance when the clock advances between reads", async () => {
+    const now = Date.now(); let elapsed = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now + elapsed++);
+    const c = await commissionSubscriptionCalibration("operator", "chatgpt", "selected");
+    expect(c.deadlineAt - c.admittedAt).toBe(600_000);
+  });
+  it.each([{ modelClass: "embedding" }, { modelClass: "image_gen" }, { modelClass: "speech" }, { modelClass: "chat", outputModalities: ["audio"] }])("refuses incompatible current model %j even when capacity evidence exists", async model => {
+    m.db.modelProfile.findUnique.mockResolvedValue(model);
+    await expect(commissionSubscriptionCalibration("operator", "chatgpt", "selected")).rejects.toThrow(/text|identity|incompatible/i);
+    expect(m.db.endpointTestRun.create).not.toHaveBeenCalled();
+  });
   it("persists the exact non-secret commission before returning its queue identity", async () => {
     const c = await commissionSubscriptionCalibration("operator", "chatgpt", "selected");
     expect(c).toMatchObject({ userId: "operator", principalId: "principal", accountId: "account", credentialId: "credential", corpusHash: calibrationCorpusHash() });

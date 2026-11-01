@@ -8,6 +8,7 @@ import type { ExecutionProof } from "./provider-capacity/execution-proof";
 import { BUILTIN_DIMENSIONS } from "./types";
 import { getTestsForDimension } from "./golden-tests";
 import { currentGovernedInferenceDeadline } from "./governed-inference-deadline";
+import { supportsTextGeneration } from "./model-classifier";
 
 type Db = Prisma.TransactionClient;
 export const calibrationCorpus = () => BUILTIN_DIMENSIONS.flatMap(d => getTestsForDimension(d));
@@ -45,7 +46,10 @@ async function currentOperator(userId: string, db: Db) {
 /** Observation and current ownership are both required; neither creates authority. */
 export async function validateCalibrationCommission(c: CalibrationCommission, db: Db = prisma): Promise<boolean> {
   const tests = calibrationCorpus();
+  const model = await db.modelProfile.findUnique({ where: { providerId_modelId: { providerId: c.providerId, modelId: c.modelId } },
+    select: { modelClass: true, outputModalities: true } });
   if (c.providerId !== "chatgpt" || c.jobId !== calibrationJobId(c.providerId, c.modelId)
+    || !model || !supportsTextGeneration(model)
     || c.corpusHash !== calibrationCorpusHash() || Date.now() >= c.deadlineAt
     || c.deadlineAt > c.admittedAt + 600_000 || c.deadlineAt > c.proof.expiresAt
     || c.maxCalls !== tests.length * 2 || c.maxOutputTokens !== tests.reduce((n,t) => n + (t.maxTokens ?? 512), 0) * 2
@@ -91,9 +95,10 @@ export async function commissionSubscriptionCalibration(userId: string, provider
     if (!principalId || !captured || !account?.credentialEntryId || account.executionChannel !== "direct-api" || !proof)
       throw new Error("Current operator, owned account and selected-model capacity evidence are required before calibration.");
     const tests = calibrationCorpus();
+    const admittedAt = Date.now();
     const c: CalibrationCommission = { version: 1, runId: `DE-${randomUUID()}`, jobId, userId, principalId,
       accountId: captured.accountId, credentialId: account.credentialEntryId, providerId, modelId, proof,
-      corpusHash: calibrationCorpusHash(), admittedAt: Date.now(), deadlineAt: Math.min(Date.now() + 600_000, proof.expiresAt,
+      corpusHash: calibrationCorpusHash(), admittedAt, deadlineAt: Math.min(admittedAt + 600_000, proof.expiresAt,
         currentGovernedInferenceDeadline()?.deadlineAt ?? Infinity),
       maxCalls: tests.length * 2, maxOutputTokens: tests.reduce((n, t) => n + (t.maxTokens ?? 512), 0) * 2 };
     await lockCalibrationIdentity(db, c);
