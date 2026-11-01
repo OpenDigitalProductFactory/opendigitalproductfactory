@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
     modelProfile: { updateMany: vi.fn(), findMany: vi.fn() },
+    modelProvider: { findUnique: vi.fn() },
+    aiProviderConnection: { findUnique: vi.fn() },
     platformConfig: { findUnique: vi.fn() },
   },
 }));
@@ -86,7 +88,11 @@ describe("resolveServedContextTarget — resource-aware (BI-3E614946)", () => {
 // Default: no operator override set → target is the build floor. Individual tests
 // override per case. Set in beforeEach because clearAllMocks() clears calls but
 // not implementations, so a prior test's mockResolvedValue would otherwise leak.
-beforeEach(() => mockPrisma.platformConfig.findUnique.mockResolvedValue(null));
+beforeEach(() => {
+  mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+  mockPrisma.modelProvider.findUnique.mockReset().mockResolvedValue({ providerId: "local", status: "active" });
+  mockPrisma.aiProviderConnection.findUnique.mockReset().mockResolvedValue({ status: "active" });
+});
 afterEach(() => vi.clearAllMocks());
 
 const GEN = "docker.io/ai/qwen3-coder:latest";
@@ -497,5 +503,29 @@ describe("resolveLocalServingPosture (BI-A8BFEFCE)", () => {
       servedContextTokens: null,
       presence: "unknown",
     });
+  });
+});
+
+describe("operator pause during local configuration reconciliation", () => {
+  it.each([
+    { configured: null },
+    { configured: 40960, keepAlive: "5m" },
+  ])("defers context/residency repair without reporting a change: %j", async opts => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    const r = makeFetch(opts);
+    expect(await reconcileLocalModelContext(r.fetchImpl)).toMatchObject({
+      status: "deferred", after: null, reason: expect.stringMatching(/paused by an operator/),
+    });
+    expect(r.calls.post).toBe(0);
+    expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("defers embedder placement without preloading it", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    const r = makeFetch({ models: [{ id: EMBED }] });
+    expect(await reconcileLocalEmbedderPlacement(r.fetchImpl)).toMatchObject({
+      status: "deferred", reason: expect.stringMatching(/paused by an operator/),
+    });
+    expect(r.calls.post).toBe(0);
   });
 });

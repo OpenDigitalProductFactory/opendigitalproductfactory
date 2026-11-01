@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ stance: vi.fn(), account: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account } } }));
+const mocks = vi.hoisted(() => ({ stance: vi.fn(), account: vi.fn(), job: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account }, scheduledJob: { findUnique: mocks.job } } }));
 vi.mock("@/lib/install/instance-stance", () => ({ loadInstanceStance: mocks.stance, prismaInstanceStanceStore: () => ({}) }));
 
 import { providerAccountDefinitions } from "./packs/provider-account-tools";
@@ -12,6 +12,29 @@ const tool = providerAccountDefinitions.find((t) => t.name === "manage_provider_
 const classify = (params: Record<string, unknown>) => resolveCallConsequence(tool, { toolName: tool.name, params, userId: "owner" });
 const local = { connectionId: "provider-default-local", providerId: "local", authMethod: "local", executionChannel: "local-runtime", credentialEntryId: null, organizationId: null };
 const disable = { operation: "disable", connectionId: local.connectionId };
+
+describe("stopping a persisted quota-recovery commission", () => {
+  const params = { operation: "stop-quota-recovery", connectionId: "provider-default-chatgpt" };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stance.mockResolvedValue({ environmentClass: "production", primaryPurpose: "operate-business" });
+    mocks.account.mockResolvedValue({ connectionId: params.connectionId, providerId: "chatgpt", organizationId: null, status: "paused" });
+    mocks.job.mockResolvedValue({ metadata: { kind: "subscription-quota-recovery", version: 1, modelId: "target", hourly: true } });
+  });
+  it("narrows only the existing commission without restoring an account or invoking a provider", async () => {
+    expect((await classify(params)).consequence).toBeNull();
+    expect(tool.requiredCapability).toBe("manage_provider_connections");
+  });
+  it.each([{ ...params, hourly: true }, { ...params, modelId: "different" }, { ...params, providerId: "codex" }, { ...params, force: true }])("retains authority for extra or mismatched effects: %j", async request => {
+    expect((await classify(request)).consequence).toBe("authority");
+  });
+  it("retains authority if no valid owned commission is proven", async () => {
+    mocks.job.mockResolvedValue(null);
+    expect((await classify(params)).consequence).toBe("authority");
+    mocks.job.mockResolvedValue({ metadata: { kind: "different", version: 1, modelId: "target", hourly: true } });
+    expect((await classify(params)).consequence).toBe("authority");
+  });
+});
 
 describe("active DEV subscription verification", () => {
   const account = { connectionId: "provider-default-chatgpt", providerId: "chatgpt", authMethod: "oauth", status: "active", credentialEntryId: "owned", organizationId: null };
