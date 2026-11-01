@@ -145,7 +145,8 @@ export async function pauseOperatorProvider(input: { providerId: string; actorId
 }
 /** This narrows current routing eligibility; it never enables an account, accepts
  * a caller-selected deadline, or impersonates the original operator. */
-export async function restoreOperatorProviderPause(input: { providerId: string; actorId: string; expectedOperationId: string }, deps: PauseDependencies = {}): Promise<PauseWriteResult> {
+export async function restoreOperatorProviderPause(input: { providerId: string; connectionId: string; actorId: string; expectedOperationId: string }, deps: PauseDependencies = {}): Promise<PauseWriteResult> {
+  if (!isLocal(input.providerId) || input.connectionId !== `provider-default-${input.providerId}`) throw new Error("Restore requires the exact canonical local account identity");
   if (typeof input.expectedOperationId !== "string" || !input.expectedOperationId.trim()) throw new Error("An exact persisted pause source is required");
   return writeOperatorPause({ providerId: input.providerId, actorId: input.actorId, restoreOperationId: input.expectedOperationId }, deps);
 }

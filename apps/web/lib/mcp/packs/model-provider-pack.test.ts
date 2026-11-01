@@ -255,11 +255,16 @@ describe("native exact pause restoration", () => {
   it("forwards only the governed server caller and persisted source generation", async () => {
     const result = await modelProviderPack.handlers.manage_provider_account(request, "trusted-caller");
     expect(result).toMatchObject({ success: true, data: { outcome: "restored", operationId: "new-pause", resumeAt: "2026-11-22T03:37:14.209Z" } });
-    expect(pauseRestore.restoreOperatorProviderPause).toHaveBeenCalledExactlyOnceWith({ providerId: "local", expectedOperationId: "original-pause", actorId: "trusted-caller" });
+    expect(pauseRestore.restoreOperatorProviderPause).toHaveBeenCalledExactlyOnceWith({ providerId: "local", connectionId: "provider-default-local", expectedOperationId: "original-pause", actorId: "trusted-caller" });
     expect(accounts.setProviderAccountEnabled).not.toHaveBeenCalled();
   });
   it.each([{ actorId: "spoofed" }, { resumeAt: "2030-01-01" }, { duration: { value: 1, unit: "days" } }, { force: true }, { expectedOperationId: "" }])("rejects arbitrary input before restoring: %j", async extra => {
     expect(await modelProviderPack.handlers.manage_provider_account({ ...request, ...extra }, "trusted-caller")).toMatchObject({ success: false });
+    expect(pauseRestore.restoreOperatorProviderPause).not.toHaveBeenCalled();
+  });
+  it("refuses a nondefault selected account rather than acting on its provider default", async () => {
+    db.prisma.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: "additional-local-account", providerId: "local" });
+    expect(await modelProviderPack.handlers.manage_provider_account({ ...request, connectionId: "additional-local-account" }, "trusted-caller")).toMatchObject({ success: false });
     expect(pauseRestore.restoreOperatorProviderPause).not.toHaveBeenCalled();
   });
   it("refuses a missing trusted caller", async () => {

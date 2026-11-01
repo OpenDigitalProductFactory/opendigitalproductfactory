@@ -23,7 +23,7 @@ describe.skipIf(!url)("exact pause restoration on isolated leased PostgreSQL", (
   let deadline: string;
   let metadata: Record<string, string | number>;
   const send = vi.fn(async () => undefined);
-  const request = { providerId: "local", expectedOperationId: "source-pause", actorId: "native-restoring-caller" };
+  const request = { providerId: "local", connectionId: "provider-default-local", expectedOperationId: "source-pause", actorId: "native-restoring-caller" };
   beforeAll(async () => { fixture = await createReviewPostgresFixture({ url: url!, schema, tables }); });
   beforeEach(async () => {
     send.mockClear();

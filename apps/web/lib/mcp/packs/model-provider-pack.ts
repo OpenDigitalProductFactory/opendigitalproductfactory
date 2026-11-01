@@ -315,12 +315,12 @@ async function manage(params: Record<string, unknown>, userId: string): Promise<
   if (!connection || (providerId && providerId !== connection.providerId)) return { success: false, error: "Provider account not found", message: "Provider account not found" };
   switch (params.operation) {
     case "restore-pause": {
-      if (!userId || Object.keys(params).some(key => !["operation", "connectionId", "providerId", "expectedOperationId"].includes(key))
+      if (!userId || connectionId !== `provider-default-${connection.providerId}` || connection.connectionId !== connectionId || Object.keys(params).some(key => !["operation", "connectionId", "providerId", "expectedOperationId"].includes(key))
         || typeof params.expectedOperationId !== "string" || !params.expectedOperationId.trim())
         return { success: false, error: "Restore accepts only the exact existing pause identity", message: "Choose the persisted operator pause to restore" };
       try {
         const { restoreOperatorProviderPause } = await import("@/lib/inference/provider-operator-pause");
-        const out = await restoreOperatorProviderPause({ providerId: connection.providerId, expectedOperationId: params.expectedOperationId, actorId: userId });
+        const out = await restoreOperatorProviderPause({ providerId: connection.providerId, connectionId, expectedOperationId: params.expectedOperationId, actorId: userId });
         return { success: true, message: out.outcome === "already-restored" ? "Original pause is already restored" : out.deliveryPending ? "Original pause restored; automatic resume may be delayed" : "Original pause restored", data: out };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Pause restoration unavailable; refresh the current provider state";

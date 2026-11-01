@@ -226,7 +226,7 @@ describe("restoring the exact persisted operator pause", () => {
     const f = fixture();
     const original = await pauseLocalProvider({ providerId: "local", actorId: "original-operator", duration: { value: 1, unit: "hours" } }, f.deps);
     await resumeLocalProvider({ providerId: "local", actorId: "window-operator" }, { ...f.deps, now: new Date("2026-10-12T02:01:00Z") });
-    const input = { providerId: "local", expectedOperationId: original.operationId, actorId: "restoring-operator" };
+    const input = { providerId: "local", connectionId: "provider-default-local", expectedOperationId: original.operationId, actorId: "restoring-operator" };
     return { ...f, input, restoreDeps: { ...f.deps, now: new Date("2026-10-12T02:10:00Z") } };
   }
   it("restores the original exact expiry with a new attributable generation", async () => {
@@ -305,6 +305,12 @@ describe("restoring the exact persisted operator pause", () => {
       await expect(restoreOperatorProviderPause(f.input, { ...f.deps, now: undefined })).rejects.toThrow(/source|expired/i);
       expect(f.state.connection.status).toBe("active");
     } finally { vi.useRealTimers(); }
+  });
+  it("binds the selected account before opening a restoration transaction", async () => {
+    const f = await resumed(); f.db.$transaction.mockClear();
+    await expect(restoreOperatorProviderPause({ ...f.input, connectionId: "additional-local-account" }, f.restoreDeps)).rejects.toThrow(/account|identity/i);
+    expect(f.db.$transaction).not.toHaveBeenCalled();
+    expect(f.state.connection.status).toBe("active");
   });
   it("requires a trusted actor before any transaction", async () => {
     const f = await resumed(); f.db.$transaction.mockClear();
