@@ -100,3 +100,15 @@ describe("BusinessPerformanceDashboard", () => {
     expect(html).toContain("View trend as a table");
   });
 });
+
+it("shows software ledger currency and one native Finance action with analysis disclosed", () => {
+  const software: ReadyBusinessPerformance = { ...performance, archetypeId: "software-platform", reportingCurrency: "EUR",
+    nextAction: { href: "/finance/reports/general-ledger?period=2026-10", label: "Review finance records" },
+    metricValues: [{ ...performance.metricValues[0]!, key: "posted-ledger-income", label: "Posted income", unit: "currency", value: 1200, currency: "EUR", drilldownRoute: undefined }],
+    sections: { headline: ["posted-ledger-income"], operating: [], financial: [], customer: [], workforce: [] } };
+  const html = renderToStaticMarkup(<BusinessPerformanceDashboard performance={software} />);
+  expect(html).toContain("€1,200.00");
+  expect(html.match(/href="\/finance\/reports\/general-ledger\?period=2026-10"/g)).toHaveLength(1);
+  expect(html).toContain("Available ledger records");
+  expect(html).toContain("<summary");
+});

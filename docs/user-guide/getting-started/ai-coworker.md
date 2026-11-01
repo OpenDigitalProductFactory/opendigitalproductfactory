@@ -48,6 +48,16 @@ does not resume automatically.
 
 ## Quick Actions
 
+In **Finance**, the opening briefing keeps urgent owner decisions visible, even
+when they concern another area. Otherwise it gives Finance decisions priority
+and keeps routine unrelated decisions in your **Needs-you inbox**, with the
+correct count. It does not move work or answer a decision for you.
+
+On **Spend** and expense pages, a nonempty briefing also points to the existing
+expense-entry form and explains what to prepare. You can always use **Spend →
+My Expenses → New Expense Claim**. When no decision needs you, the normal
+briefing stays silent; the entry action remains on the page.
+
 Each page has skill buttons that trigger common tasks. These appear at the top of the coworker panel when you open it. Examples:
 
 - On the **Compliance** page: "Gap assessment", "Posture report", "Onboard a regulation"

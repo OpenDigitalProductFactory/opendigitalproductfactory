@@ -1034,7 +1034,7 @@
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n  - button\n  - button\n    - text\n  - group\n    - link\n    - button\n    - text\n    - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - text\n  - link\n  - text\n  - heading [level=1]\n  - text\n  - paragraph\n    - text"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n  - button\n  - button\n    - text\n  - group\n    - link\n    - button\n    - text\n    - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link"
     },
     "/finance/reports/outstanding": {
       "defaultVisibleWords": 102,
