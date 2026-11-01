@@ -545,6 +545,9 @@
     "apps/web/lib/actions/compliance.ts": [
       "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md"
     ],
+    "apps/web/lib/actions/coworker-response-persistence.ts": [
+      "docs/architecture/ai-routing-document-map.md"
+    ],
     "apps/web/lib/actions/coworker-tool-budget.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
@@ -1384,6 +1387,9 @@
     "apps/web/lib/routing/request-contract.ts": [
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/routing/response-feedback.ts": [
+      "docs/architecture/ai-routing-document-map.md"
     ],
     "apps/web/lib/routing/task-requirements.email.test.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
@@ -3217,12 +3223,14 @@
       "packages/validators/src/operating-composition/legacy-fingerprint.ts"
     ],
     "docs/architecture/ai-routing-document-map.md": [
+      "apps/web/lib/actions/coworker-response-persistence.ts",
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
       "apps/web/lib/ea/ai-routing-architecture-registry.ts",
       "apps/web/lib/ea/reconcile-ai-routing-architecture.ts",
       "apps/web/lib/govern/data/policy-decision.ts",
       "apps/web/lib/govern/data/policy-enforcement.ts",
-      "apps/web/lib/inference/routed-inference.ts"
+      "apps/web/lib/inference/routed-inference.ts",
+      "apps/web/lib/routing/response-feedback.ts"
     ],
     "docs/architecture/application-boundaries.md": [
       "scripts/check-application-boundaries.mjs"

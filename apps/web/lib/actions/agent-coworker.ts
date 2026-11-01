@@ -1,5 +1,5 @@
 "use server";
-import { persistCoworkerResponse } from "../tak/coworker-response-persistence";
+import { persistCoworkerResponse } from "./coworker-response-persistence";
 import { RESPONSE_FEEDBACK_BINDING_SELECT, type ResponseProducer } from "../routing/response-producer";
 import { randomUUID } from "node:crypto";
 import { buildAttachmentContext } from "@/lib/tak/attachment-context";
