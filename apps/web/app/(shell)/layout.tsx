@@ -337,10 +337,12 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             </div>
           </main>
         </div>
-        {/* The coworker's proposal cards translate with useT("approvals")
-            (BI-4E192035 leave decision card); no component under the
-            coworker reads another namespace. */}
-        <MessagesProvider locale={language} messages={{ approvals: namespaceMessages(language, "approvals") }}>
+        {/* The global coworker is outside page providers. Keep its proposal
+            and answer-feedback namespaces local to this subtree. */}
+        <MessagesProvider locale={language} messages={{
+          approvals: namespaceMessages(language, "approvals"),
+          routingManagement: namespaceMessages(language, "routingManagement"),
+        }}>
           <AgentCoworkerShell
             userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
             useUnifiedCoworker={useUnifiedCoworker}
