@@ -67,16 +67,17 @@ runs the existing supported tests within one limited commission. Subscription
 accounts cannot be included in a bulk evaluation.
 
 The request acknowledgement means the evaluation was queued. Open **Test Runs**
-for its actual outcome and summary. Complete observations may update the six
-supported grading dimensions. The unavailable conversational grader stays
+for its actual outcome and summary. Only when all six supported grading dimensions
+finish conclusively may their measurements update. The unavailable conversational grader stays
 unverified; a partial evaluation does not raise whole-model confidence or the
 evaluation count, and administrator overrides remain intact.
 
-An incomplete response or uncertain execution does not earn a score. DPF retains
-the recorded attempts and requires reconciliation before another commission;
-waiting longer or redelivering the job does not start a replacement. Account,
-credential, model and operator changes are checked again before sending a request
-and before saving measurements.
+An incomplete response does not earn a score. A known incomplete outcome can
+settle without measurements. When a provider attempt's outcome is unknown, DPF
+retains its recorded attempt and requires reconciliation before another
+commission; waiting longer or redelivering the job does not start a replacement.
+Account, credential, model and operator changes are checked again before sending
+a request and before saving measurements.
 
 ## Usage records
 
