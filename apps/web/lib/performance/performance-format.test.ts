@@ -21,3 +21,8 @@ describe("performance metric formatting", () => {
     expect(chartMetricValue(75, "duration")).toBe(75);
   });
 });
+
+it("formats the recorded source currency instead of silently converting to USD", () => {
+  expect(formatMetricValue(1200, "currency", "EUR")).toBe("€1,200.00");
+  expect(formatMetricValue(null, "currency", "EUR")).toBe("Not available");
+});
