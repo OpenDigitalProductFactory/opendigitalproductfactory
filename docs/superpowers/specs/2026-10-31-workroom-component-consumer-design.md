@@ -100,7 +100,7 @@ library, provider, registry or spend. The existing scope decisions remain the
 reason for this extraction; local tests do not substitute native admission.
 
 Native research receipt: `initiative-78cb09aa-f6b5-4766-bbad-a69a1611d4a9`.
-Independent scope/plan approval, coverage and DPF execution evidence remain owed.
+The current medium delivery rule uses the five Acceptance bullets in the live item as its objective baseline; independent spec approval is not required. Independent client design/plan review passed. Immutable plan coverage and DPF execution evidence remain owed.
 The prior local-refactor exception permits bounded source preparation with
 independent client review and native gates honestly marked unrun; it grants no
 production deployment, public package release, credential or permission change.

@@ -86,3 +86,17 @@ not permission to duplicate a body or change current records. Revert the whole
 consumer dependency/import/body slice through a protected PR when necessary.
 The package candidates, other families, DPF2 and production remain independently
 owned. Public package release and installation upgrades remain held.
+
+## Quoted acceptance and trace references
+
+- AC-PILOT-1: The real shape-conformance caller imports the qualified Workroom artifact; existing Workroom and process contract paths resolve only to thin exports of that same body.
+- AC-PILOT-2: Retire the displaced graph, marking, receipt, action-result, outcome-disposition and pure process identity/diagnostic/construct bodies in this slice; enumerate retained compatibility consumers and their removal condition.
+- AC-PILOT-3: Exact tarball identity, integrity-pinned receiving lock, declared dependencies, Apache notices and the existing Docker dependency layer support clean installation without a new registry or public package release.
+- AC-PILOT-4: Affected DPF tests, package/web typechecks, source and emitted loaders, isolated examples, merged-code integration and the relevant served nonproduction Workroom flow preserve ordinary/adverse/recovery behavior; distinguish unrun from passed.
+- AC-PILOT-5: Rollback restores the prior tested dependency/import set without changing persisted records; DPF retains transactions, current actor/admission/permit decisions and effect/result custody.
+
+C-PUBLIC: One explicit Workroom ESM/declaration contract and integrity-pinned artifact supplies every retained bridge.
+
+C-HOST: DPF retains current identity, admission, permits, transactions and effect/result custody.
+
+F-PILOT: Real shape-conformance caller → canonical Workroom artifact → same-slice body retirement and receiving/rollback verification.
