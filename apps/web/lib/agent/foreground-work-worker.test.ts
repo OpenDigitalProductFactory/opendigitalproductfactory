@@ -163,4 +163,24 @@ describe("retained foreground worker", () => {
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.wake).not.toHaveBeenCalled();
   });
+  it.each(["normalization", "ready"])("cannot execute a concurrently repaired row during %s cleanup", async lane => {
+    row.status = "input-required";
+    row.progressPayload = { resourceWait: { kind: "provider-capacity", attempt: 1 } };
+    const repair = async () => {
+      const snapshot = structuredClone(row);
+      row.status = "submitted";
+      row.progressPayload = null;
+      row.updatedAt = new Date(+row.updatedAt + 1);
+      return [snapshot];
+    };
+    if (lane === "ready") mocks.candidates.mockResolvedValueOnce([]).mockImplementationOnce(repair);
+    else mocks.candidates.mockImplementationOnce(repair).mockResolvedValueOnce([]);
+    await reconcileForegroundWork();
+    expect(row.status).toBe("submitted");
+    expect(row.progressPayload).toBeNull();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.context).not.toHaveBeenCalled();
+    expect(mocks.createMessage).not.toHaveBeenCalled();
+    expect(mocks.wake).not.toHaveBeenCalled();
+  });
 });

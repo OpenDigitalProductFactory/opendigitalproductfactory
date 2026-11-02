@@ -12,7 +12,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ Prisma: { DbNull: null }, prisma: {
   $queryRaw: (...args: any[]) => args[0].join("").includes("LIMIT 50")
-    ? args[0].join("").includes('SELECT "id", "taskRunId"') ? [] : fixture.list({ where: { OR: true } })
+    ? args[0].join("").includes("AND NOT COALESCE") ? [] : fixture.list({ where: { OR: true } })
     : fixture.lock(...args), $transaction: fixture.transaction,
   taskRun: { findUnique: fixture.load, updateMany: fixture.update, findMany: fixture.list },
   agentThread: { findUnique: fixture.thread },
