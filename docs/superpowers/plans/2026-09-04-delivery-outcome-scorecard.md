@@ -133,7 +133,7 @@ the existing Work Control payload without altering write paths.
 - `apps/web/app/(shell)/build/work/page.tsx`
 
 Write render tests for ready, empty, partial/stale, and failed-source states; semantic
-headings/tables; `Unavailable` values; record links; and compact narrow-safe structure.
+headings/tables; `Unavailable` values; record links; and compact desktop structure.
 Render the default Work Control view unchanged in shape with a compact outcomes entry,
 and branch server-side to the detailed scorecard for `?view=outcomes`. Use report-kit,
 theme tokens, no motion, no client polling, and no local calculation fork.
@@ -143,8 +143,9 @@ theme tokens, no motion, no client polling, and no local calculation fork.
 1. Run focused projection, adapter, component, Work Control, and page tests.
 2. Run web typecheck and the resolved prose/style guard obligations.
 3. Run `pnpm run pregate:preflight`; regenerate only named derived artifacts.
-4. Obtain UX-fit review and exercise default and outcome views at desktop and narrow
-   widths with keyboard and assistive semantics against a leased preview/runtime.
+4. Obtain UX-fit review and exercise default and outcome views on desktop web,
+   including light/dark modes, keyboard and assistive semantics, against a leased
+   preview/runtime.
 5. Record semantic review against the exact base/head/tree/diff identity.
 6. Run the exact-head local gate. If infrastructure makes it inconclusive, record that
    state exactly; never infer PASS. Protected PR and merge-group checks remain mandatory.
@@ -214,3 +215,11 @@ Retightening may only lower that budget and must preserve owner and expiry.
 This measured convergence needs no budget increase; the previous exception
 question is not an approval. Independent review, served desktop/narrow behavior,
 UX capture and the protected build/release gates still apply to the final delta.
+
+## Desktop-web verification reconciliation — 2026-11-02
+
+The owner-directed amendment in the existing design proposes desktop-web acceptance for AC-DOS-006. The current web verification matrix is a 1280 by 900 desktop viewport, light/dark modes and Full/Simple navigation, with keyboard and assistive semantics; populated data, source degradation, phase-report behavior, axe/contrast, existing zoom/accessibility obligations and route budgets remain owed. Do not add another 390 px browser campaign. Native iOS is a separate scope and remains untested here.
+
+> Prior Phase 5 step 4: Obtain UX-fit review and exercise default and outcome views at desktop and narrow widths with keyboard and assistive semantics against a leased preview/runtime.
+
+The older narrow-safe render-test wording and dated desktop/narrow evidence remain historical. No existing responsive implementation, protected guard, route denominator or baseline threshold is removed. No completion or revised acceptance is credited until normal baseline/plan reconciliation succeeds. Preserve the original seven item criteria, objective/contract/flow links and AC identifiers. The prior 49a gate expired; after an actual source checkpoint, bind plan coverage and required evidence to the resulting immutable source through normal governance. No old gate lifetime or review verdict is extended by this amendment.

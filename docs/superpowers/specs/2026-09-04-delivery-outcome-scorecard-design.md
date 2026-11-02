@@ -25,15 +25,15 @@ token totals reward consumption, and a median hides the blocked tail. The operat
 to know whether a delivery change produced more verified outcomes with equal or better
 quality, less waiting, less human attention, and complete attribution.
 
-- **OBJ-DOS-001 — coherent outcome unit.** Project one immutable, versioned observation
+- **OBJ-DOS-001:** coherent outcome unit. Project one immutable, versioned observation
   per Workroom and aggregate only explicitly defined cohorts.
-- **OBJ-DOS-002 — truthful flow and quality.** Report stage durations, p50/p90, first-pass
+- **OBJ-DOS-002:** truthful flow and quality. Report stage durations, p50/p90, first-pass
   protected-check state, rework, abandonment, and evidence completeness without turning
   missing facts into zero or success.
-- **OBJ-DOS-003 — truthful economy.** Keep uncached input, cached input, cache creation,
+- **OBJ-DOS-003:** truthful economy. Keep uncached input, cached input, cache creation,
   output, reasoning, API-equivalent cost, and actual invoiced spend distinct. Preserve
   attribution method and completeness. Parent and child views must not double count.
-- **OBJ-DOS-004 — decision-ready UI.** Show the bounded cohort, verified-results signal,
+- **OBJ-DOS-004:** decision-ready UI. Show the bounded cohort, verified-results signal,
   bottleneck, quality, economy, and source health first; disclose record-level evidence
   and technical detail second.
 
@@ -108,7 +108,7 @@ The outcome view uses one report-kit composition:
 3. stage and economy tables with `Unavailable` labels instead of zeroes;
 4. a bounded Workroom table linking every aggregate to `/build/work/<capsuleId>`.
 
-The view is server-rendered, keyboard navigable, narrow-safe, theme-token-only, and
+The view is server-rendered, keyboard navigable, desktop-web focused, theme-token-only, and
 reduced-motion neutral. It adds no polling. Refresh follows normal navigation; later
 Workroom-rail/task-hub slices may supply event-driven invalidation without changing the
 projection contract.
@@ -122,7 +122,7 @@ projection contract.
 | AC-DOS-003 | OBJ-DOS-002 | Verified, abandoned, superseded, first-pass, rework, regression, and evidence-completeness measures link to their underlying Workrooms. |
 | AC-DOS-004 | OBJ-DOS-003 | Token classes and spend concepts remain separate; exclusive/inclusive child attribution deduplicates run identity and exposes completeness. |
 | AC-DOS-005 | OBJ-DOS-001 | The DB adapter reads a 30-day, row-bounded cohort using existing indexed identities and returns per-source state without a GitHub/network fan-out. |
-| AC-DOS-006 | OBJ-DOS-004 | `/build/work?view=outcomes` renders ready, empty, partial/stale, and failed-source states with report-kit and semantic tables on desktop and narrow layouts. |
+| AC-DOS-006 | OBJ-DOS-004 | `/build/work?view=outcomes` renders ready, empty, partial/stale, and failed-source states with report-kit and semantic tables on desktop web. |
 | AC-DOS-007 | OBJ-DOS-004 | The default `/build/work` frozen route budget, keyboard semantics, contrast, light/dark tokens, and UX sweep pass. |
 | AC-DOS-008 | OBJ-DOS-001 | No schema migration, second event stream, global navigation entry, or client-owned scorecard state is introduced. |
 
@@ -228,3 +228,11 @@ Retightening may only lower that budget and must preserve owner and expiry.
 This measured convergence needs no budget increase; the previous exception
 question is not an approval. Independent review, served desktop/narrow behavior,
 UX capture and the protected build/release gates still apply to the final delta.
+
+## Desktop-web acceptance scope amendment — 2026-11-02
+
+The owner clarified that the separate native iOS app supplies the mobile experience, and this execution campaign should prioritize desktop web. This amendment proposes replacing the narrow-browser campaign target in AC-DOS-006 with desktop-web acceptance. The remaining data, source attribution, coverage, reporting and accessibility obligations are unchanged. Credit against the revised criterion requires supported baseline reconciliation; this source proposal is not independent approval or acceptance.
+
+> Prior AC-DOS-006: `/build/work?view=outcomes` renders ready, empty, partial/stale, and failed-source states with report-kit and semantic tables on desktop and narrow layouts.
+
+The revised criterion keeps the same route, states, report-kit and semantic-table contract on desktop web. Desktop light/dark, keyboard, contrast, axe, existing zoom/accessibility obligations and frozen route-budget checks remain owed. Native iOS is separate scope and is untested by this web change; no native feature acceptance is introduced or inferred. Existing responsive behavior and protected repository guards remain enabled. Historical C108 narrow observations and earlier dated wording are retained, without commissioning additional narrow-browser testing. All other acceptance IDs and the seven medium-item body criteria remain unchanged.
