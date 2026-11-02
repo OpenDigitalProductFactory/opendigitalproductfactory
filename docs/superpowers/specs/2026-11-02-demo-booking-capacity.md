@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Demo booking capacity repair
 
 **Status:** design for BI-0F5FCA55; source implementation and served acceptance pending.

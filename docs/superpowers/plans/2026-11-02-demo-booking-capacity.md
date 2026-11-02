@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Demo booking capacity implementation
 
 **Backlog:** BI-0F5FCA55. **Design:** [Demo booking capacity](../specs/2026-11-02-demo-booking-capacity.md).
