@@ -29,6 +29,7 @@ import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalatio
 import type { ProposalClient } from "./resolution-proposal-store";
 import { objectRecord } from "@/lib/attention/coworker-envelope-decision";
 import { settleObsoleteLeaseReleaseEnvelopes, type ObsoleteReleaseDb, type ObsoleteReleaseSummary } from "@/lib/coworker/obsolete-lease-envelope";
+import { settleObsoleteScopeReleaseEnvelopes, type ObsoleteScopeDb, type ObsoleteScopeSummary } from "@/lib/coworker/obsolete-scope-envelope";
 
 /** Stable identity of the standing governance room. */
 export const GOVERNANCE_ROOM_KEY = "decision-concierge-standing-room";
@@ -168,7 +169,8 @@ async function retireStaleProposals(): Promise<number> {
 }
 
 /** Append the pass to the standing room, convening it the first time. */
-async function recordPass(summary: SweepSummary, obsoleteReleaseApprovals?: ObsoleteReleaseSummary): Promise<void> {
+async function recordPass(summary: SweepSummary, obsoleteReleaseApprovals?: ObsoleteReleaseSummary,
+  obsoleteScopeApprovals?: ObsoleteScopeSummary): Promise<void> {
   const room = await prisma.workroom.upsert({
     where: { idempotencyKey: GOVERNANCE_ROOM_KEY },
     update: { lastSyncedAt: new Date(), executorKind: "dpf-native", executorRef: "concierge-sweep" },
@@ -204,6 +206,7 @@ async function recordPass(summary: SweepSummary, obsoleteReleaseApprovals?: Obso
         skipped: summary.skipped,
         retiredStaleProposals: summary.retiredStaleProposals,
         obsoleteReleaseApprovals: obsoleteReleaseApprovals ?? null,
+        obsoleteScopeApprovals: obsoleteScopeApprovals ?? null,
       },
     },
   });
@@ -218,6 +221,7 @@ export async function runConciergeSweepJob(input: {
   limits?: SweepLimits;
 }): Promise<SweepSummary> {
   let obsoleteReleaseApprovals: ObsoleteReleaseSummary | undefined;
+  let obsoleteScopeApprovals: ObsoleteScopeSummary | undefined;
   return runConciergeSweep(
     {
       candidates: loadCandidates,
@@ -232,10 +236,15 @@ export async function runConciergeSweepJob(input: {
         obsoleteReleaseApprovals = await settleObsoleteLeaseReleaseEnvelopes(
           prisma as unknown as ObsoleteReleaseDb, new Date(), cursor,
         );
+        const scopeCheckpoint = objectRecord(objectRecord(last?.payload)?.obsoleteScopeApprovals)?.nextCursor;
+        const scopeCursor = typeof scopeCheckpoint === "string" && scopeCheckpoint.length <= 128 ? scopeCheckpoint : null;
+        obsoleteScopeApprovals = await settleObsoleteScopeReleaseEnvelopes(
+          prisma as unknown as ObsoleteScopeDb, new Date(), scopeCursor,
+        );
         const stale = await retireStaleProposals();
-        return lapsed + obsoleteReleaseApprovals.cancelled + stale;
+        return lapsed + obsoleteReleaseApprovals.cancelled + obsoleteScopeApprovals.cancelled + stale;
       },
-      report: summary => recordPass(summary, obsoleteReleaseApprovals),
+      report: summary => recordPass(summary, obsoleteReleaseApprovals, obsoleteScopeApprovals),
       conduct: async (subject) => {
         return conductTriage(
           {

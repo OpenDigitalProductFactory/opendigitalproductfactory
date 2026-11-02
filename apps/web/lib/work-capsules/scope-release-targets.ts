@@ -84,6 +84,32 @@ export function originalScopeReleaseTargetsMatch(
   });
 }
 
+/** Maintenance needs positive obsolescence, not merely a failed precondition.
+ * Issuance and never-started approval proof are separately required by its caller. */
+export function classifyOriginalScopeReleaseTargets(
+  room: { id?: string; scopeClaims: unknown }, expectedRoomId: string, targets: readonly ScopeReleaseTarget[],
+): "current" | "obsolete" | "unknown" {
+  const originals = parseOriginalScopeReleaseTargets(targets);
+  if (!originals || !expectedRoomId || room.id !== expectedRoomId || !Array.isArray(room.scopeClaims)) return "unknown";
+  const current = new Map<string, ScopeReleaseTarget>();
+  for (const entry of room.scopeClaims) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return "unknown";
+    const row = entry as Record<string, unknown>;
+    if (!["kind", "value", "intent", "recordedByPrincipalId", "releaseEpoch"].some(key => key in row)) continue;
+    const target = targetOf(row);
+    if (!target || !parseScopeClaims([row])[0] || current.has(keyOf(target))) return "unknown";
+    current.set(keyOf(target), target);
+  }
+  let obsolete = false;
+  for (const target of originals) {
+    const stored = current.get(keyOf(target));
+    if (!stored) { obsolete = true; continue; }
+    if (stored.releaseEpoch !== target.releaseEpoch) { obsolete = true; continue; }
+    if (stored.intent !== target.intent || stored.recordedByPrincipalId !== target.recordedByPrincipalId) return "unknown";
+  }
+  return obsolete ? "obsolete" : "current";
+}
+
 
 /** Validate before receipt replay; absence of a key keeps the normal writer. */
 export const prepareScopeRelease: NonNullable<ReceiptedWorkroomToolOptions["prepare"]> = params => {

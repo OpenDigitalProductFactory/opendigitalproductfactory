@@ -97,6 +97,27 @@ a completed response records turn settlement, not business-result acceptance.
 
 ## Verification and remaining evidence
 
+### Legacy retry compatibility
+
+The November 1 canonical PostgreSQL regression at `ff338195b81` failed because
+the bounded selector omitted waits with absent or invalid `nextAttemptAt`.
+Those are due under the existing resource-wait contract. The correction uses
+parameterized PostgreSQL selection and preserves that contract, including older
+JavaScript-readable date strings. Each tick normalizes at most fifty older
+timestamps with a status/version compare-and-swap and retains every other
+progress field and all original request metadata. A separate batch selects at
+most fifty fresh, ready, expired or exhausted requests; unnormalized future
+strings cannot crowd out that batch. No retry count, deadline or authority is
+renewed. The worker still rechecks eligibility and execution authority.
+
+PostgreSQL's silent JSONPath datetime check identifies timestamps eligible for
+native ordering; it does not replace JavaScript's interpretation of older
+strings ([PostgreSQL JSON functions](https://www.postgresql.org/docs/17/functions-json.html)).
+Added database coverage checks absent/invalid times, more than fifty future
+legacy waits, bounded convergence and unchanged request fences. These new
+database cases and served Finance acceptance remain unrun until their governed
+checks execute; focused adapter tests are separate evidence.
+
 Source-local tests cover duplicate HTTP submissions, concurrent queue claims,
 the immutable request/deadline, capacity retry, expiration, authority revocation,
 changed coworker and execution generation, cancellation, pending approval,
