@@ -220,6 +220,10 @@ export async function reconcileForegroundWork() {
   `;
   for (const row of rows) {
     const wait = parseResourceWaitProjection(row.progressPayload);
+    if (!wait && isRecord(row.progressPayload) && "resourceWait" in row.progressPayload) {
+      await executeForegroundWork(row.taskRunId);
+      continue;
+    }
     if (row.status !== "submitted" && !wait) continue;
     const metadata = isRecord(row.a2aMetadata) ? row.a2aMetadata : {};
     const request = isRecord(metadata.foregroundRequest) ? metadata.foregroundRequest : {};
