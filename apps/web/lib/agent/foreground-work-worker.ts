@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma, Prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { randomUUID } from "node:crypto";
 import { isRecord } from "@/lib/shared/coerce";
 import { agentEventBus } from "@/lib/agent-event-bus";
@@ -44,7 +44,7 @@ export async function executeForegroundWork(taskRunId: string) {
     return { kind: published.kind };
   }
   const wait = parseResourceWaitProjection(progress);
-  if (run.status !== "submitted" && !(run.status === "input-required" && wait)) return { kind: "not-due" };
+  if (run.status !== "submitted" && !(run.status === "input-required" && "resourceWait" in progress)) return { kind: "not-due" };
   const now = new Date();
   const block = async (summary: string) => {
     const { resourceWait: _wait, ...retained } = progress;
@@ -159,6 +159,8 @@ export async function executeForegroundWork(taskRunId: string) {
 /** The existing queue reconciles lost wakes and due waits from retained rows. */
 export async function reconcileForegroundWork() {
   const { jobs } = await import("@/lib/jobs");
+  const now = new Date();
+  const nowIso = now.toISOString();
   const interrupted = await prisma.taskRun.findMany({ where: { source: "coworker", status: { in: ["working", "stalled"] }, archivedAt: null,
     AND: [ { a2aMetadata: { path: ["foregroundRequest", "schemaVersion"], equals: 1 } },
       { a2aMetadata: { path: ["foregroundRequest", "deadlineAt"], lte: new Date().toISOString() } } ],
@@ -170,21 +172,52 @@ export async function reconcileForegroundWork() {
     } });
     if (result.count === 1) await retainNotice(row, "Your request is retained, but execution ended without a confirmed outcome. Existing results must be checked before another attempt.");
   }
-  const rows = await prisma.taskRun.findMany({ where: { source: "coworker",
-    // Admission leaves progress SQL NULL. Claimed/parked work has a projection,
-    // so future waits cannot occupy the fresh-submission batch after a restart.
-    OR: [ { status: "submitted", progressPayload: { equals: Prisma.DbNull } }, { status: { in: ["submitted", "input-required"] }, AND: [
-      { progressPayload: { path: ["resourceWait", "kind"], equals: "provider-capacity" } },
-      { OR: [
-        { progressPayload: { path: ["resourceWait", "nextAttemptAt"], lte: new Date().toISOString() } },
-        { a2aMetadata: { path: ["foregroundRequest", "deadlineAt"], lte: new Date().toISOString() } },
-        { progressPayload: { path: ["resourceWait", "attempt"], gte: RESOURCE_WAIT_MAX_ATTEMPTS } },
-      ] },
-    ] } ],
-    AND: [ { a2aMetadata: { path: ["foregroundRequest", "schemaVersion"], equals: 1 } },
-      { a2aMetadata: { path: ["trigger"], equals: "interactive" } } ], archivedAt: null },
-    orderBy: { createdAt: "asc" }, take: 50, select: { taskRunId: true, status: true, progressPayload: true, a2aMetadata: true },
-  });
+  // Older projections used Date.parse, including non-ISO strings. Converge a
+  // bounded batch before SQL eligibility; preserve that meaning and every fence.
+  // A separate ready lane prevents fifty future legacy waits starving new work.
+  const isoPattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$";
+  type RetryRow = { id: string; taskRunId: string; status: string; updatedAt: Date; progressPayload: Prisma.JsonValue; a2aMetadata: Prisma.JsonValue };
+  const legacy = await prisma.$queryRaw<RetryRow[]>`
+    SELECT "id", "taskRunId", "status", "updatedAt", "progressPayload", "a2aMetadata" FROM "TaskRun"
+    WHERE "source" = 'coworker' AND "archivedAt" IS NULL
+      AND "status" IN ('submitted', 'input-required')
+      AND "a2aMetadata" #> '{foregroundRequest,schemaVersion}' = '1'::jsonb
+      AND "a2aMetadata" ->> 'trigger' = 'interactive'
+      AND "progressPayload" #>> '{resourceWait,kind}' = 'provider-capacity'
+      AND "progressPayload" #>> '{resourceWait,nextAttemptAt}' IS NOT NULL
+      AND NOT COALESCE(
+        jsonb_typeof("progressPayload" #> '{resourceWait,nextAttemptAt}') = 'string'
+        AND "progressPayload" #>> '{resourceWait,nextAttemptAt}' ~ ${isoPattern}
+        AND jsonb_path_exists_tz("progressPayload", 'strict $.resourceWait.nextAttemptAt.datetime()', '{}'::jsonb, true), false)
+    ORDER BY "createdAt", "id" LIMIT 50
+  `;
+  for (const row of legacy) {
+    const wait = parseResourceWaitProjection(row.progressPayload);
+    if (!wait) { await executeForegroundWork(row.taskRunId); continue; }
+    const due = Date.parse(wait.nextAttemptAt!);
+    const nextAttemptAt = Number.isFinite(due) ? new Date(due).toISOString() : nowIso;
+    await prisma.taskRun.updateMany({ where: { id: row.id, status: row.status, updatedAt: row.updatedAt },
+      data: { progressPayload: { ...(row.progressPayload as Prisma.JsonObject), resourceWait: { ...wait, nextAttemptAt } } as Prisma.InputJsonValue },
+    });
+  }
+  // SQL NULL is the actual fresh-admission projection. Missing retry times are
+  // due; unnormalized strings wait for the bounded convergence lane above.
+  const rows = await prisma.$queryRaw<RetryRow[]>`
+    SELECT "taskRunId", "status", "progressPayload", "a2aMetadata" FROM "TaskRun"
+    WHERE "source" = 'coworker' AND "archivedAt" IS NULL
+      AND "a2aMetadata" #> '{foregroundRequest,schemaVersion}' = '1'::jsonb
+      AND "a2aMetadata" ->> 'trigger' = 'interactive'
+      AND (("status" = 'submitted' AND "progressPayload" IS NULL)
+        OR ("status" IN ('submitted', 'input-required')
+          AND "progressPayload" #>> '{resourceWait,kind}' = 'provider-capacity'
+          AND ("a2aMetadata" #>> '{foregroundRequest,deadlineAt}' <= ${nowIso}
+            OR "progressPayload" #> '{resourceWait,attempt}' >= to_jsonb(${RESOURCE_WAIT_MAX_ATTEMPTS}::int)
+            OR "progressPayload" #>> '{resourceWait,nextAttemptAt}' IS NULL
+            OR ("progressPayload" #>> '{resourceWait,nextAttemptAt}' ~ ${isoPattern}
+              AND jsonb_path_exists_tz("progressPayload", 'strict $.resourceWait.nextAttemptAt.datetime()', '{}'::jsonb, true)
+              AND "progressPayload" #>> '{resourceWait,nextAttemptAt}' <= ${nowIso}))))
+    ORDER BY "createdAt", "id" LIMIT 50
+  `;
   for (const row of rows) {
     const wait = parseResourceWaitProjection(row.progressPayload);
     if (row.status !== "submitted" && !wait) continue;

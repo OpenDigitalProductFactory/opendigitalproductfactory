@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ load: vi.fn(), update: vi.fn(), list: vi.fn(), message: vi.fn(), createMessage: vi.fn(), patchMessage: vi.fn(), execute: vi.fn(), context: vi.fn(), wake: vi.fn(), emit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ load: vi.fn(), update: vi.fn(), list: vi.fn(), candidates: vi.fn(), message: vi.fn(), createMessage: vi.fn(), patchMessage: vi.fn(), execute: vi.fn(), context: vi.fn(), wake: vi.fn(), emit: vi.fn() }));
 vi.mock("server-only", () => ({}));
-vi.mock("@dpf/db", () => ({ Prisma: { DbNull: null }, prisma: { taskRun: { findUnique: mocks.load, updateMany: mocks.update, findMany: mocks.list }, agentMessage: { findFirst: mocks.message, upsert: mocks.createMessage, updateMany: mocks.patchMessage } } }));
+vi.mock("@dpf/db", () => ({ prisma: { $queryRaw: mocks.candidates, taskRun: { findUnique: mocks.load, updateMany: mocks.update, findMany: mocks.list }, agentMessage: { findFirst: mocks.message, upsert: mocks.createMessage, updateMany: mocks.patchMessage } } }));
 vi.mock("./foreground-work-context", () => ({ withForegroundWork: mocks.context }));
 vi.mock("@/lib/actions/agent-coworker", () => ({ sendMessage: mocks.execute }));
 vi.mock("@/lib/jobs", () => ({ jobs: { send: mocks.wake } }));
@@ -29,6 +29,7 @@ describe("retained foreground worker", () => {
     mocks.context.mockImplementation(async (_id, callback) => callback());
     mocks.execute.mockResolvedValue({ agentMessage: { id: "answer", role: "assistant" } });
     mocks.list.mockResolvedValue([]);
+    mocks.candidates.mockResolvedValue([]);
   });
   it("claims duplicate queue deliveries only once and binds output to the original request", async () => {
     await Promise.all([executeForegroundWork("TR-one"), executeForegroundWork("TR-one")]);
@@ -144,7 +145,7 @@ describe("retained foreground worker", () => {
     expect(mocks.execute).not.toHaveBeenCalled();
   });
   it("recovers lost advisory wakes from retained due rows without replaying blocked jobs", async () => {
-    mocks.list.mockResolvedValue([
+    mocks.candidates.mockResolvedValueOnce([]).mockResolvedValueOnce([
       { taskRunId: "TR-new", status: "submitted", progressPayload: null },
       { taskRunId: "TR-blocked", status: "input-required", progressPayload: { foregroundOutcome: "execution-uncertain" } },
     ]);

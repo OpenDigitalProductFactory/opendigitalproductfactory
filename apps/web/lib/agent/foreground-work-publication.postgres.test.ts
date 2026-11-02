@@ -171,4 +171,35 @@ describe.skipIf(!url)("foreground publication on PostgreSQL", () => {
       "eligible-due", "eligible-exhausted", "eligible-expired", "eligible-invalid-time", "eligible-legacy", "eligible-new", "eligible-no-time",
     ]);
   });
+
+  it("converges fifty legacy future timestamps without starving fresh work or changing request fences", async () => {
+    const now = new Date();
+    const originalTime = "November 20, 2099 12:00:00 GMT";
+    const wait = { ...createResourceWaitProjection("busy", 2, now), nextAttemptAt: originalTime };
+    const metadata = { trigger: "interactive", requestDigest: "f".repeat(64), foregroundRequest: {
+      schemaVersion: 1, deadlineAt: new Date(+now + 3_600_000).toISOString(), userMessageId: "original-message",
+    } };
+    const row = (id: string) => ({ taskRunId: id, userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo",
+      routeContext: "/workspace", source: "coworker", title: "Synthetic legacy retry", objective: "Preserve original retry meaning", status: "input-required",
+      createdAt: new Date(+now - 60_000), progressPayload: { foregroundAttempt: 2, dispatch: { claimedAt: "original-generation" }, resourceWait: wait }, a2aMetadata: metadata,
+    });
+    await fixture.db.taskRun.createMany({ data: [
+      ...Array.from({ length: 52 }, (_, i) => row(`legacy-future-${i}`)),
+      { ...row("fresh-after-legacy"), createdAt: now, status: "submitted", progressPayload: Prisma.DbNull },
+    ] });
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId)).toEqual(["fresh-after-legacy"]);
+    const first = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "legacy-future-" } } });
+    expect(first.filter(row => (row.progressPayload as any).resourceWait.nextAttemptAt === new Date(Date.parse(originalTime)).toISOString())).toHaveLength(50);
+    for (const retained of first) {
+      expect(retained.status).toBe("input-required");
+      expect(retained.a2aMetadata).toEqual(metadata);
+      expect(retained.progressPayload).toMatchObject({ foregroundAttempt: 2, dispatch: { claimedAt: "original-generation" }, resourceWait: { attempt: 2 } });
+    }
+    ports.wake.mockClear();
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId)).toEqual(["fresh-after-legacy"]);
+    const remaining = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "legacy-future-" } } });
+    expect(remaining.every(row => (row.progressPayload as any).resourceWait.nextAttemptAt === new Date(Date.parse(originalTime)).toISOString())).toBe(true);
+  });
 });
