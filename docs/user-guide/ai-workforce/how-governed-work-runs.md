@@ -64,8 +64,15 @@ A coworker releasing its own current file claims can use its existing authority
 when its lease and ownership still qualify. The release names the original
 acquisition: an old request cannot release a newer claim on the same file.
 Changed or unknown claims stop before another approval is created. Permissions
-and any required human decision still apply. Automatic retirement of older
-approval cards is separate work; this protection does not clear those cards.
+and any required human decision still apply.
+
+DPF can also withdraw an unused release request when its records prove that
+the original claim ended or was replaced and that the request never started.
+It records the withdrawal without approving the request or performing a release.
+Requests that were approved, started, or lack reliable history stay untouched.
+An explicit policy requiring human approval still applies. The routine review
+works through bounded batches, so older uncertain records cannot hold up later
+requests that have complete evidence.
 
 ## 2. The shape bounds what may happen
 
