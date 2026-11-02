@@ -29,6 +29,17 @@ async function retainNotice(run: { taskRunId: string; threadId: string | null; r
   });
 }
 
+type BlockableRun = { id: string; taskRunId: string; status: string; updatedAt: Date; threadId: string | null; routeContext: string | null };
+async function blockRetainedWork(run: BlockableRun, progress: Record<string, unknown>, summary: string) {
+  const { resourceWait: _wait, ...retained } = progress;
+  const saved = await prisma.taskRun.updateMany({ where: { id: run.id, status: run.status, updatedAt: run.updatedAt }, data: {
+    status: "input-required", progressPayload: { ...retained, foregroundOutcome: "blocked", summary, nextActor: "owner" } as Prisma.InputJsonValue,
+  } });
+  if (saved.count === 1) await retainNotice(run, `Your request is retained. ${summary}`);
+  return { kind: "blocked" };
+}
+const invalidCapacitySummary = "The retained capacity state needs reconciliation before another attempt.";
+
 /** Execute one fenced generation. Unknown outcomes are held, never replayed. */
 export async function executeForegroundWork(taskRunId: string) {
   const run = await prisma.taskRun.findUnique({ where: { taskRunId } });
@@ -46,15 +57,8 @@ export async function executeForegroundWork(taskRunId: string) {
   const wait = parseResourceWaitProjection(progress);
   if (run.status !== "submitted" && !(run.status === "input-required" && "resourceWait" in progress)) return { kind: "not-due" };
   const now = new Date();
-  const block = async (summary: string) => {
-    const { resourceWait: _wait, ...retained } = progress;
-    const saved = await prisma.taskRun.updateMany({ where: { id: run.id, status: run.status, updatedAt: run.updatedAt }, data: {
-      status: "input-required", progressPayload: { ...retained, foregroundOutcome: "blocked", summary, nextActor: "owner" } as Prisma.InputJsonValue,
-    } });
-    if (saved.count === 1) await retainNotice(run, `Your request is retained. ${summary}`);
-    return { kind: "blocked" };
-  };
-  if ("resourceWait" in progress && !wait) return block("The retained capacity state needs reconciliation before another attempt.");
+  const block = (summary: string) => blockRetainedWork(run, progress, summary);
+  if ("resourceWait" in progress && !wait) return block(invalidCapacitySummary);
   if (hasExecutionUncertainty(progress)) return block("The existing execution needs reconciliation before another attempt.");
   if (!run.threadId || !run.routeContext || !run.initiatingAgentId) return block("The retained request has incomplete execution identity. Reconcile its original conversation.");
   const deadline = typeof request.deadlineAt === "string" ? Date.parse(request.deadlineAt) : NaN;
@@ -176,9 +180,9 @@ export async function reconcileForegroundWork() {
   // bounded batch before SQL eligibility; preserve that meaning and every fence.
   // A separate ready lane prevents fifty future legacy waits starving new work.
   const isoPattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$";
-  type RetryRow = { id: string; taskRunId: string; status: string; updatedAt: Date; progressPayload: Prisma.JsonValue; a2aMetadata: Prisma.JsonValue };
+  type RetryRow = BlockableRun & { progressPayload: Prisma.JsonValue; a2aMetadata: Prisma.JsonValue };
   const legacy = await prisma.$queryRaw<RetryRow[]>`
-    SELECT "id", "taskRunId", "status", "updatedAt", "progressPayload", "a2aMetadata" FROM "TaskRun"
+    SELECT "id", "taskRunId", "status", "updatedAt", "threadId", "routeContext", "progressPayload", "a2aMetadata" FROM "TaskRun"
     WHERE "source" = 'coworker' AND "archivedAt" IS NULL
       AND "status" IN ('submitted', 'input-required')
       AND "a2aMetadata" #> '{foregroundRequest,schemaVersion}' = '1'::jsonb
@@ -193,7 +197,10 @@ export async function reconcileForegroundWork() {
   `;
   for (const row of legacy) {
     const wait = parseResourceWaitProjection(row.progressPayload);
-    if (!wait) { await executeForegroundWork(row.taskRunId); continue; }
+    if (!wait) {
+      if (isRecord(row.progressPayload)) await blockRetainedWork(row, row.progressPayload, invalidCapacitySummary);
+      continue;
+    }
     const due = Date.parse(wait.nextAttemptAt!);
     const nextAttemptAt = Number.isFinite(due) ? new Date(due).toISOString() : nowIso;
     await prisma.taskRun.updateMany({ where: { id: row.id, status: row.status, updatedAt: row.updatedAt },
@@ -203,7 +210,7 @@ export async function reconcileForegroundWork() {
   // SQL NULL is the actual fresh-admission projection. Missing retry times are
   // due; unnormalized strings wait for the bounded convergence lane above.
   const rows = await prisma.$queryRaw<RetryRow[]>`
-    SELECT "taskRunId", "status", "progressPayload", "a2aMetadata" FROM "TaskRun"
+    SELECT "id", "taskRunId", "status", "updatedAt", "threadId", "routeContext", "progressPayload", "a2aMetadata" FROM "TaskRun"
     WHERE "source" = 'coworker' AND "archivedAt" IS NULL
       AND "a2aMetadata" #> '{foregroundRequest,schemaVersion}' = '1'::jsonb
       AND "a2aMetadata" ->> 'trigger' = 'interactive'
@@ -221,7 +228,7 @@ export async function reconcileForegroundWork() {
   for (const row of rows) {
     const wait = parseResourceWaitProjection(row.progressPayload);
     if (!wait && isRecord(row.progressPayload) && "resourceWait" in row.progressPayload) {
-      await executeForegroundWork(row.taskRunId);
+      await blockRetainedWork(row, row.progressPayload, invalidCapacitySummary);
       continue;
     }
     if (row.status !== "submitted" && !wait) continue;
