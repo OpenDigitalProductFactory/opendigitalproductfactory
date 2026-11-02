@@ -826,3 +826,109 @@ reconciliation of possibly started effects; missing proof refuses it. Neither
 rollback nor a current verdict clears the historical incident.
 
 [October 23–24 upstream admission observations and historical plan clarification](../../history/2026-10-16-review-settlement-investigation.md#october-24-upstream-historical-plan-clarification) retain their immutable source, failed review and unchanged original request history separately from the present reassessment contract.
+
+## Consent-specific amendment — November 2
+
+This proposed amendment extends BI-7906C73E's existing mechanism to the two
+operator-authorized BI-05E0EA33 requirements. It is not an approval or permission
+to execute them. Source delivery belongs to WC-EE03C388 on
+`codex/consent-recovery-amendment`. The consent source stays frozen at
+`eaedda44088581930f3cf7696bd277eee99c5ec6` in WC-D32E1140; original signed design
+commit `1828333ce88db34ef7a8c594607f9761eebeeb02` remains in its history.
+
+Current original design/spec-approval reads return
+`original-review-not-safely-resumable`: native execution exited 1 but original
+launch membership, child closure and complete effect reconciliation remain
+unproven. These are retained unknowns. The separate semantic-review task
+TR-GATE-D3D96721FF4E3C29F88EB912 expired without a verdict; it is not the
+initiative-policy lane and is not replayed by this amendment.
+
+The operator approved the concrete bounded proposal on November 2. Genuine
+authorization is retained on subject BI-05E0EA33 as
+`cmvzqqbnb0m7c01tmwdafqmuv`, and on BI-7906C73E as
+`cmvzqmnzk0lps01tmk3k0xmir`. WWMD DI-2B16147142A5 selected preparing this
+amendment, with cited Grade C engineering estimates and no commandment conflict.
+That direction is not independent approval, original settlement or measured
+runtime evidence. Earlier unusable consultations supplied no authority.
+
+**OBJ-CONSENT:** Admit at most one separately approved present assessment of each
+of the two exact consent requirements through the existing bounded recovery
+mechanism, while preserving historical uncertainty and other subjects' policies.
+
+### Separate authority, unchanged mechanism
+
+The current independently retained BI-7906C73E policy artifact names BI-285EF102.
+Do not replace its subject, add a second policy block to that artifact, or
+supersede its baseline merely to authorize consent. BI-9D3A6DB7 is the separate
+consent authority carrier; its candidate is
+[the consent reassessment policy](2026-11-02-consent-review-reassessment-policy.md).
+It needs its own genuine independent spec-approval baseline, retained bytes and
+operator evidence. Its preparation in this source branch is not that approval.
+
+Extend the existing strict v1 policy decoder only to the two explicitly covered
+subjects, BI-285EF102 and BI-05E0EA33. Keep one policy block, two total
+assessments, exactly the two gate names, one allowance per gate, unique original
+digests, normal current limits and retained unknown historical consumption.
+BI-05E0EA33's policy must name its two observed original digests; another consent
+requirement is outside the operator's authorization. Preserve BI-285EF102's
+existing accepted bytes, digest, reader behavior and limits. No arbitrary-subject
+policy, new grant, table, scheduler or parallel attempt ledger is introduced.
+
+Reuse `readApprovedReassessmentPolicy`, original-result membership, all-family
+lineage locking, admission, qualification, native composition, captured effect
+stores and canonical writer/approval fences. The caller supplies only the
+authorization item locator, never a verdict, launch membership or an assertion
+that effects ended. Both subjects require independently retained immutable
+policy, same owning organization, current original human and assistant action
+access, normal budget/model selection and complete prospective capture.
+Public source access never implies access to private data. Workroom assignments,
+allowed LLMs and existing data-clearance intersections remain binding.
+
+Every accepted pending, failed, cancelled or uncertain present assessment consumes
+its allowance across authorization families. No original replay, historical
+budget refund, attempt/deadline reset, replacement credential, new source identity
+to evade a hold, or borrowing another subject's policy is permitted. Old effects
+remain an unresolved incident after any new verdict. Architecture, plan and
+postimplementation reviews are separate requirements, outside this two-assessment
+authorization.
+
+### Acceptance and supersession
+
+AC-RA-3's BI-285EF102 exception remains unchanged. For this amendment, extend its
+explicit subject boundary only by the separately approved BI-9D3A6DB7 consent
+policy described above. Other subjects retain the original accounting
+prerequisite. Existing objectives and criteria remain required; the following
+additions do not assert that their historical runtime evidence has passed.
+Independent amendment review must use the issuer's actual
+`expectedCurrentBaselineId` and explicitly disposition any changed criterion;
+the historical baseline locator at the start of this document is not an
+instruction to overwrite a newer baseline.
+
+| Criterion | Objectives | Observable requirement |
+|---|---|---|
+| AC-CR-1 | OBJ-CONSENT, OBJ-HISTORY | Only the two named subjects decode; the consent policy binds the exact two original digests. Unapproved, mismatched, multi-block, expanded, duplicate or cross-subject policy refuses before allocation. |
+| AC-CR-2 | OBJ-CONSENT, OBJ-PRESENT | The consent authority carrier has its own independently approved, retained immutable policy baseline and actual operator evidence. The unchanged BI-285EF102 policy remains usable under its own current baseline and limits. |
+| AC-CR-3 | OBJ-CONSENT, OBJ-CONTAIN | Consent admits at most two accepted assessments total, one per named gate, across families; pending/failed/cancelled/uncertain consumption counts. Original unknown history, budgets, attempts and deadlines remain intact. |
+| AC-CR-4 | OBJ-CONSENT, OBJ-FENCE | Original-owner access, receipt precedence, qualification, full prospective capture, backend tool reach, late-writer/approval fences and normal current budget/model checks are reused unchanged. Missing evidence or private-data/model/assignment authority refuses. |
+| AC-CR-5 | OBJ-CONSENT, OBJ-PRESENT | Protected source delivery and canonical compatibility precede admission. A supported issuer packet on frozen consent source yields genuine current design/spec receipts, then normal consent planning admission; client assessment or policy approval alone cannot satisfy those gates. |
+| AC-CR-6 | OBJ-CONSENT, OBJ-HISTORY | Regression and canonical evidence prove both unchanged BI-285EF102 handling and bounded consent admission/refusal. Unsupported older owners refuse consent; downgrade or rollback cannot erase spent allowances or unknown history. |
+
+### Delivery and limits
+
+The [consent recovery plan](../plans/2026-11-02-consent-review-reassessment.md)
+separates framework source delivery under BI-7906C73E from independent policy
+approval under BI-9D3A6DB7 and the original consent outcome under BI-05E0EA33.
+The framework PR may prepare an unapproved policy candidate; it cannot activate
+that policy. Record genuine baseline/coverage and implementation admission before
+code. Test exact-subject policy decoding, approved-policy reader isolation,
+lineage/admission counts and preserved transport/writer invariants. Use existing
+bounded collections and caps; this adds two requirements for one named subject,
+not an unbounded search or a new installation-wide collection.
+
+Advance only through `request_self_upgrade`, reusing an existing scheduled
+upgrade when it includes the protected merge. Then verify actual canonical
+compatibility and supported issuer refusal/positive admission. Do not restart a
+spent semantic-review window, renew a lost preview, bypass a consumed approval or
+declare a cloud production build locally passed. Consent implementation, browser
+acceptance and personal first-connect/reconnect remain the parent's unfinished
+outcome, not acceptance evidence for this source amendment.
