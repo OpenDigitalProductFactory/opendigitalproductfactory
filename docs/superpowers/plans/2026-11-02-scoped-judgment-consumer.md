@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Adopt scoped judgment in the DPF receiving product
 
 Status: implementation plan draft; source changes require live coverage and admission.
