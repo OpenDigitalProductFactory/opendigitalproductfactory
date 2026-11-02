@@ -1,11 +1,11 @@
 ---
-status: draft
+status: active
 ---
 
 # Demo booking capacity implementation
 
 **Backlog:** BI-0F5FCA55. **Design:** [Demo booking capacity](../specs/2026-11-02-demo-booking-capacity.md).
-**Status:** planned; coverage and implementation admission required before source edits.
+**Status:** implementation admitted; delivery and runtime verification pending.
 
 One atomic repair: native demo loading cannot become valid through tests or allocation alone. No phase is independently shippable. Broader owner acceptance remains under BI-A699AE2C/DOC-82684072.
 
@@ -30,4 +30,4 @@ Keep completed work in the past and pending/confirmed work upcoming; preserve in
 
 ## Backlog coverage
 
-Atomic deliverable maps to BI-0F5FCA55 using REQ-CAPACITY, CONTRACT-DEMO, FLOW-RESULTS and VERIFY-DEMO. Live receipt pending; implementation is not yet authorized by this document.
+Atomic deliverable maps to BI-0F5FCA55 using REQ-CAPACITY, CONTRACT-DEMO, FLOW-RESULTS and VERIFY-DEMO. Native receipt cmvzqofph0m4v01tmehv9yow9 binds the immutable plan at dade0a9e3192f339edfa759b098089e6ef40e37c (blob b6b32d91d53d7cabe823cfeb498d08685fff50e3). Research receipt initiative-fe3a69f1-0b1d-428a-9768-783cc497bbcd and implementation admission IRD-B745E859CFFF were recorded 2026-11-02. Execution evidence remains pending.
