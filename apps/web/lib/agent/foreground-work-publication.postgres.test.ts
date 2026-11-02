@@ -202,4 +202,28 @@ describe.skipIf(!url)("foreground publication on PostgreSQL", () => {
     const remaining = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "legacy-future-" } } });
     expect(remaining.every(row => (row.progressPayload as any).resourceWait.nextAttemptAt === new Date(Date.parse(originalTime)).toISOString())).toBe(true);
   });
+
+  it("disposes fifty malformed legacy waits so they cannot permanently crowd out fresh work", async () => {
+    const now = new Date();
+    const row = (id: string) => ({ taskRunId: id, userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo",
+      routeContext: "/workspace", source: "coworker", title: "Synthetic malformed wait", objective: "Dispose without inference", status: "input-required",
+      createdAt: new Date(+now - 60_000), progressPayload: { resourceWait: { kind: "provider-capacity", attempt: 1 } },
+      a2aMetadata: { trigger: "interactive", foregroundRequest: { schemaVersion: 1, deadlineAt: new Date(+now + 60_000).toISOString() } },
+    });
+    await fixture.db.taskRun.createMany({ data: [
+      ...Array.from({ length: 50 }, (_, i) => row(`malformed-${i}`)),
+      { ...row("fresh-after-malformed"), createdAt: now, status: "submitted", progressPayload: Prisma.DbNull },
+    ] });
+    await reconcileForegroundWork();
+    expect(ports.wake).not.toHaveBeenCalled();
+    const disposed = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "malformed-" } } });
+    expect(disposed).toHaveLength(50);
+    for (const retained of disposed) {
+      expect(retained.status).toBe("input-required");
+      expect(retained.progressPayload).toMatchObject({ foregroundOutcome: "blocked", nextActor: "owner" });
+      expect((retained.progressPayload as any).resourceWait).toBeUndefined();
+    }
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId)).toEqual(["fresh-after-malformed"]);
+  });
 });

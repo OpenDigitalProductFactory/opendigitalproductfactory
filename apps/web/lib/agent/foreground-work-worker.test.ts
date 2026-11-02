@@ -152,4 +152,15 @@ describe("retained foreground worker", () => {
     await reconcileForegroundWork();
     expect(mocks.wake).toHaveBeenCalledExactlyOnceWith({ name: "agent/foreground-work.run", data: { taskRunId: "TR-new" } });
   });
+  it("removes a malformed legacy wait from the ready lane without inference", async () => {
+    row.status = "input-required";
+    row.progressPayload = { resourceWait: { kind: "provider-capacity", attempt: 1 } };
+    mocks.candidates.mockResolvedValueOnce([]).mockResolvedValueOnce([structuredClone(row)]);
+    await reconcileForegroundWork();
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload).toMatchObject({ foregroundOutcome: "blocked", nextActor: "owner" });
+    expect(row.progressPayload.resourceWait).toBeUndefined();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.wake).not.toHaveBeenCalled();
+  });
 });
