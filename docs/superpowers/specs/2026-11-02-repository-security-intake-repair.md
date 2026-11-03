@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Repository security intake repair
 
 Backlog: BI-2422A366. Workroom: WC-3BB460F8.
@@ -10,6 +14,9 @@ and peer demand. The latter has recurrence semantics rather than source
 reconciliation: the scan reports 3971 recurrences and 38 ambiguous issue origins.
 Six open Dependabot alerts (#232, #238, #254–257) have no reader in this intake.
 An empty estate patch report does not establish repository alert coverage.
+The existing GitHub security-findings watch is healthy: run 41483190081 updated
+standing issue #4389 with all six findings on November 2. Preserve that detector;
+the defect is actionable per-alert backlog coverage, not a missing provider scan.
 
 ## Existing design and selected repair
 
