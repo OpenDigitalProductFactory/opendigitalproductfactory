@@ -10,6 +10,7 @@ import * as fixtureHelpers from "./foreground-work-recovery-fixtures";
 import { assertForegroundFixtureRuntime, assertForegroundBackgroundQuiet, prepareForegroundFixtures,
   cleanupForegroundFixtures, foregroundIsolationFailure, foregroundSeedScheduleDefinitions, prepareForegroundTarget,
   hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport } from "./foreground-work-recovery-fixtures";
+import { readForegroundBuildEvidence } from "./foreground-work-recovery-fixtures";
 
 const admitted = {
   CI: "true", GITHUB_ACTIONS: "true", DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1",
@@ -211,6 +212,22 @@ it("checks isolation early and again immediately before normal boot", () => {
 describe("required recovery workflow", () => {
   const ci = parse(readFileSync(new URL("../../../.github/workflows/ci.yml", import.meta.url), "utf8"));
   const ux = parse(readFileSync(new URL("../../../.github/workflows/ux-route-sweep.yml", import.meta.url), "utf8"));
+  it.each(["true", "false"])("reads evidence from the actual served build layout: %s", reused => {
+    const root = mkdtempSync(join(tmpdir(), "foreground-build-evidence-"));
+    try {
+      const buildRoot = join(root, reused === "true" ? "apps/web/.next/standalone/apps/web/.next" : "apps/web/.next");
+      mkdirSync(join(buildRoot, "server/app/api/agent/send"), { recursive: true });
+      writeFileSync(join(buildRoot, "BUILD_ID"), "synthetic-build-id\n");
+      writeFileSync(join(buildRoot, "server/app/api/agent/send/route.js"), "synthetic compiled route");
+      const value = readForegroundBuildEvidence(root, reused);
+      expect(value.buildId).toBe("synthetic-build-id");
+      expect(value.sendRouteSha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(value.staticRoot).toBe(join(buildRoot, "static"));
+      expect(() => readForegroundBuildEvidence(root, reused === "true" ? "false" : "true")).toThrow();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+    const verification = ux.jobs.sweep.steps.find((step: { name: string }) => step.name === "Verify retained work through authenticated HTTP and the owned queue");
+    expect(verification.env.DPF_REUSED_BUILD).toContain("steps.materialize-build.outputs.reused");
+  });
   it.each([
     ["true", "standalone", true, 0],
     ["false", "root", true, 0],

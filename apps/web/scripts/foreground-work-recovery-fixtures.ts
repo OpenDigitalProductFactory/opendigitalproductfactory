@@ -1,5 +1,6 @@
 import type { PrismaClient } from "../../../packages/db/generated/client/client";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -8,6 +9,18 @@ import { isRecord } from "../lib/shared/coerce";
 import { readWorkroomPostureClaim } from "../lib/work-management/workroom-posture-claim";
 import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
 import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
+
+/** Read the same build layout that the workflow actually serves. */
+export function readForegroundBuildEvidence(root: string, reused: string | undefined) {
+  if (reused !== undefined && !["", "true", "false"].includes(reused)) throw new Error("Invalid reused build selection");
+  const buildRoot = resolve(root, reused === "true"
+    ? "apps/web/.next/standalone/apps/web/.next" : "apps/web/.next");
+  const buildId = readFileSync(resolve(buildRoot, "BUILD_ID"), "utf8").trim();
+  if (!buildId) throw new Error("The served build has no build ID");
+  return { buildId,
+    sendRouteSha256: createHash("sha256").update(readFileSync(resolve(buildRoot, "server/app/api/agent/send/route.js"))).digest("hex"),
+    staticRoot: resolve(buildRoot, "static"), layout: reused === "true" ? "standalone" : "root" };
+}
 
 /** One case inventory shared with the existing diff-impact planner. */
 export function foregroundRequiredCaseIds(): string[] {

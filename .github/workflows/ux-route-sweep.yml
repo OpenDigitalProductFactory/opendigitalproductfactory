@@ -341,6 +341,7 @@ jobs:
         if: ${{ inputs.scenario == 'foreground-recovery' }}
         env:
           DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+          DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
         run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-verification.ts
 
       # Provider-detail routes require a dynamic fixture and are excluded from

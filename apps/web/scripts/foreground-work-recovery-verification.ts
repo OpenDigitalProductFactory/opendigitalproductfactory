@@ -11,6 +11,7 @@ import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
 import { assertForegroundFixtureRuntime, prepareForegroundFixtures, cleanupForegroundFixtures,
   assertForegroundBackgroundQuiet, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport, type ForegroundFixture } from "./foreground-work-recovery-fixtures";
 import { foregroundRequiredCaseIds, assertForegroundCasesExecuted } from "./foreground-work-recovery-fixtures";
+import { readForegroundBuildEvidence } from "./foreground-work-recovery-fixtures";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/foreground-work-recovery");
@@ -60,9 +61,9 @@ export async function verifyForegroundRecovery() {
     check(isRecord(version), "The served version is not a version record");
     check(version.gitSha === runtime.sourceSha, "Served source is absent or does not match this verification build");
     evidence.servedVersion = version;
+    const build = readForegroundBuildEvidence(ROOT, process.env.DPF_REUSED_BUILD);
     evidence.productionBuild = {
-      buildId: readFileSync(resolve(ROOT, "apps/web/.next/BUILD_ID"), "utf8").trim(),
-      sendRouteSha256: createHash("sha256").update(readFileSync(resolve(ROOT, "apps/web/.next/server/app/api/agent/send/route.js"))).digest("hex"),
+      ...build,
       sourceBinding: "reported CI deployment source plus canonical production build, compiled route hash and observed matching served static bytes; no live-install or baked-image claim",
     };
     fixtureSettlement = "preparation-outcome-unknown";
@@ -71,7 +72,7 @@ export async function verifyForegroundRecovery() {
     await page.goto(runtime.origin + "/workspace", { waitUntil: "domcontentloaded", timeout: 60_000 });
     const scriptPath = await page.locator('script[src^="/_next/static/"]').first().getAttribute("src");
     check(scriptPath, "The served page has no production static asset");
-    const asset = new URL(scriptPath, runtime.origin), staticRoot = resolve(ROOT, "apps/web/.next/static");
+    const asset = new URL(scriptPath, runtime.origin), staticRoot = build.staticRoot;
     const assetFile = resolve(staticRoot, decodeURIComponent(asset.pathname.slice("/_next/static/".length)));
     check(asset.origin === runtime.origin && assetFile.startsWith(staticRoot + sep), "The served asset is outside this runtime build");
     const fetchedAsset = await context.request.get(asset.href);
