@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { withMessages } from "@/test-support/with-messages";
 import type { RoutingManagementData, RoutingReceipt } from "@/lib/ai-operations-map/routing-management-types";
 import type { OperationsMapRoutingTopology } from "@/lib/ai-operations-map/types";
 import { RoutingManagementWorkspace } from "./RoutingManagementWorkspace";
 import { RoutingManagementNav } from "./RoutingManagementNav";
 
+const answerActions = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/actions/response-feedback", () => ({ getResponseFeedbackAnswerAction: answerActions.read }));
+vi.mock("@/components/agent/ResponseFeedback", () => ({ ResponseFeedback: () => <div data-testid="response-feedback">Feedback controls</div> }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname, useRouter: () => ({ push: navigation.push }) }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.ComponentProps<"a">) => <a {...props}>{children}</a> }));
@@ -162,7 +165,7 @@ describe("routing workspace investigation", () => {
     mount();
     const table = within(screen.getByRole("region", { name: "Task evaluation" })).getByRole("table");
     expect(within(table).getAllByText("Evaluated quality")).toHaveLength(2);
-    expect(within(table).getAllByText("Operator feedback")).toHaveLength(2);
+    expect(within(table).getAllByText("Feedback coverage")).toHaveLength(2);
     expect(within(table).getByText("0/1 scored · unavailable")).toBeTruthy();
   });
   it("keeps the searchable traffic catalog's reflowed evidence labeled", () => {
@@ -212,4 +215,50 @@ describe("existing provider navigation", () => {
     render(withMessages(<RoutingManagementNav />));
     expect(screen.getByRole("link", { name: "Evaluation" }).getAttribute("href")).toContain("routingTask=review");
   });
+});
+
+
+describe("answer investigation within routing", () => {
+  beforeEach(() => { answerActions.read.mockReset(); });
+  it("reviews an exact authorized answer in the same dialog and returns focus with scope preserved", async () => {
+    answerActions.read.mockResolvedValue({ok:true,data:{content:"Exact **saved answer**.",attemptId:"attempt1",providerId:"cloud",modelId:"model",state:{messageId:"answer1",available:true,value:null,source:null,canWrite:true,revision:0}}});
+    const attempt = {id:"attempt1",providerId:"cloud",modelId:"model",channel:"api",status:"success",startedAt:receipt.occurredAt,durationMs:10,estimatedCostUsd:null,inputTokens:null,outputTokens:null,feedback:null,hold:null,agentMessageId:"answer1"};
+    mount({...data,receipts:[{...receipt,attempts:[attempt]}]});
+    const initialUrl=window.location.href;
+    const decision=within(screen.getByRole("region",{name:"Recent routing decisions"})).getByRole("button",{name:/review/i});
+    decision.focus();fireEvent.click(decision);
+    const review=screen.getByRole("button",{name:"Review answer"});fireEvent.click(review);
+    await screen.findByRole("dialog",{name:"Saved answer"});
+    await screen.findByText("saved answer");
+    expect(answerActions.read).toHaveBeenCalledExactlyOnceWith("answer1","attempt1");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);expect(window.location.href).toBe(initialUrl);
+    expect(screen.getByTestId("response-feedback")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button",{name:"Back to decision"}));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button",{name:"Review answer"})));
+    fireEvent.click(screen.getByRole("button",{name:"Close routing inspector"}));
+    expect(document.activeElement).toBe(decision);expect(window.location.href).toBe(initialUrl);
+  });
+  it("does not expose an unavailable answer or rating", async () => {
+    answerActions.read.mockResolvedValue({ok:false,error:"forbidden"});
+    const attempt = {id:"attempt1",providerId:"cloud",modelId:"model",channel:"api",status:"success",startedAt:receipt.occurredAt,durationMs:10,estimatedCostUsd:null,inputTokens:null,outputTokens:null,feedback:null,hold:null,agentMessageId:"answer1"};
+    mount({...data,receipts:[{...receipt,attempts:[attempt]}]});
+    fireEvent.click(within(screen.getByRole("region",{name:"Recent routing decisions"})).getByRole("button",{name:/review/i}));
+    fireEvent.click(screen.getByRole("button",{name:"Review answer"}));
+    await screen.findByText("This saved answer is unavailable with your current access or evidence.");
+    expect(screen.queryByTestId("response-feedback")).toBeNull();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+});
+
+
+it("retains the clicked attempt when fallback attempts share one final-answer message id",async()=>{
+ answerActions.read.mockImplementation(async(_messageId:string,expectedAttemptId:string)=>expectedAttemptId==="winner"?{ok:true,data:{content:"Winner answer.",attemptId:"winner",providerId:"winner-provider",modelId:"winner-model",state:{messageId:"answer1",available:true,canWrite:true,revision:0}}}:{ok:false,error:"unavailable"});
+ const baseAttempt={providerId:"earlier-provider",modelId:"earlier-model",channel:"api",status:"error",startedAt:receipt.occurredAt,durationMs:10,estimatedCostUsd:null,inputTokens:null,outputTokens:null,feedback:null,hold:null,agentMessageId:"answer1"};
+ mount({...data,receipts:[{...receipt,attempts:[{...baseAttempt,id:"earlier"},{...baseAttempt,id:"winner",providerId:"winner-provider",modelId:"winner-model",status:"success"}]}]});
+ fireEvent.click(within(screen.getByRole("region",{name:"Recent routing decisions"})).getByRole("button",{name:/review/i}));
+ fireEvent.click(screen.getAllByRole("button",{name:"Review answer"})[0]);
+ await screen.findByText("This saved answer is unavailable with your current access or evidence.");
+ expect(answerActions.read).toHaveBeenLastCalledWith("answer1","earlier");expect(screen.queryByText("Winner answer.")).toBeNull();expect(screen.queryByTestId("response-feedback")).toBeNull();
+ fireEvent.click(screen.getByRole("button",{name:"Back to decision"}));fireEvent.click(screen.getAllByRole("button",{name:"Review answer"})[1]);
+ await screen.findByText("Winner answer.");expect(answerActions.read).toHaveBeenLastCalledWith("answer1","winner");expect(screen.getByText(/winner-provider/)).toBeTruthy();
 });

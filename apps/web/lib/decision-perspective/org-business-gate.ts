@@ -31,6 +31,35 @@ import type {
   DecisionScoredOption,
 } from "./types";
 import type { AlignmentCorpora, AlignmentEvidence } from "./alignment-criteria";
+import {
+  directionEvidence,
+  loadOrganizationDirection,
+  type DirectionReadClient,
+} from "@/lib/organization-direction/direction";
+
+/** Ref prefix the instance's direction carries in the WWWD corpus (BI-8AB6B4F7). */
+export const DIRECTION_REF_PREFIX = "direction:";
+
+/**
+ * The owner's mission, vision and outcomes as WWWD evidence: the prime context
+ * the org's business decisions steer by. Fail-soft to none; never a default.
+ */
+async function loadDirectionEvidence(db: any, organizationId: string): Promise<AlignmentEvidence[]> {
+  if (!db.businessContext?.findUnique || !db.instanceOutcome?.findMany || !db.instanceDirectionRevision?.findFirst) {
+    return [];
+  }
+  try {
+    return directionEvidence(await loadOrganizationDirection(db as DirectionReadClient, organizationId));
+  } catch {
+    return [];
+  }
+}
+
+/** What the ledger records about the direction a WWWD decision read. */
+export function instanceDirectionLedger(corpora: AlignmentCorpora | undefined): { recorded: boolean; refs: string[] } {
+  const refs = (corpora?.wwwd ?? []).map((row) => row.ref).filter((ref) => ref.startsWith(DIRECTION_REF_PREFIX));
+  return { recorded: refs.length > 0, refs };
+}
 
 type OrgBusinessGateClient = any;
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
@@ -86,8 +115,9 @@ export async function loadOrgAlignmentCorpora(
     const gtmRows = wikiRows.filter((row) =>
       /how-we-decide|supply-chain|pricing|growth|who-we-serve/.test(String(row["slug"] ?? "")),
     );
+    const direction = await loadDirectionEvidence(db, organizationId);
     return {
-      wwwd: evidence("wiki", wikiRows),
+      wwwd: [...direction, ...evidence("wiki", wikiRows)],
       portfolio: evidence("product", productRows),
       gtm: evidence("wiki", gtmRows),
     };
@@ -176,6 +206,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     now: input.now,
     recentOverrideCount: input.recentOverrideCount,
     alignmentCorpora,
+    outcomePayloadExtra: { instanceDirection: instanceDirectionLedger(alignmentCorpora) },
   });
 
   return {

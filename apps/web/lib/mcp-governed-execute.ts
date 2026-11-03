@@ -440,6 +440,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tool,
       agentGrantAllowed,
     );
+    if (authorityGate.outcome === "settled-command") return authorityGate.result;
     if (authorityGate.outcome === "settled") return settledApprovalResult(args.toolName, authorityGate);
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {

@@ -12,6 +12,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RepositorySourceAdmission } from "@/lib/backlog/initiative-readiness/repository-artifact";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { pageSource, boundedInteger } from "@/lib/source-page";
 import { REPO_COMMIT_RANGE_PATH_PREFIX } from "@/lib/shared/immutable-review-reader";
@@ -59,6 +60,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         repositoryFullName: { type: "string", description: "Canonical repository owner/name for immutable provider fallback" },
+        workroomId: { type: "string", description: "Optional exact actor-admitted Workroom selecting public component source; requires its current commit and expected blob." },
         path: { type: "string", description: "Relative file path" },
         version: { type: "string", description: "Git tag or ref (default: deployed version)" },
         startLine: { type: "number", description: "1-based line to start at (default 1)" },
@@ -107,6 +109,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         repositoryFullName: { type: "string", description: "Canonical repository owner/name for immutable provider fallback" },
+        workroomId: { type: "string", description: "Optional exact actor-admitted Workroom selecting public component source; requires one exact path, current commit and expected blob." },
         query: { type: "string", description: "Text or regex pattern to search" },
         version: { type: "string", description: "Git tag or ref (default: deployed version)" },
         glob: { type: "string", description: "File glob filter (e.g., '*.ts')" },
@@ -191,13 +194,20 @@ async function queryVersionHistoryHandler(params: Record<string, unknown>): Prom
   };
 }
 
-async function readSourceAtVersionHandler(params: Record<string, unknown>): Promise<ToolResult> {
+async function readSourceAtVersionHandler(params: Record<string, unknown>, sourceAdmission?: RepositorySourceAdmission): Promise<ToolResult> {
   const { gitBlobId, gitShow, isGitAvailable } = await import("@/lib/git-utils");
   const gitUnavailable = "Git history is not available in this deployment. Use read_codebase_manifest for codebase orientation.";
   const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
   const path = String(params.path ?? "");
   const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
   const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId : null;
+  const { isCanonicalRepositorySource } = await import("@/lib/backlog/initiative-readiness/repository-artifact");
+  const canonical = repositoryFullName === null || await isCanonicalRepositorySource(repositoryFullName);
+  if ((!canonical && !sourceAdmission) || (sourceAdmission && (!repositoryFullName
+    || sourceAdmission.repositoryFullName.toLowerCase() !== repositoryFullName.toLowerCase()
+    || sourceAdmission.headSha !== ref || !expectedBlobId || !await sourceAdmission.isCurrent()))) {
+    return { success: false, error: "workroom_source_unavailable", message: "The exact selected repository source or actor admission could not be verified." };
+  }
   // The provider fallback needs the canonical repository and an immutable
   // commit. The blob id is verification when the caller has one (a bound review
   // packet), not a precondition: a caller that knows only commit + path — a
@@ -218,7 +228,7 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
   let content: string | null = null;
   let blobId: string | null = null;
   let localError = gitUnavailable;
-  if (await isGitAvailable()) {
+  if (canonical && !sourceAdmission && await isGitAvailable()) {
     const resolvedBlob = await gitBlobId({ ref, path });
     if (!("error" in resolvedBlob)) {
       if (expectedBlobId !== null && expectedBlobId !== resolvedBlob.blobId) {
@@ -250,6 +260,7 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
       commitSha: ref,
       path,
       expectedBlobId,
+      ...(sourceAdmission ? { sourceAdmission } : {}),
     });
     if (!providerBlob.ok) return { success: false, error: providerBlob.code, message: providerBlob.error };
     blobId = providerBlob.blobId;
@@ -349,13 +360,20 @@ async function readBuildArtifactRevisionHandler(params: Record<string, unknown>)
   };
 }
 
-async function searchSourceAtVersionHandler(params: Record<string, unknown>): Promise<ToolResult> {
+async function searchSourceAtVersionHandler(params: Record<string, unknown>, sourceAdmission?: RepositorySourceAdmission): Promise<ToolResult> {
   const { gitBlobId, gitGrep, isGitAvailable } = await import("@/lib/git-utils");
   const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
   const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
   const glob = typeof params.glob === "string" ? params.glob : null;
   const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId : null;
   const exactPath = glob !== null && !/[*?\[]/.test(glob);
+  const { isCanonicalRepositorySource } = await import("@/lib/backlog/initiative-readiness/repository-artifact");
+  const canonical = repositoryFullName === null || await isCanonicalRepositorySource(repositoryFullName);
+  if ((!canonical && !sourceAdmission) || (sourceAdmission && (!repositoryFullName || !exactPath || !expectedBlobId
+    || sourceAdmission.repositoryFullName.toLowerCase() !== repositoryFullName.toLowerCase()
+    || sourceAdmission.headSha !== ref || !await sourceAdmission.isCurrent()))) {
+    return { success: false, error: "workroom_source_unavailable", message: "The exact selected repository source or actor admission could not be verified." };
+  }
   const offset = boundedInteger(params.offset, 0, 0, MAX_SEARCH_OFFSET);
   if (typeof params.offset === "number" && params.offset > MAX_SEARCH_OFFSET) {
     return { success: false, error: "invalid_search_offset", message: `Search offset exceeds ${MAX_SEARCH_OFFSET}.` };
@@ -368,7 +386,7 @@ async function searchSourceAtVersionHandler(params: Record<string, unknown>): Pr
     }
   }
   let results: Array<{ path: string; line: number; text: string }>;
-  if (await isGitAvailable()) {
+  if (canonical && !sourceAdmission && await isGitAvailable()) {
     if (expectedBlobId !== null) {
       const resolvedBlob = await gitBlobId({ ref, path: glob! });
       if ("error" in resolvedBlob) return { success: false, error: resolvedBlob.error, message: resolvedBlob.error };
@@ -401,6 +419,7 @@ async function searchSourceAtVersionHandler(params: Record<string, unknown>): Pr
       commitSha: ref,
       path: glob,
       expectedBlobId,
+      ...(sourceAdmission ? { sourceAdmission } : {}),
     });
     if (!providerBlob.ok) return { success: false, error: providerBlob.code, message: providerBlob.error };
     blobId = providerBlob.blobId;
@@ -470,12 +489,23 @@ const handlers: Record<string, ToolPackHandler> = {
     // BI-46E344FE: a merged change bound whole to a post-implementation review.
     : String(params.path ?? "").startsWith(REPO_COMMIT_RANGE_PATH_PREFIX)
     ? import("@/lib/backlog/initiative-readiness/repo-commit-range").then(({ readCommitRangeAtVersion }) => readCommitRangeAtVersion(params))
-    : readSourceAtVersionHandler(params),
+    : selectedSourceHandler(params, userId, context, readSourceAtVersionHandler),
   read_build_artifact_revision: (params) => readBuildArtifactRevisionHandler(params),
-  search_source_at_version: (params) => searchSourceAtVersionHandler(params),
+  search_source_at_version: (params, userId, context) => selectedSourceHandler(params, userId, context, searchSourceAtVersionHandler),
   list_source_directory: (params) => listSourceDirectoryHandler(params),
   compare_versions: (params) => compareVersionsHandler(params),
 };
+
+async function selectedSourceHandler(params: Record<string, unknown>, userId: string,
+  context: Parameters<ToolPackHandler>[2], handler: typeof readSourceAtVersionHandler) {
+  if (params.workroomId === undefined) return handler(params);
+  const { prepareWorkroomRepositorySource } = await import("../workroom-repository-source");
+  const selected = await prepareWorkroomRepositorySource({ workroomId: params.workroomId, userId, agentId: context?.agentId ?? null });
+  if (!selected) return { success: false, error: "workroom_source_unavailable", message: "The exact Workroom source or actor admission could not be verified." };
+  const result = await handler(params, selected.sourceAdmission);
+  return await selected.sourceAdmission.isCurrent() ? result
+    : { success: false, error: "workroom_source_unavailable", message: "The selected source or actor admission changed during the read." };
+}
 
 export const versionHistoryPack: ToolPack = {
   packId: "version-history",

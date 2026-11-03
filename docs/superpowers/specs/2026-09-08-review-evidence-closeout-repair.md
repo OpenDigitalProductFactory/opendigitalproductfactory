@@ -27,6 +27,121 @@ only INV5_UNVERIFIED_MESSAGE. `resolveEvidenceRecovery` preserves withheldConten
 but the loop drops it. MCP task execution treats the resulting text as completion.
 The draft's correctness is unknown; it must not become an approved verdict.
 
+### Current reproduction and bounded follow-through (2026-10-31)
+
+BI-0C0669B5 resumes in WC-95E5E6F9 on
+`codex/coworker-grounding-failure`, based on
+`bb16531c673919212f8318b3920e0b3012b9f18e`. Two separate read-only COO
+checks on served `a87edcb6472381b5ba7b9ffea8dbf5db4cd8dff2` returned the
+INV-5 refusal despite successful ChatGPT component calls. The second named
+the exact approval reader and its supported pending mode. Neither returned a
+verified count. These observations establish failure, not its extraction,
+attachment or authorization cause. Private deliberation read was denied; no
+alternate private endpoint, database read or broader grant is authorized.
+
+The current loop reproduction is
+`apps/web/lib/tak/agentic-loop-evidence.test.ts`: two model replies with no
+tool execution exhaust the one recovery nudge, return the guard message,
+but omit both a typed failure and the withheld draft. The greeting control
+passes. This is a unit reproduction with mocked inference, not a live model
+qualification. The initial command used a nonexistent package filter and ran
+no tests; only the later `web` package run establishes the actual red result.
+
+The ordered AC-REC-003 repair is:
+
+1. Pin the current loop failure before production edits. Add controls for a
+   real successful read, a failed read, and discovery-only calls; neither a
+   model's claimed read nor a successful meta-tool proves live facts.
+2. Extend the existing typed dead-end result with an evidence-unavailable
+   outcome. Carry the withheld final-answer drafts separately from reply text,
+   under the existing bounded recovery budget. Record the observed tool counts
+   and a turn metric before the early return. These are loop observations,
+   not proof that an unobserved native tool did not run.
+3. Reuse existing task artifacts for explicitly unverified diagnostic drafts,
+   bound to the server's current task, agent and thread. Preserve current task
+   authority and execution fencing. Do not put drafts in response text,
+   progress summaries, completion receipts or semantic recall. A missing task
+   binding or failed artifact write remains explicit; it never becomes a claim
+   that a draft was saved. Outward artifact projections and positive-evidence
+   search must exclude these internal drafts. No schema, credential, grant,
+   model requirement or privacy change is proposed.
+4. Exercise the actual chat and MCP task boundaries: refusal is a non-success
+   result, the task cannot complete from its canned text, and the draft stays
+   outside outward messages. Verify existing server-bound artifact-review and
+   native reader provenance controls for AC-REC-002; do not add a text-based
+   evidence exemption. Any remaining AC-REC-002 miss stays open rather than
+   declaring the whole item delivered.
+5. Run affected tests, both web typechecks, module-size and documentation
+   guards, independent source assessment and the canonical merged-code gate.
+   Publish through the protected queue and advance the canonical runtime, then
+   perform one new read-only acceptance check only after the repair changes.
+   Historical uncertain executions remain unreplayed. This reporting repair
+   does not itself establish why the original approval reader failed.
+
+This is one bounded repair of the existing evidence outcome contract, not an
+implementation of intake-only BI-E9555B2D or an expansion of the parallel
+provider-quota branch. Draft retention, non-success classification and outward
+isolation must be verified together. The implementation now preserves unknown tool settlement using the existing
+execution-uncertain outcome and does not write an auxiliary draft artifact for
+that path. Its first-failing regression expected execution-uncertain and got
+evidence-unavailable; the corrected focused cohort passed 57 tests. A broader
+source-local run passed 547 tests with six real-PostgreSQL cases explicitly
+skipped. Both web TypeScript programs passed. These are source checks on the
+uncommitted implementation, not canonical gate, deployment or live acceptance.
+The isolated database tests exercise real persistence, rollback, task ownership,
+generation and cancellation row locks; their actual shared-environment run is
+still owed. AC-REC-002 source/provenance controls remain separate and are not
+claimed complete by this reporting repair.
+
+### Current acceptance baseline and delivery trace
+
+The current medium fix uses the following acceptance criteria from the live
+BI-0C0669B5 body. These preserve its current safety constraints:
+
+- AC-REC-002: A bounded immutable-artifact review uses server-owned review context; artifact text or a claimed read cannot disable the guard for genuine live operational questions. Verify existing native-reader provenance and isolation controls on the current source.
+- AC-REC-003: Exhausted bounded evidence recovery returns a typed non-success outcome and preserves withheld final-answer drafts as explicitly unverified internal diagnostic artifacts. Drafts never become factual replies, outward progress summaries, positive evidence, semantic recall or review receipts. Failed retention or missing task binding remains explicit.
+- AC-REC-005: Safe loop observations distinguish no observed successful authoritative read from a proven provider or permission cause. Preserve current routing, model requirements, authority intersection, execution fencing, privacy and bounded nudge budget; report unknown provenance honestly.
+
+OBJ-REC-002 and OBJ-REC-003 retain the meanings below. OBJ-REC-005 covers
+AC-REC-005's safe observations and preserved boundaries. The existing INV-1,
+INV-4 and INV-5 remain the evidence-integrity contract; this repair does not
+relax them.
+
+The atomic delivery flow is:
+
+Loop evidence guard -> typed failure -> outward task result -> fenced diagnostic artifact
+
+Failure classification, isolation, exact-task retention and unknown-settlement
+precedence must agree in that flow. No phase is a separately shippable
+capability. AC-REC-002 verification remains explicit; this branch does not claim
+a completed native review or restoration of the original missing live tool call.
+
+Verification references for this delivery:
+
+- apps/web/lib/tak/agentic-loop-evidence.test.ts
+- apps/web/lib/tak/evidence-requirement.test.ts
+- apps/web/lib/tak/agentic-loop-native-mcp-tools.test.ts
+- apps/web/lib/mcp-task-execution.test.ts
+- apps/web/lib/tak/evidence-recovery-artifact.test.ts
+- apps/web/lib/tak/evidence-recovery-artifact.db.test.ts
+- apps/web/lib/mcp-task-evidence-failure.test.ts
+- apps/web/lib/tak/autonomous-evidence-failure.test.ts
+
+Current evidence, separate from the earlier reproduction checkpoint: the
+qualified canonical run for source 882ce9e95dc54351fb852cab88ce4c74302930e2
+passed 3,982 tests across 315 passing files, with 20 skips and five todo cases.
+All six new real PostgreSQL cases, both web TypeScript programs and migrations
+passed. The affected plan did not run a production build. Native evidence is
+cmvx39i2g0apa01pozut0rr4m; its lease was released. Independent client source
+assessment found no blocking finding on the exact unchanged repair files.
+
+The native semantic review for that source is execution-uncertain, with no
+verdict and no authorized retry. Existing shadow publication policy keeps that
+separate from the client assessment. This documentation reconciliation changes
+no runtime code; its final source identity and publication checks remain to be
+recorded. Deployment, fresh useful coworker acceptance and the separate routing
+repair remain open.
+
 The native semantic operation also reused an exact-tree automatic receipt after
 the caller requested high risk and high assurance. Fresh tree identity is
 necessary but insufficient: an automatic receipt does not prove independent review.

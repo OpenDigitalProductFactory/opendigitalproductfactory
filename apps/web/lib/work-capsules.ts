@@ -311,6 +311,8 @@ export type ScopeClaim = {
   intent: "edit" | "read";
   recordedAt: string;
   recordedByPrincipalId: string;
+  /** Server-owned prospective protection; absence is legacy, not birth proof. */
+  releaseEpoch?: string;
 };
 
 const STATUS_SET = new Set<string>(WORK_CAPSULE_STATUSES);

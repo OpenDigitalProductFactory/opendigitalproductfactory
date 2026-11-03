@@ -72,3 +72,22 @@ test("the live pnpm-workspace.yaml passes the guard", () => {
   assert.ok(scanned > 0, "should scan at least one override");
   assert.deepEqual(untagged, [], `live workspace has untagged floors: ${untagged.join(", ")}`);
 });
+
+test("isolated mobile protocol mappings are exact compatibility exceptions", () => {
+  for (const key of ["@dpf/validators>@dpf/integration-shared", "@dpf/validators>zod", "@dpf/integration-shared>undici"]) {
+    assert.deepEqual(auditOverrides(wrap(`  '${key}': 'replacement'`)).untagged, []);
+  }
+  assert.deepEqual(auditOverrides(wrap("  '@dpf/validators>unreviewed': '^1.0.0'")).untagged,
+    ["@dpf/validators>unreviewed"]);
+});
+
+test("the Inngest telemetry compatibility pin is scoped and does not exempt other floors", () => {
+  const text = wrap([
+    "  'inngest>@opentelemetry/auto-instrumentations-node': '0.81.2'",
+    "  '@opentelemetry/auto-instrumentations-node@0.81.2>@opentelemetry/core': '2.12.0'",
+    "  '@opentelemetry/instrumentation@0.223.0>import-in-the-middle': '3.4.0'",
+    "  'vitest>@opentelemetry/api': '1.9.1'",
+    "  '@opentelemetry/auto-instrumentations-node': '^0.82.0'",
+  ].join("\n"));
+  assert.deepEqual(auditOverrides(text).untagged, ["@opentelemetry/auto-instrumentations-node"]);
+});

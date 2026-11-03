@@ -21,6 +21,7 @@ on:
       - "packages/api-client/**"
       - "packages/types/**"
       - "packages/validators/**"
+      - "packages/integration-shared/**"
       - ".github/workflows/mobile-ci.yml"
       # apps/mobile resolves in its own workspace (plan 2026-09-08 M6); its
       # lockfile and workspace file live under apps/mobile/** above. The shared

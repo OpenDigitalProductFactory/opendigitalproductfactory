@@ -1,15 +1,9 @@
 diff --git a/index.js b/index.js
 --- a/index.js
 +++ b/index.js
-@@ -166,7 +166,7 @@
- 	return input;
- }
- 
+@@ -139,1 +139,1 @@
 -export default function decodeUriComponent(encodedURI) {
 +module.exports = function decodeUriComponent(encodedURI) {
- 	if (typeof encodedURI !== 'string') {
- 		throw new TypeError(`Expected \`encodedURI\` to be of type \`string\`, got \`${typeof encodedURI}\``);
- 	}
 diff --git a/package.json b/package.json
 --- a/package.json
 +++ b/package.json

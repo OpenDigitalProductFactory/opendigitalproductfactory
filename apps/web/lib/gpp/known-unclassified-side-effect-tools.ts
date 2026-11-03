@@ -133,6 +133,8 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "record_marketing_kpi_checkpoint",
   "record_plan_backlog_coverage",
   "record_product_outcome_observation",
+  // BI-A009189A: reviewed reversible internal disposition with correction/clear and retained audit; no external, spend, authority or routing-policy effect.
+  "record_response_feedback",
   "record_runtime_verification",
   "record_semantic_review_outcome",
   "record_surface_readiness",

@@ -126,3 +126,22 @@ joined heuristically.
 The owner view uses plain-language subway stations. BPMN, SysML, ArchiMate/C4,
 source versions, rule detail, and remediation appear through progressive
 drill-through rather than competing diagrams.
+
+
+## Exact saved-answer feedback
+
+The [exact-response design](../superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md)
+and [operator workflow](../user-guide/ai-workforce/model-routing-lifecycle.md#investigate-routing-and-record-feedback)
+share one domain in `apps/web/lib/routing/response-feedback.ts`. Browser actions,
+the existing work-thread MCP pack and authorized surfaces recheck current actor,
+conversation ownership, Workroom admission, exact producer and saved content.
+The browser save-envelope helper belongs in
+`apps/web/lib/actions/coworker-response-persistence.ts`; its failure presentation
+uses the allowed actions-to-build dependency.
+
+Owned data-architecture decision DI-DF76FEA979F7 preserves one indexed soft
+telemetry reference so capture failure and 180-day telemetry removal do not
+control answer delivery. The exception names only AgentMessage.responseAttemptId
+and retains the existing baseline owner and expiry. Human acceptance, coworker
+judgment, execution evidence, evaluated quality and cost coverage remain distinct;
+the platform does not infer missing attribution or scores.

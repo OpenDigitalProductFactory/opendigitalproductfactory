@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-
+import { isRecord } from "@/lib/shared/coerce";
 export type SkillEvidenceKind =
   | "skill_usage_event"
   | "tool_execution"
@@ -120,7 +120,7 @@ export async function searchSkillEvidence(
     ...issueRows.map(mapPlatformIssue),
     ...externalEvidenceRows.map(mapExternalEvidence),
     ...taskMessageRows.map((row) => mapTaskMessage(row, taskRunByRowId, scope)),
-    ...taskArtifactRows.map((row) => mapTaskArtifact(row, taskRunByRowId, scope)),
+    ...taskArtifactRows.filter((row) => !isRecord(row.metadata) || row.metadata.kind !== "unverified-evidence-draft").map((row) => mapTaskArtifact(row, taskRunByRowId, scope)),
     ...backlogActivityRows.map(mapBacklogActivity),
   ];
 

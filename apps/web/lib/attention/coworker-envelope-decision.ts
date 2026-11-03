@@ -446,7 +446,12 @@ export function summarizeCoworkerEnvelopeDecision(input: {
 /** Human presentation only. The original proposal remains the execution binding. */
 export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, locale: string = DEFAULT_LOCALE) {
   let params: Record<string, unknown> = {};
-  try { params = objectRecord(JSON.parse(decision.completeProposedContent ?? "null")) ?? {}; } catch { /* Older unresolved projection. */ }
+  let hasOriginal = false;
+  try {
+    const original = objectRecord(JSON.parse(decision.completeProposedContent ?? "null"));
+    hasOriginal = original !== null;
+    params = original ?? {};
+  } catch { /* Older unresolved projection. */ }
   const copy = SOURCE_CATALOG.approvals.card.primary;
   const recordsResult = decision.kind !== "unknown"
     && ["record_workroom_evidence", "record_execution_evidence"].includes(decision.toolName)
@@ -454,6 +459,16 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   const handover = decision.kind === "handover" ? ASSISTANT_NAMES[stringParam(params, "toExecutorKind") ?? ""] : undefined;
   const research = decision.kind === "known" && decision.gate === "research";
   const unresolved = !recordsResult && !handover && !research;
+  // A registered operation can be named without establishing its effects.
+  // Only a standard self-update request establishes the app as its target.
+  const exact = (decision.kind === "exact" || decision.kind === "unknown") && hasOriginal;
+  const appUpdate = exact && decision.toolName === "request_self_upgrade"
+    && Object.keys(params).every(key => key === "reason")
+    && (params.reason === undefined || typeof params.reason === "string");
+  const mergeWork = exact && decision.toolName === "merge_backlog_items"
+    && !!stringParam(params, "canonicalItemId") && !!stringParam(params, "duplicateItemId");
+  const releaseReservation = exact && decision.toolName === "release_nonprod_environment_lease"
+    && !!stringParam(params, "leaseId");
   let title = copy.unresolvedTitle;
   let description = copy.unresolvedDescription;
   let consequence = decision.consequence.startsWith("None declared.") ? copy.effectUnknown : decision.consequence;
@@ -474,6 +489,13 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     description = `${decision.authorization.charAt(0).toUpperCase()}${decision.authorization.slice(1)}.`;
     consequence = copy.reviewConsequence;
     recommendation = decision.recommendation;
+  } else if (appUpdate) {
+    title = copy.appUpdateTitle;
+    description = copy.appUpdateDescription;
+  } else if (mergeWork) {
+    title = copy.mergeWorkTitle;
+  } else if (releaseReservation) {
+    title = copy.releaseReservationTitle;
   }
   if (!unresolved && !decision.consequence.startsWith("None declared.")) {
     consequence = `${consequence} ${decision.consequence}`;
@@ -504,6 +526,6 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   }
   if (unresolved) visit(params, [], false);
   return { title, description, consequence, facts, unresolved,
-    target: decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? copy.targetUnavailable, recommendation,
+    target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? copy.targetUnavailable, recommendation,
   };
 }

@@ -640,7 +640,7 @@ export async function executeAutonomousAgenticLoop(input: {
   // proposals and for Balanced/low postures. (The full multi-agent deliberation
   // engine — minutes-long, build-artifact-coupled — stays the build-phase mechanism;
   // this is the synchronous, output-revising leverage for coworker turns.)
-  if (result.content && !result.proposal) {
+  if (result.content && !result.proposal && !result.failure) {
     try {
       const pattern = await resolveCoworkerReviewPattern(input.agentId);
       if (pattern === "review" || pattern === "debate") {
@@ -650,7 +650,7 @@ export async function executeAutonomousAgenticLoop(input: {
           sensitivity: input.sensitivity,
           pattern,
         });
-        if (verdict.revised) result.content = verdict.content;
+        if (verdict.revised) { result.content = verdict.content; result.responseProducer = undefined; }
       }
     } catch (err) {
       console.warn("[golden-triangle] coworker deliberation (unified seam) failed (fail-open):", err);

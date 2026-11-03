@@ -521,7 +521,8 @@ describe("stage-declared tools reach the dispatched task", () => {
       stageKey: "sweep",
       tools: ["read_codebase_manifest", "list_patch_posture"],
     });
-    expect(call?.prompt).toContain("Tools for this stage: read_codebase_manifest, list_patch_posture.");
+    const facts = JSON.parse(call!.prompt.split("\n").find((line) => line.startsWith("{"))!);
+    expect(facts.stageTools).toEqual(call!.stage.tools);
   });
 
   it("leaves an undeclared stage exactly as before: no tools, no tools line", async () => {

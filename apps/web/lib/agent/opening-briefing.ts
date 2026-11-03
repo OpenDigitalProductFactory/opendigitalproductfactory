@@ -9,6 +9,8 @@
 
 import type { AttentionItem } from "@/lib/attention/types";
 import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
+import { DEFAULT_LOCALE, translate } from "@dpf/i18n";
+import { isOverrideTier, overrideReason } from "@/lib/attention/triage";
 
 export type OpeningBriefing = {
   /** Markdown for the assistant bubble (links render via ReactMarkdown). */
@@ -29,6 +31,49 @@ export type OpeningBriefingPayload = {
 
 /** The "Needs you" inbox — the full view the briefing links to for the rest. */
 const ATTENTION_INBOX_ROUTE = "/workspace/inbox";
+
+function routePath(route: string): string {
+  return route.split(/[?#]/, 1)[0] ?? "";
+}
+
+function withinRoute(path: string, root: string): boolean {
+  return path === root || path.startsWith(`${root}/`);
+}
+
+export function isFinanceBriefingRoute(route: string): boolean {
+  return withinRoute(routePath(route), "/finance");
+}
+
+function composeFinanceBriefing(items: AttentionItem[], route: string, language: string): OpeningBriefing {
+  const path = routePath(route);
+  const prefix = surfacePrefixFromRouteContext(path);
+  const financeItems = items.filter((item) => isFinanceBriefingRoute(item.deepLink));
+  // Input order already belongs to canonical attention triage. Never re-rank it.
+  const headline = items.find(isOverrideTier)
+    ?? financeItems.find((item) => withinRoute(routePath(item.deepLink), prefix))
+    ?? financeItems[0];
+  const lines: string[] = [];
+  if (headline) {
+    const reason = overrideReason(headline);
+    const label = reason ? `Most pressing (${reason})` : "Most pressing";
+    const link = `[${headline.title}](${headline.deepLink})`;
+    lines.push(detailRestatesTitle(headline.title, headline.context)
+      ? `**${label}:** ${link}`
+      : `**${label}:** ${link} — ${headline.context}`);
+  }
+  const expenseContext = path === "/finance/spend"
+    || withinRoute(path, "/finance/my-expenses") || withinRoute(path, "/finance/expense-claims");
+  lines.push(expenseContext
+    ? `[Enter an expense](/finance/my-expenses/new)\n\n${translate(language, "shell", "finance.expenseEntryDetails")}`
+    : "Tell me which finance task you want to work on here.");
+  const remaining = items.length - (headline ? 1 : 0);
+  if (remaining > 0) {
+    lines.push(headline
+      ? `${remaining} more ${remaining === 1 ? "item is" : "items are"} waiting for your review → [open your Needs-you inbox](${ATTENTION_INBOX_ROUTE})`
+      : `${remaining} owner ${remaining === 1 ? "decision is" : "decisions are"} waiting in [your Needs-you inbox](${ATTENTION_INBOX_ROUTE}).`);
+  }
+  return { content: lines.join("\n\n"), itemCount: items.length };
+}
 
 /**
  * Normalize a thread routeContext to its surface prefix so items that deep-link
@@ -85,12 +130,15 @@ export function detailRestatesTitle(title: string, context: string | null | unde
  * even the all-clear is said out loud.
  *
  * `items` must arrive in attention-triage order (the aggregator's contract);
- * the headline is the first surface-local item, falling back to the global top.
+ * Finance keeps canonical urgent decisions visible before local preference and
+ * offers task guidance instead of a routine unrelated headline. Other surfaces
+ * keep the first surface-local item, falling back to the global top.
  */
 export function composeOpeningBriefing(input: {
   routeContext: string;
   proactivityLevel: ProactivityLevel | null;
   items: AttentionItem[];
+  language?: string;
 }): OpeningBriefing | null {
   const level = input.proactivityLevel ?? "balanced";
   if (level === "quiet") return null;
@@ -102,6 +150,10 @@ export function composeOpeningBriefing(input: {
         "Nothing is waiting on you right now — no approvals, escalations, or paused work. I'm watching this surface and will flag the next decision that needs you.",
       itemCount: 0,
     };
+  }
+
+  if (isFinanceBriefingRoute(input.routeContext)) {
+    return composeFinanceBriefing(input.items, input.routeContext, input.language ?? DEFAULT_LOCALE);
   }
 
   const prefix = surfacePrefixFromRouteContext(input.routeContext);
