@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Show ordinary initiative review receipts in Workroom
 
 Backlog: BI-537E3E75. Epic: EP-WORK-CONVERGENCE. Workroom: WC-564AE32A.
