@@ -6,6 +6,7 @@ import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkroomInventory, type WorkroomInventoryRow } from "./WorkroomInventory";
+import { projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 
 afterEach(cleanup);
 const renderInventory = (node: ReactNode) => render(<MessagesProvider locale="en-US"
@@ -13,20 +14,31 @@ const renderInventory = (node: ReactNode) => render(<MessagesProvider locale="en
 const summary = { scanned: 3, live: 2, working: 1, history: 1, reapable: 1, byLiveness: {},
   heavyLane: { executing: 1, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } };
 const row = (capsuleId: string, liveness: string, title: string): WorkroomInventoryRow => ({
-  capsuleId, backlogItemId: null, title, status: "working", source: "external-adoption",
-  executorKind: "codex-desktop", attribution: { executor: "codex-desktop", invocation: "private-session-id" },
-  portfolioRole: "foundational", headBranch: "fix/example", pullRequestUrl: null,
-  updatedAt: "2026-10-13T18:00:00Z", liveness, isLive: liveness !== "lease-expired", isReapable: liveness === "lease-expired",
-  livenessReason: "Lease valid for 29m", trueLivenessAt: null, accountableName: "Dana Reyes",
+  capsuleId, backlogItemId: null, title, status: "working",
+  portfolioRole: "foundational", pullRequestUrl: null,
+  liveness, isLive: liveness !== "lease-expired", accountableName: "Dana Reyes",
 });
 const rows = [row("WC-NOW", "live", "Prepare adoption event"), row("WC-WAIT", "paused", "Update user guide"), row("WC-OLD", "lease-expired", "Stopped review")];
+
+it("retains the owner-setup instruction when a worker is already assigned", () => {
+  const room = row("WC-OWNER-MISSING", "live", "Unowned work");
+  const operator = projectWorkroomOperatorSummary({ ...room, executorKind: "codex-desktop", accountability: {
+    state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null,
+  } });
+  renderInventory(<WorkroomInventory workrooms={[{ ...room, accountableName: null, operator }]} summary={summary} />);
+  expect(screen.getByText(/Assign an accountable person in the room/)).toBeVisible();
+  expect(screen.queryByText(/Check the worker's recorded result/)).toBeNull();
+  expect(screen.getByRole("link", { name: "Unowned work" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-OWNER-MISSING");
+});
 describe("operator Workrooms inventory", () => {
   it("shows actual progress first without mounting history or exposing diagnostic text", () => {
     renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
     expect(screen.getByRole("table", { name: "Working now" })).toBeVisible();
     expect(screen.queryByText("Stopped review")).toBeNull();
     expect(screen.getByText("Dana Reyes")).toBeVisible();
-    expect(screen.getByText("private-session-id", { exact: false })).not.toBeVisible();
+    expect(screen.queryByText("private-session-id", { exact: false })).toBeNull();
+    expect(screen.getByRole("link", { name: "View recorded evidence in the room", hidden: true }))
+      .toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
     expect(screen.getByRole("link", { name: "Prepare adoption event" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
   });
   it("puts paused workers in Waiting rather than Working now", () => {
@@ -48,7 +60,7 @@ describe("operator Workrooms inventory", () => {
     renderInventory(<WorkroomInventory workrooms={[...rows, { ...row("WC-BLOCK", "live", "Restore failed review"), status: "blocked", accountableName: null }]} summary={summary} />);
     expect(screen.getByRole("table", { name: "Needs attention" })).toBeVisible();
     expect(screen.getByText("Not assigned")).toBeVisible();
-    expect(screen.getByText("Open the room to check its blocker")).toBeVisible();
+    expect(screen.getByText(/Actor not recorded.*Action not recorded/)).toBeVisible();
   });
   it("shows a shared hold once instead of repeating it as an individual row", () => {
     const blocked = { ...row("WC-BLOCK", "live", "Repeated review"), status: "blocked" };

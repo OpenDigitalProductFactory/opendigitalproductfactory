@@ -36,7 +36,21 @@ person when both items are this installation's own, carry the same
 (`apps/web/lib/demand/duplicate-merge-consequence.ts`, BI-EAFD2D09). That is the
 same fold intake performs. Every merge writes a `duplicate_merge` activity on
 the retired item with both rows' prior state, so it can be undone from the
-record. Any other merge still reaches a person.
+record. Any other ordinary merge still reaches a person.
+
+An agent can reconcile a completed merge with the same tool and
+`reconcileOnly: true` (BI-8EC69BE0). This mode returns the existing result and
+withdraws its superseded proposed merge requests. The handler rejects an open
+duplicate before the fold transaction, so no demand count or item status can
+change in this mode, even if state changed after consequence classification.
+Malformed option values are rejected. The per-call refiner narrows this enforced
+nonmutating mode; omitting the option or passing `false` keeps ordinary merge
+behavior and its consequence checks. Its `requestCleanup` result reports the
+number actually withdrawn. A failed read or write reports unavailable cleanup
+with a null count and a failed result, rather than presenting unknown as zero;
+ordinary merging retains its existing best-effort cleanup behavior. A different
+completed merge is rejected without withdrawing its requests. Reconciliation
+does not approve or execute an outstanding merge or retirement request.
 
 Those observer counts still describe repeated calls, not independently
 identified observations. Retry-safe observation identity for those callers is

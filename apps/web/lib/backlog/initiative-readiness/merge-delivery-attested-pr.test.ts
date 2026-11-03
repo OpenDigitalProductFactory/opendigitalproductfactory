@@ -12,11 +12,9 @@
  * The git half runs against REAL repositories, for the reason BI-043946C5 gives:
  * the defect class lives in the boundary between this module and git.
  */
-import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { createRealGitFixture, REAL_GIT_SETUP_HOOK_MS, type RealGitFixture } from "@/lib/testing/real-git-fixture";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -26,9 +24,6 @@ import {
   resolveMergeDeliveryFromDb,
   trunkCommitDeliversItem,
 } from "./merge-delivery-signal";
-
-const execFileAsync = promisify(execFile);
-const git = (root: string, ...args: string[]) => execFileAsync("git", ["-C", root, ...args], { windowsHide: true });
 
 const prSubmit = (pullRequestNumber: unknown, to = "awaiting-acceptance") => ({
   kind: "status_change",
@@ -81,28 +76,28 @@ describe("trunkCommitDeliversItem", () => {
   });
 });
 
-type Repo = { root: string };
+type Repo = RealGitFixture;
 
-async function commit(root: string, file: string, message: string, body?: string) {
-  await writeFile(path.join(root, file), `${message}\n`);
-  await git(root, "add", ".");
-  await git(root, "commit", "-q", "-m", message, ...(body ? ["-m", body] : []));
+async function commit(repo: Repo, file: string, message: string, body?: string) {
+  await writeFile(path.join(repo.root, file), `${message}\n`);
+  await repo.git("add", ".");
+  await repo.git("commit", "-q", "-m", message, ...(body ? ["-m", body] : []));
 }
 
 async function makeRepo(): Promise<Repo> {
-  const root = await mkdtemp(path.join(tmpdir(), "dpf-merge-identity-b04a0203-"));
-  await git(root, "init", "-q", "--initial-branch=main");
-  await git(root, "config", "user.email", "test@example.invalid");
-  await git(root, "config", "user.name", "Test");
-  await git(root, "config", "commit.gpgsign", "false");
-  await commit(root, "a.txt", "fix(gate): repair the gate (BI-AAAA1111) (#101)");
-  await commit(root, "b.txt", "feat(other): unrelated work (#102)", "Context: this follows on from BI-BBBB2222.");
-  await commit(root, "c.txt", "doc(plan): plan the feature (BI-CCCC3333) (#103)");
-  await commit(root, "d.txt", "feat(x): ship it (BI-DDDD4444) (#104)");
-  await commit(root, "e.txt", "Revert \"feat(x): ship it (BI-DDDD4444) (#104)\" (#105)");
-  const tip = (await git(root, "rev-parse", "HEAD")).stdout.trim();
-  await git(root, "update-ref", "refs/remotes/origin/main", tip);
-  return { root };
+  return createRealGitFixture("dpf-merge-identity-b04a0203-", async (repo) => {
+    await repo.git("init", "-q", "--initial-branch=main");
+    await repo.git("config", "user.email", "test@example.invalid");
+    await repo.git("config", "user.name", "Test");
+    await repo.git("config", "commit.gpgsign", "false");
+    await commit(repo, "a.txt", "fix(gate): repair the gate (BI-AAAA1111) (#101)");
+    await commit(repo, "b.txt", "feat(other): unrelated work (#102)", "Context: this follows on from BI-BBBB2222.");
+    await commit(repo, "c.txt", "doc(plan): plan the feature (BI-CCCC3333) (#103)");
+    await commit(repo, "d.txt", "feat(x): ship it (BI-DDDD4444) (#104)");
+    await commit(repo, "e.txt", "Revert \"feat(x): ship it (BI-DDDD4444) (#104)\" (#105)");
+    const tip = (await repo.git("rev-parse", "HEAD")).stdout.trim();
+    await repo.git("update-ref", "refs/remotes/origin/main", tip);
+  });
 }
 
 describe("attested pull requests against a real trunk", () => {
@@ -110,8 +105,8 @@ describe("attested pull requests against a real trunk", () => {
   const now = new Date();
   const fresh = async () => now;
 
-  beforeAll(async () => { repo = await makeRepo(); });
-  afterAll(async () => { await rm(repo.root, { recursive: true, force: true }).catch(() => {}); });
+  beforeAll(async () => { repo = await makeRepo(); }, REAL_GIT_SETUP_HOOK_MS);
+  afterAll(async () => { await repo?.dispose(); });
 
   const signal = (attestedPullRequests: number[], itemId: string, workType: string | null = "bug") =>
     resolveMergeSignalFromRefs({

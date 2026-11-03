@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { prisma, type Prisma } from "@dpf/db";
 
 type TaskJson = Prisma.InputJsonValue | null;
+type TaskRunReader = { taskRun: Pick<Prisma.TransactionClient["taskRun"], "findUnique"> };
+type TaskMessageWriter = TaskRunReader & { taskMessage: Pick<Prisma.TransactionClient["taskMessage"], "create"> };
 
 function toTaskJson(value: unknown): TaskJson {
   if (value === undefined) return null;
@@ -11,7 +13,7 @@ function toTaskJson(value: unknown): TaskJson {
 async function resolveTaskRunRecord(input: {
   publicTaskRunId: string;
   taskRunRecordId?: string | null;
-}): Promise<{ id: string; contextId: string | null }> {
+}, db: TaskRunReader = prisma): Promise<{ id: string; contextId: string | null }> {
   if (input.taskRunRecordId) {
     return {
       id: input.taskRunRecordId,
@@ -19,7 +21,7 @@ async function resolveTaskRunRecord(input: {
     };
   }
 
-  const taskRun = await prisma.taskRun.findUnique({
+  const taskRun = await db.taskRun.findUnique({
     where: { taskRunId: input.publicTaskRunId },
     select: { id: true, contextId: true },
   });
@@ -40,14 +42,14 @@ export async function createTaskMessage(input: {
   content: string;
   metadata?: unknown;
   referenceTaskIds?: string[];
-}): Promise<void> {
+}, db: TaskMessageWriter = prisma): Promise<void> {
   const taskRun = await resolveTaskRunRecord({
     publicTaskRunId: input.taskRunId,
     taskRunRecordId: input.taskRunRecordId,
-  });
+  }, db);
   const metadata = toTaskJson(input.metadata);
 
-  await prisma.taskMessage.create({
+  await db.taskMessage.create({
     data: {
       id: randomUUID(),
       messageId: `tm_${randomUUID()}`,

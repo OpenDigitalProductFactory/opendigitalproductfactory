@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // BI-754C9E82 — proactivity plan ENFORCEMENT on scheduled runs. Split from
 // agent-task-scheduler.test.ts (module-size ratchet): same mock harness, only
 // the enforcement describe block lives here.
@@ -107,7 +108,7 @@ const FIXED_NOW = new Date("2026-07-12T09:00:00.000Z");
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim runs before execution; default to a WON
   // claim so these plan-behavior tests exercise the work.
   mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
@@ -385,7 +386,7 @@ describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E8
       nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
       attempts: 0,
     });
-    expect(mocks.prisma.scheduledJob.update).toHaveBeenCalledWith({
+    expect(mocks.prisma.scheduledJob.updateMany).toHaveBeenCalledWith({
       where: { jobId: taskId },
       data: {
         lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
@@ -449,7 +450,7 @@ describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E8
       nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
       attempts: 0,
     });
-    expect(mocks.prisma.scheduledJob.update).toHaveBeenCalledWith({
+    expect(mocks.prisma.scheduledJob.updateMany).toHaveBeenCalledWith({
       where: { jobId: taskId },
       data: {
         lastRunAt: new Date("2026-10-19T00:25:00.000Z"),

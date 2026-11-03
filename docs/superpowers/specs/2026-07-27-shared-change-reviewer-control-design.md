@@ -683,6 +683,29 @@ Rollback through a signed revert, preserving requests, checkpoints, deadlines,
 attempt history and receipts. Unsupported proof versions stay ineligible.
 Source delivery is not deployed verification; an unavailable check stays unrun.
 
+### Homogeneous aggregate reasons — BI-7415E648
+
+A fresh operator-install review exposed a regression:
+two required branches each recorded a direct capacity refusal, but aggregation
+returned `review-capacity-deferred,review-capacity-deferred`. The worker's
+canonical-reason check therefore left capacityRecovery null. Existing PR6446
+and BI-7CCCA696 remain delivered; this narrow repair reuses their proof and
+reconciler, without reopening or replaying historical uncertain execution.
+
+Normalize repeated reason identities in the existing aggregate. Homogeneous
+waits retain one canonical reason; heterogeneous, unsupported and unknown
+reasons remain distinct. The reason alone grants no recovery: the existing
+complete checkpoint proof, authority, source/evidence, deadline, budget,
+quiescence and generation guards still decide eligibility.
+
+Ordered atomic repair: reproduce the aggregate mismatch and the missing worker
+marker through the real aggregator plus typed provider-refusal injection;
+deduplicate reasons; verify existing concurrent reconciliation resumes exactly
+one generation and retains the deadline/attempts; run mixed/unknown/failure and
+passing-sibling controls, both typechecks and exact gate before protected DCO
+delivery. Served recovery remains unrun until canonical deployment and a new
+permitted request demonstrate it. No new timer, ledger, provider or authority.
+
 ## Non-goals
 
 - Replacing GitHub review.

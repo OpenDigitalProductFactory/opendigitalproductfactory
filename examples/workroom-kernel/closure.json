@@ -1,7 +1,13 @@
 {
   "schemaVersion": 1,
   "entry": "kernel/workroom/index.ts",
-  "runtimeDependencies": [],
+  "runtimeDependencies": [
+    {
+      "name": "@opendigitalproductfactory/dpf-workroom",
+      "version": "0.1.0-candidate.4",
+      "source": "exact local tarball"
+    }
+  ],
   "sources": [
     "packages/validators/src/action-result.ts",
     "packages/validators/src/workroom/flow-graph.ts",
@@ -13,8 +19,17 @@
     "packages/validators/src/gpp/executable-constructs.ts",
     "packages/validators/src/gpp/constructs-used-by.ts"
   ],
-  "toolchain": { "node": "24.16.0", "typescript": "6.0.3" },
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3"
+  },
   "license": "Apache-2.0",
   "sourceBaseline": "e22a9996c58a21e6af868baa0f48ee2195573bc2",
-  "qualification": "Synthetic protocol fixture only; no execution, authentication, enforcement or business qualification."
+  "qualification": "Synthetic protocol fixture only; no execution, authentication, enforcement or business qualification.",
+  "componentArtifact": {
+    "name": "@opendigitalproductfactory/dpf-workroom",
+    "version": "0.1.0-candidate.4",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
+    "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44"
+  }
 }

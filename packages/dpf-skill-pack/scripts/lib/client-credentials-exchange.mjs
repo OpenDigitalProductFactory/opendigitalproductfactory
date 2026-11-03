@@ -13,6 +13,17 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
 /** Where the authorization server's token endpoint is, given the MCP URL. */
+const CREDENTIAL_REFUSAL_CODES = new Set([
+  "mcp_authentication_failed", "mcp_authorization_failed", "mcp_credential_exchange_refused",
+]);
+const AUTHENTICATION_ERRORS = new Set(["invalid_client", "invalid_grant"]);
+const AUTHORIZATION_ERRORS = new Set(["access_denied", "unauthorized_client", "invalid_scope", "insufficient_scope"]);
+
+/** Typed authority answers survive bearer materialization; never parse prose. */
+export function isMcpCredentialRefusal(error) {
+  return CREDENTIAL_REFUSAL_CODES.has(error?.code);
+}
+
 export function tokenEndpointFor(mcpUrl) {
   const url = new URL(mcpUrl);
   return `${url.origin}/api/oauth/token`;
@@ -80,10 +91,17 @@ export async function exchangeClientCredentials({
   if (response.status !== 200 || typeof payload?.access_token !== "string") {
     const code = payload?.error ?? `http_${response.status}`;
     const detail = payload?.error_description ? ` — ${String(payload.error_description).replace(/\.$/, "")}` : "";
-    throw new Error(
+    const refusalCode = response.status === 401 || AUTHENTICATION_ERRORS.has(payload?.error)
+      ? "mcp_authentication_failed"
+      : response.status === 403 || AUTHORIZATION_ERRORS.has(payload?.error)
+        ? "mcp_authorization_failed"
+        : response.status >= 400 && response.status < 500 ? "mcp_credential_exchange_refused" : null;
+    const error = new Error(
       `client_credentials exchange at ${endpoint} refused (${code})${detail}. `
       + "The client may be revoked or its secret rotated; re-issue it in Admin > Platform Development > MCP.",
     );
+    if (refusalCode) Object.assign(error, { code: refusalCode, status: response.status });
+    throw error;
   }
   const expiresIn = Number(payload.expires_in);
   const ttlSeconds = Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 300;

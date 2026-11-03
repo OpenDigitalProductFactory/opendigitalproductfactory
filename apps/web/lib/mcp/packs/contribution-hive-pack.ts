@@ -11,7 +11,6 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import { improvementProposalOutcome } from "@/lib/backlog/intake-outcome";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
@@ -25,7 +24,7 @@ import {
   extractBuildIdHint,
   resolveActiveBuildId,
 } from "@/lib/mcp/build-tool-helpers";
-import { isLowSeverityReferenceDocProposal } from "@/lib/process-spine/reference-doc-promotion";
+import { submitImprovementDraft } from "@/lib/mcp/improvement-draft";
 import {
   finalizeHiveContribution,
   reconcileHiveContributionDelivery,
@@ -68,8 +67,8 @@ const definitions: ToolDefinition[] = [
   {
     name: "propose_improvement",
     description:
-      "Propose a platform improvement based on friction or a missing capability observed in this conversation. " +
-      "Available to ALL employees regardless of role — anyone can submit an idea. Auto-attributes to the current user.",
+      "Save an internal improvement recommendation using the finding and evidence you explicitly provide. " +
+      "Pending repeats reuse the same draft. Filing a recommendation does not apply its proposed change. Auto-attributes to the current user.",
     inputSchema: {
       type: "object",
       properties: {
@@ -90,16 +89,15 @@ const definitions: ToolDefinition[] = [
       required: ["title", "description", "category"],
     },
     requiredCapability: null,
-    executionMode: "proposal",
+    executionMode: "immediate",
+    coworkerArtifact: true,
     sideEffect: true,
   },
   {
     name: "propose_skill_improvement",
     description:
-      "Propose a content change to a specific coworker skill (e.g. tightening instructions, fixing a stale " +
-      "reference). Use when you have observed the current skill prompt produce the wrong behavior and you can " +
-      "draft a better version. Submits an ImprovementProposal(category='skill', targetSkillId=…) that a human " +
-      "reviews on /platform/ai/skills.",
+      "Save an internal skill suggestion for review on /platform/ai/skills. This records a draft; it never applies the change. " +
+      "Identical pending suggestions reuse the same draft. Actual skill application keeps its separate reviewer approval.",
     inputSchema: {
       type: "object",
       properties: {
@@ -126,7 +124,8 @@ const definitions: ToolDefinition[] = [
       required: ["skillId", "title", "description", "proposedContent"],
     },
     requiredCapability: null,
-    executionMode: "proposal",
+    executionMode: "immediate",
+    coworkerArtifact: true,
     sideEffect: true,
   },
   {
@@ -643,118 +642,6 @@ async function contributeToHiveHandler(
   };
 }
 
-async function proposeImprovementHandler(
-  params: Record<string, unknown>,
-  userId: string,
-  context?: { routeContext?: string; threadId?: string; agentId?: string },
-): Promise<ToolResult> {
-  const proposalId = `IP-${crypto.randomUUID().slice(0, 5).toUpperCase()}`;
-
-  // Capture conversation excerpt (last 5 messages) for evidence
-  let conversationExcerpt: string | null = null;
-  if (context?.threadId) {
-    const recentMessages = await prisma.agentMessage.findMany({
-      where: { threadId: context.threadId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      select: { role: true, content: true },
-    });
-    if (recentMessages.length > 0) {
-      conversationExcerpt = recentMessages
-        .reverse()
-        .map((m) => `[${m.role}] ${m.content?.slice(0, 200)}`)
-        .join("\n");
-    }
-  }
-
-  const category = String(params["category"] ?? "missing_feature");
-  const proposal = await prisma.improvementProposal.create({
-    data: {
-      proposalId,
-      title: String(params["title"] ?? "Untitled improvement"),
-      description: String(params["description"] ?? ""),
-      category,
-      severity: String(params["severity"] ?? "medium"),
-      observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
-      conversationExcerpt,
-      submittedById: userId,
-      agentId: context?.agentId ?? "unknown",
-      routeContext: context?.routeContext ?? "unknown",
-      threadId: context?.threadId ?? null,
-    },
-  });
-
-  // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
-  // backlog the moment the proposal exists, so it is visible and triageable
-  // without the old manual Review→Prioritize promotion that never happened.
-  // The proposal stays the evidence record; the BacklogItem is the work. Gate (BI-18685188): low-severity [reference-doc] doc-polish proposals are
-  // withheld from the backlog here, mirroring the reconcile-path exclusion, so
-  // the scanner's recurring doc-suggestion batch never inflates the backlog at
-  // creation. They remain as ImprovementProposal rows (backlogItemId null) for
-  // founder review. medium/high reference-doc + all other proposals still file.
-  let backlogItemId: string | null = null;
-  const autoFileSuppressed = isLowSeverityReferenceDocProposal({
-    title: proposal.title,
-    severity: proposal.severity,
-  });
-  if (!autoFileSuppressed) {
-    try {
-      const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
-        "@/lib/operate/backlog-ingest"
-      );
-      const ingest = await ingestBacklogItem({
-        title: proposal.title,
-        outcome: improvementProposalOutcome(proposal), // BI-458CCA8D
-        body: [
-          proposal.description,
-          proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
-          `Category: ${category} | Severity: ${proposal.severity}`,
-          `From improvement proposal ${proposal.proposalId}`,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        workType: improvementCategoryToWorkType(category),
-        source: "automated-detection",
-        itemIdPrefix: "IMP",
-        submittedById: userId,
-        agentId: context?.agentId ?? null,
-        origin: { kind: "improvement", id: proposal.proposalId },
-      });
-      backlogItemId = ingest.itemId;
-      await prisma.improvementProposal.update({
-        where: { proposalId: proposal.proposalId },
-        data: { backlogItemId },
-      });
-    } catch (err) {
-      // Non-fatal: the proposal is still recorded even if the backlog projection fails.
-      console.error("[propose_improvement] backlog auto-file failed", err);
-    }
-  }
-
-  // Index the proposal in platform knowledge (was previously unreachable
-  // dead code after the return).
-  import("@/lib/semantic-memory")
-    .then(({ storePlatformKnowledge }) =>
-      storePlatformKnowledge({
-        entityId: proposal.proposalId,
-        entityType: "improvement",
-        title: proposal.title,
-        content: String(params["description"] ?? ""),
-      }),
-    )
-    .catch(() => {});
-
-  return {
-    success: true,
-    entityId: proposal.proposalId,
-    message: backlogItemId
-      ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
-      : autoFileSuppressed
-        ? `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". Kept in the Improvements view for founder review; low-severity [reference-doc] suggestions are not auto-filed to the backlog (BI-18685188).`
-        : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
-  };
-}
-
 async function proposeSkillImprovementHandler(
   params: Record<string, unknown>,
   userId: string,
@@ -797,7 +684,8 @@ async function proposeSkillImprovementHandler(
     return {
       success: true,
       entityId: result.proposalId,
-      message: `Skill proposal ${result.proposalId} created for ${skillId}. A reviewer must approve before it takes effect.`,
+      data: { proposalId: result.proposalId, reused: result.reused },
+      message: `Skill suggestion ${result.proposalId} ${result.reused ? "already saved" : "saved"} for ${skillId}. A reviewer must approve before it takes effect.`,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
@@ -841,7 +729,7 @@ const handlers: Record<string, ToolPackHandler> = {
   assess_contribution: (params, userId) => assessContributionHandler(params, userId),
   contribute_to_hive: (params, userId) => contributeToHiveHandler(params, userId),
   contribute_finding_to_hive: (params) => contributeFindingToHiveHandler(params),
-  propose_improvement: (params, userId, context) => proposeImprovementHandler(params, userId, context),
+  propose_improvement: (params, userId, context) => submitImprovementDraft(params, userId, context),
   propose_skill_improvement: (params, userId, context) => proposeSkillImprovementHandler(params, userId, context),
   submit_feedback: (params, userId) => submitFeedbackHandler(params, userId),
 };

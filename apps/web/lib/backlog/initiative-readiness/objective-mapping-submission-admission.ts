@@ -13,15 +13,13 @@ import {
 import {
   MAX_OBJECTIVE_MAPPING_HISTORY_ROWS,
   classifyHistoricalObjectiveMappingArtifacts,
-  currentBaseline,
   exactArtifactRefMatches,
   exactStringSetMatches,
   loadObjectiveMappingHistoryFromDb,
-  parseBaselinePayloads,
-  type BaselinePayload,
   type TerminalRecoveryPorts,
   type TerminalRecoveryRoom,
 } from "./terminal-recovery";
+import { currentBaseline, parseBaselinePayloads, type BaselinePayload } from "./baseline-head";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   reconcileInitiativeObjectives,

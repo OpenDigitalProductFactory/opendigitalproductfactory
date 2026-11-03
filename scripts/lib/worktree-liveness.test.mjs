@@ -6,14 +6,23 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 
 import {
   parseActiveWorktreePaths,
-  loadActiveWorkroomPaths,
+  loadActiveWorkroomPaths as loadPaths,
   pathHasActiveClaim,
   normalizePath,
   ACTIVE_WORKROOM_STATUSES,
 } from "./worktree-liveness.mjs";
+
+// A real default client file must never turn fixture PATs into live exchanges.
+const loadActiveWorkroomPaths = async options => {
+  const { resolveMcpCredential } = await import("./mcp-credential.mjs");
+  return loadPaths({ ...options, resolveCredential: options.resolveCredential ?? (args => resolveMcpCredential({ ...args,
+    env: { ...args.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: fileURLToPath(new URL("./missing-fixture-credentials.json", import.meta.url)) },
+  })) });
+};
 
 const roomsPayload = (rooms) =>
   JSON.stringify({
@@ -431,5 +440,199 @@ describe("claims honour the server's liveness verdict", () => {
     assert.equal(result.available, true);
     assert.equal(result.activePaths.size, 0);
     assert.deepEqual(names, ["list_workrooms"]);
+  });
+});
+
+
+describe("ownership traversal uses one saved connection configuration (BI-02C0877D)", () => {
+  it("prepares trust once for every page and detail without mutating the caller environment", async () => {
+    const env = { DPF_MCP_URL: "https://localhost/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture" };
+    const prepared = { ...env, NODE_EXTRA_CA_CERTS: "saved-authorized-ca.pem" };
+    let resolutions = 0, credentialEnv;
+    const calls = [];
+    const result = await loadActiveWorkroomPaths({ env,
+      resolveTrust: options => { resolutions++; assert.equal(options.env, env); return { env: prepared }; },
+      resolveCredential: options => { credentialEnv = options.env; return { bearer: "fixture" }; },
+      fetchImpl: async (_url, init) => {
+        const { name, arguments: args } = JSON.parse(init.body).params;
+        calls.push(name);
+        if (name === "get_workroom") return new Response(JSON.stringify({ success: true, data: { capsule: room("two", "D:/wt/two") } }));
+        return new Response(args.cursor
+          ? pagePayload([{ capsuleId: "two", status: "working", detail: { toolName: "get_workroom", arguments: { capsuleId: "two" } } }], { populationCount: 2 })
+          : pagePayload([room("one", "D:/wt/one")], { populationCount: 2, nextCursor: "next", disposition: "more" }));
+      },
+    });
+    assert.equal(result.available, true);
+    assert.equal(resolutions, 1);
+    assert.equal(credentialEnv, prepared);
+    assert.equal(env.NODE_EXTRA_CA_CERTS, undefined);
+    assert.deepEqual(calls, ["list_workrooms", "list_workrooms", "get_workroom"]);
+    assert.equal(result.activePaths.size, 2);
+  });
+
+  it("fails closed before credentials or requests when saved trust cannot be read", async () => {
+    let requests = 0, credentials = 0;
+    const result = await loadActiveWorkroomPaths({ env: { DPF_MCP_URL: "https://localhost/api/mcp/v1" },
+      resolveTrust: () => { throw new Error("saved CA unreadable"); },
+      resolveCredential: () => { credentials++; return { bearer: "fixture" }; },
+      fetchImpl: async () => { requests++; return new Response(pagePayload([])); },
+    });
+    assert.equal(result.available, false);
+    assert.match(result.reason, /saved CA unreadable/);
+    assert.equal(requests, 0);
+    assert.equal(credentials, 0);
+  });
+});
+
+// Exercise native-request trust resolution rather than the early fetch seam.
+describe("prepared system trust reaches native paging transport", () => {
+  for (const kind of ["pat", "client_credentials"]) it(`discovers once across native pages, detail and credential minting (${kind})`, async () => {
+    const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+    const { resolveMcpCredential } = await import("./mcp-credential.mjs");
+    const { EventEmitter } = await import("node:events");
+    const env = Object.freeze({ DPF_MCP_URL: "https://127.0.0.1:1/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "fixture-only",
+      ...(kind === "client_credentials" ? { DPF_MCP_CLIENT_ID: "fixture-client", DPF_MCP_CLIENT_SECRET: "fixture-secret" } : {}) });
+    let discoveries = 0, trustResolutions = 0, requests = 0, mints = 0, expectedEnv, expectedConnection, expectedOAuthEnv;
+    let expectPreparation = true, nativeTrustChecks = 0;
+    const resolveTrust = options => {
+      trustResolutions++;
+      const preparing = expectPreparation;
+      if (preparing) {
+        assert.equal(options.env, env, "each observation starts from its explicit environment");
+        assert.equal(options.connection, undefined);
+        expectPreparation = false;
+      } else {
+        assert.equal(options.connection, expectedConnection, "every request and OAuth mint forwards the prepared connection");
+        if (Object.hasOwn(options, "clientId")) {
+          assert.equal(options.env, expectedOAuthEnv, "OAuth forwards its scoped credential environment");
+        } else {
+          assert.equal(options.env, expectedEnv, "every native request forwards the scoped transport environment");
+          nativeTrustChecks++;
+        }
+      }
+      const trust = resolveHostMcpTrust({ ...options, platform: "win32", installDir: ".",
+        spawnSyncImpl: () => {
+          discoveries++;
+          assert.equal(discoveries, Math.floor(requests / 3) + 1, "unexpected rediscovery inside an observation");
+          return { status: 0, stdout: JSON.stringify({ McpUrl: env.DPF_MCP_URL, CaBundle: "" }) };
+        },
+      });
+      if (preparing) { expectedEnv = trust.env; expectedConnection = trust.connection; }
+      return trust;
+    };
+    const resolveCredential = options => {
+      assert.equal(options.env, expectedEnv);
+      assert.equal(options.connection, expectedConnection);
+      expectedOAuthEnv = { ...options.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: fileURLToPath(new URL("./missing-fixture-credentials.json", import.meta.url)) };
+      return resolveMcpCredential({ ...options, env: expectedOAuthEnv,
+        exchange: async config => {
+          assert.equal(config.env.DPF_MCP_URL, env.DPF_MCP_URL);
+          assert.equal(config.connection, expectedConnection);
+          resolveTrust(config); // real trust adapter, fixture token response only
+          mints++;
+          return { accessToken: "fixture-minted", expiresAt: Date.now() + 3600_000 };
+        },
+      });
+    };
+    const requestImpl = (_url, options, respond) => {
+      requests++;
+      assert.equal(options.ca, undefined, "system trust is preserved");
+      assert.equal(options.rejectUnauthorized, undefined, "TLS verification retains its secure default");
+      const request = new EventEmitter();
+      let body;
+      request.write = value => { body = JSON.parse(value); };
+      request.setTimeout = () => {};
+      request.destroy = error => { request.emit("error", error); request.emit("close"); };
+      request.end = () => queueMicrotask(() => {
+        const { name, arguments: args } = body.params;
+        const payload = name === "get_workroom"
+          ? JSON.stringify({ success: true, data: { capsule: room("two", "D:/wt/two") } })
+          : args.cursor ? pagePayload([{ capsuleId: "two", status: "working", detail: { toolName: "get_workroom", arguments: { capsuleId: "two" } } }], { populationCount: 2 })
+          : pagePayload([room("one", "D:/wt/one")], { populationCount: 2, nextCursor: "next", disposition: "more" });
+        const response = new EventEmitter();
+        response.statusCode = 200;
+        response.setEncoding = () => {};
+        respond(response);
+        response.emit("data", payload);
+        response.emit("end");
+        request.emit("close");
+      });
+      return request;
+    };
+    for (let observation = 1; observation <= 2; observation++) {
+      expectPreparation = true;
+      const result = await loadActiveWorkroomPaths({ env, resolveTrust, resolveCredential, requestImpl });
+      assert.equal(result.available, true, result.reason);
+      assert.equal(result.activePaths.size, 2);
+      assert.equal(discoveries, observation, "fresh observations discover again, individual reads do not");
+      assert.equal(trustResolutions, observation * (kind === "pat" ? 4 : 5), "instrument preparation, every native request and OAuth trust");
+      assert.equal(requests, observation * 3, "two native pages and one native detail read");
+      assert.equal(nativeTrustChecks, observation * 3, "each native trust call checks both forwarding arguments");
+      assert.equal(mints, kind === "pat" ? 0 : observation);
+    }
+  });
+});
+it("reuses a completed empty-CA selection without rediscovering host state", async () => {
+  const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+  let discoveries = 0;
+  const options = { mcpUrl: "https://127.0.0.1:1/api/mcp/v1", env: {}, platform: "win32", installDir: ".",
+    spawnSyncImpl: () => { discoveries++; return { status: 0, stdout: JSON.stringify({ McpUrl: "https://127.0.0.1:1/api/mcp/v1", CaBundle: "" }) }; },
+  };
+  const prepared = resolveHostMcpTrust(options);
+  for (let page = 0; page < 3; page++) resolveHostMcpTrust({ ...options, connection: prepared.connection });
+  assert.equal(discoveries, 1, "preparation plus three reads must discover once, not four times");
+});
+
+it("prepared connections remain endpoint-bound and reread their CA on every request", async () => {
+  const { resolveHostMcpTrust } = await import("./mcp-host-trust.mjs");
+  const { getCACertificates } = await import("node:tls");
+  const { X509Certificate } = await import("node:crypto");
+  const { mkdtempSync, writeFileSync, unlinkSync, rmdirSync, existsSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = mkdtempSync(join(tmpdir(), "dpf-prepared-ca-"));
+  const bundle = join(directory, "fixture-ca.pem");
+  try {
+    const pem = getCACertificates("default").find(value => {
+      const certificate = new X509Certificate(value);
+      return certificate.ca && Date.parse(certificate.validFrom) <= Date.now() && Date.parse(certificate.validTo) > Date.now();
+    });
+    assert.ok(pem, "a valid bundled CA is available for the fixture");
+    writeFileSync(bundle, pem);
+    const mcpUrl = "https://127.0.0.1:1/api/mcp/v1";
+    const prepared = resolveHostMcpTrust({ mcpUrl, env: { NODE_EXTRA_CA_CERTS: bundle } });
+    assert.throws(() => resolveHostMcpTrust({ mcpUrl: "https://other.example/api/mcp/v1", env: {}, connection: prepared.connection }),
+      error => error.code === "mcp_connection_mismatch");
+    unlinkSync(bundle);
+    assert.throws(() => resolveHostMcpTrust({ mcpUrl, env: {}, connection: prepared.connection }),
+      error => error.code === "mcp_ca_unreadable", "preparation must never cache certificate bytes");
+  } finally {
+    if (existsSync(bundle)) unlinkSync(bundle);
+    rmdirSync(directory);
+  }
+});
+
+describe("branch ownership completeness for deletion", () => {
+  for (const fields of [{}, { headBranch: "fix/short", shortenedFields: ["headBranch"] }, { headBranch: "" }]) {
+    it(`refuses an unproven live branch ${JSON.stringify(fields)}`, async () => {
+      const result = await loadActiveWorkroomPaths({
+        env: { DPF_MCP_BEARER_TOKEN: "fixture" }, requireBranches: true, resolvePaths: false,
+        fetchImpl: async () => new Response(pagePayload([{ ...room("WC-HELD"), ...fields }])),
+      });
+      assert.equal(result.available, false);
+      assert.equal(result.activeBranches.size, 0);
+    });
+  }
+  it("accepts exact named and explicit null branches without detail reads", async () => {
+    let calls = 0;
+    const result = await loadActiveWorkroomPaths({
+      env: { DPF_MCP_BEARER_TOKEN: "fixture" }, requireBranches: true, resolvePaths: false,
+      fetchImpl: async () => { calls++; return new Response(pagePayload([
+        { ...room("WC-HELD"), headBranch: "fix/held" }, { ...room("WC-NO-BRANCH"), headBranch: null },
+      ])); },
+    });
+    assert.equal(result.available, true, result.reason);
+    assert.deepEqual([...result.activeBranches], ["fix/held"]);
+    assert.equal(calls, 1);
   });
 });

@@ -10,6 +10,7 @@
 import type { ModelCardCapabilities } from "./model-card-types";
 import { isAnthropic, isOpenAI, usesResponsesApi } from "./provider-utils";
 import { buildProviderTools } from "./provider-tools";
+import { expressEffort, resolveEffort } from "./effort-expression";
 
 // EP-INF-009c: Model class → execution adapter mapping
 const MODEL_CLASS_ADAPTER: Record<string, string> = {
@@ -147,11 +148,14 @@ function applyAnthropicSettings(
   outputMaxTokens: number,
 ): void {
   if (
-    reasoningDepth === "medium" &&
+    (reasoningDepth === "medium" || reasoningDepth === "high") &&
     capabilities.adaptiveThinking === true
   ) {
-    settings.thinking = { type: "adaptive" };
-    // Adaptive thinking manages its own budget — no max_tokens adjustment needed
+    const decision = resolveEffort({ reasoningDepth, estimatedInputTokens: 0,
+      maxOutputTokens: outputMaxTokens, capabilities });
+    const expression = expressEffort("anthropic", decision, capabilities);
+    Object.assign(settings, expression.settings);
+    // Adaptive thinking manages its own budget inside the existing allowance.
   } else if (
     (reasoningDepth === "medium" || reasoningDepth === "high") &&
     capabilities.thinking === true

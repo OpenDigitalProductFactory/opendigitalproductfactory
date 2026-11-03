@@ -170,3 +170,25 @@ export function parseSnapshots(text) {
   }
   return map;
 }
+
+/** Exact file-archive identities; these have no registry release key. */
+export function parseFilePackages(text) {
+  const records = new Map(); let key = null;
+  for (const line of topLevelSection(lockLines(text), "packages:")) {
+    const entry = line.match(/^ {2}(\S.*?):\s*$/);
+    if (entry) {
+      key = unquote(entry[1]); const match = key.match(/^(.*)@file:(.+\.tgz)$/);
+      if (match) records.set(key, { name: match[1] }); else key = null;
+    } else if (key) {
+      const record = records.get(key), version = line.match(/^ {4}version: (.+)$/);
+      if (version) record.version = unquote(version[1].trim());
+      if (/^ {4}resolution:/.test(line)) {
+        for (const field of ["integrity", "tarball"]) {
+          const match = line.match(new RegExp(`(?:\\{|,| )${field}: ([^,}]+)`));
+          if (match) record[field] = unquote(match[1].trim());
+        }
+      }
+    }
+  }
+  return records;
+}

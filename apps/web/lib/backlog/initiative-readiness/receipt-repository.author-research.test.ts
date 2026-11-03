@@ -3,7 +3,8 @@ import type { AuthorResearchPolicyBinding } from "@/lib/build/author-research-po
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 const io = vi.hoisted(() => ({ artifact: vi.fn(), author: vi.fn(), item: vi.fn(), decision: vi.fn(),
-  append: vi.fn(), judgment: vi.fn(), delegation: vi.fn(), transaction: vi.fn() }));
+  append: vi.fn(), judgment: vi.fn(), delegation: vi.fn(), transaction: vi.fn(), source: vi.fn(), sourceGuard: vi.fn() }));
+vi.mock("@/lib/mcp/workroom-repository-source", () => ({ prepareWorkroomRepositorySource: io.source }));
 vi.mock("@/lib/build/author-research-policy-binding", () => ({ resolveAuthorResearchPolicyBinding: io.author }));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: io.artifact }));
 vi.mock("./reviewer-identity", () => ({ resolveReviewerIdentity: async () => ({ principalId: "principal-actor", kind: "coworker" }) }));
@@ -49,6 +50,25 @@ beforeEach(() => {
 });
 
 describe("author research publication transaction", () => {
+  it.each([true, false])("rechecks selected component source under publication locks: %s", async current => {
+    decision.rationale = {};
+    const artifactRef = { kind: "repo-blob-at-commit" as const, repositoryFullName: "OpenDigitalProductFactory/dpf-workroom",
+      commitSha: "a".repeat(40), path: "package.json", providerBlobId: "b".repeat(40) };
+    const sourceAdmission = { itemId: proof.itemId, workroomId: "WC-COMPONENT", repositoryFullName: artifactRef.repositoryFullName,
+      branchName: "codex/component", headSha: artifactRef.commitSha, isCurrent: async () => true };
+    io.sourceGuard.mockResolvedValue(current);
+    io.source.mockResolvedValue({ sourceAdmission, admissionGuard: io.sourceGuard });
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: artifactRef, digest: proof.valueDigest,
+      authorPrincipalId: "principal-actor", authorAgentId: args.reviewerAgentId, bytes: Buffer.from("component source") } });
+    const result = await recordInitiativeGateReceipt({ ...args, artifactRef, sourceWorkroomId: "WC-COMPONENT" });
+    expect(io.source).toHaveBeenCalledWith(expect.objectContaining({ itemId: proof.itemId,
+      userId: args.reviewerUserId, agentId: args.reviewerAgentId, target: {
+        repositoryFullName: artifactRef.repositoryFullName, commitSha: artifactRef.commitSha } }));
+    expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({ sourceAdmission }));
+    expect(io.sourceGuard).toHaveBeenCalledWith(tx);
+    expect(result.ok).toBe(current);
+    expect(io.append).toHaveBeenCalledTimes(current ? 1 : 0);
+  });
   it("appends only the same canonical author fact revalidated inside the serialized subject transaction", async () => {
     expect(await recordInitiativeGateReceipt(args)).toMatchObject({ ok: true });
     expect(io.author).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-author", agentId: "AGT-WS-BUILD", params }), tx);

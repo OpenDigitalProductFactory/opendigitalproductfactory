@@ -78,6 +78,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        taskId: { type: "string", description: "Optional exact task id; returns only this owned task and its current revision without expanding its prompt." },
         organizationId: { type: "string" },
         productLineId: { type: "string" },
         businessProductId: { type: "string" },
@@ -87,6 +88,15 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
+  },
+  {
+    name: "configure_scheduled_agent_task_reporting",
+    description: "Narrow an eligible paused task you own to observation and reporting only. All operational writes are excluded. Routine results stay in its history; actionable changes are surfaced once. Preserves its original instructions, cadence, settings and history; does not resume it.",
+    inputSchema: { type: "object", properties: {
+      taskId: { type: "string" }, expectedRevision: { type: "string", description: "Exact current revision returned by the task list." },
+      mode: { type: "string", enum: ["read-only-history"] }, reason: { type: "string" },
+    }, required: ["taskId", "expectedRevision", "mode", "reason"], additionalProperties: false },
+    requiredCapability: "view_operations", executionMode: "immediate", sideEffect: true, consequence: "authority",
   },
   {
     name: "cancel_scheduled_agent_task",
@@ -233,6 +243,9 @@ async function listScheduledAgentTasksHandler(
   params: Record<string, unknown>,
   userId: string,
 ): Promise<ToolResult> {
+  if (params.taskId !== undefined && (typeof params.taskId !== "string" || !params.taskId.trim() || params.taskId.length > 128)) {
+    return { success: false, error: "invalid_task_selector", message: "Provide one exact scheduled task id." };
+  }
   const { getScheduledAgentTasksFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
   const scope =
     typeof params.organizationId === "string"
@@ -249,8 +262,10 @@ async function listScheduledAgentTasksHandler(
         }
       : undefined;
   const tasks = scope
-    ? await getScheduledAgentTasksFor(userId, scope)
-    : await getScheduledAgentTasksFor(userId);
+    ? await getScheduledAgentTasksFor(userId, scope, typeof params.taskId === "string" ? params.taskId : undefined)
+    : typeof params.taskId === "string"
+      ? await getScheduledAgentTasksFor(userId, undefined, params.taskId)
+      : await getScheduledAgentTasksFor(userId);
   // Bound each prompt so a few long tasks can't blow the local context window
   // (the MCP-route result cap is the backstop).
   const compact = tasks.map((t) => ({ ...t, prompt: t.prompt.length > 200 ? `${t.prompt.slice(0, 200)}…` : t.prompt }));
@@ -302,6 +317,10 @@ async function cancelScheduledAgentTaskHandler(
 }
 
 const handlers: Record<string, ToolPackHandler> = {
+  configure_scheduled_agent_task_reporting: async (params, userId) => {
+    const { configureScheduledReportingFor } = await import("@/lib/operate/scheduled-jobs/scheduled-reporting-config");
+    return configureScheduledReportingFor(userId, params);
+  },
   create_scheduled_agent_task: (params, userId) => createScheduledAgentTaskHandler(params, userId),
   list_scheduled_agent_tasks: (params, userId) => listScheduledAgentTasksHandler(params, userId),
   cancel_scheduled_agent_task: (params, userId) => cancelScheduledAgentTaskHandler(params, userId),
@@ -318,6 +337,7 @@ export const scheduledAgentTaskPack: ToolPack = {
   definitions,
   handlers,
   grants: {
+    configure_scheduled_agent_task_reporting: ["work_capsule_write"],
     create_scheduled_agent_task: ["work_capsule_write"],
     cancel_scheduled_agent_task: ["work_capsule_write"],
     pause_scheduled_agent_task: ["work_capsule_write"],

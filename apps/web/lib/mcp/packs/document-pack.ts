@@ -23,6 +23,7 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
+import type { ManagedDocument } from "@/lib/documents/document-store";
 import { DOCUMENT_FAMILY_TOOL_DEFINITIONS, DOCUMENT_FAMILY_TOOL_GRANTS, documentFamilyToolHandlers } from "./document-family-tools";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
@@ -33,6 +34,13 @@ function optionalString(value: unknown): string | null {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+// Keep the selected body once at the tool boundary. The shared store retains
+// history for the human UI; coworkers can list metadata and load a pinned version.
+function documentToolProjection(document: ManagedDocument): Omit<ManagedDocument, "versions"> {
+  const { versions: _versions, ...selected } = document;
+  return selected;
 }
 
 // Resolve the principal id the document write should be attributed to: the
@@ -164,7 +172,7 @@ const definitions: ToolDefinition[] = [
   ...DOCUMENT_FAMILY_TOOL_DEFINITIONS,
   {
     name: "doc_load",
-    description: "Load a managed document by stable document id, optionally pinned to a version. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
+    description: "Load a managed document by stable document id, optionally pinned to a version. Returns the selected body once; use doc_version_list for history metadata and doc_load with a version number for another body. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
     inputSchema: {
       type: "object",
       properties: {
@@ -224,7 +232,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "doc_version_list",
-    description: "List version metadata for a managed document.",
+    description: "List version metadata without bodies for a managed document. Use doc_load with a version number to read that version's body.",
     inputSchema: {
       type: "object",
       properties: {
@@ -339,7 +347,7 @@ async function docSave(
     entityId: document.documentId,
     message: `Saved document ${document.documentId} v${version}: /workspace/documents/${encodeURIComponent(document.documentId)}.`,
     data: {
-      document: document as unknown as Record<string, unknown>,
+      document: documentToolProjection(document),
       route: `/workspace/documents/${encodeURIComponent(document.documentId)}`,
     },
   };
@@ -430,7 +438,7 @@ async function docLoad(params: Record<string, unknown>, userId: string): Promise
   // Renditions of the loaded version (BI-9D43CBEF): a PDF and a plain-text
   // projection of an office file, once the rendition job has run.
   const data: Record<string, unknown> = {
-    document: document as unknown as Record<string, unknown>,
+    document: documentToolProjection(document),
     renditions: document.currentVersion?.renditions ?? [],
   };
 
@@ -489,7 +497,7 @@ async function docSearch(params: Record<string, unknown>, userId: string): Promi
   return {
     success: true,
     message: summary,
-    data: { results: documents as unknown as Record<string, unknown>[] },
+    data: { results: documents.map(documentToolProjection) },
   };
 }
 
@@ -523,7 +531,7 @@ async function docVersionList(params: Record<string, unknown>, userId: string): 
   return {
     success: true,
     message: versions.length === 0 ? "No versions found." : `Found ${versions.length} document version${versions.length === 1 ? "" : "s"}.`,
-    data: { versions: versions as unknown as Record<string, unknown>[] },
+    data: { versions: versions.map(({ contentText: _contentText, ...metadata }) => metadata) },
   };
 }
 
@@ -546,7 +554,7 @@ async function docStateChange(
     success: true,
     entityId: document.documentId,
     message: `Document ${document.documentId} moved to ${document.currentState}.`,
-    data: { document: document as unknown as Record<string, unknown> },
+    data: { document: documentToolProjection(document) },
   };
 }
 

@@ -31,7 +31,7 @@ function compact(row: Row): Row {
   const recovery = row.recovery as Row | undefined;
   return {
     capsuleId: row.capsuleId, title: bounded("title", row.title), status: row.status,
-    worktreePath: row.worktreePath ?? null,
+    headBranch: row.headBranch ?? null, worktreePath: row.worktreePath ?? null,
     liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable,
     backlogItemId: row.backlogItemId ?? null,
     decisionScope: row.decisionScope ?? null, portfolioRole: row.portfolioRole ?? null,
@@ -119,7 +119,7 @@ export class WorkroomObservations {
     for (const row of snapshot.rows.slice(offset, offset + snapshot.limit)) {
       if (fits([...selected, row])) { selected.push(row); continue; }
       if (selected.length) break;
-      const minimal = { capsuleId: row.capsuleId, status: row.status, worktreePath: row.worktreePath, detail: row.detail, liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable, shortenedFields: ["summary"] };
+      const minimal = { capsuleId: row.capsuleId, status: row.status, headBranch: row.headBranch, worktreePath: row.worktreePath, detail: row.detail, liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable, shortenedFields: ["summary"] };
       if (!fits([minimal])) throw new Error("page_budget_too_small");
       selected.push(minimal);
       break;

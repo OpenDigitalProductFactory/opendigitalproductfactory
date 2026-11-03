@@ -57,6 +57,8 @@ describe("owned semantic review recovery readback", () => {
     expect(result).toMatchObject({ budget: "expired", classification: "execution-uncertain", pollUseful: false,
       details: { unresolvedNodeIds: ["TN-OWN"], nodes: [{ taskNodeId: "TN-OWN", settlement: "unverified", digestMatches: true }],
         remediation: { executionSettled: false, state: "missing-current-proof", retryAuthorized: false } } });
+    expect(result.nextAction).toContain("execution settlement");
+    expect(result.nextAction).not.toContain("bounded successor");
     expect(JSON.stringify(result)).not.toContain("provider-private-output");
     expect(db.taskNode.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRun: { taskRunId: "TR-OWN", userId: "owner" } }, take: 101 }));

@@ -2,9 +2,26 @@ import { readFile, realpath, lstat, cp } from 'node:fs/promises';
 import { resolve, join, isAbsolute } from 'node:path';
 import { verifyPackage, readPackageManifest, safePath, fileRecord, enumerateFiles,
   sha256, assertArm64MachO, contained, unusedOutput } from './package.mjs';
+import { canonicalJson } from '../../scripts/lib/canonical-json.mjs';
 
 export const RUNTIME_LOCK = JSON.parse(await readFile(new URL('./runtime.lock.json', import.meta.url), 'utf8'));
 function requireValue(ok, message) { if (!ok) throw new Error(message); }
+function requireUnfenced(report) {
+  const fenceEvents = new Set(['heartbeat-lost', 'authority-deadline', 'fence-termination-failed']);
+  requireValue(report.authorityFenced !== true && report.backendEffectSettlement === undefined
+    && (report.leaseEvents === undefined || (Array.isArray(report.leaseEvents)
+      && !report.leaseEvents.some(event => fenceEvents.has(event?.type)))),
+  'Qualification carries an authority fence; a qualified label cannot override it');
+}
+function requireModelControls(report) {
+  const expected = ['docker-baseline', 'corrected-candidate'].flatMap(engine =>
+    ['arithmetic', 'tool-call-format', 'long-cold', 'long-warm'].map(kind => engine + ':' + kind)).sort();
+  requireValue(Array.isArray(report.results) && report.results.length === 8
+    && report.results.every(row => row?.correct === true
+      && row.finishReason === (row.case === 'tool-call-format' ? 'tool_calls' : 'stop'))
+    && canonicalJson(report.results.map(row => row.engine + ':' + row.case).sort()) === canonicalJson(expected),
+  'Qualification controls incomplete');
+}
 
 // This is artifact inspection, never activation admission or a model verdict.
 export async function verifyRuntimePackage(root) {
@@ -73,11 +90,7 @@ export function verifyEngineQualification({ reportBytes, expectedReportSha256,
     'Qualification report identity changed');
   const report = JSON.parse(reportBytes.toString());
   const engineManifest = engine.manifest;
-  const fenceEvents = new Set(['heartbeat-lost', 'authority-deadline', 'fence-termination-failed']);
-  requireValue(report.authorityFenced !== true && report.backendEffectSettlement === undefined
-    && (report.leaseEvents === undefined || (Array.isArray(report.leaseEvents)
-      && !report.leaseEvents.some(event => fenceEvents.has(event?.type)))),
-  'Qualification carries an authority fence; a qualified label cannot override it');
+  requireUnfenced(report);
   requireValue(report.schemaVersion === 1 && report.status === 'model-smoke-qualified'
     && report.baselineRestored === true && Array.isArray(report.failures) && report.failures.length === 0,
     'Incomplete engine qualification');
@@ -89,13 +102,7 @@ export function verifyEngineQualification({ reportBytes, expectedReportSha256,
   requireValue(/^sha256:[a-f0-9]{64}$/.test(expectedModelDigest)
     && report.model?.ociDigest === expectedModelDigest
     && report.model?.binding?.manifestDigest === expectedModelDigest, 'Qualification model changed');
-  const expectedControls = ['docker-baseline', 'corrected-candidate'].flatMap(name =>
-    ['arithmetic', 'tool-call-format', 'long-cold', 'long-warm'].map(kind => name + ':' + kind));
-  requireValue(Array.isArray(report.results) && report.results.length === 8
-    && report.results.every(row => row.correct === true
-      && row.finishReason === (row.case === 'tool-call-format' ? 'tool_calls' : 'stop'))
-    && JSON.stringify(report.results.map(row => row.engine + ':' + row.case).sort()) === JSON.stringify(expectedControls.sort()),
-    'Qualification controls incomplete');
+  requireModelControls(report);
   requireValue(Date.parse(report.startedAt) < Date.parse(report.finishedAt), 'Invalid qualification chronology');
   if (report.package.manifestSha256 !== engine.manifestSha256) {
     requireValue(qualifiedManifestBytes && sha256(qualifiedManifestBytes) === report.package.manifestSha256,
@@ -108,6 +115,59 @@ export function verifyEngineQualification({ reportBytes, expectedReportSha256,
       'Repackaging changed qualified native files');
   }
   return { engineEvidenceReusable: true, runtimeIntegration: 'unrun', activationAuthorized: false };
+}
+
+// runtime must come from verifyRuntimePackage; models/configuration come from
+// the actual selected serving profile. This inspects immutable evidence only.
+// A signed host procedure still needs its own authority, drain and current lease.
+export function verifyRuntimeQualification({ reportBytes, expectedReportSha256, runtime,
+  models, physicalDevice, nowMs = Date.now(), qualifiedAfterMs = 0 }) {
+  requireValue(/^[a-f0-9]{64}$/.test(expectedReportSha256) && sha256(reportBytes) === expectedReportSha256,
+    'Qualification report identity changed');
+  const report = JSON.parse(reportBytes.toString()); requireUnfenced(report);
+  requireValue(report.activationAuthorized === false, 'Qualification cannot self-authorize activation');
+  requireValue(report.schemaVersion === 1 && report.status === 'runtime-api-qualified'
+    && report.runtimeFilesChanged === false && report.providerConfigurationChanged === false
+    && report.baselineRestored === true && report.candidateShutdown?.stopped === true
+    && Array.isArray(report.failures) && report.failures.length === 0
+    && (report.obstacles === undefined || (Array.isArray(report.obstacles) && report.obstacles.length === 0)),
+  'Incomplete runtime qualification or restoration');
+  requireValue(runtime.version === RUNTIME_LOCK.packageVersion && report.runtime?.version === runtime.version
+    && report.runtime?.manifestSha256 === runtime.manifestSha256
+    && report.runtimeVersion?.includes(runtime.version), 'Qualification runtime identity changed');
+  requireValue(physicalDevice === RUNTIME_LOCK.initialQualifiedDevice && report.runtime.device === physicalDevice,
+    'Physical device is not qualified');
+  const start = Date.parse(report.startedAt), admitted = Date.parse(report.admittedAt), end = Date.parse(report.finishedAt);
+  requireValue(Number.isSafeInteger(nowMs) && Number.isSafeInteger(qualifiedAfterMs)
+    && qualifiedAfterMs >= 0 && qualifiedAfterMs <= nowMs
+    && start <= admitted && admitted < end && end <= nowMs, 'Invalid qualification chronology or time bounds');
+  // Age alone does not invalidate an unchanged package. An authoritative host
+  // or serving-profile change can supply its explicit requalification boundary.
+  requireValue(end >= qualifiedAfterMs, 'Qualification predates the required evidence bound');
+  requireValue(Array.isArray(models) && models.length === 2 && models[0].model !== models[1].model
+    && models[0].digest !== models[1].digest
+    && Array.isArray(report.models) && report.models.length === 2
+    && Array.isArray(report.configurations) && report.configurations.length === 2,
+  'Qualification model/configuration binding changed');
+  for (const model of models) {
+    const matches = report.models.filter(row => row?.model === model.model);
+    const configurations = report.configurations.filter(row => row?.model === model.model);
+    requireValue(/^sha256:[a-f0-9]{64}$/.test(model.digest) && /^[a-f0-9]{64}$/.test(model.modelMetadataSha256)
+      && matches.length === 1 && matches[0].digest === model.digest
+      && matches[0].modelMetadataSha256 === model.modelMetadataSha256 && configurations.length === 1,
+    'Qualification model/projector metadata binding changed');
+    const entry = configurations[0];
+    requireValue(entry.digest === model.digest && Array.isArray(model.configuration)
+      && Array.isArray(entry.original) && Array.isArray(entry.candidate)
+      && canonicalJson(model.configuration) === canonicalJson(entry.original)
+      && canonicalJson(entry.original) === canonicalJson(entry.candidate), 'Qualification configuration binding changed');
+  }
+  requireModelControls(report);
+  requireValue(report.embedding?.correct === true && report.embedding.dimensions === 768
+    && report.embedding.modelDigest === models[1].digest, 'Qualification embedding controls incomplete');
+  // In particular, a legacy `released` event is not a platform acknowledgement.
+  return { runtimeEvidenceReusable: true, activationAuthorized: false,
+    platformWorkflowIntegration: 'unrun', releaseVerified: false };
 }
 
 export async function stageVerifiedRuntime(source, destination) {

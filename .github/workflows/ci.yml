@@ -992,6 +992,13 @@ jobs:
     # host and so runs out-of-band, not in CI.
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/edge-node-go/go.mod
+          cache-dependency-path: services/edge-node-go/go.sum
+      - name: Compile and test the native Edge release package
+        working-directory: services/edge-node-go
+        run: go test ./...
       - name: Assert edge-node image bill-of-materials stays minimal
         run: node scripts/check-edge-node-image-bom.mjs
 

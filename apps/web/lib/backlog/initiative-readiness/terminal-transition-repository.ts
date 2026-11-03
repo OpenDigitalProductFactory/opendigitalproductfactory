@@ -4,6 +4,7 @@ import { ok, type ActionResult } from "@/lib/shared/action-result";
 
 import { readinessRequirement } from "./readiness-guidance";
 import type { InitiativeReadinessDecision, ReadinessCode } from "./types";
+import type { CompletionInputContext } from "./completion-input-context";
 
 export type TerminalTransitionClient = {
   authorizationDecisionLog: { create(args: unknown): Promise<unknown> };
@@ -41,6 +42,7 @@ export type TerminalAuthority = {
 };
 
 type ResolvedTerminalReadiness = {
+  completionInputContext?: CompletionInputContext | null;
   governed: boolean;
   decision: InitiativeReadinessDecision;
   factsDigest: string;
@@ -107,6 +109,7 @@ function staleDecision(decision: InitiativeReadinessDecision): InitiativeReadine
 }
 
 async function persistAttempt(args: {
+  completionInputContext?: CompletionInputContext | null;
   tx: TerminalTransitionClient;
   anchorBacklogItemId: string;
   actor: TerminalActor;
@@ -141,6 +144,7 @@ async function persistAttempt(args: {
       authorityDecisionId: args.authorityDecisionId,
       authoritySnapshot: args.authority.authoritySnapshot,
       enforcementState: "enforced",
+      ...(args.completionInputContext !== undefined ? { completionInputContext: args.completionInputContext } : {}),
     },
     recordedById: args.actor.humanContextRef,
     recordedByAgentId: args.actor.agentContextRef,
@@ -174,7 +178,8 @@ export async function executeGovernedTerminalTransition(args: {
       }
       const anchorBacklogItemId = resolved.anchorBacklogItemId ?? args.anchorBacklogItemId;
       if (!anchorBacklogItemId) throw new Error("Governed terminal transition has no backlog receipt anchor.");
-      await persistAttempt({ ...args, tx, anchorBacklogItemId, decision, authorityDecisionId, factsDigest: resolved.factsDigest });
+      await persistAttempt({ ...args, tx, anchorBacklogItemId, decision, authorityDecisionId, factsDigest: resolved.factsDigest,
+        completionInputContext: resolved.completionInputContext });
       if (decision.verdict !== "allowed") {
         return { ok: false, code: firstCode(decision), decision, authorityDecisionId };
       }

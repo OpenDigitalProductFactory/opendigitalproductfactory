@@ -16,6 +16,31 @@ status: active
 
 ## 1. Purpose
 
+### Customer-proof safety repair (BI-4F02E21E)
+
+MarketingAssetTask instructions and MarketingStrategy.proofAssets labels/URLs
+are not verified customer outcomes or customer permission. Existing and new
+customer-proof tasks must be projected as evidence-collection work while those
+facts remain unverified, preserving the task identity and original request.
+The drafter refuses customer-proof intent before inference or draft creation;
+it also rejects recognized customer-outcome claims in generated ordinary copy.
+Clearly labeled internal dogfooding cannot imply third-party customer results.
+External publish/send approval remains mandatory under the existing contract.
+
+This bounded guard uses the current task, workspace snapshot and draft services;
+it adds no evidence table, consent store, provider or access grant. The current
+proof-asset fields do not support binding checked outcomes and permission. The
+full positive customer-proof path remains unimplemented until an existing
+governed source/permission contract is selected and verified. Pattern detection
+is a conservative guard for recognized instructions and claims, not a factual
+verifier for arbitrary generated language. Human review remains necessary.
+
+Ordered repair: reproduce the saved-task failure; add one shared safety helper;
+apply it to task capture/read projection and drafting; exercise missing/label-only
+evidence, legacy tasks, ordinary/internal content and generated-claim refusal;
+run source checks and exact-tree gate; then protected PR and served acceptance.
+No external publication or real customer data is required for the source tests.
+
 Driving `/customer/marketing` end-to-end as the CEO of Open Digital Product Factory surfaced the product gap: the Marketing Strategist can now persist a high-quality plan, but the platform still stops before execution. It can save strategy, campaign briefs, asset tasks, KPI checkpoints, and automation candidates. It does not yet draft the LinkedIn post, route it through approval, publish it, answer inbound replies, or pull channel performance back into the next planning cycle.
 
 This spec defines the missing execution loop:

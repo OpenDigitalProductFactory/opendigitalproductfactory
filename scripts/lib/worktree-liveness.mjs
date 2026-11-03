@@ -26,6 +26,7 @@
 
 import { mcpPost, extractToolResult } from "./mcp-client.mjs";
 import { resolveMcpCredential } from "./mcp-credential.mjs";
+import { resolveHostMcpTrust } from "./mcp-host-trust.mjs";
 
 /** Statuses that mean a room still owns its worktree. Anything terminal is not here. */
 export const ACTIVE_WORKROOM_STATUSES = Object.freeze([
@@ -96,7 +97,7 @@ function detailArguments(row) {
  * A compact row without a provable path is accepted only when `allowDetail` and
  * the row names its own detail read; the caller must then resolve it.
  */
-function readObservation(raw, { allowDetail = false } = {}) {
+function readObservation(raw, { allowDetail = false, requireBranches = false } = {}) {
   const result = readToolResult(raw);
   const data = result?.data ?? result;
   if (!data || result.success === false || result.isError || data._truncated || data.truncated) {
@@ -107,6 +108,11 @@ function readObservation(raw, { allowDetail = false } = {}) {
   for (const row of rooms) {
     if (!row || typeof row.capsuleId !== "string" || !row.capsuleId || !ROOM_STATUSES.has(row.status)) {
       throw new Error("missing workroom ownership identity");
+    }
+    if (requireBranches && ACTIVE_WORKROOM_STATUSES.includes(row.status) && !serverSaysReapable(row)
+      && (!Object.hasOwn(row, "headBranch") || row.shortenedFields?.includes("headBranch")
+        || !(row.headBranch === null || (typeof row.headBranch === "string" && row.headBranch.trim() !== "")))) {
+      throw new Error("missing or shortened workroom branch ownership identity");
     }
     if (!rowCarriesPath(row) && !(allowDetail && detailArguments(row))) {
       throw new Error("missing or shortened workroom ownership identity");
@@ -140,7 +146,7 @@ function serverSaysReapable(row) {
 }
 
 /** Adds proven paths; returns active rows whose path only their detail read can prove. */
-function addOwners(rooms, paths, ids, released = { count: 0 }) {
+function addOwners(rooms, paths, ids, released = { count: 0 }, branches = new Set()) {
   const unresolved = [];
   for (const row of rooms) {
     if (ids.has(row.capsuleId)) throw new Error("duplicate workroom in observation");
@@ -150,6 +156,8 @@ function addOwners(rooms, paths, ids, released = { count: 0 }) {
       released.count++;
       continue;
     }
+    // A held room protects its branch even when the room has no tree (BI-88D75BA3).
+    if (typeof row.headBranch === "string" && row.headBranch) branches.add(row.headBranch);
     if (!rowCarriesPath(row)) unresolved.push(row);
     else if (row.worktreePath !== null) paths.add(normalizePath(row.worktreePath));
   }
@@ -185,23 +193,23 @@ export function parseActiveWorktreePaths(raw) {
 }
 
 /** Every page of ONE observation, or a throw. Never returns a partial population. */
-async function traverseObservation(callTool) {
-  const paths = new Set(), ids = new Set(), cursors = new Set(), unresolved = [], released = { count: 0 };
+async function traverseObservation(callTool, requireBranches = false) {
+  const paths = new Set(), ids = new Set(), cursors = new Set(), unresolved = [], released = { count: 0 }, branches = new Set();
   let cursor, observation;
   for (let pages = 0; pages <= MAX_ROOMS; pages++) {
     const text = await callTool("list_workrooms", { limit: 100, ...(cursor ? { cursor } : {}) });
-    const { rooms, page } = readObservation(text, { allowDetail: true });
+    const { rooms, page } = readObservation(text, { allowDetail: true, requireBranches });
     if (cursor && !page) throw new Error("workroom continuation lost its observation");
     if (page) {
       const identity = JSON.stringify([page.observationId, page.observedAt, page.populationCount]);
       if (observation && observation !== identity) throw new Error("workroom observation changed during traversal");
       observation = identity;
     }
-    unresolved.push(...addOwners(rooms, paths, ids, released));
+    unresolved.push(...addOwners(rooms, paths, ids, released, branches));
     if (ids.size > MAX_ROOMS || (page && ids.size > page.populationCount)) throw new Error("workroom count exceeded observation");
     if (!page || page.disposition === "complete") {
       if (page && ids.size !== page.populationCount) throw new Error("incomplete workroom observation");
-      return { paths, unresolved, count: ids.size, released };
+      return { paths, branches, unresolved, count: ids.size, released };
     }
     if (cursors.has(page.nextCursor)) throw new Error("workroom cursor loop");
     cursors.add(page.nextCursor);
@@ -221,23 +229,34 @@ async function traverseObservation(callTool) {
  * `fetchImpl` is the test seam; production goes through the shared MCP client
  * (scripts/lib/mcp-client.mjs) over node:http, with no curl dependency.
  *
- * @returns {Promise<{ available: boolean, activePaths: Set<string>, reason: string }>}
+ * @returns {Promise<{ available: boolean, activePaths: Set<string>, activeBranches: Set<string>, reason: string }>}
  */
 export async function loadActiveWorkroomPaths(options = {}) {
   const env = options.env ?? process.env;
   const url = env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
   try {
-    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env });
-    const deadline = Date.now() + READ_BUDGET_MS;
+    // Resolve the install's saved connection once for the whole observation.
+    // Otherwise each HTTPS page starts a host shell to rediscover the same CA.
+    // The transport still rereads and validates that bundle on every request;
+    // no certificate, credential or authority decision is cached here.
+    const deadline = Date.now() + (Number.isFinite(options.readBudgetMs) && options.readBudgetMs > 0 ? options.readBudgetMs : READ_BUDGET_MS);
+    const trust = new URL(url).protocol === "https:"
+      ? (options.resolveTrust ?? resolveHostMcpTrust)({ mcpUrl: url, env }) : null;
+    const transportEnv = trust?.env ?? env;
+    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env: transportEnv, connection: trust?.connection });
     const callTool = async (name, args) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("workroom observation read budget exceeded");
       const reply = await mcpPost("tools/call", { name, arguments: args }, {
         mcpUrl: url,
+        env: transportEnv,
         bearerToken: credential.bearer,
         timeoutMs: Math.min(20_000, remaining),
         accept: "application/json, text/event-stream",
         fetchImpl: options.fetchImpl,
+        requestImpl: options.requestImpl,
+        resolveTrust: options.resolveTrust,
+        connection: trust?.connection,
         // DPF_MCP_URL is operator intent; `env` may be an injected copy, so the
         // client's own process.env check cannot see it.
         allowNonLoopbackEndpoint: Boolean(env.DPF_MCP_URL),
@@ -249,15 +268,17 @@ export async function loadActiveWorkroomPaths(options = {}) {
     let traversal;
     for (let attempt = 0; !traversal; attempt++) {
       try {
-        traversal = await traverseObservation(callTool);
+        traversal = await traverseObservation(callTool, options.requireBranches === true);
       } catch (err) {
         // An expired observation is restarted from nothing; claims read from it
         // are dropped with it, so no mixed population is ever returned.
         if (!(err instanceof ObservationExpired) || attempt >= MAX_RESTARTS) throw err;
       }
     }
-    // Detail reads run after the listing so they cannot outlive its cursor.
-    for (const row of traversal.unresolved) {
+    // Detail reads run after the listing so they cannot outlive its cursor. A
+    // caller that needs only branches (the branch reaper) skips them: every
+    // live row already named its branch (BI-88D75BA3).
+    for (const row of options.resolvePaths === false ? [] : traversal.unresolved) {
       const worktreePath = readDetailPath(await callTool("get_workroom", detailArguments(row)), row);
       if (worktreePath !== null) traversal.paths.add(normalizePath(worktreePath));
     }
@@ -265,12 +286,14 @@ export async function loadActiveWorkroomPaths(options = {}) {
     return {
       available: true,
       activePaths: traversal.paths,
+      activeBranches: traversal.branches,
       reason: `${traversal.count} workroom(s) read${resolved}${releasedNote(traversal.released)}`,
     };
   } catch (err) {
     return {
       available: false,
       activePaths: new Set(),
+      activeBranches: new Set(),
       reason: `workroom query failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }

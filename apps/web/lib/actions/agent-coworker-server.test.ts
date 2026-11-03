@@ -101,6 +101,7 @@ describe("agent coworker thread scoping", () => {
           id: "msg-1",
           role: "assistant",
           content: "Inventory help",
+          responseFeedbackEligible: false,
           agentId: "agent-ops",
           routeContext: "/inventory",
           createdAt: "2026-03-14T10:00:00.000Z",

@@ -62,8 +62,8 @@ const definitions: ToolDefinition[] = [
         },
         retrievalMode: {
           type: "string",
-          enum: ["vector", "ppr"],
-          description: "'vector' for cosine-only ranking (default — same as before). 'ppr' adds a Personalized PageRank pass over the per-org WikiPageLink subgraph so pages linked from the seed set also surface. Falls back to vector if the subgraph is sparse or PPR fails. Default: the org's wikiRetrievalMode setting, which is 'vector' until explicitly switched.",
+          enum: ["vector", "ppr", "lexical"],
+          description: "'lexical' searches published Postgres pages without embedding inference. 'vector' uses cosine ranking (default). 'ppr' adds a Personalized PageRank pass over the per-org WikiPageLink subgraph so pages linked from the seed set also surface. Falls back to vector if the subgraph is sparse or PPR fails. Default: the org's wikiRetrievalMode setting, which is 'vector' until explicitly switched.",
         },
       },
       required: ["query"],
@@ -171,7 +171,7 @@ async function wikiQueryHandler(
     typeof params["appliesTo"] === "string" ||
     typeof params["publicOnly"] === "boolean";
   const orgMode = org?.wikiRetrievalMode === "ppr" ? "ppr" : "vector";
-  const mode: "vector" | "ppr" = principleFiltersPresent
+  const mode: "vector" | "ppr" | "lexical" = callerMode === "lexical" ? "lexical" : principleFiltersPresent
     ? "vector"
     : callerMode === "ppr" || callerMode === "vector"
     ? callerMode
@@ -230,7 +230,7 @@ async function wikiQueryHandler(
   if (typeof params["publicOnly"] === "boolean") {
     searchArgs.principlePublic = params["publicOnly"];
   }
-  const results = await searchWikiPages(searchArgs);
+  const results = mode === "lexical" ? await (await import("@/lib/wiki/embeddings")).searchWikiPagesLexically(searchArgs) : await searchWikiPages(searchArgs);
   if (results.length === 0) {
     return { success: true, message: "No matching wiki pages found.", data: { results: [], retrievalMode: mode } };
   }

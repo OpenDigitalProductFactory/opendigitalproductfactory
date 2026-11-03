@@ -24,16 +24,18 @@ node examples/workroom-kernel/run.mjs
 The invoking Node executable must be **24.16.0**. `WORKROOM_NODE24` may select
 another installed executable of that exact version. The compiler is the existing
 managed TypeScript **6.0.3** installation; it is a build tool, not a runtime
-dependency. No install, download or package-manager operation occurs in the run.
+dependency. The runner uses bundled npm to install only the integrity-pinned
+local Workroom archive offline, with engine checks enabled and scripts disabled.
 
 `run.mjs` copies only `closure.json`'s nine producer source files, this sample's
 sources and `tsconfig.json` into a fresh directory outside the repository. It writes
-a standalone ESM manifest and lock with zero runtime dependencies, clears
+a standalone ESM consumer with one first-party Workroom artifact dependency, clears
 `NODE_PATH`, compiles with `module`/`moduleResolution: NodeNext`, `types: []` and
 `lib: ["ES2022"]`, then executes the emitted JavaScript under Node 24. It rejects
-non-relative/non-`.js` kernel imports and copies regular source files rather than
-dependency symlinks. No application alias, workspace-wide TypeScript configuration
-or producer runtime package is available to the consumer. The temporary directory
+kernel imports outside relative TypeScript sources and the artifact's explicit
+export map. It copies regular source files and a clean installed distribution,
+with no dependency symlinks, application aliases or workspace-wide TypeScript
+configuration. The artifact has zero transitive or third-party dependencies. The temporary directory
 is removed after success or failure.
 
 The output names passing scenario groups and records SHA-256 digests of the exact
@@ -94,21 +96,24 @@ failure/budget stops remain unsupported by the extracted marking implementation.
 
 Producer source derives from DPF baseline
 `e22a9996c58a21e6af868baa0f48ee2195573bc2` and this local extraction. `closure.json`
-is the complete runtime source manifest. Original source comments remain in those
-files. `LICENSE` and `NOTICE` preserve the repository's license and attribution
+records the copied bridge/source closure and exact installed component identity.
+Original comments remain in retained sources; retired bodies live in the
+component's independently maintained source home. `LICENSE` and `NOTICE` preserve the repository's license and attribution
 notice; the runner carries both into the temporary consumer.
 No third-party runtime source is vendored by this example. This is provenance
 documentation, not a complete rights or supply-chain audit.
 
-Absorb the manifested pure kernel behind the consumer's current core adapters only
+Consume the pinned component behind the consumer's current core adapters only
 after its unchanged command/experience acceptance passes. Retire only structural
 calculations actually replaced. Keep company facts, trusted evidence/authority,
 transactions, scheduling and executor qualification with their canonical owners.
-The producer's public entry is `packages/validators/src/workroom/index.ts`; browser
-consumers must use that narrow entry rather than an unrelated package root barrel.
+The historical `packages/validators/src/workroom/index.ts` entry is a thin
+compatibility bridge. New consumers use `@opendigitalproductfactory/dpf-workroom`
+or its explicit narrow subpaths; none reaches the GPP compiler.
 
-The platform maintainer owns the kernel and this conformance example. Upgrades
-must retain the source manifest, compare exact definition/receipt serialization,
-rerun the isolated suite and migrate callers together. Revert the extraction and
-its actual caller changes as one slice. No schema migration, issued identity,
+Component maintainers own the kernel; DPF maintainers own its receiving bridges
+and this example. Upgrades retain the artifact/source identities, compare exact
+definition/receipt serialization, rerun the isolated suite and migrate callers
+together. Roll back DPF's artifact/import/body slice together without changing
+another product's component version. No schema migration, issued identity,
 production record, service, image, credential or subscription is changed here.

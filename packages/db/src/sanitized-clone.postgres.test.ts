@@ -8,13 +8,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "../generated/client/client";
 import {
   createSanitizedCloneInsertWriter,
+  createSanitizedCloneWriter,
+  createSanitizedCloneSanitizer,
+  copyRowsForSanitization,
   buildSanitizedCursorQuery,
   insertRowsWithReplicationDisabled,
   runSourceCheckedClone,
   sanitizeConfidentialRow,
 } from "./sanitized-clone";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
-import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
+import { copySanitizedCursorBatches, withSanitizedCursorBatches } from "./sanitized-clone-batches";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -50,6 +53,130 @@ const sourceClient = {
 };
 
 describeDatabase("sanitized clone publication with PostgreSQL", () => {
+  it("compares50and500row transactions through the real confidential caller with identical values and duplicate winners", async () => {
+    const name = fixtureName("stream_cost");
+    const table = `"${schema}"."${name}"`;
+    const destination = publicFixture(name);
+    const users = `"${schema}"."User"`;
+    const results: Array<Record<string, unknown>> = [];
+    let expectedDigest: string | null = null;
+    try {
+      await client.query(`CREATE TABLE ${users} (id text PRIMARY KEY)`);
+      await client.query(`INSERT INTO ${users} VALUES ('000001'), ('000003')`);
+      await client.query(`CREATE TABLE ${table} (id text PRIMARY KEY, name text, payload jsonb, embedding vector(3))`);
+      await client.query(`CREATE TABLE ${destination} (id text PRIMARY KEY, name text, payload jsonb, embedding vector(3))`);
+      await client.query(`CREATE UNIQUE INDEX ON ${destination} ((payload->>'dedupe'))`);
+      await client.query(`INSERT INTO ${table} SELECT lpad(i::text, 6, '0'), 'Source person', jsonb_build_object('dedupe', i % 30000, 'value', i, 'text', repeat('x',128)), '[0.1,0.2,0.3]'::vector FROM generate_series(1,50001) i`);
+      // The source and destination fixtures have identical column metadata.
+      // Only source data resolves through this private schema; destination
+      // catalog/writer connections remain public, as in the real caller.
+      await client.query(`SET search_path TO "${schema}", public`);
+      for (const ceiling of [50, 500, 500, 50]) {
+        await client.query(`TRUNCATE TABLE ${destination}`);
+        const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, insertMs: 0, transactionAttempts: 0, transactionMs: 0, transactionWorkMs: 0 };
+        const writer = createSanitizedCloneWriter(destinationClient, { batchSize: ceiling, maxWaitMs: 10000, timeoutMs: 30000 });
+        const started = performance.now();
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        await copyRowsForSanitization(client, sourceClient, destinationClient, name,
+          next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(2), metrics), undefined, metrics);
+        await client.query("COMMIT");
+        const elapsedMs = performance.now() - started;
+        const rows = await client.query(`SELECT count(*)::int AS count, md5(string_agg(row_to_json(d)::text, ',' ORDER BY id)) AS digest FROM ${destination} d`);
+        expect(rows.rows[0].count).toBe(30000);
+        if (expectedDigest === null) expectedDigest = rows.rows[0].digest;
+        expect(rows.rows[0].digest).toBe(expectedDigest);
+        expect(metrics.rows).toBe(50001); expect(metrics.batches).toBe(1001); expect(metrics.fetches).toBe(1002);
+        if (ceiling === 50) expect(metrics.transactionAttempts).toBe(1001);
+        else expect(metrics.transactionAttempts).toBeGreaterThanOrEqual(101);
+        expect((await client.query(`SELECT name, embedding FROM ${destination} WHERE id = '000001'`)).rows[0]).toEqual({ name: "Dev User 001", embedding: null });
+        results.push({ ceiling, elapsedMs, ...metrics });
+      }
+      expect((await client.query(`SELECT count(*)::int AS count FROM ${table} WHERE name = 'Source person' AND embedding IS NOT NULL`)).rows[0].count).toBe(50001);
+      console.info(`[sanitized-clone-comparison] ${JSON.stringify({ sourceRows: 50001, copiedRows: 30000, results })}`);
+    } finally {
+      await client.query("ROLLBACK");
+      await client.query("SET search_path TO public");
+      await client.query(`DROP TABLE IF EXISTS ${table}`);
+      await client.query(`DROP TABLE IF EXISTS ${destination}`);
+      await client.query(`DROP TABLE IF EXISTS ${users}`);
+    }
+  }, 30_000);
+
+  it.each(["source", "write", "commit"])("cleans previously committed groups after a real streamed %s failure", async failure => {
+    const name = fixtureName("stream_failure");
+    const source = `"${schema}"."${name}"`, destination = publicFixture(name);
+    const trigger = fixtureName("deferred_fail");
+    const fn = `"${schema}"."${trigger}"`;
+    let fetches = 0;
+    try {
+      await client.query(`CREATE TABLE ${source} (id int PRIMARY KEY, name text)`);
+      await client.query(`CREATE TABLE ${destination} (id int PRIMARY KEY, name text ${failure === "write" ? ", CHECK (id < 751)" : ""})`);
+      if (failure === "commit") {
+        await client.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.id >= 751 THEN RAISE EXCEPTION 'fixture deferred commit failure'; END IF; RETURN NEW; END $$`);
+        await client.query(`CREATE CONSTRAINT TRIGGER "${trigger}" AFTER INSERT ON ${destination} DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
+        await client.query(`ALTER TABLE ${destination} ENABLE ALWAYS TRIGGER "${trigger}"`);
+      }
+      await client.query(`INSERT INTO ${source} SELECT i, 'Source person' FROM generate_series(1,1001) i`);
+      const sourceReader = { async query(sql: string) {
+        if (sql.startsWith("FETCH") && ++fetches === 12 && failure === "source") throw new Error("fixture source failure");
+        return client.query(sql);
+      } };
+      const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+      const writer = createSanitizedCloneWriter(destinationClient);
+      await expect(runSourceCheckedClone(
+        async () => { await destinationClient.$executeRawUnsafe(`TRUNCATE TABLE ${destination}`); },
+        async () => {},
+        () => withSanitizedCursorBatches(sourceReader, `SELECT id, name FROM ${source} ORDER BY id`,
+          next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics),
+      )).rejects.toThrow();
+      expect(metrics.transactionAttempts).toBe(2);
+      expect((await client.query(`SELECT count(*)::int AS count FROM ${destination}`)).rows[0].count).toBe(0);
+      expect((await client.query(`SELECT count(*)::int AS count FROM ${source} WHERE name='Source person'`)).rows[0].count).toBe(1001);
+    } finally {
+      await client.query("ROLLBACK");
+      await client.query(`DROP TABLE IF EXISTS ${source}`);
+      await client.query(`DROP TABLE IF EXISTS ${destination}`);
+      if (failure === "commit") await client.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    }
+  }, 30_000);
+
+  it("measures real narrow-row fetch, sanitization and destination phases without changing the cohort", async () => {
+    const table = `"${schema}"."TelemetryCost"`;
+    const destinationName = fixtureName("telemetry_cost");
+    const destination = publicFixture(destinationName);
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, writeMs: 0, transactionAttempts: 0, transactionMs: 0, transactionWorkMs: 0 };
+    const write = createSanitizedCloneInsertWriter(destinationClient);
+    const count = 50_001;
+    try {
+      await client.query(`CREATE TABLE ${table} (id bigint PRIMARY KEY, name text, payload jsonb)`);
+      await client.query(`CREATE TABLE ${destination} (id bigint PRIMARY KEY, name text, payload jsonb)`);
+      await client.query(`INSERT INTO ${table} SELECT i, 'Source person', jsonb_build_object('value', i, 'text', repeat('x', 128)) FROM generate_series(1, ${count}) i`);
+      const started = performance.now();
+      await copySanitizedCursorBatches(client, `SELECT id, name, payload FROM ${table} ORDER BY id`, async rows => {
+        const transformStarted = performance.now();
+        for (let i = 0; i < rows.length; i++) rows[i] = sanitizeConfidentialRow(rows[i]!, Number(rows[i]!.id));
+        metrics.sanitizeMs += performance.now() - transformStarted;
+        const writeStarted = performance.now();
+        try { await write(destinationName, rows, metrics); }
+        finally { metrics.writeMs += performance.now() - writeStarted; }
+      }, 50, true, metrics);
+      const elapsedMs = performance.now() - started;
+      expect(metrics.rows).toBe(count);
+      expect(metrics.batches).toBe(1001);
+      expect(metrics.fetches).toBe(1002);
+      expect(metrics.transactionAttempts).toBe(1001);
+      expect(metrics.transactionWorkMs).toBeGreaterThan(0);
+      expect(metrics.transactionWorkMs).toBeLessThanOrEqual(metrics.transactionMs);
+      const persisted = await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND payload->>'value' = id::text`);
+      expect(persisted.rows[0].count).toBe(count);
+      const untouched = await client.query(`SELECT count(*)::int AS count FROM ${table} WHERE name = 'Source person'`);
+      expect(untouched.rows[0].count).toBe(count);
+      console.info(`[sanitized-clone-cost] ${JSON.stringify({ cohort: "narrow-telemetry-fixture", elapsedMs, ...metrics })}`);
+    } finally {
+      await client.query(`DROP TABLE IF EXISTS ${table}`);
+      await client.query(`DROP TABLE IF EXISTS ${destination}`);
+    }
+  }, 30_000);
   beforeAll(async () => {
     client = new Client({ connectionString: databaseUrl });
     await client.connect();
@@ -561,4 +688,79 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
 
     expect(await destinationCount()).toBe(1);
   });
+  it.each([false, true])("observes streamed real-writer heap inside transactions, including commit-cleared retention=%s", async retainUntilCommit => {
+    const source = `"${schema}"."StreamWide"`, name = fixtureName("stream_wide"), destination = publicFixture(name);
+    const streamClient = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl!, max: 1, options: "-c search_path=public" }) });
+    let peak = 0;
+    let afterCommitPeak = 0;
+    let insertSamples = 0;
+    let transactionOpen = false;
+    let innerSamples = 0;
+    let sampleInside: (() => void) | null = null;
+    try {
+      await streamClient.$connect();
+      await client.query(`CREATE TABLE ${source} (id bigint PRIMARY KEY, name text, payload jsonb, embedding vector(3072))`);
+      await client.query(`CREATE TABLE ${destination} (id bigint PRIMARY KEY, name text, payload jsonb, embedding vector(3072))`);
+      await client.query(`INSERT INTO ${source} SELECT i, 'Source person', jsonb_build_object('text',repeat('x',32768)), array_fill(0.5::real,ARRAY[3072])::vector FROM generate_series(1,2001) i`);
+      const baseline = retainedHeap();
+      const observedClient = { $transaction: async (write: (tx: unknown) => Promise<void>, options: unknown) => {
+        await streamClient.$transaction(async tx => {
+          // The positive control holds >16MiB only until the callback returns.
+          // Post-COMMIT sampling must miss it; the in-transaction probe must not.
+          let retainedParameters: unknown[] | null = null;
+          transactionOpen = true;
+          sampleInside = () => { innerSamples++; peak = Math.max(peak, retainedHeap() - baseline); };
+          const observedTx = new Proxy(tx, { get(target, key) {
+            if (key === "$executeRawUnsafe") return async (sql: string, ...values: unknown[]) => {
+              const result = await target.$executeRawUnsafe(sql, ...values);
+              if (sql.startsWith("INSERT")) {
+                if (retainUntilCommit && retainedParameters === null) {
+                  retainedParameters = new Array(3 * 1024 ** 2).fill(values[0]);
+                }
+                insertSamples++;
+
+              }
+              return result;
+            };
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          } });
+          try {
+            await write(observedTx);
+            sampleInside();
+          } finally {
+            retainedParameters = null;
+            transactionOpen = false;
+            sampleInside = null;
+          }
+        }, options as never);
+        afterCommitPeak = Math.max(afterCommitPeak, retainedHeap() - baseline);
+      } };
+      const writer = createSanitizedCloneWriter(observedClient as never);
+      const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+      await withSanitizedCursorBatches(client, `SELECT id,name,payload,NULL::text AS embedding FROM ${source} ORDER BY id`,
+        next => writer.copyBatches(name, async () => {
+          // Each source window is 50 rows (the final window is smaller).
+          // This runs after the preceding window's real awaited SQL inserts
+          // and before the next fetch, while its transaction is still open.
+          if (transactionOpen) sampleInside!();
+          return next();
+        }, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics);
+      expect(metrics.rows).toBe(2001);
+      expect(insertSamples).toBeGreaterThanOrEqual(41);
+      expect(innerSamples).toBeGreaterThanOrEqual(41);
+      expect(afterCommitPeak).toBeLessThan(16 * 1024 ** 2);
+      if (retainUntilCommit) expect(peak).toBeGreaterThan(16 * 1024 ** 2);
+      else expect(peak).toBeLessThan(16 * 1024 ** 2);
+      expect((await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND embedding IS NULL AND length(payload->>'text')=32768`)).rows[0].count).toBe(2001);
+      console.info(`[sanitized-clone-stream-memory] ${JSON.stringify({ sourceRows: 2001, retainUntilCommit, insertSamples, innerSamples, retainedPeakGrowth: peak, afterCommitPeakGrowth: afterCommitPeak, ...metrics })}`);
+    } finally {
+      await streamClient.$disconnect();
+      await client.query("ROLLBACK");
+      await client.query(`DROP TABLE IF EXISTS ${source}`);
+      await client.query(`DROP TABLE IF EXISTS ${destination}`);
+    }
+  }, 20_000);
+
+
 });

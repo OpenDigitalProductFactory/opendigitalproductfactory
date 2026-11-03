@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseSemanticReviewResponse } from "./semantic-change-review";
+import { createLowRiskAutoPassReceipt, parseSemanticReviewResponse } from "./semantic-change-review";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import {
   runSemanticChangeReview,
+  resolveSemanticReviewCoordination,
   selectSemanticReviewSpecialists,
   type SemanticChangeReviewOperationInput,
 } from "./semantic-change-review-operation";
@@ -163,6 +164,44 @@ describe("semantic change-review operation", () => {
     expect(staleDispatch).toHaveBeenCalledOnce();
     expect(stale.staleReasons).toContain("head-tree-changed");
     expect(stale.reusedFreshReceipt).toBe(false);
+  });
+
+  it.each(["high", "critical"] as const)(
+    "does not reuse an automatic receipt when current risk=%s requires independent review",
+    async (risk) => {
+      // New reviews are mandatory on current main. Preserve the regression by
+      // supplying an automatic receipt at the same immutable identity.
+      const priorReceipt = createLowRiskAutoPassReceipt({
+        identity: resolveSemanticReviewCoordination(input()).identity,
+        rationale: "Previously automatically approved.",
+      });
+      const dispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Independently reviewed.",
+        failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." } });
+
+      const out = await runSemanticChangeReview(
+        input({ risk, sensitivityFloor: "high-assurance", priorReceipt }),
+        { dispatch },
+      );
+
+      expect(out.activation.activate).toBe(true);
+      expect(dispatch).toHaveBeenCalledOnce();
+      expect(out.reusedFreshReceipt).toBe(false);
+      expect(out.receipt.disposition).toBe("reviewed");
+    },
+  );
+
+  it.each(["low", "medium"] as const)("does not reuse automatic receipts at risk=%s under mandatory review", async (risk) => {
+    const priorReceipt = createLowRiskAutoPassReceipt({
+      identity: resolveSemanticReviewCoordination(input()).identity,
+      rationale: "Previously automatically approved.",
+    });
+    const dispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Reviewed.",
+      failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." } });
+    const out = await runSemanticChangeReview(input({ risk, priorReceipt }), { dispatch });
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(out.reusedFreshReceipt).toBe(false);
+    expect(out.receipt.disposition).toBe("reviewed");
+    expect(out.mayPublish).toBe(true);
   });
 
   it("retries a fresh infrastructure-inconclusive receipt for the same immutable identity", async () => {

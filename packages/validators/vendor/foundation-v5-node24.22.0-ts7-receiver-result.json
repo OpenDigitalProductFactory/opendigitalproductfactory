@@ -1,0 +1,88 @@
+{
+  "kind": "clean-installed-foundation-receiver-matrix",
+  "node": "v24.22.0",
+  "typescript": "7.0.2",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "identities": [
+    {
+      "component": "@opendigitalproductfactory/dpf-workroom",
+      "version": "0.1.0-candidate.4",
+      "sourceCommit": "ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9",
+      "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
+      "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44"
+    },
+    {
+      "component": "@opendigitalproductfactory/dpf-scoped-judgment",
+      "version": "0.1.0-candidate.2",
+      "sourceCommit": "79bfff540fa8a11c5f725cf60d46764e600868fe",
+      "tarball": "opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.2.tgz",
+      "sha256": "cf79f4ee40c72706439af9e51155b2a12c9b14c5029a6253d14f8a6848a87af9"
+    },
+    {
+      "component": "@opendigitalproductfactory/dpf-gpp",
+      "version": "0.1.0-candidate.4",
+      "sourceCommit": "4df0e60f8ee3705c93e5eb4ab3ac25dcbd9f655a",
+      "tarball": "opendigitalproductfactory-dpf-gpp-0.1.0-candidate.4.tgz",
+      "sha256": "ed8b36f6c96945248c857d7d7724e7fa45f09f3c8899a1e711cef09bff60bc2c"
+    }
+  ],
+  "cases": {
+    "room": {
+      "passed": [
+        "paired company and improvement jobs use the extracted marking transitions",
+        "receipt subject, kind, actor, profile, binding and pinned definition must match",
+        "human-required work does not advance from a reviewer or fixture standing authority",
+        "rework advances iterations and old receipt evidence cannot complete the new pass",
+        "lost acknowledgment recovers one committed result; conflicting replay and revoked replay refuse",
+        "unknown and pending attempts hold; only an observed no-effect permits a distinct retry",
+        "protected bytes and transitive upstream lineage are rechecked after restart",
+        "a new cycle requires new evidence; wrong pinned state and changed runtime remain held",
+        "changed prerequisite references and malformed persisted marking write no result",
+        "withdrawal during a pending attempt prevents its later completion",
+        "exhausted rework stops as a hold and cannot masquerade as an accepted improvement",
+        "human checkpoint binds exact content, verdict and attempt rather than only the stage",
+        "revoked upstream authority invalidates dependent current evidence without erasing recorded effects"
+      ],
+      "qualification": "synthetic-only"
+    },
+    "judgment": {
+      "passed": [
+        "wwmd synthetic advice, exact owner and independent admission",
+        "wwwd synthetic advice, exact owner and independent admission",
+        "wsid synthetic advice, exact owner and independent admission",
+        "missing/cross-scope/cross-owner context hold",
+        "stale context and revoked principle hold",
+        "hard eligibility before preferences; all-ineligible hold",
+        "identity, numeric and domain-port validation",
+        "synthetic WWWD capture/re-consult and wrong-owner/WSID refusal",
+        "raw scoring no-signal abstention compatibility"
+      ],
+      "qualification": "Synthetic advisory fixture only; native gates, production ownership, corpus quality, human admission and enforcement remain unqualified."
+    },
+    "browser": [
+      "strict schema and document parse",
+      "decoded duplicate keys, syntax, BOM, CRLF, trailing input, depth and unknown fields refuse",
+      "JSON Schema and layout contracts",
+      "malformed graphs and absent failure/budget exits refuse",
+      "injected facts distinguish unevaluated capabilities, absent sandbox facts, failed declared containment and declared-only mediation"
+    ],
+    "compiler": {
+      "passed": [
+        "deterministic compile/digest/diagnostics/emitted bytes and legacy round trip",
+        "missing policy, tool registration, grant mapping and classification refuse without output",
+        "missing direct/transitive sub-shape facts refuse without output",
+        "generated shape feeds the extracted Workroom marking step with run-bound host observations",
+        "draft binding and strict serial host mapping preserve versions; missing/changed/human/unsupported facts hold",
+        "three-stage same-actor/session capability combination remains C-5 unassessed and explicitly held despite favorable checks or gate labels"
+      ],
+      "qualification": "Synthetic compiler and marking mechanics only. No authentication, tool execution, qualified enforcement, GPP 0.19 actor/session aggregation or production admission."
+    }
+  },
+  "exportsAndDeclarations": "passed",
+  "generatedModule": "compiled and imported",
+  "boundedJson": "normal/adverse passed",
+  "actualProductAdoption": false,
+  "actualBrowserCsp": false,
+  "osEnforcementQualification": false
+}
