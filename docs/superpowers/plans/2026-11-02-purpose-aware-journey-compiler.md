@@ -137,7 +137,23 @@ PR workflow. The PR must state that the compiler is additive and has no default
 UI consumer. Rollback is deletion/disablement of the consumer; no data rollback
 or trust-state rewrite exists.
 
-## 3. Verification matrix
+## 3. Backlog coverage and four-way traceability
+
+This plan is one atomic deliverable. The contracts, registry, resolver, compiler,
+and compatibility adapter are not useful or safe as independent releases. The
+next UI, federation, standards, and ecosystem-productivity releases retain their
+separate backlog items under `EP-1FABA22D`.
+
+| Deliverable | Backlog item | Requirement refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- | --- |
+| `purpose-aware-journey-compiler` | `BI-91EF130B` | `OBJ-PJC-1`–`OBJ-PJC-5`; `AC-PJC-1`–`AC-PJC-5` | Design §§5–8 | Tasks 1–6 | Plan §4; Task 7 |
+
+The condition blocking a governed coverage receipt before independent approval
+is: **no initiative scope baseline exists for `BI-91EF130B`**. A passing
+spec-approval receipt mints that baseline; the immutable plan blob is then bound
+with `record_plan_backlog_coverage` before implementation.
+
+## 4. Verification matrix
 
 | Requirement | Evidence |
 | --- | --- |
@@ -150,7 +166,7 @@ or trust-state rewrite exists.
 | Authority remains external | Tests prove profile compilation invokes no writers and cannot change federation/grant data |
 | Production readiness | Exact-tree local CI, build/typecheck, architecture review, semantic review |
 
-## 4. Rollback
+## 5. Rollback
 
 The compiler is not the canonical owner of any record. Disable or remove its
 consumer and continue to use the legacy setup projection and existing
