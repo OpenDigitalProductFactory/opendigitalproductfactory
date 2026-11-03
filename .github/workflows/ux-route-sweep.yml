@@ -113,6 +113,8 @@ jobs:
       NEXTAUTH_URL: http://localhost:3000
       UX_SWEEP_BASE_URL: http://localhost:3000
       UX_SWEEP_WORKERS: ${{ inputs.workers || '2' }}
+      DPF_UX_FIXTURE_PROFILE: ${{ inputs.scenario == 'foreground-recovery' && 'foreground-finance' || 'route-sweep' }}
+      DPF_FOREGROUND_RECOVERY_SCENARIO_CI: ${{ inputs.scenario == 'foreground-recovery' && '1' || '0' }}
       # Pinned measurement clock (BI-99909E53). Calendar-relative copy over
       # code-defined dates — the inbox's compliance-evidence "lapses in N days"
       # / "lapses after today" / "lapsed N days ago" — moved a frozen baseline

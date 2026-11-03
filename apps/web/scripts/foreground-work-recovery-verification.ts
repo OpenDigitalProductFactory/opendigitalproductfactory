@@ -11,7 +11,7 @@ import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
 import { assertForegroundFixtureRuntime, prepareForegroundFixtures, cleanupForegroundFixtures,
   assertForegroundBackgroundQuiet, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport, type ForegroundFixture } from "./foreground-work-recovery-fixtures";
 import { foregroundRequiredCaseIds, assertForegroundCasesExecuted } from "./foreground-work-recovery-fixtures";
-import { readForegroundBuildEvidence } from "./foreground-work-recovery-fixtures";
+import { assertForegroundFinanceEntry, readForegroundBuildEvidence } from "./foreground-work-recovery-fixtures";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/foreground-work-recovery");
@@ -27,8 +27,8 @@ export async function verifyForegroundRecovery() {
     "Declared source does not match the exact runtime checkout");
   mkdirSync(OUT, { recursive: true });
   const { prisma } = await import("@dpf/db");
-  const modelId = runtime.runKey + "-model", answer = `Synthetic result ${runtime.runKey}: example checklist retained.`;
-  const prompt = `Synthetic fixture ${runtime.runKey}. Return exactly: ${answer} Do not use tools, send mail, change settings or spend money.`;
+  const modelId = runtime.runKey + "-model", answer = `Synthetic Finance result ${runtime.runKey}: draft an expense at /finance/my-expenses/new and retain its receipt; no expense has been created.`;
+  const prompt = `Synthetic fixture ${runtime.runKey}. Give read-only expense-entry and receipt guidance for our software business. Return exactly: ${answer} Do not use tools, send mail, change settings or spend money.`;
   const transport = await startForegroundFixtureTransport({ modelId, marker: runtime.runKey, answer });
   let browser: Browser | undefined, context: BrowserContext | undefined;
   let fixture: ForegroundFixture | undefined, taskRunId: string | undefined;
@@ -66,10 +66,18 @@ export async function verifyForegroundRecovery() {
       ...build,
       sourceBinding: "reported CI deployment source plus canonical production build, compiled route hash and observed matching served static bytes; no live-install or baked-image claim",
     };
+    const business = await prisma.storefrontConfig.findFirst({ where: { organization: { slug: "platform" } },
+      select: { organizationId: true, archetype: { select: { archetypeId: true } } } });
+    check(business?.archetype.archetypeId === "software-platform", "The served Finance fixture has the wrong business context");
+    evidence.businessContext = { organizationId: business.organizationId, archetypeId: business.archetype.archetypeId };
+    executedCaseIds.push("software-business-context");
+    const expenseState = async () => ({ claims: await prisma.expenseClaim.count(), items: await prisma.expenseItem.count() });
+    const expensesBefore = await expenseState();
+    check(expensesBefore.claims === 0 && expensesBefore.items === 0, "Readonly Finance fixture requires no existing expenses");
     fixtureSettlement = "preparation-outcome-unknown";
     fixture = await prepareForegroundFixtures(prisma, transport.baseUrl);
     fixtureSettlement = "active";
-    await page.goto(runtime.origin + "/workspace", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(runtime.origin + "/platform/ai/agent/AGT-900", { waitUntil: "domcontentloaded", timeout: 60_000 });
     const scriptPath = await page.locator('script[src^="/_next/static/"]').first().getAttribute("src");
     check(scriptPath, "The served page has no production static asset");
     const asset = new URL(scriptPath, runtime.origin), staticRoot = build.staticRoot;
@@ -100,6 +108,17 @@ export async function verifyForegroundRecovery() {
     check(isRecord(receipt) && typeof receipt.taskRunId === "string" && typeof receipt.userMessageId === "string"
       && isRecord(requestData) && typeof requestData.threadId === "string" && typeof requestData.requestKey === "string", "Acceptance has no durable request/job identity");
     taskRunId = receipt.taskRunId;
+    const admittedRequest = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId },
+      select: { initiatingAgentId: true, routeContext: true, a2aMetadata: true } });
+    const retainedRequest = isRecord(admittedRequest.a2aMetadata) && isRecord(admittedRequest.a2aMetadata.foregroundRequest)
+      ? admittedRequest.a2aMetadata.foregroundRequest : null;
+    const submittedMode = requestData.coworkerMode ?? "advise", retainedMode = retainedRequest?.coworkerMode;
+    assertForegroundFinanceEntry({ archetypeId: business.archetype.archetypeId,
+      routeContext: admittedRequest.routeContext ?? "", initiatingAgentId: admittedRequest.initiatingAgentId, submittedMode, retainedMode });
+    check(requestData.routeContext === admittedRequest.routeContext,
+      "The readonly Finance request changed route or execution mode");
+    evidence.financeEntry = { initiatingAgentId: admittedRequest.initiatingAgentId, routeContext: admittedRequest.routeContext, submittedMode, retainedMode };
+    executedCaseIds.push("native-finance-entry");
     const eventIds = async () => (await prisma.jobEvent.findMany({ where: { name: FOREGROUND_WORK_EVENT,
       data: { path: ["taskRunId"], equals: taskRunId } }, select: { id: true } })).map(event => event.id);
     const duplicateSubmission = async () => {
@@ -203,6 +222,10 @@ export async function verifyForegroundRecovery() {
     await page.screenshot({ path: resolve(OUT, "recovered-result.png"), fullPage: true });
     evidence.result = { taskRunId, messageId: message.id, contentDigest: digest, responseAttemptId: message.responseAttemptId,
       responseScope: message.responseScope, jobs, reconciliation, noResubmissionAfterCapacityReturn: true, duplicateResultStable: true };
+    const expensesAfter = await expenseState();
+    check(expensesAfter.claims === 0 && expensesAfter.items === 0, "Readonly Finance guidance created persisted expense records");
+    evidence.readonlyExpenses = { before: expensesBefore, after: expensesAfter };
+    executedCaseIds.push("readonly-expense-guidance");
     evidence.panelPresent = await panel.count();
     evidence.noUnrelatedDispatches = true;
     completed = true;

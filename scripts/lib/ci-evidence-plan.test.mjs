@@ -69,8 +69,10 @@ describe("createEvidencePlan", () => {
       "apps/web/lib/agent-form-assist.ts",
       "apps/web/lib/coworker/agent-coworker-core.ts",
       "apps/web/scripts/foreground-work-recovery-verification.ts",
+      "apps/web/scripts/ux-sweep-fixture-core.mjs",
+      "apps/web/scripts/ux-sweep-fixture.ts",
     ]) {
-      const test = path.replace(/\.ts$/, ".test.ts");
+      const test = path.replace(/(\.(?:mjs|ts))$/, ".test$1");
       const plan = createEvidencePlan(input({ changedFiles: [path, test], knownTests: [test],
         codeGraphAdvice: trustedGraph(), relatedTestsBySource: { [path]: [test] } }));
       assert.equal(plan.fullSuite, false, `covered path must select without an escalation: ${path}`);

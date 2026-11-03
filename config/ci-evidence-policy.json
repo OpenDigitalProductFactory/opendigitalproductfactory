@@ -28,6 +28,9 @@
     {
       "id": "foreground-recovery",
       "requiredCaseIds": [
+        "software-business-context",
+        "native-finance-entry",
+        "readonly-expense-guidance",
         "authenticated-acceptance",
         "capacity-wait",
         "waiting-duplicate",
@@ -59,7 +62,8 @@
         "^apps/web/scripts/foreground-work-recovery-",
         "^\\.github/workflows/(ci|ux-route-sweep)\\.yml$",
         "^config/ci-evidence-policy\\.json$",
-        "^scripts/(lib/)?ci-evidence-"
+        "^scripts/(lib/)?ci-evidence-",
+        "^apps/web/scripts/ux-sweep-fixture(?:-core)?\\.(?:mjs|ts)$"
       ]
     }
   ],
