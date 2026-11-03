@@ -267,6 +267,20 @@ routing is unsafe; bounded routing without a clean target is unsafe; neither
 proves the repair without actual delivery. Consumer product fixes remain in
 their own existing BIs and branches. No coverage receipt has yet been issued.
 
+### Backlog coverage
+
+Blocking CONDITION: no initiative scope baseline exists for BI-PIR-7f040ec5.
+The native coverage writer returned traceability-incomplete; it directs the
+existing Workroom to its issued independent spec-approval request. Implementation
+is blocked until that baseline and a valid server-selected coverage receipt
+exist. No receipt is fabricated here and the refused write is not retried until
+its named prerequisite changes.
+
+| Deliverable | Live owner | Requirements | Contracts | Flows | Verification | Delivery boundary |
+| --- | --- | --- | --- | --- | --- | --- |
+| Clean preview transport admission | BI-PIR-7f040ec5 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-8 | C-TARGET, C-ROUTING, C-CAPACITY, C-EVIDENCE | F-PREPARE, F-EXECUTE, F-RECOVER, F-CLEANUP | V-BOUNDARY, V-ROUTING, V-CAPACITY, V-DELIVERY, V-RELEASE | One atomic transport repair; its safe profile must enforce all admission boundaries before enabling execution |
+| Foreground retained-work consumer | BI-D0D2FF0D and BI-7DC3B91D | AC-6, AC-7 | C-EVIDENCE | F-RECOVER | V-FOREGROUND | Separately owned consumer source and served response mechanism; dependent acceptance remains blocked, not delivered by this transport plan |
+
 1. V-BOUNDARY: after the exact native readiness prerequisites and server-issued
    plan coverage are satisfied, claim
    exact implementation paths and consume their change-impact obligations.
