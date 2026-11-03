@@ -58,6 +58,18 @@ describe("formatProviderBadge", () => {
 });
 
 describe("AgentMessageBubble", () => {
+  it("keeps a retained request legible and discloses its reference only under details", () => {
+    const html = renderToStaticMarkup(<AgentMessageBubble message={{
+      id: "foreground-receipt-TR-CHAT-example", role: "system",
+      content: "Your request is saved. Its progress and result will stay in this conversation.\n\nRequest reference: TR-CHAT-example",
+      agentId: "coo", routeContext: "/workspace/mailroom", createdAt: "2026-10-29T00:00:00.000Z",
+    }} showAgentLabel={false} agentName={null} />);
+    expect(html).toContain("font-size:14px");
+    expect(html).toContain("<details><summary>Your request is saved.");
+    expect(html).not.toContain("<details open");
+    expect(html).toContain("Your request is saved");
+    expect(html).toContain("TR-CHAT-example");
+  });
   it("announces system recovery messages as status updates", () => {
     const html = renderToStaticMarkup(
       <AgentMessageBubble

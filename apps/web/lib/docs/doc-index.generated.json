@@ -1706,7 +1706,8 @@
       "publishedPortal": false,
       "anchors": [
         "failure-analysis-and-recovery-evidence",
-        "deployment-and-protection"
+        "deployment-and-protection",
+        "unconfigured-verification-is-not-a-successful-check"
       ]
     },
     "docs/architecture/federation-outbox-runbook.md": {
@@ -12874,6 +12875,7 @@
       "anchors": [
         "the-short-version",
         "how-it-works",
+        "saved-requests-and-recovery",
         "quick-actions",
         "universal-skills",
         "voice",
