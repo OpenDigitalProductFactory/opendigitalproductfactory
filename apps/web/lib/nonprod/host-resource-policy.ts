@@ -36,6 +36,8 @@ export interface HostResourceAdmissionInput {
   inferenceResident: boolean;
   hostReserveBytes?: number;
   inferenceGrowthReserveBytes?: number;
+  /** Only the lease service may mark an envelope derived from server policy. */
+  expectedMemoryAuthority?: "caller" | "server-derived";
 }
 
 export type HostResourceAdmission =
@@ -97,7 +99,8 @@ export function resolveHostResourceAdmission(
   if (!isFinitePositive(expectedMemoryBytes)) {
     return { status: "blocked", resourceClass: input.resourceClass, reason: "expected-memory-unmeasurable" };
   }
-  if (expectedMemoryBytes < floor) {
+  if (expectedMemoryBytes < floor
+    && input.expectedMemoryAuthority !== "server-derived") {
     return {
       status: "blocked",
       resourceClass: input.resourceClass,
@@ -120,7 +123,21 @@ export function resolveHostResourceAdmission(
         / expectedMemoryBytes,
       ));
 
-  if (input.availableMemoryBytes < expectedMemoryBytes + hostReserveBytes + inferenceGrowthReserveBytes) {
+  const activeReservationBytes = input.activeHeavyReservations.reduce(
+    (sum, reservation) => sum + (
+      isHeavyResourceClass(reservation.resourceClass)
+      && isFinitePositive(reservation.expectedMemoryBytes)
+        ? reservation.expectedMemoryBytes
+        : 0
+    ),
+    0,
+  );
+  const requiredMemoryBytes = hostReserveBytes
+    + inferenceGrowthReserveBytes
+    + activeReservationBytes
+    + expectedMemoryBytes;
+
+  if (input.availableMemoryBytes < requiredMemoryBytes) {
     return {
       status: "queued",
       resourceClass: input.resourceClass,
