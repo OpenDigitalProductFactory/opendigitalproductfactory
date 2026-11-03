@@ -302,6 +302,13 @@ was saved, it says so and offers the buttons again. If something was saved, it s
 result. If it cannot tell, it says not to approve again and links to the request's result.
 It never sends your decision a second time on its own.
 
+A fresh routine update request can receive the existing “batch below threshold”
+answer before a new approval is raised. DPF first checks current access,
+including access to the release queue. This answer does not start or schedule
+an update. Existing pending or approved requests and recent completed outcomes
+keep their original handling. When an update could proceed, or the check is
+uncertain, the normal approval rules remain.
+
 ### The floors nothing crosses
 
 Two hold at every posture, every autonomy level, and every proactivity setting:
