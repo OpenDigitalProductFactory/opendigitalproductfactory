@@ -41,6 +41,11 @@ it("accepts only bound typed server eligibility refusal without a provider ledge
    routingEligibility: [{ sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 1,
     exclusions: [{ bucket: "output-capacity", count: 1 }] }] } };
  expect(semanticNodeProviderSettled(refusal, digest)).toBe(true);
+ const incomplete = structuredClone(node.outputSnapshot.providerSettlement);
+ incomplete.events = incomplete.events.filter(event => event.state !== "response-completed");
+ expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, providerSettlement: incomplete } }, digest)).toBe(false);
+ expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, providerSettlement: {} } }, digest)).toBe(false);
+
  expect(semanticNodeProviderSettled({ ...refusal, requestContract: {} }, digest)).toBe(false);
  expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, providerOutcome: "unknown" } }, digest)).toBe(false);
  expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, routingEligibility: [{}] } }, digest)).toBe(false);

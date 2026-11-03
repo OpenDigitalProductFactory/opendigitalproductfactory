@@ -202,3 +202,6 @@ failed or interrupted nodes before retry, successor admission or worker checkpoi
 replacement. A final pass or fail checkpoint is reused without redispatch. Existing
 typed, generation-bound server capacity or eligibility refusals can establish that
 routing ended before dispatch; a status label or diagnostic fragment alone cannot.
+A retained ledger takes precedence over compatibility evidence. A typed legacy
+refusal may establish pre-dispatch settlement only when the ledger is absent;
+malformed, unsealed or incomplete native observations cannot be overridden.

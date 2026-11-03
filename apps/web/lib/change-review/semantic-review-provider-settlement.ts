@@ -23,8 +23,8 @@ export function semanticNodeProviderSettled(node: Node, requestDigest: string): 
   const output = isRecord(node.outputSnapshot) ? node.outputSnapshot : {};
   if (!/^[a-f0-9]{64}$/.test(requestDigest) || contract.requestDigest !== requestDigest
     || output.requestDigest !== requestDigest || typeof contract.generation !== "string" || !contract.generation) return false;
-  if (providerLedgerSettled(output.providerSettlement, { taskNodeId: node.taskNodeId,
-    requestDigest, generation: contract.generation })) return true;
+  if (output.providerSettlement !== undefined) return providerLedgerSettled(output.providerSettlement, { taskNodeId: node.taskNodeId,
+    requestDigest, generation: contract.generation });
   // These existing typed server checkpoints attest a refusal before routing or dispatch.
   if (!["completed","superseded"].includes(node.status ?? "") || output.providerOutcome !== "not-dispatched") return false;
   const result = isRecord(output.result) ? output.result : {};
