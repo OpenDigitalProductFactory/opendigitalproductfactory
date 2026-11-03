@@ -180,6 +180,7 @@ export function collectGateStatus(context, {
   return applyLiveGate(recorded, {
     live,
     queuedWaiter,
+    slots,
     headSha: context.headSha,
     headBranch: context.headBranch,
   });

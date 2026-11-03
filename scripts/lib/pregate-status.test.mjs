@@ -1204,3 +1204,25 @@ test("live marker: a second pregate is refused with a pointer at the running one
   assert.equal(liveGateRefusal(null), null);
   assert.match(liveGateRefusal(liveMarker()), /already running.*pid 4144.*pregate:status/s);
 });
+
+// Observed live 2026-11-03: slot-0 held this HEAD's queued claim (pool closed,
+// detached resumer alive) while slot-1 still held a 5-day-old record for the
+// pre-rebase SHA. Reconciliation ranks STALE above the queued claim, so the
+// overlay must look for HEAD's in-flight record across every slot.
+test("live: a queued claim for HEAD in one slot is QUEUED even when another slot's stale record wins reconciliation", () => {
+  const stale = { ...classifySlotRecord({
+    state: passingState({ sha: OLD, gatePassed: false, status: "running", evidenceRecordId: "" }),
+    metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW,
+  }), slotKey: "slot-1" };
+  const queued = { ...recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 3 }] }), slotKey: "slot-0" };
+  const slots = [queued, stale];
+  const reconciled = reconcileSlots(slots);
+  assert.equal(reconciled.verdict, "STALE");
+  const r = applyLiveGate(reconciled, {
+    slots, queuedWaiter: { checked: true, alive: true, pids: [52976], alivePids: [52976] }, ...head,
+  });
+  assert.equal(r.verdict, "QUEUED");
+  assert.equal(r.live.queuePosition, 3);
+  assert.equal(r.live.pid, 52976);
+  assert.equal(r.slot, "slot-0");
+});

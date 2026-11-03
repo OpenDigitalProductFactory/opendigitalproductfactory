@@ -572,17 +572,25 @@ const LIVE_VERDICT_FOR_STATUS = Object.freeze({ queued: "QUEUED", admitted: "ADM
  * gating a different commit does not stand in for HEAD; it is named in the
  * reason so nobody starts a second run on top of it.
  *
- * @param {object} result reconciled verdict (reconcileSlots or the NO-RECORD stub)
+ * HEAD's in-flight record is looked for in EVERY slot, not only the reconciled
+ * winner: a five-day-old record in the other slot reconciles as STALE and
+ * outranks a queued claim, which hid a live queue behind "STALE" (2026-11-03).
+ *
+ * @param {object} reconciled verdict (reconcileSlots or the NO-RECORD stub)
  * @param {{ live?: ReturnType<import("./pregate-live.mjs").readLivePregate>,
  *           queuedWaiter?: { checked?: boolean, alive?: boolean, pids?: number[], alivePids?: number[] } | null,
- *           headSha?: string, headBranch?: string }} input
+ *           slots?: object[], headSha?: string, headBranch?: string }} input
  */
-export function applyLiveGate(result, { live = null, queuedWaiter = null, headSha = "", headBranch = "" } = {}) {
-  if (!result || result.verdict === "PASS") return result;
+export function applyLiveGate(reconciled, { live = null, queuedWaiter = null, slots = [], headSha = "", headBranch = "" } = {}) {
+  if (!reconciled || reconciled.verdict === "PASS") return reconciled;
   const sameBranch = (branch) => !headBranch || !branch || branch === headBranch;
   const liveForHead = live && live.sha === headSha && sameBranch(live.branch) ? live : null;
-  const recordForHead = Boolean(result.boundSha) && result.boundSha === headSha && sameBranch(result.boundBranch);
-  const inFlightStatus = recordForHead && LIVE_VERDICT_FOR_STATUS[result.gateStatus] ? result.gateStatus : "";
+  const inFlightRecord = [reconciled, ...slots].find((record) => record?.boundSha === headSha
+    && sameBranch(record.boundBranch) && LIVE_VERDICT_FOR_STATUS[record.gateStatus]);
+  const result = inFlightRecord && inFlightRecord !== reconciled
+    ? { ...inFlightRecord, slot: inFlightRecord.slotKey ?? inFlightRecord.slot ?? null }
+    : reconciled;
+  const inFlightStatus = inFlightRecord ? inFlightRecord.gateStatus : "";
   const waiterAlive = queuedWaiter?.checked === true && queuedWaiter.alive === true;
   const waiterPid = (queuedWaiter?.alivePids ?? queuedWaiter?.pids ?? [])[0] ?? null;
 
@@ -602,11 +610,11 @@ export function applyLiveGate(result, { live = null, queuedWaiter = null, headSh
   if (!verdict) {
     if (live?.sha && live.sha !== headSha) {
       return {
-        ...result,
-        reason: `${result.reason} (a pregate, pid ${live.pid}, is still running for ${live.sha.slice(0, 12)}, not HEAD ${String(headSha).slice(0, 12)} — let it finish before gating HEAD)`,
+        ...reconciled,
+        reason: `${reconciled.reason} (a pregate, pid ${live.pid}, is still running for ${live.sha.slice(0, 12)}, not HEAD ${String(headSha).slice(0, 12)} — let it finish before gating HEAD)`,
       };
     }
-    return result;
+    return reconciled;
   }
 
   const queuePosition = inFlightStatus === "queued" ? (result.queuePosition ?? null) : null;
@@ -617,13 +625,13 @@ export function applyLiveGate(result, { live = null, queuedWaiter = null, headSh
       ? `queued for the local-CI pool at position ${queuePosition}`
       : "requesting a local-CI slot (queue position not yet known)";
   }
-  const prior = ["NO-RECORD", "INCONCLUSIVE"].includes(result.verdict)
+  const prior = ["NO-RECORD", "INCONCLUSIVE"].includes(reconciled.verdict)
     ? ""
-    : ` The ${result.verdict} on disk belongs to an earlier attempt and is being replaced.`;
+    : ` The ${reconciled.verdict} on disk belongs to an earlier attempt and is being replaced.`;
   return {
     ...result,
     verdict,
-    priorVerdict: result.verdict,
+    priorVerdict: reconciled.verdict,
     reason: `pregate is still working (pid ${pid ?? "unknown"}): ${where}. This is not a verdict and not a failure — wait, then read pregate:status again.${prior}`,
     live: { pid, stage: stageText, queuePosition },
   };
