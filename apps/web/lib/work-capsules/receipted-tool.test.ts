@@ -2,39 +2,58 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BI-763D6E01: a Workroom tool call with commandId runs once; without it, unchanged.
 
-const { receiptRows, txClient, transaction, state } = vi.hoisted(() => {
+const { receiptRows, txClient, transaction, state, row } = vi.hoisted(() => {
   const receiptRows = new Map<string, Record<string, unknown>>();
-  const state = { active: false, unknownCommit: false, unknownRollback: false, events: [] as string[] };
+  const row = { id: "row-1", capsuleId: "WC-1", status: "working", archivedAt: null, scopeClaims: [] as unknown[],
+    updatedAt: new Date(), leaseHolderPrincipalId: "owner", leaseExpiresAt: new Date(Date.now() + 600_000) };
+  const state = { observeScope: false, active: false, unknownCommit: false, unknownRollback: false, events: [] as string[] };
   const transaction = vi.fn();
   const txClient = {
     $queryRaw: async (strings: TemplateStringsArray) => {
       if (strings.join("?").includes("pg_advisory_xact_lock")) {
         throw new Error("Failed to deserialize column of type 'void'");
       }
+      if (state.observeScope) state.events.push("room-lock");
       return [{ id: "row-1" }];
     },
     $executeRaw: async () => 1,
+    workroom: { findUnique: async () => ({ ...row }), findMany: async () => [],
+      update: async ({ data }: { data: Partial<typeof row> }) => Object.assign(row, data) },
     workroomActivity: {
       findFirst: async ({ where }: { where: { commandScopeKey: string; commandKey: string } }) =>
         receiptRows.get(`${where.commandScopeKey}#${where.commandKey}`) ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        receiptRows.set(`${data.commandScopeKey}#${data.commandKey}`, { id: "receipt-" + receiptRows.size, workCapsuleId: data.workCapsuleId, kind: data.kind, payload: data.payload });
+        if (typeof data.commandKey === "string") receiptRows.set(`${data.commandScopeKey}#${data.commandKey}`, { id: "receipt-" + receiptRows.size, workCapsuleId: data.workCapsuleId, kind: data.kind, payload: data.payload });
         return data;
       },
     },
   };
-  return { receiptRows, txClient, transaction, state };
+  return { receiptRows, txClient, transaction, state, row };
 });
 
 vi.mock("@dpf/db", () => ({
   prisma: { ...txClient, $transaction: transaction },
 }));
 
+vi.mock("./handler-actor", () => ({ workCapsuleActor: async () => ({ userId: "user-1", agentId: "AGT-1", principalId: "owner" }) }));
+vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
+vi.mock("./activity-events", () => ({ publishRecordedWorkCapsuleActivity: vi.fn() }));
+vi.mock("./change-impact-contract", () => ({ planCapsuleChangeImpact: async () => ({ contract: {} }) }));
+vi.mock("./scope-epoch-enrollment.server", async original => ({
+  ...await original<typeof import("./scope-epoch-enrollment.server")>(),
+  assertScopeEpochEnrollmentReady: async () => {
+    if (state.active) throw new Error("Qualification must run before opening the receipt transaction");
+    state.events.push("qualified");
+    return { assertCurrent: async () => { state.events.push("admission"); } };
+  },
+}));
+import { prepareScopeClaim, claimWorkCapsuleScope } from "./scope-claim-store";
+
 import { commandDb, hasBoundCommandTransaction, receiptedWorkroomTool } from "./receipted-tool";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
 beforeEach(() => {
-  receiptRows.clear(); state.active = false; state.unknownCommit = false; state.unknownRollback = false; state.events = [];
+  receiptRows.clear(); row.scopeClaims = []; row.leaseExpiresAt = new Date(Date.now() + 600_000); state.observeScope = false; state.active = false; state.unknownCommit = false; state.unknownRollback = false; state.events = [];
   transaction.mockImplementation(async (fn: (tx: typeof txClient) => Promise<unknown>) => {
     const prior = new Map(receiptRows); state.active = true; state.events.push("begin");
     let result: unknown;
@@ -227,4 +246,26 @@ describe("bound command post-commit notification", () => {
     try { expect(await tool(params, "user-1", undefined)).toMatchObject({ success: true }); expect(afterCommit).not.toHaveBeenCalled(); expect(receiptRows.size).toBe(1); }
     finally { spy.mockRestore(); warning.mockRestore(); }
   });
+});
+
+
+it("qualifies a keyed acquisition before its receipt transaction and publishes one committed epoch", async () => {
+  state.observeScope = true;
+  const handler = vi.fn(async (params: Record<string, unknown>) => {
+    expect(hasBoundCommandTransaction(commandDb())).toBe(true);
+    const result = await claimWorkCapsuleScope({ db: commandDb(), capsuleId: params.capsuleId as string,
+      claims: params.claims as Array<{ kind: "path"; value: string; intent: "edit" }>,
+      actor: { userId: "user-1", agentId: "AGT-1", principalId: "owner" } });
+    return { success: true, message: "Scope acquired.", data: { capsule: result } };
+  });
+  const tool = receiptedWorkroomTool("claim-scope", handler, { prepareAsync: prepareScopeClaim });
+  const params = { capsuleId: "WC-1", claims: [{ kind: "path", value: "a.ts", intent: "edit" }], commandId: "acquisition" };
+  const first = await tool(params, "user-1", { agentId: "AGT-1" });
+  const second = await tool(params, "user-1", { agentId: "AGT-1" });
+  expect(first.success).toBe(true); expect(second).toEqual(first); expect(handler).toHaveBeenCalledOnce();
+  expect(row.scopeClaims).toHaveLength(1);
+  expect(row.scopeClaims[0]).toHaveProperty("releaseEpoch", expect.stringMatching(/^[a-f0-9-]{36}$/));
+  expect(state.events.indexOf("qualified")).toBeLessThan(state.events.indexOf("begin"));
+  expect(state.events.indexOf("admission")).toBeLessThan(state.events.indexOf("room-lock"));
+  expect(receiptRows.size).toBe(1);
 });

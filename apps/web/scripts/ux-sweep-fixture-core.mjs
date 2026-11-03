@@ -80,16 +80,23 @@ async function convergeUxSweepWorkCase(db, now) {
   // A room, so the posture section has something to resolve and render.
   const room = await db.workroom.findFirst({
     where: { capsuleId: "WC-UX-SWEEP" },
-    select: { id: true },
+    select: { id: true, scopeClaims: true, updatedAt: true },
   });
   const scopeClaims = [
     { workroomShape: "change-consequential", recordedAt: now.toISOString() },
     { workroomPosture: { proactivityLevel: "balanced" }, recordedAt: now.toISOString() },
   ];
   if (room) {
+    if (!Array.isArray(room.scopeClaims)) throw new Error("Existing fixture room scope is unproven; refusing replacement.");
+    const preserved = room.scopeClaims.flatMap(entry => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [entry];
+      if (!("workroomShape" in entry) && !("workroomPosture" in entry)) return [entry];
+      const { workroomShape, workroomPosture, ...rest } = entry;
+      return Object.keys(rest).some(key => !["recordedAt", "source"].includes(key)) ? [rest] : [];
+    });
     await db.workroom.update({
-      where: { id: room.id },
-      data: { scopeClaims, workItemId: item.id, archivedAt: null },
+      where: { id: room.id, updatedAt: room.updatedAt, scopeClaims: { equals: room.scopeClaims } },
+      data: { scopeClaims: [...preserved, ...scopeClaims], workItemId: item.id, archivedAt: null },
     });
   } else {
     await db.workroom.create({

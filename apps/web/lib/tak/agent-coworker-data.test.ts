@@ -161,3 +161,32 @@ describe("serializeMessage — inline approval requests", () => {
     expect(serializeMessage(assistantMsg, null)).not.toHaveProperty("approvalRequests");
   });
 });
+
+describe("serializeMessage — feedback display hint", () => {
+  it("exposes only a bounded eligibility hint, never producer identity", () => {
+    const row = serializeMessage({ ...assistantMsg, responseAttemptId: "attempt", responseContentDigest: "digest", responseScope: "known_unroomed", responseWorkroomId: null });
+    expect(row.responseFeedbackEligible).toBe(true);expect(row).not.toHaveProperty("responseAttemptId");expect(row).not.toHaveProperty("responseContentDigest");
+  });
+  it.each([null, "workroom"])("does not infer eligibility from incomplete scope %s", responseScope => {
+    expect(serializeMessage({ ...assistantMsg, responseAttemptId: "attempt", responseContentDigest: "digest", responseScope, responseWorkroomId: null }).responseFeedbackEligible).toBe(false);
+    expect(serializeMessage(assistantMsg).responseFeedbackEligible).toBe(false);
+  });
+});
+
+describe("selectVisibleTelemetry — exact saved producer", () => {
+  const message = { id: "answer", providerId: "anthropic", modelId: "actual-model", responseAttemptId: "saved-attempt" };
+  const row = { ...baseRow, id: "saved-attempt", agentMessageId: "answer", modelId: "actual-model", executionMode: "single", startedAt: new Date("2026-10-31T10:00:00Z") };
+  const later = { ...row, id: "later-call", modelId: "later-model", startedAt: new Date("2026-10-31T10:01:00Z") };
+  it("uses the saved exact producer even when a later visible call exists", () => {
+    expect(selectVisibleTelemetry([row, later], [message]).get("answer")?.id).toBe("saved-attempt");
+  });
+  it("does not substitute a later call while the exact telemetry is missing", () => {
+    expect(selectVisibleTelemetry([later], [message]).has("answer")).toBe(false);
+  });
+  it.each([
+    { executionMode: "shadow-alt" }, { executionMode: "race-loser" },
+    { providerId: "different-provider" }, { modelId: "different-model" }, { agentMessageId: "other-answer" },
+  ])("rejects a mismatched or non-visible exact row %j", mismatch => {
+    expect(selectVisibleTelemetry([{ ...row, ...mismatch }, later], [message]).has("answer")).toBe(false);
+  });
+});

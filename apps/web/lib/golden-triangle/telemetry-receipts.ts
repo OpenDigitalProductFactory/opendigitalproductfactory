@@ -24,6 +24,8 @@ export interface TelemetryRunRow {
   estimatedCostUsd: unknown; // Prisma.Decimal | number | null — coerced below
   durationMs: number | null;
   userAccepted: boolean | null;
+  feedbackSource?: "human" | "agent" | null;
+  feedbackPrincipalId?: string | null;
   startedAt: Date | string;
 }
 
@@ -48,7 +50,7 @@ function actualFromRow(row: TelemetryRunRow): ActualRun {
     // Failover isn't recorded on the telemetry row, so v1 reconstruction can't
     // distinguish an infra failover here; tier-match / cost / latency still hold.
     fallbackOccurred: false,
-    accepted: row.userAccepted ?? null,
+    accepted: row.feedbackSource === "human" && row.feedbackPrincipalId ? row.userAccepted ?? null : null,
   };
 }
 
@@ -92,7 +94,7 @@ export async function listRecentPostureReceipts(
       where: { status: "success" },
       orderBy: { startedAt: "desc" },
       take: cap,
-      select: { id: true, modelId: true, estimatedCostUsd: true, durationMs: true, userAccepted: true, startedAt: true },
+      select: { id: true, modelId: true, estimatedCostUsd: true, durationMs: true, userAccepted: true, feedbackSource: true, feedbackPrincipalId: true, startedAt: true },
     });
     return rows.map((row) => receiptFromTelemetry(row, resolved.preference, decoded, resolved.source));
   } catch {

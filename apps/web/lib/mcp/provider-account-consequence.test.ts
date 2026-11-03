@@ -128,3 +128,47 @@ describe("delegated DEV credentialless local containment", () => {
     expect(resolveEscalation({ ...base, steering: "connection-delegation", dataPolicy: { sensitivity: "restricted" } }).verdict).toBe("human");
   });
 });
+
+
+describe("bounded DEV restoration of the persisted operator pause", () => {
+  const params = { operation: "restore-pause", connectionId: local.connectionId, expectedOperationId: "original-pause" };
+  const source = () => ({ jobId: "provider-pause-local", enabled: true, lastStatus: "resumed", metadata: { kind: "operator-provider-pause", version: 1, providerId: "local", operationId: "original-pause", actorId: "original-operator", pausedAt: new Date(Date.now() - 120_000).toISOString(), resumedAt: new Date(Date.now() - 60_000).toISOString(), resumeAt: new Date(Date.now() + 3_600_000).toISOString(), priorProviderStatus: "active", priorConnectionStatus: "active" } });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.account.mockResolvedValue({ ...local, status: "active" });
+    mocks.job.mockResolvedValue(source());
+  });
+  it("narrows only restoration of the exact existing future pause", async () => {
+    expect((await classify(params)).consequence).toBeNull();
+    expect((await classify({ operation: "enable", connectionId: local.connectionId, providerId: "local" })).consequence).toBe("authority");
+    expect(tool.requiredCapability).toBe("manage_provider_connections");
+  });
+  it.each([{ expectedOperationId: "different" }, { actorId: "spoof" }, { resumeAt: "2030-01-01" }, { force: true }, { providerId: "ollama" }])("keeps malformed, expanded or foreign effects consequential: %j", async extra => {
+    expect((await classify({ ...params, ...extra })).consequence).toBe("authority");
+  });
+  it.each([null, { ...local, status: "disabled" }, { ...local, status: "active", credentialEntryId: "key" }, { ...local, status: "active", organizationId: "peer" }])("keeps ineligible persisted accounts consequential: %j", async account => {
+    mocks.account.mockResolvedValue(account);
+    expect((await classify(params)).consequence).toBe("authority");
+  });
+  it.each(["production", "staging"])("never narrows %s authority", async environmentClass => {
+    mocks.stance.mockResolvedValue({ environmentClass, primaryPurpose: "evolve-dpf" });
+    expect((await classify(params)).consequence).toBe("authority");
+  });
+  it.each(["newer", "expired", "malformed", "indefinite"])("retains authority for %s source", async kind => {
+    const job = source();
+    if (kind === "newer") job.metadata.operationId = "newer-pause";
+    if (kind === "expired") job.metadata.resumeAt = new Date(Date.now() - 1).toISOString();
+    if (kind === "malformed") job.metadata.kind = "different";
+    if (kind === "indefinite") job.metadata.resumeAt = null as unknown as string;
+    mocks.job.mockResolvedValue(job);
+    expect((await classify(params)).consequence).toBe("authority");
+  });
+  it("preserves the exact original enable approval binding", async () => {
+    const { buildCoworkerApprovalBinding } = await import("@/lib/govern/authority/coworker-authority-decision");
+    const { buildEffectiveAuthContext } = await import("@/lib/identity/effective-auth-context");
+    const authContext = buildEffectiveAuthContext({ user: { id: "owner", type: "admin", platformRole: null, isSuperuser: false, accountId: null, contactId: null }, grantedCapabilities: [], actingHumanUserId: "owner", actingAgentId: "agent" });
+    const binding = buildCoworkerApprovalBinding({ authContext, action: { toolName: "manage_provider_account", requiredCapability: "manage_provider_connections", agentGrantAllowed: true, sideEffect: true, executionMode: "immediate", routeContext: null, approvalPolicy: "side-effects" }, integration: { required: false, state: "not-required" }, rawParams: { operation: "enable", providerId: "local", connectionId: "provider-default-local" }, subject: { kind: "platform", id: "dpf" }, dataPolicy: { sensitivity: "internal", maskingRequired: false, maskingSatisfied: true, decisionVersionsCurrent: true, decisionVersionIds: ["coworker-authority-v1"] } });
+    expect(binding).toEqual({ actingHumanUserId: "owner", actingAgentId: "agent", chainId: null, taskRunId: null, toolName: "manage_provider_account", subject: { kind: "platform", id: "dpf" }, routeContext: null, inputFingerprint: "35cadae30ace6d7b044cb464ef3ab710aece0ec3efa237b0443a675b3007f562", sensitivity: "internal", decisionVersionFingerprint: "5405b8f3656e47f6aab8a1bcf7e33642277732782683ab5fbd49de10fde910ce" });
+  });
+});

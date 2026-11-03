@@ -937,3 +937,34 @@ test('initializer source mutation still refuses portal startup and cleans up', a
   assert.equal(calls.some(c => Array.isArray(c) && c[0] === 'up' && c.at(-1) === 'dev-portal'), false);
   assert.equal(calls.at(-1), 'cleanup');
 });
+
+
+test('preview prerequisite failure preserves the error without requesting immediate lease release', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-preview-finalize-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const calls = [];
+  const server = createServer((request, response) => {
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const packet = JSON.parse(body);
+      if (packet.method === 'tools/call') calls.push(packet.params.name);
+      response.end(JSON.stringify({ jsonrpc: '2.0', id: packet.id, result: {
+        content: [{ type: 'text', text: JSON.stringify({ success: true }) }],
+      } }));
+    });
+  });
+  await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { main } = await import('./dev-preview-runtime.mjs');
+  await assert.rejects(main({
+    DPF_DEV_WORKTREE: directory,
+    DPF_DEV_PORTAL_LEASE_ID: 'NPEL-PREREQUISITE-FIXTURE',
+    DPF_DEV_PORTAL_OWNER_SESSION_ID: 'fixture-owner',
+    DPF_INSTALL_STATE_PATH: join(directory, 'missing-install-state.json'),
+    DPF_MCP_CLIENT_CREDENTIALS_FILE: join(directory, 'absent-private-credentials.json'),
+    DPF_MCP_BEARER_TOKEN: 'fixture-local-only',
+    DPF_MCP_URL: 'http://127.0.0.1:' + server.address().port + '/api/mcp/v1',
+  }), { code: 'ENOENT' });
+  assert.deepEqual(calls, [], 'missing retained admission must not request release or broaden readback');
+});

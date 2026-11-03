@@ -58,8 +58,24 @@ describe("expressEffort — one decision, each provider's dialect", () => {
 
   it("Anthropic adaptive: the model owns the budget, so no extra output tokens", () => {
     const e = expressEffort("anthropic", decide("medium", 8000, adaptiveCaps), adaptiveCaps);
-    expect(e.settings).toEqual({ thinking: { type: "adaptive" } });
+    expect(e.settings).toEqual({ thinking: { type: "adaptive" }, output_config: { effort: "medium" } });
     expect(e.extraMaxTokens).toBe(0);
+  });
+
+  it("Anthropic high depth stays adaptive without reserving a manual token budget", () => {
+    const decision = decide("high", 8000, adaptiveCaps);
+    expect(decision).toEqual({ level: "high", adaptive: true, budgetTokens: null });
+    expect(expressEffort("anthropic", decision, adaptiveCaps)).toMatchObject({
+      settings: { thinking: { type: "adaptive" }, output_config: { effort: "high" } },
+      extraMaxTokens: 0, effortUnexpressed: false,
+    });
+  });
+
+  it("does not silently lower an unsupported adaptive effort", () => {
+    const caps = { ...adaptiveCaps, effortLevels: ["medium"] };
+    expect(expressEffort("anthropic", decide("high", 8000, caps), caps)).toMatchObject({
+      settings: {}, effortUnexpressed: true,
+    });
   });
 
   it("OpenAI reasoning: reasoning_effort", () => {

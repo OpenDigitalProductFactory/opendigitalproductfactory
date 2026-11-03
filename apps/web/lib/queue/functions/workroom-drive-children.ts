@@ -42,6 +42,7 @@
 // item, build or task run, which a child never is. So the system actor below
 // completes and abandons children through the ordinary path.
 
+import { scopeWriteWhere } from "@/lib/work-capsules/scope-input";
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
 import { readStoredDriveMarking, type DriveMarking } from "@dpf/validators/workroom/marking";
 import {
@@ -217,7 +218,7 @@ export function createSubShapeChildEffects(loadDb: () => Promise<ChildDb> = asyn
         });
         const claimed = readWorkShapeClaim(child.scopeClaims);
         if (!claimed || `${claimed.key}@${claimed.version}` !== ensure.ref) {
-          await tx.workroom.update({ where: { id: child.id }, data: { scopeClaims: withWorkShapeClaim(child.scopeClaims, ensure.ref, now) as object } });
+          await tx.workroom.update({ where: { ...scopeWriteWhere(child), id: child.id }, data: { scopeClaims: withWorkShapeClaim(child.scopeClaims, ensure.ref, now) as object } });
         }
         if (owner) await establishRoomOwnership(tx as never, { workroomId: child.id, ownerPrincipalId: owner, assistantPrincipalId: null });
         await tx.workroomRelation.createMany({ data: [{ fromWorkroomId: parent.id, toWorkroomId: child.id, relation: "contains" }], skipDuplicates: true });

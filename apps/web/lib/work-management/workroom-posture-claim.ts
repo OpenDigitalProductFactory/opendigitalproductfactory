@@ -1,3 +1,4 @@
+import { withoutScopeMetadataFields } from "../work-capsules/scope-metadata.mjs";
 // EP-WORK-POSTURE Slice D (BI-4F468192) — the room's DECLARED posture.
 //
 // Stored inside the Workroom's `scopeClaims` JSON under the key
@@ -94,7 +95,6 @@ export function withWorkroomPostureClaim(
   declaration: RoomPostureDeclaration,
   now: Date = new Date(),
 ): unknown[] {
-  const existing = Array.isArray(scopeClaims) ? scopeClaims : [];
-  const preserved = existing.filter((entry) => declarationFrom(entry) === null);
+  const preserved = withoutScopeMetadataFields(scopeClaims, ["workroomPosture"]);
   return [...preserved, buildWorkroomPostureClaim(declaration, now)];
 }

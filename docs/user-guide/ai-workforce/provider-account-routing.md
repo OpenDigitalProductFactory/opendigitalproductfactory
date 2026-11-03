@@ -15,6 +15,21 @@ Model discovery records access for the selected account. A vendor catalog entry
 alone does not prove that an account can run that model. Unknown capability and
 quota information remain unknown until the provider supplies evidence.
 
+## Read the account list
+
+The provider list shows status and its reason without opening an account:
+
+- **Working:** a request on this account succeeded within the last hour.
+- **Enabled:** configured and enabled, with no recent successful check.
+- **Waiting for capacity** or **Paused:** a usage limit, host reservation or pause prevents new work.
+- **Needs attention:** review the account connection, model access or billing.
+- **Status unconfirmed:** current routing information could not be read.
+
+Check times and the next action appear alongside the status. A provider reset
+estimate is different from a scheduled availability check. **Allowed work** says
+which data may be sent; approval for company work does not mean the account is
+available now. A successful request on another account is not proof for this one.
+
 ## Capacity and recovery
 
 Authentication or billing trouble on one account stays with that account. A
@@ -54,6 +69,30 @@ If credentials or account permissions change while a request is waiting, DPF
 checks the current account before dispatch. A native execution whose outcome is
 uncertain needs reconciliation before another attempt; it is not automatically
 replayed on a sibling account.
+
+**Model measurements.**
+
+A successful capacity check shows that an account can answer a short request.
+It does not measure the model's quality or lower a coworker's requirements.
+
+For an active install-owned ChatGPT account with a fresh check for the selected
+model, an administrator can request that model's evaluation. DPF first checks
+whether the account's Responses endpoint honors the required output bound, then
+runs the existing supported tests within one limited commission. Subscription
+accounts cannot be included in a bulk evaluation.
+
+The request acknowledgement means the evaluation was queued. Open **Test Runs**
+for its actual outcome and summary. Only when all six supported grading dimensions
+finish conclusively may their measurements update. The unavailable conversational grader stays
+unverified; a partial evaluation does not raise whole-model confidence or the
+evaluation count, and administrator overrides remain intact.
+
+An incomplete response does not earn a score. A known incomplete outcome can
+settle without measurements. When a provider attempt's outcome is unknown, DPF
+retains its recorded attempt and requires reconciliation before another
+commission; waiting longer or redelivering the job does not start a replacement.
+Account, credential, model and operator changes are checked again before sending
+a request and before saving measurements.
 
 ## Usage records
 

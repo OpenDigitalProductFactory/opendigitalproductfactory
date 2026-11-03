@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { prisma } from "@dpf/db";
 import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow } from "./environment-lease-result";
 import { checkpointFreshNonprodLeaseAdmission, checkpointNonprodLeaseWait, deterministicNonprodWaitTaskRunId, parseNonprodLeaseWait } from "./durable-wait";
@@ -159,4 +160,21 @@ export async function checkpointQueuedLeaseProvenance(
   const wait = await checkpointNonprodLeaseWait({ db: input.db as never, userId: input.authenticatedUserId,
     lease, queuePosition: input.queuePosition!, waitDeadlineAt: input.waitDeadlineAt, now: input.now });
   return { lease, durableWaitTaskRunId: wait.taskRunId };
+}
+
+
+/** The ORM may supply its own creation time even when the field is omitted.
+ * Only the exact transaction's database clock satisfies the birth invariant. */
+export async function freshLeaseBirthFields(
+  tx: Partial<Pick<typeof prisma, "$queryRaw">>,
+): Promise<{ leaseId: string; createdAt?: Date }> {
+  const leaseId = `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+  // Legacy narrow domain ports cannot assert positive history.
+  if (typeof tx.$queryRaw !== "function") return { leaseId };
+  const rows = await tx.$queryRaw<Array<{ createdAt: Date }>>`SELECT CURRENT_TIMESTAMP::timestamp(3) AS "createdAt"`;
+  const createdAt = Array.isArray(rows) && rows.length === 1 ? rows[0]?.createdAt : null;
+  if (!(createdAt instanceof Date) || !Number.isFinite(createdAt.getTime())) {
+    throw new Error("nonprod_lease_birth_clock_unavailable");
+  }
+  return { leaseId, createdAt };
 }

@@ -1,3 +1,4 @@
+import { installWorkroomArtifact } from "../_shared/install-workroom-artifact.mjs";
 import { readRegularFile } from "../_shared/read-regular-file.mjs";
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -57,6 +58,7 @@ function child(args, label) {
   return result.stdout;
 }
 try {
+  const workroomArtifact = await installWorkroomArtifact({ root, destination: temp, artifact: manifest.componentArtifact, node });
   const packageName = "workroom-policies-isolated-consumer";
   await writeFile(join(temp, "package.json"), JSON.stringify({ name: packageName, version: "0.0.0", private: true, type: "module", dependencies: {} }, null, 2));
   await writeFile(join(temp, "package-lock.json"), JSON.stringify({ name: packageName, version: "0.0.0", lockfileVersion: 3, requires: true,
@@ -71,7 +73,7 @@ try {
     const contents = await readRegularFile(path, "utf8");
     sourceDigests[source] = digest(contents);
     for (const specifier of importsOf(contents, source))
-      if (!specifier.startsWith(".") || !specifier.endsWith(".ts")) throw new Error(`Nonportable import in ${source}: ${specifier}`);
+      if (!workroomArtifact.acceptsImport(specifier) && (!specifier.startsWith(".") || !specifier.endsWith(".ts"))) throw new Error(`Nonportable import in ${source}: ${specifier}`);
     const target = resolve(temp, "kernel", relative(base, path));
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, contents);
@@ -83,7 +85,7 @@ try {
     seen.add(path);
     const contents = sources.get(path);
     if (contents === undefined) throw new Error(`Manifest omitted source: ${path}`);
-    for (const specifier of importsOf(contents, path)) closure(resolve(dirname(path), specifier));
+    for (const specifier of importsOf(contents, path)) if (!workroomArtifact.acceptsImport(specifier)) closure(resolve(dirname(path), specifier));
   }
   closure(resolve(temp, manifest.entry));
   closure(resolve(temp, "kernel/workroom/index.ts"));
@@ -91,7 +93,7 @@ try {
   const result = JSON.parse(child(["--input-type=module", "--eval",
     `const {runSmoke}=await import(${JSON.stringify(pathToFileURL(join(temp, "dist/src/smoke.js")).href)}); console.log(JSON.stringify(runSmoke()));`], "Standalone synthetic policy smoke"));
   process.stdout.write(JSON.stringify({ ...result, toolchain: { node: version.stdout.trim(), typescript: compilerPackage.version },
-    sourceBaseline: manifest.sourceBaseline, runtimeDependencies: [], sourceFiles: sources.size, reachableSourceFiles: seen.size,
+    sourceBaseline: manifest.sourceBaseline, runtimeDependencies: [workroomArtifact.evidence], sourceFiles: sources.size, reachableSourceFiles: seen.size,
     copiedSourceSha256: sourceDigests, fixtureSourceSha256: fixtureDigests }, null, 2) + "\n");
 } finally {
   await rm(temp, { recursive: true, force: true });

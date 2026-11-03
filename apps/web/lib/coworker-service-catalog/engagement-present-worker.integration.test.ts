@@ -5,7 +5,7 @@ import { reassessmentBudgetFixture } from "../../test-support/reassessment-budge
 import { ENGAGEMENT_NATIVE_COMPOSITION as catalog } from "../shared/engagement-native-composition";
 import { parseEngagementTaskBinding } from "./engagement-task-binding";
 import { withEngagementPresentRequest, currentEngagementPresentAssessment, prepareEngagementPresentAdmission,
-  activateEngagementPresentAdmission, assertEngagementPresentAssociation, reconcileEngagementPresentObservation, readOutstandingEngagementReservations } from "./engagement-present-assessment";
+  activateEngagementPresentAdmission, assertEngagementPresentAssociation, reconcileEngagementPresentObservation, readOutstandingEngagementReservations, readEngagementPresentConfiguration } from "./engagement-present-assessment";
 import { executeEngagementPresentAttempt, type EngagementPresentPorts } from "./engagement-present-worker";
 import { persistEngagementRead } from "./engagement-read-provenance";
 import type { RemoteTaskAttemptInput } from "../mcp-task-submit-types";
@@ -105,7 +105,7 @@ beforeEach(() => {
   m.rows.agent.push({ id: "actor-row", agentId: binding.actorAgentId, status: "active", archived: false, toolGrants: [], toolGrantRevocations: [] });
   m.rows.agentModelConfig.push({ agentId: binding.providerAgentId, minimumTier: "strong", minimumContextTokens: 16000, minimumCapabilities: null });
   m.rows.modelProvider.push({ providerId: "local", status: "active", retiredAt: null, supportsToolUse: true, baseUrl: "http://synthetic.invalid/engines/v1" });
-  m.rows.aiProviderConnection.push({ connectionId: "provider-default-local", providerId: "local", status: "active", executionChannel: "local-runtime", authMethod: "none", credentialEntryId: null });
+  m.rows.aiProviderConnection.push({ connectionId: "provider-default-local", providerId: "local", status: "active", executionChannel: "local-runtime", authMethod: "local", credentialEntryId: null });
   m.rows.modelProfile.push({ providerId: "local", modelId: catalog.logicalModelRef, modelStatus: "active", retiredAt: null, qualityTier: "strong", supportsToolUse: true, capabilities: { imageInput: null }, maxOutputTokens: 2048 });
   m.rows.authorizationDecisionLog.push({ decisionId: "fixture-native-decision", actionKey: "request_coworker_engagement", humanContextRef: binding.userId,
     agentContextRef: binding.actorAgentId, decision: "allow", authorityBindingId: "fixture-delegation" });
@@ -182,6 +182,32 @@ afterEach(() => {
 const generations = () => m.sends.filter(url => url.endsWith("/messages"));
 const retained = () => m.rows.taskArtifact.flatMap(row => row.parts).map(part => part.data);
 const engagement = () => m.rows.coworkerEngagement[0];
+
+describe("canonical local account configuration", () => {
+  it("accepts the canonical local account without allocating or contacting a provider", async () => {
+    await expect(readEngagementPresentConfiguration(binding.providerAgentId)).resolves.toMatchObject({
+      modelId: catalog.logicalModelRef, budget: { registryAgentId: "AGT-906" } });
+    expect(m.sends).toHaveLength(0); expect(m.rows.taskRun).toHaveLength(1);
+    expect(engagement().metadata.presentAssessment).toBeUndefined();
+  });
+  it.each([
+    ["legacy no-auth marker", "authMethod", "none", "native-configuration-unavailable"],
+    ["paused account", "status", "paused", "local-account-paused: Resume the existing provider-default-local account using supported account controls"],
+    ["foreign execution channel", "executionChannel", "direct-api", "native-configuration-unavailable"],
+    ["credentialed account", "credentialEntryId", "foreign-credential", "native-configuration-unavailable"],
+  ])("refuses %s before allocation or provider starts", async (_label, field, value, reason) => {
+    m.rows.aiProviderConnection[0][field] = value;
+    await expect(readEngagementPresentConfiguration(binding.providerAgentId)).rejects.toThrow(reason);
+    expect(m.sends).toHaveLength(0); expect(m.rows.taskRun).toHaveLength(1);
+    expect(engagement().metadata.presentAssessment).toBeUndefined(); expect(m.rows.tokenUsage).toHaveLength(0);
+  });
+  it("preserves an inactive provider and names its supported remedy", async () => {
+    m.rows.modelProvider[0].status = "inactive";
+    await expect(readEngagementPresentConfiguration(binding.providerAgentId)).rejects.toThrow("local-provider-inactive: Enable the existing local provider using supported account controls");
+    expect(m.rows.modelProvider[0].status).toBe("inactive"); expect(m.sends).toHaveLength(0);
+    expect(m.rows.taskRun).toHaveLength(1); expect(engagement().metadata.presentAssessment).toBeUndefined();
+  });
+});
 
 describe("actual admitted finite Critic worker with synthetic external boundaries", () => {
   it("counts the exact image body once and atomically returns the attributable advisory result and usage", async () => {

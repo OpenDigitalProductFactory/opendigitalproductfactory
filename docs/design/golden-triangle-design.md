@@ -789,3 +789,20 @@ The Golden Triangle earns trust only when the user can answer four questions:
 4. Did the result work?
 
 If any one of those is missing, the feature is decoration. If all four are present, it becomes a real trusted-agent control — and a unit of the platform's load-migration machine: the human keeps the one irreducible judgment (the posture), and the platform carries the rest.
+
+
+## Current acceptance receipt boundary — BI-A009189A
+
+The telemetry receipt adapter reads `AdapterRunTelemetry.userAccepted` only when
+`feedbackSource` is `human` and `feedbackPrincipalId` is present. Coworker and
+unattributed legacy values map to an unavailable acceptance signal. Clearing a
+judgment also yields no current acceptance value. These are preferences, separate
+from execution success and evaluated task quality.
+
+Exact answer feedback reuses the current telemetry row, with revision checks and
+an atomic existing AdminActivity audit. Its indexed AgentMessage attempt pointer
+is deliberately soft under owned decision DI-DF76FEA979F7: asynchronous capture
+and independent 180-day telemetry retention must not prevent answer delivery.
+Missing, edited or ambiguous evidence makes feedback unavailable. See the
+[operator routing guide](../user-guide/ai-workforce/model-routing-lifecycle.md#investigate-routing-and-record-feedback)
+and [current routing document map](../architecture/ai-routing-document-map.md).

@@ -10,40 +10,13 @@ import { readMigrationSecret } from './promoter-migration-envelope.mjs';
 import { isEntryModule } from './lib/entry-module.mjs';
 import { scriptArgv } from './lib/script-argv.mjs';
 
+import { observeMaintenanceEnvironments } from "./lib/maintenance-epoch-receipt.mjs";
+export { observeMaintenanceEnvironments } from "./lib/maintenance-epoch-receipt.mjs";
+
 const exec = promisify(execFile);
 const SERVICES = ['portal', 'sandbox'];
-const INSPECT_TEMPLATE = '{"Id":{{json .Id}},"State":{"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}}},"Config":{"Labels":{{json .Config.Labels}}}}';
 const invalid = () => { throw new Error('maintenance_epoch_observation_unavailable'); };
 
-/** Read-only observer. It never starts, stops, signals or removes a container. */
-export async function observeMaintenanceEnvironments({ project, runDocker }) {
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/.test(project)) invalid();
-  const daemonId = (await runDocker(['info', '--format', '{{.ID}}'])).trim();
-  const inventory = (await runDocker(['ps', '--all', '--no-trunc', '--format', '{{.ID}}'])).trim().split(/\r?\n/).filter(Boolean);
-  if (!inventory.length || inventory.length > 10_000 || inventory.some(id => !/^[a-f0-9]{64}$/.test(id))
-    || new Set(inventory).size !== inventory.length) invalid();
-  const environments = {};
-  // Inspect only this project's candidate services; inventory remains complete
-  // for proving removal. Do not load Docker Config.Env or other secret fields.
-  const projectIds = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
-    '--format', '{{.ID}}'])).trim().split(/\r?\n/).filter(Boolean);
-  for (const id of projectIds) {
-    if (!inventory.includes(id)) invalid();
-    const raw = await runDocker(['inspect', '--type', 'container', '--format', INSPECT_TEMPLATE, id]);
-    // The executable prints a bounded JSON projection (not the environment).
-    let inspected;
-    try { inspected = JSON.parse(raw); } catch { invalid(); }
-    const service = inspected.Config?.Labels?.['com.docker.compose.service'];
-    if (!SERVICES.includes(service)) continue;
-    if (environments[service] || inspected.Id !== id || inspected.State?.Running !== true
-      || inspected.Config.Labels['com.docker.compose.project'] !== project) invalid();
-    environments[service] = { id, startedAt: inspected.State.StartedAt };
-  }
-  if (!SERVICES.every(service => environments[service])) invalid();
-  // A daemon switch during the multi-call observation invalidates the snapshot.
-  if ((await runDocker(['info', '--format', '{{.ID}}'])).trim() !== daemonId) invalid();
-  return { daemonId, environments, inventory: inventory.sort() };
-}
 
 export async function captureMaintenanceEpoch({ secret, runDocker, now, ...identity }) {
   const observed = await observeMaintenanceEnvironments({ project: identity.project, runDocker });
@@ -70,6 +43,55 @@ export async function finishMaintenanceEpoch({ baseline, secret, expected, runDo
 export async function runEpochDocker(args) {
   const { stdout } = await exec('docker', args, { timeout: 15_000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
   return stdout;
+}
+
+/** A scoped packaged-writer proof of the actual immutable portal image.
+ * No mounts, network, credentials or deployment effects are exposed to the probe. */
+export async function inspectScopeEpochWriterImage({ image, expectedSource = '', runDocker = runEpochDocker }) {
+  const config = (await runDocker(['image', 'inspect', image, '--format', '{{.Id}}'])).trim();
+  if (!/^sha256:[a-f0-9]{64}$/.test(config)) throw new Error('scope_writer_image_unproven');
+  const name = `dpf-scope-writer-probe-${randomUUID()}`;
+  let bytes;
+  try {
+    bytes = await runDocker(['run', '--rm', '--read-only', '--name', name, '--network', 'none', '--cap-drop', 'ALL',
+      '--security-opt', 'no-new-privileges', '--memory', '128m', '--cpus', '1', '--pids-limit', '64', '--pull', 'never',
+      '--entrypoint', 'node', config, '/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs']);
+  } catch {
+    try { await runDocker(['rm', '-f', name]); } catch { /* Only this observation's own container. */ }
+    throw new Error('scope_writer_image_unproven');
+  }
+  try {
+    const proof = JSON.parse(bytes), hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+    if (Buffer.byteLength(bytes) > 8192 || !proof || Object.keys(proof).length !== 6 || proof.schemaVersion !== 1 || proof.version !== 1
+      || !/^[a-f0-9]{40}$/.test(proof.sourceSha ?? '') || (expectedSource && proof.sourceSha !== expectedSource)
+      || !hash(proof.sourceContentHash) || !hash(proof.contractSha256) || !proof.writers || typeof proof.writers !== 'object'
+      || Array.isArray(proof.writers) || !Object.keys(proof.writers).length || Object.values(proof.writers).some(value => !hash(value))) throw new Error();
+  } catch { throw new Error('scope_writer_image_unproven'); }
+  if ((await runDocker(['image', 'inspect', image, '--format', '{{.Id}}'])).trim() !== config) throw new Error('scope_writer_image_moved');
+  return config;
+}
+
+/** Legacy classification is positive absence, never a generic failed probe.
+ * The caller must first verify the actual baseline's existing source contract.
+ * Initial enrollment excludes every rollback-capable actuator until it exits;
+ * continuing caller/portal floors make later baselines scope-aware. */
+export async function classifyInitialScopeEpochFallback({ image, runDocker = runEpochDocker }) {
+  try { return { kind: 'compatible', image: await inspectScopeEpochWriterImage({ image, runDocker }) }; }
+  catch {
+    if (!/^sha256:[a-f0-9]{64}$/.test(image)) throw new Error('scope_writer_fallback_unproven');
+    const name = `dpf-scope-legacy-probe-${randomUUID()}`;
+    const script = `const fs=require('node:fs');const absent=p=>{try{fs.lstatSync(p);return false}catch(e){if(e.code==='ENOENT')return true;throw e}};try{if(!absent('/app/apps/web-src/lib/work-capsules/scope-epoch-contract.ts')||!absent('/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs'))process.exit(78);process.stdout.write('legacy-scope-epoch-absent')}catch{process.exit(78)}`;
+    let output;
+    try { output = await runDocker(['run', '--rm', '--read-only', '--name', name, '--network', 'none', '--cap-drop', 'ALL',
+      '--security-opt', 'no-new-privileges', '--memory', '128m', '--cpus', '1', '--pids-limit', '64', '--pull', 'never',
+      '--entrypoint', 'node', image, '--eval', script]); }
+    catch {
+      try { await runDocker(['rm', '-f', name]); } catch { /* Own probe only. */ }
+      throw new Error('scope_writer_fallback_unproven');
+    }
+    if (output.trim() !== 'legacy-scope-epoch-absent') throw new Error('scope_writer_fallback_unproven');
+    return { kind: 'initial-legacy', image };
+  }
 }
 
 async function readOptional(path) {
@@ -119,8 +141,10 @@ export async function persistMaintenanceEpoch({ phase, env = process.env, secret
 
 if (isEntryModule(import.meta.url)) {
   try {
-    const { values } = parseArgs({ args: scriptArgv(), options: { phase: { type: 'string' } }, allowPositionals: false });
-    await persistMaintenanceEpoch({ phase: values.phase });
+    const { values } = parseArgs({ args: scriptArgv(), options: { phase: { type: 'string' }, image: { type: 'string' }, source: { type: 'string' } }, allowPositionals: false });
+    if (values.phase === 'scope-image') process.stdout.write(`${await inspectScopeEpochWriterImage({ image: values.image, expectedSource: values.source })}\n`);
+    else if (values.phase === 'scope-fallback') process.stdout.write(`${JSON.stringify(await classifyInitialScopeEpochFallback({ image: values.image }))}\n`);
+    else await persistMaintenanceEpoch({ phase: values.phase });
   } catch {
     // No raw daemon errors, paths, payloads or secrets in the promoter log.
     process.stderr.write('maintenance_epoch_evidence_unavailable\n');

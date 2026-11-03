@@ -4,6 +4,7 @@ import {
   composeInboundBody,
   mapPeerDemandMirrors,
   mapUpstreamIssues,
+  mapDependabotAlerts,
   runInboundIssueTriage,
   toBacklogIngestInput,
   type InboundEcosystemItem,
@@ -21,6 +22,18 @@ const item = (overrides: Partial<InboundEcosystemItem> = {}): InboundEcosystemIt
 });
 
 describe("toBacklogIngestInput", () => {
+  it("files a provider alert as automated detection with a distinct stable repository origin", () => {
+    const [alert] = mapDependabotAlerts([{ number: 257, state: "open", packageName: "minimatch", manifest: "pnpm-lock.yaml",
+      severity: "medium", advisory: "GHSA-g3hv-75wg-m249", summary: "Resource exhaustion", vulnerable: "<11.0.1",
+      patched: "11.0.1", url: "https://github.com/acme/widgets/security/dependabot/257" }], { owner: "acme", name: "widgets" });
+    const input = toBacklogIngestInput(alert);
+    expect(input).toMatchObject({ source: "automated-detection", workType: "bug",
+      origin: { kind: "ecosystem-dependabot-alert", id: "acme/widgets#257" } });
+    expect(input.body).toContain("GHSA-g3hv-75wg-m249");
+    expect(input.body).toContain("Patched release: 11.0.1");
+    expect(input.reconcile).not.toHaveProperty("legacyId");
+  });
+
   it("records the submitter's request as a user-request, not an automated detection", () => {
     // The origin is a person at another install; it merely ARRIVES by automation.
     // Recording it as automated-detection would erase the submitter that the
@@ -57,8 +70,9 @@ describe("toBacklogIngestInput", () => {
     expect(() => toBacklogIngestInput(item({ repository: null }))).toThrow(/repository/);
   });
 
-  it("leaves peer demand on the existing recurrence semantics", () => {
-    expect(toBacklogIngestInput(item({ sourceKind: "peer-demand", sourceId: "fdm_1" })).reconcile).toBeUndefined();
+  it("reconciles repeated peer snapshots instead of counting another customer occurrence", () => {
+    const input = toBacklogIngestInput(item({ sourceKind: "peer-demand", sourceId: "fdm_1" }));
+    expect(input.reconcile).toMatchObject({ fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) });
   });
 
   it("distinguishes the two transports in the origin kind", () => {

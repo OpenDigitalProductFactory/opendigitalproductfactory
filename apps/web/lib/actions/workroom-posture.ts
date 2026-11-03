@@ -18,6 +18,7 @@
  * `view_platform`-gated: a room's posture is shared state that governs what
  * every participant may do, not a per-user preference.
  */
+import { withoutScopeMetadataFields } from "../work-capsules/scope-metadata.mjs";
 import { revalidatePath } from "next/cache";
 
 import { Prisma, prisma } from "@dpf/db";
@@ -33,6 +34,7 @@ import { readWorkroomPostureClaim, withWorkroomPostureClaim } from "@/lib/work-m
 import { buildWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 import type { RoomPostureDeclaration } from "@dpf/validators/workroom-policy";
+import { workroomBoundaryWriteWhere } from "@/lib/work-management/workroom-boundary-write.server";
 
 async function requirePlatformAdmin() {
   const session = await auth();
@@ -63,7 +65,7 @@ export async function saveWorkroomPosture(
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
-      select: { scopeClaims: true },
+      select: { id: true, scopeClaims: true, updatedAt: true },
     });
     if (!room) return err("That room could not be found.");
     // Merge onto what the room already declared: the control saves one axis at
@@ -77,7 +79,7 @@ export async function saveWorkroomPosture(
       declaredAt: new Date().toISOString(),
     });
     await prisma.workroom.update({
-      where: { id: roomRowId },
+      where: { id: room.id, AND: workroomBoundaryWriteWhere(room) },
       data: { scopeClaims: next as Prisma.InputJsonValue },
     });
     revalidateRoom(caseKey);
@@ -97,18 +99,13 @@ export async function resetWorkroomPosture(
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
-      select: { scopeClaims: true },
+      select: { id: true, scopeClaims: true, updatedAt: true },
     });
     if (!room) return err("That room could not be found.");
     // Drop only the posture entry; every other claim (including the shape) stays.
-    const kept = Array.isArray(room.scopeClaims)
-      ? (room.scopeClaims as unknown[]).filter(
-          (entry) =>
-            !(entry && typeof entry === "object" && "workroomPosture" in (entry as object)),
-        )
-      : [];
+    const kept = withoutScopeMetadataFields(room.scopeClaims, ["workroomPosture"]);
     await prisma.workroom.update({
-      where: { id: roomRowId },
+      where: { id: room.id, AND: workroomBoundaryWriteWhere(room) },
       data: { scopeClaims: kept as Prisma.InputJsonValue },
     });
     revalidateRoom(caseKey);
@@ -135,17 +132,12 @@ export async function saveWorkroomShape(
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
-      select: { scopeClaims: true },
+      select: { id: true, scopeClaims: true, updatedAt: true },
     });
     if (!room) return err("That room could not be found.");
-    const existing = Array.isArray(room.scopeClaims) ? (room.scopeClaims as unknown[]) : [];
-    // Replace any prior shape claim rather than appending a second one — the
-    // reader returns the FIRST valid declaration, so a stale entry would win.
-    const kept = existing.filter(
-      (entry) => !(entry && typeof entry === "object" && "workroomShape" in (entry as object)),
-    );
+    const kept = withoutScopeMetadataFields(room.scopeClaims, ["workroomShape"]);
     await prisma.workroom.update({
-      where: { id: roomRowId },
+      where: { id: room.id, AND: workroomBoundaryWriteWhere(room) },
       data: { scopeClaims: [...kept, buildWorkroomShapeClaim(shape)] as Prisma.InputJsonValue },
     });
     revalidateRoom(caseKey);
