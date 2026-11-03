@@ -12,6 +12,7 @@ import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-conse
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { ATLAS_HEALTH_STATES } from "@/lib/work-management/atlas-health";
 import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
 
@@ -90,7 +91,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         view: { type: "string", enum: ["instances", "definitions", "atlas"], description: "atlas returns the Work Atlas picture: health counts, plus up to limit (max 400) rows, optionally filtered by health. Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
-        health: { type: "string", enum: ["needs-person", "stuck", "working", "waiting", "no-signal", "finished"], description: "view atlas only: rows in this health state." },
+        health: { type: "string", enum: [...ATLAS_HEALTH_STATES], description: "view atlas only: rows in this health state." },
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
