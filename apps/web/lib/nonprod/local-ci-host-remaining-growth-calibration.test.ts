@@ -40,6 +40,13 @@ describe("hostRemainingGrowthSampleFromEvidence", () => {
     {},
     evidence(10, 11),
     { ...evidence(10, 1), hostPressure: {} },
+    {
+      ...evidence(2 * GiB, 1 * GiB),
+      admissionPoolPolicy: {
+        ...evidence(2 * GiB, 1 * GiB).admissionPoolPolicy,
+        decidedHostPressure: { totalMemoryBytes: 2 * GiB, availableMemoryBytes: 2 * GiB },
+      },
+    },
   ])("rejects incomplete or contradictory evidence %#", (value) => {
     expect(hostRemainingGrowthSampleFromEvidence(value)).toBeNull();
   });
@@ -106,6 +113,32 @@ describe("foldHostRemainingGrowthSample", () => {
     });
     expect(folded.samples).toHaveLength(HOST_REMAINING_GROWTH_CALIBRATION_WINDOW);
     expect(folded.samples.at(-1)?.observedAt).toBe(now.toISOString());
+  });
+
+  it("never lowers the historical high-water when old samples age out", () => {
+    const current = {
+      schemaVersion: 1 as const,
+      highWaterDrawdownBytes: 16 * GiB,
+      samples: Array.from({ length: HOST_REMAINING_GROWTH_CALIBRATION_WINDOW }, (_, index) => ({
+        hostTotalBytes: 64 * GiB,
+        admissionAvailableBytes: 12 * GiB,
+        minimumAvailableBytes: 8 * GiB,
+        drawdownBytes: 4 * GiB,
+        hostMemoryFence: 4 * GiB,
+        observedAt: new Date(Date.UTC(2026, 10, 1, 0, index)).toISOString(),
+      })),
+    };
+    const folded = foldHostRemainingGrowthSample({
+      current,
+      sample: hostRemainingGrowthSampleFromEvidence(evidence(12 * GiB, 7 * GiB))!,
+      now: new Date("2026-11-03T00:00:00.000Z"),
+    });
+    expect(folded.highWaterDrawdownBytes).toBe(16 * GiB);
+    expect(measuredHostRemainingGrowthReserve({
+      checkedInReserveBytes: CHECKED_IN,
+      safetyMarginBytes: MARGIN,
+      calibration: folded,
+    }).bytes).toBe(17 * GiB);
   });
 });
 

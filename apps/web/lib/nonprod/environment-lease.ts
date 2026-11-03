@@ -397,7 +397,7 @@ export async function claimNonprodEnvironmentLease(input: {
               && input.slotManifestVersion === 1
               ? { slotManifestVersion: 1 }
               : {}),
-            ...(candidateReservation && lease.expectedMemoryBytes === null
+            ...(candidateReservation
               ? {
                 resourceClass: candidateReservation.resourceClass,
                 expectedMemoryBytes: candidateReservation.expectedMemoryBytes,

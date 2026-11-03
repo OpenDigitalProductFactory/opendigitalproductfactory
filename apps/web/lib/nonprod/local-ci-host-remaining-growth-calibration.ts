@@ -18,6 +18,8 @@ export type HostRemainingGrowthSample = HostRemainingGrowthObservation & {
 
 export type HostRemainingGrowthCalibration = {
   schemaVersion: 1;
+  /** Historical maximum; sample-window expiry can never lower it. */
+  highWaterDrawdownBytes: number;
   samples: HostRemainingGrowthSample[];
 };
 
@@ -48,6 +50,7 @@ function parseObservation(value: unknown): HostRemainingGrowthObservation | null
     || !finiteNonnegative(sample.hostMemoryFence)
     || sample.admissionAvailableBytes > sample.hostTotalBytes
     || sample.minimumAvailableBytes > sample.admissionAvailableBytes
+    || sample.hostMemoryFence > sample.hostTotalBytes
     || sample.drawdownBytes !== sample.admissionAvailableBytes - sample.minimumAvailableBytes) {
     return null;
   }
@@ -74,7 +77,15 @@ export function parseHostRemainingGrowthCalibration(
   if (!row || row.schemaVersion !== 1 || !Array.isArray(row.samples)) return null;
   const samples = row.samples.map(parseSample);
   if (samples.some((sample) => sample === null)) return null;
-  return { schemaVersion: 1, samples: samples as HostRemainingGrowthSample[] };
+  const parsedSamples = samples as HostRemainingGrowthSample[];
+  const observedHighWater = parsedSamples.length > 0
+    ? Math.max(...parsedSamples.map(({ drawdownBytes }) => drawdownBytes))
+    : 0;
+  const highWaterDrawdownBytes = finiteNonnegative(row.highWaterDrawdownBytes)
+    ? row.highWaterDrawdownBytes
+    : observedHighWater;
+  if (highWaterDrawdownBytes < observedHighWater) return null;
+  return { schemaVersion: 1, highWaterDrawdownBytes, samples: parsedSamples };
 }
 
 export function hostRemainingGrowthSampleFromEvidence(
@@ -115,7 +126,7 @@ export function measuredHostRemainingGrowthReserve(input: {
       sampleCount: 0,
     };
   }
-  const measured = Math.max(...calibration.samples.map(({ drawdownBytes }) => drawdownBytes))
+  const measured = calibration.highWaterDrawdownBytes
     + Math.max(0, input.safetyMarginBytes);
   if (measured <= input.checkedInReserveBytes) {
     return {
@@ -138,9 +149,14 @@ export function foldHostRemainingGrowthSample(input: {
   sample: HostRemainingGrowthObservation;
   now: Date;
 }): HostRemainingGrowthCalibration {
-  const prior = parseHostRemainingGrowthCalibration(input.current)?.samples ?? [];
+  const current = parseHostRemainingGrowthCalibration(input.current);
+  const prior = current?.samples ?? [];
   return {
     schemaVersion: 1,
+    highWaterDrawdownBytes: Math.max(
+      current?.highWaterDrawdownBytes ?? 0,
+      input.sample.drawdownBytes,
+    ),
     samples: [
       ...prior,
       { ...input.sample, observedAt: input.now.toISOString() },

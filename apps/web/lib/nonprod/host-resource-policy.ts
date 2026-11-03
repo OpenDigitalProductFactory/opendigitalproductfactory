@@ -63,6 +63,7 @@ export type HostResourceAdmission =
       reason:
         | "unknown-resource-class"
         | "host-memory-unmeasurable"
+        | "host-memory-inconsistent"
         | "expected-memory-unmeasurable"
         | "expected-memory-below-governed-floor";
     };
@@ -92,6 +93,10 @@ export function resolveHostResourceAdmission(
   }
   if (!isFinitePositive(input.totalMemoryBytes) || !Number.isFinite(input.availableMemoryBytes)) {
     return { status: "blocked", resourceClass: input.resourceClass, reason: "host-memory-unmeasurable" };
+  }
+  if (input.availableMemoryBytes < 0
+    || input.availableMemoryBytes > input.totalMemoryBytes) {
+    return { status: "blocked", resourceClass: input.resourceClass, reason: "host-memory-inconsistent" };
   }
 
   const floor = DEFAULT_HEAVY_RESOURCE_PROFILES[input.resourceClass].expectedMemoryBytes;

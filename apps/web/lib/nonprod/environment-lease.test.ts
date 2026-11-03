@@ -401,6 +401,7 @@ describe("durable nonproduction admission", () => {
 
     const hostPressure = {
       observedAt: NOW.toISOString(),
+      totalMemoryBytes: 64 * 1024 ** 3,
       availableMemoryBytes: 8 * 1024 ** 3
         + 2 * localCiSlotResources.builderPolicy.memoryBytes,
       sustainedCpuPercent: 20,

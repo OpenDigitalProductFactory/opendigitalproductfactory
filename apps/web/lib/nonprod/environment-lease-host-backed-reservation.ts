@@ -105,7 +105,7 @@ export async function resolveHostBackedClaimPolicy(input: {
   const localHost: LocalCiHostPressure | undefined =
     input.sharedPoolPolicy?.decidedHostPressure;
   const hostResource = input.explicitHostResource ?? {
-    totalMemoryBytes: localHost?.totalMemoryBytes ?? Number.MAX_SAFE_INTEGER,
+    totalMemoryBytes: localHost?.totalMemoryBytes ?? Number.NaN,
     availableMemoryBytes: localHost?.availableMemoryBytes ?? Number.NaN,
     inferenceResident: active.some(({ resourceClass }) => resourceClass === "inference"),
   };
