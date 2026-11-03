@@ -198,8 +198,24 @@ export async function planInstall(
   return { chunkCount: plan.chunks.length, totalBytes: plan.totalBytes, maxZoom };
 }
 
+/**
+ * The plan is read back from disk, so what it says to download is checked
+ * again before any request: only the public Protomaps build host, over HTTPS,
+ * with a well-formed ETag.
+ */
+export function assertPlanSource(plan: Pick<PlanFile, "sourceUrl" | "sourceEtag">): void {
+  const url = new URL(plan.sourceUrl);
+  if (url.protocol !== "https:" || url.origin !== new URL(BUILDS_BASE_URL).origin || url.search || url.hash) {
+    throw new Error("staged plan names an unexpected source");
+  }
+  if (plan.sourceEtag && !/^(W\/)?"[\x21\x23-\x7e]*"$/.test(plan.sourceEtag)) {
+    throw new Error("staged plan has a malformed source ETag");
+  }
+}
+
 async function readPlan(dir: string): Promise<{ plan: PlanFile; triples: Float64Array }> {
   const plan = JSON.parse(await readFile(join(dir, "plan.json"), "utf8")) as PlanFile;
+  assertPlanSource(plan);
   const raw = await readFile(join(dir, "contents.bin"));
   const triples = new Float64Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
   return { plan, triples };
@@ -298,12 +314,13 @@ export async function finalizeInstall(
 }
 
 async function stagedManifestFor(staged: string, plan: PlanFile, packId: string, now: Date): Promise<MapPackManifest> {
-  const size = (await stat(staged)).size;
-  if (size !== plan.totalBytes) throw new Error(`staged pack is ${size} bytes, expected ${plan.totalBytes}`);
-
-  // Structural check with the pinned reader: header and root directory parse.
+  // Size and structure are checked through one open handle, so they describe the same file.
   const fh = await open(staged, "r");
+  let size: number;
   try {
+    size = (await fh.stat()).size;
+    if (size !== plan.totalBytes) throw new Error(`staged pack is ${size} bytes, expected ${plan.totalBytes}`);
+    // Structural check with the pinned reader: header and root directory parse.
     const head = new Uint8Array(16_384);
     await fh.read(head, 0, Math.min(16_384, size), 0);
     const h = bytesToHeader(head.buffer as ArrayBuffer);

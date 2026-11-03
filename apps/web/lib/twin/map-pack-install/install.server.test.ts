@@ -18,7 +18,7 @@ import {
   headerToBytes,
   type DirEntry,
 } from "./pmtiles-v3";
-import { discardStaging, downloadChunk, finalizeInstall, planInstall, stagingDir } from "./install.server";
+import { assertPlanSource, discardStaging, downloadChunk, finalizeInstall, planInstall, stagingDir } from "./install.server";
 
 // A synthetic clustered "planet": every tile at z0-4, plus a dense block over
 // central Texas at z5-13, each tile's bytes naming its tile id. Ocean-like
@@ -198,5 +198,13 @@ describe("map pack install, end to end against a synthetic archive (BI-43BBCC26)
     );
     await discardStaging("abandoned", { root });
     await expect(stat(stagingDir("abandoned", root))).rejects.toThrow();
+  });
+
+  it("downloads only from the Protomaps build host named in a well-formed plan", () => {
+    expect(() => assertPlanSource({ sourceUrl: "https://build.protomaps.com/20261007.pmtiles", sourceEtag: '"abc"' })).not.toThrow();
+    expect(() => assertPlanSource({ sourceUrl: "https://build.protomaps.com/20261007.pmtiles", sourceEtag: "" })).not.toThrow();
+    expect(() => assertPlanSource({ sourceUrl: "https://example.com/planet.pmtiles", sourceEtag: "" })).toThrow(/unexpected source/);
+    expect(() => assertPlanSource({ sourceUrl: "http://build.protomaps.com/20261007.pmtiles", sourceEtag: "" })).toThrow(/unexpected source/);
+    expect(() => assertPlanSource({ sourceUrl: "https://build.protomaps.com/x.pmtiles", sourceEtag: 'a"\r\nX: y' })).toThrow(/ETag/);
   });
 });
