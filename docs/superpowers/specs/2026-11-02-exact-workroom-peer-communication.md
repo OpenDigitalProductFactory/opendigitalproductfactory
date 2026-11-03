@@ -53,7 +53,7 @@ The implementation gap is independently visible in the named source:
 | AC-PEER-11 | OBJ-AUTHORITY, OBJ-DELIVERY | Receipt and reply writes authenticate the actual recipient and recheck admission. Another principal cannot acknowledge on its behalf, an old event cannot roll back later state, and telemetry cleanup plus restart preserves the retained message's canonical receipt state. |
 | AC-PEER-12 | OBJ-ROUTE, OBJ-CONTINUITY | Portal and MCP expose the same address and state. Unknown origin, ambiguous legacy room address, unsupported protocol or adapter, offline peer and authorization denial are distinguishable where disclosure permits; unauthorized callers retain the non-enumerating refusal. |
 
-AC-PEER-01/02/03 refine AC-PAC-10. AC-PEER-07/08/11 refine AC-PAC-11. AC-PEER-05/06/09 refine AC-PAC-12. The remaining rows close the observed delivery-evidence and external-adapter ambiguities under the dialog broker scope.
+AC-PEER-01/02/03 refine AC-PAC-10 (bidirectional thread/room exchange). AC-PEER-02/07/08 refine AC-PAC-11 (non-member rejection with no message write), and AC-PEER-07/08 refine AC-PAC-12 (home revocation and mirror convergence). Retry, offline recovery, per-recipient receipts and external-adapter behavior are additional qualification under the dialog broker scope; they are not substitutes for those parent criteria.
 
 ## Address and authority contract
 
