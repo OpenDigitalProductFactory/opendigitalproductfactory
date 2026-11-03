@@ -50,6 +50,24 @@ export interface UpstreamIssueReaderDeps {
   maxPages?: number;
 }
 
+/** Always retain open intake/review coverage, plus state changes since the
+ * previous scan's START (not end), so a closure during pagination is not lost. */
+export async function readControllerIssues(
+  repo: RepoIdentity,
+  cursor: string | null,
+  read = readUpstreamIssues,
+): Promise<UpstreamIssueReadResult> {
+  const open = await read({ repo, state: "open" });
+  if (!open.ok || !cursor) return open;
+  const since = new Date(cursor);
+  if (!Number.isFinite(since.getTime())) return { ok: false, state: "error", error: "Invalid issue reconciliation cursor" };
+  const changes = await read({ repo, state: "all", since });
+  if (!changes.ok) return changes;
+  const issues = new Map(open.issues.map(issue => [issue.number, issue]));
+  for (const issue of changes.issues) issues.set(issue.number, issue);
+  return { ok: true, issues: [...issues.values()] };
+}
+
 interface RawIssue {
   number?: unknown;
   title?: unknown;

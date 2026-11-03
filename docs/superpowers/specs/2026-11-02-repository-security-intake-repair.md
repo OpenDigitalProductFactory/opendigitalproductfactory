@@ -74,6 +74,12 @@ guess the canonical delivery item or retire it to improve metrics.
 
 ## Boundaries
 
+The existing Scheduled Work Run now action dispatches the same commissioned
+intake on its existing event rail. Manual and recurring runs share one account
+concurrency lane. Both honor quiescence; the recurring run also honors the
+schedule enable switch. Source changes are recorded in intake activity without
+overwriting curated backlog text or automatically reopening completed work.
+
 The scheduled-work UI refactor belongs to another chat. Contributor inventory
 and SIEM permission denials remain in force. Read-only ScheduledJob diagnostics
 are independent of those denied operations. No new provider or budget is added.
