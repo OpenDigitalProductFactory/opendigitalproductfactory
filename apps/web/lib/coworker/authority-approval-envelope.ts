@@ -65,6 +65,23 @@ async function findActiveEnvelope(
   });
 }
 
+/** Metadata only: a fresh non-admission must not replace a pending approval
+ * or the existing exact replay path. Never reads arguments or action results. */
+export async function hasCurrentAuthorityApproval(
+  binding: CoworkerApprovalBinding,
+  now: Date = new Date(),
+  db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
+): Promise<boolean> {
+  const approvalBindingFingerprint = fingerprintCoworkerApprovalBinding(binding);
+  return Boolean(await db.coworkerActionEnvelope.findFirst({
+    where: { approvalBindingFingerprint, OR: [
+      activeEnvelopeWhere(approvalBindingFingerprint, now),
+      { status: { in: ["executed", "failed"] }, resolvedAt: { gt: new Date(now.getTime() - APPROVAL_REPLAY_WINDOW_MS) } },
+    ] },
+    select: { id: true },
+  }));
+}
+
 /**
  * BI-C8EC05C9 (spec D2 S2, "No pause"): a request raised under a propose
  * boundary is metadata on argsJson, never part of the binding. The run that

@@ -16,6 +16,7 @@ import type { RoomParticipantInvitationPreflight } from "./work-management/room-
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
+import { registerUpgradeAdmissionCases } from "./mcp-governed-execute.upgrade-admission.cases";
 import { coworkerAuthorityInputFixture as authorityInput } from "../test-support/coworker-authority-input-fixture";
 
 const preflightMocks = vi.hoisted(() => {
@@ -405,6 +406,7 @@ describe("governedExecuteTool — happy path", () => {
   });
 });
 registerRefusalDurationCases({ auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, normalUser: NORMAL_USER, executionCalls: () => executeMock.mock.calls });
+registerUpgradeAdmissionCases({ auditRows: () => auditRows, receiptRows: () => receiptRows, applyOverrides: applyAuthorityOverrides, executionCalls: () => executeMock.mock.calls, authorityInput });
 describe("governedExecuteTool — rejection paths", () => {
   registerWorkroomAliasCases({
     executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows,
