@@ -31,12 +31,12 @@ function ReviewerExecutionItem({ run }: { run: ReviewerExecutionObservation }) {
         <summary className="min-h-11 cursor-pointer break-words py-2">{gate ? <>{gate} · </> : null}{run.taskRunId} · {run.status} · {identity}</summary>
         <dl className="grid grid-cols-1 gap-3 break-words sm:grid-cols-2">
           <div><dt className="font-medium">Where are we?</dt><dd>Recorded {run.status}. Heartbeat {run.heartbeat}: {run.lastHeartbeatAt ?? "unknown"}. Read at {run.readAt}.</dd></div>
-          <div><dt className="font-medium">Why are we here?</dt><dd>{reason}</dd></div>
+          <div><dt className="font-medium">Why are we here?</dt><dd>{ordinary && run.receipt ? <><p>Review {run.receipt.decision}: {run.receipt.summary}</p>{run.executionUncertain || run.identityConflict ? <p>{reason}</p> : null}</> : reason}</dd></div>
           <div><dt className="font-medium">What can happen next?</dt><dd aria-live="polite" aria-atomic="true">{next}</dd></div>
-          <div><dt className="font-medium">Who owns the action?</dt><dd>{nativeRecovery ? "Requester" : "Request owner"}: {run.requesterName ?? run.requesterId ?? "unknown"}. The server owns dispatch.</dd></div>
+          <div><dt className="font-medium">Who owns the action?</dt><dd>{nativeRecovery ? "Requester" : "Request owner"}: {run.requesterName ?? run.requesterId ?? "unknown"}. Server owns dispatch.</dd></div>
           <div><dt className="font-medium">What evidence supports this?</dt><dd>
             <p>TaskRun:{run.recordId} · Source: {run.sourceHeadSha ?? "unknown"}{ordinary ? <> · Artifact: {run.artifactVersion ?? "unknown"}</> : null}</p>
-            {run.receipt ? <p>Review {run.receipt.decision}: {run.receipt.summary} · Receipt:{run.receipt.id}</p> : <p>No correlated receipt.</p>}
+            {run.receipt ? <p>{!ordinary ? <>Review {run.receipt.decision}: {run.receipt.summary} · </> : null}Receipt:{run.receipt.id}</p> : <p>No correlated receipt.</p>}
             <ButtonLink variant="ghost" className="min-h-11" href={`/api/internal/tasks/${encodeURIComponent(run.taskRunId)}`}>Request history</ButtonLink>
           </dd></div>
           <div><dt className="font-medium">What else is affected?</dt><dd>Linked to this Workroom. Downstream impact is not established.</dd></div>

@@ -10,6 +10,23 @@ const map: WorkroomFlowMapModel = { shapeRef: "delivery-small@1.0.0", title: "Ma
   ends: { success: false, failure: false, budget: false }, finished: false, graphFlow: false };
 const build = () => createWorkroomProcessSnapshot(target, graph, { definition: null, mode: "finite", activeCycle: false }, map);
 describe("process snapshot wire contract", () => {
+  it.each(["pass", "fail", "inconclusive", "not-applicable"] as const)("round-trips a recorded %s receipt without discarding saved process evidence", decision => {
+    const snapshot = build();
+    snapshot.graph = { ...snapshot.graph, process: { ...snapshot.graph.process!, reviewerRuns: [{
+      reviewKind: "initiative-review", reviewGate: "spec-approval", taskRunId: "TR-review", recordId: "review-row",
+      requesterId: "requester", status: "completed", reason: null, nextAction: "Inspect this original request.",
+      readAt: "2026-10-25T12:00:00Z", lastHeartbeatAt: null, heartbeat: "historical", recoveryWait: false,
+      budget: { deadlineAt: null, recoveryAttempt: null }, checkpoints: [],
+      receipt: { id: "receipt", decision, summary: "Recorded review result." } }] } };
+    const parsed = parseWorkroomProcessSnapshot(JSON.parse(JSON.stringify(snapshot)), target);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.graph.process?.reviewerRuns?.[0].receipt).toEqual({ id: "receipt", decision, summary: "Recorded review result." });
+    expect(parsed?.flowMap).toEqual(map);
+    const invalid = JSON.parse(JSON.stringify(snapshot));
+    invalid.graph.process.reviewerRuns[0].receipt.decision = "invented-verdict";
+    expect(parseWorkroomProcessSnapshot(invalid, target)).toBeNull();
+  });
+
   it("normalizes encoded/decoded identities without accepting malformed escapes", () => {
     expect(normalizeProcessCaseKey("task:TR-1")).toBe(target.caseKey); expect(normalizeProcessCaseKey("%")).toBeNull();
     expect(parseWorkroomProcessSnapshot(build(), { ...target, caseKey: "task:TR-1" })).toEqual(build());

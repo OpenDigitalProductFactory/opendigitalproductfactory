@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "verdict-with-reason",
+  "decisionInteractionId": "DI-0DB4381646B0",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "verdict-with-reason",
+      "verdict-with-evidence"
+    ]
+  },
+  "notes": "Finite read-only correction within the existing closed Workroom disclosure. Show the authenticated verdict and reason under Why are we here; retain the native receipt identity under evidence and unresolved execution separately. No new route, control, model action or authority. Kernel signal usable/strong, confidence high, autonomyEligible true/no blockers; selected by agent. Cognitive/effort inputs are contributor estimates, not measured usability or served acceptance. Existing component, theme tokens, inspection link and source history are reused; desktop live verification remains required, native iOS separate."
+}

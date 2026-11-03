@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadSemanticReviewRoomProjection, type ReviewerRunSnapshot } from "./semantic-review-room-projection";
+import { loadSemanticReviewRoomProjection, type ReviewerRunSnapshot, type ReviewerRoomClient } from "./semantic-review-room-projection";
 import { projectWorkroomRecovery } from "@/lib/work-capsules/workroom-recovery-projection";
 
 vi.mock("./review-room-candidates", () => ({ loadReviewRoomCandidates: vi.fn(async (db, capsuleIds: string[]) => {
@@ -224,7 +224,37 @@ describe("ordinary initiative review observations", () => {
   });
   const project = (rows: ReturnType<typeof initiative>[]) => loadSemanticReviewRoomProjection({
     taskRun: { findMany: async () => rows }, $queryRaw: vi.fn().mockResolvedValue([]),
-  }, ["WC-1"], now);
+    authorizationDecisionLog: { findUnique: vi.fn(async () => null) },
+    coworkerActionEnvelope: { findMany: vi.fn(async () => []) },
+  } as unknown as ReviewerRoomClient, ["WC-1"], now);
+
+  it.each(["pass", "fail", "not-applicable"])("shows an authenticated ordinary %s receipt without promoting the Workroom", async decision => {
+    const row = initiative();
+    row.status = "completed";
+    const payload = { schemaVersion: 1, receiptId: "initiative-receipt", gate: "spec-approval", decision,
+      subject: { kind: "backlog-item", id: "BI-1" }, artifactRef: row.initiativeBinding.artifactRef,
+      policyVersion: "initiative-v1", artifactDigest: "sha256:" + "e".repeat(64),
+      artifactAuthorRef: "principal:author|agent:author-agent", reviewerPrincipalId: "reviewer", reviewerAgentId: "AGT-REVIEWER",
+      authorityDecisionId: "AUTH-1", authoritySnapshot: { decision: "allow", actionKey: row.initiativeBinding.writerToolName,
+        policyVersion: "authority-v1", organizationId: "platform", effectiveHumanCapability: "manage_backlog",
+        effectiveAgentGrant: "initiative_design_review", tokenScope: "write" },
+      findingRefs: decision === "fail" ? ["finding-1"] : [], resolvedFindingRefs: [], reason: "Recorded design review." };
+    const db = { taskRun: { findMany: async () => [row] },
+      $queryRaw: vi.fn(async (sql: TemplateStringsArray) => sql.join("").includes("BacklogItemActivity")
+        ? [{ rowId: row.id, receiptId: payload.receiptId, itemRowId: "item-row", backlogItemId: "item-row", organizationId: null,
+          gateKey: "spec_approval", payload, recordedAt: now, payloadTruncated: false, envelopeTaskIds: [],
+          authority: { decision: "allow", actionKey: row.initiativeBinding.writerToolName,
+            organizationId: null, policyVersion: "authority-v1", rationale: { taskRunId: row.taskRunId } } }] : []),
+      authorizationDecisionLog: { findUnique: vi.fn(async () => ({ decision: "allow", actionKey: row.initiativeBinding.writerToolName,
+        organizationId: null, policyVersion: "authority-v1", rationale: { taskRunId: row.taskRunId } })) },
+      coworkerActionEnvelope: { findMany: vi.fn(async () => []) } };
+    const view = await loadSemanticReviewRoomProjection(db as unknown as ReviewerRoomClient, ["WC-1"], now);
+    expect(view.runs[0].receipt).toMatchObject({ id: payload.receiptId, decision, summary: payload.reason });
+    expect(view.receipts).toContainEqual(expect.objectContaining({ receiptId: payload.receiptId,
+      receiptKind: "initiative-review-receipt", rawRef: { table: "BacklogItemActivity", id: payload.receiptId } }));
+    expect(view.runs[0]).toMatchObject({ status: "completed", executionUncertain: true, recoveryWait: false });
+    expect(view.runs[0].nextAction).not.toContain("retry-review");
+  });
 
   it("retains a current room's ordinary review of an older immutable plan without inferring settlement", async () => {
     const view = await project([initiative()]);

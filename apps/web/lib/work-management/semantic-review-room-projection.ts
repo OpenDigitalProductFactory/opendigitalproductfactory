@@ -1,3 +1,5 @@
+import type { ReviewReceiptDecision } from "@/lib/mcp-task-review-receipt";
+import { loadInitiativeReviewRoomReceipts, type InitiativeReceiptClient } from "./initiative-review-room-receipts";
 import { projectRecordedTaskState } from "@/lib/tak/task-states";
 import type { PrismaClient } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
@@ -23,7 +25,7 @@ export type ReviewerExecutionObservation = {
   recoveryWait: boolean; budget: SemanticReviewBudgetSnapshot;
   identityScope?: "current" | "historical" | "unknown";
   sourceHeadSha?: string | null;
-  receipt?: { id: string; decision: "pass" | "fail" | "inconclusive"; summary: string };
+  receipt?: { id: string; decision: ReviewReceiptDecision; summary: string };
   checkpoints: Array<{ taskNodeId: string; recordId: string; title: string; status: string; actorId: string | null }>;
 };
 
@@ -34,7 +36,7 @@ export type ReviewerRunSnapshot = {
   nodes?: Array<{ id: string; taskNodeId: string; title: string; status: string; updatedAt: Date; requestContract?: unknown }>;
 };
 export type ReviewerRoomClient = { taskRun?: { findMany(args: unknown): Promise<ReviewerRunSnapshot[]> } }
-  & Partial<Pick<PrismaClient, "$queryRaw">>;
+  & Partial<Pick<PrismaClient, "$queryRaw">> & InitiativeReceiptClient;
 
 /** Read-model snapshots of existing records, never new completion receipts or a task ledger. */
 export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, capsuleIds: string[], now: Date) {
@@ -49,6 +51,8 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
   const identities = await loadRequestIdentities(db, rows.filter(row => row.reviewKind === "semantic-review"));
   const ordinaryIdentities = new Map(rows.filter(row => row.reviewKind === "initiative-review")
     .map(row => [row.id, initiativeRoomIdentity(row, now)]));
+  const ordinaryReceipts = await loadInitiativeReviewRoomReceipts(db, rows, now);
+  for (const room of ordinaryReceipts.partialRooms) partialRooms.add(room);
   const ordinaryGates = new Map<string, number>();
   for (const identity of ordinaryIdentities.values()) {
     if (!identity.requestBound || identity.sourceHeadSha?.toLowerCase() !== identity.currentHeadSha?.toLowerCase()) continue;
@@ -102,6 +106,7 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
     const heartbeat = row.lastHeartbeatAt ? row.lastHeartbeatAt.toISOString() : "unknown";
     const age = row.lastHeartbeatAt ? now.getTime() - row.lastHeartbeatAt.getTime() : null;
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
+    const ordinaryReceipt = ordinaryReceipts.receipts.get(row.id);
     runs.push({ capsuleId: row.capsuleId,
       reviewKind: row.reviewKind, reviewGate: ordinaryIdentity?.reviewGate ?? null,
       artifactVersion: ordinaryIdentity?.artifactVersion ?? null,
@@ -115,6 +120,8 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
         && (identity.receiptDecision === "pass" || identity.receiptDecision === "fail" || identity.receiptDecision === "inconclusive")
         ? { receipt: { id: identity.receiptId, decision: identity.receiptDecision,
           summary: identity.receiptSummary ?? "No receipt summary recorded." } } : {}),
+      ...(ordinary && qualified && ordinaryReceipt
+        ? { receipt: { id: ordinaryReceipt.id, decision: ordinaryReceipt.decision, summary: ordinaryReceipt.summary } } : {}),
       reason: recordedReason,
       nextAction: ordinary ? "Inspect this original review result with its bound request digest; status alone is not a verdict." : recoveryAction ?? (row.status === "working" || row.status === "submitted" ? next : typeof progress.action === "string" ? progress.action
         : typeof progress.nextAction === "string" ? progress.nextAction : next),
@@ -128,13 +135,14 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
     const ref: WorkCaseSourceRef = { kind: "task-run", id: row.taskRunId, status: row.status, sourceType: "task-run" };
     sourceRefs.push(ref);
     const recordedReceipt = runs[runs.length - 1]!.receipt;
-    if (recordedReceipt && identity?.receiptCreatedAt) {
-      const receiptRef: WorkCaseSourceRef = { kind: "evidence", id: recordedReceipt.id, sourceType: "external-evidence", status: recordedReceipt.decision };
+    const receiptTime = ordinary ? ordinaryReceipts.receipts.get(row.id)?.recordedAt : identity?.receiptCreatedAt;
+    if (recordedReceipt && receiptTime) {
+      const receiptRef: WorkCaseSourceRef = { kind: "evidence", id: recordedReceipt.id, sourceType: ordinary ? "backlog-item-activity" : "external-evidence", status: recordedReceipt.decision };
       sourceRefs.push(receiptRef);
-      receipts.push({ receiptId: recordedReceipt.id, receiptKind: "semantic-review-receipt", enforcementMode: "observed-event",
+      receipts.push({ receiptId: recordedReceipt.id, receiptKind: ordinary ? "initiative-review-receipt" : "semantic-review-receipt", enforcementMode: "observed-event",
         sourceRef: receiptRef, status: "observed", summary: `Recorded review ${recordedReceipt.decision}: ${recordedReceipt.summary}`,
-        occurredAt: identity.receiptCreatedAt.toISOString(), policyRefs: [],
-        rawRef: { table: "ExternalEvidenceRecord", id: recordedReceipt.id } });
+        occurredAt: receiptTime.toISOString(), policyRefs: [],
+        rawRef: { table: ordinary ? "BacklogItemActivity" : "ExternalEvidenceRecord", id: recordedReceipt.id } });
     }
     if (!attentionReason && identityScope !== "historical" && (state === "waiting" || state === "unknown" || row.status === "failed")) {
       attentionReason = `Reviewer ${row.taskRunId}: ${state === "unknown" ? "unknown state" : row.status}. ${reason}`;

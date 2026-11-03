@@ -114,6 +114,17 @@ describe("reviewer execution inside a Workroom", () => {
 
 
 describe("ordinary initiative review disclosure", () => {
+  it("shows the recorded verdict without hiding unresolved execution", () => {
+    render(<ReviewerExecutionList runs={[{ ...run, status: "completed", reviewKind: "initiative-review",
+      reason: null, recoveryWait: false, executionUncertain: true,
+      receipt: { id: "receipt-1", decision: "fail", summary: "Required proof is missing." } }]} />);
+    expect(screen.getByText("Why are we here?").parentElement).toHaveTextContent("Review fail: Required proof is missing.");
+    expect(screen.getByText("Execution outcome is unknown.")).toBeInTheDocument();
+    expect(screen.getByText(/Required proof is missing/)).toBeInTheDocument();
+    expect(screen.queryByText("No correlated receipt.")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
+  });
+
   it.each(["current", "historical"] as const)("keeps %s originals inspectable without native semantic retry", identityScope => {
     render(<ReviewerExecutionList runs={[{ ...run, identityScope, reviewKind: "initiative-review",
       reviewGate: "spec-approval", artifactVersion: "artifact-before-head", sourceHeadSha: "current-head",

@@ -1,3 +1,4 @@
+import { REVIEW_RECEIPT_DECISIONS } from "@/lib/mcp-task-review-receipt";
 import { z } from "zod";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import { SHAPE_NODE_STATES, type ShapeGraph } from "./shape-projection";
@@ -46,7 +47,7 @@ const reviewer = z.object({
   reason: text.nullable(), nextAction: text, readAt: text, lastHeartbeatAt: text.nullable(), heartbeat: z.enum(["historical", "unknown", "stale", "recent"]),
   recoveryWait: z.boolean(), budget: z.object({ deadlineAt: text.nullable(), recoveryAttempt: z.number().nullable(), eligibilityBlocked: z.boolean().optional(), routingEligibility: z.array(eligibility).max(5).optional() }),
   identityScope: z.enum(["current", "historical", "unknown"]).optional(), sourceHeadSha: optionalText,
-  receipt: z.object({ id: text, decision: z.enum(["pass", "fail", "inconclusive"]), summary: text }).optional(),
+  receipt: z.object({ id: text, decision: z.enum(REVIEW_RECEIPT_DECISIONS), summary: text }).optional(),
   checkpoints: z.array(z.object({ taskNodeId: text, recordId: text, title: text, status: text, actorId: text.nullable() })).max(12),
 });
 const graph: z.ZodType<ShapeGraph> = z.object({
