@@ -262,9 +262,33 @@ async function inviteRoomParticipantHandler(
 ): Promise<ToolResult> {
   const preflight = await preflightRoomParticipantInvitation({ params, userId, agentId: context?.agentId });
   if (preflight.verdict === "deny") return preflight.result;
-  const { agentId, caseKey, item } = preflight;
+  const { agentId, caseKey, item, clearanceRaise } = preflight;
   const inviteeAgentId = str(params, "agentId");
   const inviteeUserId = str(params, "userId");
+
+  // BI-6AE64074: the approved invite also raises the invitee's data access to
+  // the room's level, through the same audited control the owner uses by hand.
+  // That control refuses a person without manage_agents or beyond their own
+  // access; then nobody is admitted.
+  if (clearanceRaise) {
+    const { setCoworkerDataAccess, CoworkerDataAccessError } = await import("@/lib/identity/coworker-data-access");
+    try {
+      await setCoworkerDataAccess(userId, {
+        agentId: clearanceRaise.agentId,
+        expected: clearanceRaise.from,
+        levels: clearanceRaise.to,
+        reason: `Admitted to Work Room ${caseKey}, which holds ${clearanceRaise.level} information, by an approved invitation.`,
+      });
+    } catch (error) {
+      if (!(error instanceof CoworkerDataAccessError)) throw error;
+      return {
+        success: false,
+        error: "clearance_raise_refused",
+        message: `${error.message} The coworker was not admitted to ${caseKey}.`,
+        data: { caseKey, membershipRecorded: false, effectiveAdmission: false },
+      };
+    }
+  }
 
   let inviteePrincipalId: string | null = null;
   let inviteeLabel = "A participant";
@@ -686,6 +710,11 @@ const definitions: ToolDefinition[] = [
         agentId: { type: "string", description: "Invite an AI coworker by agent id (provide agentId OR userId)." },
         userId: { type: "string", description: "Invite a person by user id (provide agentId OR userId)." },
         canAct: { type: "boolean", description: "Whether the invitee may post (true, default) or only read (false)." },
+        raiseClearanceTo: {
+          type: "string",
+          enum: ["internal", "confidential"],
+          description: "Only when an earlier invite was refused with invitee_clearance_below_room: the room's level, as that refusal named it. The room's owner is then asked once to admit the coworker AND raise its data access to that level.",
+        },
       },
       required: ["caseKey"],
     },

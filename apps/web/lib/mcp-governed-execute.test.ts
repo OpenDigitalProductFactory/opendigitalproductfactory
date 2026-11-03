@@ -29,7 +29,7 @@ const preflightMocks = vi.hoisted(() => {
     workroomTargetAccessRefusal: vi.fn(async () => null as ToolResult | null),
     preflightRoomParticipantInvitation: vi.fn<() => Promise<RoomParticipantInvitationPreflight>>(async () => ({
       verdict: "allow" as const, agentId: "AGT-100",
-      caseKey: "backlog-item:BI-1", item: roomItem,
+      caseKey: "backlog-item:BI-1", item: roomItem, clearanceRaise: null,
     })),
   };
 });
@@ -80,7 +80,7 @@ beforeEach(() => {
   preflightMocks.preflightRoomParticipantInvitation.mockReset();
   preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
     verdict: "allow", agentId: "AGT-100",
-    caseKey: "backlog-item:BI-1", item: preflightMocks.roomItem,
+    caseKey: "backlog-item:BI-1", item: preflightMocks.roomItem, clearanceRaise: null,
   });
   auditRows = []; receiptRows = []; authorityRows = [];
   executeMock = vi.fn(
