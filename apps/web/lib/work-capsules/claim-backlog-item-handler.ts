@@ -143,7 +143,7 @@ export async function claimBacklogItemForWork(args: {
   // BI-DF34D948: a short SHA is expanded against the repository, not refused.
   const shas = await resolveSourceCommitShas(params, lazyResolverDeps(args.resolveCommitDeps, repositoryFullName));
   if (!shas.ok) return sourceCommitRefusal(shas, { tool: "claim_backlog_item_for_work", args: params });
-  const { baseSha, headSha } = shas;
+  const { baseSha, headSha } = shas.data;
   const executorKind = providerToExecutorKind(provider);
   const shape = await resolveClaimShape({
     db: args.db,

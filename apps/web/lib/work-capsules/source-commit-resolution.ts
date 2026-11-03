@@ -1,4 +1,5 @@
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 /**
  * BI-DF34D948: a caller naturally holds a short SHA (`git log --oneline`), and
@@ -31,7 +32,7 @@ type ShaField = "baseSha" | "headSha";
 export type SourceCommitRefusalReason = "malformed" | "ambiguous" | "unknown" | "unavailable";
 
 export type SourceCommitResolution =
-  | { ok: true; baseSha: string | null; headSha: string | null; expanded: Array<{ field: ShaField; supplied: string; resolved: string }> }
+  | ActionSuccess<{ baseSha: string | null; headSha: string | null; expanded: Array<{ field: ShaField; supplied: string; resolved: string }> }>
   | { ok: false; field: ShaField; supplied: string; reason: SourceCommitRefusalReason; candidates: string[] };
 
 async function resolveOne(field: ShaField, raw: unknown, deps: SourceCommitResolverDeps) {
@@ -40,11 +41,11 @@ async function resolveOne(field: ShaField, raw: unknown, deps: SourceCommitResol
     || (supplied.length < MIN_SHORT_SHA_LENGTH)) {
     return { ok: false as const, field, supplied, reason: "malformed" as const, candidates: [] };
   }
-  if (FULL_SHA.test(supplied)) return { ok: true as const, sha: supplied, expanded: false };
+  if (FULL_SHA.test(supplied)) return ok({ sha: supplied, expanded: false });
   const prefix = supplied.toLowerCase();
   const provider = await deps.lookupProviderCommit(prefix);
   if (provider.kind === "found" && FULL_SHA.test(provider.sha) && provider.sha.toLowerCase().startsWith(prefix)) {
-    return { ok: true as const, sha: provider.sha.toLowerCase(), expanded: true };
+    return ok({ sha: provider.sha.toLowerCase(), expanded: true });
   }
   // GitHub answers 422 for an ambiguous prefix and an unknown one alike, so the
   // candidates come from what this installation has already recorded.
@@ -66,10 +67,10 @@ export async function resolveSourceCommitShas(
     if (input[field] == null) continue;
     const one = await resolveOne(field, input[field], deps);
     if (!one.ok) return one;
-    resolved[field] = one.sha;
-    if (one.expanded) expanded.push({ field, supplied: (input[field] as string).trim(), resolved: one.sha });
+    resolved[field] = one.data.sha;
+    if (one.data.expanded) expanded.push({ field, supplied: (input[field] as string).trim(), resolved: one.data.sha });
   }
-  return { ok: true, ...resolved, expanded };
+  return ok({ ...resolved, expanded });
 }
 
 /**

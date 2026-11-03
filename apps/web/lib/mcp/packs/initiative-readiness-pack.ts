@@ -24,7 +24,7 @@ import { parseQualificationExperimentState,
   parseQualificationVerificationEvidence, qualificationBindingDigest,
   verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { normalizeRepositoryArtifactRefInput } from "@/lib/backlog/initiative-readiness/artifact-ref-input";
-import { defaultArtifactRefInputDeps, initiativeWorkedExample, initiativeRetry } from "./initiative-readiness-worked-example";
+import { defaultArtifactRefInputDeps, initiativeWorkedExample, initiativeRetry } from "@/lib/backlog/initiative-readiness/worked-example";
 
 const artifactRefSchema = {
   type: "object",
@@ -534,7 +534,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       const normalized = await normalizeRepositoryArtifactRefInput(params.artifactRef, await defaultArtifactRefInputDeps(),
         { tool: actionKey, args: params });
       if (!normalized.ok) return normalized.refusal;
-      params = { ...params, artifactRef: normalized.artifactRef };
+      params = { ...params, artifactRef: normalized.data.artifactRef };
     }
     const findings = parseFindings(params.findings);
     const resolvedFindingRefs = parseStringArray(params.resolvedFindingRefs);

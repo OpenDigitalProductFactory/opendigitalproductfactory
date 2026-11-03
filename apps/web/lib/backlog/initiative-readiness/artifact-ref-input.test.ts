@@ -13,7 +13,7 @@ function deps(overrides: Partial<Parameters<typeof normalizeRepositoryArtifactRe
       lookupProviderCommit: vi.fn(async () => ({ kind: "found" as const, sha: HEAD })),
       recordedCandidates: vi.fn(async () => [] as string[]),
     })),
-    readBlobId: vi.fn(async () => ({ ok: true as const, blobId: BLOB })),
+    readBlobId: vi.fn(async () => ({ ok: true as const, data: { blobId: BLOB } })),
     ...overrides,
   };
 }
@@ -24,22 +24,22 @@ describe("normalizeRepositoryArtifactRefInput (BI-DF34D948)", () => {
   it("leaves a complete repository locator untouched without any provider read", async () => {
     const ref = { kind: "repo-blob-at-commit", repositoryFullName: REPO, commitSha: HEAD, path: "docs/a.md", providerBlobId: BLOB };
     const d = deps();
-    expect(await normalizeRepositoryArtifactRefInput(ref, d, call(ref))).toEqual({ ok: true, artifactRef: ref, derived: [] });
+    expect(await normalizeRepositoryArtifactRefInput(ref, d, call(ref))).toEqual({ ok: true, data: { artifactRef: ref, derived: [] } });
     expect(d.readBlobId).not.toHaveBeenCalled();
     expect(d.canonicalRepositoryFullName).not.toHaveBeenCalled();
   });
 
   it("passes non-repository kinds through", async () => {
     const ref = { kind: "document-version", versionId: "DV-1" };
-    expect(await normalizeRepositoryArtifactRefInput(ref, deps(), call(ref))).toEqual({ ok: true, artifactRef: ref, derived: [] });
+    expect(await normalizeRepositoryArtifactRefInput(ref, deps(), call(ref))).toEqual({ ok: true, data: { artifactRef: ref, derived: [] } });
   });
 
   it("derives kind, repository, full commit and blob id from {path, headSha}", async () => {
     const d = deps();
     const result = await normalizeRepositoryArtifactRefInput({ path: "docs/a.md", headSha: "7fb295c" }, d, call({}));
-    expect(result).toEqual({ ok: true,
+    expect(result).toEqual({ ok: true, data: {
       artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: REPO, commitSha: HEAD, path: "docs/a.md", providerBlobId: BLOB },
-      derived: ["kind", "repositoryFullName", "commitSha", "providerBlobId"] });
+      derived: ["kind", "repositoryFullName", "commitSha", "providerBlobId"] } });
     expect(d.readBlobId).toHaveBeenCalledWith({ repositoryFullName: REPO, commitSha: HEAD, path: "docs/a.md" });
   });
 

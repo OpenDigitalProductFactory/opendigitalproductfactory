@@ -107,8 +107,8 @@ export async function adoptWorktree(args: {
         headBranch,
         worktreePath,
         baseBranch: stringParam(params, "baseBranch") ?? null,
-        baseSha: shas.baseSha,
-        headSha: shas.headSha,
+        baseSha: shas.data.baseSha,
+        headSha: shas.data.headSha,
         executorKind: validatedExecutorKind,
         executorRef: stringParam(params, "sessionRef") ?? null, // session identity; see the tool schema
         backlogItemId: boundBacklogItemId,

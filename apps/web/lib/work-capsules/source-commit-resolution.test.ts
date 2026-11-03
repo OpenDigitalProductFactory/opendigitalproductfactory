@@ -16,7 +16,7 @@ function deps(overrides: Partial<Parameters<typeof resolveSourceCommitShas>[1]> 
 describe("resolveSourceCommitShas (BI-DF34D948)", () => {
   it("passes omitted and full SHAs through without any lookup", async () => {
     const d = deps();
-    expect(await resolveSourceCommitShas({ baseSha: FULL }, d)).toEqual({ ok: true, baseSha: FULL, headSha: null, expanded: [] });
+    expect(await resolveSourceCommitShas({ baseSha: FULL }, d)).toEqual({ ok: true, data: { baseSha: FULL, headSha: null, expanded: [] } });
     expect(d.lookupProviderCommit).not.toHaveBeenCalled();
     expect(d.recordedCandidates).not.toHaveBeenCalled();
   });
@@ -24,8 +24,8 @@ describe("resolveSourceCommitShas (BI-DF34D948)", () => {
   it("expands an unambiguous short SHA through the repository provider", async () => {
     const d = deps({ lookupProviderCommit: vi.fn(async () => ({ kind: "found" as const, sha: FULL })) });
     const result = await resolveSourceCommitShas({ baseSha: FULL, headSha: " 7FB295C " }, d);
-    expect(result).toEqual({ ok: true, baseSha: FULL, headSha: FULL,
-      expanded: [{ field: "headSha", supplied: "7FB295C", resolved: FULL }] });
+    expect(result).toEqual({ ok: true, data: { baseSha: FULL, headSha: FULL,
+      expanded: [{ field: "headSha", supplied: "7FB295C", resolved: FULL }] } });
     expect(d.lookupProviderCommit).toHaveBeenCalledWith("7fb295c");
   });
 

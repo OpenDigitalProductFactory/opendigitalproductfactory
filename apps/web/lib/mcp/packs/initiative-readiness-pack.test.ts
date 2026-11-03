@@ -35,8 +35,8 @@ vi.mock("@/lib/backlog/initiative-readiness", async (importOriginal) => ({
 }));
 
 const artifactDeps = vi.hoisted(() => ({ readBlobId: vi.fn(), lookupProviderCommit: vi.fn() }));
-vi.mock("./initiative-readiness-worked-example", async (importOriginal) => ({
-  ...await importOriginal<typeof import("./initiative-readiness-worked-example")>(),
+vi.mock("@/lib/backlog/initiative-readiness/worked-example", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness/worked-example")>(),
   defaultArtifactRefInputDeps: async () => ({
     canonicalRepositoryFullName: async () => "owner/repo",
     commitDeps: () => ({ lookupProviderCommit: artifactDeps.lookupProviderCommit, recordedCandidates: async () => [] }),
@@ -238,7 +238,7 @@ describe("initiative readiness reviewer tools", () => {
     mocks.findTaskRun.mockResolvedValue(null);
     mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "IRR-1" });
     artifactDeps.lookupProviderCommit.mockResolvedValue({ kind: "found", sha: "a".repeat(40) });
-    artifactDeps.readBlobId.mockResolvedValue({ ok: true, blobId: "b".repeat(40) });
+    artifactDeps.readBlobId.mockResolvedValue({ ok: true, data: { blobId: "b".repeat(40) } });
     const result = await initiativeReadinessPack.handlers.record_initiative_evidence!({ itemId: "BI-TEST", gate: "research",
       decision: "pass", artifactRef: { path: "docs/a.md", headSha: "aaaaaaa" }, reason: "Reproduced.", findings: [], resolvedFindingRefs: [] },
     "user", {} as never);

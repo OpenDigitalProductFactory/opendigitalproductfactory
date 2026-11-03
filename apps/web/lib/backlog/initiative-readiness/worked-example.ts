@@ -1,5 +1,6 @@
 import type { ArtifactRefInputDeps } from "@/lib/backlog/initiative-readiness/artifact-ref-input";
 import type { InitiativeReadinessLane } from "@/lib/tak/initiative-readiness-tool-grants";
+import { ok } from "@/lib/shared/action-result";
 import { workedCall } from "@/lib/work-capsules/source-commit-resolution";
 
 /**
@@ -43,7 +44,7 @@ export async function defaultArtifactRefInputDeps(): Promise<ArtifactRefInputDep
     }),
     readBlobId: async (args) => {
       const blob = await repository.readRepositoryProviderBlob(args);
-      return blob.ok ? { ok: true, blobId: blob.blobId } : { ok: false, code: blob.code, error: blob.error };
+      return blob.ok ? ok({ blobId: blob.blobId }) : { ok: false, code: blob.code, error: blob.error };
     },
   };
 }

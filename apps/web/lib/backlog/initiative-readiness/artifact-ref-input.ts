@@ -1,4 +1,5 @@
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import {
   resolveSourceCommitShas,
   sourceCommitRefusal,
@@ -23,13 +24,13 @@ export type ArtifactRefInputDeps = {
   commitDeps: (repositoryFullName: string) => SourceCommitResolverDeps;
   /** The blob the provider serves at commit:path (`git rev-parse <commit>:<path>`). */
   readBlobId: (args: { repositoryFullName: string; commitSha: string; path: string }) =>
-    Promise<{ ok: true; blobId: string } | { ok: false; code: string; error: string }>;
+    Promise<ActionSuccess<{ blobId: string }> | { ok: false; code: string; error: string }>;
 };
 
 type Call = { tool: string; args: Record<string, unknown> };
 
 export type ArtifactRefNormalization =
-  | { ok: true; artifactRef: unknown; derived: string[] }
+  | ActionSuccess<{ artifactRef: unknown; derived: string[] }>
   | { ok: false; refusal: ToolResult };
 
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
@@ -45,17 +46,17 @@ export async function normalizeRepositoryArtifactRefInput(
   deps: ArtifactRefInputDeps,
   call: Call,
 ): Promise<ArtifactRefNormalization> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: true, artifactRef: raw, derived: [] };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return ok({ artifactRef: raw, derived: [] });
   const ref = raw as Record<string, unknown>;
   const kindGiven = ref.kind !== undefined;
-  if (kindGiven ? ref.kind !== "repo-blob-at-commit" : !("path" in ref)) return { ok: true, artifactRef: raw, derived: [] };
+  if (kindGiven ? ref.kind !== "repo-blob-at-commit" : !("path" in ref)) return ok({ artifactRef: raw, derived: [] });
 
   const commitInput = ref.commitSha ?? ref.headSha;
   const path = text(ref.path);
   const commitKey = ref.commitSha !== undefined ? "commitSha" : "headSha";
   if (kindGiven && text(ref.repositoryFullName) && path && typeof commitInput === "string" && FULL.test(commitInput.trim())
     && typeof ref.providerBlobId === "string" && FULL.test(ref.providerBlobId.trim())) {
-    return { ok: true, artifactRef: raw, derived: [] };
+    return ok({ artifactRef: raw, derived: [] });
   }
   const derived: string[] = kindGiven ? [] : ["kind"];
   if (!path || commitInput == null) {
@@ -75,12 +76,12 @@ export async function normalizeRepositoryArtifactRefInput(
     return { ok: false, refusal: sourceCommitRefusal(sha, { ...call, label: `artifactRef.${commitKey}`,
       withValue: (value) => ({ ...call.args, artifactRef: { ...callerRef, [commitKey]: value } }) }) };
   }
-  const commitSha = sha.headSha!;
-  if (sha.expanded.length > 0 || commitKey !== "commitSha") derived.push("commitSha");
+  const commitSha = sha.data.headSha!;
+  if (sha.data.expanded.length > 0 || commitKey !== "commitSha") derived.push("commitSha");
 
   const suppliedBlob = text(ref.providerBlobId);
   if (suppliedBlob && FULL.test(suppliedBlob)) {
-    return { ok: true, artifactRef: { kind: "repo-blob-at-commit", repositoryFullName, commitSha, path, providerBlobId: suppliedBlob }, derived };
+    return ok({ artifactRef: { kind: "repo-blob-at-commit", repositoryFullName, commitSha, path, providerBlobId: suppliedBlob }, derived });
   }
   const blob = await deps.readBlobId({ repositoryFullName, commitSha, path });
   const corrected = { path, headSha: commitSha };
@@ -88,10 +89,10 @@ export async function normalizeRepositoryArtifactRefInput(
     return { ok: false, refusal: { success: false, error: blob.code,
       message: `${blob.error} The provider has no ${path} at ${commitSha}: git push the branch so that commit is on the provider (and check the path is repository-relative), then retry: ${withArtifact(call, corrected)}` } };
   }
-  if (suppliedBlob && (!HEX.test(suppliedBlob) || !blob.blobId.toLowerCase().startsWith(suppliedBlob.toLowerCase()))) {
+  if (suppliedBlob && (!HEX.test(suppliedBlob) || !blob.data.blobId.toLowerCase().startsWith(suppliedBlob.toLowerCase()))) {
     return { ok: false, refusal: { success: false, error: "malformed-receipt",
-      message: `providerBlobId "${suppliedBlob}" is not the blob at ${path}@${commitSha} (${blob.blobId}). Omit it and let the server derive it, or retry with: ${withArtifact(call, { ...corrected, providerBlobId: blob.blobId })}` } };
+      message: `providerBlobId "${suppliedBlob}" is not the blob at ${path}@${commitSha} (${blob.data.blobId}). Omit it and let the server derive it, or retry with: ${withArtifact(call, { ...corrected, providerBlobId: blob.data.blobId })}` } };
   }
   derived.push("providerBlobId");
-  return { ok: true, artifactRef: { kind: "repo-blob-at-commit", repositoryFullName, commitSha, path, providerBlobId: blob.blobId }, derived };
+  return ok({ artifactRef: { kind: "repo-blob-at-commit", repositoryFullName, commitSha, path, providerBlobId: blob.data.blobId }, derived });
 }
