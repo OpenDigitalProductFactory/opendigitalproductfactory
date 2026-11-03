@@ -112,7 +112,8 @@ import { spawnSync } from "node:child_process";
 
 test("the actual workflow cannot turn missing publisher configuration into success", () => {
   const source = readFileSync(new URL("../.github/workflows/failure-readiness.yml", import.meta.url), "utf8");
-  const block = source.split("        run: |\n")[1];
+  const step = source.replace(/\r\n/g, "\n").split("- name: Verify platform failure evidence for every source change")[1];
+  const block = step?.split("        run: |\n")[1]?.split(/\n      - /)[0];
   assert.ok(block, "workflow must have an executable verification step");
   const command = block.split("\n").map(line => line.replace(/^          /, "")).join("\n");
   const result = spawnSync(process.env.DPF_TEST_BASH ?? "bash", ["-e", "-c", command], {
