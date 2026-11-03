@@ -352,3 +352,132 @@ clears it before COMMIT: the inner probe must detect it while the old
 post-transaction probe misses it. Source-only counters do not declare this repair
 qualified. Its PostgreSQL, gate, review, canonical release and one full-size
 startup outcomes remain to be recorded.
+
+## November 2 continuation: observable long-table copy progress
+
+This is a design-only continuation of BI-B47BB1D7 in WC-54651F1C, admitted
+by IRD-63778B928D18. The original acceptance obligations above remain verbatim.
+No data-policy decision, implementation admission, reviewer verdict or new
+preview authorization follows from this document.
+
+### Current evidence and design grounding
+
+On current source 49d845230041e48237968659a5a72d0c41e86322,
+`packages/db/src/sanitized-clone.ts` has Git blob
+`93ffff98a1105de57b224270d828f9c472f98e6e`. Its `copySanitizedTable` emits
+`[sanitized-clone-phase]` in `finally` only. The cursor already counts fetched
+rows and batches in `sanitized-clone-batches.ts`; the actual writer lives in
+`sanitized-clone.ts`, not a separate writer module. A long table therefore has
+no interim progress from the phase metric even while awaited batches complete.
+This is source evidence of an observation gap, not a cause for transport timeout.
+
+C108 retained clone start and completion approximately 10m4.931s apart. Its
+QueueTelemetryEvent processed count and independent destination count both
+were 6,266,206. The 223 instrumented phases and 8,452,558 processed rows are not
+an all-table total or original 14.5-million-row scale proof. C108 later lost
+controller authority. CDA8 retained only clone start and partial completed
+phases before EOF; its controller exited1 without readiness. Both reservations
+are terminal. Earlier source/fixture results do not replace those outcomes.
+The existing BI-18A74F86 owner handles controller diagnostics and fencing; this
+continuation does not change that controller or claim its transport cause known.
+
+Reuse the current counters and normal foreground initializer output. Do not add
+a table, service, polling endpoint, progress database or browser refresh timer.
+The existing background-operation observation contract remains authoritative
+if a future separately scoped renderer consumes these events. This slice makes
+the actual long-table operation observable to its current controller/agent;
+it does not claim to deliver a new browser progress component.
+
+### Objective and acceptance
+
+**OBJ-PROGRESS:** A contributor observing an admitted confidential table copy can
+see bounded aggregate forward progress before the table finishes, and can tell
+processed work from estimated remaining work and from durable copy success.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-PROGRESS-1 | OBJ-PROGRESS | Emit a bounded aggregate progress event during a multi-window copy before terminal table completion, at most once per elapsed one-second interval, plus a final completed or failed event. |
+| AC-PROGRESS-2 | OBJ-PROGRESS | Progress contains only table identity, elapsed time and scalar counters; it never retains row arrays, values, SQL arguments, credentials or per-row events. |
+| AC-PROGRESS-3 | OBJ-PROGRESS | Name fetched, processed and committed semantics explicitly. Existing cursor `rows` counts fetched rows and must not become a claimed durable persisted-row count. |
+| AC-PROGRESS-4 | OBJ-PROGRESS | An existing displayed separate-connection table count may be labeled an estimate only. Remaining rows are an estimate with a floor of zero, never snapshot equality or an ETA guarantee; missing estimates remain unknown. |
+| AC-PROGRESS-5 | OBJ-PROGRESS | Preserve the final phase event shape and completed flag for existing observers; intermediate events use a distinct marker and cannot create duplicate terminal phases or readiness. |
+| AC-PROGRESS-6 | OBJ-PROGRESS | Keep one 50-row fetched window, awaited writes, current statement/transaction ceilings, source read-only snapshot, error propagation, cleanup/publication fences and every existing timeout unchanged. |
+
+### Ordered implementation and verification
+
+This continuation is one atomic progress fix under the existing BI. The
+following are internal verification phases, not independently delivered fixes.
+No progress-only receipt closes the item's other policy and full-scale criteria.
+
+1. `FLOW-PROGRESS-RED`: add a deterministic test around the actual confidential
+   caller seam. With an injected monotonic clock and several awaited windows,
+   observe that the current code emits no interim event before table completion.
+   Record the failing behavior and the exact bound source before requesting
+   implementation admission. Tests must not require a live model or preview.
+2. `CLONE-PROGRESS`: extend the existing copy instrumentation with an optional
+   scalar-only observer at an awaited window boundary. Compose the callback at
+   the caller, after a successful awaited write, and throttle by the injected
+   monotonic clock without an interval/timer. Do not retain payload windows or
+   fetch ahead. A synchronous logging failure must not masquerade as completed
+   clone publication; specify and test its error behavior explicitly.
+3. `CLONE-COUNT-SEMANTICS`: pass the already obtained displayed count as an
+   optional estimate; do not add source COUNT queries or touch the held cursor
+   snapshot. For audit tables use the selected limit as an estimate. Report
+   observed processed rows separately from approximate remaining rows; allow
+   observed work to exceed the estimate without hiding rows or moving backwards.
+   Do not report committed counts until a real transaction-commit observation
+   exists; this slice may omit that field instead of guessing.
+4. `VC-PROGRESS-UNIT`: prove pre-completion emission, one-second throttling,
+   finite/nondecreasing counters, empty/small copies, unknown and stale estimates,
+   final success/failure, distinct marker compatibility, no payload retention,
+   and no extra reads/writes. Extend existing clone/cursor tests rather than
+   creating a duplicate copy implementation. Run the full related clone corpus
+   and both DB typechecks once compile readiness is established.
+5. `VC-PROGRESS-PG`: on normally admitted shared PostgreSQL, exercise the actual
+   writer and compare identical persisted ordered values, duplicate winners and
+   query/transaction bounds with observation enabled and disabled. Inject a
+   later fetch/write/commit failure and prove the existing owner resets the
+   destination and publishes no partial ready target. Retain the existing cold,
+   warm and positive-control memory checks; no ceiling is raised.
+6. `VC-PROGRESS-LIVE`: after protected delivery and a containing canonical
+   release, coordinate one normally admitted next attempt with the sole preview
+   owner. Retain interim aggregate progress, final phase/raw hashes, actual
+   source/image/module/lease identities, elapsed time, separately measured
+   memory, initializer/controller outcomes and actual readiness. An unchanged
+   terminal failure does not permit replay. Browser-route acceptance remains
+   separately owned and requires actual served evidence, not log success.
+
+### Scope, prerequisites and rollback
+
+Proposed runtime paths are the existing clone caller, cursor/writer seam and
+colocated tests; any helper must first be checked against existing substrate.
+The current claim admits editing this design only. Expand exact path claims,
+consume the resulting impact contract, record immutable coverage and satisfy
+current native research/implementation admission before code changes. The
+present worktree is source-only: no pnpm, Prisma, typecheck or Vitest result is
+claimed. Node-only design checks are not runtime qualification.
+
+Doc impact currently names the derived doc index: check
+`node scripts/gen-doc-index.mjs --check`, and claim its exact generated path
+before any regeneration. All source impact tests and guards belong in the
+updated contract before Red. Runtime shared gates, release and preview admission
+remain under the canonical coordinator; this design starts none of them.
+
+Rollback is a normal source revert of the progress extension and governed
+release. No migration, source-data deletion, retention change, heap increase,
+new credential, lease bypass, provider activation or longer timeout exists.
+The original data-owner policy, original-scale time/memory and complete served
+acceptance remain open until their own evidence and decisions exist.
+
+### Existing peer-demand overlap
+
+Exact native read of BI-8F70BBA5 confirms the same original preview-progress
+and expected-remaining-work obligations and the peer-demand/federated origin.
+It has no active Workroom on this read. It is a read-only peer-origin demand,
+not a second implementation assignment or permission to modify that record.
+Keep local implementation/evidence on BI-B47BB1D7 and reconcile delivery through
+the existing same-organization work synchronization. This is a bounded exact
+record check, not a claim that all backlog work was searched. The existing
+`2026-10-11-external-client-verification.md` plan remains the served-route and
+fixture verification context; its browser coverage is not replaced by progress
+log observations.
