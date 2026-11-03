@@ -101,6 +101,15 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.affectedTests, ["scripts/ci-policy-guards.test.mjs"]);
   });
 
+  it("maps the evidence policy to its planner conformance test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["config/ci-evidence-policy.json"],
+      knownTests: ["scripts/lib/ci-evidence-plan.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/lib/ci-evidence-plan.test.mjs"]);
+    assert.equal(plan.escalations.some((entry) => entry.code.startsWith("unmapped")), false);
+  });
+
   it("maps the installed published-correction guard to its PR Health Logic test", () => {
     const plan = createEvidencePlan(input({
       changedFiles: ["packages/dpf-skill-pack/hooks/lib/published-correction.mjs"],

@@ -132,6 +132,7 @@ function testStem(path) {
 // entrypoint rather than under lib/. Keep that relationship declarative so a
 // published correction can derive it without an operator-supplied map.
 export const RELATED_TESTS_BY_SOURCE = Object.freeze({
+  "config/ci-evidence-policy.json": ["scripts/lib/ci-evidence-plan.test.mjs"],
   "scripts/lib/ci-policy-guards.mjs": ["scripts/ci-policy-guards.test.mjs"],
   "packages/dpf-skill-pack/hooks/lib/published-correction.mjs": ["scripts/published-correction.test.mjs"],
 });
