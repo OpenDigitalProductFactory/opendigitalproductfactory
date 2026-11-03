@@ -440,6 +440,14 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tool,
       agentGrantAllowed,
     );
+    if (authorityGate.outcome === "not-admitted") {
+      const result = authorityGate.result;
+      const audit = await writeAudit({ toolName: args.toolName, rawParams: args.rawParams,
+        result, userId: args.userId, source: args.source, context: args.context, durationMs: null });
+      // This call observed non-admission. It spent no approval and executed no
+      // command, so do not fabricate a consequential execution receipt.
+      return audit?.id ? { ...result, governance: { toolExecutionId: audit.id } } : result;
+    }
     if (authorityGate.outcome === "settled-command") return authorityGate.result;
     if (authorityGate.outcome === "settled") return settledApprovalResult(args.toolName, authorityGate);
     if (authorityGate.outcome === "reject") {
