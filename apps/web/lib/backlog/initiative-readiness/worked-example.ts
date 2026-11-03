@@ -11,7 +11,7 @@ import { workedCall } from "@/lib/work-capsules/source-commit-resolution";
 export function initiativeWorkedExample(toolName: string, lane: InitiativeReadinessLane): string {
   const gate = lane.gates.includes("research") ? "research" : lane.gates[0];
   return workedCall(toolName, {
-    itemId: "BI-1A2B3C4D",
+    itemId: "BI-XXXXXXXX",
     gate,
     decision: "pass",
     artifactRef: { path: "docs/superpowers/specs/2026-10-28-example-design.md", headSha: "<pushed head, full or 7+ character prefix>" },

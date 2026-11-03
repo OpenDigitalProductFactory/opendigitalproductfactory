@@ -167,7 +167,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "adopt_worktree",
-    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history. Worked example: adopt_worktree({\"title\":\"Fix short-SHA refusals\",\"objective\":\"Tools resolve short SHAs\",\"repositoryFullName\":\"OpenDigitalProductFactory/opendigitalproductfactory\",\"headBranch\":\"fix/short-sha\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"backlogItemId\":\"BI-1A2B3C4D\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"sessionRef\":\"<your session id>\"}).",
+    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history. Worked example: adopt_worktree({\"title\":\"Fix short-SHA refusals\",\"objective\":\"Tools resolve short SHAs\",\"repositoryFullName\":\"OpenDigitalProductFactory/opendigitalproductfactory\",\"headBranch\":\"fix/short-sha\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"backlogItemId\":\"BI-XXXXXXXX\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"sessionRef\":\"<your session id>\"}).",
     inputSchema: {
       type: "object",
       properties: {
@@ -192,7 +192,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason. Worked example: claim_backlog_item_for_work({\"itemId\":\"BI-1A2B3C4D\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"branchName\":\"fix/short-sha\",\"provider\":\"claude\",\"sessionRef\":\"<your session id>\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"workIntent\":\"design\"}).",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason. Worked example: claim_backlog_item_for_work({\"itemId\":\"BI-XXXXXXXX\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"branchName\":\"fix/short-sha\",\"provider\":\"claude\",\"sessionRef\":\"<your session id>\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"workIntent\":\"design\"}).",
     inputSchema: {
       type: "object",
       properties: {
