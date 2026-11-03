@@ -47,7 +47,7 @@ function executionEvidence(attempts: RoutingReceipt["attempts"], outcomes: Routi
 /** Allowlist only: never spread decisions, adapter rows, JSON traces or vendor payloads. */
 export function projectRoutingManagement(input: {
   decisions: Array<RoutingDecisionSourceRow & { traceId: string | null; inferenceDataScreenReceipt?: unknown }>;
-  attempts: Array<Omit<RoutingEvidenceAdapterRunRow, "estimatedCostUsd"> & { estimatedCostUsd: unknown; quotaPoolConsumed?: string | null; userAccepted?: boolean | null; errorClass?: string | null; httpStatus?: number | null }>;
+  attempts: Array<Omit<RoutingEvidenceAdapterRunRow, "estimatedCostUsd"> & { estimatedCostUsd: unknown; quotaPoolConsumed?: string | null; userAccepted?: boolean | null; feedbackSource?: "human" | "agent" | null; feedbackPrincipalId?: string | null; agentMessageId?: string | null; errorClass?: string | null; httpStatus?: number | null }>;
   outcomes: RoutingEvidenceOutcomeRow[];
   usage: RoutingEvidenceTokenUsageRow[];
   models: RoutingManagementData["models"];
@@ -73,6 +73,8 @@ export function projectRoutingManagement(input: {
       status: ["success", "refusal", "error", "timeout", "cancelled", "policy-block"].includes(a.status) ? a.status : "unknown",
       startedAt: a.startedAt.toISOString(), durationMs: finite(a.durationMs), estimatedCostUsd: finite(a.estimatedCostUsd),
       inputTokens: finite(a.inputTokens), outputTokens: finite(a.outputTokens), feedback: typeof a.userAccepted === "boolean" ? a.userAccepted : null,
+      agentMessageId: a.agentMessageId ?? null,
+      feedbackSource: a.feedbackPrincipalId && (a.feedbackSource === "human" || a.feedbackSource === "agent") ? a.feedbackSource : null,
       hold: a.status === "policy-block" ? "policy" as const : a.status === "success" ? null : routingHold(`${a.errorClass ?? ""} ${a.httpStatus ?? ""}`),
     }));
     const exclusions = [...records(d.excludedTrace), ...candidates.filter(c => c.excluded === true)].map(c => ({

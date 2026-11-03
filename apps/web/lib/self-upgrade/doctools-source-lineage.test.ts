@@ -74,17 +74,60 @@ describe("listAncestorReleaseTags (BI-660D77EC)", () => {
 });
 
 describe("loadSourceLineageContext", () => {
+  it.each(["7396fc5fd", "7396fc5fdb0874686c59966f020b8f17a0f0e59c"])("recovers the release of exact bare stamped commit %s", async (stamp) => {
+    const calls: string[][] = [];
+    const context = await loadSourceLineageContext({
+      hostSourcePath: "/host-dpf/",
+      readPlatformVersion: async () => stamp,
+      env: { GHCR_OWNER: "opendigitalproductfactory" },
+      runGit: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: "v2026.10.28-dev-recovery.154-80-g7396fc5fdb0\n", stderr: "" };
+      },
+    });
+    expect(context).toEqual({ imageTag: "v2026.10.28-dev-recovery.154", ghcrOwner: "opendigitalproductfactory", sourceRoot: "/host-dpf" });
+    expect(calls).toEqual([["-C", "/host-dpf", "describe", "--tags", "--always", stamp]]);
+    expect(calls.flat()).not.toContain("HEAD");
+  });
+
+  it.each(["latest", "", null, "7396fc5fd-dirty", "--all"])("does not describe unsupported stamp %s", async (stamp) => {
+    let calls = 0;
+    const context = await loadSourceLineageContext({
+      hostSourcePath: "/host-dpf", readPlatformVersion: async () => stamp, env: { GHCR_OWNER: "o" },
+      runGit: async () => { calls++; throw new Error("must not run"); },
+    });
+    expect(context).toBeNull();
+    expect(calls).toBe(0);
+  });
+
+  it.each(["git-failure", "no-release", "throw"])("does not invent lineage after %s", async (failure) => {
+    let calls = 0;
+    const context = await loadSourceLineageContext({
+      hostSourcePath: "/host-dpf", readPlatformVersion: async () => "7396fc5fd", env: { GHCR_OWNER: "o" },
+      runGit: async () => {
+        calls++;
+        if (failure === "throw") throw new Error("git unavailable");
+        return { code: failure === "git-failure" ? 128 : 0, stdout: "7396fc5fd", stderr: "" };
+      },
+    });
+    expect(context).toBeNull();
+    expect(calls).toBe(1);
+  });
+
   it("combines the baked lineage with the install's registry owner and clone mount", async () => {
+    let calls = 0;
     const context = await loadSourceLineageContext({
       hostSourcePath: "/host-dpf/",
       readPlatformVersion: async () => "2026.09.25-shape-raise.1-35-gbcaa30a8",
       env: { GHCR_OWNER: "opendigitalproductfactory" },
+      runGit: async () => { calls++; throw new Error("direct lineage must not need Git"); },
     });
     expect(context).toEqual({
       imageTag: "v2026.09.25-shape-raise.1",
       ghcrOwner: "opendigitalproductfactory",
       sourceRoot: "/host-dpf",
     });
+    expect(calls).toBe(0);
   });
 
   it("returns null without an owner, a version, or a readable version", async () => {

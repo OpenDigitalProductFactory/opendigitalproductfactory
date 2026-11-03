@@ -22,13 +22,20 @@ export function routingCohorts(rows: RoutingReceipt[]) {
     const key = JSON.stringify([row.task, row.providerId, row.modelId, row.recipeKey, row.evaluator]);
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
-  return [...groups].map(([key, cohort]) => ({
+  return [...groups].map(([key, cohort]) => {
+    const attempts = [...new Map(cohort.flatMap(r => r.attempts.filter(a => a.providerId === r.providerId && a.modelId === r.modelId)).map(a => [a.id, a])).values()];
+    const feedback = attempts.filter(a => a.feedback !== null);
+    return ({
     key, sample: cohort[0], count: cohort.length,
     knownExecution: cohort.filter(r => ["success", "error", "blocked"].includes(r.selectedExecution)).length,
     successes: cohort.filter(r => r.selectedExecution === "success").length,
     evaluated: cohort.filter(r => r.quality !== null).length,
-    feedback: cohort.flatMap(r => r.attempts.filter(a => a.feedback !== null && a.providerId === r.providerId && a.modelId === r.modelId)),
+    feedback,
+    humanFeedback: feedback.filter(a => a.feedbackSource === "human"),
+    agentFeedback: feedback.filter(a => a.feedbackSource === "agent"),
+    unattributedFeedback: feedback.filter(a => !a.feedbackSource),
+    feedbackAttemptCount: attempts.length,
     costCovered: cohort.filter(r => r.costUsd !== null).length,
     recordedCost: cohort.reduce((sum,r) => sum + (r.costUsd ?? 0), 0),
-  }));
+  }); });
 }

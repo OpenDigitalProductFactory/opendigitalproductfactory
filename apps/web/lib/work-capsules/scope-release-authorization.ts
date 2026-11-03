@@ -1,31 +1,25 @@
 import { prisma } from "@dpf/db";
-import { isWorkCapsuleStatus, parseScopeClaims, SCOPE_KIND_SET, type ScopeClaim } from "@/lib/work-capsules";
+import { isWorkCapsuleStatus, parseScopeClaims } from "@/lib/work-capsules";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { isTerminalCapsuleStatus } from "./work-capsule-branch-identity";
 import type { ScopeClaimRoom } from "./scope-claim-lease";
+import { originalScopeReleaseTargetsMatch, parseOriginalScopeReleaseTargets, type ScopeReleaseTarget } from "./scope-release-targets";
 
 export const OWN_SCOPE_RELEASE_REASON = "owned-workroom-scope-release";
-export type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
-export type ScopeReleaseRoom = ScopeClaimRoom & { capsuleId: string; scopeClaims: unknown };
+export type ScopeReleaseInput = ScopeReleaseTarget;
+export type ScopeReleaseRoom = ScopeClaimRoom & { id?: string; capsuleId: string; scopeClaims: unknown };
 const record = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
 /** Same ingress shape as the handler; invalid input never earns refinement. */
 export function parseScopeReleaseClaims(value: unknown): ScopeReleaseInput[] | null {
-  if (!Array.isArray(value) || !value.length) return null;
-  const result: ScopeReleaseInput[] = [];
-  for (const entry of value) {
-    const row = record(entry);
-    if (!row || typeof row.kind !== "string" || !SCOPE_KIND_SET.has(row.kind as ScopeClaim["kind"])
-      || typeof row.value !== "string" || !row.value.trim()) return null;
-    result.push({ kind: row.kind as ScopeClaim["kind"], value: row.value.trim() });
-  }
-  return result;
+  return parseOriginalScopeReleaseTargets(value);
 }
 
 /** Positive proof only. Giving back foreign or unproven authority stays gated. */
 export function classifyScopeRelease(input: {
   room: ScopeReleaseRoom | null; capsuleId: string; claims: ScopeReleaseInput[] | null;
+  expectedRoomId?: string;
   callerPrincipalId: string | null; now: Date;
 }): { consequence: "authority" | null; reason: string } {
   const authority = (reason: string) => ({ consequence: "authority" as const, reason });
@@ -34,6 +28,7 @@ export function classifyScopeRelease(input: {
   if (!callerPrincipalId || !claims?.length) return authority("scope-release-identity-unproven");
   if (!room || !isWorkCapsuleStatus(room.status) || room.capsuleId !== input.capsuleId || room.archivedAt != null
     || isTerminalCapsuleStatus(room.status)) return authority("scope-release-room-unavailable");
+  if (!originalScopeReleaseTargetsMatch(room, input.expectedRoomId, claims)) return authority("scope-release-target-unproven");
   if (room.leaseHolderPrincipalId !== callerPrincipalId || !room.leaseExpiresAt
     || !(room.leaseExpiresAt.getTime() > now.getTime())) return authority("scope-release-lease-unproven");
   if (!Array.isArray(room.scopeClaims)) return authority("scope-release-ownership-unproven");

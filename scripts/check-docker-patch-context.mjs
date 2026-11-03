@@ -29,7 +29,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStages, isDockerignored } from "./lib/docker-stage-graph.mjs";
 export { parseStages, isDockerignored } from "./lib/docker-stage-graph.mjs";
-import { checkEdgeWorkspaceContext } from "./check-docker-workspace-context.mjs";
+import { checkEdgeWorkspaceContext, checkFileDependencyContext } from "./check-docker-workspace-context.mjs";
 
 const REPO_ROOT = process.cwd();
 
@@ -284,9 +284,10 @@ if (isMain) {
   const result = checkPatchContext();
   const frozen = checkFrozenLockfile();
   const workspace = checkEdgeWorkspaceContext();
-  if (!result.ok || !frozen.ok || !workspace.ok) {
+  const archives = checkFileDependencyContext(REPO_ROOT, ROOT_CONTEXT_DOCKERFILES);
+  if (!result.ok || !frozen.ok || !workspace.ok || !archives.ok) {
     console.error("Docker Patch Context Guard: FAIL\n");
-    console.error([...result.problems, ...frozen.problems, ...workspace.problems].map((p) => `  - ${p}`).join("\n"));
+    console.error([...result.problems, ...frozen.problems, ...workspace.problems, ...archives.problems].map((p) => `  - ${p}`).join("\n"));
     process.exit(1);
   }
   console.log(

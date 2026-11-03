@@ -166,6 +166,7 @@ model AccountInvite {
   usedBy    String?
   createdAt DateTime        @default(now())
   account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
   @@index([accountId])
 }
 
@@ -225,6 +226,7 @@ model TeamMembership {
 }
 
 model Principal {
+  responseFeedbackAttempts            AdapterRunTelemetry[]               @relation("ResponseFeedbackPrincipal")
   investmentAttempts                  AdapterRunTelemetry[]               @relation("InvestmentAttemptPrincipal")
   id                                  String                              @id @default(cuid())
   principalId                         String                              @unique
@@ -389,7 +391,6 @@ model AuthorityBinding {
 
   @@index([oauthUserId, oauthClientId, oauthPurpose, status])
   @@index([oauthClientId])
-
   @@index([scopeType, status])
   @@index([resourceType, resourceRef])
   @@index([appliedAgentId])
@@ -887,12 +888,11 @@ model McpApiToken {
   authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
   oauthFamilyKey String?
 
-  @@index([authorityBindingId])
-  @@index([oauthFamilyKey, revokedAt])
-
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   oauthClient OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: SetNull)
 
+  @@index([authorityBindingId])
+  @@index([oauthFamilyKey, revokedAt])
   @@index([userId, revokedAt])
   @@index([tokenHash])
   // Lookup: "all active ephemeral tokens for build X" — used by the
@@ -985,8 +985,6 @@ model OAuthAuthorizationCode {
   userId              String
   authorityBindingId  String?
   authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
-
-  @@index([authorityBindingId])
   redirectUri         String
   codeChallenge       String
   codeChallengeMethod String    @default("S256")
@@ -1000,6 +998,7 @@ model OAuthAuthorizationCode {
   client OAuthClient @relation(fields: [oauthClientId], references: [id], onDelete: Cascade)
   user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([authorityBindingId])
   @@index([oauthClientId])
   @@index([userId])
   @@index([expiresAt])
@@ -1019,9 +1018,6 @@ model OAuthRefreshToken {
   authorityBindingId String?
   authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
   oauthFamilyKey String?
-
-  @@index([authorityBindingId])
-  @@index([oauthFamilyKey, revokedAt])
   agentId       String?
   resource      String
   scopes        String[]  @default([])
@@ -1040,6 +1036,8 @@ model OAuthRefreshToken {
   rotatedTo   OAuthRefreshToken?  @relation("OAuthRefreshRotation", fields: [rotatedToId], references: [id], onDelete: SetNull)
   rotatedFrom OAuthRefreshToken[] @relation("OAuthRefreshRotation")
 
+  @@index([authorityBindingId])
+  @@index([oauthFamilyKey, revokedAt])
   @@index([oauthClientId, revokedAt])
   @@index([userId, revokedAt])
   @@index([agentId])

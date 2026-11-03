@@ -148,7 +148,8 @@ test("analyzer rejects a new reverse dependency with an actionable edge key", as
   });
 });
 
-test("a documented exception freezes existing debt and becomes stale when the edge is removed", async () => {
+test("a documented exception freezes existing debt and becomes stale when the edge is removed", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-08-01T00:00:00Z") });
   const exception = {
     key: "apps/web/lib/domain/leak.ts|@/lib/edge/handler|edge",
     owner: "platform-domain",

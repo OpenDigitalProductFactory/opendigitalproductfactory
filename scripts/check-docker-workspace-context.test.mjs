@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { findMissingWorkspaceContext, checkEdgeWorkspaceContext } from "./check-docker-workspace-context.mjs";
+import { findMissingWorkspaceContext, checkEdgeWorkspaceContext, findMissingFileContext, checkFileDependencyContext } from "./check-docker-workspace-context.mjs";
 import { collectProdRoots, collectWorkspaceClosure } from "./sbom/runtime-surface.mjs";
 const graph = {
   "services/app": { prod: [{name:"a", value:"link:../../packages/a"}], dev: [] },
@@ -51,4 +51,29 @@ test("missing direct input is reported", () => {
 });
 test("unresolved workspace protocol fails closed", () => {
   assert.throws(() => collectWorkspaceClosure({a:{prod:[{name:"b",value:"workspace:*"}],dev:[]}},["a"]), /Unresolved workspace/);
+});
+
+const archive = "packages/validators/vendor/foundation.tgz";
+const archivePrefix = "FROM node AS build\nWORKDIR /app\n";
+test("filtered installs still need the root file archive before install", () => {
+  assert.match(findMissingFileContext(archivePrefix + install, [archive])[0], /foundation.tgz/);
+});
+test("late or wrong-destination archive copies do not satisfy transport", () => {
+  assert.equal(findMissingFileContext(archivePrefix + install + "COPY packages/validators/vendor ./packages/validators/vendor\n", [archive]).length, 1);
+  assert.equal(findMissingFileContext(archivePrefix + "COPY packages/validators/vendor ./wrong\n" + install, [archive]).length, 1);
+});
+test("archive copies are inherited only through the same stage filesystem", () => {
+  const copied = archivePrefix + "COPY packages/validators/vendor ./packages/validators/vendor\n";
+  assert.deepEqual(findMissingFileContext(copied + "FROM build AS child\n" + install, [archive]), []);
+  assert.equal(findMissingFileContext(copied + "FROM node AS child\nWORKDIR /app\n" + install, [archive]).length, 1);
+});
+test("archive dockerignore and exact destination remain binding", () => {
+  const copied = archivePrefix + "COPY " + archive + " ./packages/validators/vendor/\n" + install;
+  assert.deepEqual(findMissingFileContext(copied, [archive]), []);
+  assert.equal(findMissingFileContext(copied, [archive], "**/*.tgz").length, 1);
+});
+test("all canonical filtered images carry the current root file archives", () => {
+  const result = checkFileDependencyContext(fileURLToPath(new URL("../", import.meta.url)),
+    ["Dockerfile", "services/edge-node/Dockerfile", "services/adp/Dockerfile", "services/integration-test-harness/Dockerfile"]);
+  assert.equal(result.ok, true, result.problems.join("\n"));
 });

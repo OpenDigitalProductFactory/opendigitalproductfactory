@@ -8,6 +8,7 @@
 // See docs/superpowers/specs/2026-09-16-ecosystem-issue-intake-and-arbitration-design.md §6.1.
 
 import { isRecord } from "@/lib/shared/coerce";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 
 import type { BacklogIngestResult, IngestBacklogStore } from "@/lib/operate/backlog-ingest";
 
@@ -23,6 +24,9 @@ export interface OriginReconciliation {
   fingerprint: string;
   /** Legacy unqualified origin id to dual-read (the bare issue number). */
   legacyId?: string;
+  /** Latest source text, retained as evidence without overwriting curated work. */
+  title?: string;
+  body?: string;
 }
 
 /**
@@ -74,7 +78,8 @@ function storedIssueRepositories(texts: Array<string | null | undefined>, issueN
 
 /** What an intake_origin payload records about the source at that moment. */
 export function sourceSnapshot(r: OriginReconciliation): Record<string, string | null> {
-  return { repository: r.repository, url: r.sourceUrl, state: r.state, fingerprint: r.fingerprint };
+  return { repository: r.repository, url: r.sourceUrl, state: r.state, fingerprint: r.fingerprint,
+    ...(r.title !== undefined ? { title: r.title } : {}), ...(r.body !== undefined ? { body: r.body } : {}) };
 }
 
 type CandidateRow = { id?: string; itemId: string; body: string | null; status: string };
@@ -88,7 +93,7 @@ interface OriginHistory {
   urls: string[];
 }
 
-function readOriginHistory(rows: Array<{ payload: unknown }>, qualifiedId: string): OriginHistory {
+function readOriginHistory(rows: Array<{ payload: unknown }>, origin: { kind: string; id: string }, legacyId?: string): OriginHistory {
   let latest: OriginHistory["latest"] = null;
   let mapped = false;
   const urls: string[] = [];
@@ -96,6 +101,9 @@ function readOriginHistory(rows: Array<{ payload: unknown }>, qualifiedId: strin
   for (const row of rows) {
     const payload = isRecord(row.payload) ? row.payload : null;
     if (!payload) continue;
+    const recordedOrigin = isRecord(payload.origin) ? payload.origin : null;
+    if (!recordedOrigin || recordedOrigin.kind !== origin.kind
+        || (recordedOrigin.id !== origin.id && (legacyId === undefined || recordedOrigin.id !== legacyId))) continue;
     const source = isRecord(payload.source) ? payload.source : null;
     if (source) {
       if (typeof source.url === "string") urls.push(source.url);
@@ -105,7 +113,7 @@ function readOriginHistory(rows: Array<{ payload: unknown }>, qualifiedId: strin
     }
     const mapping = isRecord(payload.mapping) ? payload.mapping : null;
     const to = mapping && isRecord(mapping.to) ? mapping.to : null;
-    if (to && to.id === qualifiedId) mapped = true;
+    if (to && to.id === origin.id) mapped = true;
   }
   return { latest, mapped, urls };
 }
@@ -145,11 +153,11 @@ export async function reconcileOrigin(
       select: { payload: true },
       orderBy: { recordedAt: "desc" },
     }),
-    origin.id,
+    origin, reconcile.legacyId,
   );
 
   const qualifiedMarker = backlogOriginMarker(origin.kind, origin.id);
-  const qualified = (await findItems({ where: { body: { contains: qualifiedMarker } }, select })) as CandidateRow[];
+  const qualified = (await findItems({ where: { body: { contains: qualifiedMarker }, AND: [ownedRowBodyWhere()] }, select })) as CandidateRow[];
 
   const accepted = new Map<string, { row: CandidateRow; viaLegacy: boolean }>();
   for (const row of qualified) if (row.id) accepted.set(row.id, { row, viaLegacy: false });
@@ -158,7 +166,7 @@ export async function reconcileOrigin(
   const repository = reconcile.repository.toLowerCase();
   if (reconcile.legacyId) {
     const legacyMarker = backlogOriginMarker(origin.kind, reconcile.legacyId);
-    const legacy = (await findItems({ where: { body: { contains: legacyMarker } }, select })) as CandidateRow[];
+    const legacy = (await findItems({ where: { body: { contains: legacyMarker }, AND: [ownedRowBodyWhere()] }, select })) as CandidateRow[];
     for (const row of legacy) {
       if (!row.id || accepted.has(row.id)) continue;
       const repos = storedIssueRepositories([row.body, ...(await history(row.id)).urls], reconcile.legacyId);
@@ -210,6 +218,14 @@ export async function reconcileOrigin(
   }
 
   let outcome: BacklogIngestOutcome = "unchanged";
+  if (!past.latest && !match.viaLegacy) {
+    await store.backlogItemActivity.create({ data: {
+      backlogItemId: itemCuid, kind: "intake_origin",
+      summary: `Source baseline: ${origin.kind} ${origin.id}`,
+      payload: { origin, created: false, createdBy: "backlog-ingest", source: snapshot },
+      ...recordedBy,
+    } });
+  }
   if (past.latest && past.latest.fingerprint !== reconcile.fingerprint) {
     const kind = changeKind(past.latest.state, reconcile.state);
     await store.backlogItemActivity.create({
