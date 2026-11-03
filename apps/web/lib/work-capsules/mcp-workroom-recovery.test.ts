@@ -38,6 +38,7 @@ function reviewCandidate() {
 let candidates: Array<Record<string, unknown>>;
 let identities: Array<Record<string, unknown>>;
 let candidateFailure: Error | null;
+let receiptFailure: Error | null;
 
 describe("get_workroom native review readback", () => {
   beforeEach(() => {
@@ -53,6 +54,7 @@ describe("get_workroom native review readback", () => {
     db.backlogItem.findMany.mockResolvedValue([]);
     candidates = [reviewCandidate()];
     candidateFailure = null;
+    receiptFailure = null;
     identities = [{ rowId: "review-row", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2,
       requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
       requesterAgentId: "AGT-EXT-CODEX", sourceHeadSha: room.headSha, currentHeadSha: room.headSha,
@@ -62,6 +64,10 @@ describe("get_workroom native review readback", () => {
       if (sql.includes("candidates AS MATERIALIZED")) {
         if (candidateFailure) throw candidateFailure;
         return candidates;
+      }
+      if (sql.includes('FROM jsonb_to_recordset(') && sql.includes('"BacklogItemActivity"')) {
+        if (receiptFailure) throw receiptFailure;
+        return [];
       }
       if (sql.includes('AS "rowId"')) return identities;
       throw new Error("Unexpected review query");
@@ -302,7 +308,13 @@ describe("get_workroom native review readback", () => {
       { id: "plan-original", taskRunId: "TR-PLAN", gate: "plan-review", digest: "e".repeat(64),
         artifactVersion: "c".repeat(40), blob: "a".repeat(40), path: "docs/superpowers/plans/existing.md" },
     ];
-    for (const truncated of [false, true]) {
+    for (const { truncated, receiptUnavailable } of [
+      { truncated: false, receiptUnavailable: false },
+      { truncated: true, receiptUnavailable: false },
+      { truncated: false, receiptUnavailable: true },
+    ]) {
+      receiptFailure = receiptUnavailable ? new Error("private receipt read unavailable") : null;
+      const incomplete = truncated || receiptUnavailable;
       candidates = originals.map((original, index) => ({ ...reviewCandidate(),
         id: original.id, taskRunId: original.taskRunId, reviewKind: "initiative-review", candidatePosition: index + 1,
         requestDigest: original.digest, metadataTrigger: "external-mcp", roomBacklogItemId: "BI-1",
@@ -319,8 +331,8 @@ describe("get_workroom native review readback", () => {
       const formatted = clampToolResultForModel(result, { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP });
       expect(formatted.truncated).toBe(false);
       const readback = JSON.parse(formatted.text.slice(formatted.text.indexOf("\n") + 1));
-      expect(readback.capsule.recovery).toMatchObject({ state: truncated ? "unknown" : "working",
-        reviewerExecution: null, reviewerExecutionsTruncated: truncated });
+      expect(readback.capsule.recovery).toMatchObject({ state: incomplete ? "unknown" : "working",
+        reviewerExecution: null, reviewerExecutionsTruncated: incomplete });
       expect(readback.capsule.recovery.reviewerExecutions).toHaveLength(2);
       expect(readback.capsule.recovery.reviewerExecutions).toMatchObject(originals.map(original => ({
         taskRunId: original.taskRunId, reviewKind: "initiative-review", reviewGate: original.gate,
@@ -332,8 +344,10 @@ describe("get_workroom native review readback", () => {
           requiredUserId: "requester-1" },
       })));
     }
-    expect(db.$queryRaw).toHaveBeenCalledTimes(2);
-    expect(db.$queryRaw.mock.calls.every(([strings]) => strings.join("").includes("candidates AS MATERIALIZED"))).toBe(true);
+    expect(db.$queryRaw).toHaveBeenCalledTimes(6);
+    const queries = db.$queryRaw.mock.calls.map(([strings]) => strings.join(""));
+    expect(queries.filter(sql => sql.includes("candidates AS MATERIALIZED"))).toHaveLength(3);
+    expect(queries.filter(sql => sql.includes('FROM jsonb_to_recordset(') && sql.includes('"BacklogItemActivity"'))).toHaveLength(3);
     expect(db.taskRun.findMany).not.toHaveBeenCalled();
   });
 
