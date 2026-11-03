@@ -42,6 +42,13 @@ when its limit was observed, the expected reset and the next recorded check.
 A long-term reset is a forecast: the provider may make capacity available sooner.
 Short waits supplied by the provider still apply.
 
+When a Claude subscription reports its weekly or usage limit with a reset time,
+such as "resets Nov 3 at 10am", DPF records that time and starts routing to the
+account again when the limit resets. You do not need to do anything. DPF keeps
+renewing the account's sign-in while it waits, whatever status the account
+shows, unless you disabled or disconnected it. The Needs-you item for an account
+whose every request fails stays open until a request succeeds again.
+
 For an active install-owned ChatGPT or Codex subscription account, **Check now**
 sends one short synthetic request to the model you select. It never retries the
 original coworker task. A completed check qualifies only that model, account,
