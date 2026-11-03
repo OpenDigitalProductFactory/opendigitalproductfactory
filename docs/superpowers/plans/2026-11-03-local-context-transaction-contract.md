@@ -13,6 +13,18 @@ status: draft
 
 An authorized context change becomes one verified, durable, reversible transaction. Operator changes and boot reconciliation share the same policy and coordinator; routing never advertises more context than DMR verifies.
 
+## Acceptance baseline
+
+- AC-ONE-POLICY: Operator mutation and boot reconciliation use one context transaction and no contradictory above-estimate rules remain.
+- AC-ORDER: Durable intent and routing projection never advance before exact-model DMR readback verifies the requested value.
+- AC-COMMIT: Success leaves PlatformConfig, verified DMR service, and every matching local ModelProfile consistent.
+- AC-ROLLBACK: Every failure boundary either restores the captured state or returns recovery-required while routing to the lower verified bound.
+- AC-RECONCILE: Restart preserves a committed operator choice and repairs drift without inventing or silently clamping intent.
+- AC-DIAGNOSTICS: Operator evidence distinguishes requested, estimated, model maximum, live, committed, qualified, and rollback values.
+- AC-AUTHORITY: Existing manage-providers authorization remains; sensitivity, grants, coworker floors, routing admission, and deadlines do not change.
+- AC-QUALIFICATION: Source tests and DMR configuration are never presented as live capacity or semantic-review qualification.
+- AC-UX: Any changed operator surface passes independent desktop, narrow, keyboard, focus, announcement, contrast, and recovery review.
+
 ## Atomic backlog coverage
 
 This plan is atomic under BI-041CD15B. Policy extraction alone leaves split writes; transaction code without reconciliation leaves restart drift; reconciliation without rollback can still misroute work. The deliverables therefore ship together.
