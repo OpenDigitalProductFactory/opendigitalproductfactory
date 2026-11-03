@@ -286,18 +286,17 @@ describe("backlog-steward-watch composes the existing backlog and Workroom subst
     expect(shape?.stages.map((stage) => stage.key)).toEqual(["observe", "reconcile", "decide"]);
     expect(shape?.stages[0]?.tools).toEqual([
       "sweep_duplicate_demand",
-      "list_backlog_items",
       "list_epics",
       "query_backlog",
     ]);
     expect(shape?.stages[1]?.tools).toEqual([
       "find_duplicate_candidates",
-      "link_backlog_item_to_epic",
-      "merge_backlog_items",
-      "record_workroom_evidence",
+      "query_backlog",
     ]);
     expect(shape?.stages[2]?.accountablePrincipalRef).toBe("role:backlog-owner");
     expect(shape?.stages[2]?.advance.kind).toBe("governed-decision");
+    expect(shape?.stages[2]?.advance).toMatchObject({ decisionScope: "backlog-admission" });
     expect(shape?.description).toMatch(/same-organization work sync/i);
+    expect(shape?.description).toMatch(/standing watch remains advisory/i);
   });
 });
