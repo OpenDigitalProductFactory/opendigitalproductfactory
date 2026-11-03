@@ -12,8 +12,8 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import {
-  AgentAllowanceExhaustedError, checkAgentBudget, checkAgentBudgetFromRegistry, isPaidPerTokenProvider,
-  isZeroMarginalPricing, nextAllowanceReset, writeBudgetEvent,
+  AgentAllowanceExhaustedError, checkAgentBudget, checkAgentBudgetFromRegistry,
+  classifyProviderSpend, isZeroMarginalPricing, nextAllowanceReset, providerSpendClass, writeBudgetEvent,
 } from "./budget-gate";
 import { prisma } from "@dpf/db";
 
@@ -93,11 +93,14 @@ describe("only real spend counts", () => {
 
   it("decides by the recorded price, never by the provider's name", async () => {
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 } as never);
-    expect(await isPaidPerTokenProvider("anthropic-sub")).toBe(false);
+    expect(await classifyProviderSpend("anthropic-sub")).toBe("free");
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: 3, outputPricePerMToken: 15 } as never);
-    expect(await isPaidPerTokenProvider("anthropic")).toBe(true);
+    expect(await classifyProviderSpend("anthropic")).toBe("priced");
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: null, outputPricePerMToken: null } as never);
+    expect(await classifyProviderSpend("openrouter")).toBe("unpriced");
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce(null);
-    expect(await isPaidPerTokenProvider("unregistered")).toBe(true);
+    expect(await classifyProviderSpend("unregistered")).toBe("unpriced");
+    expect(providerSpendClass({ costModel: "compute", inputPricePerMToken: null, outputPricePerMToken: null })).toBe("free");
   });
 
   it("excludes free providers' usage from the agent's daily cap", async () => {

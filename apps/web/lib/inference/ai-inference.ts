@@ -331,16 +331,17 @@ export async function callProvider(
   const capacityAccount = selectedAccount ? capacityAccountIdentity(selectedAccount) : undefined;
   const localProvider = needsModelConnection && (!selectedAccount || isLocalProviderId(providerId)) ? await readEnabledRoutingProvider(providerId) : null;
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
-  // Only paid, per-token calls are governed: a local engine or a flat-rate
-  // subscription costs nothing extra, so it is never refused here
-  // (BI-F3B6713F). The owner-set installation allowance decides when recorded;
-  // the registry per-agent cap is the fallback. A used allowance throws
+  // Only paid calls are governed: a local engine or a flat-rate subscription
+  // costs nothing extra, so it is never refused here (BI-F3B6713F). The
+  // owner-set installation allowance decides when recorded; the registry
+  // per-agent cap is the fallback. A paid provider with no recorded price is
+  // charged an estimate in logTokenUsage, so the allowance sees it. A used allowance throws
   // AgentAllowanceExhaustedError, which routing skips without penalising the
   // endpoint. Any other gate failure is swallowed: the gate never breaks inference.
   if (attribution?.agentId && !reassessment) {
     try {
-      const { AgentAllowanceExhaustedError, checkAgentBudgetFromRegistry, isPaidPerTokenProvider, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
-      const budget = await isPaidPerTokenProvider(providerId) ? await checkAgentBudgetFromRegistry(attribution.agentId) : null;
+      const { AgentAllowanceExhaustedError, checkAgentBudgetFromRegistry, classifyProviderSpend, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+      const budget = await classifyProviderSpend(providerId) === "free" ? null : await checkAgentBudgetFromRegistry(attribution.agentId);
 
       if (budget?.status === "rejected") {
         void writeBudgetEvent({
@@ -603,6 +604,26 @@ export async function callProvider(
 
 // ─── Token Usage Logging ─────────────────────────────────────────────────────
 
+/**
+ * A paid provider with no recorded price is never free (BI-F3B6713F). Estimate
+ * from what the install knows: the model's profiled price, else the platform's
+ * conservative $3/MTok blended rate, so the owner's paid AI allowance sees it.
+ */
+const ESTIMATED_BLENDED_PER_MTOKEN = 3;
+
+async function estimatedTokenRates(providerId: string, modelId: string | undefined): Promise<{ input: number; output: number }> {
+  if (modelId) {
+    const profile = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId, modelId } },
+      select: { inputPricePerMToken: true, outputPricePerMToken: true },
+    }).catch(() => null);
+    if (profile?.inputPricePerMToken != null && profile.outputPricePerMToken != null) {
+      return { input: profile.inputPricePerMToken, output: profile.outputPricePerMToken };
+    }
+  }
+  return { input: ESTIMATED_BLENDED_PER_MTOKEN, output: ESTIMATED_BLENDED_PER_MTOKEN };
+}
+
 export async function logTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
@@ -613,7 +634,10 @@ export async function logTokenUsage(input: {
   inputTokens: number;
   outputTokens: number;
   inferenceMs?: number;
+  /** Used only to estimate a cost when the provider has no recorded price; not stored. */
+  modelId?: string;
 }): Promise<void> {
+  const { modelId, ...row } = input;
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: input.providerId } });
 
   let costUsd = 0;
@@ -625,12 +649,10 @@ export async function logTokenUsage(input: {
         provider.electricityRateKwh ?? 0.12,
       );
     } else if (provider.costModel === "token") {
-      costUsd = computeTokenCost(
-        input.inputTokens,
-        input.outputTokens,
-        provider.inputPricePerMToken ?? 0,
-        provider.outputPricePerMToken ?? 0,
-      );
+      const rates = provider.inputPricePerMToken != null && provider.outputPricePerMToken != null
+        ? { input: provider.inputPricePerMToken, output: provider.outputPricePerMToken }
+        : await estimatedTokenRates(input.providerId, modelId);
+      costUsd = computeTokenCost(input.inputTokens, input.outputTokens, rates.input, rates.output);
     }
   }
   // Record cost metric for Prometheus
@@ -640,14 +662,14 @@ export async function logTokenUsage(input: {
 
   await prisma.tokenUsage.create({
     data: {
-      traceId:      input.traceId ?? null,
-      agentId:      input.agentId,
-      providerId:   input.providerId,
-      ...(input.providerConnectionId ? { recordedProviderConnectionRef: input.providerConnectionId, quotaScopeKey: input.quotaScopeKey ?? null } : {}),
-      contextKey:   input.contextKey,
-      inputTokens:  input.inputTokens,
-      outputTokens: input.outputTokens,
-      ...(input.inferenceMs !== undefined && { inferenceMs: input.inferenceMs }),
+      traceId:      row.traceId ?? null,
+      agentId:      row.agentId,
+      providerId:   row.providerId,
+      ...(row.providerConnectionId ? { recordedProviderConnectionRef: row.providerConnectionId, quotaScopeKey: row.quotaScopeKey ?? null } : {}),
+      contextKey:   row.contextKey,
+      inputTokens:  row.inputTokens,
+      outputTokens: row.outputTokens,
+      ...(row.inferenceMs !== undefined && { inferenceMs: row.inferenceMs }),
       costUsd,
     },
   });

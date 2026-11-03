@@ -116,7 +116,7 @@ export type BudgetStatus =
   | "ok"          // < 80% of daily limit
   | "warning_80"  // 80–95% — warn in logs, continue normally
   | "warning_95"  // 95–100% — warn + downgrade to routine-tier model if possible
-  | "rejected";   // ≥ 100% — throw InferenceError("billing")
+  | "rejected";   // ≥ 100% — throw AgentAllowanceExhaustedError
 
 export type BudgetCheckResult = {
   status: BudgetStatus;
@@ -183,13 +183,27 @@ async function zeroMarginalProviderIds(database: Pick<Prisma.TransactionClient, 
   return rows.map((row) => row.providerId);
 }
 
-/** True when a call on this provider is real spend that the allowance governs. */
-export async function isPaidPerTokenProvider(providerId: string): Promise<boolean> {
+/**
+ * How a call on a provider is governed. "free": never counted or refused.
+ * "priced": a recorded per-token price, so its spend shows in TokenUsage.costUsd
+ * and the owner's dollar allowance can see it. "unpriced": paid, but with no
+ * recorded price its cost records as $0, so the dollar allowance cannot see it
+ * and the agent's token cap must keep applying.
+ */
+export type ProviderSpendClass = "free" | "priced" | "unpriced";
+
+export function providerSpendClass(pricing: ProviderPricing | null | undefined): ProviderSpendClass {
+  if (isZeroMarginalPricing(pricing)) return "free";
+  return pricing?.costModel === "token" && pricing.inputPricePerMToken != null && pricing.outputPricePerMToken != null
+    ? "priced" : "unpriced";
+}
+
+export async function classifyProviderSpend(providerId: string): Promise<ProviderSpendClass> {
   const pricing = await prisma.modelProvider.findUnique({
     where: { providerId },
     select: { costModel: true, inputPricePerMToken: true, outputPricePerMToken: true },
   });
-  return !isZeroMarginalPricing(pricing);
+  return providerSpendClass(pricing);
 }
 
 /** The owner-set installation allowance for paid inference, in USD; null when none is recorded. */
@@ -428,6 +442,13 @@ export async function checkAgentBudgetFromRegistry(
     return null;
   });
   if (allowanceUsd !== null) return checkPaidInferenceAllowance(allowanceUsd);
+  return checkAgentTokenCapFromRegistry(agentId);
+}
+
+/** The agent's registry cap on paid tokens, whatever the owner allowance says. */
+export async function checkAgentTokenCapFromRegistry(
+  agentId: string,
+): Promise<BudgetCheckResult> {
   const dailyLimit = getAgentDailyLimitFromRegistry(agentId);
   if (dailyLimit <= 0) {
     return { status: "ok", actualTokens: 0, limitTokens: 0, ratioPercent: 0 };

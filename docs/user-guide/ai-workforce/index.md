@@ -211,7 +211,7 @@ human action.
 
 ## Paid AI allowance
 
-Only paid AI counts against a daily limit. Local models and flat-rate subscriptions cost nothing extra per call, so they are never limited. A provider counts as paid when its recorded price per token is above zero; one with no price recorded is treated as paid.
+Only paid AI counts against a daily limit. Local models and flat-rate subscriptions cost nothing extra per call, so they are never limited. A provider counts as paid when its recorded price per token is above zero. One with no price recorded is treated as paid, and its cost is estimated from the model's known price, or at $3 per million tokens when that is unknown too. Local models are costed from how long they run.
 
 An owner can set one **Paid AI allowance** for the whole installation in **Admin → Platform Development**, under **Daily limits and the autopilot switches**. It is a dollar amount per day, shared by every coworker, and it resets at 00:00 UTC. Setting it needs the platform and finance permissions and a recorded reason. While no allowance is set, each coworker's built-in daily cap limits its paid use instead.
 
