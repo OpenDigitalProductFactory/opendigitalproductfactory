@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Clean shared-preview job transport repair
 
 Status: author design only; implementation, independent approval, plan coverage,
@@ -66,7 +70,7 @@ spec approval, a funding decision, rollout permission or a production flag flip.
 | AC-2 | OBJ-1, OBJ-2 | An explicitly admitted function/event cohort uses Postgres without Inngest dual-send; unadmitted events and functions fail closed with an actionable reason, while normal production routing remains unchanged. |
 | AC-3 | OBJ-2 | Seeded poison work, production database bindings, stale or foreign leases, cloned-target mode and absent admission all prevent execution before any handler or provider effect. |
 | AC-4 | OBJ-3 | Preview keys are normalized or rejected to retain the dev-portal namespace, actual preview reservations do not pause inference, and real heavy verification reservations still do. |
-| AC-5 | OBJ-1 | Both original build/review.verify and rendition-backfill event paths have actual isolated-target tests demonstrating correct enqueue, one handler result and actionable transport-unavailable recovery without a production key. |
+| AC-5 | OBJ-1 | Both original build/review.verify and rendition-backfill event paths have actual isolated-target tests demonstrating correct enqueue, one bounded handler result and actionable transport-unavailable recovery without a production key; an expected missing-sandbox skip proves delivery only, never successful build verification or conversion. |
 | AC-6 | OBJ-4 | On a source containing the foreground repair, one authorized synthetic Finance request retains request/thread/task identity through capacity hold, automatic continuation, duplicate delivery, saved answer and page reload; exactly one answer persists without owner resubmission. |
 | AC-7 | OBJ-4 | Separate negative cases identify unavailable transport, absent Finance authority and unavailable model without presenting queued work, owner-review state or a rendered page as a coworker result. |
 | AC-8 | OBJ-1, OBJ-2 | Cleanup stops only owned processes, closes the exact reservation through its required native gate, and records failures and unrun checks without changing source or claiming rollout success. |
@@ -90,6 +94,36 @@ fixtures. Admission is derived from that verified host preparation, not from a
 caller-supplied environment flag alone. Revalidate lease/target ownership before
 fixture dispatch. Missing or conflicting bindings are a refusal, never a reset.
 
+The clean startup branch runs immediately after the Node/runtime build gate in
+instrumentation.register, before importing the normal boot-task graph. Its
+complete permitted startup list is: verify clean-target admission; register the
+existing in-memory tool-governance hooks; mirror the platform version into this
+fixture database; start the admitted Postgres worker; start the admission
+watchdog. Return before normal instrumentation continues. No production boot
+reconciler, issue bridge, converter image reconciliation, federation, backup,
+self-upgrade, model placement, provider synchronization, code-graph bootstrap,
+LDAP listener, render backfill or other operational timer runs. Required UI
+baseline data is prepared by the fixture seed, not background convergence.
+Measurement-runtime behavior is relevant prior art, but its flag alone is not
+this boundary: it also skips worker startup and still permits boot writes.
+
+Do not mount the Docker socket, production storage, production credentials or
+host home into the clean portal. Worktree source is read-only to handlers;
+database, logs, temporary files and document storage belong to this attempt's
+disposable target. Converter, sandbox and external-provider access are absent
+from the initial transport probe. An unavailable UI prerequisite is a fixture
+defect to repair explicitly, not grounds to enable the normal boot graph.
+
+Admission is invalidated by lease expiry/revocation, owner/source/image/database
+binding changes or a failed watchdog read. Startup and every process restart
+must revalidate the current persisted binding; a durable JobRun lease supplies
+no preview authority. The worker validates before fan-out, claims, cron ticks,
+handler entry and each new durable step. Loss prevents new work, stops polling,
+notifications and maintenance, and tears down the owned runtime through the
+keeper. Completed durable steps are retained. An already dispatched external
+effect is UNKNOWN until reconciled by its existing owner; invalidation cannot
+promise to undo it or authorize replay. Initial probes have no external effects.
+
 No credentials are copied; operator consent remains necessary for real provider
 access. Synthetic organization/user/coworker fixtures use the existing authority
 path. A role label never stands in for an actual capability grant.
@@ -106,12 +140,35 @@ return a fake event id for unsupported work. Avoid importing and registering all
 production functions as a side effect of selecting Postgres.
 
 Required repair probes include build/review-verification and
-documents/rendition-backfill, backed by harmless synthetic records. A separate
-foreground acceptance cohort includes agent/foreground-work-run and the existing
-bounded automatic reconciliation path from its delivered repair. Resolve the
-exact scheduler dependency before implementation; do not enable every cron to
-obtain one recovery tick. Registrations and schedule selection share one cohort
-contract so an enabled timer cannot dispatch an excluded dependency silently.
+documents/rendition-backfill. Use a fixture build without a sandbox and assert
+the existing terminal result `sandbox or build missing`; prohibit capture,
+finalizeBuildForReview, semantic review, browser-use, dispatchShip and publication.
+This proves the originally broken event transport and handler entry only.
+Rendition backfill runs with an empty fixture document set and no converter
+access. Its existing availability check returns before scanning. Capture the
+attempt-specific `converter unavailable ... nothing swept` log, correlated by
+the supplied reason, alongside the durable handler result; zero processed alone
+does not identify this outcome. It creates no converter/container. Positive
+backfill scanning, build verification and conversion remain unrun workflows.
+
+The finite inventory is:
+
+| Cohort | Function | Trigger | Permitted downstream work |
+| --- | --- | --- | --- |
+| Transport probe | build/review-verification | build/review.verify | Load owned missing-sandbox fixture and return the existing skip result only |
+| Transport probe | documents/rendition-backfill | documents/rendition.backfill-requested | Existing converter-unavailable early return, identified by attempt-specific log and durable result; no scan, generation event or conversion |
+| Foreground, after its separate source is available | agent/foreground-work-run | agent/foreground-work.run | Existing authorized foreground worker on the one retained fixture request |
+| Foreground, after its separate source is available | agent/task-dispatch | Existing five-minute cron | Only its existing reconcile-retained-foreground-work step, which may emit agent/foreground-work.run |
+
+In the admitted foreground profile, agent/task-dispatch returns after its
+existing retained-work reconciliation step, before acceptance-upgrade wakeup,
+hourly coworker self-task convergence, provider-lane planning or other scheduled
+tasks. This is a test-target boundary, not a production scheduler change.
+Other crons are absent. Import these exact defining modules in the admitted
+startup path instead of the complete queue/functions index. Verify transitive
+imports cannot start producers; an unexpected producer/registration is a failing
+boundary test. Registration, event acceptance and timer selection share this one
+inventory. No excluded event is silently accepted or marked successful.
 
 The existing CI-only Finance conformance admission stays CI-only. Shared preview
 uses its own verified canonical lease/target contract, never forged GHA flags.
@@ -162,7 +219,10 @@ their own existing BIs and branches. No coverage receipt has yet been issued.
    exact implementation paths and consume their change-impact obligations.
    Write failing tests for clean-vs-cloned preparation, physical target identity,
    lease/source binding, poison work and startup refusal. Reuse existing seed
-   helpers after confirming their exact minimal-data contract.
+   helpers after confirming their exact minimal-data contract. Assert the clean
+   instrumentation branch never imports or calls the normal boot graph, mounts
+   no production resources and starts only the enumerated timers. Invalidate
+   admission before claim, before a step and on restart, and prove no new effect.
 2. V-ROUTING: write failing registry/routing tests for finite function selection,
    forbidden events, absent Inngest key, no dual send and unchanged production
    defaults. Implement in existing facade/registry/startup boundaries. Run all
