@@ -111,7 +111,7 @@ The routes are classified `public-machine-plane` in the endpoint classification.
 
 **Why sign-in and consent are public.** People connect from wherever they use the vendor app, including a phone. The alternative was split metadata: the authorization endpoint on a private name, the rest public. Claude documents that pattern for its tunnels; other vendors don't, so it is unconfirmed for them. It would also make connecting impossible away from home.
 
-This choice trades a larger attack surface for a connect that works anywhere. The extra surface is the sign-in page, which §7 rate-limits. **This is open operator decision D2 (§9).**
+This choice trades a larger attack surface for a connect that works anywhere. The extra surface is the sign-in page, which §7 rate-limits. **Decided by the operator on 2026-11-03 (D2, §9): public sign-in and consent, behind the §7 rate limits.** The split-metadata alternative is not built.
 
 ## 5. Hosted-client OAuth: recognize the vendor by where the code goes (`BI-34ABEC12`)
 
@@ -191,7 +191,7 @@ The caller surface is resolved per connection: local plugin, hosted connector (v
 
 **Open operator decisions:**
 - **D1. Ratify `DI-072237D5D7BD`:** segmented machine plane, opt-in. **Decided 2026-10-28: ratified by the operator.**
-- **D2. Where consent happens.** The recommendation is public sign-in and consent, behind the §7 rate limits. The alternative is consent only from home (split metadata), which is unconfirmed for non-Claude vendors.
+- **D2. Where consent happens.** **Decided 2026-11-03: public sign-in and consent, behind the §7 rate limits.** The rejected alternative was consent only from home (split metadata), which is unconfirmed for non-Claude vendors and would make connecting impossible away from home.
 - **D3. Tunnel provider and account.** The recommendation is the operator's own Cloudflare account. Its credentials are operator-only, never handled by an agent.
 - **D4. Archetype defaults.** Installs with `restricted` data, such as healthcare, ship with cloud access off. Turning it on there shows which data classes cloud assistants could reach.
 
