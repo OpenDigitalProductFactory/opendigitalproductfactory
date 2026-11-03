@@ -30,6 +30,7 @@ export function ShellAccount({ displayName, email, roleName, organizationName, i
   return (
     <details ref={detailsRef} className="relative min-w-0" onKeyDown={(event) => {
       if (event.key === "Escape" && detailsRef.current?.open) {
+        if (detailsRef.current.querySelector('[role="dialog"]')) return;
         detailsRef.current.open = false;
         detailsRef.current.querySelector("summary")?.focus();
       }
