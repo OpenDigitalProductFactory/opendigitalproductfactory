@@ -8,24 +8,34 @@ export async function withCurrentScheduledTask<T>(
   db: Pick<typeof prisma, "$transaction">, original: Record<string, unknown>, expectedRunId: string | null,
   write: (tx: Prisma.TransactionClient) => Promise<T>, requireWorking = false, beforeCadence = false,
 ): Promise<T | null> {
+  return db.$transaction(async tx => {
+    if (!await lockCurrentScheduledTask(tx, original, expectedRunId, requireWorking, beforeCadence)) return null;
+    return write(tx);
+  }, { maxWait: 5000, timeout: 20000 });
+}
+
+/** Reuse the canonical commission fence inside a caller-owned transaction. */
+export async function lockCurrentScheduledTask(
+  tx: Prisma.TransactionClient, original: Record<string, unknown>, expectedRunId: string | null,
+  requireWorking = false, beforeCadence = false,
+): Promise<boolean> {
   const taskId = typeof original.taskId === "string" ? original.taskId : "";
   const owner = typeof original.ownerUserId === "string" ? original.ownerUserId : "";
-  if (!taskId || !owner) return null;
-  return db.$transaction(async tx => {
+  if (!taskId || !owner) return false;
     const locked = await tx.$queryRaw<Array<{ taskId: string }>>`SELECT "taskId" FROM "ScheduledAgentTask" WHERE "taskId" = ${taskId} AND "ownerUserId" = ${owner} FOR UPDATE`;
-    if (locked.length !== 1) return null;
+    if (locked.length !== 1) return false;
     const current = await tx.scheduledAgentTask.findUnique({ where: { taskId } });
     const expected = !beforeCadence && isOneShotCron(String(original.schedule)) ? { ...original, isActive: false } : original;
     if (!current || current.ownerUserId !== owner || (current.taskRunId ?? null) !== expectedRunId
       || (current.nextRunAt?.getTime() ?? null) !== (original.nextRunAt instanceof Date ? original.nextRunAt.getTime() : null)
-      || scheduledReportingScopeDigest(current) !== scheduledReportingScopeDigest(expected)) return null;
+      || scheduledReportingScopeDigest(current) !== scheduledReportingScopeDigest(expected)) return false;
     if (requireWorking) {
-      if (!expectedRunId) return null;
+      if (!expectedRunId) return false;
       const run = await tx.taskRun.findUnique({ where: { taskRunId: expectedRunId }, select: { userId: true, status: true } });
-      if (!run || run.userId !== owner || run.status !== "working") return null;
+      if (!run || run.userId !== owner || run.status !== "working") return false;
     }
-    return write(tx);
-  }, { maxWait: 5000, timeout: 20000 });
+
+  return true;
 }
 
 /**
