@@ -542,6 +542,32 @@ function issueInput(n: number, overrides: {
 
 
 describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-952F08BA)", () => {
+  it("keeps independent source fingerprints on an item shared by issue and peer origins", async () => {
+    const mem = memoryStore([{ itemId: "BI-SHARED", body: `- ${issueUrl(9)}\n[origin:ecosystem-upstream-issue:${REPO}#9]\n[origin:ecosystem-peer-demand:fdm_1]` }]);
+    const peer = { ...issueInput(9), origin: { kind: "ecosystem-peer-demand", id: "fdm_1" },
+      reconcile: { repository: "", sourceUrl: null, state: "open", fingerprint: "peer-fingerprint" } };
+    await ingestBacklogItem(issueInput(9), { store: mem.store, ...quiet });
+    await ingestBacklogItem(peer, { store: mem.store, ...quiet });
+    const count = mem.activities.length;
+    expect((await ingestBacklogItem(issueInput(9), { store: mem.store, ...quiet })).outcome).toBe("unchanged");
+    expect((await ingestBacklogItem(peer, { store: mem.store, ...quiet })).outcome).toBe("unchanged");
+    expect(mem.activities).toHaveLength(count);
+    expect(mem.items).toHaveLength(1);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("excludes peer-owned mirror copies when reconciling a locally owned issue", async () => {
+    const body = `- ${issueUrl(4389)}\n\n[origin:ecosystem-upstream-issue:4389]`;
+    const mem = memoryStore([
+      { itemId: "BI-LOCAL", body },
+      { itemId: "BI-MIRROR", body: `${body}\n\n[origin:federatedWork:inst_peer:BI-MIRROR]` },
+    ]);
+    const result = await ingestBacklogItem(issueInput(4389), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ itemId: "BI-LOCAL", created: false, outcome: "unchanged" });
+    expect(mem.items).toHaveLength(2);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
   it("exports a qualified marker helper keyed on repository and number", () => {
     expect(qualifiedIssueOriginId("OpenDigitalProductFactory/OpenDigitalProductFactory", 12)).toBe(`${REPO}#12`);
     expect(parseGithubIssueUrl(issueUrl(4563))).toEqual({ repository: REPO, number: 4563 });
@@ -702,7 +728,7 @@ describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-9
       itemId: "BI-DONE",
       status: "done",
       body: `- ${issueUrl(9)}\n\n[origin:ecosystem-upstream-issue:${REPO}#9]`,
-    }], [{ backlogItemId: "cuid-seed-1", kind: "intake_origin", payload: { source: { fingerprint: "fp-closed", state: "closed" } } }]);
+    }], [{ backlogItemId: "cuid-seed-1", kind: "intake_origin", payload: { origin: { kind: "ecosystem-upstream-issue", id: `${REPO}#9` }, source: { fingerprint: "fp-closed", state: "closed" } } }]);
     const result = await ingestBacklogItem(issueInput(9, { fingerprint: "fp-open", state: "open" }), { store: mem.store, ...quiet });
     expect(result).toMatchObject({ created: false, outcome: "changed", itemId: "BI-DONE" });
     const events = mem.activities.filter((a) => (a.payload as { change?: unknown }).change);
