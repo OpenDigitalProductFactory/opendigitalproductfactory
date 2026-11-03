@@ -938,6 +938,19 @@
         "ownership-and-successor-work"
       ]
     },
+    "docs/architecture/application-boundary-review-2026-11-02.md": {
+      "publicHref": "/architecture/application-boundary-review-2026-11-02/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "existing-application-boundary-debt-review-november-2-2026",
+        "evidence-and-bounded-disposition",
+        "shrink-schedule-and-recovery",
+        "exact-retained-keys",
+        "removed-exception"
+      ]
+    },
     "docs/architecture/archetype-business-value-streams.md": {
       "publicHref": "/architecture/archetype-business-value-streams/",
       "portalHref": null,
