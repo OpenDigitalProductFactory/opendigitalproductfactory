@@ -3,6 +3,7 @@
 import { createGithubReadTransport, resolveGithubToken, type RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isRecord } from "@/lib/shared/coerce";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 export interface RepositoryAlert {
   number: number;
@@ -17,7 +18,7 @@ export interface RepositoryAlert {
   url: string;
 }
 
-export type RepositoryAlertRead = { ok: true; alerts: RepositoryAlert[] } | { ok: false; error: string };
+export type RepositoryAlertRead = (ActionSuccess & { alerts: RepositoryAlert[] }) | { ok: false; error: string };
 
 function parseAlert(value: unknown, repo: RepoIdentity): RepositoryAlert | null {
   if (!isRecord(value)) return null;
@@ -77,7 +78,7 @@ export async function readDependabotAlerts(input: {
       url = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1] ?? null;
     }
     if (url) return { ok: false, error: `Dependabot coverage incomplete after ${maxPages} pages` };
-    return { ok: true, alerts };
+    return { ...ok(), alerts };
   } catch (error) {
     return { ok: false, error: `Dependabot coverage failed: ${getErrorMessage(error)}` };
   } finally {

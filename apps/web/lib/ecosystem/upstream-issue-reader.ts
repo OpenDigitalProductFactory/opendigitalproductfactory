@@ -19,6 +19,7 @@ import {
   type RepoIdentity,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok } from "@/lib/shared/action-result";
 
 const DEFAULT_MAX_PAGES = 10;
 const DEFAULT_PER_PAGE = 100;
@@ -65,7 +66,7 @@ export async function readControllerIssues(
   if (!changes.ok) return changes;
   const issues = new Map(open.issues.map(issue => [issue.number, issue]));
   for (const issue of changes.issues) issues.set(issue.number, issue);
-  return { ok: true, issues: [...issues.values()] };
+  return { ...ok(), issues: [...issues.values()] };
 }
 
 interface RawIssue {

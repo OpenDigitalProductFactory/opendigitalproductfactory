@@ -74,6 +74,16 @@ guess the canonical delivery item or retire it to improve metrics.
 
 ## Boundaries
 
+Release prerequisite discovered during verification: the existing application
+boundary reviews expired November 1 and block normal publication on the base
+tree as well. Reuse the existing registry and BI-9BEB3D56 inquiry. The
+[per-edge disposition](../../architecture/application-boundary-review-2026-11-02.md)
+records fresh source analysis, removal of one obsolete key and retention of
+42 exact existing keys only until the existing November 16 budget. WWMD
+DI-16446C24A439 permits that bounded choice autonomously. Preserve prior dates,
+context owners, unchanged guard enforcement and independent exact-change review;
+do not claim the remaining dependency refactors are complete.
+
 The existing Scheduled Work Run now action dispatches the same commissioned
 intake on its existing event rail. Manual and recurring runs share one account
 concurrency lane. Both honor quiescence; the recurring run also honors the
