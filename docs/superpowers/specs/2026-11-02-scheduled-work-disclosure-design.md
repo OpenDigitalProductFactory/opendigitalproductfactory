@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Scheduled Work: purpose, ownership and progressive disclosure
 
 Status: graphical redesign after operator rejection; no implementation authorization.
@@ -107,7 +110,7 @@ The operator requires schedules to be useful within a persona and Workroom conte
 
 - `packages/db/src/archetype-room-definition-projection.ts` derives room definitions from the canonical operational value stream: stage/input/output/responsible role/gates/measures become room source/trigger/outcome/required participant/gates/measures. Load-bearing stages become standing rooms. These are reusable definitions, not proof an instance or appointment exists.
 - `packages/storefront-templates/src/standing-rooms.ts` derives universal operating rooms plus software-specific rooms only for software businesses. Do not give a stable a repository-maintenance cockpit merely because that is the example on the current install.
-- The source archetype catalog currently contains 111 literal leaf declarations across 25 category files. This source inventory is not a count of installed businesses. The older Work Atlas design says 107; its number is historical. Reuse `deriveTwinProfile`, `deriveResourceCapacityProfile` and the canonical value-stream projection, rather than authoring another archetype-to-layout catalog here.
+- Evaluating the exported ALL_ARCHETYPES catalog returns 107 archetypes across 25 categories. The earlier count of 111 literal archetypeId declarations included nested product-mix references and was not a valid leaf inventory. This source inventory is not a count of installed businesses. Reuse `deriveTwinProfile`, `deriveResourceCapacityProfile` and the canonical value-stream projection, rather than authoring another archetype-to-layout catalog here.
 - The live `list_workrooms(view: definitions)` inventory was traversed to completion: 20 canonical source definitions, including booking, field-service-job, scheduled, manual-task and activity. The response explicitly says occurrence assessment not exercised and organization applicability unknown. It is not an inventory of instantiated horse-care Workrooms.
 - The existing calendar projects native and domain events (`apps/web/lib/workforce/calendar-data.ts`); shared capacity is profiled by `resource-capacity-profile.ts`; resource/availability/allocation records live in `resource-scheduling.prisma`. A merged display must not become another booking, animal identity, availability or schedule writer.
 - `AnimalProfile` is a durable animal identity, with animal-welfare/custody consumers already present. Its current custody lifecycle does not prove working-horse workload or equestrian booking support. Horses must retain animal semantics; they are not employees, equipment or public adoption listings. A lesson also reserves human time and location capacity without changing the horse's identity.
@@ -166,3 +169,87 @@ Research must produce two linked baselines: the market's scheduling models and i
 Live audit: Large@1.0.0 remains at spec; CE-6F6299DE is requested without fulfillment/result. The drive records awaiting_agent_capacity over 19 ticks and an earlier run without stage evidence. These are observed dispatch/evidence gaps, not proof of a global outage. The UX role, active service offer and canonical skill instructions exist. The external agent's stored skills list and the offer's backing skillIds are empty; their meaning must be reconciled with actual client exposure/runtime assignment, rather than claiming skill content was deleted.
 
 WWMD comparison DI-7BF3A79081EA recommends recovery of the existing stage rather than the continued solo prototype loop or holding all independent research for process repairs. Its feature vectors are author tradeoff estimates, not empirical measures. WWWD's mission and decision-scope corpus were consulted as context; this process question is platform-owned. Requested UX WSID consultation DI-6377DF65743C instead resolved software-engineer, declaredBorrow:false, confidence0.35 and no recommendation. Source preserves the identified AGT-EXT-CODEX craft. This is not UX steering, and no identity bypass is authorized. Existing BI-EBA897BD carries the recurrence, with engagement execution owned by BI-331868F4 and shape-based review instantiation by BI-E27F3600. No specialist findings, review approval or stage completion are inferred.
+
+## Recovery research baseline — market and platform
+
+Research question: how can one governed schedule experience help every persona understand the time commitments in their Workrooms, while retaining the original admin automation-health purpose and each domain's meaning and safeguards? This is not a request to implement all verticals or to replace their scheduling engines.
+
+### Complete exported catalog sweep
+
+Executed the existing pure source projections over every exported archetype: ALL_ARCHETYPES, deriveOperationalValueStream, deriveStandingRooms, deriveTwinProfile and deriveResourceCapacityProfile. TypeScript was transpiled in memory for this read-only inventory; no runtime/database or package install was used for that extraction. The inventory covers 107 exported archetypes and 25 categories, not 111 raw literal references. It is definition-level evidence only. A declared class or dispatch pattern is not proof of courses, transport capacity, event feeds, permissions or booking behavior on a live install. Definitions without an authoritative event source must remain visibly unsupported/unavailable rather than silently empty.
+
+| Category | Exported leaf archetypes reviewed | Existing derived capacity patterns |
+| --- | --- | --- |
+| healthcare-wellness | veterinary-clinic, dental-practice, medical-practice, physiotherapy, counselling, optician, home-health-care, mobile-phlebotomy, dme-delivery | appointment, dispatch |
+| beauty-personal-care | hair-salon, barber-shop, nail-salon, beauty-spa, personal-trainer, mobile-beauty | appointment, dispatch |
+| trades-maintenance | facilities-maintenance, plumber, electrician, cleaning-service, landscaping, hvac-contractor, pest-control, appliance-repair, pool-spa-service, pressure-washing, roofing-gutters | dispatch |
+| professional-services | it-managed-services, legal-services, accounting, marketing-agency, consulting, field-inspection, land-surveying, process-serving-notary | dispatch |
+| software-platform | software-platform | No physical capacity profile; deadlines/commitments/automation require their own sources |
+| education-training | corporate-training, tutoring, music-school, driving-school | class |
+| pet-services | pet-grooming, dog-walking, pet-boarding, mobile-pet-grooming, mobile-vet | appointment, dispatch, occupancy |
+| food-hospitality | restaurant, catering, bakery | service-floor, venue |
+| retail-goods | retail-goods, artisan-goods, florist, wholesale-distribution, furniture-delivery-install | dispatch |
+| fitness-recreation | gym, yoga-studio, dance-studio | class |
+| nonprofit-community | pet-rescue, animal-shelter, community-shelter, charity, sports-club, cooperative, agricultural-cooperative, meal-delivery-program | dispatch, rental |
+| hoa-property-management | homeowners-association, condo-association, property-management-company | project-resource |
+| banking-financial-services | community-bank, credit-union, mortgage-lending | No physical capacity profile; deadlines/commitments/automation require their own sources |
+| public-sector | small-town-municipality, municipal-utility, law-enforcement-agency | dispatch |
+| asset-rental | equipment-rental, self-storage, production-equipment-rental | rental |
+| real-estate-construction | new-home-builder, custom-home-builder | project-resource |
+| automotive-services | auto-glass, mobile-mechanic, mobile-detailing, mobile-tire, roadside-assistance, locksmith | dispatch |
+| moving-and-logistics | moving-company, junk-removal, courier-delivery, last-mile-freight, freight-brokerage | dispatch |
+| security-services | guard-patrol, alarm-cctv-install | dispatch |
+| media-production | film-video-production, post-production-studio, event-production-staging | No physical capacity profile; deadlines/commitments/automation require their own sources |
+| live-events-venues | event-venue, tour-promoter, talent-booking-agency | venue |
+| warehousing-fulfilment | third-party-logistics, ecommerce-fulfilment, cold-chain-storage, cross-dock-transload | service-floor |
+| fabric-care-services | dry-cleaning-plant-network, wash-and-fold-laundry, alterations-tailoring | service-floor |
+| agriculture-ranching | mixed-farm-ranch, crop-hay-farm, cattle-ranch | dispatch |
+| manufacturing | industrial-equipment-oem | service-floor |
+
+The default OVSM backbone is extended by leaf process profiles: for example, animal-welfare profiles produce 21 stages, while rental/custody profiles add return/inspection or receiving/storage. Do not replace those Workroom definitions with a page-owned list. Source-derived room definition preserves trigger, required role, intended result, trust gates and measures; an actual schedule requires a related occurrence or availability authority as well.
+
+### Time meanings that cannot be flattened
+
+| Time meaning | Representative situations | Source or source-fit evidence | Presentation constraint |
+| --- | --- | --- | --- |
+| Operating/availability windows | Restaurant open/close, provider hours, closures | BusinessProfile.businessHours and hoursConfirmedAt through operating-hours-read.ts; ProviderAvailability / ResourceAvailability | A window permits work; it is not an appointment or proof the business opened. Distinguish configured/default/unconfirmed hours. |
+| Booked intervals | Consultations, reservations, lessons | StorefrontBooking scheduledAt/duration/status/provider; CareAppointment subject/provider/resource and footprint | Booking, attendance and completed work are separate evidence. |
+| Courses/cohorts and repeating sessions | Training term, class series, instructor/room/learner | education-training catalog and class capacity profile; recurrence primitives | A class profile is not a complete course/cohort/attendance product. Preserve series identity and cancelled/changed occurrences; source integration still needs verification. |
+| Staff assignments | Restaurant shifts, instructors, housekeeping | Workforce calendar and staffing projection into calendar | Assignment, availability preference and actual attendance are different. Respect overnight windows and explicit leave. |
+| Stays and turnover | Hotel check-in/out, occupied/dirty/ready rooms | Existing occupancy/resource family; planned lodging BI-5AA20AFB, BI-C32044BB, BI-0820CF57 all triaging | Stay interval, arrival/departure actions and room readiness need coordinated lanes, not a single success color. Hotel is not an exported leaf in this inspected catalog. Do not promise an installed lodging integration. |
+| Arrival/service windows | Field work, moving, mobile care | Field-service WorkCase and field-dispatch/capacity profiles | Travel/buffer and assignment are constraints, not invented exact arrival times. |
+| Return/inspection windows | Rentals and reusable equipment | YARD/rental profile and return-inspect value-stream stage | Expected return is not actual return or readiness for next use. |
+| Deadlines and obligations | Case/matter deadlines, renewals, regulatory dates, periodic reviews | Calendar projections, WorkEngagement.dueAt, manual tasks/approvals/activities | Do not invent a start/end time; record deadline provenance, owning person and next action. |
+| Service periods and cutoffs | Restaurant service, events, warehouse waves, production promises | FLOOR/VENUE/DOCK/BAYS profiles and domain capacity/turn authorities | Capacity or readiness can be at risk without an execution failure. |
+| Automated execution | Repository checks, backups, Workroom stage drives | ScheduledAgentTask and scheduled-work register/history | Enabled, executing, verified success, stale and retired remain independent. Preserve the original admin acceptance criteria. |
+
+Across these meanings: recurrence is a rule, an occurrence is one dated instance, a projection is not a booking, a reminder is not completion, and no signal is not healthy. One occurrence may appear under its subject, performer, location and Workroom, but totals deduplicate by canonical source identity. Future occurrences remain expectations rather than guarantees. Local timezone and IANA-zone/DST handling belong to the source temporal contract, not formatting a UTC cron string as local.
+
+### Market comparison: inspect models as well as screens
+
+| Comparator and primary material | Observed model or interaction | Adopt | Reject / limitation |
+| --- | --- | --- | --- |
+| [Cal.com schema](https://github.com/calcom/cal.com/blob/main/packages/prisma/schema.prisma) | Separate EventType, Schedule, Availability and Booking. Availability has weekday or date windows; Schedule has timezone; EventType includes confirmation, notice and before/after buffers; Booking has occurrence times, attendees and state. | Separate rule, availability, committed occurrence and participant context; explicit pending confirmation and buffers. | Meeting-centric booking is not sufficient for opening hours, stay readiness or scheduler execution health. No Cal.com dependency proposed. |
+| [Easy!Appointments appointment model](https://github.com/alextselegidis/easyappointments/blob/develop/application/models/Appointments_model.php) | Start/end, service, provider, customer and status; explicit unavailability flag; validation of linked provider/customer/service and interval. | Human-purpose labels and source relationships, availability separate from appointments. | A single provider/customer appointment model cannot represent every Workroom situation. No copied code or imported engine. |
+| [Odoo community ResourceCalendar](https://github.com/odoo/odoo/blob/19.0/addons/resource/models/resource_calendar.py) | Resource working time combines weekday attendance intervals and general/resource-specific leave with timezone and fixed/flexible schedules. | Availability windows and exceptions as first-class context, not scheduled-job rows. | A resource working-time model does not establish business opening, booking attendance or outcome. Community source is not evidence of proprietary Appointments internals. |
+| [Mews Timeline](https://help.mews.com/s/article/timeline) | Bookings organized by space type/number, time-scale/density controls, distinct reservation and housekeeping states, contextual filters and optional/unconfirmed styling. | Coordinate time and physical context; show required action at the affected commitment; distinguish readiness from booking. | Do not copy vendor colors or imply moving an event automatically satisfies preparation, capacity or authority. Product documentation is precedent, not proof of DPF integration. |
+| [7shifts Availability](https://kb.7shifts.com/hc/en-us/articles/4417513664659-7shifts-101-Availability) | Recurring work preferences/conflicts and specific time-off workflows are distinct; overnight shifts have explicit day-association rules. | Separate availability, assignment and actual work; include overnight boundary checks. | Do not adopt an undocumented cross-midnight policy or expose employee availability solely through a persona filter. |
+| [Odoo Appointments](https://www.odoo.com/documentation/19.0/applications/productivity/appointments.html) | User- or resource-based availability, booking duration and confirmation/capacity context. | Contextual booking and capacity-linked selection. | Appointment booking alone is not an all-purpose calendar. App documentation and community working-time model are separate evidence. |
+
+Additional task-specific precedent remains relevant: Airflow's persistent grid/detail context, Dagster's grouped timeline demand, deadline-aware monitoring, and Hippovibe's subject/team/event filters. These were already linked above. They are bounded qualitative observations, not a representative user-preference survey. Course semantics are corroborated by [Frappe Education's Course Schedule documentation](https://docs.frappe.io/education/course-schedule): course, instructor, student group, room and interval with attendance recorded separately. The attempted develop source path returned 404, so this is documentation evidence, not a verified current source-model inspection.
+
+### Standard and constraints
+
+[RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) separates calendar events, to-dos and free/busy and defines recurrence/timezone/exception semantics. Reuse the platform's existing RFC-5545 RecurrenceSchedule and existing expansion code; do not introduce a competing recurrence engine. Standards alignment does not require migrating every legacy recurrence representation in this UI refactor. Record source behavior and gaps before promising series edits. Applicable updates and source-specific recurrence support must be checked when implementing affected contracts.
+
+### Architecture options for review
+
+1. Expand the admin job register into one universal operational calendar and writer. This puts domain work in an admin mental model and couples unrelated authorization/state machines; unsuitable unless the existing sources are explicitly superseded through a larger approved design.
+2. Compose shared read projections and visual/context controls over authoritative domain sources. Keep business/persona/Workroom entry context and a linked admin automation-health view. Domain writers retain scheduling/conflict/audit rules. Candidate preference: supports mixed situations without equating a stay, opening window and automated run. Missing adapters and authority must be disclosed and independently covered, not hidden by a generic row.
+3. Keep separate domain calendars and improve only deep links plus the admin overview. This minimizes integration initially but leaves cross-Workroom coordination and shared subjects fragmented. It is a viable bounded first delivery only if the research/owner explicitly accepts that limitation and a covered convergence path is recorded.
+
+These are proposals for governed comparison and actual craft contribution, not a selected implementation or a replacement for independent review. The original job-health refactor and shared contextual scheduling may need separate deliverables under one approved baseline; the reviewed plan must make that boundary explicit.
+
+### Research evidence still owed
+
+Definition/model coverage is now systematic; live occurrence, permission and source-read coverage is not. The original UX engagement must receive immutable source plus actual rendered evidence and return attributable findings. Its result must address the broad time semantics and persistent context, not merely accessibility or the horse fixture. Independent spec approval, delivery boundaries, lifecycle/orphan cohort audit, a backlog-covered reviewed plan and served verification remain outstanding. No research stage completion is asserted by this appendix.
