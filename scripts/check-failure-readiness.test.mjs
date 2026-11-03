@@ -107,3 +107,18 @@ test("evidence is read from the creator-bearing LIST endpoint, never the combine
   assert.match(requested[0], /\/commits\/[0-9a-f]{40}\/statuses\?/, "must call /statuses (list), which returns creator");
   assert.doesNotMatch(requested[0], /\/status\?/, "must not call /status (combined), which omits creator");
 });
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+
+test("the actual workflow cannot turn missing publisher configuration into success", () => {
+  const source = readFileSync(new URL("../.github/workflows/failure-readiness.yml", import.meta.url), "utf8");
+  const block = source.split("        run: |\n")[1];
+  assert.ok(block, "workflow must have an executable verification step");
+  const command = block.split("\n").map(line => line.replace(/^          /, "")).join("\n");
+  const result = spawnSync(process.env.DPF_TEST_BASH ?? "bash", ["-e", "-c", command], {
+    cwd: new URL("..", import.meta.url), encoding: "utf8",
+    env: { ...process.env, DPF_REVIEW_STATUS_PUBLISHER: "", GH_TOKEN: "" },
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 2, `unconfigured must remain inconclusive/nonzero: ${result.stdout} ${result.stderr}`);
+});
