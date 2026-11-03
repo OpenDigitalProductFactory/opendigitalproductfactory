@@ -108,7 +108,15 @@ Measurement-runtime behavior is relevant prior art, but its flag alone is not
 this boundary: it also skips worker startup and still permits boot writes.
 
 Do not mount the Docker socket, production storage, production credentials or
-host home into the clean portal. Worktree source is read-only to handlers;
+host home into the clean portal. Export the committed tracked tree into the
+existing keeper's owned scratch directory and verify its tree identity; mount
+that source view read-only instead of the whole worktree. Never export ignored
+files, Git/client configuration, host node_modules or local environment files.
+Dependencies and generated declarations retain dedicated managed runtime mounts.
+A harmless ignored fake-secret canary beside the worktree source must be absent
+inside the actual prepared portal; do not inspect real secrets for this proof.
+Tracked credential-like configuration is a preparation refusal, not a waiver.
+Worktree source is read-only to handlers;
 database, logs, temporary files and document storage belong to this attempt's
 disposable target. Converter, sandbox and external-provider access are absent
 from the initial transport probe. An unavailable UI prerequisite is a fixture
@@ -123,6 +131,28 @@ notifications and maintenance, and tears down the owned runtime through the
 keeper. Completed durable steps are retained. An already dispatched external
 effect is UNKNOWN until reconciled by its existing owner; invalidation cannot
 promise to undo it or authorize replay. Initial probes have no external effects.
+
+The authoritative reader remains the host keeper's existing
+list_nonprod_environment_leases / renew_nonprod_environment_lease calls in
+scripts/lib/dev-preview-runtime.mjs, supervised by lease-supervisor.mjs. Those
+credentials stay on the host. There is currently no worker admission-read
+interface: implementing that bridge is part of this repair, not a claimed
+existing capability. Extend the keeper's existing admitted binding with an
+ephemeral read-only runtime projection under its owned state directory. It
+contains the same lease/owner/source tree/image/physical target/cohort identity,
+observation time, expiry and admission state, never tokens. This is a projection
+of canonical authority, not an independently renewable lease or work ledger.
+Only the keeper writes it, atomically; the portal has no writable ancestor or
+Docker socket. Before each new effect the worker rejects missing, replaced,
+malformed, stale or mismatched projection content. Startup rejects a projection
+older than five seconds. The keeper re-observes canonical validity at most five
+seconds apart, shortens validity to the earlier canonical expiry, and publishes
+revocation/failure immediately; inability to renew/read makes admission invalid.
+The maximum observation gap is explicit, not instantaneous revocation. Existing
+business-tool authority checks remain necessary at effects. The owned process
+is stopped on loss; durable state does not authorize an automatic new admission.
+Tests revoke/change the actual native binding, wait for the bounded observation,
+then prove claims/steps/restart refuse; a constant-true predicate is no evidence.
 
 No credentials are copied; operator consent remains necessary for real provider
 access. Synthetic organization/user/coworker fixtures use the existing authority
@@ -191,6 +221,28 @@ duplicate tests prove one result and bounded recovery without resubmission.
 No real mail, customer edge action or paid provider activation is part of this
 synthetic transport repair. Those remain explicit business acceptance work.
 
+AC-6 is explicitly dependent on consumer BI-7DC3B91D providing an admitted served
+controlled-reply mechanism, or an existing independently verified permitted
+provider binding. Current foreground601c3b calls real sendMessage; test-runner
+mocks do not supply a served answer. This repair does not widen that consumer's
+CI-only guard or add an ungated response override. Until the consumer owns and
+qualifies the shared-target seam, the positive Finance reply case is BLOCKED,
+even if transport probes pass. Any controlled response must bind this target,
+synthetic request, native owner/coworker grants, expiry and publication fences;
+normal production requests must be unable to select it. Real-provider readiness
+remains unverified by a controlled answer.
+
+One attempt is limited to one fixture organization, one owner, one original
+Finance request, one missing-sandbox build and zero document versions. Use one
+Postgres worker at concurrency one, at most32 events/runs, at most5000 fixture
+rows, preparation at most five minutes and execution at most15 minutes (allowing
+two existing five-minute reconciliation ticks). Bound inventory reads at the
+ceiling plus one and refuse overflow rather than truncate. Enforce the earlier
+of the original request deadline and attempt deadline; never extend authority
+for convenience. Raising transport bounds belongs to BI-PIR-7f040ec5's governed
+scope amendment; changing Finance cases belongs to BI-7DC3B91D. Neither implies
+the sixty-customer MSP scale case has been proved.
+
 ## Flows
 
 F-PREPARE: claim canonical dev-portal reservation -> prepare clean database ->
@@ -215,13 +267,16 @@ routing is unsafe; bounded routing without a clean target is unsafe; neither
 proves the repair without actual delivery. Consumer product fixes remain in
 their own existing BIs and branches. No coverage receipt has yet been issued.
 
-1. V-BOUNDARY: after independent scope approval and valid v2 coverage, claim
+1. V-BOUNDARY: after the exact native readiness prerequisites and server-issued
+   plan coverage are satisfied, claim
    exact implementation paths and consume their change-impact obligations.
    Write failing tests for clean-vs-cloned preparation, physical target identity,
    lease/source binding, poison work and startup refusal. Reuse existing seed
    helpers after confirming their exact minimal-data contract. Assert the clean
    instrumentation branch never imports or calls the normal boot graph, mounts
-   no production resources and starts only the enumerated timers. Invalidate
+   no production resources and starts only the enumerated timers. Prove the
+   ignored fake-secret canary is absent and the mounted tracked tree matches.
+   Invalidate
    admission before claim, before a step and on restart, and prove no new effect.
 2. V-ROUTING: write failing registry/routing tests for finite function selection,
    forbidden events, absent Inngest key, no dual send and unchanged production
