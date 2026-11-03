@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Corpus-scoped read grants — implementation plan (BI-825D3487)
 
 Design: [corpus-scoped read grants](../specs/2026-10-28-corpus-scoped-read-grants-design.md),
