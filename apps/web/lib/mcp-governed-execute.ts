@@ -662,7 +662,10 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tokenGrantScopes: args.context?.tokenGrantScopes,
       governedReadToolCatalog: () => getAvailableTools(args.userContext, { mode: "advise",
         agentId: args.context?.agentId, roomAuthorizedGrants: args.context?.roomAuthority?.authorizedGrants }),
+      governedAuthorityTool: () => tool,
       governedRoomAuthority: () => args.context?.roomAuthority ?? null,
+      connectionDelegation: args.context?.connectionDelegation
+        ? { ...args.context.connectionDelegation } : undefined,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,
