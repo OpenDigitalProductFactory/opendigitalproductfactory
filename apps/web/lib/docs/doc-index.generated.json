@@ -6593,7 +6593,8 @@
       "publishedPortal": false,
       "anchors": [
         "enumerating-workrooms-through-mcp",
-        "executor-and-invocation"
+        "executor-and-invocation",
+        "the-work-atlas-picture"
       ]
     },
     "docs/personas/README.md": {

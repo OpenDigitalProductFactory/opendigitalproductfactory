@@ -89,14 +89,15 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        view: { type: "string", enum: ["instances", "definitions"], description: "Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        view: { type: "string", enum: ["instances", "definitions", "atlas"], description: "atlas returns the Work Atlas picture: health counts, plus up to limit (max 400) rows, optionally filtered by health. Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        health: { type: "string", enum: ["needs-person", "stuck", "working", "waiting", "no-signal", "finished"], description: "view atlas only: rows in this health state." },
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
         headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
         pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
-        limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
+        limit: { type: "integer", minimum: 1, maximum: 400, description: "Requested page size (default 5, maximum 100; view atlas default 10, maximum 400); whole rows are reduced to fit the client budget." },
         cursor: { type: "string", maxLength: 1024, description: "Opaque continuation for the selected view. Instance and definition cursors cannot be mixed. Keep instance filters unchanged. Instance expiry or changed definition inventory requires a fresh traversal." },
       },
       required: [],
