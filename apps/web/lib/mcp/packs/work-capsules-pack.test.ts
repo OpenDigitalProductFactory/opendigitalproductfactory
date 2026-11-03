@@ -27,6 +27,9 @@ vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
 
+// These tool fixtures represent a qualified canonical writer cohort.
+vi.mock("@/lib/work-capsules/scope-epoch-enrollment.server", () => ({ assertScopeEpochEnrollmentReady: async () => ({ assertCurrent() {} }) }));
+
 vi.mock("@/lib/identity/principal-linking", () => ({
   ensureAgentPrincipalIdentity: vi.fn(async () => ({ id: "principal-agent" })),
   syncUserPrincipal: vi.fn(async () => ({ id: "principal-user" })),
@@ -615,7 +618,8 @@ describe("work capsule MCP tools", () => {
   it("claim_workroom_scope stores typed scope claims", async () => {
     let capsule = {
       id: "row-1",
-      capsuleId: "WC-SCOPE",
+      capsuleId: "WC-SCOPE", status: "working", archivedAt: null, updatedAt: new Date(),
+      leaseHolderPrincipalId: "principal-agent", leaseExpiresAt: new Date(Date.now() + 600_000),
       scopeClaims: [],
     } as Record<string, unknown>;
     mockPrisma.workroom.findUnique.mockImplementation(async () => capsule);
@@ -724,14 +728,14 @@ describe("work capsule MCP tools", () => {
           value: "apps/web/lib/work-capsules.ts",
           intent: "edit",
           recordedAt: "2026-05-14T00:00:00.000Z",
-          recordedByPrincipalId: "principal-1",
+          recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001",
         },
         {
           kind: "route",
           value: "/build/work",
           intent: "read",
           recordedAt: "2026-05-14T00:00:00.000Z",
-          recordedByPrincipalId: "principal-1",
+          recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001",
         },
       ],
     });
@@ -740,8 +744,8 @@ describe("work capsule MCP tools", () => {
 
     const { executeTool } = await import("@/lib/mcp-tools");
     const result = await executeTool("release_workroom_scope", {
-      capsuleId: "WC-RELEASE",
-      claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
+      capsuleId: "WC-RELEASE", expectedRoomId: "row-1",
+      claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit", recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001" }],
     }, "user-1", { agentId: "codex", authorityDecisionId: "AUTH-release" });
 
     expect(result.success).toBe(true);

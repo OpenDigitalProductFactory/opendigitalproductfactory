@@ -1,3 +1,4 @@
+import { RESPONSE_FEEDBACK_BINDING_SELECT } from "../routing/response-producer";
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type {
@@ -16,6 +17,7 @@ type AttachmentRow = {
 };
 
 type TelemetryRow = {
+  id?: string;
   agentMessageId: string | null;
   providerId: string;
   modelId: string;
@@ -37,6 +39,10 @@ function serializeMessage(
     createdAt: Date;
     providerId?: string | null;
     modelId?: string | null;
+    responseAttemptId?: string | null;
+    responseContentDigest?: string | null;
+    responseScope?: string | null;
+    responseWorkroomId?: string | null;
     attachments?: AttachmentRow[];
   },
   proposal?: {
@@ -59,6 +65,8 @@ function serializeMessage(
     agentId: m.agentId,
     routeContext: m.routeContext,
     createdAt: m.createdAt.toISOString(),
+    responseFeedbackEligible: m.role === "assistant" && Boolean(m.responseAttemptId && m.responseContentDigest
+      && ((m.responseScope === "known_unroomed" && !m.responseWorkroomId) || (m.responseScope === "workroom" && m.responseWorkroomId))),
   };
   if (m.attachments && m.attachments.length > 0) {
     row.attachments = m.attachments.map((a): AttachmentInfo => ({
@@ -128,16 +136,23 @@ async function loadInlineApprovalRequests(
  * Pick the user-visible telemetry row for each agentMessageId.
  *
  * Multiple rows can exist per message in race/shadow modes; only the
- * primary/single rows are what the user actually saw. Most-recent wins for
- * the rare case of replays.
+ * primary/single rows are what the user actually saw. Saved producer bindings
+ * win exactly; legacy messages without a binding retain the latest-row display.
  */
-function selectVisibleTelemetry(rows: TelemetryRow[]): Map<string, TelemetryRow> {
+function selectVisibleTelemetry(rows: TelemetryRow[], messages: ReadonlyArray<{ id: string; providerId?: string | null; modelId?: string | null; responseAttemptId?: string | null }> = []): Map<string, TelemetryRow> {
   const sorted = [...rows].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
   const out = new Map<string, TelemetryRow>();
   for (const r of sorted) {
     if (!r.agentMessageId) continue;
     if (!VISIBLE_EXEC_MODES.has(r.executionMode)) continue;
     if (!out.has(r.agentMessageId)) out.set(r.agentMessageId, r);
+  }
+  const byAttempt = new Map(rows.filter(row => row.id).map(row => [row.id, row]));
+  for (const message of messages) {
+    if (!message.responseAttemptId) continue;
+    out.delete(message.id);
+    const exact = byAttempt.get(message.responseAttemptId);
+    if (exact?.agentMessageId === message.id && exact.providerId === message.providerId && exact.modelId === message.modelId && VISIBLE_EXEC_MODES.has(exact.executionMode)) out.set(message.id, exact);
   }
   return out;
 }
@@ -150,7 +165,7 @@ function selectVisibleTelemetry(rows: TelemetryRow[]): Map<string, TelemetryRow>
  * pre-telemetry rows.
  */
 async function loadProviderInfo(
-  messages: Array<{ id: string; role: string; providerId?: string | null; modelId?: string | null }>,
+  messages: Array<{ id: string; role: string; providerId?: string | null; modelId?: string | null; responseAttemptId?: string | null }>,
 ): Promise<Map<string, AgentMessageProvider>> {
   const assistantIds = messages
     .filter((m) => m.role === "assistant")
@@ -160,7 +175,7 @@ async function loadProviderInfo(
   const telemetry = (await prisma.adapterRunTelemetry.findMany({
     where: { agentMessageId: { in: assistantIds } },
     select: {
-      agentMessageId: true,
+      id: true, agentMessageId: true,
       providerId: true,
       modelId: true,
       adapterKind: true,
@@ -169,14 +184,14 @@ async function loadProviderInfo(
     },
   })) as TelemetryRow[];
 
-  const visible = selectVisibleTelemetry(telemetry);
+  const visible = selectVisibleTelemetry(telemetry, messages);
 
   // Gather provider ids to resolve display names — from telemetry first, then
   // from AgentMessage.providerId for messages without telemetry.
   const providerIds = new Set<string>();
   for (const r of visible.values()) providerIds.add(r.providerId);
   for (const m of messages) {
-    if (m.role === "assistant" && m.providerId && !visible.has(m.id)) {
+    if (m.role === "assistant" && m.providerId) {
       providerIds.add(m.providerId);
     }
   }
@@ -229,7 +244,7 @@ export const getRecentMessages = cache(
         routeContext: true,
         providerId: true,
         modelId: true,
-        createdAt: true,
+        ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
         attachments: {
           select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
         },

@@ -71,6 +71,7 @@ function memoryDb() {
   const state = { workrooms: [] as Row[], activities: [] as Row[], participants: [] as Row[], relations: [] as Row[] };
   let seq = 0;
   const match = (row: Row, where: Row) => Object.entries(where).every(([key, value]) =>
+    value && typeof value === "object" && !Array.isArray(value) && "equals" in value ? JSON.stringify(row[key]) === JSON.stringify(value.equals) :
     value && typeof value === "object" && !Array.isArray(value) && "in" in value ? (value.in as unknown[]).includes(row[key]) : row[key] === value);
   const db: any = {
     state,

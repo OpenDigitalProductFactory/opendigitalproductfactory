@@ -19,6 +19,7 @@ import baseline from "../lib/ux-budget/route-budget-baseline.json";
 import { waitForRouteDomToSettle, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
 import { assertProviderQuotaFixtureRuntime, startQuotaFixtureTransport, prepareProviderQuotaFixtures,
   resetProviderQuotaFixture, cleanupProviderQuotaFixtures, type ProviderQuotaFixture } from "./provider-quota-recovery-fixtures";
+import { verifySubscriptionCalibrationHistory } from "./subscription-calibration-verification";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/ux-route-sweep/provider-quota-recovery");
@@ -116,7 +117,20 @@ export async function verifyProviderQuotaRecovery() {
             await waitForRouteDomToSettle(page);
             const job = await prisma.scheduledJob.findUniqueOrThrow({ where: { jobId: fixture.jobId } });
             check(job.lastStatus === (scenario === "recovered" ? "recovered" : "unconfirmed"), "The served result differs from its durable check history");
-            if (scenario === "recovered") check((await details.innerText()).includes(fixture.modelId), "Current proof hides its exact selected model");
+            if (scenario === "recovered") {
+              // The client result precedes router.refresh()'s server projection.
+              // Wait for the actual proof, not a quiet DOM or the model picker.
+              try {
+                await details.getByRole("definition").filter({ hasText: `${fixture.modelId} ·` })
+                  .waitFor({ state: "visible", timeout: 30_000 });
+              } catch (error) {
+                const slug = `recovered-${layout}-${theme}-proof-failure`;
+                await details.screenshot({ path: resolve(OUT, slug + ".png") });
+                write(slug + ".json", { status: "failed", ...runtime, modelId: fixture.modelId,
+                  ariaSnapshot: await details.ariaSnapshot(), requestCount: transport.counts().requests - countBefore });
+                throw error;
+              }
+            }
           } else {
             check(await details.getByRole("button", { name: copy.capacityCheck, exact: true }).count() === 0, "A restricted account offers inference");
             const before = await prisma.providerCapacityStatus.findMany({ orderBy: { id: "asc" } });
@@ -158,8 +172,10 @@ export async function verifyProviderQuotaRecovery() {
         }
       } finally { await context.close(); }
     }
+    const calibrationHistory = await verifySubscriptionCalibrationHistory({ browser, db: prisma, fixture, out: OUT,
+      storageState: resolve(ROOT, "e2e/.auth/state.json"), requestCount: () => transport.counts().requests });
     check(transport.counts().rejected === 0, "The synthetic provider received a request outside the fixed contract");
-    completed = { status: "passed", ...runtime, captures, counts: transport.counts(), syntheticTransport: true, realSubscriptionCapacity: "unrun" };
+    completed = { status: "passed", ...runtime, captures, calibrationHistory, counts: transport.counts(), syntheticTransport: true, realSubscriptionCapacity: "unrun" };
   } catch (error) {
     write("execution.json", { status: "failed", ...runtime, completedCaptures: captures.length, error: safeError(error) });
     throw error;

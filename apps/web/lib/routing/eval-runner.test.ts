@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getTestsForDimension } from "./golden-tests";
+import { prisma } from "@dpf/db";
+import { BUILTIN_DIMENSIONS } from "./types";
 
 // Mocks for the runDimensionEval integration test. The pure-function tests in
 // this file don't touch either module, so the mocks are inert for them.
@@ -346,6 +348,22 @@ describe("errorEndsEvalCycle (whole-endpoint short-circuit predicate)", () => {
   });
 });
 
+describe("subscription calibration authority boundary", () => {
+  it("refuses a forced unbound OAuth evaluation without dispatch or measurement", async () => {
+    evalState.callCount = 0;
+    evalState.profileUpdates.length = 0;
+    evalState.createCount = 0;
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({
+      authMethod: "oauth2_authorization_code", name: "ChatGPT",
+    } as never);
+    await expect(runDimensionEval("chatgpt", "selected-model", "test-operator", { force: true }))
+      .rejects.toThrow(/OAuth|commission|account/i);
+    expect(evalState.callCount).toBe(0);
+    expect(evalState.createCount).toBe(0);
+    expect(evalState.profileUpdates).toEqual([]);
+  });
+});
+
 describe("known-incomplete golden calibration", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -361,6 +379,26 @@ describe("known-incomplete golden calibration", () => {
   });
   afterEach(() => { evalState.truncatedAt = null; evalState.expectedResponses = {}; vi.useRealTimers(); });
 
+  it("keeps ungraded conversation and whole-profile confidence unverified while retaining real dimension measurements", async () => {
+    evalState.truncatedAt = Number.MAX_SAFE_INTEGER;
+    evalState.expectedResponses = Object.fromEntries(BUILTIN_DIMENSIONS.flatMap(d =>
+      getTestsForDimension(d).map(t => [t.prompt, t.expectedOutput ?? "OK"])));
+    const pending = runDimensionEval("local", "selected-model", "test", { force: true });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    const conversation = result.dimensions.find(d => d.dimension === "conversational");
+    expect(conversation).toMatchObject({ inconclusive: true });
+    expect(conversation?.testResults.every(t => t.score === null)).toBe(true);
+    expect(result.dimensions.some(d => !d.inconclusive)).toBe(true);
+    for (const update of evalState.profileUpdates) {
+      for (const field of ["conversational", "profileConfidence", "evalCount", "retiredAt", "retiredReason"]) {
+        expect(update).not.toHaveProperty(field);
+      }
+    }
+    expect(evalState.profileUpdates.some(update => "reasoning" in update)).toBe(true);
+    expect(evalState.savedRuns[0]?.data).toMatchObject({ status: "incomplete", avgScore: null });
+  });
+
   it.each([1, 6])("holds all quality/lifecycle writes when call %i is known-truncated", async truncatedAt => {
     evalState.truncatedAt = truncatedAt;
     const pending = runDimensionEval("local", "selected-model", "test", { force: true });
@@ -372,7 +410,7 @@ describe("known-incomplete golden calibration", () => {
     expect(result.dimensions.every(d => d.newScore === d.previousScore)).toBe(true);
     const qualityFields = ["reasoning", "codegen", "toolFidelity", "instructionFollowingScore", "structuredOutputScore",
       "conversational", "contextRetention", "supportsToolUse", "capabilities", "profileSource", "profileConfidence",
-      "evalCount", "modelStatus", "retiredAt", "retiredReason"];
+      "evalCount", "lastEvalAt", "modelStatus", "retiredAt", "retiredReason"];
     for (const update of evalState.profileUpdates) {
       for (const field of qualityFields) expect(update).not.toHaveProperty(field);
     }

@@ -226,7 +226,9 @@ model AdapterRunTelemetry {
 }
 ```
 
-`userAccepted` is set asynchronously when a downstream signal lands (user keeps the reply, retries, or escalates). Acceptance is the canonical "did this adapter win?" signal.
+#### 4.3.1 Exact-response disposition (BI-A009189A; design 2026-10-31)
+
+The [exact-response routing feedback design](./2026-10-31-exact-response-routing-feedback-design.md) is the canonical feedback extension to §4.3. This parent retains the adapter architecture; feedback objectives, acceptance criteria, authorization, audit and UX live in the dedicated design.
 
 ### 4.4 Hard-coded CLI special case removal
 

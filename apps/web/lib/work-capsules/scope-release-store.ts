@@ -1,19 +1,25 @@
 import { parseScopeClaims } from "@/lib/work-capsules";
 import { replaceOwnershipClaims, scopeWriteWhere } from "./scope-input";
 import { recordWorkCapsuleActivity } from "./work-capsule-activity-store";
-import { classifyScopeRelease, type ScopeReleaseInput } from "./scope-release-authorization";
+import { classifyScopeRelease, parseScopeReleaseClaims, type ScopeReleaseInput } from "./scope-release-authorization";
+import { originalScopeReleaseTargetsMatch } from "./scope-release-targets";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 /** Revalidate the ordinary effect against the write snapshot, then CAS that snapshot. */
 export async function releaseWorkCapsuleScope(args: {
-  db: CapsuleDb; capsuleId: string; claims: ScopeReleaseInput[]; actor: WorkCapsuleActor;
+  db: CapsuleDb; capsuleId: string; expectedRoomId: string; claims: ScopeReleaseInput[]; actor: WorkCapsuleActor;
   /** Internal result of the current monitor-bound decision, never a tool parameter. */
   ownScopeOnly?: boolean; now?: Date;
 }) {
   const write = async (tx: CapsuleDb) => {
+    if (tx.$queryRaw) await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${args.expectedRoomId} FOR UPDATE`;
     const capsule = await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId } });
     if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-    if (args.ownScopeOnly && classifyScopeRelease({ room: capsule, capsuleId: args.capsuleId,
+    const targets = parseScopeReleaseClaims(args.claims);
+    if (!targets || !originalScopeReleaseTargetsMatch(capsule, args.expectedRoomId, targets)) {
+      throw new Error("Original scope-release target is missing or changed. This request cannot release the current claim.");
+    }
+    if (args.ownScopeOnly && classifyScopeRelease({ room: capsule, capsuleId: args.capsuleId, expectedRoomId: args.expectedRoomId,
       claims: args.claims, callerPrincipalId: args.actor.principalId, now: args.now ?? new Date() }).consequence) {
       throw new Error("Owned scope or lease changed. Read this Workroom before requesting another release.");
     }

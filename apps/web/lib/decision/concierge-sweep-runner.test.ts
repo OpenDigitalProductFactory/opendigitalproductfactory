@@ -22,7 +22,9 @@ beforeEach(() => {
   state.rows = Array.from({ length: 201 }, (_, i) => obsoleteEnvelope(`approval-${String(i).padStart(3, "0")}`));
   for (const row of state.rows.slice(0, 200)) row.argsJson = {};
   state.db.coworkerActionEnvelope.findMany.mockImplementation(async ({ where, take }: any) => state.rows.filter(row =>
-    ["proposed", "approved"].includes(row.status) && (!where.id || row.id > where.id.gt)).slice(0, take).map(row => structuredClone(row)));
+    (typeof where.manifestActionId === "string" ? row.manifestActionId === where.manifestActionId
+      : where.manifestActionId?.in?.includes(row.manifestActionId))
+    && ["proposed", "approved"].includes(row.status) && (!where.id || row.id > where.id.gt)).slice(0, take).map(row => structuredClone(row)));
   state.db.coworkerActionEnvelope.updateMany.mockImplementation(async ({ where, data }: any) => {
     const row = state.rows.find(r => r.id === where.id);
     if (!row || row.status !== where.status || row.resolvedAt !== null) return { count: 0 };
@@ -38,6 +40,12 @@ beforeEach(() => {
 });
 
 describe("scheduled obsolete approval cleanup", () => {
+  it("keeps scope withdrawal counts and cursor separate from lease cleanup", async () => {
+    await runConciergeSweepJob({ userId: "person" });
+    expect(state.payloads[0].obsoleteScopeApprovals).toMatchObject({ scanned: 0, cancelled: 0,
+      hasMore: false, nextCursor: null });
+    expect(state.payloads[0].obsoleteReleaseApprovals.scanned).toBe(200);
+  });
   it("checkpoints bounded scan counts and reaches page two on the next ordinary pass", async () => {
     await runConciergeSweepJob({ userId: "person" });
     expect(state.payloads[0].obsoleteReleaseApprovals).toMatchObject({ scanned: 200, skipped: 200,

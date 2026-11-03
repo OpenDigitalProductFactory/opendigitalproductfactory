@@ -650,7 +650,7 @@ export async function executeAutonomousAgenticLoop(input: {
           sensitivity: input.sensitivity,
           pattern,
         });
-        if (verdict.revised) result.content = verdict.content;
+        if (verdict.revised) { result.content = verdict.content; result.responseProducer = undefined; }
       }
     } catch (err) {
       console.warn("[golden-triangle] coworker deliberation (unified seam) failed (fail-open):", err);

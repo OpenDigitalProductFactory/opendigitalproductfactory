@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PROMOTE_TEST_TIMEOUT_MS, reassessmentCapabilityFixture } from "./promote-script-functional.test-support";
+import { PROMOTE_TEST_TIMEOUT_MS, reassessmentCapabilityFixture, scopeWriterCapabilityFixture } from "./promote-script-functional.test-support";
 
 const REPO_ROOT = resolve(__dirname, "../../../..");
 const SCRIPT = join(REPO_ROOT, "scripts", "promote.sh");
@@ -66,6 +66,15 @@ function writeFakeTools(root: string): string {
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, "docker"), `#!/bin/sh
 [ -n "\${DOCKER_LOG:-}" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
+if [ "\${1-}" = run ]; then
+  probe_path=
+  for probe_path in "$@"; do :; done
+  if [ "$probe_path" = /app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs ]; then
+    [ -n "\${DPF_TEST_SCOPE_WRITER_REPORT:-}" ] || exit 78
+    printf '%s' "$DPF_TEST_SCOPE_WRITER_REPORT"
+    exit 0
+  fi
+fi
 case "$*" in
   *"/app/scripts/reassessment-capability-probe.mjs"*) [ -n "$DPF_TEST_REASSESSMENT_REPORT" ] || exit 78; printf '%s' "$DPF_TEST_REASSESSMENT_REPORT" ;;
   *".Id"*) printf "%s" "$DPF_TEST_RELEASE_CONFIG_DIGEST" ;;
@@ -199,6 +208,7 @@ function runCandidate(fixture: Fixture, options: {
     `export PROMOTE_INSTALL_ROOT=${quote(bashPath(fixture.source))}`,
     `export PROMOTE_TARGET_SHA=${TARGET_SHA}`,
     `export DPF_TEST_REASSESSMENT_REPORT=${quote(reassessmentCapabilityFixture(TARGET_SHA))}`,
+    `export DPF_TEST_SCOPE_WRITER_REPORT=${quote(scopeWriterCapabilityFixture(TARGET_SHA))}`,
     `export PROMOTE_BACKUP_PATH=${quote(bashPath(fixture.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${quote(bashPath(stateDir))}`,
     `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${quote(bashPath(join(stateDir, "runtime-transition.secret")))}`,
