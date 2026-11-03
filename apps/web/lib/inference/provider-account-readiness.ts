@@ -48,10 +48,11 @@ export function projectAccountReadiness(input: {
       ? copy.readinessWaitingSummary : capacity?.safeSummary || restrictions.find(r => ["capacity", "quota", "host-capacity", "health", "recovery"].includes(r.key))?.summary || copy.readinessWaitingSummary),
       providerResetAt: capacity?.retryAtMs ? new Date(capacity.retryAtMs).toISOString() : null };
   }
-  if (input.control && !input.control.eligibility.eligible) {
+  // Company-data clearance limits allowed work; it is not an account outage or operator pause.
+  if (input.control && !input.control.eligibility.eligible && input.control.eligibility.state !== "public_only") {
     return result(input.control.eligibility.state === "no_models" ? "action-required" : "paused", copy.readinessRestricted, input.control.eligibility.reason);
   }
-  const policyRestriction = restrictions.find(r => ["local-only", "clearance"].includes(r.key));
+  const policyRestriction = restrictions.find(r => r.key === "local-only");
   if (policyRestriction) return result("paused", copy.readinessRestricted, policyRestriction.summary);
   if (input.verifiedModelCount === 0) return result("action-required", copy.readinessRestricted, copy.readinessNoModels);
   if (!input.healthAvailable) return result("unverified", copy.readinessUnverified, copy.routingCheckUnavailable);

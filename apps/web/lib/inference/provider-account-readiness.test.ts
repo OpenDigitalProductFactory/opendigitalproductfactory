@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { projectAccountReadiness } from "./provider-account-readiness";
+import { projectProviderRoutingControl } from "@/lib/routing/provider-routing-control";
 import copy from "../../../../packages/i18n/src/messages/en-US/providerAccounts.json";
 
 const now = Date.parse("2026-10-15T12:00:00Z");
 const base = { status: "active", providerStatus: "active", requiresCredential: true, hasCredential: true,
   credentialNeedsRenewal: false, healthAvailable: true, now, copy };
 describe("account readiness distinguishes configuration from current proof", () => {
+  it.each([true, false])("keeps public-work readiness separate from company-data approval (recent success: %s)", recentSuccess => {
+    const control = projectProviderRoutingControl({ pw: { provider: { providerId: "chatgpt", status: "active",
+      endpointType: "responses", authMethod: "oauth2_authorization_code", defaultConnectionStatus: "active",
+      sensitivityClearance: ["public"] }, credential: { hasUsableMaterial: true } }, modelCount: 8, now, localOnly: false });
+    expect(control.eligibility).toMatchObject({ state: "public_only", eligible: false });
+    const capacity = recentSuccess ? { state: "available" as const, lastSuccessAtMs: now - 1000 } : undefined;
+    expect(projectAccountReadiness({ ...base, control, capacity }).state).toBe(recentSuccess ? "verified-success" : "enabled");
+    for (const key of ["operator", "local-only"]) {
+      const restricted = { ...control, restrictions: [...control.restrictions, { key, summary: "Work remains paused.", until: null }] };
+      expect(projectAccountReadiness({ ...base, control: restricted, capacity }).state).toBe("paused");
+    }
+  });
   it("does not call a configured account working without successful inference", () => {
     expect(projectAccountReadiness(base).state).toBe("enabled");
     expect(projectAccountReadiness({ ...base, healthAvailable: false }).state).toBe("unverified");

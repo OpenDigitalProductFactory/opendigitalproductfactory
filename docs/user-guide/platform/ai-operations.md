@@ -45,6 +45,8 @@ Recorded cost uses correlated token usage when present, otherwise correlated rou
 
 ## Investigate stops and provider setup
 
+Account health and allowed work answer separate questions. A **Public data only** account can be working or enabled for eligible public work while company-data review is still required. That review requirement does not mean the account was paused. Operator pauses, capacity holds, credentials and other restrictions still apply.
+
 Data policy and clearance, token/context limits, quota/cooldown, payment, disabled configuration, sign-in, operator pause and unavailable capacity evidence are distinct reasons. Current provider restrictions come from the same read model as provider settings; an exclusion on an older decision is historical evidence, not a claim about current eligibility.
 
 **Settings & overrides** opens the existing provider detail. The Providers navigation returns to the catalog; Traffic or Evaluation restores the routing scope. Provider settings remain the place to manage credentials, connections, operator pauses and sensitivity overrides. Risk acceptance still requires the existing warning, acknowledged scope, rationale and expiry. Revoking an override or lifting a pause does not clear another restriction. Assignment settings remain the place for coworker model pins.
