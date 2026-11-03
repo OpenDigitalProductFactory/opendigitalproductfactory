@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Repository security remediation
 
 Parent: BI-2422A366. Dependency delivery: BI-1D8EC7F7.
