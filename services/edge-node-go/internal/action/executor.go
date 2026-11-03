@@ -3,6 +3,8 @@ package action
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -22,6 +24,12 @@ type Executor struct {
 	OrganizationJoin *OrganizationJoinHandler
 	// DockerVmRestart is set only on a Windows host (BI-F8F8C383).
 	DockerVmRestart DockerVmRestartExecutor
+	// Optional and disabled until the supported native installer provisions the
+	// complete lifecycle implementation. A type registration never enables it.
+	ManagedInference ManagedInferenceExecutor
+	// QualificationWindows is configured only by the supported Windows native
+	// installer. A registered type without this handler remains unavailable.
+	QualificationWindows QualificationWindowsExecutor
 }
 
 type DockerVmRestartExecutor interface {
@@ -65,6 +73,20 @@ func (e *Executor) Execute(ctx context.Context, signed SignedEnvelope) (Executio
 		if !validDockerVmRestartParameters(signed.Parameters) {
 			return ExecutionOutput{}, ErrInvalidParameters
 		}
+	} else if signed.ActionType == ManagedInferenceActionType {
+		if e.ManagedInference == nil {
+			return ExecutionOutput{}, ErrUnsupportedAction
+		}
+		if _, err := parseManagedInferenceParameters(signed.Parameters); err != nil {
+			return ExecutionOutput{}, err
+		}
+	} else if signed.ActionType == QualificationWindowsVerifyActionType {
+		if e.QualificationWindows == nil {
+			return ExecutionOutput{}, ErrUnsupportedAction
+		}
+		if _, err := parseQualificationWindowsParameters(signed.Parameters); err != nil {
+			return ExecutionOutput{}, err
+		}
 	} else if signed.ActionType != "organization.join.issue" && signed.ActionType != "organization.join.import" {
 		return ExecutionOutput{}, ErrUnsupportedAction
 	} else if e.OrganizationJoin == nil {
@@ -84,6 +106,29 @@ func (e *Executor) Execute(ctx context.Context, signed SignedEnvelope) (Executio
 			return ExecutionOutput{}, err
 		}
 		output.Evidence = evidence
+	} else if signed.ActionType == ManagedInferenceActionType {
+		var err error
+		output, err = e.ManagedInference.Execute(ctx, signed)
+		if err != nil {
+			return output, err
+		}
+	} else if signed.ActionType == QualificationWindowsVerifyActionType {
+		var err error
+		output, err = e.QualificationWindows.Execute(ctx, signed.Parameters)
+		if err != nil {
+			return output, err
+		}
+		canonical, canonicalErr := CanonicalEnvelope(signed.Envelope)
+		if canonicalErr != nil {
+			return ExecutionOutput{}, canonicalErr
+		}
+		digest := sha256.Sum256(canonical)
+		if output.Evidence == nil {
+			output.Evidence = map[string]any{}
+		}
+		output.Evidence["actionKey"] = signed.ActionKey
+		output.Evidence["nodeId"] = signed.NodeID
+		output.Evidence["requestDigest"] = hex.EncodeToString(digest[:])
 	} else {
 		var err error
 		output, err = e.dispatchPrivileged(ctx, signed.ActionType, signed.Parameters)

@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import type {
   CommunicationChannel,
@@ -16,8 +16,9 @@ export interface RecordDeliveryAttemptInput {
 
 export async function recordDeliveryAttempt(
   input: RecordDeliveryAttemptInput,
+  db: { communicationDeliveryAttempt: Pick<Prisma.TransactionClient["communicationDeliveryAttempt"], "create"> } = prisma,
 ): Promise<{ attemptId: string }> {
-  return prisma.communicationDeliveryAttempt.create({
+  return db.communicationDeliveryAttempt.create({
     data: {
       channelType: input.channel,
       targetType: input.target.targetType,

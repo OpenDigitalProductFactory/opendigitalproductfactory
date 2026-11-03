@@ -9,6 +9,17 @@ import type { TerminalActor, TerminalAuthority } from "./terminal-transition-rep
 import type { ReadinessProfile } from "./types";
 import { resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 
+/**
+ * The serialized terminal mutations that may record an item's body criteria as
+ * its scope: the backlog item's own completion, and the completion of the
+ * build it originated (BI-729D9B27). The baseline is a scope record, never a
+ * receipt; acceptance still needs an independent reviewer's mapping.
+ */
+const MINTING_AUTHORITIES = [
+  { actionKey: "update_backlog_item_status", capability: "manage_backlog", grant: "backlog_write" },
+  { actionKey: "complete_feature_build", capability: "view_platform", grant: "build_lifecycle" },
+] as const;
+
 /** Called only inside the existing authorized, serialized subject mutation. */
 export async function ensureItemBodyBaseline(tx: Prisma.TransactionClient, args: {
   item: BacklogCompletionItem;
@@ -20,8 +31,8 @@ export async function ensureItemBodyBaseline(tx: Prisma.TransactionClient, args:
   const authority = args.authority.authoritySnapshot;
   if (args.effectiveShape !== "medium" || args.authority.organizationId !== args.item.organizationId
     || authority.organizationId !== (args.item.organizationId ?? "platform") || authority.decision !== "allow"
-    || authority.effectiveHumanCapability !== "manage_backlog" || authority.effectiveAgentGrant !== "backlog_write"
-    || args.authority.actionKey !== "update_backlog_item_status") return;
+    || !MINTING_AUTHORITIES.some((allowed) => allowed.actionKey === args.authority.actionKey
+      && allowed.capability === authority.effectiveHumanCapability && allowed.grant === authority.effectiveAgentGrant)) return;
   const criteria = bodyCriteriaVersion(args.item.body);
   if (!criteria) return;
   const source = await loadBaselineSourceForItem(tx as unknown as BaselineSourceDb, args.item);

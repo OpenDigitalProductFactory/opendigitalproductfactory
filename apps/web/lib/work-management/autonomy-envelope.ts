@@ -15,8 +15,8 @@ import {
   resolveVerificationRequirement,
   type JoinedAutonomy,
   type VerificationRequirement,
-} from "./hitl-join";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy/hitl-join";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { VerificationDepth } from "@/lib/golden-triangle";
 import type { WorkCaseActionVerb } from "./case-types";
 import {
@@ -25,11 +25,8 @@ import {
 } from "./source-registry";
 import type { WorkCaseAutonomyMode, WorkCasePolicyEnvelope } from "./policy-envelope";
 
-export type WorkCaseAutonomyDecisionMode =
-  | "shadow-only"
-  | "propose-for-approval"
-  | "supervised-action"
-  | "autonomous-action";
+import type { WorkCaseAutonomyDecisionMode } from "@dpf/validators/policy-types";
+export type { WorkCaseAutonomyDecisionMode } from "@dpf/validators/policy-types";
 
 export interface WorkCaseAutonomyEnvelopeInput {
   sourceKey: string;

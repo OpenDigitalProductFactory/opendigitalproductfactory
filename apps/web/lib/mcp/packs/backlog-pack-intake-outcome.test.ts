@@ -42,13 +42,18 @@ describe("create_backlog_item captures the outcome (BI-B1B44777)", () => {
     expect(result.message).not.toContain("No outcome stated");
   });
 
-  it("files an item with no outcome and prompts for one", async () => {
-    ingest.ingestBacklogItem.mockResolvedValue({ itemId: "BI-NEW", id: "row", created: true, outcomeStated: false });
+  it("files an item with no outcome, names the derived draft and how to correct it (BI-8DE5429B)", async () => {
+    ingest.ingestBacklogItem.mockResolvedValue({
+      itemId: "BI-NEW", id: "row", created: true, outcomeStated: false,
+      derivedOutcome: 'The reported problem no longer happens: "Something".',
+    });
     const result = await backlogPack.handlers.create_backlog_item!(
       { title: "Something", type: "portfolio", workType: "bug", body: "Broken." },
       "user-1",
     );
     expect(result.success).toBe(true);
     expect(result.message).toContain("No outcome stated");
+    expect(result.message).toContain('The reported problem no longer happens: "Something".');
+    expect(result.message).toContain("update_backlog_item");
   });
 });

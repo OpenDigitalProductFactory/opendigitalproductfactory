@@ -174,7 +174,7 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
 
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
-  return defaultGovernedToolPreflight(event, oauthRoomRefusal);
+  return defaultGovernedToolPreflight(event, oauthRoomRefusal, findTool(event.toolName));
 }
 
 /**
@@ -210,6 +210,9 @@ async function callExecuteTool(
   if (refusal) return refusal;
   const recoveryRefusal = await checkRecoveredReviewAuthority(userId, ctx);
   if (recoveryRefusal) return recoveryRefusal;
+  const { scheduledReportingToolRefusal } = await import("./operate/scheduled-jobs/scheduled-reporting-authority");
+  const reportingRefusal = await scheduledReportingToolRefusal(toolName, userId, ctx, findTool(toolName));
+  if (reportingRefusal) return reportingRefusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -437,6 +440,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tool,
       agentGrantAllowed,
     );
+    if (authorityGate.outcome === "settled-command") return authorityGate.result;
     if (authorityGate.outcome === "settled") return settledApprovalResult(args.toolName, authorityGate);
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {

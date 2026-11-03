@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// BI-B1B44777: the portal backlog form's create action stores the outcome the
-// item delivers at the top of its body, and still files an item without one.
+// BI-B1B44777, BI-8DE5429B: the portal backlog form's create action stores the
+// outcome the item delivers in its outcome field, and still files an item
+// without one, with a derived draft marked derived.
 
 const { mockPrisma, txCreate } = vi.hoisted(() => {
   const txCreate = vi.fn(async (_args: { data: Record<string, unknown> }) => ({ id: "row-1", demandStage: null }));
@@ -26,14 +27,19 @@ beforeEach(() => txCreate.mockClear());
 const base = { title: "Overdue invoices view", type: "portfolio" as const, workType: "feature" as const, status: "open" as const };
 
 describe("portal backlog intake captures the outcome (BI-B1B44777)", () => {
-  it("writes the outcome first and keeps the notes", async () => {
+  it("stores the stated outcome in its field and keeps the notes as the body", async () => {
     await createBacklogItem({ ...base, outcome: "Finance sees every overdue invoice in one list.", body: "Asked for by finance." });
-    expect(txCreate.mock.calls[0]![0].data.body)
-      .toBe("## Outcome\nFinance sees every overdue invoice in one list.\n\nAsked for by finance.");
+    expect(txCreate.mock.calls[0]![0].data).toMatchObject({
+      outcome: "Finance sees every overdue invoice in one list.", outcomeSource: "stated", body: "Asked for by finance.",
+    });
   });
 
-  it("files an item with notes and no outcome exactly as before", async () => {
+  it("files an item with notes and no outcome, with a derived draft", async () => {
     await createBacklogItem({ ...base, body: "  Just notes.  " });
-    expect(txCreate.mock.calls[0]![0].data.body).toBe("Just notes.");
+    expect(txCreate.mock.calls[0]![0].data).toMatchObject({
+      body: "Just notes.",
+      outcome: '"Overdue invoices view" is in place and working for the people it is for.',
+      outcomeSource: "derived",
+    });
   });
 });

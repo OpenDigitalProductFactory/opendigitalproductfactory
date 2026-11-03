@@ -8,6 +8,7 @@ import {
   findImporterDependency,
   parseImporters,
   parsePackageKeys,
+  parseFilePackages,
   parseSnapshots,
   splitNameVersion,
   topLevelSection,
@@ -131,4 +132,9 @@ test("empty or missing input parses to empty results", () => {
   assert.deepEqual(parsePackageKeys(""), []);
   assert.deepEqual(parseImporters(undefined), {});
   assert.equal(parseSnapshots(null).size, 0);
+});
+
+test("file archives retain their locked semantic version and integrity", () => {
+  const map = parseFilePackages("packages:\n  '@scope/kernel@file:vendor/kernel.tgz':\n    resolution: {integrity: sha512-pinned, tarball: file:vendor/kernel.tgz}\n    version: 1.2.3\nsnapshots:\n");
+  assert.deepEqual(map.get("@scope/kernel@file:vendor/kernel.tgz"), { name: "@scope/kernel", version: "1.2.3", integrity: "sha512-pinned", tarball: "file:vendor/kernel.tgz" });
 });

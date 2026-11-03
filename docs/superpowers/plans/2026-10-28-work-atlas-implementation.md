@@ -49,6 +49,21 @@ Each step extends existing substrate rather than adding a parallel one.
   - A6a business layouts and Just now feed -> BI-B0D8394B
   - A6b refinements (existing item) -> BI-7EE5681A
 
+### Traceability to the design's scope manifest
+
+Each step names the objectives (design §11) it advances, the acceptance statements that verify it, the contract it introduces and the flow it changes.
+
+| Key | Objectives | Acceptance | Contract | Flow |
+|---|---|---|---|---|
+| A0 | OBJ-ONE-VOCABULARY, OBJ-UX-AUTHORITY | AC-ONE-VOCABULARY, AC-UX | atlas health classifier | operator summary, Build rail, delivery task hub |
+| A1 | OBJ-ONE-PROJECTION, OBJ-ONE-PICTURE | AC-ONE-PROJECTION | atlas room tuple | portal loader, MCP read |
+| A2 | OBJ-ONE-PICTURE, OBJ-NO-PARALLEL-VIEWS, OBJ-UX-AUTHORITY | AC-ONE-PICTURE, AC-RETIRE, AC-UX | atlas URL filters | Work in progress page |
+| A3 | OBJ-DISCLOSE, OBJ-UX-AUTHORITY | AC-DISCLOSE, AC-UX | inspector over the room flow map | cell to inspector to room detail |
+| A4 | OBJ-RHYTHM-AND-AGE | AC-RHYTHM | standing run history | rhythm strip |
+| A5 | OBJ-RHYTHM-AND-AGE | AC-AGE | stage queue percentiles | stage lens |
+| A6a | OBJ-BUSINESS-LAYOUT | AC-LAYOUT | layout per twin template | layout per archetype |
+| A6b | OBJ-BUSINESS-LAYOUT | AC-REFINE | organization facet selection | setup confirmation |
+
 | Key | Deliverable | Live BI | Requirements | Contracts | Flows | Verification | Depends on | Independently shippable |
 |---|---|---|---|---|---|---|---|---|
 | A0 | One health vocabulary; three groupings become adapters; critic calibration | BI-930A4C88 | AC-ONE-VOCABULARY, AC-UX | `AtlasHealth` six-state type; adapter functions | operator summary, Build rail, delivery hub | parity test; guard test; corpus entries recorded | — | yes |

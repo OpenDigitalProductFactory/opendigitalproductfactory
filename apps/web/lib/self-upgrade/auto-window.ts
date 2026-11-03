@@ -94,11 +94,8 @@ export function pickOvernightWindow(args: { timeZone: string; now?: Date }): Mai
 }
 
 /** A schedule-derived or telemetry-observed low-traffic slot (BusinessProfile.lowTrafficWindows). */
-export type LowTrafficWindow = {
-  dayOfWeek: number;
-  start: string;
-  end: string;
-};
+import type { LowTrafficWindow } from "@dpf/validators/workroom-policy/clock-types";
+export type { LowTrafficWindow } from "@dpf/validators/workroom-policy/clock-types";
 
 // An upgrade window should be a quiet slot, not "all day"; reject anything longer.
 const MAX_TROUGH_MINUTES = 6 * 60;

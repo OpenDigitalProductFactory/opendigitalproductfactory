@@ -13,14 +13,24 @@ export function classifyInitialPublication(anchor, { repositoryFullName, branch,
   if (!anchor || anchor.repositoryFullName !== repositoryFullName || anchor.branch !== branch
     || anchor.pullRequestNumber !== pullRequestNumber || !SHA.test(anchor.sha ?? "") || !SHA.test(anchor.tree ?? "")) return miss("missing or foreign initial-publication anchor");
   const state = anchor.state;
+  const metadata = anchor.metadata;
+  const equivalent = anchor.equivalentCandidate;
+  const sameSynthesizedTree = equivalent?.sha === state?.sha
+    && equivalent?.synthesizedTreeSha === anchor.tree
+    && metadata?.candidateSha === state?.sha
+    && metadata?.synthesizedTreeSha === anchor.tree;
   const capturedAt = Date.parse(anchor.capturedAt);
-  if (!state || state.branch !== branch || state.sha !== anchor.sha || !Number.isFinite(capturedAt)
+  if (!state || state.branch !== branch || (state.sha !== anchor.sha && !sameSynthesizedTree) || !Number.isFinite(capturedAt)
     || !Number.isFinite(Date.parse(state.recordedAt)) || Date.parse(state.recordedAt) > capturedAt
     || state.testStub === true || state.evidencePending === true) return miss("initial publication was not qualified at capture");
   if (state.gatePassed === true && state.status === "passed" && !state.skipped) {
-    const metadata = anchor.metadata;
+    // A signed/rebased PR commit may retain exactly the same synthesized
+    // integration tree as the canonical candidate that was executed.  The
+    // evidence remains bound to its original candidate SHA; accept it for the
+    // published SHA only when that full integration tree is identical.
+    const candidateMatches = state.sha === anchor.sha || sameSynthesizedTree;
     if (!state.evidenceRecordId || !(Date.parse(state.expiresAt) > capturedAt)
-      || !state.leaseId || metadata?.candidateSha !== anchor.sha || metadata.runLeaseId !== state.leaseId
+      || !state.leaseId || metadata?.candidateSha !== state.sha || !candidateMatches || metadata.runLeaseId !== state.leaseId
       || metadata.execution?.status !== "passed") return miss("initial canonical evidence is unbound or unqualified");
     return { ok: true, kind: "canonical" };
   }

@@ -26,14 +26,23 @@ The reason is the squash-merge above. Every merged PR gets a fresh SHA on `main`
 
 Reference: [`apps/web/lib/self-upgrade/local-changes-ledger.ts`](../../apps/web/lib/self-upgrade/local-changes-ledger.ts) (BI-75C4A412).
 
+## Read-only work needs no worktree
+
+Review, diagnosis, research and answering a question about the source change nothing, so they get no working copy. Create the room on the read-only shape (`create_workroom` with `workShape: "source-inquiry@1.0.0"`) and read through `read_source_at_version`, `search_source_at_version`, `list_source_directory` and `read_project_file`, or `git show origin/main:<path>` against the root clone. A `source-inquiry` room cannot reach worktree provisioning: `plan_workroom_worktree`, `claim_workroom_scope` and `adopt_worktree` refuse it with `worktree_provision_not_admitted`, and so does the WorktreeCreate hook while the session holds such a room. When the inquiry turns out to need a change, claim the item with a delivery shape; that claim is the route to a worktree ([design](../superpowers/specs/2026-10-14-worktree-provisioning-under-gpp-design.md), BI-D1FB8C4D).
+
 ## Creating a worktree
 
+Create worktrees through the governed path, which admits and binds the Workroom **before** the worktree exists:
+
 ```
-git worktree add D:/DPF-worktrees/<topic> -b <prefix>/<topic>     # Windows
-git worktree add ~/dpf-worktrees/<topic>  -b <prefix>/<topic>     # macOS / Linux
+bash scripts/new-dev-worktree.sh <topic> [<prefix>]          # manual path
 ```
 
-⟦runtime: install-local paths — the `D:/` form is the Windows install shape⟧ The dedicated sibling base is canonical for **all three** host CLI surfaces (Claude Code, Codex, Grok) per the 2026-06-05 unified-delivery-surfaces decision #1 — not Claude Code's default `.claude/worktrees/<random>` nesting, and not the older `D:/DPF-<topic>` alongside-the-clone form.
+Claude Code's auto-created worktrees go through the WorktreeCreate hook, which runs the same library (`scripts/lib/worktree-provision.mjs`). Both refuse, and create nothing, when the platform refuses or cannot be reached. Raw `git worktree add` bypasses the admission; a guard for it is BI-25A45D5C.
+
+**Break-glass.** When the platform is down and an operator authorizes recovery (AGENTS.md §1), set `DPF_WORKTREE_BREAK_GLASS="<operator: reason>"` for that one command. The worktree is created unbound with a `dpf-workroom-pending.json` marker in its git dir; bind it with `adopt_worktree` once the platform is back. Break-glass never overrides a refusal: a refusal is an authorization answer, not an outage.
+
+⟦runtime: install-local paths — the `D:/` form is the Windows install shape⟧ The dedicated sibling base (`<root>-worktrees/<topic>`) is canonical for **all three** host CLI surfaces (Claude Code, Codex, Grok) per the 2026-06-05 unified-delivery-surfaces decision #1 — not Claude Code's default `.claude/worktrees/<random>` nesting, and not the older `D:/DPF-<topic>` alongside-the-clone form.
 
 Never share a working tree across sessions: it causes index/HEAD collisions and cross-thread file sweeps.
 
@@ -118,6 +127,17 @@ The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the en
 - **Workroom ownership is read in full or not at all.** The janitor reads every page of one `list_workrooms` observation. A row without a provable `worktreePath` is resolved through its own `get_workroom` detail read, and an expired observation is restarted rather than mixed with a new one. Any incomplete read keeps every ownership-dependent tree, and the `--json` report's `claims.reason` says why (BI-83345811). See the [janitor schedule guide](../install/worktree-janitor-schedule.md#who-owns-a-worktree-bi-83345811).
 - **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
 - **Unpushed-work backup.** Before a live run deletes a stale, unmerged branch (bash stale prune, or Node Tier B), it counts commits on no remote (`git rev-list --count refs/heads/<b> --not --remotes`). If any exist it writes `refs/janitor-backup/<YYYY-MM-DD>/<b>` at the tip and logs it; if that count or ref write fails, the worktree is kept (BI-EBBBDF40). Recover with `git branch <b> refs/janitor-backup/<date>/<b>`.
+
+## Branches left without a worktree
+
+The janitor deletes a branch only together with the worktree it removes, so a branch whose tree went some other way stays forever. `scripts/branch-reaper.mjs` (BI-88D75BA3) inventories those branches. Local deletion remains incomplete.
+
+- **Dry run by default.** `node scripts/branch-reaper.mjs` classifies and reports; `--live` prunes remote-tracking refs and reports local deletion as blocked (exit 3) when candidates exist; `--json` gives the full report.
+- **What it classifies as eligible.** A local branch whose work is already on `origin/main`: either an ancestor of it, or exactly the head commit a PR shipped into main whose merge commit is reachable from the observed main history (squash merge). The branch must also have no worktree, no open PR and no live Workroom, and must not be the current, `main`, `release/*`, `hotfix/*` or a pinned branch. Pin a branch by adding its name as a line in `<git-common-dir>/dpf-branch-pins`.
+- **Fails closed.** Missing exact branch identities, failed Git ownership reads, or an unreadable, malformed or limit-saturated open-PR inventory cannot authorize deletion. The observation must be installation-wide: an OAuth client credential sees only caller-visible rooms, so run it with the install's PAT. It reads branches only (`resolvePaths: false`) with a long read budget, because a large install's observation takes minutes.
+- **Local deletion gate.** A complete snapshot and a tip comparison do not protect a new claim or checkout admitted after observation. The executable deletion path returns `concurrent-ownership-fence-unavailable` and performs zero local-ref mutations. There is no override flag. BI-88D75BA3 stays open until admission and deletion share a verified ownership reservation.
+- **Each live cycle also** runs `git fetch --prune origin`, so remote-tracking refs for deleted remote branches go too.
+- **Stash census.** It reports the stash: entry count, how many are older than 7 or 30 days, and the oldest. It never drops an entry, because the stash stack is repository-wide and holds other sessions' work.
 
 ## Rebasing on a shallow clone — never a bare `git rebase origin/main`
 

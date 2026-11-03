@@ -39,6 +39,16 @@ contains no credential values, actor identifiers or raw errors. A current allowe
 result is neither a historical cause nor permission to retry. Use the returned
 supported remedy for the failed stage; never replace the saved credential by hand.
 
+For `oauth-authority-invalid`, optional `detail` identifies the first current
+failure in the shared execution predicate: token kind/revocation, missing or
+revoked client, ineligible human, missing continuity binding or evidence, or
+missing/invalid consent. The fixed `nextAction` distinguishes account-owner
+review from a binding that the recovery owner must reconcile. Missing continuity
+evidence does not prove expiry caused the original failure, and reconnecting a
+different client does not restore the original binding. Storage failures remain
+unavailable. The diagnostic does not change execution eligibility, settle an old
+execution, or authorize a retry.
+
 The original signed-in human can read the same bounded recovery observation on
 the existing `/api/internal/tasks/<taskId>` task-detail endpoint. Its original
 task admission runs first; another owner's task receives no added authority

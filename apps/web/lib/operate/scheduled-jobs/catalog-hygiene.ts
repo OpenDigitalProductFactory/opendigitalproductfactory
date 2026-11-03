@@ -67,6 +67,19 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     runNowEvent: null,
   },
   {
+    jobId: "backlog-outcome-reconcile",
+    inngestId: "ops/backlog-outcome-reconcile",
+    honorsEnabledGate: true,
+    name: "Backlog outcome reconcile",
+    purpose:
+      "Gives every open backlog item an outcome (lifted from its body, or a derived draft marked derived), at most 250 per run, and records reopens and failing evidence as regressed or not achieved against the item's own outcome (BI-8DE5429B). Fills empty fields only; never overwrites an outcome.",
+    cron: "41 * * * *",
+    cadence: "Hourly at :41",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "runtime-target-janitor",
     inngestId: "ops/runtime-target-janitor",
     ungatedReason:

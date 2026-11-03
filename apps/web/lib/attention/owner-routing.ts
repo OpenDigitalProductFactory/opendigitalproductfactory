@@ -1,4 +1,4 @@
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { namesNoConcreteConsequence } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 

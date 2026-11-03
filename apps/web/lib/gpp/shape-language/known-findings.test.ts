@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { applyKnownFindings, KNOWN_FINDING_ELIGIBLE_RULES, type KnownFinding } from "./known-findings";
-import { hasBlockingDiagnostic, type GppDiagnostic } from "./diagnostics";
-import { compileShapeDocument } from "./compile";
-import type { GppResolveSources } from "./resolve";
+import { hasBlockingDiagnostic, type GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
+import { compileShapeDocument } from "./dpf-toolkit";
+import type { GppResolveSources } from "@dpf/validators/gpp/resolve";
 
 const diagnostic: GppDiagnostic = { rule: "D-1", code: "D-1", elementId: "stage:plan", path: "/stages/0", severity: "error", message: "ungated entry", tools: ["publish", "merge"] };
 const entry: KnownFinding = { rule: "D-1", code: "D-1", elementId: "stage:plan", tools: ["merge", "publish"], reason: "Existing source divergence", backlogItemId: "BI-12345678" };
@@ -16,7 +16,8 @@ describe("declared-flow shrink-only findings", () => {
     expect(result.diagnostics[0]).toEqual({ ...diagnostic, knownFinding: { reason: entry.reason, backlogItemId: entry.backlogItemId } });
     expect(diagnostic).not.toHaveProperty("knownFinding");
     expect(result.staleKnownFindings).toEqual([]);
-    expect(hasBlockingDiagnostic(result.diagnostics)).toBe(false);
+    // Annotation is data; only the explicit DPF declared-flow disposition tolerates it.
+    expect(hasBlockingDiagnostic(result.diagnostics)).toBe(true);
     for (const changed of [{ code: "D-2" }, { elementId: "stage:build" }, { tools: ["merge", "publish", "extra"] }]) {
       const mismatch = applyKnownFindings([{ ...diagnostic, ...changed } as GppDiagnostic], [entry]);
       expect(mismatch.staleKnownFindings).toEqual([entry]);

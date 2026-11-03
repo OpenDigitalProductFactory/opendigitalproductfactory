@@ -532,6 +532,8 @@ export type RecordProductOutcomeObservationInput = {
   provenance: Record<string, unknown> | null;
   recordedByPrincipalId: string | null;
   supersedesObservationId: string | null;
+  /** The backlog item whose own outcome this observes (BI-8DE5429B); platform writers only. */
+  backlogItemId?: string | null;
 };
 
 function numberOf(
@@ -648,6 +650,7 @@ export async function recordProductOutcomeObservation(
         provenance: input.provenance ?? undefined,
         recordedByPrincipalId,
         supersedesObservationId,
+        ...(input.backlogItemId ? { backlogItemId: input.backlogItemId } : {}),
       },
     });
   });

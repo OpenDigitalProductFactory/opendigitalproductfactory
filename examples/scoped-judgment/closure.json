@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "entry": "kernel/judgment/index.ts",
+  "runtimeDependencies": [],
+  "sources": [
+    "packages/validators/src/decision-scopes.ts",
+    "packages/validators/src/judgment/scopes.ts",
+    "packages/validators/src/judgment/option-scoring.ts",
+    "packages/validators/src/judgment/mcda-quality-gates.ts",
+    "packages/validators/src/judgment/option-identities.ts",
+    "packages/validators/src/judgment/uncertain-retry.ts",
+    "packages/validators/src/judgment/scoped-advice.ts",
+    "packages/validators/src/judgment/index.ts"
+  ],
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3"
+  },
+  "license": "Apache-2.0",
+  "sourceBaseline": "91550be3e97ad8d99af3d01992323c07d2f1d1c5",
+  "qualification": "Synthetic advisory contract fixture only; no authenticated ownership, corpus quality, human admission, enforcement or production qualification."
+}

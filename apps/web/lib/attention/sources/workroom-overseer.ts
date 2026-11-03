@@ -23,8 +23,35 @@ export const OVERSEER_ATTENTION_SCAN_LIMIT = 100;
 
 export type OverseerAttentionRow = { capsuleId: string; title: string; updatedAt: Date; workspaceState: unknown };
 
+/** Holds that wait on an agent or on platform capacity, never on a person (BI-3A515481). */
+const AGENT_SIDE_HOLD_REASONS: ReadonlySet<string> = new Set([
+  "executor_writeback_unavailable",
+  "missing_task_owner",
+  "awaiting_agent_capacity",
+  "agent_stage",
+  "provider_held",
+  "lease_held",
+]);
+
+/**
+ * Whether an overseer item asks the owner for a business judgment (BI-3A515481).
+ * Resuming or handing over an AI session (R3), waiting on an agent or on
+ * capacity, and recording a size the drive already derived are recovery work
+ * the owner cannot do; owner-routing sends them to the custodian. A hold on a
+ * person, a role or a governed decision still reaches the owner.
+ */
+function asksOwnerJudgment(state: ReturnType<typeof readOverseerState>): boolean {
+  const attention = state.attention;
+  if (!attention || attention.rule === "R3") return false;
+  if (state.holdConclusion?.outcome === "derived-size") return false;
+  // The hold key is "<action>|<reason>|<stage>" (workroom-drive-hold.ts).
+  const reason = attention.key.replace(/^R4:/, "").split("|")[1] ?? "";
+  return !AGENT_SIDE_HOLD_REASONS.has(reason);
+}
+
 export function projectOverseerAttention(row: OverseerAttentionRow): AttentionItem | null {
-  const attention = readOverseerState(row.workspaceState).attention;
+  const state = readOverseerState(row.workspaceState);
+  const attention = state.attention;
   if (!attention) return null;
   const roomHref = `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId })}`;
   const assignee = attention.assigneePrincipalRef;
@@ -41,7 +68,7 @@ export function projectOverseerAttention(row: OverseerAttentionRow): AttentionIt
       blastRadius: assignee
         ? "this room's outcome, and a later claim on its item"
         : "this room's outcome — and it has no overseer to route to",
-      decideEffort: "judgment",
+      decideEffort: asksOwnerJudgment(state) ? "judgment" : "review",
       irreversible: false,
     },
     createdAtIso: attention.raisedAt || row.updatedAt.toISOString(),

@@ -9,7 +9,7 @@
  * merges, force-pushes, dismisses a check or edits required-check config: the
  * merge queue stays the only writer of `main`.
  */
-import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import {
   decideAutonomousRecovery,

@@ -128,6 +128,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Update status. For triaged items only; use triage_backlog_item to leave triaging." },
         priority: { type: "number", description: "Priority number (lower = higher priority)" },
         body: { type: "string", description: "Updated description" },
+        outcome: { type: "string", description: "The outcome this item delivers: what will be true, and for whom, once it is done. Replaces a derived draft and is recorded as stated." },
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
@@ -281,6 +282,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       type: "object",
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
+        workroomId: { type: "string", description: "Optional exact persisted Workroom locator. Requires current human and assistant action access and matching item/source; never supplies authority or caller source hashes. Preserves unscoped ambiguity when omitted." },
         recoveryGate: { type: "string", enum: RECOVERY_READ_GATES, description: "Return only this gate's exact current recovery request or explicit issuer escalation, without large body/history. Re-read unchanged identity for the same request; never reconstruct a packet." },
         reassessmentAuthorizationItemId: { type: "string", description: "Optional immutable approved policy item locator for a separately authorized present design-spec or spec-approval reassessment. Selects evidence only; cannot grant execution, replay an original task or replenish an allowance." },
       },

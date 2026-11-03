@@ -41,3 +41,24 @@ describe("update_backlog_item sensitivity (BI-0A5EE9C1)", () => {
     expect(m.activity).not.toHaveBeenCalled();
   });
 });
+
+describe("update_backlog_item outcome (BI-8DE5429B)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m.find.mockResolvedValue({
+      id: "row-1", itemId: "BI-1", status: "open", sensitivity: "internal", demandStage: "raw",
+      outcome: '"X" is in place and working for the people it is for.', outcomeSource: "derived",
+    });
+  });
+
+  it("replaces a derived draft with the stated outcome", async () => {
+    const result = await handleUpdateBacklogItem({ itemId: "BI-1", outcome: "  Finance sees overdue invoices.  " });
+    expect(result.success).toBe(true);
+    expect(m.update.mock.calls[0][0].data).toEqual({ outcome: "Finance sees overdue invoices.", outcomeSource: "stated" });
+  });
+
+  it("does not clear the outcome when given an empty value", async () => {
+    await handleUpdateBacklogItem({ itemId: "BI-1", outcome: "   ", sensitivity: "confidential" });
+    expect(m.update.mock.calls[0][0].data).toEqual({ sensitivity: "confidential" });
+  });
+});

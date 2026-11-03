@@ -49,6 +49,21 @@ must qualify for the request. An unavailable policy read does not confirm that
 hosted AI is permitted. The global Local-only policy remains visible above the
 account table.
 
+### Managed engine on a qualified Mac
+
+The Local provider page shows **Local inference engine** to platform managers.
+**Use tested engine** appears only when the host installation, tested package
+and reserved processing window are ready. Review the concrete change before
+confirming. It keeps the configured models and settings and pauses new local
+work while the host verifies the switch. **Restore Docker** uses the recorded
+previous settings. An operator pause or disabled local account blocks a switch.
+
+**Change queued** means the request was accepted; the engine has not necessarily
+switched. If the response is lost, reload the page and choose **Check original
+request**. The page retains that request until its outcome is confirmed. A status
+check never starts a second switch. An uncertain result must be reconciled before
+another change. Performance verification is reported separately from selection.
+
 ### Routing status and temporary pauses
 
 Z.ai GLM Coding is also listed separately so you can manage its coding endpoint and traffic. It inherits the main Z.ai key unless you configure an override.

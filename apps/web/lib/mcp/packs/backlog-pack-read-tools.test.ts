@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   taskAuthority: vi.fn(),
   recoveryTarget: vi.fn(),
   presentRequest: vi.fn(),
+  loadBuildFacts: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -64,6 +65,7 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
 vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: mocks.recoveryTarget }));
 vi.mock("@/lib/mcp-task-review-reassessment", () => ({ issuePresentReassessmentRequest: mocks.presentRequest }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
+vi.mock("@/lib/build/build-entry-gate", () => ({ loadBuildReadinessFacts: mocks.loadBuildFacts }));
 
 import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
 import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
@@ -416,6 +418,35 @@ describe("backlog deferral read projection", () => {
     expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({
       item: expect.objectContaining({ itemId: "BI-COMPLETE", status: "done" }),
       activities: [terminalActivity],
+    }));
+  });
+
+  // BI-6F2872FC AC-6: an item with an active build reads the facts its build gate uses.
+  it("projects an item with an active build on that build's sensitivity and reviewed design", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-b", itemId: "BI-BUILD", status: "open", body: "prose",
+      createdAt: new Date("2026-10-01T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+      activeBuildId: "fb-row",
+      activeBuild: { buildId: "FB-1", kind: "feature", phase: "plan", draftApprovedAt: null, sandboxId: null,
+        createdAt: new Date("2026-10-01T00:00:00Z"), designDoc: { acceptanceCriteria: ["a"] }, designReview: { decision: "pass" },
+        buildPlan: { fileStructure: [{ path: "packages/db/prisma/schema.prisma" }] } },
+    });
+    const raised = { level: "elevated", trigger: { source: "build-plan-paths", signal: "schema" } };
+    mocks.loadBuildFacts.mockResolvedValue({ workShape: "delivery-medium@1.0.0", inheritedScope: null,
+      deliverySensitivity: raised, buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 1 } });
+    mocks.projectReadiness.mockReturnValue({ governed: true, artifactHints: { hasSpec: false, hasPlan: false }, decisions: {} });
+
+    await getBacklogItem({ itemId: "BI-BUILD" });
+
+    expect(mocks.loadBuildFacts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      originator: expect.objectContaining({ id: "row-b", itemId: "BI-BUILD" }),
+      buildPlan: { fileStructure: [{ path: "packages/db/prisma/schema.prisma" }] },
+    }));
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({
+      item: expect.objectContaining({ deliverySensitivity: raised }),
+      buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 1 },
     }));
   });
 

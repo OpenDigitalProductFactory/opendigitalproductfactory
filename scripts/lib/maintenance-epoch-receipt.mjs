@@ -57,3 +57,45 @@ export function verifyMaintenanceEpoch(envelope, secret, expected, checkpoint = 
   if (canonicalJson(payload) !== envelope.payload) refuse();
   return validatePayload(payload, expected, checkpoint);
 }
+
+
+const INSPECT_TEMPLATE = '{"Id":{{json .Id}},"State":{"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}}},"Config":{"Labels":{{json .Config.Labels}}}}';
+const observationInvalid = () => { throw new Error("maintenance_epoch_observation_unavailable"); };
+
+/** Read-only observer. It never starts, stops, signals or removes a container. */
+export async function observeMaintenanceEnvironments({ project, runDocker }) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/.test(project)) observationInvalid();
+  const daemonId = (await runDocker(['info', '--format', '{{.ID}}'])).trim();
+  const inventory = (await runDocker(['ps', '--all', '--no-trunc', '--format', '{{.ID}}'])).trim().split(/\r?\n/).filter(Boolean);
+  if (!inventory.length || inventory.length > 10_000 || inventory.some(id => !/^[a-f0-9]{64}$/.test(id))
+    || new Set(inventory).size !== inventory.length) observationInvalid();
+  const environments = {};
+  // Inspect only this project's candidate services; inventory remains complete
+  // for proving removal. Do not load Docker Config.Env or other secret fields.
+  const projectIds = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
+    '--format', '{{.ID}}'])).trim().split(/\r?\n/).filter(Boolean);
+  for (const id of projectIds) {
+    if (!inventory.includes(id)) observationInvalid();
+    const raw = await runDocker(['inspect', '--type', 'container', '--format', INSPECT_TEMPLATE, id]);
+    // The executable prints a bounded JSON projection (not the environment).
+    let inspected;
+    try { inspected = JSON.parse(raw); } catch { observationInvalid(); }
+    const service = inspected.Config?.Labels?.['com.docker.compose.service'];
+    if (!SERVICES.includes(service)) continue;
+    if (environments[service] || inspected.Id !== id || inspected.State?.Running !== true
+      || inspected.Config.Labels['com.docker.compose.project'] !== project) observationInvalid();
+    environments[service] = { id, startedAt: inspected.State.StartedAt };
+  }
+  if (!SERVICES.every(service => environments[service])) observationInvalid();
+  // A daemon switch during the multi-call observation invalidates the snapshot.
+  if ((await runDocker(['info', '--format', '{{.ID}}'])).trim() !== daemonId) observationInvalid();
+  return { daemonId, environments, inventory: inventory.sort() };
+}
+
+
+/** Existing canonical launchers name rollback-capable actuators dpf-promoter-*.
+ * Final portal/sandbox retirement alone does not prove those actuators exited. */
+export async function assertNoCanonicalActuators({ runDocker }) {
+  const output = await runDocker(['ps', '--no-trunc', '--filter', 'name=dpf-promoter', '--format', '{{.ID}}']);
+  if (output.trim()) observationInvalid();
+}

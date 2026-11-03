@@ -56,3 +56,12 @@ On 2026-10-27 the backlog held 352 awaiting-acceptance items. 190 were platform-
 - User acceptance testing: kept for contractual deliverables.
 
 DPF adopts the first two as the default, and keeps the third only for items tagged `contractual`.
+
+## Amendment 2026-10-28: the outcome is a field (BI-8DE5429B)
+
+Founder direction, 2026-10-28: "The outcome is an aspect of the BI. No BI should be without a clear outcome." This supersedes the "Intake" bullet above, which kept the outcome in the body.
+
+- `BacklogItem.outcome` holds the outcome, and `outcomeSource` is `stated` or `derived` (WWMD DI-342D45001EF5). The ingest front door and `create_backlog_item` write the field. With no outcome given, an Outcome section in the body is lifted as stated. Otherwise a deterministic draft is derived from the title and work type and stored as derived (DI-D50BBC916B6D). `update_backlog_item` takes `outcome` and marks it stated.
+- The hourly job `ops/backlog-outcome-reconcile` fills open items with no outcome through the same derivation, 250 per run. That includes routes that still compose an Outcome section into the body.
+- A Workroom's outcome is the outcome of the item it carries, read when the room is read. A claim sets `Workroom.objective` to it (DI-139981F74A44).
+- Outcome observations are per item, linked by `ProductOutcomeObservation.backlogItemId`. Delivery records achieved, a reopen from done records regressed, and failing evidence while done records not achieved. The epic and platform-work objectives are only the roll-up (DI-19ED69C312FC). This supersedes the cohort hold rate of BI-42399593 (DI-321FE7AC7AA4).

@@ -5,16 +5,16 @@
 
 import { describe, expect, it } from "vitest";
 
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 
-import type { GppShapeDocument } from "./gpp-shape-schema";
+import type { GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
 import {
   markedStageKeys,
   startShapeInstance,
   stepShapeInstance,
   type GppShapeEvent,
   type GppShapeMarking,
-} from "./interpreter";
+} from "@dpf/validators/gpp/interpreter";
 
 type Stage = GppShapeDocument["stages"][number];
 type Gate = NonNullable<Extract<Stage["advance"], { kind: "governed-decision" }>["gate"]>;

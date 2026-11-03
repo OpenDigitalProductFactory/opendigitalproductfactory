@@ -188,6 +188,8 @@ Promote a suggested client only after each gate has evidence (or an explicit “
 
 Source checklist also lives in `packages/dpf-skill-pack/README.md` (adapter checklist section).
 
+**Codex connector declaration (BI-B6641BC2).** The updater refreshes its managed `X-DPF-Toolchain` header in inline and nested TOML header tables while preserving custom header values. A refresh without a delivered declaration keeps existing headers intact. Saved configuration convergence does not prove that an already-running client has reloaded it.
+
 ### Adding a client (the updater's adapter contract, BI-D43723D7)
 
 Clients change weekly, so the updater finds them on every run instead of using a list fixed at bootstrap. A binary on `PATH` or an app bundle counts as installed. A config folder alone does not, because one is often left behind after an uninstall. `DISCOVERY` in `packages/dpf-skill-pack/scripts/toolchain_convergence.py` lists where each known client shows itself. An installed client with no adapter is reported `unproven` in the run report, never skipped. So is an adapted client whose app is present without the CLI DPF converges it through.

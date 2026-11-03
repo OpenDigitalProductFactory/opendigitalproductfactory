@@ -22,7 +22,7 @@ import {
   type DecisionOption,
   type DecisionPrinciple,
   type DecisionStakes,
-} from "../decision/option-scoring";
+} from "@dpf/validators/judgment/option-scoring";
 import type { DecisionRiskTier, DecisionScoredOption } from "./types";
 
 const TIER_DEFAULT_WEIGHT = 1.0; // commandments only; matches principle-decide-pack.ts's TIER_DEFAULT_WEIGHT.commandment.

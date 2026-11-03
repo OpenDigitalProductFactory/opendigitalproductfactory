@@ -3,18 +3,23 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { OUTCOME_SOURCES } from "@/lib/backlog/intake-outcome";
+
 import {
   EPIC_OBJECTIVE_SOURCE_KIND,
+  ITEM_OUTCOME_RESULT_FOR_EVENT,
   PLATFORM_WORK_OBJECTIVE_SOURCE_KIND,
-  computeDeliveredWorkHoldRate,
-  deliveredWorkWindow,
-  deliveryObservationSourceRef,
+  classifyItemOutcomeActivity,
   isPlatformWorkScope,
+  itemOutcomeSourceRef,
+  itemOutcomeValue,
+  outcomeDigest,
 } from "./delivered-work-outcomes";
 
-const observedAt = new Date("2026-10-28T12:00:00.000Z");
-const day = 24 * 60 * 60 * 1000;
-const at = (daysAgo: number) => new Date(observedAt.getTime() - daysAgo * day);
+const deliveredAt = new Date("2026-10-28T12:00:00.000Z");
+const after = new Date("2026-10-29T12:00:00.000Z");
+const before = new Date("2026-10-27T12:00:00.000Z");
+const done = { status: "done", completedAt: deliveredAt };
 
 describe("isPlatformWorkScope", () => {
   it("counts platform, common, unknown and unscoped work without a business Product", () => {
@@ -30,92 +35,67 @@ describe("isPlatformWorkScope", () => {
   });
 });
 
-describe("deliveredWorkWindow", () => {
-  it("is the cohort delivered between 90 and 14 days before the observation", () => {
-    expect(deliveredWorkWindow(observedAt)).toEqual({ from: at(90), to: at(14) });
-  });
-});
-
-describe("deliveryObservationSourceRef", () => {
-  it("names one delivery, so a redelivery after a reopen is a new observation", () => {
-    expect(deliveryObservationSourceRef("BI-1", new Date("2026-10-28T09:00:00.000Z")))
-      .toBe("BI-1@2026-10-28T09:00:00.000Z");
-  });
-});
-
-describe("computeDeliveredWorkHoldRate", () => {
-  const delivered = (itemId: string, daysAgo: number, overrides: Record<string, unknown> = {}) => ({
-    itemId,
-    status: "done",
-    deliveredAt: at(daysAgo),
-    laterActivities: [] as { kind: string; recordedAt: Date; payload: unknown }[],
-    ...overrides,
-  });
-
-  it("reports the share of matured deliveries that held, with the ones that did not", () => {
-    const result = computeDeliveredWorkHoldRate([
-      delivered("BI-A", 40),
-      delivered("BI-B", 30),
-      delivered("BI-C", 20, {
-        status: "open",
-        laterActivities: [{ kind: "status_change", recordedAt: at(10), payload: { from: "done", to: "open" } }],
-      }),
-    ]);
-
-    expect(result).toEqual({
-      numerator: 2,
-      denominator: 3,
-      value: 66.666667,
-      notHeld: [{ itemId: "BI-C", reason: "reopened" }],
+describe("an item event's result (BI-8DE5429B)", () => {
+  it("delivery achieves the item's outcome, a reopen regresses it, failing evidence while done does not achieve it", () => {
+    expect(ITEM_OUTCOME_RESULT_FOR_EVENT).toEqual({
+      delivered: "achieved", reopened: "regressed", "failing-evidence": "not-achieved",
     });
   });
 
-  it("does not count a delivery whose later evidence failed", () => {
-    const result = computeDeliveredWorkHoldRate([
-      delivered("BI-A", 40, {
-        laterActivities: [{ kind: "evidence", recordedAt: at(35), payload: { evidenceKind: "test_fail" } }],
-      }),
-      delivered("BI-B", 30, {
-        laterActivities: [{ kind: "evidence", recordedAt: at(25), payload: { evidenceKind: "test_pass" } }],
-      }),
-    ]);
-
-    expect(result).toMatchObject({ numerator: 1, denominator: 2, value: 50 });
-    expect(result?.notHeld).toEqual([{ itemId: "BI-A", reason: "failing-evidence" }]);
+  it("is 100 when achieved and 0 otherwise, so the roll-up is the mean of the items", () => {
+    expect(itemOutcomeValue("achieved")).toBe(100);
+    expect(itemOutcomeValue("not-achieved")).toBe(0);
+    expect(itemOutcomeValue("regressed")).toBe(0);
   });
 
-  it("ignores reopen and failure rows recorded before the delivery they would contradict", () => {
-    const result = computeDeliveredWorkHoldRate([
-      delivered("BI-A", 40, {
-        laterActivities: [
-          { kind: "status_change", recordedAt: at(60), payload: { from: "done", to: "open" } },
-          { kind: "evidence", recordedAt: at(50), payload: { evidenceKind: "test_fail" } },
-        ],
-      }),
-    ]);
-
-    expect(result).toMatchObject({ numerator: 1, denominator: 1, value: 100, notHeld: [] });
+  it("is identified by item, event and the fact behind it, so each event is recorded once", () => {
+    expect(itemOutcomeSourceRef("BI-1", "reopened", "act-9")).toBe("BI-1:reopened:act-9");
+    expect(itemOutcomeSourceRef("BI-1", "delivered", deliveredAt.toISOString()))
+      .not.toBe(itemOutcomeSourceRef("BI-1", "delivered", after.toISOString()));
   });
 
-  it("counts an item no longer done as not held even without a recorded reopen", () => {
-    const result = computeDeliveredWorkHoldRate([delivered("BI-A", 40, { status: "retired" })]);
-
-    expect(result).toMatchObject({ numerator: 0, denominator: 1, value: 0 });
-    expect(result?.notHeld).toEqual([{ itemId: "BI-A", reason: "no-longer-done" }]);
-  });
-
-  it("returns null when no delivery has matured, rather than inventing a rate", () => {
-    expect(computeDeliveredWorkHoldRate([])).toBeNull();
+  it("digests the outcome text it measured, ignoring surrounding space", () => {
+    expect(outcomeDigest(" Finance sees invoices. ")).toBe(outcomeDigest("Finance sees invoices."));
+    expect(outcomeDigest("A")).not.toBe(outcomeDigest("B"));
   });
 });
 
-describe("objective origin closed set", () => {
-  it("matches the database CHECK, so a derived objective can always be written", () => {
+describe("classifyItemOutcomeActivity", () => {
+  it("reads a status change out of done as a reopen", () => {
+    expect(classifyItemOutcomeActivity(
+      { kind: "status_change", recordedAt: after, payload: { from: "done", to: "open" } },
+      { status: "open", completedAt: null },
+    )).toBe("reopened");
+    expect(classifyItemOutcomeActivity(
+      { kind: "status_change", recordedAt: after, payload: { from: "in-progress", to: "done" } }, done,
+    )).toBeNull();
+  });
+
+  it("reads failing evidence as not achieved only after delivery and while still done", () => {
+    const failing = { kind: "evidence", recordedAt: after, payload: { evidenceKind: "ux_fail" } };
+    expect(classifyItemOutcomeActivity(failing, done)).toBe("failing-evidence");
+    expect(classifyItemOutcomeActivity({ ...failing, recordedAt: before }, done)).toBeNull();
+    expect(classifyItemOutcomeActivity(failing, { status: "open", completedAt: null })).toBeNull();
+    expect(classifyItemOutcomeActivity({ ...failing, payload: { evidenceKind: "ux_verified" } }, done)).toBeNull();
+  });
+});
+
+describe("closed sets match the database CHECKs", () => {
+  it("objective origins", () => {
     const migration = readFileSync(resolve(__dirname,
       "../../../../packages/db/prisma/migrations/20261028100000_product_objective_origin/migration.sql"), "utf8");
     const allowed = /"sourceKind" IN \(([^)]*)\)/.exec(migration)?.[1]
       ?.split(",").map((value) => value.trim().replaceAll("'", "")).sort();
 
     expect(allowed).toEqual([EPIC_OBJECTIVE_SOURCE_KIND, PLATFORM_WORK_OBJECTIVE_SOURCE_KIND].sort());
+  });
+
+  it("outcome sources", () => {
+    const migration = readFileSync(resolve(__dirname,
+      "../../../../packages/db/prisma/migrations/20261028210000_backlog_item_outcome/migration.sql"), "utf8");
+    const allowed = /"outcomeSource" IN \(([^)]*)\)/.exec(migration)?.[1]
+      ?.split(",").map((value) => value.trim().replaceAll("'", "")).sort();
+
+    expect(allowed).toEqual([...OUTCOME_SOURCES].sort());
   });
 });

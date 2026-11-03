@@ -48,9 +48,9 @@ import {
   joinAutonomy,
   resolveVerificationRequirement,
   type VerificationEvidence,
-} from "@/lib/work-management/hitl-join";
+} from "@dpf/validators/workroom-policy/hitl-join";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
-import { shapeBiasFor } from "@/lib/work-posture";
+import { shapeBiasFor } from "@dpf/validators/workroom-policy";
 import { readWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 export type WorkroomShapeGateMode = "enforce" | "shadow" | "off";

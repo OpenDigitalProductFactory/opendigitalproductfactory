@@ -711,6 +711,8 @@ export function projectBacklogItemReadinessSummary(args: {
    * decision still wins; absent both, completion is projected as before.
    */
   completionDecision?: InitiativeReadinessDecision | null;
+  /** The active build's reviewed design, as its build gates pass it (BI-6F2872FC AC-6). */
+  buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
 }) {
   const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
@@ -730,6 +732,7 @@ export function projectBacklogItemReadinessSummary(args: {
       authorization: "pass",
       capsuleIdentity: "pass",
       artifactHints: { hasSpec: args.hasSpec, hasPlan: args.hasPlan },
+      buildDesign: args.buildDesign ?? null,
       evaluatedAt: args.evaluatedAt,
     });
     return [target, projected.decision];

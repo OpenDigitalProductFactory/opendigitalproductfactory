@@ -36,3 +36,21 @@ export type ExistingRemoteTask = {
   completedAt: Date | null;
   updatedAt: Date;
 };
+
+export type RemoteTaskAttemptInput = {
+  run: { id: string; taskRunId: string; contextId: string | null };
+  threadId: string;
+  token: RemoteTaskSubmitAuth;
+  userContext: import("@/lib/govern/permissions").UserContext;
+  parsed: import("./mcp-task-submit-params").RemoteTaskSubmitParams;
+  idempotentReplay: boolean;
+  resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
+  capacityAttempt: number;
+  terminalWriterAttempt?: number;
+  /** Identity acquired by the caller's reservation CAS; null denotes initial execution. */
+  expectedReservation?: string | null;
+  expectedDispatchClaim?: string | null;
+  /** Frozen by the reservation owner before hydration; never adopted from a later row. */
+  expectedExecutionFence?: import("./shared/task-execution-fence").TaskExecutionFence;
+};

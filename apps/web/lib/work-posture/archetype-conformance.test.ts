@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { ALL_ARCHETYPES, deriveOperationalValueStream } from "@dpf/storefront-templates";
 
-import { deriveStreamBiases } from "./derive";
-import { resolveWorkPosture } from "./resolve";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import { deriveStreamBiases } from "@dpf/validators/workroom-policy/derive";
+import { resolveWorkPosture } from "@dpf/validators/workroom-policy/resolve";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 
 // EP-WORK-POSTURE (BI-BEDAFF57) — every archetype resolves a posture from its
 // OWN operational value stream.

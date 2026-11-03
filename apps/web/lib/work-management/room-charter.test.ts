@@ -72,6 +72,16 @@ describe("evaluateCharterAdmission", () => {
     })).toEqual({ inCharter: false, reason });
   });
 
+  // BI-ED5561BB: clearance compares by rank, as room access does, so a
+  // higher clearance covers a lower ceiling even when it is the only value held.
+  it("treats a higher clearance as covering a lower room ceiling", () => {
+    expect(evaluateCharterAdmission({
+      charter: resolveRoomCharter({ charter: undefined, sensitivityCeiling: "public" }),
+      invitee: { ...orgCoworker, sensitivityClearance: ["internal"] }, roomSensitivityCeiling: "public",
+      requestedClass: "create", now: NOW,
+    }).inCharter).toBe(true);
+  });
+
   it("keeps an expired charter from admitting anyone", () => {
     const expired = parseRoomCharter({ admits: ["org-coworker"], classCeiling: "create", expiresAt: "2026-10-01T00:00:00Z" });
     expect(evaluateCharterAdmission({

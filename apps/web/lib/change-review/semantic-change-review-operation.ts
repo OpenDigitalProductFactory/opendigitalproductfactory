@@ -212,7 +212,10 @@ export async function runSemanticChangeReview(
 
   if (input.priorReceipt) {
     const freshness = assessSemanticReviewReceiptFreshness(input.priorReceipt, identity);
-    if (freshness.fresh && input.priorReceipt.result.decision !== "inconclusive") {
+    // A matching tree is not proof of the independent review now required.
+    // Automatic receipts must take the same review path as an uncached input.
+    if (freshness.fresh && input.priorReceipt.disposition === "reviewed"
+      && input.priorReceipt.result.decision !== "inconclusive") {
       return resultForReceipt({
         receipt: input.priorReceipt,
         activation,

@@ -1,3 +1,4 @@
+import { presentAssessmentRequestKey } from "./coworker-service-catalog/engagement-present-policy";
 import { parseInitiativeReviewBinding, validateInitiativeReviewAuthorityScope, type InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { parseDurableInferenceTaskRecipeId, type DurableInferenceTaskRecipeId } from "./mcp-task-durable-inference-contract";
 import { parseEngagementTaskBinding, type EngagementTaskBinding, ENGAGEMENT_READ_TOOLS } from "./coworker-service-catalog/engagement-task-binding";
@@ -99,7 +100,7 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
   if (engagementBinding && (initiativeReviewBinding || durableRecipeId || riskClass !== "read"
     || agentId !== engagementBinding.providerAgentId
     || optionalString(params["threadId"]) !== null
-    || idempotencyKey !== `coworker-engagement:${engagementBinding.engagementId}`
+    || idempotencyKey !== (engagementBinding.presentAssessment ? presentAssessmentRequestKey(engagementBinding.engagementId) : `coworker-engagement:${engagementBinding.engagementId}`)
     || !authorityScope || ENGAGEMENT_READ_TOOLS.some(name => !authorityScope.includes(`tool:${name}`))
     || authorityScope.some(scope => scope.startsWith("tool:") && !(ENGAGEMENT_READ_TOOLS as readonly string[]).includes(scope.slice(5))))) {
     return "tasks/submit engagement requires its original provider/key, read-only tool scope and no other task binding";

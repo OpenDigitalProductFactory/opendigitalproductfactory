@@ -6,6 +6,12 @@ import type { Prisma } from "@dpf/db";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import {
+  parseQualificationExperimentState,
+  qualificationToolEffectAllowed,
+  qualificationBindingDigest,
+  verifyQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { isRecord } from "@/lib/shared/coerce";
 import { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveTaskId, workroomDriveBranchTaskId } from "./drive-resolution";
 import { isDeliveryShapeKey, DELIVERY_XLARGE_SHAPE_KEY, DELIVERY_AUTHOR_ROLE, DELIVERY_AUTHOR_EVIDENCE_TOOL as EVIDENCE_WRITER } from "./delivery-shapes";
@@ -31,6 +37,8 @@ export const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 export type MandateRoom = {
   capsuleId: string; status: string; archivedAt: Date | null; scopeClaims: unknown;
   id?: string; backlogItemId?: string | null; workspaceState?: unknown;
+  repositoryFullName?: string | null; baseSha?: string | null; headSha?: string | null;
+  leaseHolderPrincipalId?: string | null; leaseExpiresAt?: Date | null;
 };
 
 // BI-17238133: each select is checked against the generated Prisma types, so a
@@ -42,6 +50,7 @@ const RUN_SELECT = {
 } as const satisfies Prisma.TaskRunSelect;
 const ROOM_SELECT = {
   id: true, capsuleId: true, status: true, archivedAt: true, scopeClaims: true, backlogItemId: true, workspaceState: true,
+  repositoryFullName: true, baseSha: true, headSha: true, leaseHolderPrincipalId: true, leaseExpiresAt: true,
   requestedByPrincipal: ROOM_OWNER_USER_INCLUDE.requestedByPrincipal,
   createdByPrincipal: ROOM_OWNER_USER_INCLUDE.createdByPrincipal,
 } as const satisfies Prisma.WorkroomSelect;
@@ -52,14 +61,20 @@ const TASK_SELECT = {
 type OwnerAliases = { aliases: Array<{ aliasValue: string }> } | null;
 export type MandateRoomRow = MandateRoom & { requestedByPrincipal?: OwnerAliases; createdByPrincipal?: OwnerAliases };
 
-/** The declared writes the room grants one of `agentIds` on its own drive task. Pure. */
-export function roomStageMandatedTools(input: {
+type RoomStageMandateInput = {
   scheduledTaskId: string;
   room: MandateRoom;
   agentIds: readonly string[];
   /** Server-read task assignment for a role stage the drive assigned dynamically. */
   assignedStageKey?: string | null;
-} & ReportCall): string[] {
+} & ReportCall;
+
+/** The declared writes the room grants one of `agentIds` on its own drive task. Pure. */
+export function roomStageMandatedTools(input: RoomStageMandateInput): string[] {
+  return declaredRoomStageTools(input, false);
+}
+
+function declaredRoomStageTools(input: RoomStageMandateInput, blockedReportOnly: boolean): string[] {
   const { room } = input;
   if (room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)) return [];
   const shape = resolveWorkShapeClaim(room.scopeClaims);
@@ -72,7 +87,7 @@ export function roomStageMandatedTools(input: {
     if (stage.advance.kind === "governed-decision") continue;
     const principal = parseAccountablePrincipalRef(boundStagePrincipal(stage.accountablePrincipalRef, false, bindings));
     // Delivery completion also requires current funding and dispatch provenance below.
-    if (!isDeliveryShapeKey(shape.key) && principal.kind === "agent" && input.agentIds.includes(principal.value)) {
+    if (!blockedReportOnly && !isDeliveryShapeKey(shape.key) && principal.kind === "agent" && input.agentIds.includes(principal.value)) {
       for (const tool of stage.mandatedTools ?? []) tools.add(tool);
     }
     // Reporting failure does not authorize success or the stage's business act.
@@ -143,7 +158,28 @@ function checkpointKey(c: DispatchCheckpoint): string {
     c.confirmedEffect.kind, c.confirmedEffect.taskId, c.confirmedEffect.recordedAt,
     c.stage.shapeKey, c.stage.shapeVersion, c.stage.stageKey, [...c.stage.tools].sort(),
     c.authority.holderPrincipalId, c.authority.leaseExpiresAt,
-    c.dispatchScope?.runKey, c.dispatchScope?.cycleKey, c.dispatchScope?.iteration]);
+    c.dispatchScope?.runKey, c.dispatchScope?.cycleKey, c.dispatchScope?.iteration,
+    c.source !== undefined, c.source?.repositoryFullName, c.source?.headSha]);
+}
+
+/** Legacy nonrepository work remains valid; missing source never proves repository authority. */
+function dispatchSourceIsCurrent(input: {
+  room: MandateRoom; runCheckpoint: unknown; taskCheckpoint: unknown;
+  taskId: string; shapeKey: string; shapeVersion: string; assignedStageKey: string | null;
+}): boolean {
+  const { room, runCheckpoint, taskCheckpoint } = input;
+  const hasSource = (value: unknown) => isRecord(value) && "source" in value;
+  if (room.repositoryFullName == null && room.headSha == null
+    && !hasSource(runCheckpoint) && !hasSource(taskCheckpoint)) return true;
+  const run = readDispatchCheckpoint(runCheckpoint), task = readDispatchCheckpoint(taskCheckpoint);
+  // A standing room's latest checkpoint may belong to another concurrent branch.
+  // Its task and immutable run receipt are the source admission being exercised.
+  return Boolean(run?.source && task?.source && checkpointKey(run) === checkpointKey(task)
+    && run.roomId === room.id && run.confirmedEffect.taskId === input.taskId
+    && run.stage.shapeKey === input.shapeKey && run.stage.shapeVersion === input.shapeVersion
+    && run.stage.stageKey === input.assignedStageKey
+    && run.source.repositoryFullName === (room.repositoryFullName ?? null)
+    && run.source.headSha === (room.headSha ?? null));
 }
 
 /** One reconstruction for attachment, proposal interception and the reference monitor. */
@@ -172,6 +208,58 @@ export async function loadScheduledRoomAuthority(
     const assignedStageKey = assignment?.shapeKey === shape.key && assignment?.shapeVersion === shape.version ? assignment.stageKey : null;
     const declared = roomStageMandatedTools({ ...input, scheduledTaskId: taskId, room, assignedStageKey });
     const declaration = readWorkroomPostureClaim(room.scopeClaims);
+    if (assignment?.qualificationExperiment) {
+      if (room.archivedAt !== null || room.status !== "working" || TERMINAL_WORKROOM_STATUSES.has(room.status)) {
+        return withheld("The qualification Workroom is no longer active.");
+      }
+      run ??= await db.taskRun.findUnique({ where: { taskRunId: input.taskRunId }, select: RUN_SELECT });
+      const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
+      const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+      const runState = isRecord(run?.a2aMetadata) ? run.a2aMetadata : {};
+      const runBinding = isRecord(runState.qualificationExperiment) ? runState.qualificationExperiment : null;
+      const qualificationNow = (deps.now ?? (() => new Date()))();
+      const verified = state ? verifyQualificationExperimentAdmission(state.token, { now: qualificationNow }) : null;
+      const binding = assignment.qualificationExperiment;
+      const digest = qualificationBindingDigest(binding);
+      const exactRoom = room.backlogItemId === binding.itemId && room.capsuleId === binding.workroomId
+        && room.repositoryFullName === binding.repositoryFullName
+        && room.baseSha?.toLowerCase() === binding.baseSha.toLowerCase()
+        && room.headSha?.toLowerCase() === binding.headSha.toLowerCase()
+        && room.leaseHolderPrincipalId === binding.accountablePrincipalRef
+        && room.leaseExpiresAt != null && room.leaseExpiresAt.getTime() > qualificationNow.getTime();
+      if (!run || run.status !== "working" || run.archivedAt != null || !run.currentAgentId
+        || !sameActor(run.currentAgentId, task?.agentId ?? "") || !task?.isActive
+        || !state || state.status !== "started" || state.startCount !== 1 || state.taskId !== taskId
+        || !verified?.ok || verified.data.bindingDigest !== digest || state.bindingDigest !== digest
+        || qualificationBindingDigest(runBinding as typeof binding) !== digest || !exactRoom) {
+        return withheld("The qualification admission is missing, expired, superseded, or not bound to this run.");
+      }
+      // Qualification tools are a signed, one-shot exception to the standing
+      // shape's ordinary read/write list. The current shape+stage identity is
+      // revalidated above; the token and task assignment must both name each
+      // exceptional tool, so neither source can widen the other.
+      const grants = await (deps.loadAgentGrants
+        ?? (await import("@/lib/tak/agent-grants")).getAgentToolGrantsAsync)(coworkerAuthorityAgentId(task.agentId));
+      const tools = assignment.tools.filter((tool) => binding.permittedTools.includes(tool)
+        && isToolAllowedByGrants(tool, grants));
+      if (tools.length === 0) return withheld("The qualification task no longer declares an admitted tool.");
+      if (!input.toolName) return { ...EMPTY, mandatedTools: tools };
+      if (!tools.includes(input.toolName)) return withheld("The tool is outside the qualification admission.");
+      if (!qualificationToolEffectAllowed({ binding: assignment.qualificationExperiment, state,
+        toolName: input.toolName, params: input.params, now: qualificationNow })) {
+        return withheld("The qualification tool effect is outside the exact path, duration, or terminal-evidence binding.");
+      }
+      return { ...EMPTY, mandatedTools: [input.toolName] };
+    }
+    const taskState = isRecord(task?.taskConfig) ? task.taskConfig : {};
+    const runState = isRecord(metadata) ? metadata : {};
+    if (!dispatchSourceIsCurrent({ room, taskId, shapeKey: shape.key, shapeVersion: shape.version, assignedStageKey,
+      runCheckpoint: runState.workroomDispatchCheckpoint, taskCheckpoint: taskState.workroomDispatchCheckpoint })) {
+      const blockedReport = declaration?.actionBoundary !== "advise" && declaration?.actionBoundary !== "propose"
+        ? declaredRoomStageTools({ ...input, scheduledTaskId: taskId, room, assignedStageKey }, true) : [];
+      return blockedReport.length ? { ...EMPTY, mandatedTools: blockedReport }
+        : withheld("The dispatch source is missing, changed, or no longer bound to this run. Reconcile the dispatch before continuing.");
+    }
     // BI-E458A9CB: an exact blocked report survives lost completion authority.
     if (!isDeliveryShapeKey(shape.key) || (input.params?.outcome === "blocked" && declared.includes(EVIDENCE_WRITER)
       && declaration?.actionBoundary !== "advise" && declaration?.actionBoundary !== "propose")) {

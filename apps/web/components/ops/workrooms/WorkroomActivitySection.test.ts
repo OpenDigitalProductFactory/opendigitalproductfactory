@@ -31,7 +31,9 @@ describe("workroomInventoryWhere", () => {
       headBranch: null, pullRequestUrl: null, updatedAt: new Date(), liveness: "live", isLive: true,
       isReapable: false, livenessReason: "Recent progress", trueLivenessAt: null,
       outcomeAnchor: { narrative: "large-outcome-packet".repeat(400) },
-      scopeClaims: [{ privateData: "scope-private".repeat(400) }], recovery: { packet: "source-path".repeat(400) },
+      scopeClaims: [{ privateData: "scope-private".repeat(400) }], recovery: {
+        prerequisite: { accountableRole: "artifact-resolver", repair: { packet: "source-path".repeat(400) } },
+      },
     }));
     fixture.load.mockResolvedValue({ capsulesAll: rooms, livenessSummary: { live: 200, history: 0,
       heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null } } });
@@ -60,11 +62,16 @@ describe("workroomInventoryWhere", () => {
     expect(fixture.owners).toHaveBeenCalledTimes(1);
     expect(fixture.owners.mock.calls[0]![1]).toHaveLength(200);
     const serialized = JSON.stringify(payload);
+    console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);
     expect(serialized).not.toMatch(/large-outcome-packet|scope-private|source-path/);
     expect(serialized).toContain("Recorded person");
+    expect(serialized).toContain("inventory.actor.delivery");
+    expect(serialized).toContain("inventory.action.source");
     expect(serialized).toContain("/workspace/cases/work-capsule%3AWC-0");
     expect(serialized.length).toBeLessThan(JSON.stringify(rooms).length / 10);
+    // Executing the original0209 mapper on this same fixture measured180471.
+    // Keep diagnostics out of the list even after adding useful action fields.
+    expect(serialized.length).toBeLessThan(170000);
     expect(fixture.load).toHaveBeenCalledWith({}, expect.objectContaining({ take: 200, portalSummary: true }));
-    console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);
   });
 });

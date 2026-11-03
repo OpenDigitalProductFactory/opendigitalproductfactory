@@ -83,7 +83,7 @@ describe("BacklogPanel governed deferral fields", () => {
     expect((screen.getByRole("option", { name: "Retired" }) as HTMLOptionElement).disabled).toBe(true);
   });
 
-  it("asks for the outcome on a new item, optionally, and not when editing (BI-B1B44777)", () => {
+  it("asks for the outcome on a new item, optionally, and lets an existing item's outcome be edited (BI-8DE5429B)", () => {
     const panel = (item?: Parameters<typeof BacklogPanel>[0]["item"]) => (
       <MessagesProvider locale="en-US" messages={{ backlog: namespaceMessages("en-US", "backlog") }}>
         <BacklogPanel isOpen onClose={() => undefined} item={item} digitalProducts={[]} taxonomyNodes={[]} epics={[]} />
@@ -95,12 +95,15 @@ describe("BacklogPanel governed deferral fields", () => {
     expect(outcome.placeholder).toBe("What will be true, and for whom, when this is done?");
 
     rerender(panel({ id: "row-1", itemId: "BI-1", title: "Existing", status: "open", type: "portfolio",
-      workType: "feature", source: "user-request", body: "## Outcome\nX", priority: null, epicId: null,
+      workType: "feature", source: "user-request", body: "Notes", priority: null, epicId: null,
+      outcome: '"Existing" is in place and working for the people it is for.', outcomeSource: "derived",
       triageOutcome: null, duplicateOfId: null, effortSize: null, activeBuildId: null, activeBuild: null,
       digitalProduct: null, taxonomyNode: null, submittedBy: null, completedAt: null, agentId: null,
       createdAt: new Date("2026-08-01T00:00:00Z"), updatedAt: new Date("2026-08-01T00:00:00Z"),
       upstreamIssueNumber: null, upstreamIssueUrl: null, deferReason: null, deferTrigger: null, deferReviewAt: null,
     } as never));
-    expect(screen.queryByLabelText(/^Outcome/)).toBeNull();
+    const edited = screen.getByLabelText(/^Outcome/) as HTMLTextAreaElement;
+    expect(edited.value).toBe('"Existing" is in place and working for the people it is for.');
+    expect(screen.getByText(/Draft written by DPF from the title/)).toBeTruthy();
   });
 });

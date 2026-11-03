@@ -7,12 +7,12 @@
 
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { diffWorkShapeBinding, type BindingChangeKind, type WorkShapeBindingDiff } from "./work-shape-binding-diff";
-import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
+import { isCompletingWorkroomDriveReceipt } from "@dpf/validators/workroom/receipts";
 import { getWorkShape, getWorkShapeVersion, readWorkShapeDefinitionContract, type WorkShapeDefinition } from "./work-shapes";
 import { hasStoredDriveMarking } from "./drive-graph-tick";
 import { liveSubShapeChildren } from "./drive-child-rooms";
-import { readStoredDriveMarking } from "./drive-marking";
-import { backwardReach, buildShapeFlowGraph, forwardReach } from "./work-shape-flow-graph";
+import { readStoredDriveMarking } from "@dpf/validators/workroom/marking";
+import { backwardReach, buildShapeFlowGraph, forwardReach } from "@dpf/validators/workroom/flow-graph";
 import { readWorkShapeClaim } from "./workroom-shape-claim";
 
 export const REBIND_REFUSAL_CODES = [

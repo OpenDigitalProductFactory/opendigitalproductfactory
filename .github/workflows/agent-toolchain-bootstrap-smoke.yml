@@ -17,35 +17,11 @@ name: Agent toolchain bootstrap smoke (BI-4B17051B)
 permissions:
   contents: read
 
+# Required CI calls this workflow; keeping one implementation avoids duplicate
+# PR/push runs and gives merge_group the same toolchain checks (BI-A689AB68).
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "packages/dpf-bootstrap/**"
-      - "packages/dpf-skill-pack/scripts/**"
-      # hooks.json is the source of truth the updater's drift tests assert
-      # against; without it a guard added under hooks/ never runs this suite
-      # and the drift lands on main invisibly.
-      - "packages/dpf-skill-pack/hooks/**"
-      - "scripts/dpf-bootstrap-agent-toolchain.sh"
-      - "scripts/ensure-dpf-skill-pack.sh"
-      - "scripts/installer/lib/state.sh"
-      - "scripts/installer/install-state.schema.json"
-      - ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
-  push:
-    branches: [main]
-    paths:
-      - "packages/dpf-bootstrap/**"
-      - "packages/dpf-skill-pack/scripts/**"
-      # hooks.json is the source of truth the updater's drift tests assert
-      # against; without it a guard added under hooks/ never runs this suite
-      # and the drift lands on main invisibly.
-      - "packages/dpf-skill-pack/hooks/**"
-      - "scripts/dpf-bootstrap-agent-toolchain.sh"
-      - "scripts/ensure-dpf-skill-pack.sh"
-      - "scripts/installer/lib/state.sh"
-      - "scripts/installer/install-state.schema.json"
-      - ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
   group: agent-toolchain-bootstrap-smoke-${{ github.ref }}

@@ -9,9 +9,9 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { GPP_BINDINGS } from "../bindings";
-import { emitBindingRecords } from "./bindings-emit";
-import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { emitBindingRecords } from "@dpf/validators/gpp/bindings-emit";
+import { gppShapeDocumentSchema, type GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources } from "./resolve-sources";
 
 const READ_TOOL = "list_customer_accounts";

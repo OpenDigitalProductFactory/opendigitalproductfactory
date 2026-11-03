@@ -79,3 +79,68 @@ describe('canonical promoter retirement observation', () => {
     });
   }
 });
+
+
+describe('scope writer actuator observations', () => {
+  it('keeps unknown or malformed probe failures distinct from positive legacy absence', async () => {
+    const { classifyInitialScopeEpochFallback } = await import('./promoter-epoch-evidence.mjs');
+    const image = 'sha256:' + 'a'.repeat(64);
+    const runner = absent => async args => {
+      if (args[0] === 'image') return image;
+      if (args.includes('--eval')) { if (!absent) throw new Error('contract present or unavailable'); return 'legacy-scope-epoch-absent'; }
+      if (args[0] === 'rm') return '';
+      return '{}';
+    };
+    await assert.rejects(classifyInitialScopeEpochFallback({ image, runDocker: runner(false) }), /scope_writer_fallback_unproven/);
+    assert.deepEqual(await classifyInitialScopeEpochFallback({ image, runDocker: runner(true) }), { kind: 'initial-legacy', image });
+  });
+});
+
+
+import { inspectScopeEpochWriters } from "../apps/web/lib/work-capsules/scope-epoch-writer-probe.mjs";
+import * as scopeWriterContract from "../apps/web/lib/work-capsules/scope-epoch-contract.ts";
+const scopeProbeFixture = () => ({ root: "/packaged", loadContract: async () => scopeWriterContract,
+  readFile: async path => Buffer.from(path.endsWith(".dpf-image-version") ? "a".repeat(40)
+    : path.endsWith(".dpf-source-content-hash") ? "b".repeat(64) : `packaged source ${path}`) });
+it("reports every declared writer's bytes independently of reassessment owners", async () => {
+  const proof = await inspectScopeEpochWriters(scopeProbeFixture());
+  assert.equal(proof.version, 1); assert.equal(proof.sourceSha, "a".repeat(40));
+  assert.deepEqual(Object.keys(proof.writers), [...scopeWriterContract.SCOPE_EPOCH_WRITER_PATHS]);
+  assert.ok(Object.values(proof.writers).every(hash => /^[a-f0-9]{64}$/.test(hash)));
+  assert.equal(proof.owners, undefined);
+});
+it("a missing packaged writer is unknown, never a partial compatible report", async () => {
+  const f = scopeProbeFixture(), read = f.readFile;
+  f.readFile = async path => { if (path.endsWith("scope-release-preflight.ts")) throw new Error("missing"); return read(path); };
+  await assert.rejects(inspectScopeEpochWriters(f), /scope_writer_probe_evidence_unavailable/);
+});
+it("rejects malformed source identity", async () => {
+  const f = scopeProbeFixture(), read = f.readFile;
+  f.readFile = async path => path.endsWith(".dpf-image-version") ? Buffer.from("unknown") : read(path);
+  await assert.rejects(inspectScopeEpochWriters(f), /scope_writer_probe_identity_invalid/);
+});
+
+it("canonical shell candidate check refuses incompatible portal bytes independently", async () => {
+  const { readFile } = await import("node:fs/promises"), { spawnSync } = await import("node:child_process");
+  const source = await readFile(new URL("./promote.sh", import.meta.url), "utf8");
+  const start = source.indexOf("# scope-writer-compatibility-begin"), end = source.indexOf("# scope-writer-compatibility-end");
+  assert.ok(start >= 0 && end > start, "the actual promoter must contain its separate scope writer check");
+  const block = source.slice(start, end);
+  const proof = await inspectScopeEpochWriters(scopeProbeFixture());
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises"), { tmpdir } = await import("node:os"), { join, delimiter } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "dpf-scope-shell-"));
+  await writeFile(join(dir, "docker"), `#!/bin/sh
+case "$1" in image) printf '%s\\n' 'sha256:${"c".repeat(64)}';; run) printf '%s' "$SCOPE_REPORT";; rm) exit 0;; *) exit 77;; esac
+`, { mode: 0o700 });
+  const { fileURLToPath } = await import("node:url");
+  const scripts = fileURLToPath(new URL(".", import.meta.url));
+  const shell = `_promoter_dir='${scripts.replaceAll("'", "'\\''")}'\n${block}\n_assert_scope_writer_image 'sha256:${"c".repeat(64)}' '${proof.sourceSha}'`;
+  try {
+  for (const [label, report, expected] of [["compatible", proof, 0], ["old", { ...proof, version: 0 }, 78],
+    ["wrong source", { ...proof, sourceSha: "d".repeat(40) }, 78]]) {
+    const result = spawnSync("bash", ["-c", shell], { encoding: "utf8", timeout: 5000,
+      env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}`, SCOPE_REPORT: JSON.stringify(report) } });
+    assert.equal(result.status, expected, `${label}: ${result.stderr}`);
+  }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

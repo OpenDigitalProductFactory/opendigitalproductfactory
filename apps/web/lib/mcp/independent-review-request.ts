@@ -190,7 +190,7 @@ export async function authorizeCoworkerRequest(
         ? { bounded: true }
         : deny("The selected Workroom's immutable source changed or is incomplete. Refresh its exact claim and review request.");
     }
-    currentDesignSource = { repositoryFullName: room.repositoryFullName, headBranch: room.headBranch,
+    currentDesignSource = { workroomId: binding.workroomRef.workroomId, repositoryFullName: room.repositoryFullName, headBranch: room.headBranch,
       baseSha: room.baseSha, headSha: room.headSha };
   }
   const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId, undefined, undefined,

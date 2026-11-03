@@ -38,6 +38,7 @@ describe("GET /api/operations/snapshot", () => {
     const response = await GET();
 
     expect(response.status).toBe(200);
+    expect(loadSnapshotMock).toHaveBeenCalledWith({ viewer: { id: "operator-1" } });
     expect(response.headers.get("server-timing")).toBe(
       'operations;dur=123.5;desc="current-state read";queries=10',
     );

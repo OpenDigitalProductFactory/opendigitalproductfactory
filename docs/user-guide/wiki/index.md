@@ -96,6 +96,8 @@ It also lists **Craft questions your specialists answered from platform defaults
 
 ## What To Watch
 
+Coworkers can save observations about a screen as draft UX critiques. Native capture refuses an existing title instead of replacing its content; read that entry before retrying, or use a distinct title for a new observation. A coworker's proposed verdict is advisory: it does not publish guidance or count as a founder or designer ruling. Review the recorded route and evidence before relying on a critique; missing screenshots or an unknown rendered version limit what it proves.
+
 - pages marked draft being cited as established policy
 - useful imported content that has no source citation
 - principle pages that conflict with current `AGENTS.md` or architecture standards

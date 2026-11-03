@@ -195,6 +195,12 @@ N days" — measures the same on any day; live regions (`aria-live`, `status`/`a
 not counted as words visible on arrival. Details and the evidence behind both:
 [CI evidence — UX route-sweep stability](testing/ci-evidence.md#ux-route-sweep-stability).
 
+Provider-detail pages remain outside the broad sweep's dynamic-route fixture. The same
+workflow separately exercises the Local inference engine control at desktop and phone
+widths: an unqualified host offers no switch, refreshing status completes a server read,
+and the control fits the viewport without creating an operation request. This fixture
+coverage does not establish qualified Mac activation, rollback or inference performance.
+
 Three enforcement modes, decided by `lib/ux-budget/ratchet.ts`:
 
 1. **Pre-existing route → regression ratchet.** A changed route may not exceed its own
@@ -508,6 +514,17 @@ Every coworker that writes customer-facing copy (marketing-specialist and peers)
 - use short sentences, active voice, and familiar words; avoid jargon in business copy;
 - keep architecture and standards copy precise even when it reads higher;
 - check the Flesch–Kincaid grade before publishing.
+
+### Provider account readiness
+
+Provider lists show current readiness prominently using the shared
+`providerAccountReadiness` status domain. Working requires recent successful
+inference from that account; Enabled describes configuration without that proof.
+Temporary waits and operator pauses use warning, connection or billing failures
+use danger, and unavailable observations remain neutral. Keep the reason visible
+beside the badge and show account-owned check times and the next action. Allowed
+work describes data permission separately and cannot imply that capacity is ready.
+See [routing with provider accounts](user-guide/ai-workforce/provider-account-routing.md).
 
 ### Name the role, not the species (BI-F2EC4699)
 

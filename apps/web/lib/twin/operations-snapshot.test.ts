@@ -10,7 +10,7 @@ import {
   selectOperationsScene,
   selectOperationsSummary,
   toLivingBusinessSnapshot,
-} from "./operations-snapshot";
+} from "@dpf/storefront-templates/operations";
 
 function twinFixture(): TwinSnapshot {
   return {

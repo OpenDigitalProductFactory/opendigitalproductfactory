@@ -12,19 +12,15 @@ export interface DonationTotal {
 /** The population physically in the shelter right now, split by the status
  *  staff act on. Adopted animals are an outcome, not a population, so they are
  *  not counted here. */
-export interface AnimalsInCare {
-  total: number;
-  onHold: number;
-  available: number;
-  pending: number;
-}
+export type { AnimalsInCare } from "@dpf/storefront-templates/operations";
+import type { AnimalsInCare } from "@dpf/storefront-templates/operations";
 
 export interface ArchetypeOutcomeInput {
   archetypeId: string;
   currency: string;
   locale: string;
   paidRevenue: number;
-  deliveredJobs: number;
+  deliveredJobs: number | null;
   /** One entry per currency the gifts were recorded in. `null` means the
    *  donation source could not be read at all; `[]` means no gifts yet. */
   donationTotals?: DonationTotal[] | null;
@@ -34,7 +30,8 @@ export interface ArchetypeOutcomeInput {
   /** Housing the shelter has recorded. `null` means none has been recorded at
    *  all, which is a different answer from having none free. */
   kennelCapacity?: { total: number; free: number; occupied: number; outOfService: number } | null;
-  animalsPlaced?: number | null;
+  kennelSourceUnavailable?: boolean;
+  adoptionOutcomes?: number | null;
   fostersActive?: number | null;
 }
 
@@ -117,6 +114,8 @@ function animalsInCareOutcome(inCare: AnimalsInCare | null | undefined): TwinOut
     { count: inCare.onHold, label: "on hold" },
     { count: inCare.available, label: "available" },
     { count: inCare.pending, label: "pending" },
+    { count: inCare.placementReady ?? 0, label: "placement ready" },
+    { count: inCare.intakeReview ?? 0, label: "intake review" },
   ]
     .filter((part) => part.count > 0)
     .map((part) => `${part.count} ${part.label}`);
@@ -137,7 +136,9 @@ function animalsInCareOutcome(inCare: AnimalsInCare | null | undefined): TwinOut
  */
 function kennelsOutcome(
   capacity: ArchetypeOutcomeInput["kennelCapacity"],
+  unavailable = false,
 ): TwinOutcome {
+  if (unavailable) return { key: "kennels-free", label: "Kennels", value: "Unavailable", intent: "info", hint: "Housing source unavailable" };
   if (capacity == null) {
     return {
       key: "kennels-free",
@@ -173,14 +174,14 @@ export function buildArchetypeOutcomes(
       heading: "Mission impact",
       outcomes: [
         animalsInCareOutcome(input.animalsInCare),
-        kennelsOutcome(input.kennelCapacity),
+        kennelsOutcome(input.kennelCapacity, input.kennelSourceUnavailable),
         donationsOutcome(input),
         {
           key: "animals-placed",
-          label: "Animals placed",
-          value: countValue(input.animalsPlaced, "animal"),
+          label: "Adoption outcomes",
+          value: countValue(input.adoptionOutcomes, "outcome"),
           intent: "success",
-          hint: input.animalsPlaced == null ? "Adoption source unavailable" : "Adopted · 90 days",
+          hint: input.adoptionOutcomes == null ? "Adoption source unavailable" : "Completed custody episodes · 90 days",
         },
         {
           key: "fosters-active",
@@ -209,9 +210,9 @@ export function buildArchetypeOutcomes(
       {
         key: "delivered",
         label: "Delivered",
-        value: `${input.deliveredJobs} job${input.deliveredJobs === 1 ? "" : "s"}`,
+        value: input.deliveredJobs == null ? "Unavailable" : `${input.deliveredJobs} job${input.deliveredJobs === 1 ? "" : "s"}`,
         intent: "info",
-        hint: "Settled & paid",
+        hint: input.deliveredJobs == null ? "Delivery source unavailable" : "Completed work",
       },
     ],
   };

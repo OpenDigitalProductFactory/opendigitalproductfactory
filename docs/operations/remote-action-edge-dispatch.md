@@ -114,6 +114,25 @@ Re-running the organization PKI workflow renews the client certificate without
 replacing the organization root. Registering the renewed certificate
 atomically marks the prior active certificate `superseded`.
 
+The authority-host repair in BI-AFDB58C8 distinguishes a valid client from an
+expired one. A valid client follows normal renewal. An expired authority-host
+client uses the existing restricted issuer, with the expected subject and
+client-auth usage checked against the existing root. The replacement pair is
+staged privately and checked before publication; a failure preserves the prior
+pair. It never makes an expired certificate acceptable to the action listener or
+changes the CA's expiry policy. A pre-existing repair lock or an unproven
+restoration stops another attempt for reconciliation by that operation's owner.
+
+The corrected Bash and PowerShell bootstraps and their shared public-certificate
+validator ship in the normal release assets. After canonical publication, the
+executing agent uses the supported authority PKI workflow and verifies the new
+certificate's actual validity and native registration. Updating source or
+installing the assets alone does not renew a certificate. An explicit disabled
+dispatch setting remains disabled; an absent setting retains the bootstrap's
+existing configured-channel behavior. Node trust, quarantine, revocation,
+action allow-lists and per-action approval still apply independently. Member
+recovery and continuous rotation remain separate from this authority-host repair.
+
 Use **Platform → Edge Nodes** for trust lifecycle decisions:
 
 - **Quarantine** immediately makes the node and its active certificates

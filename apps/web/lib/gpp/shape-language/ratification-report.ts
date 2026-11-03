@@ -21,10 +21,10 @@
 
 import type { WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import { lowerToDefinition } from "./emit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { lowerToDefinition } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { legacyDroppedFields } from "./legacy";
+import { legacyDroppedFields } from "@dpf/validators/gpp/legacy";
 
 export type RatificationScopeStatus = "ratified" | "proposed" | "unlisted";
 

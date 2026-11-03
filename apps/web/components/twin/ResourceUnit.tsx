@@ -14,11 +14,14 @@ export function ResourceUnit({
   intent,
   owner,
   sublabel,
+  action,
 }: Omit<ResourceUnitData, "key">) {
   return (
     <div className="flex flex-col gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-[var(--dpf-text)]">{label}</span>
+        {action ? (
+          <a href={action.href} aria-label={`${action.label}: ${label}`} className="text-xs font-semibold text-[var(--dpf-text)] underline focus-visible:outline-2 focus-visible:outline-offset-2">{label}</a>
+        ) : <span className="text-xs font-semibold text-[var(--dpf-text)]">{label}</span>}
         <StatusBadge intent={intent ?? "neutral"} label={state} variant="soft" size="sm" />
       </div>
       {sublabel ? (

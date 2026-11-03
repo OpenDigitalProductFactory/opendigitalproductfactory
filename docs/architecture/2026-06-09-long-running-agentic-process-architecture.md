@@ -1,5 +1,14 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Repository intake:** the commissioned controller reads issues, Dependabot
+alerts and peer demand through the existing backlog origin reconciler. It
+records source snapshots without inflating unchanged demand or overwriting
+curated work. The four-hour schedule and Scheduled Work **Run now** action
+share one account concurrency lane and durable intake/heartbeat steps. Both
+check quiescence; the recurring trigger also honors the schedule enable switch.
+Denied security reads and ambiguous origins remain incomplete coverage. See the
+[repository intake repair plan](../superpowers/specs/2026-11-02-repository-security-intake-repair.md).
+
 **Operator provider pauses:** optional expiry runs through the existing jobs
 facade, with `ScheduledJob` holding the operation identity and resume time.
 A five-minute reconciliation job repairs overdue timers after restart or event
@@ -274,6 +283,13 @@ checklist approval on every retry.
 | Provider, source reader or budget becomes unavailable | Progress and real continuation cursors survive; retry is bounded and wakes on a relevant change. Exhaustion names a repair or terminal disposition. |
 | Authority is revoked or the request/artifact is superseded | Resume refuses the stale authority or evidence and supplies the supported repair; it never invents approval. |
 | No eligible replacement or a nonrepeatable effect is uncertain | Work remains visible with an accountable owner and reconciliation/compensation path; it is not silently marked successful. |
+
+**Current convergence follow-up (BI-1FDAA62B, BI-7DC3B91D):** the
+[agent execution conformance design](../superpowers/specs/2026-10-29-agent-execution-conformance-design.md)
+and [mapped plan](../superpowers/plans/2026-10-29-agent-execution-conformance-plan.md)
+apply this existing contract to the observed portal, native-tool, reviewer and
+result-persistence boundaries. They are draft repair/qualification scope, not
+a second engine or a declaration that the following acceptance matrix passed.
 
 Coverage belongs to the owning adapter's tests and runtime evidence. Updating
 this architecture does not establish fleet-wide conformance. The September 2026

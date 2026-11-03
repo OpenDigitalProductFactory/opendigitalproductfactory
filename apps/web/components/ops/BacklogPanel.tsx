@@ -69,6 +69,7 @@ export function BacklogPanel({
         workType: itemWorkType ?? "feature",
         status: item.status as BacklogItemInput["status"],
         body:   item.body ?? "",
+        outcome: item.outcome ?? "",
         deferReason: item.deferReason ?? "",
         deferTrigger: item.deferTrigger ?? "",
         deferReviewAt: item.deferReviewAt
@@ -333,20 +334,22 @@ export function BacklogPanel({
             </label>
           )}
 
-          {/* Outcome — create only; afterwards it lives in the body (BI-B1B44777) */}
-          {!item && (
-            <label className="flex flex-col gap-1">
-              <span className="text-dpf-caption uppercase tracking-widest text-[var(--dpf-muted)]">{t("intake.outcomeLabel")}</span>
-              <textarea
-                value={form.outcome ?? ""}
-                onChange={(e) => set("outcome", e.target.value)}
-                rows={2}
-                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-dpf-body text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
-                placeholder={t("intake.outcomePlaceholder")}
-              />
-              <span className="text-dpf-caption text-[var(--dpf-muted)]">{t("intake.outcomeHint")}</span>
-            </label>
-          )}
+          {/* Outcome — the item's own field (BI-8DE5429B); editable after create */}
+          <label className="flex flex-col gap-1">
+            <span className="text-dpf-caption uppercase tracking-widest text-[var(--dpf-muted)]">{t("intake.outcomeLabel")}</span>
+            <textarea
+              value={form.outcome ?? ""}
+              onChange={(e) => set("outcome", e.target.value)}
+              rows={2}
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-dpf-body text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
+              placeholder={t("intake.outcomePlaceholder")}
+            />
+            <span className="text-dpf-caption text-[var(--dpf-muted)]">
+              {item?.outcomeSource === "derived" && form.outcome === (item.outcome ?? "")
+                ? t("intake.outcomeDerivedHint")
+                : t("intake.outcomeHint")}
+            </span>
+          </label>
 
           {/* Body */}
           <label className="flex flex-col gap-1">

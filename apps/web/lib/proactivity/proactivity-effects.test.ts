@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { describeProactivityEffects } from "./proactivity-effects";
-import { resolveProactivityPlanForLevel } from "./proactivity-resolver";
+import { resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
 
 const registered = {
   registered: true,

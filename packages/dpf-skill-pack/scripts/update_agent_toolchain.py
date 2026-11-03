@@ -839,14 +839,37 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
     return None
 
 
+def declared_codex_headers(headers: Any, declaration: str) -> dict[str, str]:
+    """Replace only the DPF-owned HTTP header, preserving operator headers."""
+    if not isinstance(headers, dict) or any(not isinstance(value, str) for value in headers.values()):
+        raise ValueError("Codex HTTP headers must be a string table; configuration unchanged")
+    retained = {key: value for key, value in headers.items() if key.lower() != "x-dpf-toolchain"}
+    return {**retained, "X-DPF-Toolchain": declaration}
+
+
+def converge_codex_header_table(text: str, declaration: Optional[str]) -> str:
+    """Update a nested headers table without introducing an inline duplicate."""
+    if not declaration or not any(canonical_toml_table_header(line) == "mcp_servers.dpf.http_headers" for line in text.splitlines()):
+        return text
+    import codex_toml
+
+    try:
+        headers = codex_toml.loads_any(text)["mcp_servers"]["dpf"]["http_headers"]
+    except (ValueError, KeyError, codex_toml.CodexTomlUnavailable):
+        raise ValueError("Cannot read Codex HTTP headers; configuration unchanged") from None
+    merged = declared_codex_headers(headers, declaration)
+    return upsert_toml_table(text, "[mcp_servers.dpf.http_headers]", [
+        f"{json.dumps(key, ensure_ascii=False)} = {json.dumps(value, ensure_ascii=False)}" for key, value in merged.items()
+    ])
+
+
 def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optional[str] = None) -> list[str]:
     """Change managed keys only; retain operator-owned options and credentials."""
     retained: list[str] = []
     active = False
     seen = False
     custom_bearer = False
-    # An operator's [mcp_servers.dpf.http_headers] table would clash with an
-    # inline http_headers key, so the declaration is then left out.
+    # Nested headers are converged separately after the parent table.
     custom_headers = any(canonical_toml_table_header(line) == "mcp_servers.dpf.http_headers" for line in text.splitlines())
     existing_endpoint = existing_codex_mcp_endpoint(text) if not endpoint else None
     for line in text.splitlines():
@@ -865,11 +888,18 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
                 continue
             custom_bearer = True
         if key == "http_headers":
-            # The toolchain declaration (BI-DE1E6485) is the one header line
-            # the updater owns; an operator's own headers table is kept as is.
-            if "X-DPF-Toolchain" in value:
-                continue
             custom_headers = True
+            if declaration_header:
+                import codex_toml
+
+                try:
+                    headers = codex_toml.loads_any("http_headers = " + value)["http_headers"]
+                except (ValueError, KeyError, codex_toml.CodexTomlUnavailable):
+                    raise ValueError("Cannot read Codex HTTP headers; configuration unchanged") from None
+                merged = declared_codex_headers(headers, declaration_header)
+                line = "http_headers = { " + ", ".join(
+                    f"{json.dumps(key, ensure_ascii=False)} = {json.dumps(item, ensure_ascii=False)}" for key, item in merged.items()
+                ) + " }"
         if line.strip():
             retained.append(line)
     # An implicit plugin refresh must not change the resource an OAuth login
@@ -926,6 +956,7 @@ def ensure_codex_config(
         "[mcp_servers.dpf]",
         codex_mcp_body(text, mcp_url, declaration_header),
     )
+    text = converge_codex_header_table(text, declaration_header)
     validate_toml(text)
     if dry_run:
         return True

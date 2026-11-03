@@ -171,7 +171,12 @@ function, `provisionWorktree({ mainRoot, plan, env, effects })`:
    The server runs §3. A refusal returns `{status: "refused", code, message}` and stops.
    No worktree is created.
 4. `git worktree add` (existing branch or `-b <branch> origin/main`).
-5. Write the claim marker into the new worktree's git dir and return the path.
+5. Re-adopt with the source identity observed in the new checkout
+   (`captureSourceIdentity`, idempotent on the same room), which writes the claim
+   marker into the new worktree's git dir; then return the path. The hook does this
+   through its verified-source binder (BI-0B292D84: the binder is imported from the
+   checkout just created, never the plugin copy). The claim already exists from step
+   3, so a failure here is a warning on stderr, not a refusal.
 6. Unreachable: refuse, unless `DPF_WORKTREE_BREAK_GLASS` holds a non-empty reason. With
    it, create the worktree, write `dpf-workroom-pending.json` (reason, time, branch,
    sessionRef) and report it on stderr. The claim guard treats a pending marker as unbound,

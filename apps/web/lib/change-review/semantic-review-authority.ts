@@ -3,11 +3,12 @@ import { can } from "@/lib/permissions";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { AsyncOperationAuthorizationError, resolveServerOwnedAsyncOperationAuthority } from "@/lib/inference/async-operation-authority";
-import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
+import { inspectOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT, type OAuthExecutionAuthorityDetail } from "@/lib/auth/oauth-tokens";
 import type { SemanticReviewRequest } from "./semantic-review-request";
 
 type AuthorityDatabase = Pick<Prisma.TransactionClient, "user" | "mcpApiToken" | "taskRun" | "workroom" | "agent" | "authorityBinding" | "oAuthRefreshToken">;
 export type SemanticReviewAuthorityObservation = {
+  detail?: OAuthExecutionAuthorityDetail;
   state: "allowed" | "denied" | "unavailable";
   reason: "authority-current" | "human-capability-denied" | "saved-token-unavailable"
     | "saved-token-scope-denied" | "oauth-authority-invalid" | "auth-source-unsupported"
@@ -35,7 +36,10 @@ export async function inspectSemanticReviewAuthority(packet: SemanticReviewReque
       || !isToolAllowedByGrants("review_semantic_change", token.scopes)) return { state: "denied", reason: "saved-token-scope-denied" };
     // Audience was checked on admission; this immutable actor names that same
     // token row. Recheck current human, consent and client authority before work.
-    if (actor.authSource === "oauth" && !await isCurrentOAuthExecutionAuthority(token, db)) return { state: "denied", reason: "oauth-authority-invalid" };
+    if (actor.authSource === "oauth") {
+      const observation = await inspectOAuthExecutionAuthority(token, db);
+      if (!observation.allowed) return { state: "denied", reason: "oauth-authority-invalid", detail: observation.detail };
+    }
   } else if (actor.authSource !== null && actor.authSource !== "session-jwt") {
     return { state: "denied", reason: "auth-source-unsupported" };
   }

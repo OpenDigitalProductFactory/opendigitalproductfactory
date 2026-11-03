@@ -1,3 +1,4 @@
+import type { AccountReadiness } from "./provider-account-readiness";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 
 /** Presentation identity consumes the canonical masked account read model. */
@@ -14,10 +15,25 @@ export type ProviderAccountIdentity = {
 
 export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
   label: string; providerName: string; statusLabel: string;
+  readiness?: AccountReadiness;
+  connectionSummary?: string;
+  eligibilitySummary?: string;
+  lastCheckedAt?: string | null;
+  lastSucceededAt?: string | null;
+  quotaRecheckAt?: string | null;
+  nextActionLabel?: string;
   allowedWork: string; allowedWorkSummary: string;
   modelSummary: string; capacitySummary: string; resetSummary: string | null;
   capabilitySummary?: string;
   resolvesPhases: string[];
+  statusIntent?: "success" | "warning" | "danger" | "neutral";
+  quotaRecovery?: {
+    models: Array<{ modelId: string; name: string }>; selectedModelId: string | null; hourly: boolean;
+    canCheck: boolean; lastCheckAt: string | null; nextCheckAt: string | null; lastResult: string | null;
+    checkedModelId: string | null; checkedAt: string | null; proofExpiresAt: string | null;
+    observedAt: string | null; observationSource: string | null; limits: Array<{ summary: string; until: string | null }>;
+    usageUrl: string | null; unavailable: boolean;
+  };
 };
 
 export function isProviderAccountVisible(
