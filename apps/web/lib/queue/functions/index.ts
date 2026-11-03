@@ -8,7 +8,7 @@ import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
-import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
+import { ecosystemInboundTriage, ecosystemInboundTriageRequested } from "./ecosystem-inbound-triage";
 import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
@@ -266,6 +266,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  ecosystemInboundTriageRequested,
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
