@@ -118,9 +118,22 @@ returned NULL for valid JavaScript UTC `Z` strings and prevented convergence.
 Due or invalid legacy times normalize to the captured current time; valid
 future times retain their exact instant. Original request fences do not change.
 Added database coverage checks absent/invalid times, more than fifty future
-legacy waits, bounded convergence and unchanged request fences. These new
-database cases and served Finance acceptance remain unrun until their governed
-checks execute; focused adapter tests are separate evidence.
+legacy waits, bounded convergence and unchanged request fences. Actual
+PostgreSQL on admitted disposable test database `NPEL-C28AB0DB3A` passed all
+eight publication/retry cases at `a146b7c617a`, after the earlier source passed
+six and failed two. Native evidence: `cmvzyuoto0q6101o2h70meo3q`.
+
+The separately scoped conformance source `8091115bee5` has identical foreground
+implementation files and passed five actual Finance PostgreSQL integration
+cases plus three target-selection controls; native evidence:
+`cmvzyuou70q6401o28awpn01c`. Coworker replies, queue transport and events remain
+controlled doubles. These checks prove database persistence, duplicate handling,
+membership/owner rechecks, acknowledgement-loss recovery and changed-request
+refusal. They do not prove browser authentication, actual queue delivery, a
+useful Finance tool result, original historical task recovery or deployed
+business acceptance. Full canonical qualification remains blocked by the
+existing expired architecture reviews under `BI-9BEB3D56`; served acceptance
+is still owed.
 
 Source-local tests cover duplicate HTTP submissions, concurrent queue claims,
 the immutable request/deadline, capacity retry, expiration, authority revocation,
