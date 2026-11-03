@@ -481,3 +481,30 @@ record check, not a claim that all backlog work was searched. The existing
 `2026-10-11-external-client-verification.md` plan remains the served-route and
 fixture verification context; its browser coverage is not replaced by progress
 log observations.
+
+
+### November 2 source implementation checkpoint
+
+The earlier source-only checkpoint is superseded: managed dependency bootstrap
+is complete. Research receipt `initiative-c78447ab-908a-4264-bc90-4addd4bc3858`
+records the current caller reproduction. Medium implementation admission
+`IRD-B02D1549DBEB` and atomic coverage `cmw04uhd81n0a01n2pqwl2hnb` bind this
+continuation to BI-B47BB1D7 and the published design at `dc203d4046c3883ad2f0fb97a0120d16d955b292`.
+
+The implementation extracts existing terminal instrumentation into
+`observeSanitizedTableCopy` in the same module and connects its throttled observer
+to the existing writer after awaited insertion and payload-window release.
+Processed rows count attempted rows whose inserts returned, including conflict
+skips, and do not claim durable committed rows. The existing count is an estimate;
+unknown totals remain null and stale remaining estimates stop at zero. Observer
+errors propagate through the transaction and whole-clone cleanup path. No timer,
+extra query, retained payload, timeout change or new service is introduced.
+
+The first writer regression failed with zero notifications where one was expected.
+After the repair, all 116 tests in the five source-local clone suites passed.
+Both DB TypeScript programs passed. The PostgreSQL cases now compare observer
+enabled and disabled using identical values and duplicate winners, exercise
+failed-copy terminal reporting, and retain the original memory and positive
+controls with observation enabled. Those PostgreSQL cases are not yet executed
+for this change. The earlier Windows host guard result remains INCONCLUSIVE;
+no exact-source integration, protected delivery or live acceptance is claimed.

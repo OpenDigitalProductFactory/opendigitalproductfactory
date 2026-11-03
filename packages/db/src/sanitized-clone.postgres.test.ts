@@ -9,6 +9,7 @@ import { PrismaClient } from "../generated/client/client";
 import {
   createSanitizedCloneInsertWriter,
   createSanitizedCloneWriter,
+  observeSanitizedTableCopy,
   createSanitizedCloneSanitizer,
   copyRowsForSanitization,
   buildSanitizedCursorQuery,
@@ -71,14 +72,34 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       // Only source data resolves through this private schema; destination
       // catalog/writer connections remain public, as in the real caller.
       await client.query(`SET search_path TO "${schema}", public`);
-      for (const ceiling of [50, 500, 500, 50]) {
+      for (const [ceiling, observed] of [[50, false], [500, true], [500, false], [50, true]] as const) {
         await client.query(`TRUNCATE TABLE ${destination}`);
         const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, insertMs: 0, transactionAttempts: 0, transactionMs: 0, transactionWorkMs: 0 };
         const writer = createSanitizedCloneWriter(destinationClient, { batchSize: ceiling, maxWaitMs: 10000, timeoutMs: 30000 });
         const started = performance.now();
         await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-        await copyRowsForSanitization(client, sourceClient, destinationClient, name,
-          next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(2), metrics), undefined, metrics);
+        let progressEvents = 0;
+        if (observed) {
+          let observationClock = 0;
+          await observeSanitizedTableCopy(name, async (observedMetrics, onWindow) => {
+            await copyRowsForSanitization(client, sourceClient, destinationClient, name,
+              next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(2), observedMetrics,
+                count => { observationClock += 1000; onWindow(count); }), undefined, observedMetrics);
+            Object.assign(metrics, observedMetrics);
+          }, 50001, { now: () => observationClock, log: line => {
+            if (line.startsWith("[sanitized-clone-progress]")) {
+              progressEvents++;
+              const event = JSON.parse(line.slice(line.indexOf("{")));
+              expect(event.processedRows).toBeLessThanOrEqual(50001);
+              expect(event.estimatedRemainingRows).toBe(50001 - event.processedRows);
+              expect(event).not.toHaveProperty("committedRows");
+            }
+          } });
+          expect(progressEvents).toBe(1001);
+        } else {
+          await copyRowsForSanitization(client, sourceClient, destinationClient, name,
+            next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(2), metrics), undefined, metrics);
+        }
         await client.query("COMMIT");
         const elapsedMs = performance.now() - started;
         const rows = await client.query(`SELECT count(*)::int AS count, md5(string_agg(row_to_json(d)::text, ',' ORDER BY id)) AS digest FROM ${destination} d`);
@@ -89,7 +110,7 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
         if (ceiling === 50) expect(metrics.transactionAttempts).toBe(1001);
         else expect(metrics.transactionAttempts).toBeGreaterThanOrEqual(101);
         expect((await client.query(`SELECT name, embedding FROM ${destination} WHERE id = '000001'`)).rows[0]).toEqual({ name: "Dev User 001", embedding: null });
-        results.push({ ceiling, elapsedMs, ...metrics });
+        results.push({ ceiling, observed, elapsedMs, ...metrics });
       }
       expect((await client.query(`SELECT count(*)::int AS count FROM ${table} WHERE name = 'Source person' AND embedding IS NOT NULL`)).rows[0].count).toBe(50001);
       console.info(`[sanitized-clone-comparison] ${JSON.stringify({ sourceRows: 50001, copiedRows: 30000, results })}`);
@@ -123,12 +144,20 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       } };
       const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
       const writer = createSanitizedCloneWriter(destinationClient);
+      const terminalStates: boolean[] = [];
       await expect(runSourceCheckedClone(
         async () => { await destinationClient.$executeRawUnsafe(`TRUNCATE TABLE ${destination}`); },
         async () => {},
-        () => withSanitizedCursorBatches(sourceReader, `SELECT id, name FROM ${source} ORDER BY id`,
-          next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics),
+        () => observeSanitizedTableCopy(name, async (observedMetrics, onWindow) => {
+          try {
+            await withSanitizedCursorBatches(sourceReader, `SELECT id, name FROM ${source} ORDER BY id`,
+              next => writer.copyBatches(name, next, createSanitizedCloneSanitizer(0), observedMetrics, onWindow), 50, true, observedMetrics);
+          } finally { Object.assign(metrics, observedMetrics); }
+        }, 1001, { log: line => {
+          if (line.startsWith("[sanitized-clone-phase]")) terminalStates.push(JSON.parse(line.slice(line.indexOf("{"))).completed);
+        } }),
       )).rejects.toThrow();
+      expect(terminalStates).toEqual([false]);
       expect(metrics.transactionAttempts).toBe(2);
       expect((await client.query(`SELECT count(*)::int AS count FROM ${destination}`)).rows[0].count).toBe(0);
       expect((await client.query(`SELECT count(*)::int AS count FROM ${source} WHERE name='Source person'`)).rows[0].count).toBe(1001);
@@ -738,14 +767,17 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       } };
       const writer = createSanitizedCloneWriter(observedClient as never);
       const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
-      await withSanitizedCursorBatches(client, `SELECT id,name,payload,NULL::text AS embedding FROM ${source} ORDER BY id`,
+      await observeSanitizedTableCopy(name, async (observedMetrics, onWindow) => {
+        await withSanitizedCursorBatches(client, `SELECT id,name,payload,NULL::text AS embedding FROM ${source} ORDER BY id`,
         next => writer.copyBatches(name, async () => {
           // Each source window is 50 rows (the final window is smaller).
           // This runs after the preceding window's real awaited SQL inserts
           // and before the next fetch, while its transaction is still open.
           if (transactionOpen) sampleInside!();
           return next();
-        }, createSanitizedCloneSanitizer(0), metrics), 50, true, metrics);
+        }, createSanitizedCloneSanitizer(0), observedMetrics, onWindow), 50, true, observedMetrics);
+        Object.assign(metrics, observedMetrics);
+      }, 2001, { log: () => {} });
       expect(metrics.rows).toBe(2001);
       expect(insertSamples).toBeGreaterThanOrEqual(41);
       expect(innerSamples).toBeGreaterThanOrEqual(41);

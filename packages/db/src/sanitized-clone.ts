@@ -308,19 +308,11 @@ export async function runSanitizedClone(): Promise<void> {
         const userCount = (await sanitizedSource.query('SELECT count(*) AS count FROM "User"')).rows;
         const sanitizeRows = createSanitizedCloneSanitizer(Number(userCount[0]?.count ?? 0));
         const writer = createSanitizedCloneWriter(dev);
-        const copySanitizedTable = async (tableName: string, limit?: number) => {
-          const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, insertMs: 0, transactionMs: 0, transactionAttempts: 0, transactionWorkMs: 0 };
-          const started = performance.now();
-          let completed = false;
-          try {
-            await copyRowsForSanitization(sanitizedSource, prod, dev, tableName,
-              next => writer.copyBatches(tableName, next, sanitizeRows, metrics), limit, metrics);
-            completed = true;
-          } finally {
-            // Transaction time contains its fetch/sanitize/insert work; do not add these nested axes.
-            console.log(`[sanitized-clone-phase] ${JSON.stringify({ table: tableName, completed, timingModel: "nested-transaction", elapsedMs: performance.now() - started, ...metrics })}`);
-          }
-        };
+        const copySanitizedTable = (tableName: string, limit?: number, estimatedRows?: number) =>
+          observeSanitizedTableCopy(tableName, (metrics, onWindow) =>
+            copyRowsForSanitization(sanitizedSource, prod, dev, tableName,
+              next => writer.copyBatches(tableName, next, sanitizeRows, metrics, onWindow), limit, metrics),
+          estimatedRows);
 
         for (const { tablename } of tables) {
           if (!destinationTableNames.has(tablename)) {
@@ -348,7 +340,7 @@ export async function runSanitizedClone(): Promise<void> {
           if (AUDIT_TABLES.has(tablename)) {
             const copyCount = Math.min(rowCount, AUDIT_RECORD_LIMIT);
             console.log(`  AUDIT (last ${copyCount} of ${rowCount}): ${tablename}`);
-            await copySanitizedTable(tablename, copyCount);
+            await copySanitizedTable(tablename, copyCount, copyCount);
             continue;
           }
 
@@ -357,7 +349,7 @@ export async function runSanitizedClone(): Promise<void> {
             await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
-            await copySanitizedTable(tablename);
+            await copySanitizedTable(tablename, undefined, rowCount);
           }
         }
 
@@ -609,6 +601,41 @@ export type CloneWriteMetrics = { transactionAttempts: number; transactionMs: nu
 export type CloneCopyMetrics = CloneFetchMetrics & CloneWriteMetrics & { sanitizeMs: number };
 export const SANITIZED_CLONE_WRITE_GROUP_MAX_MS = 1_000;
 
+/** Observe processed work, never claim committed rows. Logging failures propagate
+ * through the existing transaction and destination cleanup owners. */
+export async function observeSanitizedTableCopy(
+  table: string,
+  copy: (metrics: CloneCopyMetrics, onWindow: (processedRows: number) => void) => Promise<void>,
+  estimatedRows?: number,
+  observation: { now?: () => number; log?: (message: string) => void } = {},
+): Promise<void> {
+  const now = observation.now ?? (() => performance.now());
+  const log = observation.log ?? ((message: string) => console.log(message));
+  const metrics: CloneCopyMetrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, insertMs: 0, transactionMs: 0, transactionAttempts: 0, transactionWorkMs: 0 };
+  const estimatedTotalRows = typeof estimatedRows === "number" && Number.isSafeInteger(estimatedRows) && estimatedRows >= 0 ? estimatedRows : null;
+  const started = now();
+  let lastEmission = started;
+  let processedRows = 0;
+  let completed = false;
+  try {
+    await copy(metrics, count => {
+      processedRows += count;
+      const timestamp = now();
+      if (timestamp - lastEmission < 1_000) return;
+      lastEmission = timestamp;
+      log('[sanitized-clone-progress] ' + JSON.stringify({
+        table, elapsedMs: timestamp - started, fetchedRows: metrics.rows, processedRows,
+        estimatedTotalRows,
+        estimatedRemainingRows: estimatedTotalRows === null ? null : Math.max(0, estimatedTotalRows - processedRows),
+      }));
+    });
+    completed = true;
+  } finally {
+    // Preserve the existing terminal metric and its nested timing semantics.
+    log('[sanitized-clone-phase] ' + JSON.stringify({ table, completed, timingModel: "nested-transaction", elapsedMs: now() - started, ...metrics }));
+  }
+}
+
 /** Shares metadata and SQL conversion between the legacy direct writer and
  * the streaming caller. A streamed group retains one source window, not 500 rows. */
 export function createSanitizedCloneWriter(
@@ -652,7 +679,8 @@ export function createSanitizedCloneWriter(
       }
     },
     async copyBatches(tableName: string, next: CloneBatchReader,
-      transform: (rows: Array<Record<string, unknown>>) => void, metrics: CloneCopyMetrics) {
+      transform: (rows: Array<Record<string, unknown>>) => void, metrics: CloneCopyMetrics,
+      onWindow?: (processedRows: number) => void) {
       if (!Number.isInteger(policy.batchSize) || policy.batchSize < 50 || policy.batchSize > 500) {
         throw new Error("Streaming clone transactions require a ceiling from 50 to 500 rows");
       }
@@ -675,6 +703,7 @@ export function createSanitizedCloneWriter(
             rows.length = 0;
             pending = null;
             written += count;
+            onWindow?.(count);
             if (written + 50 > policy.batchSize || performance.now() - workStarted >= SANITIZED_CLONE_WRITE_GROUP_MAX_MS) return;
             pending = await next();
             if (pending === null) { exhausted = true; return; }

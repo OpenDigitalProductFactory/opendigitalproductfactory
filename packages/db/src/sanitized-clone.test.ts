@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { withSanitizedCursorBatches } from "./sanitized-clone-batches";
 import {
   createSanitizedCloneWriter,
+  observeSanitizedTableCopy,
   buildDestinationResetSql,
   buildSanitizedCursorQuery,
   buildSourceCopyArgs,
@@ -236,6 +237,30 @@ describe("destination cleanup", () => {
 });
 
 describe("bounded confidential inserts", () => {
+  it("reports processed windows after releasing payload and before the next fetch", async () => {
+    let fetched = 0;
+    let lastRows: Array<Record<string, unknown>> = [];
+    const observe = vi.fn((count: number) => {
+      expect(count).toBe(1);
+      expect(lastRows).toHaveLength(0);
+    });
+    const next = async () => {
+      if (fetched > 0) expect(observe).toHaveBeenCalledTimes(fetched);
+      if (fetched === 3) return null;
+      fetched++;
+      lastRows = [{ id: String(fetched) }];
+      return lastRows;
+    };
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async () => 1,
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => write(transaction) };
+    const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, transactionAttempts: 0, transactionMs: 0 };
+    await createSanitizedCloneWriter(client as never).copyBatches("First", next, () => {}, metrics, observe);
+    expect(observe).toHaveBeenCalledTimes(3);
+  });
+
   it.each(["source", "write", "commit"])("aborts streaming on a %s failure without committing the source snapshot", async failure => {
     const events: string[] = [];
     let fetches = 0;
@@ -542,5 +567,99 @@ describe("confidential cursor order", () => {
     const sql = buildSanitizedCursorQuery("NoId", '"userId"', new Set(["userId"]));
     expect(sql).toContain('row_number() OVER (ORDER BY ctid)');
     expect(sql).toMatch(/ORDER BY r\."__dpfCloneRowOrder"$/);
+  });
+});
+
+
+describe("sanitized table progress", () => {
+  const decode = (line: string) => JSON.parse(line.slice(line.indexOf("{")));
+
+  it("throttles actual writer progress and labels stale totals as estimates", async () => {
+    const lines: string[] = [];
+    let clock = 0;
+    const timestamps = [1000, 1500, 2000];
+    let inserts = 0;
+    let fetched = 0;
+    let committed = false;
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async (sql: string) => {
+        if (sql.startsWith("INSERT")) clock = timestamps[inserts++]!;
+        return 1;
+      },
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => {
+      await write(transaction); committed = true;
+    } };
+    await observeSanitizedTableCopy("Fixture", async (metrics, onWindow) => {
+      await createSanitizedCloneWriter(client as never).copyBatches("Fixture", async () => {
+        if (fetched === 3) return null;
+        metrics.rows++; metrics.batches++; fetched++;
+        return [{ id: "PRIVATE-ROW-VALUE" }];
+      }, () => {}, metrics, onWindow);
+    }, 2, { now: () => clock, log: line => {
+      if (line.startsWith("[sanitized-clone-progress]")) expect(committed).toBe(false);
+      lines.push(line);
+    } });
+    expect(lines.map(line => line.split(" ")[0])).toEqual([
+      "[sanitized-clone-progress]", "[sanitized-clone-progress]", "[sanitized-clone-phase]",
+    ]);
+    expect(lines.slice(0, 2).map(decode)).toEqual([
+      { table: "Fixture", elapsedMs: 1000, fetchedRows: 1, processedRows: 1, estimatedTotalRows: 2, estimatedRemainingRows: 1 },
+      { table: "Fixture", elapsedMs: 2000, fetchedRows: 3, processedRows: 3, estimatedTotalRows: 2, estimatedRemainingRows: 0 },
+    ]);
+    expect(decode(lines[2]!)).toMatchObject({ completed: true, rows: 3, batches: 3, timingModel: "nested-transaction" });
+    expect(lines.join("\n")).not.toContain("PRIVATE-ROW-VALUE");
+    expect(inserts).toBe(3);
+  });
+
+  it.each([undefined, NaN, Infinity, -1, 1.5])("keeps an unavailable or invalid estimate unknown (%s)", async estimated => {
+    const lines: string[] = []; let clock = 0;
+    await observeSanitizedTableCopy("Fixture", async (metrics, onWindow) => {
+      metrics.rows = 50; clock = 1000; onWindow(50);
+    }, estimated, { now: () => clock, log: line => lines.push(line) });
+    expect(decode(lines[0]!)).toMatchObject({ estimatedTotalRows: null, estimatedRemainingRows: null, processedRows: 50 });
+  });
+
+  it.each([0, 1])("emits exactly one successful terminal phase for a short %s-row copy", async rows => {
+    const log = vi.fn();
+    await observeSanitizedTableCopy("Fixture", async (metrics, onWindow) => {
+      metrics.rows = rows; if (rows) onWindow(rows);
+    }, rows, { now: () => 0, log });
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(decode(log.mock.calls[0]![0])).toMatchObject({ completed: true, rows });
+  });
+
+  it("preserves an observed copy failure and emits a failed terminal phase", async () => {
+    const lines: string[] = []; let clock = 0;
+    await expect(observeSanitizedTableCopy("Fixture", async (metrics, onWindow) => {
+      metrics.rows = 1; clock = 1000; onWindow(1); throw new Error("commit failed");
+    }, 5, { now: () => clock, log: line => lines.push(line) })).rejects.toThrow("commit failed");
+    expect(lines).toHaveLength(2);
+    expect(decode(lines[1]!)).toMatchObject({ completed: false });
+    expect(decode(lines[0]!)).not.toHaveProperty("committedRows");
+  });
+
+  it("propagates a progress observer error through transaction and destination cleanup", async () => {
+    let committed = false; let clock = 0; const lines: string[] = [];
+    const reset = vi.fn(async () => {});
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async (sql: string) => { if (sql.startsWith("INSERT")) clock = 1000; return 1; },
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => {
+      await write(transaction); committed = true;
+    } };
+    let fetched = false;
+    await expect(runWithDestinationCleanup(reset, () => observeSanitizedTableCopy("Fixture", (metrics, onWindow) =>
+      createSanitizedCloneWriter(client as never).copyBatches("Fixture", async () => {
+        if (fetched) return null; fetched = true; metrics.rows = 1; return [{ id: "private" }];
+      }, () => {}, metrics, onWindow), 1, { now: () => clock, log: line => {
+        if (line.startsWith("[sanitized-clone-progress]")) throw new Error("observer unavailable");
+        lines.push(line);
+      } }))).rejects.toThrow("observer unavailable");
+    expect(committed).toBe(false);
+    expect(reset).toHaveBeenCalledTimes(2);
+    expect(decode(lines[0]!)).toMatchObject({ completed: false });
   });
 });
