@@ -49,8 +49,9 @@ installation tooling at `/api/map-assets/recommendation` (administrators only).
 Next to a region that no pack covers, select **Install the <region> street
 map**. DPF downloads just that region's street data from the Protomaps build of
 OpenStreetMap, checks it, and adds it to your map packs. You can leave the page
-while it works. While it stays open, the panel updates every few seconds with
-each step and says when the map is installed, or why it didn't.
+while it works. While it stays open, the panel updates as each step finishes
+and says when the map is installed, or why it didn't. Installation tooling can
+read the same status at `/api/map-assets/install-status` (administrators only).
 
 - It covers the region around your own locations, with full street detail for a
   state or province. A very large region is installed with slightly less

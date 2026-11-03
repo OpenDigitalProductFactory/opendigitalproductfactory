@@ -5,7 +5,9 @@ import "server-only";
 
 import { prisma } from "@dpf/db";
 
-import { parseInstallStatus, type MapPackInstallStatus } from "./status";
+import { agentEventBus } from "@/lib/agent-event-bus";
+
+import { isInstallRunning, parseInstallStatus, type MapPackInstallStatus } from "./status";
 
 export const MAP_PACK_INSTALL_STATUS_KEY = "map-packs.install.status";
 
@@ -30,4 +32,14 @@ export async function writeInstallStatus(patch: Partial<MapPackInstallStatus>): 
     create: { key: MAP_PACK_INSTALL_STATUS_KEY, value: next },
     update: { value: next },
   });
+  // Persisted first; the event only tells open panels to re-read the projection.
+  agentEventBus.broadcastSystem({ type: "system:map-pack-install", packId: next.packId, state: next.state, observedAt: next.updatedAt });
+}
+
+/** The Street maps panel's status projection: the stored status and the server's running check. */
+export type MapPackInstallSnapshot = { status: MapPackInstallStatus; running: boolean };
+
+export async function readInstallSnapshot(): Promise<MapPackInstallSnapshot> {
+  const status = await readInstallStatus();
+  return { status, running: isInstallRunning(status) };
 }

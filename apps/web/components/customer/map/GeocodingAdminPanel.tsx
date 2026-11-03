@@ -4,7 +4,7 @@
 // AC-CMAP-PROVIDER-1/2): choose a provider (None by default) and find missing
 // locations, with counts from the last run.
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
@@ -18,7 +18,8 @@ import {
 import type { GeocodingConfig } from "@/lib/geocoding/providers";
 import type { GeocodingBackfillStatus } from "@/lib/geocoding/backfill.server";
 import type { RegionRecommendation } from "@/lib/twin/map-region-recommendation";
-import { IN_FLIGHT_STATES, type MapPackInstallStatus } from "@/lib/twin/map-pack-install/status";
+import { IDLE_INSTALL, IN_FLIGHT_STATES, type MapPackInstallStatus } from "@/lib/twin/map-pack-install/status";
+import { useBackgroundOperationObserver } from "@/lib/hooks/useBackgroundOperationObserver";
 import { useT } from "@/lib/i18n/use-t";
 
 export function GeocodingAdminPanel({
@@ -26,8 +27,8 @@ export function GeocodingAdminPanel({
   opencageKeyConfigured,
   status,
   regions = null,
-  install = null,
-  installRunning = false,
+  install: initialInstall = null,
+  installRunning: initialInstallRunning = false,
 }: {
   config: GeocodingConfig;
   opencageKeyConfigured: boolean;
@@ -63,18 +64,22 @@ export function GeocodingAdminPanel({
           ? { kind: "success", text: t("admin.streetMapsInstallStarted") }
           : { kind: "error", text: t(result && !result.ok && result.error === "already-running" ? "admin.streetMapsInstallRunning" : "placeFailed") },
       );
-      router.refresh();
+      void installObserver.refresh();
     });
   }
 
+  // The install runs in the background. Its status projection is observed per
+  // the background-operation observation contract: events invalidate, the
+  // projection is re-read, the route is never refreshed on a timer.
+  const installObserver = useBackgroundOperationObserver<{ status: MapPackInstallStatus; running: boolean }>({
+    endpoint: "/api/map-assets/install-status",
+    eventType: "system:map-pack-install",
+    initialSnapshot: { status: initialInstall ?? IDLE_INSTALL, running: initialInstallRunning },
+    isActive: (snapshot) => snapshot.running,
+  });
+  const install = installObserver.snapshot.status;
+  const installRunning = installObserver.snapshot.running;
   const stalled = install ? IN_FLIGHT_STATES.includes(install.state) && !installRunning : false;
-
-  // The install runs in the background; refresh while it does so each step shows without a reload.
-  useEffect(() => {
-    if (!installRunning) return;
-    const id = setInterval(() => router.refresh(), 5000);
-    return () => clearInterval(id);
-  }, [installRunning, router]);
 
   function start() {
     startTransition(async () => {

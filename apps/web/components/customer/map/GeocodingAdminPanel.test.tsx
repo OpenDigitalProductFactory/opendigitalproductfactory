@@ -10,6 +10,15 @@ import type { MapPackInstallStatus } from "@/lib/twin/map-pack-install/status";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 const installAction = vi.hoisted(() => vi.fn());
+// The panel observes the install projection; render the snapshot it starts with.
+vi.mock("@/lib/hooks/useBackgroundOperationObserver", () => ({
+  useBackgroundOperationObserver: <T,>(options: { initialSnapshot: T }) => ({
+    snapshot: options.initialSnapshot,
+    refresh: async () => {},
+    pending: false,
+    error: null,
+  }),
+}));
 vi.mock("@/lib/actions/customer-map", () => ({
   saveGeocodingProviderAction: vi.fn(),
   startGeocodingBackfillAction: vi.fn(),
