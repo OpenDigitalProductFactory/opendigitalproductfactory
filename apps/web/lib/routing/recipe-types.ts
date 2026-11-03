@@ -77,6 +77,8 @@ export interface RoutedExecutionPlan {
     allowParallelToolCalls?: boolean;
   };
   responsePolicy: {
+    /** Mandatory finite provider output bound; rejection must never remove it. */
+    requireOutputBound?: boolean;
     strictSchema?: boolean;
     stream?: boolean;
     /** Sole writer whose eventual execution is fail-closed by the caller's terminal-tool policy. */

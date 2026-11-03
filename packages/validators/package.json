@@ -24,11 +24,12 @@
     "./*": "./*"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && node --test ../../examples/_shared/install-workroom-artifact.test.mjs",
     "typecheck": "node ../../scripts/run-tsc.mjs --noEmit"
   },
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
+    "@opendigitalproductfactory/dpf-workroom": "file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
     "zod": "catalog:"
   },
   "devDependencies": {

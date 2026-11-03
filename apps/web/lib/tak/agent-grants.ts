@@ -12,6 +12,7 @@ import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
+import { THREAD_TOOL_GRANTS } from "./thread-tool-grants";
 import { SURFACE_READINESS_TOOL_GRANTS } from "./surface-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
@@ -398,11 +399,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_deliberation_outcome:  ["deliberation_read"],
   deliberate_on:             ["deliberation_create"],
 
-  // Specialist subtask thread spawning
-  spawn_work_thread:         ["thread_write"],
-  cancel_thread:             ["thread_write"],
-  get_thread_result:         ["thread_read"],
-  get_child_threads:         ["thread_read"],
+  // Thread delegation and exact-response feedback
+  ...THREAD_TOOL_GRANTS,
 
   // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
   // child work thread, so they require the same thread_write grant as spawn.

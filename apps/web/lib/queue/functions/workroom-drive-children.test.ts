@@ -57,6 +57,7 @@ function memoryDb() {
   const failNext = { relationDelete: false };
   let seq = 0;
   const match = (row: Row, where: Row) => Object.entries(where).every(([key, value]) =>
+    value && typeof value === "object" && !Array.isArray(value) && "equals" in value ? JSON.stringify(row[key]) === JSON.stringify(value.equals) :
     value && typeof value === "object" && !Array.isArray(value) && "in" in value ? (value.in as unknown[]).includes(row[key]) : row[key] === value);
   const db: any = {
     state,
@@ -343,4 +344,21 @@ describe("sub-shape child rooms through the runner (PR-3c-5)", () => {
     expect(await tick(h, at(0))).toMatchObject({ action: "pause", reason: "construct_not_executable" });
     expect(children(h)).toEqual([]);
   });
+});
+
+
+it("refuses a stale reused-child shape write after concurrent scope acquisition", async () => {
+  const h = parentWaitingAtB();
+  const ensure = { key: "child", stageKey: "B", stageTitle: "Child", iteration: 0, ref: "delivery-small@1.0.0", idempotencyKey: "existing-child" };
+  h.db.state.workrooms.push({ id: "row-child", capsuleId: "WC-CHILD", status: "working", idempotencyKey: ensure.idempotencyKey, scopeClaims: [], updatedAt: T0 });
+  const update = h.db.workroom.update;
+  h.db.workroom.update = async (args: Row) => {
+    if (args.where.id === "row-child" && args.data.scopeClaims) {
+      if (args.where.scopeClaims) throw new Error("Concurrent child claim changed");
+    }
+    return update(args);
+  };
+  await expect(createSubShapeChildEffects(async () => h.db).ensureChildRoom({
+    parent: { id: "row-parent", capsuleId: "WC-PARENT" }, ensure, now: T0,
+  })).rejects.toThrow("Concurrent child claim changed");
 });

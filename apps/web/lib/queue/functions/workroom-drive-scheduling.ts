@@ -37,6 +37,10 @@ export async function scheduleWorkroomAgentTask(
       baseSha: true, headSha: true, leaseHolderPrincipalId: true,
     } });
     if (!room) return false;
+    // The brief was read before the lease-fenced transaction. A changed room
+    // source needs reconciliation, not dispatch using that stale instruction.
+    if (input.source !== undefined && (input.source.repositoryFullName !== (room.repositoryFullName ?? null)
+      || input.source.headSha !== (room.headSha ?? null))) return false;
     const workspace = isRecord(room.workspaceState) ? room.workspaceState : {};
     const qualificationState = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
     let qualificationBinding = null;
@@ -77,6 +81,7 @@ export async function scheduleWorkroomAgentTask(
       taskId: input.taskId, roomId: input.lease.roomId, objective: room.objective ?? null,
       stage: input.stage, now: input.now.toISOString(),
       dispatchScope: input.dispatchScope,
+      source: input.source,
       holderPrincipalId: input.lease.holderPrincipalId, leaseExpiresAt: input.lease.expiresAt.toISOString(),
     });
     // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
@@ -110,6 +115,10 @@ export async function scheduleWorkroomAgentTask(
         if (current.agentId !== input.agentId || !sameStage(prior.stage, input.stage)) {
           throw new Error("Recorded dispatch requires task identity reconciliation before replay");
         }
+        // A matching task/cycle cannot relabel an earlier source observation.
+        // Legacy receipts remain readable, but cannot prove a new source-bound retry.
+        if (prior.source?.repositoryFullName !== input.source?.repositoryFullName
+          || prior.source?.headSha !== input.source?.headSha) return false;
         return true;
       }
       // Legacy same-stage receipts cannot establish a new cycle boundary.

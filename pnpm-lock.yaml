@@ -83,9 +83,18 @@ overrides:
 
 packageExtensionsChecksum: sha256-pFEExG4o57joHucsVi/dgGpp9BfdxYD7y4blLQUpCqI=
 
+patchedDependencies:
+  react-data-grid@7.0.0-beta.63:
+    hash: 035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18
+    path: patches/react-data-grid@7.0.0-beta.63.patch
+
 importers:
 
   .:
+    dependencies:
+      '@opendigitalproductfactory/dpf-workroom':
+        specifier: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
     devDependencies:
       '@axe-core/playwright':
         specifier: 'catalog:'
@@ -144,6 +153,9 @@ importers:
       '@fullcalendar/timegrid':
         specifier: ^6.1.22
         version: 6.1.22(@fullcalendar/core@6.1.22)
+      '@opendigitalproductfactory/dpf-workroom':
+        specifier: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -220,8 +232,8 @@ importers:
         specifier: 19.2.8
         version: 19.2.8
       react-data-grid:
-        specifier: 7.0.0-beta.61
-        version: 7.0.0-beta.61(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 7.0.0-beta.63
+        version: 7.0.0-beta.63(patch_hash=035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-day-picker:
         specifier: ^10.0.2
         version: 10.0.2(@types/react@19.3.0)(react@19.2.8)
@@ -475,6 +487,9 @@ importers:
       '@dpf/integration-shared':
         specifier: workspace:*
         version: link:../integration-shared
+      '@opendigitalproductfactory/dpf-workroom':
+        specifier: file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -1254,6 +1269,11 @@ packages:
 
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
+
+  '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz':
+    resolution: {integrity: sha512-/e61NTK8mmb5XxBQIOdCLlDWDdV29MgpxLIB8s2nRtGgQ4czcrjS6izNxky7EsN5Gnql34mo/84ClJBRVrvYJQ==, tarball: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz}
+    version: 0.1.0-candidate.4
+    engines: {node: 24.16.0 || 24.22.0 || 24.22.1}
 
   '@opentelemetry/api-logs@0.203.0':
     resolution: {integrity: sha512-9B9RU0H7Ya1Dx/Rkyc4stuBZSGVQF27WigitInx2QQoj6KUpEFYPKoWjdFTunJYxmXmh17HeBvbMa1EhGyPmqQ==}
@@ -4059,8 +4079,8 @@ packages:
   rc9@3.0.1:
     resolution: {integrity: sha512-gMDyleLWVE+i6Sgtc0QbbY6pEKqYs97NGi6isHQPqYlLemPoO8dxQ3uGi0f4NiP98c+jMW6cG1Kx9dDwfvqARQ==}
 
-  react-data-grid@7.0.0-beta.61:
-    resolution: {integrity: sha512-YTfOzvj/V/3vMoz7A/kaXFp869j7C8JW5PmH4JAnAsfaa2SMzDeOHvuoGezEDBk1G3nwOFXNVyl9tC9sosEIjA==}
+  react-data-grid@7.0.0-beta.63:
+    resolution: {integrity: sha512-AJh9ow+rvey+Wu3yAjIZ2gzfCImWYYw/AbndSTQ4I5aV4UDkQLYKiEZcJ60tRQWN6HthiK6a8xCkHgu0hOsaTQ==}
     peerDependencies:
       react: 19.2.8
       react-dom: 19.2.8
@@ -5221,6 +5241,8 @@ snapshots:
 
   '@open-draft/until@2.1.0':
     optional: true
+
+  '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz': {}
 
   '@opentelemetry/api-logs@0.203.0':
     dependencies:
@@ -8181,7 +8203,7 @@ snapshots:
       defu: 6.1.7
       destr: 2.0.5
 
-  react-data-grid@7.0.0-beta.61(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  react-data-grid@7.0.0-beta.63(patch_hash=035cb7695c23251ceb75b02bff407367337955dacd9cd29a402de03a69a06d18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)

@@ -75,11 +75,13 @@ describe("human-approved break-fix declaration", () => {
 
   it("does not confuse a claimed shape with the audited declaration", async () => {
     const pathClaim = { kind: "path", value: "apps/web/lib/example.ts", intent: "edit" };
-    mocks.room.mockResolvedValue({ id: "r1", capsuleId: "WC-ONE", scopeClaims: [pathClaim, { workShape: "delivery-break-fix@1.0.0", source: "declared" }] });
+    const updatedAt = new Date("2026-11-01T10:00:00Z");
+    const scopeClaims = [pathClaim, { workShape: "delivery-break-fix@1.0.0", source: "declared" }];
+    mocks.room.mockResolvedValue({ id: "r1", capsuleId: "WC-ONE", updatedAt, scopeClaims });
     expect(await declareBreakFixTool(params, "u1", context)).toMatchObject({ success: true });
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(mocks.update).toHaveBeenCalledWith({
-      where: { capsuleId: "WC-ONE" },
+      where: { id: "r1", capsuleId: "WC-ONE", updatedAt, scopeClaims: { equals: scopeClaims } },
       data: { scopeClaims: [pathClaim, { workShape: "delivery-break-fix@1.0.0", source: "declared", recordedAt: expect.any(String), declaredByUserId: "u1" }] },
     });
   });

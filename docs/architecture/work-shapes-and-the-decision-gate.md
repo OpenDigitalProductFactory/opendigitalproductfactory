@@ -808,6 +808,16 @@ work, which is what 337 runs did.
 stage title, definition of done, stop conditions, the evidence to record, and an
 explicit statement that claiming completion advances nothing.
 
+Native dispatch and external continuation now share that assignment projection.
+It retains the room objective, definition of done, evidence and stop obligations,
+declared tools, accountable principal, shape budgets and recorded budget usage.
+The exact task, run, cycle, iteration and source identify the assignment. Only the
+optional shape description may be deferred; if mandatory facts exceed the
+brief's budget, dispatch is refused without advancing the stage or recording a
+successful execution. Unaffected parallel branches may still proceed. The brief
+does not grant authority or turn an unknown outcome into completion. See
+[bounded assignment and continuation briefs](workroom-cycle-continuity.md#bounded-assignment-and-continuation-briefs).
+
 **And a stage advances on recorded evidence, never on a claim.** A completed
 `TaskRun` is the executor's claim about ITSELF — provenance, not evidence. PR
 #5168 proposed earning the completing receipt from `TaskRun.status` and was

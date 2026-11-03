@@ -114,3 +114,26 @@ describe("routing navigation scope", () => {
     expect(routingEvidenceAnchor(new Date(now.getTime() - 60 * 60_000).toISOString(), now.toISOString())).toBe(now.getTime() - 60 * 60_000);
   });
 });
+
+
+describe("feedback source coverage", () => {
+  it("separates explicit human, agent and unattributed dispositions without changing quality", () => {
+    const attempts = [
+      { ...attempt, feedbackSource: "human" as const, feedbackPrincipalId: "person" },
+      { ...attempt, id: "agent", userAccepted: false, feedbackSource: "agent" as const, feedbackPrincipalId: "coworker" },
+      { ...attempt, id: "legacy", feedbackSource: null, feedbackPrincipalId: null },
+      { ...attempt, id: "unbound-source", feedbackSource: "human" as const, feedbackPrincipalId: null },
+      { ...attempt, id: "unrated", userAccepted: null, feedbackSource: null, feedbackPrincipalId: null },
+    ];
+    const r = projectRoutingManagement({ decisions: [decision], models: [model], usage: [], outcomes: [], attempts }).receipts[0];
+    const c = routingCohorts([r])[0];
+    expect(c.humanFeedback).toHaveLength(1); expect(c.agentFeedback).toHaveLength(1); expect(c.unattributedFeedback).toHaveLength(2);
+    expect(c.feedbackAttemptCount).toBe(5); expect(c.feedback).toHaveLength(4); expect(r.quality).toBeNull();
+    expect(r.attempts.find(a => a.id === "unbound-source")?.feedbackSource).toBeNull();
+  });
+  it("deduplicates the same attempt within a cohort and excludes other fallback models", () => {
+    const r = projectRoutingManagement({ decisions:[decision], models:[model], usage:[], outcomes:[], attempts:[{...attempt,feedbackSource:"human" as const,feedbackPrincipalId:"person"}] }).receipts[0];
+    const c=routingCohorts([r,{...r,id:"duplicate",attempts:[...r.attempts,{...r.attempts[0],id:"other",providerId:"other"}]}])[0];
+    expect(c.humanFeedback).toHaveLength(1); expect(c.feedbackAttemptCount).toBe(1);
+  });
+});

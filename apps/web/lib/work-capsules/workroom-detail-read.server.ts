@@ -8,6 +8,10 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  if (["continuationMode", "continuationTaskId", "continuationStageKey", "continuationVersion"].some(key => params[key] !== undefined)) {
+    const { readWorkroomContinuation } = await import("./workroom-continuation-read.server");
+    return readWorkroomContinuation({ ...params, capsuleId }, userId, context);
+  }
   const reviewTaskRunId = params["reviewTaskRunId"];
   const { validateOwnedReviewInput } = await import("./semantic-review-recovery");
   const reviewInputError = validateOwnedReviewInput(reviewTaskRunId, userId);

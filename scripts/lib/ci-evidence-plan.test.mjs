@@ -423,6 +423,26 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.escalations, []);
   });
 
+  it("retains an explicit existing-test mapping for a Dockerfile", () => {
+    const source = "services/edge-node/Dockerfile";
+    const test = "scripts/check-docker-workspace-context.test.mjs";
+    const plan = createEvidencePlan(input({
+      changedFiles: [source],
+      knownTests: [test],
+      relatedTestsBySource: { [source]: [test] },
+      codeGraphAdvice: trustedGraph(),
+    }));
+
+    assert.deepEqual(plan.affectedTests, [test]);
+    assert.deepEqual(plan.fileDispositions, [{
+      path: source,
+      kind: "other",
+      disposition: "mapped-tests",
+      tests: [test],
+      routes: [],
+    }]);
+  });
+
   it("derives Next route paths and route families from page ownership", () => {
     const plan = createEvidencePlan(input({
       changedFiles: ["apps/web/app/(shell)/ops/self-upgrade/page.tsx"],

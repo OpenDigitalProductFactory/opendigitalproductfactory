@@ -141,7 +141,7 @@ export interface AiEvalRunEvent {
    *  left unset on automated enqueue paths (first-boot, page-load
    *  checkBundledProviders, model-discovery refresh) so a freshly-calibrated
    *  model isn't re-evaluated on every Inngest retry. BI-C8164664. */
-  data: { endpointId: string; modelId: string; userId: string; force?: boolean };
+  data: { endpointId: string; modelId: string; userId: string; force?: boolean; calibrationRunId?: string };
 }
 
 export interface AiProbeRunEvent {

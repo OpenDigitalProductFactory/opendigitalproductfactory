@@ -346,3 +346,18 @@ describe("recordKernelConsultInteraction", () => {
     expect(outcome.reason).toBe("write-failed");
   });
 });
+
+describe("recordKernelConsultInteraction — instance direction (BI-8AB6B4F7)", () => {
+  it("records the direction an organization-scoped consult read", async () => {
+    const db = makeDb();
+    const instanceDirection = { recorded: true, version: 2, refs: ["direction:mission@v2"], missing: ["vision", "outcomes"] };
+    await recordKernelConsultInteraction({ db: db as never, result: makeResult(), callerContext: wwmdContext, question: "q", optionIds: ["a", "b"], optionDescriptions: { a: "A", b: "B" }, appliedPrincipleCount: 0, seal: false, instanceDirection });
+    expect((db.created[0]!.outcomePayload as Record<string, unknown>).instanceDirection).toEqual(instanceDirection);
+  });
+
+  it("omits the field for a platform consult that read no direction", async () => {
+    const db = makeDb();
+    await recordKernelConsultInteraction({ db: db as never, result: makeResult(), callerContext: wwmdContext, question: "q", optionIds: ["a", "b"], optionDescriptions: { a: "A", b: "B" }, appliedPrincipleCount: 0, seal: false });
+    expect(db.created[0]!.outcomePayload as Record<string, unknown>).not.toHaveProperty("instanceDirection");
+  });
+});

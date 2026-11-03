@@ -13,6 +13,61 @@ describe("scheduled delivery author evidence (BI-D95FD249)", () => {
 });
 
 type Fixture = ReturnType<typeof scheduledDeliveryFixture>;
+
+function sourceBoundFixture() {
+  const f = scheduledDeliveryFixture();
+  const source = { repositoryFullName: "owner/repo", headSha: "a".repeat(40) };
+  const room = Object.assign(f.room, source);
+  for (const checkpoint of [room.workspaceState.workroomDispatchCheckpoint,
+    f.task.taskConfig.workroomDispatchCheckpoint, f.run.a2aMetadata.workroomDispatchCheckpoint]) {
+    checkpoint.source = { ...source };
+  }
+  return { ...f, room };
+}
+
+describe("delivery dispatch source at execution", () => {
+  it("retains completion authority for unchanged source", async () => {
+    const f = sourceBoundFixture();
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual(["record_workroom_evidence"]);
+  });
+  it.each(["repositoryFullName", "headSha"] as const)("withholds completion after the room changes %s", async field => {
+    const f = sourceBoundFixture(); f.room[field] = "changed";
+    const authority = await loadScheduledRoomAuthority(f.db, f.input, f.deps);
+    expect(authority.mandatedTools).toEqual([]);
+    expect(authority.withheldBecause).toMatch(/source/i);
+    expect(f.deps.loadAuthorStageAutonomy).not.toHaveBeenCalled();
+  });
+  it("keeps legacy source-bound dispatches unknown instead of inheriting current source", async () => {
+    const f = scheduledDeliveryFixture(); Object.assign(f.room, { repositoryFullName: "owner/repo", headSha: "a".repeat(40) });
+    expect((await loadScheduledRoomAuthority(f.db, f.input, f.deps)).withheldBecause).toMatch(/source/i);
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it.each(["run", "task", "room"] as const)("does not accept a different source stamp in the %s receipt", async target => {
+    const f = sourceBoundFixture();
+    const checkpoints = { run: f.run.a2aMetadata.workroomDispatchCheckpoint,
+      task: f.task.taskConfig.workroomDispatchCheckpoint, room: f.room.workspaceState.workroomDispatchCheckpoint };
+    checkpoints[target].source!.headSha = "b".repeat(40);
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it("accepts explicit nonrepository source without treating it as a legacy receipt", async () => {
+    const f = scheduledDeliveryFixture();
+    for (const checkpoint of [f.room.workspaceState.workroomDispatchCheckpoint,
+      f.task.taskConfig.workroomDispatchCheckpoint, f.run.a2aMetadata.workroomDispatchCheckpoint]) {
+      checkpoint.source = { repositoryFullName: null, headSha: null };
+    }
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual(["record_workroom_evidence"]);
+    delete f.room.workspaceState.workroomDispatchCheckpoint.source;
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it("allows only the exact blocked report after source changes", async () => {
+    const f = sourceBoundFixture(); f.room.headSha = "b".repeat(40);
+    f.input.params.outcome = "blocked";
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual(["record_workroom_evidence"]);
+    f.input.params.capsuleId = "WC-OTHER";
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+});
+
 const denied: Array<[string, (f: Fixture) => void]> = [
   ["foreign room effect", f => { f.input.params.capsuleId = "WC-OTHER"; }],
   ["foreign stage effect", f => { f.input.params.stageKey = "reproduce"; }],

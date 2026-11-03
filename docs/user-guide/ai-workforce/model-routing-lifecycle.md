@@ -292,3 +292,18 @@ Local models are automatically discovered and profiled. They are assigned the `b
 - Visit the AI Workforce providers page to trigger automatic discovery
 - Verify Docker Model Runner is running: `docker model list` should return available models
 - Check that the local provider status is `active` (not `unconfigured`) — the provider ID in the database is `ollama` for historical reasons, even when using Docker Model Runner
+
+
+## Investigate routing and record feedback
+
+Open **Routing management** from the AI operations map. **Traffic** follows work to its provider and model; **Evaluation** groups recorded outcomes for the same task and recipe. Provider, task, data sensitivity and time filters remain in the URL when moving between the map, provider catalog and provider settings.
+
+Open a routing decision to inspect its recorded attempts, exclusions and cost coverage in an overlay. Data policy, context limits, quota, payment and operator pauses have distinct labels. Provider settings include the existing routing overrides and their risk warning; an override is a separate explicit decision.
+
+Use **Review answer** on a recorded response attempt to inspect the exact saved answer within the same overlay. **Back to decision** returns to the investigation and keeps the filters. Answer access is checked against your current conversation ownership and Workroom permissions. A general platform view does not grant access to somebody else's answer.
+
+Beside an eligible saved answer, choose **Kept** or **Needs revision**. Change the choice or use **Clear feedback** later. These actions record your judgment without running a model or changing routing policy. A coworker judgment is labeled separately and cannot replace a human judgment. If saving is uncertain, **Check again** reads the current state before you try another change.
+
+Older, edited, missing or ambiguous response evidence displays **Feedback unavailable**. The platform does not guess which attempt produced an answer. Permission removal also prevents a later write.
+
+Evaluation shows human, agent and unattributed feedback separately, using the recorded attempt denominator. Kept share expresses preference; it does not establish correctness. Execution success, evaluated quality, feedback and cost coverage remain separate. Missing scores and costs stay unavailable rather than becoming zero.

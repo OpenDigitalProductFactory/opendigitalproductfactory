@@ -14,6 +14,7 @@ import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { guardResultEnvironment } from "./lib/pregate-preflight-receipt.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
+import { createEvidencePlan, loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 
 const now = Date.parse("2026-10-16T05:30:00Z");
 const sha = "a".repeat(40);
@@ -307,6 +308,21 @@ test("historical anchor recovery refuses foreign or unqualified retained evidenc
 
 test("an unmapped change cannot silently run zero affected checks", () => {
   assert.throws(() => buildCorrectionCommands({ affectedTests: [], fileDispositions: [{ path: "scripts/unknown.mjs", kind: "other", tests: [] }], affectedPackages: [], scope: {} }), /mapping unresolved/);
+});
+
+test("an explicitly mapped Dockerfile runs its affected test while an unmapped Dockerfile is refused", () => {
+  const source = "services/edge-node/Dockerfile";
+  const target = "scripts/check-docker-workspace-context.test.mjs";
+  const plan = createEvidencePlan({
+    eventName: "pull_request", baseSha: "base", headSha: "head", baseTreeSha: "base-tree", headTreeSha: "head-tree",
+    changedFiles: [source], knownTests: [target], relatedTestsBySource: { [source]: [target] },
+    codeGraphAdvice: null, routeAdviceBySource: {}, packageDependencies: {}, totalTestCount: 100, policy: loadEvidencePolicy(),
+  });
+  assert.ok(buildCorrectionCommands(plan).some(command => command.args.includes(target)));
+  for (const relatedTestsBySource of [{}, { [source]: ["scripts/unknown.test.mjs"] }]) {
+    const unmapped = createEvidencePlan({ ...plan, changedFiles: [source], knownTests: [target], relatedTestsBySource, policy: loadEvidencePolicy() });
+    assert.throws(() => buildCorrectionCommands(unmapped), /mapping unresolved/);
+  }
 });
 
 test("published readiness refreshes metadata guards while delegating broad source checks", () => {

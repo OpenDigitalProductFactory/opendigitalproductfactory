@@ -80,6 +80,20 @@ human, assistant and action, then rechecks eligibility inside the existing write
 transaction before the scope snapshot CAS. Transaction admission cannot extend
 a lease. Genuine approved authority operations retain their established path.
 
+Release requests carry `expectedRoomId` and the complete original targets,
+including the server-owned `releaseEpoch`, owner and intent. Claim aliases share
+one acquisition receipt path; release aliases share one release receipt path.
+A keyed exact replay returns the original settled outcome, even after later
+reacquisition, and cannot execute again. Unavailable receipt lookup is not proof
+of absence. Invalid or stale targets stop before policy projection or a new
+approval envelope. Genuine approved authority actions still require the same
+original targets at execution.
+
+Epoch enrollment waits for verified canonical writer compatibility and retirement
+of older executors. Settings writers preserve ownership fields, and full-array
+updates compare the original snapshot. The compatibility floor also applies to
+later canonical updates; an empty claim list does not relax it.
+
 No new approval store or trust exception is involved. Permission to perform an
 action remains separate from independent review or attestation of test results.
 The design and acceptance bounds are in
@@ -178,6 +192,23 @@ It reads no room records. Instance filters and cursors are refused, and a
 changed definition inventory requires a fresh traversal. Whole pages fit the
 existing result budget; a refusal never advances past unseen definitions.
 The full contract is in [Workroom review profiles](workroom-review-profile-contract.md).
+
+`get_workroom` also supports `continuationMode: "bounded"` under fresh room
+content admission. Use `continuationTaskId` for an exact scheduled task or
+`continuationStageKey` for a current manual branch; the selectors are mutually
+exclusive. Task reads check the task's own checkpoint against the current room,
+branch, source and lease. They do not substitute the room's latest checkpoint.
+Pass the returned `continuationVersion` on a later read to detect changed facts
+or authority. A stale version, mismatched task binding or oversized mandatory
+brief returns a refusal; none authorizes replay. Read this mode separately from
+activity, review and cursor queries. The response shares native assignment facts,
+excludes the originating transcript and grants no execution authority. Manual
+reads can include `advisoryCheckpoint`, retaining the saved next action and risks
+with provenance. Its `head-matches` status checks only the recorded commit head;
+the existing carrier has no repository snapshot. It remains room-scoped and
+unbound to any graph stage. Scheduled-task reads exclude it, and stale manual
+notes require reconciliation. See
+[bounded assignment and continuation briefs](workroom-cycle-continuity.md#bounded-assignment-and-continuation-briefs).
 
 `list_workrooms` accepts `headBranch` and `pullRequestNumber` so an assistant
 asked to take over a PR can find its room (BI-679D2BF6). For an OAuth

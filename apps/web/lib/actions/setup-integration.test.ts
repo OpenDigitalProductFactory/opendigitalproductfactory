@@ -52,22 +52,23 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 13 entries. monitoring follows platform-development and is
+// SETUP_STEPS has 14 entries. monitoring follows platform-development and is
 // offered only while runtime:deep-observability is undecided. This walk has no
 // recorded decision, so monitoring is hidden and does not block:
 //   0: account-bootstrap
 //   1: business-context
-//   2: ai-providers
-//   3: branding
-//   4: how-you-decide
-//   5: operating-hours
-//   6: storefront
-//   7: mailroom
-//   8: platform-development
-//   9: monitoring (hidden unless undecided)
-//   10: build-studio
-//   11: meet-your-coo
-//   12: workspace
+//   2: direction (skippable, BI-916216E7)
+//   3: ai-providers
+//   4: branding
+//   5: how-you-decide
+//   6: operating-hours
+//   7: storefront
+//   8: mailroom
+//   9: platform-development
+//   10: monitoring (hidden unless undecided)
+//   11: build-studio
+//   12: meet-your-coo
+//   13: workspace
 
 describe("setup flow integration", () => {
   beforeEach(() => {
@@ -86,7 +87,11 @@ describe("setup flow integration", () => {
     const step1 = await advanceStep(progress.id, { orgName: "Test Co" });
     expect(step1.currentStep).toBe("business-context");
 
-    // Skip step 1 → step 2
+    // Advance step 1 → the direction step
+    const step1b = await advanceStep(progress.id);
+    expect(step1b.currentStep).toBe("direction");
+
+    // Skipping the direction step never blocks setup (BI-916216E7 AC-4)
     const step2 = await skipStep(progress.id);
     expect(step2.currentStep).toBe("ai-providers");
 

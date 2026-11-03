@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { prisma } from "@dpf/db";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
@@ -72,8 +73,15 @@ export async function prepareCurrentResearchObservation(args: {
       const readBlob = args.ports?.readBlob ?? (await import("./repository-artifact")).readRepositoryProviderBlob;
       // Verify the recorded blob at the real current head, permitting unchanged
       // research across unrelated commits without treating history as current.
+      // A valid persisted receipt scopes this internal public-byte observation;
+      // it supplies no actor admission and never authorizes a new receipt/read.
+      const fingerprint = canonicalJson(binding);
       const bytes = await readBlob({ repositoryFullName: binding.room.repositoryFullName,
-        commitSha: binding.room.headSha, path: binding.artifactRef.path, expectedBlobId: binding.artifactRef.providerBlobId });
+        commitSha: binding.room.headSha, path: binding.artifactRef.path, expectedBlobId: binding.artifactRef.providerBlobId,
+        sourceAdmission: { itemId: binding.itemId, workroomId: binding.room.capsuleId,
+          repositoryFullName: binding.room.repositoryFullName, branchName: binding.room.headBranch, headSha: binding.room.headSha,
+          isCurrent: async () => canonicalJson(await loadBinding(args.itemId, args.db, source)) === fingerprint },
+      });
       return bytes.ok ? { state: "verified", receiptId: binding.receiptId,
         digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}` } : unavailable;
     },

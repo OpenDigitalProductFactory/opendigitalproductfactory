@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "scope": { "files": [
+    "apps/web/lib/agent/opening-briefing.ts"
+  ] },
+  "decidedOption": "reuse-contextual-composer",
+  "decisionInteractionId": "DI-6336758B832D",
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["reuse-contextual-composer", "keep-global-fallback", "add-finance-attention-engine"] },
+  "authority": "Existing explicit owner instruction to repair DOC-82684072, preserve urgent owner decisions and existing architecture, with separately filed BI-9F118032; implementation admission IRD-05575FAF002B and proportional plan coverage cmvx5x6z700uw01tmxxjq5pef. This records the bounded implementation choice under that scope, not new approval or authority from the advisory score.",
+  "limitations": "DI-6336758B832D ranked reuse-contextual-composer first but returned low confidence, decline/all-options-opposed and autonomyEligible=false. That score is not autonomous authority or UX approval. Native specialist engagement CE-F229158F was refused at grant intersection before review; it remains unfulfilled and no alternative grant route is used. Initial independent CLIENT plan review found no blocking issue but supplied no native approval or tests. The committed HTML prototype uses simulated cases and is not a served acceptance receipt. Actual source-local research9 regressions failed before reversible candidate57 tests passed, candidate restored; admitted implementation then59 tests passed including active catalog locale. Final source review, governed integration, protected checks and served Finance owner interaction remain owed. No new route, UI primitive, owner classifier, urgency policy, provider, persistence or access grant. Balanced zero-owner silence remains unchanged."
+}

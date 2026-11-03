@@ -4,6 +4,8 @@ import {
   getPerformanceMetricDefinition,
   type PerformanceMetricDefinition,
 } from "@dpf/storefront-templates";
+import { ledgerMonthWindow, type ScopedLedgerPeriodReport } from "@/lib/finance/ledger-period-report";
+import { projectSoftwareLedgerMetrics, SOFTWARE_LEDGER_DEFINITION_VERSION } from "./software-ledger-metrics";
 
 export const RESTAURANT_METRIC_DEFINITION_VERSION = "restaurant-v1";
 
@@ -58,8 +60,11 @@ export interface BusinessMetricRollupInput {
   sourceWatermark: Date;
   sourceLineage: {
     sourceModels: readonly string[];
-    sourceRows: number;
-    storefrontId: string;
+    sourceRows: number | null;
+    storefrontId?: string;
+    currency?: string | null;
+    generation?: string;
+    coverage?: string;
   };
 }
 
@@ -79,6 +84,12 @@ export interface BusinessMetricRollupDeps {
     computedAt: Date,
   ): Promise<RestaurantMetricSource>;
   upsert(row: BusinessMetricRollupInput, computedAt: Date): Promise<void>;
+  software?: {
+    listContexts(): Promise<readonly { organizationId: string; storefrontId: string }[]>;
+    loadReport(context: { organizationId: string; storefrontId: string }, window: MetricWindow, checkedAt: Date): Promise<ScopedLedgerPeriodReport>;
+    /** All three metric rows commit or roll back together. */
+    upsertPeriod(rows: readonly BusinessMetricRollupInput[], computedAt: Date): Promise<void>;
+  };
 }
 
 function zonedParts(date: Date, timezone: string) {
@@ -249,12 +260,13 @@ function occupiedMinutes(
 }
 
 function row(
-  source: RestaurantMetricSource,
+  source: Pick<RestaurantMetricSource, "organizationId" | "storefrontId" | "window" | "computedAt">,
   metricKey: string,
   value: number | null,
   unavailableReason: string | null,
   sourceModels: readonly string[],
-  sourceRows: number,
+  sourceRows: number | null,
+  options: { definitionVersion?: string; lineage?: BusinessMetricRollupInput["sourceLineage"] } = {},
 ): BusinessMetricRollupInput {
   const definition = getPerformanceMetricDefinition(metricKey);
   if (!definition) throw new Error(`Unknown performance metric definition: ${metricKey}`);
@@ -271,9 +283,9 @@ function row(
     unit: definition.unit,
     availability: unavailableReason ? "unavailable" : "available",
     unavailableReason,
-    definitionVersion: RESTAURANT_METRIC_DEFINITION_VERSION,
+    definitionVersion: options.definitionVersion ?? RESTAURANT_METRIC_DEFINITION_VERSION,
     sourceWatermark: source.computedAt,
-    sourceLineage: { sourceModels, sourceRows, storefrontId: source.storefrontId },
+    sourceLineage: options.lineage ?? { sourceModels, sourceRows, storefrontId: source.storefrontId },
   };
 }
 
@@ -407,5 +419,24 @@ export async function aggregateBusinessMetrics(
     }
   }
 
-  return { organizations: contexts.length, periods, upserted };
+  const softwareContexts = deps.software ? await deps.software.listContexts() : [];
+  for (const context of softwareContexts) {
+    const current = ledgerMonthWindow(at);
+    const previous = ledgerMonthWindow(new Date(current.start.getTime() - 1));
+    for (const window of [previous, current]) {
+      const report = await deps.software!.loadReport(context, window, at);
+      const projected = projectSoftwareLedgerMetrics(report, { organizationId: context.organizationId, periodKey: window.periodKey });
+      const sourceModels = ["LedgerAccount", "JournalEntry", "JournalLine"];
+      const rows = Object.entries(projected.values).map(([key, value]) => row(
+        { ...context, window, computedAt: projected.checkedAt }, key, value, projected.reason, sourceModels,
+        projected.sourceRows, { definitionVersion: SOFTWARE_LEDGER_DEFINITION_VERSION, lineage: {
+          sourceModels, sourceRows: projected.sourceRows, currency: projected.currency,
+          generation: at.toISOString(), coverage: "recorded-postings-only",
+        } },
+      ));
+      await deps.software!.upsertPeriod(rows, at);
+      periods += 1; upserted += rows.length;
+    }
+  }
+  return { organizations: contexts.length + softwareContexts.length, periods, upserted };
 }

@@ -78,7 +78,15 @@ export function readTrustBundle(path, { now = Date.now() } = {}) {
 
 export function resolveHostMcpTrust(options = {}) {
   const env = options.env ?? process.env;
-  const selected = readHostClientEnv(options);
+  // Reuse only the endpoint/bundle selection within one observation. Even an
+  // empty bundle is a completed system-trust selection, not undiscovered state.
+  // Certificates are still reread and validated below on every native request.
+  const selected = options.connection ?? readHostClientEnv(options);
+  if (options.connection && (typeof selected.McpUrl !== "string" || typeof selected.CaBundle !== "string"
+    || !options.mcpUrl || new URL(selected.McpUrl).href !== new URL(options.mcpUrl).href)) {
+    throw trustError("mcp_connection_mismatch", "Prepared MCP connection does not match the requested endpoint.");
+  }
+  const connection = Object.freeze({ McpUrl: selected.McpUrl, CaBundle: selected.CaBundle });
   const certificates = selected.CaBundle ? readTrustBundle(selected.CaBundle) : [];
   const childEnv = { ...env };
   if (selected.McpUrl && !env.DPF_MCP_URL && !options.mcpUrl) childEnv.DPF_MCP_URL = selected.McpUrl;
@@ -86,7 +94,7 @@ export function resolveHostMcpTrust(options = {}) {
   // Supplying `ca` replaces Node defaults. Preserve effective system/bundled/
   // startup roots rather than replacing them with only the private CA.
   const tlsOptions = certificates.length ? { ca: [...tls.getCACertificates("default"), ...certificates] } : {};
-  return { mcpUrl: selected.McpUrl, caBundle: selected.CaBundle, certificates, env: childEnv, tlsOptions };
+  return { mcpUrl: selected.McpUrl, caBundle: selected.CaBundle, certificates, env: childEnv, tlsOptions, connection };
 }
 
 export function describeMcpTransportError(error, { phase = "probe" } = {}) {
