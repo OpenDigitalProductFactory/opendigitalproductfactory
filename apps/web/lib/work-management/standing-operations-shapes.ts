@@ -397,7 +397,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         advance: {
           kind: "governed-decision",
           condition: "The accountable owner confirms, rejects or routes each remaining proposal to its owning installation, with a reason.",
-          decisionScope: "backlog-stewardship",
+          decisionScope: "backlog-admission",
         },
         evidence: ["decision-record"],
       },
