@@ -50,3 +50,9 @@ The canonical merge-readiness policy requires the `Failure Readiness` workflow c
 This source change alone does not update a running install or GitHub branch protection. Do not describe repository-wide enforcement as live until both are verified. A service outage leaves the required check unsatisfied. Review records remain durable and the same review call can republish a lost status response without rerunning inference.
 
 The design amendment in `docs/superpowers/specs/2026-07-27-shared-change-reviewer-control-design.md` remains canonical. Work-kind minimum verification remains the responsibility of the existing verify-first contract; failure analysis adds scenario relationships rather than another work-kind policy.
+
+### Unconfigured verification is not a successful check
+
+The workflow preserves exit code 2 when the trusted publisher is missing. This is an infrastructure/configuration problem, not a negative verdict about the change, but it cannot satisfy a required readiness check. GitHub treats a successful job as passing regardless of a notice in its logs; converting this outcome to exit 0 would silently disable enforcement. The gate regression executes the workflow's actual shell block with no publisher and checks the nonzero outcome.
+
+The platform owner repairs the publisher configuration and reruns the same source check. PR authors must not fabricate a status, switch publisher identities, or repeat independent inference to fix configuration. Configure and verify the existing server producer before requiring this context in repository protection; retain DCO and all other protected checks. An owner-authorized gate repair remains a separately recorded publication exception, never a claim that missing evidence passed.
