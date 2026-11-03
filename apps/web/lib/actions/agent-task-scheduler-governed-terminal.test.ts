@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // BI-A8679D84 — how a scheduled run that did not do its governed write ends:
 // never `completed`, typed on the TaskRun, the final correction step forced at
 // the provider, and a provider-busy reply requeued instead of filed as a
@@ -114,7 +115,7 @@ const UNAVAILABLE = "Status: blocked. I read all 5 accounts, but the required ev
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
   mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
   vi.useFakeTimers({ toFake: ["Date"] });
