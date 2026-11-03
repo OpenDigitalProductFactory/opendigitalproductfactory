@@ -111,7 +111,7 @@ The routes are classified `public-machine-plane` in the endpoint classification.
 
 **Why sign-in and consent are public.** People connect from wherever they use the vendor app, including a phone. The alternative was split metadata: the authorization endpoint on a private name, the rest public. Claude documents that pattern for its tunnels; other vendors don't, so it is unconfirmed for them. It would also make connecting impossible away from home.
 
-This choice trades a larger attack surface for a connect that works anywhere. The extra surface is the sign-in page, which §7 rate-limits. **Decided by the operator on 2026-11-03 (D2, §9): public sign-in and consent, behind the §7 rate limits.** The split-metadata alternative is not built.
+This choice trades a larger attack surface for a connect that works anywhere. The extra surface is the sign-in page, which §7 rate-limits. **Decided by the operator on 2026-11-03 (D2, §9): public sign-in and consent, behind the §7 rate limits.** The split-metadata alternative is not built. The decision is conditional: the human-facing pages are published only once the §7.1 controls for the attacks this opens are live.
 
 ## 5. Hosted-client OAuth: recognize the vendor by where the code goes (`BI-34ABEC12`)
 
@@ -159,6 +159,16 @@ This choice trades a larger attack surface for a connect that works anywhere. Th
 - **No interactive edge login on these paths.** Edge Access policies may add an IP include rule only for vendors that publish ranges, and only as defense in depth.
 
 This item **must land before** the switch can be turned on in production.
+
+### 7.1 Threats from public sign-in and consent (D2)
+
+D2 publishes the sign-in, authorize and consent pages. That surface opens three attacks. `BI-EE4E357D` may not publish the human-facing pages until every control below is live, `BI-77367B2C` included. The switch stays off by default.
+
+| Threat | Prevention | Detection | Recovery |
+| --- | --- | --- | --- |
+| **Password guessing and credential stuffing** on the public sign-in page | Per-account and per-source throttling with backoff; a failed sign-in must not reveal whether the account exists (both required by `BI-77367B2C`) | Throttle events are audited, and a burst on one account must raise an attention item for the operator (`BI-77367B2C`) | Turn the switch off, which removes every public route at once; reset the affected person's credentials; revoke that person's consents (per-person revoke exists) |
+| **Consent phishing**: a lookalike client tricks a person into granting it access | The consent page names the vendor only from the verified callback host (§5), labels an unrecognized client as such, and DCR clients start with zero scopes. Consent is one explicit Connect click and is never pre-authorized (2026-08-26 §12.4.8) | Each consent is written to the authorization decision log with client, redirect host and vendor family | Revoke the client for everyone, or one person's consent, in one action; the client's tokens stop at once |
+| **Redirect, code-injection or code-interception abuse** of the authorization flow | S256 PKCE is mandatory; redirect URIs match exactly as registered (loopback port aside); RFC 8707 resource and audience are checked; codes live 120 s and are single-use | A code or token presented with a mismatched redirect, verifier or audience is refused and logged | Revoke the client and its refresh family; turn the switch off if abuse persists |
 
 ## 8. Cloud sessions are first-class callers (`BI-EE3C3EAF`)
 
