@@ -63,7 +63,7 @@ Before implementation finalization, query authorized live task/room lineage and 
 
 HTML is a clickable design artifact with clearly labelled illustrative data, no production operations. It provides mixed/healthy/failed/disabled/stale/never-run/empty selectors, nested purpose and Workroom details, collapsed history/timeline/diagnostics, full-register filtering and theme switching. Its small fixture is for interaction review, not proof of production grouping, accessibility, timezone conversion or scale. Production components must use DPF tokens and report-kit; prototype styles are self-contained. The illustrative first-run-future example is deliberately not an actionable failure.
 
-Prototype gaps before design sign-off: add an overdue-never-run fixture; bounded all-problems navigation; a large cohort pagination fixture; measured default viewport; and reviewed owner/history enrichment. Do not treat the prototype as finished UI or a passed gate.
+Prototype gaps before design sign-off: bounded all-problems navigation; a large cohort pagination fixture; measured default viewport; and reviewed owner/history enrichment. Do not treat the prototype as finished UI or a passed gate.
 
 ## Governance and review
 
@@ -74,3 +74,7 @@ Operator must review the prototype before implementation, as explicitly requeste
 ## Compatibility, migration and scope
 
 No schema migration currently proposed; reuse sources and controls. Presentation changes do not rewrite schedules or job authority. New enrichment remains tenant scoped. Unknown owner, unavailable history or partial fetch must be explicit. Organization facts and live counts never enter reusable code. Workroom process visibility repair BI-6DAF8A1D remains a separate deliverable and must be delivered before this thread is considered fully complete. Design and implementation for that corrective item are pending.
+
+## Author preview checkpoint
+
+The conversation preview was rendered with the bundled isolated static visualization wrapper and inspected in the browser. Healthy, failed, disabled, stale, upcoming first-run, overdue first-run and empty selections changed the overview correctly. This is prototype-only interaction evidence, not served application verification. Theme control exercised; dark screenshot captured. Full screen-reader, narrow viewport, light screenshot, register filter interactions and scale verification remain unrun. JavaScript syntax and whitespace checks passed. Existing guide link lint passed (97 user-guide pages); it does not certify this design. Platform managed HTML document DOC-C9893809 renders source rather than executing the prototype; use the conversation preview for review.
