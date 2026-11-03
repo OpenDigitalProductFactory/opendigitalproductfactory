@@ -192,7 +192,7 @@ export async function reconcileForegroundWork() {
       AND NOT COALESCE(
         jsonb_typeof("progressPayload" #> '{resourceWait,nextAttemptAt}') = 'string'
         AND "progressPayload" #>> '{resourceWait,nextAttemptAt}' ~ ${isoPattern}
-        AND jsonb_path_exists_tz("progressPayload", 'strict $.resourceWait.nextAttemptAt.datetime()', '{}'::jsonb, true), false)
+        AND pg_input_is_valid("progressPayload" #>> '{resourceWait,nextAttemptAt}', 'timestamptz'), false)
     ORDER BY "createdAt", "id" LIMIT 50
   `;
   for (const row of legacy) {
@@ -201,8 +201,7 @@ export async function reconcileForegroundWork() {
       if (isRecord(row.progressPayload)) await blockRetainedWork(row, row.progressPayload, invalidCapacitySummary);
       continue;
     }
-    const due = Date.parse(wait.nextAttemptAt!);
-    const nextAttemptAt = Number.isFinite(due) ? new Date(due).toISOString() : nowIso;
+    const nextAttemptAt = resourceWaitDue(wait, now) ? nowIso : new Date(Date.parse(wait.nextAttemptAt!)).toISOString();
     await prisma.taskRun.updateMany({ where: { id: row.id, status: row.status, updatedAt: row.updatedAt },
       data: { progressPayload: { ...(row.progressPayload as Prisma.JsonObject), resourceWait: { ...wait, nextAttemptAt } } as Prisma.InputJsonValue },
     });
@@ -221,7 +220,7 @@ export async function reconcileForegroundWork() {
             OR "progressPayload" #> '{resourceWait,attempt}' >= to_jsonb(${RESOURCE_WAIT_MAX_ATTEMPTS}::int)
             OR "progressPayload" #>> '{resourceWait,nextAttemptAt}' IS NULL
             OR ("progressPayload" #>> '{resourceWait,nextAttemptAt}' ~ ${isoPattern}
-              AND jsonb_path_exists_tz("progressPayload", 'strict $.resourceWait.nextAttemptAt.datetime()', '{}'::jsonb, true)
+              AND pg_input_is_valid("progressPayload" #>> '{resourceWait,nextAttemptAt}', 'timestamptz')
               AND "progressPayload" #>> '{resourceWait,nextAttemptAt}' <= ${nowIso}))))
     ORDER BY "createdAt", "id" LIMIT 50
   `;
