@@ -129,6 +129,45 @@ Ordinary OAuth clients can use this mode without a conversation thread.
 - Full sensitivity clearance granted automatically (data stays local)
 - Model discovery + profiling runs at seed time AND on providers page visit
 
+#### Runner configuration the platform keeps in place
+
+Docker Model Runner stores runtime settings per model and mode through
+`/engines/_configure`. It forgets them on restart, and each configure call
+replaces the model's whole stored config. The local-model reconcile
+(`apps/web/lib/inference/local-model-context-reconcile.ts`) runs on boot and
+every 20 minutes, and keeps four things in place:
+
+- **Context window:** the served `context-size` for the generation model.
+- **Residency:** `keep_alive: "-1"` for the generation model (BI-34F71E9D).
+  Docker Model Runner ignores the `keep_alive` field in an OpenAI chat request
+  body; only the stored setting counts. Without it, the model unloads after five
+  idle minutes. Each reload re-reads the whole GGUF from disk and discards every
+  slot's prompt cache. A resident runner is still unloaded under memory pressure.
+- **Embedder placement:** the installed embedder runs CPU-only
+  (`runtime-flags: ["--device", "none"]`) and stays loaded (BI-B60AFE7B). On the
+  GPU beside a generation model that fills the card, each embedder load
+  overcommitted VRAM. Windows then spilled to shared memory, and generation
+  decode on a 24 GB RTX 4090 fell to about 0.02 tok/s for minutes. The embedder's
+  completion mode is also pinned CPU-only and set to unload at once, because
+  every configure call preloads the model through `/v1/chat/completions`.
+- **N-gram speculation:** on the qualified engine (llama.cpp b9879), the
+  generation model gets `runtime-flags: ["--spec-type", "ngram-mod"]`
+  (BI-0D208EBB). llama.cpp drafts tokens from n-grams already in the context and
+  verifies each one with the served model, so it needs no draft model and no
+  VRAM. Output that repeats context, such as a file rewrite, decodes about ten
+  times faster; new text decodes at the same speed. Greedy output is not
+  bit-stable once drafts are accepted. To turn it off, set the PlatformConfig
+  key `local.speculativeDecoding` to `"off"`; the next reconcile removes the
+  flags.
+
+Every context or residency write carries any other stored key (for example
+`runtime-flags` or `speculative`) back with it, so the reconcile never removes
+an operator's or a qualification run's setting. The reconcile only adds or
+removes the exact speculation pair; it never rewrites other runtime flags.
+Local thinking-budget evidence accepts `context-size`, `keep_alive` and that
+exact speculation pair, because none of them can change the chat template or
+parser. Any other stored key leaves that evidence unknown.
+
 ## Adding a New OAuth Provider
 
 1. Add the provider to `packages/db/data/providers-registry.json` with `authorizeUrl`, `tokenUrl`, `oauthClientId`, and `supportedAuthMethods` including `oauth2_authorization_code`

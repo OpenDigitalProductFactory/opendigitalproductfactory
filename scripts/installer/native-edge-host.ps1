@@ -153,11 +153,18 @@ $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-nod
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII
 
     icacls $stateRoot /inheritance:r /grant:r "$env:USERNAME`:(OI)(CI)F" 2>&1 | Out-Null
+    # The mDNS rule needs an elevated session. The logon-time convergence
+    # (BI-084F85E5) is not elevated, and host upkeep does not use mDNS, so a
+    # refused rule is reported and the agent still installs.
     $firewallName = "DPF Native Edge Node mDNS"
-    if (-not (Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Program $binary -Profile Private | Out-Null
-    } else {
-        Set-NetFirewallRule -DisplayName $firewallName -Enabled True -Action Allow | Out-Null
+    try {
+        if (-not (Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue)) {
+            New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Program $binary -Profile Private -ErrorAction Stop | Out-Null
+        } else {
+            Set-NetFirewallRule -DisplayName $firewallName -Enabled True -Action Allow -ErrorAction Stop | Out-Null
+        }
+    } catch {
+        Write-Warn "The mDNS firewall rule needs an elevated session; nearby discovery stays off until the installer runs elevated."
     }
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NoLogo -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runner`""
     $trigger = New-ScheduledTaskTrigger -AtLogOn

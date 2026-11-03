@@ -29,7 +29,6 @@ describe("durable review authority", () => {
     ["inactive-user", "human-capability-denied"], ["missing-token", "saved-token-unavailable"],
     ["read-token", "saved-token-scope-denied"], ["revoked-grant", "coworker-grant-denied"],
     ["reassigned-run", "task-authority-denied"], ["unsupported-source", "auth-source-unsupported"],
-    ["oauth-client-missing", "oauth-authority-invalid"],
   ])("explains %s with fixed categories and the same execution refusal", async (condition, reason) => {
     const { packet, db } = fixture();
     if (condition === "inactive-user") db.user.findUnique.mockResolvedValue({ isActive: false, isSuperuser: true, groups: [] });
@@ -38,7 +37,6 @@ describe("durable review authority", () => {
     if (condition === "revoked-grant") vi.mocked(getAgentToolGrantsAsync).mockResolvedValue([]);
     if (condition === "reassigned-run") db.taskRun.findUnique.mockResolvedValue({ id: "run-1", userId: "other", initiatingAgentId: "other" });
     if (condition === "unsupported-source") packet.actor.authSource = "unsupported";
-    if (condition === "oauth-client-missing") packet.actor.authSource = "oauth";
     expect(await inspectSemanticReviewAuthority(packet, "TR-1", db as never)).toEqual({ state: "denied", reason });
     expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(false);
   });
@@ -88,6 +86,9 @@ describe("durable review authority", () => {
     db.mcpApiToken.findFirst.mockResolvedValue({ scope: "write", scopes: ["backlog_write"],
       kind: "oauth_access", revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
       oauthClient: null } as never);
+    expect(await inspectSemanticReviewAuthority(packet, "TR-1", db as never)).toEqual({
+      state: "denied", reason: "oauth-authority-invalid", detail: "client-missing",
+    });
     expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(false);
   });
   it.each(["revoked-token", "expired-token", "revoked-client", "wrong-kind", "read-token", "missing-tool-grant"])("refuses OAuth %s", async (condition) => {

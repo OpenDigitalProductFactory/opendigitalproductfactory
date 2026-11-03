@@ -86,7 +86,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
-      node("--test", "scripts/host-resource-runner.test.mjs"),
+      node("--test", "scripts/host-resource-runner.test.mjs", "scripts/lib/host-reservation-observation.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
       // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
@@ -222,6 +222,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // were stale (they now read compose-chain.ps1).
       conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
+      conformanceTest("scripts/installer/edge-client-certificate.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
       // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
@@ -233,6 +234,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-7371D444: .wslconfig keys land in the section WSL reads them from
       // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
       conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
+      // BI-084F85E5: the start script and host convergence ship as release assets;
+      // an existing install converges the native agent at its next logon.
+      conformanceTest("scripts/installer/host-convergence.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -323,7 +327,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
-    ]),
+      // BI-5E4BB7CA: code-only. Every command reads installers, compose, env
+      // examples and promote.sh, never docs. Undeclared, a docs-only push ran
+      // the four promote.sh dry-run contracts above (~110 s per dry-run on a
+      // loaded Windows host, ~17 dry-runs) and sat past 30 minutes.
+    ], { inputs: ["code"] }),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
       node(
@@ -348,6 +356,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
       conformanceTest("scripts/promote-source-identity.test.mjs"),
+      // BI-578131A3: real-daemon release image addressing; skips without a
+      // daemon. self-upgrade-acceptance.yml runs it on both image stores.
+      conformanceTest("scripts/release-image-reference.docker.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -365,7 +376,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/derived-artifacts-registry.test.mjs",
         "scripts/derived-artifacts-gate.test.mjs",
+        "scripts/build-judgment-guard-runtime.test.mjs",
+        "scripts/derived-artifacts-merged-base.test.mjs",
       ),
+      // BI-78176241: reads scripts/pregate.mjs and the live evidence policy, so
+      // the preflight must keep it.
+      conformanceTest("scripts/docs-only-single-source.test.mjs"),
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
     guard("pr-health-test", "PR Health Logic", [
@@ -415,6 +431,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate-preflight-effective-environment.test.mjs",
+        // BI-FEDD8F45: guard outcome records (client record, spool, flush, hook CLI).
+        "scripts/lib/guard-outcome-record.test.mjs",
+        "scripts/lib/guard-outcome-submit.test.mjs",
+        "scripts/record-guard-outcome.test.mjs",
         "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",
@@ -473,7 +493,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // build (SUR-8AB3353C, regression from #4321).
       // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
-      node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs", "scripts/check-docker-workspace-context.test.mjs"),
       // The service images (adp, edge-node, integration-test-harness) run
       // this after `pnpm deploy`: the legacy deploy skips the lockfile under
       // node-linker=hoisted, so each image asserts its deploy tree against
@@ -888,6 +908,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
         // unreadable claim record must fail safe rather than reap on a guess.
         "scripts/lib/worktree-liveness.test.mjs",
+        "scripts/lib/branch-reaper-core.test.mjs",
         // CodeQL js/log-injection: one CR/LF strip for the janitor, the preview
         // runtime, and the auth-only bootstrap.
         "scripts/lib/safe-log.test.mjs",
@@ -941,6 +962,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // created, and the branches that predate that are reconciled. Binding
         // coverage was stuck at 65% for as long as the rule relied on memory.
         "scripts/lib/workroom-bind.test.mjs",
+        "scripts/lib/worktree-provision.test.mjs",
         "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
@@ -1129,6 +1151,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/lib/dev-portal-lease-claim-key.test.mjs",
+        "scripts/lib/dev-preview-port-binding.test.mjs",
       ),
       node(
         "--test",

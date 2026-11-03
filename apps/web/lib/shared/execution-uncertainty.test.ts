@@ -56,4 +56,18 @@ describe("safe uncertain execution evidence", () => {
       status: "error", type: "result", subtype: "error_during_execution", isError: true, hint: "auth" } } });
     expect(JSON.stringify(evidence)).not.toContain("PRIVATE");
   });
+  it("keeps an allowlisted CLI failure hint and never the stderr it was derived from (BI-PIR-0371f80d)", () => {
+    const evidence = executionUncertaintyFromError(new NativeCliExecutionUncertainError("codex", {
+      exitCode: 1, signal: null, timedOut: false, outerProcessClosed: true,
+      stdoutPresent: false, stderrPresent: true, childProcessClosure: "unverified",
+      cliFailureHint: "quota", stderr: "PRIVATE_PROMPT ERROR: You've hit your usage limit",
+    } as never));
+    expect(evidence.diagnostics).toMatchObject({ cliFailureHint: "quota" });
+    expect(JSON.stringify(evidence)).not.toContain("PRIVATE");
+    const unknown = executionUncertaintyFromError(new NativeCliExecutionUncertainError("codex", {
+      exitCode: 1, signal: null, timedOut: false, outerProcessClosed: true,
+      stdoutPresent: false, stderrPresent: true, childProcessClosure: "unverified", cliFailureHint: "free text",
+    } as never));
+    expect(unknown.diagnostics?.cliFailureHint).toBe("unclassified");
+  });
 });

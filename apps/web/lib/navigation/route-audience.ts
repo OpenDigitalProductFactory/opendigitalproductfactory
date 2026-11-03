@@ -141,6 +141,7 @@ export const DIAGNOSTIC_ROUTE_PATHS: ReadonlySet<string> = new Set([
   "/admin/wiki/lint",
   "/ea/data-model",
   "/ops/dev-loop",
+  "/ops/gate-efficacy",
   "/ops/teardown",
   "/platform/ai/capacity-continuity",
   "/platform/ai/memory",

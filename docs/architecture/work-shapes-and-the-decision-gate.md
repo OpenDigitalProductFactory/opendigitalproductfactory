@@ -58,11 +58,12 @@ each owned by a different part of the substrate. A room picks one value on each.
 | **Activity kind** — what the work *is* | `delivery`, `support`, `improvement`, `governance`, `launch-readiness`, `craft-judgment`, `lifecycle`, `remediation` | `WORK_CAPSULE_SCOPE_ACTIVITY_KINDS` in `apps/web/lib/work-capsules.ts` |
 | **Mode** — how long it lives | `finite` (one bounded decision or action), `standing` (ongoing activity) | `WorkroomMode` in `apps/web/lib/work-management/room-types.ts` |
 | **Participant roles** — who is in it, as what | `accountable`, `coordinator`, `contributor`, `specialist`, `approver`, `reviewer`, `observer` | `WorkroomParticipantRole`, same file |
-| **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `apps/web/lib/work-management/room-shapes.ts` |
+| **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `packages/validators/src/gpp/work-vocabulary.ts`; re-exported by `apps/web/lib/work-management/room-shapes.ts` |
 
 The first three are live code. The fourth **is now a registry with a write path**
-⟦runtime: 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
-`apps/web/lib/work-management/room-shapes.ts` is the enum, and a room is convened with a
+⟦runtime: 2026-08-23⟧. Its closed vocabulary lives in
+`packages/validators/src/gpp/work-vocabulary.ts`; `room-shapes.ts` retains the
+collaboration registry, presets and binding function. A room is convened with a
 shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
 `scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
 
@@ -106,6 +107,18 @@ A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-0
 (`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
 `STANDING_ROOM_SCAN_LIMIT`.
+
+Before it plans those rooms, each tick runs the **per-room overseer duty** (BI-8E1486FA,
+`workroom-overseer-duty.ts` rules, `workroom-overseer-run.ts` reads and writes). For every
+non-standing delivery room it closes the room as delivered (`archived`, scope released) when
+its item is done or retired, when its lease is past the 24-hour resume grace on a merged
+branch, or when it is a merged duplicate of another live room for the same item. A room whose
+session is gone with unmerged commits, or whose drive hold has lasted 48 ticks, is routed to
+its Process Overseer as one Attention item (`workroom-overseer:<capsuleId>`, listed by the
+workroom-stall source) and the hold is concluded with a recorded outcome. Each change writes a
+`workroom-overseer` activity naming the rule; `DPF_WORKROOM_OVERSEER_DRY_RUN=1` logs the
+cycle summary and writes nothing. Design: the October 27 amendment of
+[Coordinated Workrooms](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md).
 
 That same standing drive performs a bounded, best-effort notification reconciliation for
 Workroom-owned facts such as approval, review, lease expiry, and terminal state. Durable async
@@ -533,8 +546,10 @@ Design: [Work Posture](https://github.com/OpenDigitalProductFactory/opendigitalp
 
 ## Encoding and visualization
 
-The activity definition is typed TypeScript in `WorkShapeDefinition`; the room
-stores a `key@version` reference in `scopeClaims`. The collaboration shape has its
+The activity definition is typed TypeScript in `WorkShapeDefinition`, whose
+structural contract lives in `packages/validators/src/gpp/work-shape-contracts.ts`.
+The application registry remains in `apps/web/lib/work-management/work-shapes.ts`;
+the room stores a `key@version` reference in `scopeClaims`. The collaboration shape has its
 own `workroomShape` entry. Occurrence state and receipts live in the existing
 Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text.
 
@@ -605,6 +620,13 @@ counts a run of non-advancing actions, not a run of pauses.
   "Appointing an owner will not change this", so it carries `decideEffort: "review"`.
   `owner-routing.ts` sends it to the custodian lane, not to "Needs you". Stalls that an
   appointment does clear stay `judgment` and still reach the owner.
+- **The room overseer follows the same split** (`BI-3A515481`). Its items (`workroom-overseer.ts`)
+  are recovery work, not owner decisions, in three cases: an R3 session to resume or hand over, an
+  R4 hold on an agent-side wait (`executor_writeback_unavailable`, `missing_task_owner`,
+  `awaiting_agent_capacity`, `agent_stage`, `provider_held`, `lease_held`), and an R4 whose
+  conclusion is a derived size. Those carry `review` and go to the custodian. An R4 hold on a person,
+  a role or a governed decision stays `judgment`. On 2026-10-28 every overseer item read `judgment`,
+  and "Needs you" went from 7 to 44.
 
 Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
 (`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name
@@ -786,6 +808,16 @@ work, which is what 337 runs did.
 stage title, definition of done, stop conditions, the evidence to record, and an
 explicit statement that claiming completion advances nothing.
 
+Native dispatch and external continuation now share that assignment projection.
+It retains the room objective, definition of done, evidence and stop obligations,
+declared tools, accountable principal, shape budgets and recorded budget usage.
+The exact task, run, cycle, iteration and source identify the assignment. Only the
+optional shape description may be deferred; if mandatory facts exceed the
+brief's budget, dispatch is refused without advancing the stage or recording a
+successful execution. Unaffected parallel branches may still proceed. The brief
+does not grant authority or turn an unknown outcome into completion. See
+[bounded assignment and continuation briefs](workroom-cycle-continuity.md#bounded-assignment-and-continuation-briefs).
+
 **And a stage advances on recorded evidence, never on a claim.** A completed
 `TaskRun` is the executor's claim about ITSELF — provenance, not evidence. PR
 #5168 proposed earning the completing receipt from `TaskRun.status` and was
@@ -867,6 +899,23 @@ stage cannot be satisfied by the author (separation of duties). The evidence
 call now answers with `stageReach`: whether the next drive tick can advance the
 stage from it, or why not (a blocker, not the current stage, accountable to
 someone else, or no driven stage yet).
+
+**An answered dispatch is not run again (BI-CAP-B5F50D1F).** A stage task keeps
+the drive's own cron, so after a successful run its next tick can start before
+the drive reads that run's evidence and stops the room. On 2026-10-28 room
+WC-PIR-MCP-EFF-852B5BBE recorded its review at 11:51:02, was run again at
+12:00:00 and was stopped by the drive at 12:00:16. The writer refused the
+second review, the run was filed as an error, and it left a `blocked` record
+after the completed one. Six of that day's ten review errors were this. The
+scheduler now asks first whether the task's own dispatch (its checkpoint's
+`confirmedEffect.recordedAt`) already has completing evidence, by the same rule
+the drive earns receipts with (`stageHasCompletingEvidence`). If it does, the
+model is not run and the task records `unchanged`
+(`apps/web/lib/work-management/stage-dispatch-answered.ts`). The drive still
+owns the advance. A task with no checkpoint, another task's checkpoint, a
+graph shape or a failed read runs as before. A required writer that was
+called and refused on every call is now reported as "called N times and
+refused (codes)", never as "attached and not called".
 
 ## Failing closed is not the same as locking
 

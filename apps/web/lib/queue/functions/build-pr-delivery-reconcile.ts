@@ -88,6 +88,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       pullRequestNumber: true,
       pullRequestUrl: true,
       scopeClaims: true,
+      executorKind: true,
       workspaceState: true,
       updatedAt: true,
     },
@@ -183,6 +184,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       const readiness = projectGithubPrReadiness(observation);
       const posture = resolvePrFollowThroughPosture({
         scopeClaims: capsule.scopeClaims,
+        executorKind: capsule.executorKind,
         platformDefaultActionBoundary,
       });
       const outcome = await executeBuildPrDeliveryAction({

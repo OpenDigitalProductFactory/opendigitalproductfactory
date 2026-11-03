@@ -13,11 +13,15 @@ describe("archetypeHasPerformanceMetrics", () => {
   });
 
   it("is false for an archetype with no source loader", () => {
-    expect(archetypeHasPerformanceMetrics("software-platform")).toBe(false);
+    expect(archetypeHasPerformanceMetrics("hair-salon")).toBe(false);
     expect(archetypeHasPerformanceMetrics("field-service")).toBe(false);
   });
 
   it("includes restaurant as the currently-registered loader", () => {
     expect(PERFORMANCE_METRIC_ARCHETYPES).toContain("restaurant");
+  });
+
+  it("supports software only with the recorded ledger source path", () => {
+    expect(archetypeHasPerformanceMetrics("software-platform")).toBe(true);
   });
 });

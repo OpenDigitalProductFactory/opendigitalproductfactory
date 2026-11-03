@@ -36,16 +36,16 @@ import { resolveWorkroomPosture, type WorkroomPostureView } from "@/lib/work-man
 import { loadWorkroomPostureContext } from "@/lib/work-management/room-posture.server";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
+import { resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
-import type { ProactivityPlan, ProactivityResolverInput } from "@/lib/proactivity/proactivity-types";
-import { tightenActionBoundary } from "@/lib/work-posture";
+import type { ProactivityPlan, ProactivityResolverInput } from "@dpf/validators/workroom-policy/proactivity-types";
+import { tightenActionBoundary } from "@dpf/validators/workroom-policy";
 
 import {
   readScheduledWorkTrigger,
   temporalInputForTrigger,
   type ScheduledWorkTrigger,
-} from "./scheduled-work-trigger";
+} from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 
 export interface ScheduledTickPlan {
   /** The plan the run executes at — the inherited plan, moved by the room. */

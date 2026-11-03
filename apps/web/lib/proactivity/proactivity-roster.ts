@@ -7,8 +7,8 @@
 // docs/superpowers/specs/2026-07-17-needs-you-cognitive-load-redesign-design.md
 // (deferred surface: proactivity confirm/adjust).
 
-import { resolveProactivityPlan } from "./proactivity-resolver";
-import type { ProactivityLevel } from "./proactivity-types";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import {
   ownerFacingAreaForPortfolio,
   type OwnerFacingArea,

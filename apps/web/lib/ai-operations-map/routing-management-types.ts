@@ -11,7 +11,9 @@ export type RoutingAttempt = {
   id: string; providerId: string; modelId: string; channel: string;
   status: string; startedAt: string; durationMs: number | null;
   estimatedCostUsd: number | null; inputTokens: number | null; outputTokens: number | null;
+  agentMessageId?: string | null;
   feedback: boolean | null;
+  feedbackSource?: "human" | "agent" | null;
   hold: RoutingHold | null;
 };
 export type RoutingReceipt = {

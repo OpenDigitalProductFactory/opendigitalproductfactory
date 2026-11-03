@@ -164,6 +164,16 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
     throw new Error("Running dimension eval requires manage_capabilities permission");
   }
 
+  const provider = await prisma.modelProvider.findUnique({ where: { providerId: endpointId }, select: { authMethod: true } });
+  if (provider?.authMethod === "oauth2_authorization_code") {
+    if (!modelId) throw new Error("Select one model for account-bound subscription calibration.");
+    const { commissionSubscriptionCalibration } = await import("@/lib/routing/subscription-calibration-admission");
+    const commission = await commissionSubscriptionCalibration(userId, endpointId, modelId);
+    const { jobs } = await import("@/lib/jobs");
+    await jobs.send({ name: "ai/eval.run", data: { endpointId, modelId, userId, force: true, calibrationRunId: commission.runId } });
+    return { queued: true, message: "Calibration requested. See Test Runs for measured and unverified results." };
+  }
+
   // Operator-initiated runs always execute — bypass the recency-cooldown guard
   // (BI-C8164664) so "Run Eval" is never silently a no-op.
   if (modelId) {
@@ -179,7 +189,7 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
     // All-model eval: fire one event per active model
     const { prisma } = await import("@dpf/db");
     const profiles = await prisma.modelProfile.findMany({
-      where: { modelStatus: "active" },
+      where: { providerId: endpointId, modelStatus: "active" },
       select: { modelId: true },
     });
     const { jobs } = await import("@/lib/jobs");

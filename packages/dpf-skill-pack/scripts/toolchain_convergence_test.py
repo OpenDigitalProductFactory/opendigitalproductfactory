@@ -85,24 +85,122 @@ class DeclarationTest(unittest.TestCase):
 class CodexDeclarationTest(unittest.TestCase):
     HEADER = "pack=0.3.0;digest=0123456789abcdef;client=codex"
 
+    def assert_missing_parser_refuses(self, action, config: Path | None = None) -> bool:
+        """Exercise fail-closed behavior on stock hosts without a TOML backend."""
+        import codex_toml
+        if codex_toml.available():
+            return False
+        before = config.read_bytes() if config is not None else None
+        with self.assertRaisesRegex(ValueError, "configuration unchanged"):
+            action()
+        if config is not None:
+            self.assertEqual(config.read_bytes(), before)
+        return True
+
     def test_header_line_is_added_once_and_rewritten_on_rerun(self) -> None:
         body = updater.codex_mcp_body("", "https://localhost/api/mcp/v1", self.HEADER)
         line = 'http_headers = { "X-DPF-Toolchain" = "pack=0.3.0;digest=0123456789abcdef;client=codex" }'
         self.assertIn(line, body)
         text = "[mcp_servers.dpf]\n" + "\n".join(body) + "\n"
+        if self.assert_missing_parser_refuses(lambda: updater.codex_mcp_body(text, None, self.HEADER)):
+            return
         again = updater.codex_mcp_body(text, None, self.HEADER.replace("0.3.0", "0.3.1"))
         self.assertEqual(sum(1 for entry in again if entry.startswith("http_headers")), 1)
         self.assertIn("0.3.1", next(entry for entry in again if entry.startswith("http_headers")))
 
-    def test_an_operator_headers_table_is_kept_and_not_merged(self) -> None:
+    def test_an_operator_inline_headers_table_keeps_its_values(self) -> None:
         text = '[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1?tier=full"\nhttp_headers = { "X-Org" = "1" }\n'
+        if self.assert_missing_parser_refuses(lambda: updater.codex_mcp_body(text, None, self.HEADER)):
+            return
         body = updater.codex_mcp_body(text, None, self.HEADER)
-        self.assertEqual([entry for entry in body if entry.startswith("http_headers")], ['http_headers = { "X-Org" = "1" }'])
+        self.assertEqual([entry for entry in body if entry.startswith("http_headers")], ['http_headers = { "X-Org" = "1", "X-DPF-Toolchain" = "' + self.HEADER + '" }'])
 
     def test_an_operator_headers_subtable_is_not_duplicated(self) -> None:
         text = '[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1"\n\n[mcp_servers.dpf.http_headers]\nX-Org = "1"\n'
         body = updater.codex_mcp_body(text, None, self.HEADER)
         self.assertFalse(any(entry.startswith("http_headers") for entry in body))
+
+    def test_nested_managed_header_converges_with_operator_headers(self) -> None:
+        import codex_toml
+        for table in ('[mcp_servers.dpf.http_headers]', '["mcp_servers"."dpf"."http_headers"]', "['mcp_servers'.'dpf'.'http_headers']"):
+            with self.subTest(table=table), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                config = home / ".codex/config.toml"
+                config.parent.mkdir()
+                config.write_text('[mcp_servers.dpf]\nurl = "https://proxy.example/mcp?tier=full"\nenabled = true\n' + table + '\n"x-dpf-toolchain" = "stale"\n"Authorization" = "Bearer fake-test-only"\n"X-Org" = "keep"\n[unrelated]\nvalue = "keep"\n')
+                if self.assert_missing_parser_refuses(
+                        lambda: updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER), config):
+                    continue
+                updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER)
+                first = config.read_text()
+                parsed = codex_toml.loads_any(first)
+                self.assertEqual(parsed["mcp_servers"]["dpf"]["http_headers"], {"Authorization": "Bearer fake-test-only", "X-Org": "keep", "X-DPF-Toolchain": self.HEADER})
+                self.assertEqual(parsed["mcp_servers"]["dpf"]["url"], "https://proxy.example/mcp?tier=full")
+                self.assertEqual(parsed["unrelated"], {"value": "keep"})
+                updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER)
+                self.assertEqual(config.read_text(), first)
+
+    def test_inline_managed_header_preserves_other_header_values(self) -> None:
+        import codex_toml
+        for headers in ('{ "X-DPF-Toolchain" = "old", "X-Org" = "keep" }', '{ "X-Org" = "keep" }'):
+            with self.subTest(headers=headers), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                config = home / ".codex/config.toml"
+                config.parent.mkdir()
+                config.write_text('[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1?tier=full"\nhttp_headers = ' + headers + '\n')
+                if self.assert_missing_parser_refuses(
+                        lambda: updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER), config):
+                    continue
+                updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER)
+                parsed = codex_toml.loads_any(config.read_text())
+                self.assertEqual(parsed["mcp_servers"]["dpf"]["http_headers"], {"X-Org": "keep", "X-DPF-Toolchain": self.HEADER})
+
+    def test_nested_declaration_dry_run_does_not_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex/config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1"\n[mcp_servers.dpf.http_headers]\n"X-DPF-Toolchain" = "old"\n'
+            config.write_text(original)
+            if self.assert_missing_parser_refuses(
+                    lambda: updater.ensure_codex_config(home, None, True, declaration_header=self.HEADER), config):
+                return
+            updater.ensure_codex_config(home, None, True, declaration_header=self.HEADER)
+            self.assertEqual(config.read_text(), original)
+
+    def test_refresh_without_declaration_preserves_inline_headers(self) -> None:
+        import codex_toml
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex/config.toml"
+            config.parent.mkdir()
+            config.write_text('[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1"\nhttp_headers = { "X-DPF-Toolchain" = "old", "X-Org" = "keep" }\n')
+            if self.assert_missing_parser_refuses(lambda: updater.ensure_codex_config(home, None, False), config):
+                return
+            updater.ensure_codex_config(home, None, False)
+            self.assertEqual(codex_toml.loads_any(config.read_text())["mcp_servers"]["dpf"]["http_headers"], {"X-DPF-Toolchain": "old", "X-Org": "keep"})
+
+    def test_custom_unicode_values_and_invalid_headers_are_not_lost(self) -> None:
+        import codex_toml
+        for nested in (True, False):
+            for value in ("custom-" + chr(0x1F415), 123):
+                with self.subTest(nested=nested, value=value), tempfile.TemporaryDirectory() as tmp:
+                    home = Path(tmp)
+                    config = home / ".codex/config.toml"
+                    config.parent.mkdir()
+                    pair = '"X-Org" = ' + json.dumps(value, ensure_ascii=False)
+                    original = '[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1?tier=full"\n' + ('[mcp_servers.dpf.http_headers]\n' + pair if nested else 'http_headers = { ' + pair + ' }') + '\n'
+                    config.write_text(original, encoding="utf-8")
+                    if isinstance(value, str):
+                        if self.assert_missing_parser_refuses(
+                                lambda: updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER), config):
+                            continue
+                        updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER)
+                        self.assertEqual(codex_toml.loads_any(config.read_text(encoding="utf-8"))["mcp_servers"]["dpf"]["http_headers"]["X-Org"], value)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "HTTP headers"):
+                            updater.ensure_codex_config(home, None, False, declaration_header=self.HEADER)
+                        self.assertEqual(config.read_text(encoding="utf-8"), original)
 
     def test_no_declaration_writes_no_header(self) -> None:
         self.assertFalse(any(entry.startswith("http_headers") for entry in updater.codex_mcp_body("", None)))
@@ -204,7 +302,8 @@ class ReportJsonTest(unittest.TestCase):
     def test_explicit_updated_action_cannot_override_stale_observed_content(self) -> None:
         declared = _Declared()
         key = ("claude-code", "project:fixture")
-        stale = {"version": declared.pack, "digest": "old", "authMode": "oauth"}
+        # A converged Claude record carries the stamped delivered version (BI-4F9E3221).
+        stale = {"version": declared.delivered, "digest": "old", "authMode": "oauth"}
         current = {**stale, "digest": declared.digest}
         for after, expected in ((stale, "failed"), (current, "converged")):
             with self.subTest(expected=expected), patch.object(convergence, "snapshot", side_effect=[{key: stale}, {key: after}]), patch.object(convergence, "cli_versions", return_value={}):
@@ -229,6 +328,8 @@ class ReportJsonTest(unittest.TestCase):
             convergence.record_claude_scopes(report, Path("fixture"), "failed: local content unverified", {}, None, [])
             self.assertEqual(report.finish(False)["result"], "failed")
 
+    @unittest.skipIf(__import__("codex_toml")._stdlib_parser() is None,
+                     "fakes the Codex CLI, so its TOML needs Python 3.11+ or tomli; CI runs it (BI-90C9478D)")
     def test_report_names_each_client_and_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -261,21 +362,25 @@ class ReportJsonTest(unittest.TestCase):
             self.assertEqual(report["source"], {"kind": "local"})
             for row in report["clients"]:
                 self.assertLessEqual({"before", "after", "action", "restartRequired", "cliVersion"}, set(row))
-                self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed"))
+                self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed", "absent"))
             shared = rows[("shared", "copy")]
             self.assertEqual((shared["before"]["digest"], shared["after"]["digest"]), (None, digest))
             self.assertEqual(shared["action"], "updated")
             self.assertTrue(shared["restartRequired"])
             self.assertEqual(report["result"], "failed")
             self.assertEqual(rows[("claude-code", f"project:{stale}")]["action"], "failed")
-            self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "prunable")
+            # The fake CLI removes nothing, so pruning the gone record reads back as failed (spec M10).
+            self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "failed")
+            self.assertIn("left the record in place", rows[("claude-code", f"project:{gone}")]["detail"])
+            self.assertFalse(gone.exists())
             self.assertEqual(rows[("claude-code", f"project-mcp-json:{stale}")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", f"project-mcp-json:{stale}")]["backupPath"]).exists())
             self.assertEqual(rows[("claude-code", "user-mcp")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", "user-mcp")]["backupPath"]).exists())
             self.assertEqual(rows[("claude-code", f"local-mcp:{stale}")]["action"], "retired")
-            self.assertIn(("codex", "user"), rows)
-            self.assertIn(("grok", "user"), rows)
+            # No Codex, Grok or agy CLI on this host: absent, not a silent "unchanged" (spec M3).
+            for client in ("codex", "grok", "antigravity"):
+                self.assertEqual(rows[(client, "user")]["action"], "absent", client)
 
             managed = updater.shared_managed_plugin_path(home)
             header = f"pack={report['packVersion']};digest={digest[:16]};client=claude-code"

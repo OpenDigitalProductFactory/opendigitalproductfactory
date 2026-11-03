@@ -10,14 +10,14 @@
 // outcome is always observable in the tool response (`ledger.recorded`),
 // per make-silent-failures-observable.
 
-import type { RetryAttemptRecord } from "@/lib/decision/uncertain-retry";
+import type { RetryAttemptRecord } from "@dpf/validators/judgment/uncertain-retry";
 import {
   readVerdict,
   VERDICT_RETRY_HINTS,
   verdictConfidence,
   type DecisionResult,
   type DecisionVerdictCause,
-} from "@/lib/decision/option-scoring";
+} from "@dpf/validators/judgment/option-scoring";
 import type { DecisionCallerContext } from "@/lib/decision/caller-context";
 import { withDecisionEscalation } from "@/lib/decision-perspective/decision-escalation";
 import {
@@ -262,6 +262,8 @@ export async function recordKernelConsultInteraction(input: {
   retryAttempts?: RetryAttemptRecord[] | null;
   /** Exact action linkage supplied only by the server-owned authority path. */
   policyProjection?: KernelConsultPolicyProjection | null;
+  /** The instance direction an organization-scoped consult read (BI-8AB6B4F7). */
+  instanceDirection?: { recorded: boolean; version: number | null; refs: string[]; missing: string[] };
   now?: Date;
 }): Promise<KernelConsultLedgerOutcome> {
   try {
@@ -398,6 +400,7 @@ export async function recordKernelConsultInteraction(input: {
       phaseTo: null,
       chain,
       outcomePayloadExtra: {
+        ...(input.instanceDirection ? { instanceDirection: input.instanceDirection } : {}),
         tool: "principle_decide",
         callingPopulation: input.callerContext.callingPopulation,
         callingSurface: input.callingSurface ?? null,

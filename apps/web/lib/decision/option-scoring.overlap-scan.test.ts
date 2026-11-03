@@ -23,7 +23,7 @@ import {
   hasScoreableOverlap,
   type DecisionOption,
   type DecisionPrinciple,
-} from "./option-scoring";
+} from "@dpf/validators/judgment/option-scoring";
 
 /** A unit vector pointing along `axis`, so cosine similarity is readable by eye. */
 const unit = (axis: 0 | 1 | 2): number[] => [0, 1, 2].map((i) => (i === axis ? 1 : 0));

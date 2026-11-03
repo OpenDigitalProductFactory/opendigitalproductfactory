@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { db, recordActivity } = vi.hoisted(() => ({
   db: {
-    workroom: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    scheduledAgentTask: { updateMany: vi.fn() },
+    workroom: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    scheduledAgentTask: { updateMany: vi.fn(), findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
   recordActivity: vi.fn(),
@@ -17,6 +17,8 @@ vi.mock("./work-capsule-activity-store", () => ({ recordWorkCapsuleActivity: rec
 
 import { buildDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import {
+  holdReleaseDelayMs,
+  releaseDueWorkroomQueueHolds,
   holdWorkroomQueueAfterFailure,
   queueHoldingFailureKind,
   readWorkroomQueueHold,
@@ -25,7 +27,8 @@ import {
 
 const NOW = new Date("2026-10-13T12:00:00.000Z");
 const ROOM_TASK = { trigger: { kind: "detected-need", workroomId: "WC-1" } };
-const HELD = { since: NOW.toISOString(), kind: "rate-limit", taskId: "workroom-WC-1-shape", error: "busy" };
+const HELD = { since: NOW.toISOString(), kind: "rate-limit", taskId: "workroom-WC-1-shape", error: "busy",
+  releaseAt: new Date(NOW.getTime() + 30 * 60_000).toISOString(), count: 1, ownerUserId: "user-1" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -87,7 +90,8 @@ describe("resumeWorkroomQueue", () => {
     db.workroom.findUnique.mockResolvedValue({ id: "row-1", workspaceState: { other: 1, queueHold: HELD } });
     const result = await resumeWorkroomQueue({ db: db as never, capsuleId: "WC-1", reason: "provider answers again", actor, now: NOW });
     expect(result).toEqual({ resumed: true, hold: HELD });
-    expect(db.workroom.update).toHaveBeenCalledWith({ where: { id: "row-1" }, data: { workspaceState: { other: 1 } } });
+    expect(db.workroom.update).toHaveBeenCalledWith({ where: { id: "row-1" },
+      data: { workspaceState: { other: 1, queueHoldHistory: { count: 1, lastReleasedAt: NOW.toISOString() } } } });
     expect(db.scheduledAgentTask.updateMany).toHaveBeenCalledWith({
       where: { taskId: HELD.taskId, isActive: true }, data: { nextRunAt: NOW },
     });
@@ -99,5 +103,49 @@ describe("resumeWorkroomQueue", () => {
     await expect(resumeWorkroomQueue({ db: db as never, capsuleId: "WC-1", reason: "r", actor })).resolves.toEqual({ resumed: false, hold: null });
     expect(db.workroom.update).not.toHaveBeenCalled();
     expect(readWorkroomQueueHold({ queueHold: "junk" })).toBeNull();
+  });
+});
+
+// BI-95638941: a hold releases itself; a room held again soon waits longer.
+describe("hold release timing", () => {
+  it("backs off 30 minutes, doubling per repeat hold, capped at 6 hours", () => {
+    expect([1, 2, 3, 4, 5, 9].map((count) => holdReleaseDelayMs(count) / 60_000)).toEqual([30, 60, 120, 240, 360, 360]);
+  });
+
+  it("records releaseAt, count and owner, and counts a re-hold within a day of the last release", async () => {
+    db.workroom.findFirst.mockResolvedValue({ id: "row-1",
+      workspaceState: { queueHoldHistory: { count: 2, lastReleasedAt: new Date(NOW.getTime() - 3_600_000).toISOString() } } });
+    const hold = await holdWorkroomQueueAfterFailure({ taskId: "t", ownerUserId: "user-1", taskConfig: ROOM_TASK, error: "AI providers are momentarily busy", now: NOW });
+    expect(hold).toMatchObject({ count: 3, ownerUserId: "user-1", releaseAt: new Date(NOW.getTime() + 120 * 60_000).toISOString() });
+  });
+
+  it("starts over after a quiet day", async () => {
+    db.workroom.findFirst.mockResolvedValue({ id: "row-1",
+      workspaceState: { queueHoldHistory: { count: 4, lastReleasedAt: new Date(NOW.getTime() - 25 * 3_600_000).toISOString() } } });
+    const hold = await holdWorkroomQueueAfterFailure({ taskId: "t", ownerUserId: "user-1", taskConfig: ROOM_TASK, error: "AI providers are momentarily busy", now: NOW });
+    expect(hold).toMatchObject({ count: 1 });
+  });
+});
+
+describe("releaseDueWorkroomQueueHolds", () => {
+  it("releases due holds (legacy ones 30 minutes after they began), leaves the rest, and records each as a resume", async () => {
+    const later = new Date(NOW.getTime() + 31 * 60_000);
+    const legacy = { since: NOW.toISOString(), kind: "rate-limit", taskId: "t-legacy", error: "" };
+    const notYet = { ...HELD, taskId: "t-wait", releaseAt: new Date(NOW.getTime() + 3_600_000).toISOString() };
+    db.workroom.findMany.mockResolvedValue([
+      { capsuleId: "WC-DUE", workspaceState: { queueHold: HELD } },
+      { capsuleId: "WC-LEGACY", workspaceState: { queueHold: legacy } },
+      { capsuleId: "WC-WAIT", workspaceState: { queueHold: notYet } },
+      { capsuleId: "WC-FREE", workspaceState: {} },
+    ]);
+    db.workroom.findUnique.mockImplementation(async ({ where }: { where: { capsuleId: string } }) =>
+      ({ id: `row-${where.capsuleId}`, workspaceState: where.capsuleId === "WC-DUE" ? { queueHold: HELD } : { queueHold: legacy } }));
+    db.scheduledAgentTask.findUnique.mockResolvedValue({ ownerUserId: "user-legacy" });
+    await expect(releaseDueWorkroomQueueHolds(later)).resolves.toEqual(["WC-DUE", "WC-LEGACY"]);
+    expect(recordActivity.mock.calls.map((call) => (call as unknown as [unknown, { kind: string; actor: { userId: string } }])[1]))
+      .toEqual([
+        expect.objectContaining({ kind: "provider-unblocked", actor: expect.objectContaining({ userId: "user-1" }) }),
+        expect.objectContaining({ kind: "provider-unblocked", actor: expect.objectContaining({ userId: "user-legacy" }) }),
+      ]);
   });
 });

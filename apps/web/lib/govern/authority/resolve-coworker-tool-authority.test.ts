@@ -9,7 +9,22 @@ import {
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
   resolveTrustedInitiativeItemId,
+  resolveSteering,
 } from "./resolve-coworker-tool-authority";
+
+describe("explicit owner approval floor", () => {
+  it.each([
+    { connectionDelegation: { authorityBindingId: "consent", agentId: "agent" } },
+    { roomAuthority: { actionBoundary: "preauthorized", memberOfRoom: true } },
+    { initiativeReviewBinding: {} as never },
+    { taskRunId: "TR-SCHED-1", toolName: "record_execution_evidence", roomMandatedTools: ["record_execution_evidence"] },
+    { taskRunId: "TR-SCHED-1", agentId: "AGT-WS-PLATFORM", toolName: "create_knowledge_article" },
+  ])("withholds automatic steering when the current policy explicitly requires approval: %j", extra => {
+    const input = { initiativeReviewBinding: null, roomAuthority: null, agentId: "agent", ...extra, hitlPolicy: " Always " };
+    expect(resolveSteering({ ...input, hitlPolicy: null })).not.toBe("none");
+    expect(resolveSteering(input)).toBe("none");
+  });
+});
 
 describe("deriveAllowedRouteContexts", () => {
   it("keeps surface-agnostic and wildcard tools route-neutral", () => {
@@ -433,7 +448,15 @@ describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () 
     await expect(resolveTrustedInitiativeItemId({
       task: task("TR-SCHED-ABCD1234"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId,
     })).resolves.toBe("BI-ROUTED");
-    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234", "record_initiative_evidence");
+  });
+
+  it("takes a platform review run's subject from the review the platform issued its room (BI-AA47C672)", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-MERGED");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-PIR00001"), toolName: "record_initiative_post_implementation_review", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-MERGED");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-PIR00001", "record_initiative_post_implementation_review");
   });
 
   it("asks nothing for another tool or a non-scheduled run", async () => {

@@ -279,11 +279,9 @@ export async function assertLocalGpuFree(input: {
   }
 }
 
-export async function inspectLocalGpuAdmission(input: LocalGpuInspectDeps = {}): Promise<LocalGpuAdmission> {
-  const nowMs = input.nowMs ?? Date.now();
-  const restricted = currentReassessmentExecution();
-  if (restricted) {
-    if (input.listRunners) return refuseReassessmentExecution("reassessment-capacity-uncaptured-runners");
+/** Published telemetry only: no shell, model activation, unload or runner HTTP. */
+export async function readPublishedHostGpuObservation(input: Pick<LocalGpuInspectDeps, "nowMs" | "readSnapshot"> = {},
+  refuse: (reason: string) => never = reason => { throw new Error(`published-gpu-${reason}`); }) {
     let snapshot: HostGpuSnapshot | null = null, provenance: Record<string, unknown>;
     try {
       if (input.readSnapshot) {
@@ -308,19 +306,19 @@ export async function inspectLocalGpuAdmission(input: LocalGpuInspectDeps = {}):
             || [raw.memoryUsedMiB, raw.memoryTotalMiB, raw.utilizationPercent].some(value => typeof value !== "number")
             || raw.observedAt !== undefined && typeof raw.observedAt !== "string" || raw.observedAtMs !== undefined && typeof raw.observedAtMs !== "number"
             || raw.observedAt !== undefined && raw.observedAtMs !== undefined && Date.parse(raw.observedAt) !== raw.observedAtMs) {
-            return refuseReassessmentExecution("reassessment-capacity-evidence-invalid");
+            return refuse("evidence-invalid");
           }
           snapshot = parseHostGpuSnapshotJson(source);
-          if (!snapshot) return refuseReassessmentExecution("reassessment-capacity-evidence-invalid");
+          if (!snapshot) return refuse("evidence-invalid");
         }
       }
     } catch (error) {
       if (isReassessmentExecutionError(error)) throw error;
-      return refuseReassessmentExecution("reassessment-capacity-evidence-unavailable");
+      return refuse("evidence-unavailable");
     }
     if (snapshot && (!Object.values(snapshot).every(value => typeof value === "number" && Number.isFinite(value)) || snapshot.memoryTotalMiB <= 0
       || snapshot.memoryUsedMiB < 0 || snapshot.memoryUsedMiB > snapshot.memoryTotalMiB || snapshot.utilizationPercent < 0 || snapshot.utilizationPercent > 100)) {
-      return refuseReassessmentExecution("reassessment-capacity-evidence-invalid");
+      return refuse("evidence-invalid");
     }
     const observation = () => {
       const observedAtMs = input.nowMs ?? Date.now();
@@ -328,12 +326,21 @@ export async function inspectLocalGpuAdmission(input: LocalGpuInspectDeps = {}):
         ? "published-snapshot-stale" : snapshot.observedAtMs - observedAtMs > 60_000 ? "published-snapshot-future" : null;
       return { snapshot: unknownReason ? null : snapshot, provenance: { ...provenance, ...(unknownReason ? { unknownReason } : {}) }, observedAtMs };
     };
+  return observation();
+}
+
+export async function inspectLocalGpuAdmission(input: LocalGpuInspectDeps = {}): Promise<LocalGpuAdmission> {
+  const nowMs = input.nowMs ?? Date.now();
+  const restricted = currentReassessmentExecution();
+  if (restricted) {
+    if (input.listRunners) return refuseReassessmentExecution("reassessment-capacity-uncaptured-runners");
+    const published = await readPublishedHostGpuObservation(input, reason => refuseReassessmentExecution(`reassessment-capacity-${reason}`));
     const ports = currentReassessmentHttpTransport(), proof = restricted.qualification.finiteTokenProof;
     if (!proof) return refuseReassessmentExecution("reassessment-capacity-composition-unproven");
     let decision: LocalGpuAdmission | null = null;
     const response = await captureReassessmentHttpRequest({ url: `${proof.apiRoot}/engines/ps`, method: "GET", operation: "configuration",
       ...ports, captureAdditional: async response => {
-        const evidence = observation();
+        const evidence = published;
         let body: unknown; try { body = await response.json(); } catch { return { ...evidence, parseStatus: "invalid" }; }
         if (!response.ok || !Array.isArray(body) || body.some(row => !row || typeof row !== "object"
           || typeof row.model_name !== "string" || typeof row.mode !== "string" || typeof row.in_use !== "boolean" || typeof row.loading !== "boolean")) {

@@ -32,6 +32,13 @@ _dry_run=0
 _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
+# scope-writer-compatibility-begin
+# Independent packaged-writer contract; reassessment proof cannot stand in for it.
+_assert_scope_writer_image() {
+  node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-image --image "$1" --source "$2"
+}
+# scope-writer-compatibility-end
+
 # reassessment-compatibility-begin
 # Kept in this N-1-staged owner: the exact portal supplies its packaged probe.
 _assert_reassessment_image() {
@@ -709,6 +716,29 @@ for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET DPF
 done
 unset _signing_key _signing_key_value _signing_key_comment
 
+# BI-EEFCB232: resolve the existing configured-channel default before Compose.
+# The portal's default0 is not forwarded by the normal promoter caller. A real
+# process override still wins, including an explicitly empty value.
+_dispatch_env_file="${PROMOTE_COMPOSE_ENV_FILE:-$_compose_root/.env}"
+_dispatch_process_present="${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}"
+_dispatch_process_value="${DPF_REMOTE_ACTION_DISPATCH_ENABLED-}"
+_dispatch_policy="$(node "$_promoter_dir/installer/install-release-assets.mjs" \
+  --remote-action resolve --install-env "$_dispatch_env_file")"
+_dispatch_resolution="${_dispatch_policy%%:*}"
+_dispatch_intent_sha256="${_dispatch_policy#*:}"
+case "$_dispatch_resolution" in preserve|derive-once|derive-persist) ;; *) printf 'error: remote action dispatch resolution invalid\n' >&2; exit 1 ;; esac
+[[ ${#_dispatch_intent_sha256} -eq 64 && "$_dispatch_intent_sha256" != *[!a-f0-9]* ]] || exit 1
+case "$_dispatch_resolution" in derive-*) export DPF_REMOTE_ACTION_DISPATCH_ENABLED=1 ;; esac
+_restore_dispatch_process_override() {
+  case "$_dispatch_resolution" in derive-*) ;; *) return 0 ;; esac
+  if [[ "$_dispatch_process_present" == x ]]; then
+    DPF_REMOTE_ACTION_DISPATCH_ENABLED="$_dispatch_process_value"
+    export DPF_REMOTE_ACTION_DISPATCH_ENABLED
+  else
+    unset DPF_REMOTE_ACTION_DISPATCH_ENABLED
+  fi
+}
+
 # True when the running inngest container carries different keys from the ones
 # this promotion resolved. Portal and inngest verify each other with the same
 # pair, so a drift is fixed by recreating inngest in the same promotion as the
@@ -982,9 +1012,11 @@ if [[ $_dry_run -eq 0 ]]; then
   _reassessment_candidate_ref="${_project}-portal"
   [[ $_release_mode -eq 0 ]] || _reassessment_candidate_ref="$_candidate_portal"
   _reassessment_candidate_digest="$(_assert_reassessment_image "$_reassessment_candidate_ref" "$_built_sha")" || exit 78
+  _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
   if [[ $_promote_phase == all ]]; then
     _reassessment_candidate_override="$PROMOTE_BACKUP_PATH/reassessment-candidate-$$.yml"
     _assert_reassessment_image "$_reassessment_candidate_digest" "$_built_sha" "$_reassessment_candidate_override" >/dev/null || exit 78
+    _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
     _f_args+=(-f "$_reassessment_candidate_override")
   fi
 fi
@@ -1274,16 +1306,41 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
     --state "$_install_state" \
     --tag "$DPF_RELEASE_TAG" \
     --owner "$GHCR_OWNER" \
-    --recovery "$PROMOTE_BACKUP_PATH/release-identity"; then
+    --recovery "$PROMOTE_BACKUP_PATH/release-identity" \
+    --remote-action-resolution "$_dispatch_resolution" \
+    --remote-action-intent-sha256 "$_dispatch_intent_sha256"; then
     printf 'error: release identity commit failed; restoring the prior portal tag\n' >&2
     _rollback_f_args=()
     for _f in "${_compose_files[@]}"; do _rollback_f_args+=(-f "$PROMOTE_SOURCE/$_f"); done
     _reassessment_fallback_override="$PROMOTE_BACKUP_PATH/reassessment-fallback-$$.yml"
     _assert_reassessment_image "${_reassessment_baseline_config:-}" "" "$_reassessment_fallback_override" >/dev/null || exit 78
+    node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-fallback --image "$_reassessment_baseline_config" >/dev/null || exit 78
     _rollback_f_args+=(-f "$_reassessment_fallback_override")
+    _restore_dispatch_process_override
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
       "${_rollback_f_args[@]}" up -d --no-build --no-deps --force-recreate portal || true
     exit 1
+  fi
+fi
+
+# --- Step 7a: autostart-bridge (BI-084F85E5, BI-EEFDB9E8) ---
+# macOS/Linux autostart runs a launch script install-dpf.sh wrote once into the
+# state directory, outside the install root, so no release-asset install can
+# replace it. Rewrite it into the one-line pointer to the shipped
+# scripts/installer/dpf-start.consumer.sh, which converges the host (the native
+# host-upkeep agent) at the next boot or login. It runs from the install root,
+# not the promoter image: an older portal stages the promoter from its own file
+# list, so a new file reaches this promotion only as a verified release asset.
+# Windows has no launch script there and is a no-op; any failure is reported and
+# never fails a promotion that has already succeeded.
+if [[ $_dry_run -eq 0 && -n "${DPF_PROMOTER_STATE_DIR:-}" ]]; then
+  _bridge_root="${PROMOTE_INSTALL_ROOT:-${PROMOTE_SOURCE:-}}"
+  if [[ -n "$_bridge_root" && -f "$_bridge_root/scripts/installer/autostart-bridge.mjs" ]]; then
+    node "$_bridge_root/scripts/installer/autostart-bridge.mjs" \
+      --state-dir "$DPF_PROMOTER_STATE_DIR" --install-root "$_bridge_root" || \
+      printf 'step=autostart-bridge status=failed\n'
+  else
+    printf 'step=autostart-bridge status=module-missing\n'
   fi
 fi
 
@@ -1640,6 +1697,22 @@ _converge_summary="$(node -e '
   || _converge_summary="outcome=degraded"
 printf 'step=sidecar-converge-shadow target=%s %s\n' "${_built_sha:-$PROMOTE_TARGET_SHA}" "$_converge_summary"
 rm -f "$_converge_rendered" "$_converge_hashes" "$_converge_running" ${_converge_mounts:+"$_converge_mounts"}
+
+# Source upgrades have no release-assets transaction. Persist only this derived
+# default through the selected single-file bind, after runtime verification.
+# Release mode already committed its canonical .env; its selected bind can
+# still point at the old inode after that atomic release commit.
+if [[ $_dry_run -eq 0 && $_release_mode -eq 0 && "$_dispatch_resolution" == derive-persist ]]; then
+  if ! node "$_promoter_dir/installer/install-release-assets.mjs" \
+    --remote-action persist --install-env "$_dispatch_env_file" \
+    --remote-action-resolution "$_dispatch_resolution" \
+    --remote-action-intent-sha256 "$_dispatch_intent_sha256" \
+    --recovery "$PROMOTE_BACKUP_PATH/dispatch-env"; then
+    printf 'error: dispatch persistence is unproven after portal swap; inspect recovery path %s\n' "$PROMOTE_BACKUP_PATH/dispatch-env" >&2
+    _restore_dispatch_process_override
+    exit 1
+  fi
+fi
 
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit

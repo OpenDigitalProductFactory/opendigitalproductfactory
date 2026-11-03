@@ -29,7 +29,23 @@ export type ImmutableReaderArtifactRef =
     repositoryFullName: string;
     revisionId: string;
     valueDigest: string;
+  }
+  // BI-46E344FE: a merged change read whole. `path` is the virtual
+  // `repo-commit-range/<base>..<head>[,...]`, `version` the newest head and
+  // `expectedBlobId` the change digest.
+  | {
+    kind: "repo-commit-range";
+    repositoryFullName: string;
+    ranges: ReadonlyArray<{ baseSha: string; headSha: string }>;
+    digest: string;
   };
+
+/** BI-46E344FE: the virtual path `read_source_at_version` serves a commit range under. */
+export const REPO_COMMIT_RANGE_PATH_PREFIX = "repo-commit-range/";
+
+export function commitRangeReaderPath(ranges: ReadonlyArray<{ baseSha: string; headSha: string }>): string {
+  return `${REPO_COMMIT_RANGE_PATH_PREFIX}${ranges.map((r) => `${r.baseSha}..${r.headSha}`).join(",")}`;
+}
 
 export const REPOSITORY_BLOB_READER_TOOL = "read_source_at_version";
 export const BUILD_ARTIFACT_REVISION_READER_TOOL = "read_build_artifact_revision";
@@ -50,6 +66,10 @@ export function immutableReaderArgumentsFor(artifactRef: ImmutableReaderArtifact
   if (artifactRef.kind === "document-version") return {
     repositoryFullName: artifactRef.repositoryFullName, path: `initiative-body-version/${artifactRef.versionId}`,
     version: artifactRef.versionId, expectedBlobId: artifactRef.valueDigest,
+  };
+  if (artifactRef.kind === "repo-commit-range") return {
+    repositoryFullName: artifactRef.repositoryFullName, path: commitRangeReaderPath(artifactRef.ranges),
+    version: artifactRef.ranges[artifactRef.ranges.length - 1]!.headSha, expectedBlobId: artifactRef.digest,
   };
   if (artifactRef.kind === "feature-build-revision") {
     return {

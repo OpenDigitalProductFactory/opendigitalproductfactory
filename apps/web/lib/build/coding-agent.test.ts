@@ -310,3 +310,17 @@ describe("runSandboxTests stays scoped (BI-F5D4FA50)", () => {
     expect(commands.some((cmd) => /pnpm test|vitest run|jest/.test(cmd))).toBe(false);
   });
 });
+
+// BI-33B54E4B: the sandbox exports NODE_ENV=development and Vitest keeps an
+// existing NODE_ENV, so a test that relies on the test environment failed in the
+// sandbox only (FB-3F40A125: the objective-mapping key falls back to its test
+// secret only under NODE_ENV=test). Scoped tests run as tests, whatever the host.
+describe("scopedTestRunnerCommand runs under the test environment", () => {
+  it("sets NODE_ENV=test for Vitest and for Jest", async () => {
+    const { scopedTestRunnerCommand } = await import("./coding-agent");
+    const vitestPkg = JSON.stringify({ scripts: { test: "vitest run" }, devDependencies: { vitest: "5.0.3" } });
+    const jestPkg = JSON.stringify({ scripts: { test: "jest" }, devDependencies: { jest: "30.0.0" } });
+    expect(scopedTestRunnerCommand(vitestPkg, '"a.test.ts"')).toBe('NODE_ENV=test pnpm exec vitest run "a.test.ts"');
+    expect(scopedTestRunnerCommand(jestPkg, '"a.test.ts"')).toBe('NODE_ENV=test pnpm exec jest --ci "a.test.ts"');
+  });
+});

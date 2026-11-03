@@ -237,8 +237,14 @@ room's work is what the Workroom drive dispatches, so the hold lives there:
 - "Delegated results ahead of new work" has no subject until a child result can
   start a parent turn (`BI-AD979E79`, deferred): today it is a message in the
   parent thread. It moves to that item.
-- Usage-limit auto-resume (release a hold at the provider's reset time) is a
-  follow-up; the hold records the failure kind it needs.
+- Holds release themselves (`BI-95638941`, 2026-10-27). Live use showed the
+  manual-only release froze rooms: 40 rate-limit holds from 10-17 to 10-25, none
+  resumed, 36 rooms still held after ten days. Each hold now carries `releaseAt`
+  (30 minutes, doubling for a room re-held within 24 hours of its last release,
+  capped at 6 hours) and its owner; the `workroom/queue-hold-release` job
+  releases due holds every 5 minutes through `resumeWorkroomQueue`, recorded as
+  `provider-unblocked`. Releasing at the provider's own reset time, when one is
+  reported, remains a refinement.
 
 
 **P6b corrective continuation (2026-10-25, BI-9CD95438).** A known provider
@@ -403,3 +409,33 @@ produces; `BI-05D7A0DC` (async completion hub) renders 4.5's results;
 - Cross-installation orchestration (federation owns it).
 - Any UI beyond existing Workroom and queue-health surfaces.
 - Replacing Build Studio's phase orchestrator; it becomes a client of 4.5.
+
+### Root turn correlation repair (BI-1C23E1F3)
+
+The supervised Codex adapter must distinguish its room's root thread and active
+turn from child or unrelated provider activity. Only a terminal event for that
+exact root turn advances the supervisor's queued input. Child approvals still
+reach the room's existing decision path; filtering progress must not discard
+requests that need a decision.
+
+**OBJ-DDL-ROOT:** Concurrent provider activity cannot change or complete another
+room's root turn. A root turn settles once, with its actual terminal status.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-DDL-ROOT-1 | OBJ-DDL-ROOT | Interleaved child and foreign starts, messages and completions leave the active root identity unchanged and emit no root completion. |
+| AC-DDL-ROOT-2 | OBJ-DDL-ROOT | Matching completed, failed and interrupted root turns each settle once; duplicate, late, unknown-status and identity-missing terminal frames do not settle a current turn. |
+| AC-DDL-ROOT-3 | OBJ-DDL-ROOT | Runtime approval requests remain visible through the existing permission path, including requests from child activity. |
+
+Ordered atomic repair: replay the faulty sequence against the current adapter;
+observe failure; correlate notifications at the existing adapter boundary; replay
+normal, interleaved, duplicate and malformed sequences; run the runtime suites,
+typechecks and governed publication gate. No independently shippable subcomponent,
+new scheduler, schema, package or deployment mechanism is introduced.
+
+This reuses the existing RuntimeSession contract and fake-process transport. It
+is an OS-independent prerequisite for safe concurrency and DPF2 absorption, not a
+DPF2 implementation. The extraction boundary remains owned by
+[the reusable architecture design](2026-10-18-reusable-architecture-extraction-design.md).
+
+Settlement is retained for the session lifetime. A delayed start acknowledgement or replayed notification for an older root remains retired after subsequent roots finish; remembering only the last terminal turn is insufficient. The regression runs two complete roots before delivering their start acknowledgements in reverse order.

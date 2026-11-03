@@ -1,0 +1,27 @@
+Open Digital Product Factory
+Copyright 2026 Mark Bodman
+
+This product includes software developed by third parties.
+See below for attribution notices required by their licenses.
+
+---
+
+City geographic data derived from GeoNames (https://www.geonames.org/)
+Licensed under Creative Commons Attribution 4.0 (CC-BY 4.0)
+
+i18n-iso-countries — Copyright (c) 2016 Timo Mämecke
+Licensed under MIT
+
+Prisma — Copyright (c) 2019 Prisma Data, Inc.
+Licensed under Apache License 2.0
+
+sharp — Copyright (c) 2013 Lovell Fuller and contributors
+Licensed under Apache License 2.0
+
+
+DPF operating composition synthetic consumer.
+The exact source closure is listed in source-manifest.json, under Apache-2.0.
+No private instructions, doctrine, memory, credentials or live grants are included.
+The shared canonical-json leaf is copied from its single source home. Its parent
+package's undici runtime is neither copied nor evaluated. No third-party runtime
+dependency is included. TypeScript 6.0.3 is an external build tool.

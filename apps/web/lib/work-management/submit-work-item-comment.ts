@@ -1,7 +1,7 @@
 "use server";
 
-// BI-B416B12A: server entry for posting a work-item comment. Assembles the real
-// @mention roster (coworkers via loadRoster + workspace users) and runs the
+// BI-B416B12A: server entry for posting a work-item comment. Loads the real
+// @mention roster (loadWorkspaceMentionRoster) and runs the
 // tested pipeline (buildMentionRoster → postWorkItemComment → notification
 // fan-out). Returns a value (never throws to the client) so RSC surfaces the
 // outcome rather than a stripped production error.
@@ -9,10 +9,9 @@
 import { prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
-import { loadRoster } from "@/lib/coworker-record/roster";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { getGrantedCapabilities } from "@/lib/permissions";
-import { buildMentionRoster } from "./mention-roster";
+import { loadWorkspaceMentionRoster } from "./mention-roster.server";
 import { postWorkItemComment, type PostCommentDb } from "./post-work-item-comment";
 import { encodeWorkCaseKey } from "./workspace-case-loader";
 import { authorizeWorkspaceRoomItem } from "./workspace-room-access";
@@ -85,21 +84,7 @@ export async function submitWorkItemComment(input: {
     return { ok: false, error: "forbidden" };
   }
 
-  const [rosterResult, users] = await Promise.all([
-    loadRoster(),
-    // User has no display-name column; the mention handle derives from the email
-    // local-part (see buildMentionRoster's fallback).
-    prisma.user.findMany({ select: { id: true, email: true } }),
-  ]);
-
-  const roster = buildMentionRoster({
-    coworkers: rosterResult.rows.map((row) => ({
-      agentId: row.agentId,
-      name: row.name,
-      displayName: row.displayName,
-    })),
-    users,
-  });
+  const roster = await loadWorkspaceMentionRoster();
 
   const result = await postWorkItemComment({
     db: commentDb,

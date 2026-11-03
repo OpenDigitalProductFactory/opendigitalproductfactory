@@ -1,5 +1,5 @@
-import { buildPostureProvenance, type PostureProvenanceDriver } from "@/lib/work-posture/provenance";
-import type { PostureLayer } from "@/lib/work-posture/resolve";
+import { buildPostureProvenance, type PostureProvenanceDriver } from "@dpf/validators/workroom-policy/provenance";
+import type { PostureLayer } from "@dpf/validators/workroom-policy/resolve";
 import type { WorkroomPostureView } from "@/lib/work-management/room-posture";
 
 // EP-WORK-POSTURE Slice H (BI-4EB2F1D0) — the layer-by-layer account.

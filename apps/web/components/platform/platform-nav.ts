@@ -134,7 +134,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     label: "Updates & health",
     href: "/ops/self-upgrade",
     description: "Keep this install current and secure.",
-    matchPrefixes: ["/ops/self-upgrade", "/ops/patches", "/ops/teardown", "/ops/dev-loop", "/ops/security", "/ops/installation", "/platform/development"],
+    matchPrefixes: ["/ops/self-upgrade", "/ops/patches", "/ops/teardown", "/ops/dev-loop", "/ops/gate-efficacy", "/ops/security", "/ops/installation", "/platform/development"],
     subItems: [
       { label: "Self-upgrade", href: "/ops/self-upgrade" },
       { label: "Patches", href: "/ops/patches" },

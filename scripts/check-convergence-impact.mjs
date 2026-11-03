@@ -172,12 +172,36 @@ export function validateConvergenceDecisions(decisions) {
   return errors;
 }
 
+/**
+ * BI-084F85E5: a host-side change must say how an existing install converges on
+ * every target platform. Returns the platforms no decision reason names, or []
+ * when the change touches no platform-coverage kind.
+ */
+export function missingPlatformCoverage(surfaces, decisions, registry) {
+  const coverage = registry?.platformCoverage;
+  if (!coverage) return [];
+  const kinds = new Set(coverage.kinds ?? []);
+  if (!surfaces.some((s) => kinds.has(s.kind))) return [];
+  const reasons = decisions.map((d) => d.reason ?? "").join("\n");
+  return Object.entries(coverage.platforms ?? {})
+    .filter(([, pattern]) => !new RegExp(pattern, "i").test(reasons))
+    .map(([platform]) => platform);
+}
+
 // ── Gate ──────────────────────────────────────────────────────────────────────
 export function evaluateConvergenceGate({ changedFiles, commitMessages = "", prBody = "", registry, readFile } = {}) {
-  const surfaces = classifyConvergenceSurfaces(changedFiles, { registry, readFile });
+  const reg = registry ?? loadRegistry();
+  const surfaces = classifyConvergenceSurfaces(changedFiles, { registry: reg, readFile });
   if (surfaces.length === 0) return { ok: true, reason: "no-convergence-surface", surfaces, decisions: [] };
   const decisions = [...parseConvergenceDecisions(commitMessages), ...parseConvergenceDecisions(prBody)];
   const errors = validateConvergenceDecisions(decisions);
+  if (errors.length === 0) {
+    const missing = missingPlatformCoverage(surfaces, decisions, reg);
+    if (missing.length > 0) {
+      errors.push(`a host-runtime change must say how existing installs converge on every target platform; no decision names: ${missing.join(", ")} (BI-084F85E5)`);
+      return { ok: false, reason: "platform-coverage-missing", surfaces, decisions, errors };
+    }
+  }
   if (errors.length > 0) {
     return { ok: false, reason: decisions.length === 0 ? "missing-decision" : "invalid-decision", surfaces, decisions, errors };
   }

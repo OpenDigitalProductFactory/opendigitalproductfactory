@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { classifyOwnerAttentionLane } from "./owner-routing";
 import type { AttentionItem, AttentionSource } from "./types";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 function item(
   source: AttentionSource,

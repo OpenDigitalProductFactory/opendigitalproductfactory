@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   ensureAgent: vi.fn(), syncUser: vi.fn(), appendPolicy: vi.fn(), persistAssignments: vi.fn(),
   postComment: vi.fn(), heartbeat: vi.fn(), loadMembers: vi.fn(), workrooms: vi.fn(), workroomByCapsule: vi.fn(), workroomAccess: vi.fn(),
   executeAppointment: vi.fn(), currentUser: vi.fn(), can: vi.fn(),
-  broadcastAsk: vi.fn(), broadcastAck: vi.fn(),
+  broadcastAsk: vi.fn(), broadcastAck: vi.fn(), mentionRoster: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   workItem: { findFirst: mocks.item, findMany: mocks.children, update: mocks.updateItem },
@@ -29,6 +29,7 @@ vi.mock("@/lib/operate/coo-broadcast.server", () => ({
   executeCooBroadcastAsk: mocks.broadcastAsk,
   executeCooBroadcastAck: mocks.broadcastAck,
 }));
+vi.mock("@/lib/work-management/mention-roster.server", () => ({ loadWorkspaceMentionRoster: mocks.mentionRoster }));
 vi.mock("@/lib/work-management/case-key", () => ({ decodeWorkCaseKey: (key: string) => ({ sourceType: "backlog-item", sourceId: key }) }));
 import { roomMessagingPack } from "./room-messaging-pack";
 
@@ -176,4 +177,127 @@ it("records a COO broadcast acknowledgement without dispatching a stage", async 
     capsuleId: "WC-ONE",
     commandKey: "ask-1",
   }));
+});
+
+// BI-3C837677: an in-memory WorkItemMessage table honouring the where/orderBy/take
+// shape read_room_messages issues, so paging is checked against real ordering.
+type Row = { messageId: string; workItemId: string; senderType: string; senderAgentId: string | null;
+  senderUserId: string | null; messageType: string; body: string; createdAt: Date };
+type Bound = { createdAt?: { lt?: Date; gt?: Date } | Date; messageId?: { lt?: string; gt?: string } };
+function matchesBound(row: Row, bound: Bound): boolean {
+  if (bound.createdAt instanceof Date) {
+    if (row.createdAt.getTime() !== bound.createdAt.getTime()) return false;
+  } else if (bound.createdAt) {
+    if (bound.createdAt.lt && !(row.createdAt < bound.createdAt.lt)) return false;
+    if (bound.createdAt.gt && !(row.createdAt > bound.createdAt.gt)) return false;
+  }
+  if (bound.messageId?.lt && !(row.messageId < bound.messageId.lt)) return false;
+  if (bound.messageId?.gt && !(row.messageId > bound.messageId.gt)) return false;
+  return true;
+}
+function seedRoom(count: number): Row[] {
+  // Pairs share a timestamp so the messageId tie-break is exercised.
+  return Array.from({ length: count }, (_, index) => ({
+    messageId: `m${String(index).padStart(3, "0")}`,
+    workItemId: "parent",
+    senderType: "agent",
+    senderAgentId: "agent",
+    senderUserId: null,
+    messageType: "comment",
+    body: `message ${index}`,
+    createdAt: new Date(Date.UTC(2026, 9, 27, 0, 0, Math.floor(index / 2))),
+  }));
+}
+function useTable(rows: Row[]) {
+  mocks.messages.mockImplementation(async (args: {
+    where: { workItemId: { in: string[] }; OR?: Bound[] };
+    orderBy: Array<Record<string, "asc" | "desc">>;
+    take: number;
+  }) => {
+    const direction = args.orderBy[0]?.createdAt ?? "asc";
+    const sign = direction === "asc" ? 1 : -1;
+    return rows
+      .filter((row) => args.where.workItemId.in.includes(row.workItemId))
+      .filter((row) => !args.where.OR || args.where.OR.some((bound) => matchesBound(row, bound)))
+      .sort((a, b) => sign * (a.createdAt.getTime() - b.createdAt.getTime() || a.messageId.localeCompare(b.messageId)))
+      .slice(0, args.take);
+  });
+}
+async function readRoom(params: Record<string, unknown> = {}) {
+  return roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", ...params }, "alice", { agentId: "agent" });
+}
+type Page = { messages: Array<{ messageId: string }>; order: string; hasMore: boolean;
+  newestCursor: string | null; oldestCursor: string | null };
+
+it("returns the 20 newest messages, newest first, with cursors, in a room past 20 messages", async () => {
+  mocks.children.mockResolvedValue([]);
+  useTable(seedRoom(25));
+  const result = await readRoom();
+  expect(result.success).toBe(true);
+  const page = result.data as Page;
+  expect(page.order).toBe("newest-first");
+  expect(page.messages).toHaveLength(20);
+  expect(page.messages[0]?.messageId).toBe("m024");
+  expect(page.messages[19]?.messageId).toBe("m005");
+  expect(page.hasMore).toBe(true);
+  expect(page.newestCursor).toEqual(expect.any(String));
+  expect(page.oldestCursor).toEqual(expect.any(String));
+});
+
+it("pages back with beforeCursor across equal timestamps without skipping or repeating", async () => {
+  mocks.children.mockResolvedValue([]);
+  const rows = seedRoom(45);
+  useTable(rows);
+  const seen: string[] = [];
+  let page = (await readRoom({ limit: 7 })).data as Page;
+  seen.push(...page.messages.map((message) => message.messageId));
+  while (page.hasMore) {
+    page = (await readRoom({ limit: 7, beforeCursor: page.oldestCursor })).data as Page;
+    seen.push(...page.messages.map((message) => message.messageId));
+  }
+  expect(seen).toEqual(rows.map((row) => row.messageId).reverse());
+});
+
+it("resumes with sinceCursor returning only later messages, oldest first", async () => {
+  mocks.children.mockResolvedValue([]);
+  const rows = seedRoom(25);
+  useTable(rows.slice(0, 20));
+  const first = (await readRoom()).data as Page;
+  expect(first.messages[0]?.messageId).toBe("m019");
+
+  useTable(rows);
+  const later = (await readRoom({ sinceCursor: first.newestCursor })).data as Page;
+  expect(later.order).toBe("oldest-first");
+  expect(later.messages.map((message) => message.messageId)).toEqual(["m020", "m021", "m022", "m023", "m024"]);
+  expect(later.hasMore).toBe(false);
+
+  const none = (await readRoom({ sinceCursor: later.newestCursor })).data as Page;
+  expect(none.messages).toEqual([]);
+  expect(none.newestCursor).toBe(later.newestCursor);
+});
+
+it("refuses a malformed cursor and a call that sets both cursors", async () => {
+  mocks.children.mockResolvedValue([]);
+  useTable(seedRoom(3));
+  expect(await readRoom({ sinceCursor: "not-a-cursor" })).toMatchObject({ success: false, error: "invalid_input" });
+  const page = (await readRoom()).data as Page;
+  expect(await readRoom({ sinceCursor: page.newestCursor, beforeCursor: page.oldestCursor }))
+    .toMatchObject({ success: false, error: "invalid_input" });
+});
+
+it("resolves @mentions in an agent's post against the workspace mention roster", async () => {
+  const roster = { "release-coworker": { type: "agent", id: "release-agent" } };
+  mocks.mentionRoster.mockResolvedValue(roster);
+  mocks.item.mockResolvedValue({ id: "room-item", itemId: "WI-ROOM", sourceType: "backlog-item", sourceId: "BI-ROOM", title: "Room", evidence: [] });
+  mocks.access.mockResolvedValue({ decision: { level: "action", reason: "authorized" }, agentPrincipalId: "PRN-agent" });
+  mocks.postComment.mockResolvedValue({ messageId: "msg-1", notifiedUserIds: [], mentionedAgentIds: ["release-agent"] });
+
+  const result = await roomMessagingPack.handlers.post_room_message(
+    { caseKey: "backlog-item:BI-ROOM", body: "@release-coworker please verify the build" },
+    "alice",
+    { agentId: "agent" },
+  );
+
+  expect(result.success).toBe(true);
+  expect(mocks.postComment).toHaveBeenCalledWith(expect.objectContaining({ roster }));
 });

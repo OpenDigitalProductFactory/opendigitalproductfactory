@@ -3,6 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { mcpCall } from "./mcp-client.mjs";
 import { readGitDiffDigest } from "./semantic-review-gate.mjs";
+import { classifyDocsOnlyDiff } from "./ci-evidence-plan.mjs";
 import {
   createLocalCiPassEvidenceValidity,
   writeLocalCiGateState,
@@ -13,23 +14,9 @@ import {
   resolveLocalCiTestProfile,
 } from "./local-integration-ci.mjs";
 
-const WORKSPACE_REQUIRED_DOCS = new Set([
-  "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md",
-  "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
-]);
-
-function isDocumentationSource(path) {
-  return path.startsWith("docs/") || /(^|\/)README\.md$|\.mdx?$/.test(path);
-}
-
+/** BI-78176241: the evidence planner's classifier is the one docs-only predicate. */
 export function couldBeDocumentationFiles(changedFiles) {
-  const hasDocumentationSource = changedFiles.some(isDocumentationSource);
-  return changedFiles.length > 0
-    && !changedFiles.some((path) => WORKSPACE_REQUIRED_DOCS.has(path))
-    && changedFiles.every((path) => (
-      isDocumentationSource(path)
-      || (hasDocumentationSource && path === "apps/web/lib/docs/doc-index.generated.json")
-    ));
+  return classifyDocsOnlyDiff(changedFiles).docsOnly;
 }
 
 export function repositorySlugFromRemote(remote) {

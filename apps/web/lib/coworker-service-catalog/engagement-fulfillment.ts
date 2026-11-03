@@ -13,7 +13,9 @@ type Offer = { offerId: string; serviceId: string; status: string; authorityBoun
 type Service = { serviceId: string; providerAgentId: string; status: string; authorityBoundary: string; riskTier: string; availabilityScope: string };
 type Engagement = { engagementId: string; offerId: string; serviceId: string; providerAgentId: string; requestedByUserId: string | null; requestedByAgentId: string | null; requestedOutcome: string; inputPayload: unknown; status: string; approvalContext: unknown; metadata: unknown };
 type Room = { capsuleId: string; repositoryFullName: string | null; headSha: string | null; archivedAt: Date | null; workspaceState: unknown };
-export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: { engagement: Engagement; offer: Offer; service: Service; room: Room }, taskRunId?: string, allowFailedPreAdmission = false): void {
+export type EngagementSnapshotState = { engagement: Engagement; offer: Offer; service: Service; room: Room };
+/** Shared original request/offer/material checks; each execution adapter owns its distinct association and lifecycle proof. */
+export function assertEngagementRequestSnapshot(binding: EngagementTaskBinding, state: EngagementSnapshotState): void {
   const { engagement, offer, service, room } = state;
   const reject = () => { throw new Error("engagement_binding_refused: current request, offer, authority or immutable scope no longer matches"); };
   if (!parseEngagementTaskBinding(binding)
@@ -21,7 +23,6 @@ export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: 
     || engagement.serviceId !== binding.serviceId || engagement.providerAgentId !== binding.providerAgentId
     || engagement.requestedByUserId !== binding.userId || engagement.requestedByAgentId !== binding.actorAgentId
     || engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload) !== binding.inputDigest
-    || !["requested", "accepted", "in-progress", ...(allowFailedPreAdmission ? ["failed"] : [])].includes(engagement.status)
     || record(engagement.approvalContext).required !== false
     || offer.offerId !== binding.offerId || offer.serviceId !== binding.serviceId
     || service.serviceId !== binding.serviceId || service.providerAgentId !== binding.providerAgentId
@@ -45,10 +46,21 @@ export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: 
   }
   const fulfillment = record(engagement.metadata).fulfillment;
   if(service.serviceId==="svc-ux-design-critique"&&fulfillment===undefined&&!binding.visualEvidenceRef)throw new Error("engagement_rendered_input_required: bind owned immutable rendered captures before first Critic dispatch");
-  if (fulfillment !== undefined && (!taskRunId || record(fulfillment).taskRunId !== taskRunId
-    || canonicalJson(record(fulfillment).binding) !== canonicalJson(binding))) reject();
+
 }
 
+
+/** Legacy fulfillment keeps its exact one-task association and status contract. */
+export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: EngagementSnapshotState,
+  taskRunId?: string, allowFailedPreAdmission = false): void {
+  assertEngagementRequestSnapshot(binding, state);
+  const { engagement } = state, fulfillment = record(engagement.metadata).fulfillment;
+  if (binding.presentAssessment || !["requested", "accepted", "in-progress", ...(allowFailedPreAdmission ? ["failed"] : [])].includes(engagement.status)
+    || fulfillment !== undefined && (!taskRunId || record(fulfillment).taskRunId !== taskRunId
+      || canonicalJson(record(fulfillment).binding) !== canonicalJson(binding))) {
+    throw new Error("engagement_binding_refused: current request, offer, authority or immutable scope no longer matches");
+  }
+}
 /** Checked again in governed dispatch, including native/deferred tool calls. */
 export function engagementToolAllowed(binding: EngagementTaskBinding, toolName: string, args: Record<string, unknown>): boolean {
   if (toolName === "wiki_query" || toolName === "search_ux_critique_corpus") return true;
@@ -114,10 +126,14 @@ export async function validateEngagementTask(input: {
       : !tokenGrants.includes(scope) || !actorGrants.includes(scope))
     || ENGAGEMENT_READ_TOOLS.some(name => !input.authorityScope.includes(`tool:${name}`))) throw new Error("engagement_grant_intersection_refused");
   if(binding.visualEvidenceRef)assertEngagementVisualReadGrants([tokenGrants,actorGrants,providerGrants]);
-  assertEngagementSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room }, input.taskRunId, input.allowPreAdmissionRecovery);
+  if (binding.presentAssessment) {
+    assertEngagementRequestSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room });
+    const { assertEngagementPresentAssociation } = await import("./engagement-present-assessment");
+    await assertEngagementPresentAssociation({ binding, taskRunId: input.taskRunId, db, requireAssociation: input.requireAssociation });
+  } else assertEngagementSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room }, input.taskRunId, input.allowPreAdmissionRecovery);
   if (input.request && (input.request.objective !== engagement.requestedOutcome
     || input.request.prompt !== buildEngagementTaskPrompt(binding, engagement))) throw new Error("engagement_request_content_refused");
-  if (input.requireAssociation && record(record(engagement.metadata).fulfillment).taskRunId !== input.taskRunId) throw new Error("engagement_execution_association_missing");
+  if (input.requireAssociation && !binding.presentAssessment && record(record(engagement.metadata).fulfillment).taskRunId !== input.taskRunId) throw new Error("engagement_execution_association_missing");
   for (const [agentId, requested] of [[actor.agentId, "action"], ...providerRefs.map(id => [id, "content"] as const)] as const) {
     const access = await resolveAgentWorkroomAccess({ userId: token.userId, agentId, workroomId: room.id, requested }, db);
     if (access.decision.level !== requested) throw new Error(`engagement_room_access_refused:${access.decision.reason}`);

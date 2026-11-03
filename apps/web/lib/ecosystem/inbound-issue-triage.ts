@@ -11,6 +11,7 @@
  * provenance. It is pure and dependency-injected: no Prisma, no fetch.
  */
 
+import { outcomeUnlessStated } from "@/lib/backlog/intake-outcome";
 import { createHash } from "crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
@@ -23,11 +24,12 @@ import {
   type BacklogIngestOutcome,
 } from "@/lib/operate/backlog-ingest";
 import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+import type { RepositoryAlert } from "./dependabot-reader";
 
 /** Where an inbound item came from. Part of the provenance marker, so a re-run
  *  matches the same origin instead of filing a second copy. Upstream issues
  *  are additionally qualified by repository (BI-952F08BA). */
-export type InboundSourceKind = "upstream-issue" | "peer-demand";
+export type InboundSourceKind = "upstream-issue" | "peer-demand" | "dependabot-alert";
 
 export interface InboundEcosystemItem {
   sourceKind: InboundSourceKind;
@@ -106,7 +108,9 @@ export function composeInboundBody(item: InboundEcosystemItem): string {
  * issue did not change, so the front door records nothing (BI-952F08BA).
  */
 export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
-  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null });
+  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null,
+    occurrenceCount: item.occurrenceCount ?? null, archetypeRefs: item.archetypeRefs ?? null,
+    affectedOrganizations: item.affectedOrganizations ?? null });
   return createHash("sha256").update(material).digest("hex");
 }
 
@@ -117,7 +121,18 @@ export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
  */
 function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin" | "reconcile"> {
   const kind = `ecosystem-${item.sourceKind}`;
-  if (item.sourceKind !== "upstream-issue") return { origin: { kind, id: item.sourceId } };
+  if (item.sourceKind === "peer-demand") return {
+    origin: { kind, id: item.sourceId },
+    reconcile: {
+      // A peer mirror has a globally unique identity, independent of a forge.
+      repository: "",
+      sourceUrl: item.url ?? null,
+      state: item.state ?? "open",
+      fingerprint: inboundSourceFingerprint(item),
+      title: item.title,
+      body: composeInboundBody(item),
+    },
+  };
   const repository = item.repository?.trim().toLowerCase();
   if (!repository) {
     // Refuse rather than fall back to the bare number: an unqualified origin is
@@ -131,8 +146,10 @@ function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin
       sourceUrl: item.url ?? null,
       state: item.state ?? "open",
       fingerprint: inboundSourceFingerprint(item),
+      title: item.title,
+      body: composeInboundBody(item),
       // Dual-read the pre-qualification marker until every legacy intake maps.
-      legacyId: item.sourceId,
+      ...(item.sourceKind === "upstream-issue" ? { legacyId: item.sourceId } : {}),
     },
   };
 }
@@ -140,13 +157,20 @@ function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin
 /** Map one inbound item onto the backlog front door's input contract. */
 export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestInput {
   const scope = parseArchetypeRefs(item.archetypeRefs);
+  const body = composeInboundBody(item);
+  // BI-458CCA8D: keep the requester's own outcome; derive one only when they stated none.
+  const outcome = outcomeUnlessStated(
+    body,
+    `${item.submitter ? `The requesting install \`${item.submitter}\`` : "The requester"} gets "${item.title.trim()}", or a clear answer (${item.sourceKind} ${item.sourceId}).`,
+  );
   return {
     title: item.title.slice(0, 500),
-    body: composeInboundBody(item),
+    body,
+    ...(outcome ? { outcome } : {}),
     // The origin really is a person at another install asking for something;
     // it merely ARRIVES by automation. Recording it as automated-detection
     // would erase the submitter the arbitration model depends on.
-    source: "user-request",
+    source: item.sourceKind === "dependabot-alert" ? "automated-detection" : "user-request",
     workType: isWorkType(item.workType) ? item.workType : "feature",
     // Provenance marker: a re-run of the sweep matches this same origin rather
     // than filing a duplicate.
@@ -156,6 +180,17 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
     ...(scope.archetypeIds.length > 0 ? { archetypeIds: scope.archetypeIds } : {}),
     lifecycleTags: ["ecosystem-inbound", item.sourceKind],
   };
+}
+
+/** Each provider finding becomes actionable work through the same intake front door. */
+export function mapDependabotAlerts(alerts: RepositoryAlert[], repo: { owner: string; name: string }): InboundEcosystemItem[] {
+  return alerts.map(alert => ({
+    sourceKind: "dependabot-alert", sourceId: String(alert.number),
+    repository: `${repo.owner}/${repo.name}`.toLowerCase(), state: alert.state,
+    title: `Address ${alert.severity} ${alert.packageName} advisory (${alert.manifest}, Dependabot #${alert.number})`,
+    summary: `${alert.summary}\n\nAdvisory: ${alert.advisory}\nSeverity: ${alert.severity}\nPackage: ${alert.packageName}\nManifest: ${alert.manifest}\nAffected range: ${alert.vulnerable}\nPatched release: ${alert.patched ?? "none published — assess exposure or patch/remove the dependency"}\n\nVerify the resolved dependency and existing vulnerability treatment before remediation. A provider finding is not proof of deployed reachability.`,
+    workType: "bug", url: alert.url,
+  }));
 }
 
 export async function runInboundIssueTriage(deps: InboundTriageDeps): Promise<InboundTriageResult> {

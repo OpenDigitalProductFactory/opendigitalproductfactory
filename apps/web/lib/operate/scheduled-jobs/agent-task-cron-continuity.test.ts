@@ -3,6 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
   scheduledAgentTask: {
     findUnique: vi.fn(),
     update: vi.fn(),
@@ -73,6 +75,8 @@ const claimDb = db as unknown as Parameters<typeof claimScheduledTaskCadence>[0]
 
 beforeEach(() => {
   vi.resetAllMocks();
+  db.$transaction.mockImplementation(async callback => callback(db));
+  db.$queryRaw.mockResolvedValue([{ taskId: TASK_ID }]);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(RESUME_AT);
   taskRow = {

@@ -129,3 +129,32 @@ Native evidence `cmvoj2jhf020p01o00ty1sxwc` records the original CE-724328D6 att
 ### Boundaries and rollback
 
 No API, schema, routing policy, provider write, grant, assignment ownership, inference dispatch or stored evidence contract changes. Existing outcomes, holds, costs and quality denominators remain intact. Revert the correction PR if needed; no data migration or stored-configuration rollback is required. Plan/document work alone does not complete implementation, deployment, current UI acceptance or the outstanding attributable specialist contribution.
+
+
+## Residual presentation correction - October 28
+
+Continue BI-2BBD9D34 in successor WC-93E1F31C, branch `fix/routing-presentation-corrections`, based on `4c290ad54d46c650f1fc954d175cb478dbab761d`. Preserve the archived earlier rooms, their delivered PRs, immutable evidence and original UNKNOWN Critic engagements. This is bounded presentation rework under the unchanged seven acceptance criteria.
+
+The current served/source audit confirms three remaining issues: FlowGroup's All buttons have height but no minimum width; the evidence footer joins its two sentences; evaluation says `0/N known` without stating that the numerator counts successful executions. Apply the existing 44px minimum width to both shared All buttons, add a sentence separator to the existing footer, and clarify the localized cohort wording as successes among known executions. Retain the selected-model execution denominator, separate unknown count, URL scope, existing controls and all routing/provider authority.
+
+Reuse the existing research, reviewed prototype, Source evidence disclosure, report-kit and platform touch-target guidance. Run the existing workspace/navigation/projection and i18n catalog suites, package typechecks, gate-context obligations and the governed exact-tree merged-code gate. The graph is updating and has no linked tests for these files, so include colocated tests and shared report-kit consumers. These reversible presentation edits add no behavior that needs a new unit test; current served DOM and target geometry are required verification.
+
+Land one DCO-signed protected PR after independent source assessment and the current publication policy. Verify the containing canonical release at 320px, 390px and 1280px in both themes: All controls at least44x44CSSpx, no horizontal overflow, readable footer, explicit success/known/unknown wording, unchanged source disclosure/search/clear, Escape and focus return, and retained provider/task/data/time scope. Do not relabel earlier screenshots as current verification. Record actual unrun checks and limits. No user-guide workflow changes are needed because labels, destinations, controls and investigation steps remain the same; this addendum documents the clarified metric meaning. Revert is the correction PR; no data/configuration rollback applies.
+
+Native UX Critic contribution, source-coverage mapping, author disposition and independent whole-case acceptance remain owed separately. This correction neither dispatches nor recreates a Critic engagement and is not a professional UX verdict.
+
+
+
+## Assignment search recovery correction - October 29
+
+Served source `dc1e4b5f66fae06c5c1cfcb8f82ec79b971e5cc7` confirms an AC-GRAPH gap: an unmatched assignment-catalog search renders an empty list without a result count or recovery message. Clearing restores the six scoped assignments and Escape restores the initiating All control and original URL. Workroom assurance finding `routing-assignment-zero-results-observed-20261030` retains the screenshot, accessibility tree and observed recovery. The same branch is unchanged in the reviewed/published `478ccfaa` anchor and PR 6765. This is further correction of the existing search-and-inspect flow under the unchanged seven acceptance criteria.
+
+1. Add a first-failing workspace regression for all-provider and selected-provider scopes: zero matches must show an explicit status and zero count; clearing must restore only assignments within provider/task/data/window scope, and preserve the URL. Retain existing assignment label/identifier search and settings links.
+2. Derive the existing assignment predicate once and use the filtered array for both the list and shared FilterBar count. Reuse the already imported report-kit EmptyState for localized no-match and clear-search guidance, matching the existing provider catalog. No new primitive, route, control, store or authority is introduced.
+3. Update the operator guide's existing search-recovery guidance. Run workspace/projection/report-kit and locale tests, both web TypeScript programs, applicable prose/style/derived guards, independent assessment and the applicable protected publication procedure for the amended source. Historical anchor checks remain attributed to 478ccfaa; any reused evidence must satisfy the actual adapter, never a fabricated passing identity.
+4. On the containing release, add assignment no-match/clear/scoped-restore checks to the existing phone/desktop/theme matrix. Retain native Critic contribution, author disposition and independent acceptance as separate obligations. Revert the follow-up PR; no data/configuration rollback is needed.
+
+
+
+
+PR 6765 merged at its reviewed 478ccfaa head while this additional recovery correction was being prepared. Retain that delivery and gate evidence as historical facts. Qualify this follow-up against current main with a new normal exact-head canonical gate and a regular follow-up PR; the closed-PR published-correction shortcut does not apply.

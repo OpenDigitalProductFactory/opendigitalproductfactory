@@ -202,11 +202,11 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
-      # Management API for Ollama pull/delete/tags (distinct from OpenAI-compat
-      # inference URL above). On Docker Desktop, host.docker.internal reaches
-      # Ollama installed natively on the host. Linux sets this via the
-      # docker-compose.linux.yml overlay instead (to http://ollama:11434).
-      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
+      # Optional explicit legacy override. Desktop's local inference and
+      # management root resolve from LLM_BASE_URL unless the operator sets it;
+      # do not inject a competing Ollama endpoint into managed-engine admission.
+      # The Linux overlay supplies its intentional http://ollama:11434 default.
+      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       # Git SHA of the running image. This compose interpolation only resolves
       # to a value when DEPLOYED_SHA or DPF_VERSION is exported in the SHELL env
@@ -404,6 +404,11 @@ services:
       # per-install operator opt-in via .env.
       DPF_WORKCAPSULE_REAPER_ENABLED: ${DPF_WORKCAPSULE_REAPER_ENABLED:-1}
       DPF_WORKCAPSULE_REAPER_AUTO_REAP: ${DPF_WORKCAPSULE_REAPER_AUTO_REAP:-0}
+      # Per-room overseer duty on the Workroom drive (BI-8E1486FA): closes rooms whose
+      # item is finished or whose merged branch has no session, and routes stuck rooms
+      # to their Process Overseer. Default 0 = acting. Set 1 to keep the per-cycle
+      # summary and write nothing.
+      DPF_WORKROOM_OVERSEER_DRY_RUN: ${DPF_WORKROOM_OVERSEER_DRY_RUN:-0}
       # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
       # per-branch CI images + stray compose projects INCLUDING their named
       # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks

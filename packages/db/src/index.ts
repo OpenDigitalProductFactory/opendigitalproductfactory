@@ -102,6 +102,7 @@ export {
   ensurePayloadIndexes,
   upsertVectors,
   searchSimilar,
+  searchLexical,
   scrollPoints,
   deleteVectors,
   isVectorStoreHealthy,
@@ -175,6 +176,19 @@ export {
   type PrincipleDimension,
 } from "./wiki-taxonomy";
 export { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
+export {
+  RELATION_TYPES,
+  RelationTypeError,
+  assertRelationWrite,
+  getRelationType,
+  isGenericRelationName,
+  lintRelationVocabulary,
+  toRelationType,
+  type RelationClass,
+  type RelationStatus,
+  type RelationType,
+  type RelationTypeDef,
+} from "./relation-vocabulary";
 export {
   getDownstreamImpact,
   getUpstreamDependencies,
@@ -436,7 +450,18 @@ export {
   syncDocumentReference,
   syncEaElement,
   syncEaRelationship,
+  replaceGraphEdgesFromSource,
+  projectWikiLinksToGraph,
 } from "./graph-sync";
+// BI-23900D0A: the one writer for a wiki page's out-links, and its backfill.
+export {
+  replaceWikiPageOutLinks,
+  reconcileWikiPageLinks,
+  type WikiLinkClient,
+  type ProjectWikiLinks,
+  type ReplaceWikiPageOutLinksResult,
+  type ReconcileWikiPageLinksResult,
+} from "./wiki-links";
 export {
   CODE_GRAPH_KEY,
   DOC_GRAPH_KEY,

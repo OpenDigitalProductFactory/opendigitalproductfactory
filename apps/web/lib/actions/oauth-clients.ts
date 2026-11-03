@@ -22,6 +22,7 @@ import { prepareClientSecret } from "@/lib/auth/oauth-tokens";
 import { isRegisterableRedirectUri } from "@/lib/auth/oauth-clients";
 import { isPublicScope, PUBLIC_SCOPES, type PublicScope } from "@/lib/auth/oauth-scope-map";
 import { listClientPeople, revokeClientPersonGrants, type ClientPerson } from "@/lib/auth/oauth-client-people";
+import { endAccountAgentAccess, listAccountAgentAccess, type AccountAgentAccess } from "@/lib/auth/account-agent-access";
 import { eligibleOAuthCoworkers } from "@/lib/auth/oauth-identity-binding";
 
 const ADMIN_PATH = "/admin/platform-development";
@@ -270,6 +271,29 @@ export async function revokeOAuthClientPersonGrants(input: {
   const actor = await requireOperator();
   if (isDenied(actor)) return err(actor.denied);
   const result = await revokeClientPersonGrants(prisma, { ...input, actor });
+  if (result.ok) revalidatePath(ADMIN_PATH);
+  return result;
+}
+
+/** Every agent credential one account holds, across all clients (BI-DB506554). */
+export async function listAccountAgentAccessAction(input: { account: string }): Promise<ActionResult<AccountAgentAccess>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  return listAccountAgentAccess(prisma, { account: input.account ?? "", actor });
+}
+
+/**
+ * End one account's agent access everywhere: its tokens and refresh grants
+ * under every client, and the headless clients it owns. Same stamp and guards
+ * as the per-client control above.
+ */
+export async function endAccountAgentAccessAction(input: {
+  userId: string;
+  reason: string;
+}): Promise<ActionResult<{ revokedAccessTokens: number; revokedRefreshTokens: number; revokedCredentialsClients: number }>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  const result = await endAccountAgentAccess(prisma, { ...input, actor });
   if (result.ok) revalidatePath(ADMIN_PATH);
   return result;
 }

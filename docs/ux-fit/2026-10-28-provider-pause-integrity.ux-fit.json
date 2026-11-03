@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "separate-status",
+  "decisionInteractionId": "DI-95546DE16E78",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderRoutingControlPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "separate-status",
+      "expand-details"
+    ]
+  },
+  "sourceDecision": {
+    "verdict": "proceed",
+    "confidence": "high",
+    "autonomyEligible": true,
+    "prototype": "docs/ux-fit/2026-10-28-provider-pause-integrity.html",
+    "runtimeVerification": "Pending governed shared runtime verification; no live fix claimed."
+  }
+}

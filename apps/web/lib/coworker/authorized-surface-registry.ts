@@ -15,9 +15,21 @@ import {
   projectDiscoveryOperationsSurface,
 } from "./surfaces/discovery-operations-surface";
 
-export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE] as const;
+import { getResponseFeedback } from "@/lib/routing/response-feedback";
+import { RESPONSE_FEEDBACK_LOADER_ID, RESPONSE_FEEDBACK_SURFACE, projectResponseFeedbackSurface } from "./surfaces/response-feedback-surface";
+
+export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE, RESPONSE_FEEDBACK_SURFACE] as const;
 
 const loaders = new Map([
+  [RESPONSE_FEEDBACK_LOADER_ID, async (context: SurfacePrincipalContext) => {
+    const ids = context.workContext?.resourceIds;
+    if (!serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("get_response_feedback")
+      || context.workContext?.resourceType !== "agent-message" || ids?.length !== 1
+      || !ids[0]?.trim() || !context.actingAgentId?.trim()) throw new Error("forbidden");
+    return projectResponseFeedbackSurface(await getResponseFeedback(ids[0], {
+      userId: context.delegatingUserId, agentId: context.actingAgentId,
+    }));
+  }],
   [DISCOVERY_OPERATIONS_LOADER_ID, async (context: SurfacePrincipalContext) => {
     const model = await getDiscoveryOperationsViewModel({
       includeConnections: serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("list_discovery_connections") ?? false,
@@ -87,7 +99,10 @@ function serverContext(context: SurfacePrincipalContext): ServerSurfaceContext {
 export const authorizedSurfaceRuntime = createAuthorizedSurfaceRuntime({
   catalog: AUTHORIZED_SURFACE_CATALOG,
   loaders,
-  authorizeSurface: async () => true,
+  authorizeSurface: async (context, definition) => definition.surfaceId !== RESPONSE_FEEDBACK_SURFACE.surfaceId
+    || (serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("get_response_feedback") === true
+      && context.workContext?.resourceType === "agent-message" && context.workContext.resourceIds?.length === 1
+      && !!context.workContext.resourceIds[0]?.trim() && !!context.actingAgentId?.trim()),
   authorizeAction: async (context, action) =>
     action.actionClass === "ui-local"
     || (!!action.tool && serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has(action.tool)),

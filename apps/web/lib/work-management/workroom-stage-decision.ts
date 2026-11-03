@@ -24,7 +24,7 @@
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 import type { EffectiveHumanAccountability } from "./human-accountability";
-import { declaresRefuseRoute } from "./work-shape-flow-graph";
+import { declaresRefuseRoute } from "@dpf/validators/workroom/flow-graph";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 
 /** Evidence kinds that record a human decision. A governed stage must declare one. */

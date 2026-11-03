@@ -1,3 +1,4 @@
+import { withoutScopeMetadataFields } from "../work-capsules/scope-metadata.mjs";
 // EP-WORK-POSTURE Slice D (BI-4F468192) — the room's DECLARED posture.
 //
 // Stored inside the Workroom's `scopeClaims` JSON under the key
@@ -14,11 +15,11 @@
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
-} from "@/lib/proactivity/proactivity-types";
-import { PROACTIVITY_LEVELS } from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy/proactivity-types";
+import { PROACTIVITY_LEVELS } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import { isGoldenTrianglePreference } from "@/lib/golden-triangle/persistence";
-import type { RoomPostureDeclaration } from "@/lib/work-posture";
+import type { RoomPostureDeclaration } from "@dpf/validators/workroom-policy";
 
 export type WorkroomPostureClaimEntry = {
   workroomPosture: RoomPostureDeclaration;
@@ -94,7 +95,6 @@ export function withWorkroomPostureClaim(
   declaration: RoomPostureDeclaration,
   now: Date = new Date(),
 ): unknown[] {
-  const existing = Array.isArray(scopeClaims) ? scopeClaims : [];
-  const preserved = existing.filter((entry) => declarationFrom(entry) === null);
+  const preserved = withoutScopeMetadataFields(scopeClaims, ["workroomPosture"]);
   return [...preserved, buildWorkroomPostureClaim(declaration, now)];
 }

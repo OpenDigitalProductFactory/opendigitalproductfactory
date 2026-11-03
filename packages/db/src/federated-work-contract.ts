@@ -54,10 +54,22 @@ export interface FederatedWorkDeferralV1 {
   deferredAt: string | null;
 }
 
+/** Whether the origin is working the item right now (BI-91FC6B9A): a held
+ *  claim or a live Workroom naming it. Lets a peer see the work before it
+ *  duplicates it. `since` is the claim time when one is held. */
+export interface FederatedWorkClaimV1 {
+  active: boolean;
+  since: string | null;
+  workrooms: number;
+}
+
 export interface FederatedWorkItemV1 {
   itemId: string;
   title: string;
   status: string;
+  /** The origin's claim and live-Workroom presence. Absent on pages from a peer
+   *  older than this field. */
+  claim?: FederatedWorkClaimV1 | null;
   /** Present when `status` is `deferred` AND the origin holds an attributable
    *  deferral; null otherwise (including an origin that parked the item with
    *  nothing attached — the receiver reports that, it does not hide it). Absent
@@ -232,6 +244,18 @@ export function validateFederatedWorkItemV1(value: unknown, path = "item"): stri
   if (!isIso(value.updatedAt)) violations.push(`${path}.updatedAt:invalid`);
   if (!isNullableIso(value.completedAt)) violations.push(`${path}.completedAt:invalid`);
   violations.push(...validateFederatedWorkDeferralV1(value.deferral, `${path}.deferral`));
+  violations.push(...validateFederatedWorkClaimV1(value.claim, `${path}.claim`));
+  return violations;
+}
+
+/** Absent or null is well-formed (an older peer). Present must be complete. */
+export function validateFederatedWorkClaimV1(value: unknown, path = "claim"): string[] {
+  if (value === null || value === undefined) return [];
+  if (!isRecord(value)) return [`${path}:not-an-object`];
+  const violations: string[] = [];
+  if (typeof value.active !== "boolean") violations.push(`${path}.active:invalid`);
+  if (!isNullableIso(value.since)) violations.push(`${path}.since:invalid`);
+  if (!Number.isInteger(value.workrooms) || (value.workrooms as number) < 0) violations.push(`${path}.workrooms:invalid`);
   return violations;
 }
 

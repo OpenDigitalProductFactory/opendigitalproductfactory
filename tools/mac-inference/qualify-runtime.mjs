@@ -16,6 +16,20 @@ import { admittedLeaseTtlMs, superviseLeaseRun } from '../../scripts/lib/lease-s
 import { sha256, hashFile } from './package.mjs';
 import { verifyRuntimePackage, stageVerifiedRuntime, verifyEngineQualification } from './runtime-profile.mjs';
 import { createRuntimeLaunchAgent, renderRuntimeLaunchAgent } from './runtime-launchagent.mjs';
+import { transferRuntimeModel, configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot,
+  restoreRuntimeModelProfiles, verifyRuntimeModelProfiles } from './runtime-model-store.mjs';
+export { configureDrainedCandidate, configurationSnapshot, loopbackManagementRoot };
+export function capturedQualificationProfiles(report) {
+  check(Array.isArray(report.models) && report.models.length === 2
+    && Array.isArray(report.configurations) && report.configurations.length === 2, 'Captured qualification profiles unavailable');
+  return report.models.map(model => {
+    const entries = report.configurations.filter(entry => entry.model === model.model);
+    check(entries.length === 1 && entries[0].digest === model.digest && Array.isArray(entries[0].original),
+      'Captured qualification configuration binding changed');
+    return { model: model.model, digest: model.digest, modelMetadataSha256: model.modelMetadataSha256,
+      configuration: structuredClone(entries[0].original) };
+  });
+}
 import { validateOwnedLease, validatedModelDigest, runnerActivity, metric, testEndpoint, makeContext,
   coldMessages, authorityAwareSignal, recordAuthorityFence } from './qualify-engine.mjs';
 
@@ -23,41 +37,10 @@ const execute = promisify(execFile), pause = ms => new Promise(r => setTimeout(r
 const BRANCH = 'codex/mac-inference-runtime';
 const check = (value, message) => { if (!value) throw new Error(message); };
 const modelPath = ref => '/models/' + ref.split('/').map(encodeURIComponent).join('/');
-export function loopbackManagementRoot(value) {
-  const url = new URL(value);
-  check(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) && !url.username && !url.password
-    && ['http:', 'https:'].includes(url.protocol) && url.pathname === '/' && !url.search && !url.hash,
-  'Qualification requires a loopback management root');
-  return url.href.replace(/\/$/, '');
-}
-export function configurationSnapshot(rows, model, digest) {
-  check(Array.isArray(rows), 'Configuration capture unavailable');
-  const modes = new Set();
-  return rows.map(row => {
-    check(row && row.Backend === 'llama.cpp' && row.Model === model && row.ModelID === digest
-      && typeof row.Mode === 'string' && row.Mode.length > 0 && !modes.has(row.Mode)
-      && row.Config && typeof row.Config === 'object' && !Array.isArray(row.Config), 'Configuration model identity changed');
-    modes.add(row.Mode);
-    return { ...structuredClone(row.Config), model, mode: row.Mode };
-  }).sort((a, b) => a.mode.localeCompare(b.mode));
-}
 export function runtimeLeaseProjection(lease, expected) {
   validateOwnedLease(lease, { ...expected, branch: BRANCH });
   const { leaseId, ownerSessionId, branchName, status, phase, expiresAt } = lease;
   return { schemaVersion: 1, leaseId, ownerSessionId, branchName, status, phase, expiresAt };
-}
-export async function configureDrainedCandidate(entries, { readBaselineRunners, writeConfiguration, readConfiguration }) {
-  for (const entry of entries) {
-    for (const config of entry.original) {
-      const rows = await readBaselineRunners();
-      check(runnerActivity(rows).idle && rows.length === 0,
-        'Docker model resident before configure-triggered candidate preload');
-      await writeConfiguration(config);
-    }
-    const observed = configurationSnapshot(await readConfiguration(entry.model), entry.model, entry.digest);
-    check(JSON.stringify(entry.original) === JSON.stringify(observed), 'Candidate model configuration changed');
-    entry.candidate = observed;
-  }
 }
 export async function awaitRuntimeAdmission({ claim, bind, assertSource, observe = async () => {},
   delay = pause, now = Date.now, waitDeadline, signal }) {
@@ -188,30 +171,35 @@ async function run(a) {
   const cleanup = async () => {
     if (cleaned) return; cleaned = true;
     deadline = Math.min(Date.now() + 45000, Date.parse(lease?.expiresAt) - 15000);
-    if (service) { report.candidateShutdown = await service.stop(); await checkpoint(); }
+    if (service) {
+      report.candidateShutdown = await service.stop();
+      check(report.candidateShutdown?.stopped === true, 'Owned candidate shutdown unconfirmed');
+      await checkpoint();
+    }
     if (report.baselineUnloadedForQualification && !report.baselineRestored) {
       validate();
+      check(report.baselineProfileWriteUncertain !== true, 'Uncertain baseline configuration write requires reconciliation');
+      const models = capturedQualificationProfiles(report);
+      await restoreRuntimeModelProfiles({ expected: models, root: original, json, recovery: true,
+        writeConfiguration: async body => {
+          report.baselineProfileWriteUncertain = true;
+          return (await request(original + '/engines/_configure', { body, timeout: 30000, recovery: true })).arrayBuffer();
+        } });
+      report.baselineProfileWriteUncertain = false;
       const value = await completion(original + '/engines/llama.cpp', [{ role: 'user', content: 'Reply with OK.' }], undefined, true);
-      report.baselineRestored = value.metric.finishReason === 'stop';
-      check(report.baselineRestored, 'Docker restoration completion failed');
+      check(value.metric.finishReason === 'stop', 'Docker restoration completion failed');
+      await verifyRuntimeModelProfiles({ expected: models, root: original, json, recovery: true });
+      report.baselineRestored = true;
       await checkpoint();
     }
   };
   const transfer = async (candidate, model, digest) => {
     validate();
     console.log(JSON.stringify({ phase: 'export-load', model }));
-    const response = await request(original + modelPath(model) + '/export', { timeout: 120000 });
-    const signal = authorityAwareSignal(cancel.signal, authority.signal, Math.min(120000, deadline - Date.now()));
-    const loaded = await fetch(candidate + '/models/load', { method: 'POST', body: response.body,
-      duplex: 'half', headers: { 'content-type': 'application/x-tar' }, signal });
-    check(loaded.ok, 'Candidate stock model load failed: ' + loaded.status); await loaded.arrayBuffer();
-    const split = model.lastIndexOf(':'); check(split > model.lastIndexOf('/'), 'Explicit model tag required');
-    // Stock export does not promise preservation of tag aliases. Bind the known digest explicitly.
-    await request(candidate + modelPath(digest) + '/tag?repo=' + encodeURIComponent(model.slice(0, split))
-      + '&tag=' + encodeURIComponent(model.slice(split + 1)), { method: 'POST', timeout: 30000 });
-    const card = await json(candidate, modelPath(model), { timeout: 3000 });
-    validatedModelDigest(digest, card.id);
-    return { model, digest, modelMetadataSha256: sha256(JSON.stringify(card.config)), transfer: 'stock-export-load-tag' };
+    return transferRuntimeModel({ original, candidate, model, digest, request, json,
+      loadArchive: body => fetch(candidate + '/models/load', { method: 'POST', body, duplex: 'half',
+        headers: { 'content-type': 'application/x-tar' },
+        signal: authorityAwareSignal(cancel.signal, authority.signal, Math.min(120000, deadline - Date.now())) }) });
   };
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => cancel.abort());
   try {
@@ -269,6 +257,7 @@ async function run(a) {
       },
       terminate: async () => { fenced = true; recordAuthorityFence(report); authority.abort(); cancel.abort(); if (service) await service.stop(); },
       run: async () => {
+        let primaryFailure = false;
         try {
           report.runtimeInspectionStarted = true;
           const verified = await verifyRuntimePackage(a.package);
@@ -316,10 +305,19 @@ async function run(a) {
             report.configurations.push({ model, digest, original: config, candidate: 'unrun' }); await checkpoint();
           }
           await unload(original);
+          const baselineModels = capturedQualificationProfiles(report);
+          await restoreRuntimeModelProfiles({ expected: baselineModels, root: original, json,
+            writeConfiguration: async body => {
+              report.baselineProfileWriteUncertain = true;
+              return (await request(original + '/engines/_configure', { body, timeout: 30000 })).arrayBuffer();
+            } });
+          // Only exact readback settles these writes; cleanup must not repeat an uncertain dispatch.
+          report.baselineProfileWriteUncertain = false;
           const context = makeContext(3197);
           report.workload = { version: 'dpf-mac-model-controls.v1', contextLineCount: 3197,
             coldMessagesSha256: sha256(JSON.stringify(coldMessages(context))), transport: 'stock-model-runner-api', thinking: false, maxOutputTokens: 256 };
           await testEndpoint('docker-baseline', original + '/engines/llama.cpp', context, { request: completion, results: report.results }); await checkpoint();
+          await verifyRuntimeModelProfiles({ expected: baselineModels, root: original, json });
           await unload(original);
           await configureDrainedCandidate(report.configurations, {
             readBaselineRunners: () => json(original, '/engines/ps', { timeout: 3000 }),
@@ -344,7 +342,14 @@ async function run(a) {
           check(report.results.length === 8 && report.results.every(x => x.correct) && report.embedding.correct && report.baselineRestored,
             'One or more runtime completion controls failed');
           report.status = 'runtime-api-qualified';
-        } finally { await cleanup(); }
+        } catch (error) { primaryFailure = true; throw error; }
+        finally {
+          try { await cleanup(); }
+          catch (error) {
+            if (!primaryFailure) throw error;
+            report.failures.push('Restoration: ' + error.message);
+          }
+        }
       },
     });
   } catch (error) { recordRuntimeFailure(report, error); }

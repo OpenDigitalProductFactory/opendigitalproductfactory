@@ -81,15 +81,14 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
     const coo = cooById.get(display.capsuleId) ?? null;
     return {
       capsuleId: display.capsuleId, backlogItemId: display.backlogItemId,
-      title: display.title, status: display.status, source: display.source,
-      executorKind: display.executorKind, attribution: display.attribution,
-      portfolioRole: display.portfolioRole, headBranch: display.headBranch,
+      title: display.title, status: display.status,
+      portfolioRole: display.portfolioRole,
       pullRequestUrl: display.pullRequestUrl,
-      updatedAt: room.updatedAt instanceof Date ? room.updatedAt.toISOString() : String(room.updatedAt),
-      liveness: display.liveness, isLive: display.isLive, isReapable: display.isReapable,
-      livenessReason: display.livenessReason, trueLivenessAt: display.trueLivenessAt,
+      liveness: display.liveness, isLive: display.isLive,
       accountableName: owner?.accountableDisplayName ?? null,
-      operator: projectWorkroomOperatorSummary({ ...display,
+      operator: projectWorkroomOperatorSummary({ ...display, recovery: room.recovery,
+        executorKind: typeof room.executorKind === "string" ? room.executorKind : null,
+        decisions: room.decisions as Array<{ title: string; condition: string }> | undefined,
         accountability: owner?.accountability,
         drive: driveOf(room) }),
       coo: coo ? {
@@ -108,16 +107,16 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
   // rather than manufacturing one — and a blocked room contributes its recorded
   // liveness reason as the blocker. Nothing here asserts a verified receipt,
   // because a terminal status is not one.
-  const activityRooms: RoomActivityInput[] = workrooms.map((room) => ({
-    roomId: room.capsuleId,
-    title: room.title,
+  const activityRooms: RoomActivityInput[] = inventory.capsulesAll.map((room) => ({
+    roomId: String(room.capsuleId),
+    title: String(room.title),
     portfolioRole: (room.portfolioRole ?? null) as RoomActivityInput["portfolioRole"],
-    branchId: room.portfolioRole ?? "unplaced",
-    href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`,
-    status: room.status,
-    latestAction: room.coo?.lastAction ?? null,
-    blocker: room.status === "blocked" ? room.livenessReason : null,
-    evidenceAt: room.trueLivenessAt ?? null,
+    branchId: typeof room.portfolioRole === "string" ? room.portfolioRole : "unplaced",
+    href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: String(room.capsuleId) })}`,
+    status: String(room.status),
+    latestAction: cooById.get(String(room.capsuleId))?.lastAction ?? null,
+    blocker: room.status === "blocked" && typeof room.livenessReason === "string" ? room.livenessReason : null,
+    evidenceAt: typeof room.trueLivenessAt === "string" ? room.trueLivenessAt : null,
   }));
   const activity = projectPortfolioActivityPage({ rooms: activityRooms, now: new Date(), pageSize: 50 });
   // Labels are resolved here and passed as data. The tree is a client component,

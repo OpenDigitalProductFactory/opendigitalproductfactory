@@ -6,7 +6,7 @@ import { renderBuildDesignText } from "./render-build-design-text";
 import { renderBuildPlanText } from "./render-build-plan-text";
 
 import { readDocumentBlob } from "@/lib/documents/blob-storage";
-import { resolveRepositoryArtifact } from "./repository-artifact";
+import { resolveRepositoryArtifact, type MergedRepairProof, type RepositorySourceAdmission } from "./repository-artifact";
 import type { InitiativeArtifactRef, ResolvedInitiativeArtifact } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -121,7 +121,10 @@ export async function resolveInitiativeArtifact(args: {
   locator: InitiativeArtifactRef;
   subject: InitiativeSubject;
   workroomRef?: InitiativeReviewBinding["workroomRef"];
+  sourceAdmission?: RepositorySourceAdmission;
   canonicalPlanProof?: CanonicalPlanSourceProof;
+  /** BI-CE661173: server-resolved proof that the locator is the item's merged repair commit. */
+  mergedRepairProof?: MergedRepairProof;
   db?: InitiativeArtifactResolverDb;
   resolveDocumentAuthorAgent?: (versionId: string, principalId: string) => Promise<string | null>;
   documentBelongsToSubject?: (versionId: string, subject: InitiativeSubject) => Promise<boolean>;
@@ -279,11 +282,13 @@ export async function resolveInitiativeArtifact(args: {
 
   let providerBlob: ProviderResolvedBlob | null;
   try {
-    if (args.resolveRepositoryBlob) {
+    if (args.resolveRepositoryBlob && args.locator.kind === "repo-blob-at-commit") {
       providerBlob = await args.resolveRepositoryBlob(args.locator);
     } else {
       const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject,
-        workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof, db: db as never });
+        workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof,
+        sourceAdmission: args.sourceAdmission,
+        ...(args.mergedRepairProof ? { mergedRepairProof: args.mergedRepairProof } : {}), db: db as never });
       if (!resolved.ok) return resolved;
       providerBlob = resolved.artifact;
     }

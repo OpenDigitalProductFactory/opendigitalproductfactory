@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "same-field-editable-with-derived-hint",
+  "decisionInteractionId": "DI-30081792E1CB",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/BacklogPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "same-field-editable-with-derived-hint",
+      "read-only-outcome-line",
+      "create-only-as-before"
+    ]
+  }
+}

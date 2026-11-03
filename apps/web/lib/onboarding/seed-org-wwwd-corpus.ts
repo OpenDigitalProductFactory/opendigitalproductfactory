@@ -53,6 +53,7 @@ import {
   ensureOrgDecisionPerspectiveProfile,
   type EnsureOrgDecisionPerspectiveProfileClient,
 } from "./ensure-org-decision-perspective-profile";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 export { ORG_PERSPECTIVE_FALLBACK_PROFILE_ID } from "./ensure-org-decision-perspective-profile";
 
@@ -369,6 +370,11 @@ export async function seedOrgWwwdCorpus(
     })) as { id: string };
 
     wikiPageIds.push(saved.id);
+    await syncWikiPageLinks(db as unknown as Parameters<typeof syncWikiPageLinks>[0], {
+      pageId: saved.id,
+      organizationId,
+      body: page.body,
+    });
 
     // Only append a revision + re-embed when the content actually changed —
     // keeps re-runs a true no-op on the revision log and the embedding API.

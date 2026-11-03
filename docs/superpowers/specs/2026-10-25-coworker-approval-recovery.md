@@ -32,6 +32,8 @@ CONTRACT-EVIDENCE: A blocked record never earns a completing receipt. This repai
 
 The approval wait also survives a successful report from the same required tool or a separate missing required write. The supported Ask again replacement supersedes an expired ancestor only through its recorded lineage and matching owner, coworker, action, run and binding fingerprints. It preserves independent unresolved requests and all history. Independent client review identified both cases; regression tests reproduced them before repair.
 
+CONTRACT-OWNER (BI-17238133 break-fix): the mandate's room-owner check derives the room's task owner by the drive's own rule (BI-D13FA12A): the requester or creator user that has not been handed over, else the accountable person with an active user. Workroom has no owner column; the first implementation selected one and every scheduled Workroom run failed at the query. The mandate's Prisma selects are typed against the generated client, and a schema-grounded test judges the selects it sends, so an unknown field fails typecheck and tests.
+
 ## Ordered repair
 
 1. Keep the two first-failing regression tests and extend the report matrix across wrong room, wrong agent, wrong kind/stage, governed stage, completed outcome, and missing run context. Resolve graph-linked tests before implementation.

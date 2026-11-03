@@ -621,13 +621,13 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(result.content).toBe("hello");
     });
 
-    it("disables the OAuth provider when the token refresh fails", async () => {
+    it("disables the OAuth provider when the renewal confirms the sign-in was refused", async () => {
       mockPrisma.modelProvider.findUnique.mockResolvedValue({
         providerId: "prov1",
         name: "Claude Subscription",
         authMethod: "oauth2_authorization_code",
       });
-      mockRefreshOAuthToken.mockResolvedValue({ error: "refresh token expired" });
+      mockRefreshOAuthToken.mockResolvedValue({ error: "OAuth token expired — admin must re-authenticate" });
       throwAuth();
 
       await expect(
@@ -642,26 +642,20 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
-    it("disables the OAuth provider if the retry still auth-fails (refresh once, then give up)", async () => {
-      mockPrisma.modelProvider.findUnique.mockResolvedValue({
-        providerId: "prov1",
-        name: "Claude Subscription",
-        authMethod: "oauth2_authorization_code",
-      });
-      // Refresh succeeds but the retried call still auth-fails → disable.
+    // BI-5FE164B4 / BI-A53C594E: only a refused sign-in leaves routing. A renewed
+    // sign-in whose retry still auth-fails, or a renewal that merely failed, stays.
+    it.each([
+      ["a renewed sign-in whose retried call still auth-fails", undefined, 2],
+      ["a renewal that failed without refusing the sign-in", { error: "OAuth token renewal failed (HTTP 403)" }, 1],
+    ])("keeps %s in routing", async (_case, refresh, calls) => {
+      mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "prov1", name: "Claude Subscription", authMethod: "oauth2_authorization_code" });
+      if (refresh) mockRefreshOAuthToken.mockResolvedValue(refresh);
       throwAuth();
-
-      await expect(
-        callWithFallbackChain(
-          makeDecision("prov1", "model1"),
-          [{ role: "user", content: "hi" }],
-          "system",
-        ),
-      ).rejects.toThrow();
-
+      await expect(callWithFallbackChain(makeDecision("prov1", "model1"), [{ role: "user", content: "hi" }], "system")).rejects.toThrow();
       expect(mockRefreshOAuthToken).toHaveBeenCalledTimes(1);
-      expect(mockCallProvider).toHaveBeenCalledTimes(2);
-      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
+      expect(mockCallProvider).toHaveBeenCalledTimes(calls);
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
     });
 
     // ── BI-F4D3B9E9(a): a LOCAL serving engine has no credentials, so an

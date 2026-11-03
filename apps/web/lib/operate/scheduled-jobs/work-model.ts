@@ -42,7 +42,7 @@
 
 import { SCHEDULE_INTERVALS_MS } from "@/lib/inference/ai-provider-types";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import { getCatalogEntry } from "./catalog";
 import type { JobCategory } from "./catalog-types";

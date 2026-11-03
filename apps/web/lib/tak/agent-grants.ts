@@ -6,11 +6,13 @@ import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
 import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
+import { WORKBOOK_TOOL_GRANTS } from "./workbook-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
+import { THREAD_TOOL_GRANTS } from "./thread-tool-grants";
 import { SURFACE_READINESS_TOOL_GRANTS } from "./surface-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
@@ -47,6 +49,10 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // executors that claim/work rooms, incl. the external CLIs) may post to the room
   // it is admitted to. One-way — work_room_write never implies capsule write.
   work_capsule_write: ["work_room_write", "workroom_evidence_write"],
+  // BI-D1FB8C4D: worktree provisioning (plan a worktree, claim its paths) is its
+  // own grant so a read-only room can write its record without reaching it.
+  // Adoption binds a worktree, so it implies provisioning. One-way.
+  work_capsule_adopt: ["worktree_provision"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -182,17 +188,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
 
-  // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
-  // Previously default-denied without grants. The handler's capability split is
-  // view_workbooks (read) / manage_workbooks (write); mirror it as read/write
-  // grant categories. Held by no agent yet — workbook tools stay coworker-deny
-  // until a role grants them, which is the correct conservative default for a
-  // user-facing grid feature.
-  workbook_list_tables: ["workbook_read"],
-  workbook_get_schema: ["workbook_read"],
-  workbook_query_rows: ["workbook_read"],
-  workbook_create_row: ["workbook_write"],
-  workbook_update_cells: ["workbook_write"],
+  // Workbooks / Universal Grid (EP-GRID-WORKBOOKS) — workbook-tool-grants.ts.
+  ...WORKBOOK_TOOL_GRANTS,
 
   // Governed MCP backlog surface (spec 2026-04-25)
   create_epic: ["backlog_write"],
@@ -235,11 +232,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   apply_account_handover: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
   create_workroom: ["work_capsule_write"],
-  plan_workroom_worktree: ["work_capsule_write"],
+  plan_workroom_worktree: ["worktree_provision"],
   adopt_worktree: ["work_capsule_adopt"],
   claim_backlog_item_for_work: ["work_capsule_adopt"],
   start_external_work: ["work_capsule_adopt"],
-  claim_workroom_scope: ["work_capsule_write"],
+  claim_workroom_scope: ["worktree_provision"],
   declare_break_fix: ["work_capsule_write"],
   record_workroom_evidence: ["workroom_evidence_write"],
   record_agent_activity: ["work_capsule_write"],
@@ -260,8 +257,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],
   create_work_capsule: ["work_capsule_write"],
-  plan_capsule_worktree: ["work_capsule_write"],
-  claim_capsule_scope: ["work_capsule_write"],
+  plan_capsule_worktree: ["worktree_provision"],
+  claim_capsule_scope: ["worktree_provision"],
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
@@ -290,6 +287,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_scheduled_agent_task: ["work_capsule_write"],
   cancel_scheduled_agent_task: ["work_capsule_write"],
   list_scheduled_agent_tasks: ["work_capsule_read"],
+  configure_scheduled_agent_task_reporting: ["work_capsule_write"],
 
   // Org/WWWD business-decision consultation — advisory (returns a recommendation,
   // records a governance ledger row). Read-baseline grant: a coworker may consult
@@ -401,11 +399,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_deliberation_outcome:  ["deliberation_read"],
   deliberate_on:             ["deliberation_create"],
 
-  // Specialist subtask thread spawning
-  spawn_work_thread:         ["thread_write"],
-  cancel_thread:             ["thread_write"],
-  get_thread_result:         ["thread_read"],
-  get_child_threads:         ["thread_read"],
+  // Thread delegation and exact-response feedback
+  ...THREAD_TOOL_GRANTS,
 
   // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
   // child work thread, so they require the same thread_write grant as spawn.

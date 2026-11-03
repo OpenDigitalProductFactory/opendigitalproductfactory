@@ -40,6 +40,7 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
     const providerLabel = (id: string) => providers.find(p => p.providerId === id)?.label ?? id;
     const filteredProviders = providers.filter(p => (scope.provider === "all" || p.providerId === scope.provider) && `${p.label} ${p.providerId} ${data.models.filter(m => m.providerId === p.providerId).map(m => m.label + m.modelId).join(" ")}`.toLowerCase().includes(catalogQuery.toLowerCase()));
     const assignments = [...new Set(rows.map(r => r.actorId ?? "unattributed"))];
+    const filteredAssignments = assignments.filter(id => `${id} ${topology.coworkers.find(c => c.agentId === id)?.label}`.toLowerCase().includes(catalogQuery.toLowerCase()));
     const changeScope = (next: Partial<RoutingScope>) => {
         window.history.pushState(null, "", routingHref(`/platform/ai/operations-map?${params}`, { ...scope, ...next }));
     };
@@ -66,6 +67,12 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
           </li>)}
         </ul>;
     };
+    const renderAssignmentCatalog = () => {
+        if (!filteredAssignments.length) {
+            return <EmptyState size="sm" title={t("noMatchingAssignments")} description={t("clearSearchOrTryAssignment")}/>;
+        }
+        return <ul className="space-y-2">{filteredAssignments.map(id => <li key={id}><p className="font-medium">{topology.coworkers.find(c => c.agentId === id)?.label ?? id}</p><div className="mt-2 flex flex-wrap gap-2">{rows.filter(r => (r.actorId ?? "unattributed") === id).map(r => <button key={r.id} className={ROUTING_ACTION_CLASS} onClick={() => { setCatalog(null); setSelectedId(r.id); }}>{r.task} · {r.modelId ?? t("unknown")}</button>)}{id !== "unattributed" && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(id)}`}>{t("assignmentSettings")}</Link>}</div></li>)}</ul>;
+    };
     const columns: Column<RoutingReceipt>[] = [
         { key: "task", header: t("taskAssignment"), mobileFullWidth: true, hideMobileLabel: true, cell: r => <button type="button" onClick={() => { setCatalog(null); setSelectedId(r.id); }} className="min-h-11 text-start text-[var(--dpf-accent)] underline underline-offset-2"><span className="block font-medium">{r.task}</span><span className="block text-xs text-[var(--dpf-muted)]">{r.actorId ?? t("unattributed")}</span></button> },
         { key: "route", header: t("selectedRoute"), mobileFullWidth: true, cell: r => <div className="break-words">{r.providerId ? providerLabel(r.providerId) : t("unresolved")}<p className="text-xs text-[var(--dpf-muted)]">{r.modelId ?? t("modelUnknown")} · {r.sensitivity}</p></div> },
@@ -78,7 +85,12 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
         { key: "runs", header: t("routed"), cell: c => c.count },
         { key: "execution", header: t("modelExecutionSuccess"), cell: c => c.knownExecution ? t("knownUnknown", { p0: c.successes, p1: c.knownExecution, p2: c.count - c.knownExecution }) : t("noExecutionEvidence", { unknown: c.count }) },
         { key: "quality", header: t("evaluatedQuality"), cell: c => t("scored", { p0: c.evaluated, p1: c.count, p2: c.evaluated ? "" : " · unavailable" }) },
-        { key: "feedback", header: t("operatorFeedback2"), cell: c => c.feedback.length ? t("acceptedAttempts", { p0: c.feedback.filter(a => a.feedback).length, p1: c.feedback.length }) : t("noFeedback") },
+        { key: "feedback", header: t("feedbackCoverage"), cell: c => c.feedback.length ? <div className="space-y-1">
+          <p>{t("humanFeedbackCoverage", { kept: c.humanFeedback.filter(a => a.feedback).length, total: c.humanFeedback.length })}</p>
+          <p>{t("agentFeedbackCoverage", { kept: c.agentFeedback.filter(a => a.feedback).length, total: c.agentFeedback.length })}</p>
+          {c.unattributedFeedback.length > 0 && <p>{t("unattributedFeedbackCoverage", { total: c.unattributedFeedback.length })}</p>}
+          <p>{t("feedbackRecordedCount", { recorded: c.feedback.length, total: c.feedbackAttemptCount })}</p>
+        </div> : t("noFeedback") },
         { key: "cost", header: t("recordedCost"), cell: c => <span>{c.costCovered ? money(c.recordedCost) : t("unknown")}<span className="block text-xs text-[var(--dpf-muted)]">{t("pricedCount", { known: c.costCovered, total: c.count })}</span></span> },
     ];
     return <section aria-labelledby="routing-management-title" className="space-y-4 text-[var(--dpf-text)]" data-routing-management>
@@ -117,11 +129,11 @@ export function RoutingManagementWorkspace({ data, topology, evidenceEnd, window
       </Surface>
       <section aria-label={t("recentRoutingDecisions")} className="space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="font-semibold">{t("recentDecisions")}</h2><button className={ROUTING_ACTION_CLASS} onClick={() => openCatalog("decisions")}>{t("viewAllCount", { count: rows.length })}</button></div><DataTable responsive columns={columns} rows={rows.slice(0, 3)} getRowKey={r => r.id} empty={t("noDecisionsRecordedInThisScope")}/></section>
     </>}
-    <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
+    <p className="text-xs text-[var(--dpf-muted)]">{windowLabel}{". "}{t("thisIsBoundedEvidenceNotACompleteTraffic")}</p>
     {selected && <RoutingManagementInspector receipt={selected} scope={scope} onClose={() => setSelectedId(null)}/>}
     {catalog && <RoutingManagementOverlay title={catalog === "tuning" ? t("tuningProposalsAndAssignmentEvidence") : catalog === "providers" ? t("providerAndModelCatalog") : catalog === "assignments" ? t("assignments") : t("routingTraffic")} onClose={() => setCatalog(null)}>
-      {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} resultCount={catalog === "providers" ? filteredProviders.length : undefined} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
-      {catalog === "tuning" ? <><p className="text-sm text-[var(--dpf-muted)]">{t("platformTuningNote")}</p><ActivityRoutingWorkbench activityRouting={topology.activityRouting}/></> : catalog === "decisions" ? <DataTable responsive columns={columns} rows={filterRoutingReceipts(rows, scope, anchor, catalogQuery)} getRowKey={r => r.id} pageSize={10}/> : catalog === "assignments" ? <ul className="space-y-2">{assignments.filter(id => `${id} ${topology.coworkers.find(c => c.agentId === id)?.label}`.toLowerCase().includes(catalogQuery.toLowerCase())).map(id => <li key={id}><p className="font-medium">{topology.coworkers.find(c => c.agentId === id)?.label ?? id}</p><div className="mt-2 flex flex-wrap gap-2">{rows.filter(r => (r.actorId ?? "unattributed") === id).map(r => <button key={r.id} className={ROUTING_ACTION_CLASS} onClick={() => { setCatalog(null); setSelectedId(r.id); }}>{r.task} · {r.modelId ?? t("unknown")}</button>)}{id !== "unattributed" && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(id)}`}>{t("assignmentSettings")}</Link>}</div></li>)}</ul> : renderProviderCatalog()}
+      {catalog !== "tuning" && <FilterBar className={ROUTING_FILTER_CLASS} mode="client" facets={[{ kind: "search", key: "q", placeholder: t("searchByNameTaskModelOrIdentifier") }]} resultCount={catalog === "providers" ? filteredProviders.length : catalog === "assignments" ? filteredAssignments.length : undefined} value={{ q: catalogQuery }} onChange={v => setCatalogQuery(v.q)}/>}
+      {catalog === "tuning" ? <><p className="text-sm text-[var(--dpf-muted)]">{t("platformTuningNote")}</p><ActivityRoutingWorkbench activityRouting={topology.activityRouting}/></> : catalog === "decisions" ? <DataTable responsive columns={columns} rows={filterRoutingReceipts(rows, scope, anchor, catalogQuery)} getRowKey={r => r.id} pageSize={10}/> : catalog === "assignments" ? renderAssignmentCatalog() : renderProviderCatalog()}
     </RoutingManagementOverlay>}
   </section>;
 }
@@ -132,5 +144,5 @@ function FlowGroup({ label, count, onOpen, children }: {
     children: React.ReactNode;
 }) {
     const t = useT("routingManagement");
-    return <div className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{label}</h2><button className="min-h-11 text-xs text-[var(--dpf-accent)] underline" onClick={onOpen}>{t("allCount", { count })}</button></div>{children}</div>;
+    return <div className="min-w-0 space-y-2"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{label}</h2><button className="min-h-11 min-w-11 text-xs text-[var(--dpf-accent)] underline" onClick={onOpen}>{t("allCount", { count })}</button></div>{children}</div>;
 }

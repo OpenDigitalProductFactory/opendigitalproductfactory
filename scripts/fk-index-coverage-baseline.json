@@ -2,7 +2,7 @@
   "version": 1,
   "owner": "platform-architecture",
   "expiry": "2026-11-16",
-  "note": "FK index-coverage ratchet baseline (BI-640B011D). Shrink-only: indexes are added per query path, never mechanically. CredentialEntry.providerWorkspaceId is Anthropic's external namespace, not a local FK (BI-FFC4C94D; platform data-architecture decision DI-24F7FF4EC4EA). Regenerate with: node scripts/check-fk-index-coverage.mjs --update",
+  "note": "FK index-coverage ratchet baseline (BI-640B011D). Shrink-only: indexes are added per query path, never mechanically. CredentialEntry.providerWorkspaceId is Anthropic's external namespace, not a local FK (BI-FFC4C94D; platform data-architecture decision DI-24F7FF4EC4EA). Regenerate with: node scripts/check-fk-index-coverage.mjs --update BI-A009189A / DI-DF76FEA979F7: AgentMessage.responseAttemptId is an indexed semantic evidence pointer to asynchronously persisted, independently retained 180-day AdapterRunTelemetry. Missing or deleted telemetry makes feedback unavailable; it never prevents answer delivery. Exact producer/digest/owner/room/uniqueness checks gate use. One explicit soft-reference exception; existing owner, expiry, other exceptions and index requirements are preserved.",
   "fkMissingIndex": [
     "AccountInvite.accountId",
     "Activity.createdById",
@@ -251,6 +251,7 @@
     "AgentMessage.agentId",
     "AgentMessage.modelId",
     "AgentMessage.providerId",
+    "AgentMessage.responseAttemptId",
     "AgentMessage.routedEndpointId",
     "AgentMessage.taskRunId",
     "AgentModelConfig.pinnedModelId",

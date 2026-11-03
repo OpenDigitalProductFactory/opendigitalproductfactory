@@ -1,3 +1,4 @@
+import { loadRoomItemOutcome, roomOutcome, type RoomItemOutcomeClient } from "./room-item-outcome";
 import type {
   WorkCaseA2aStatus,
   WorkCaseSourceRef,
@@ -5,6 +6,7 @@ import type {
   WorkCaseTimelineEvent,
 } from "./case-types";
 import { loadContentAuthorizedWorkroomRecovery, type WorkroomHandoffRecoveryLoader, type WorkroomBlockerContentAuthorizer } from "@/lib/work-capsules/workroom-recovery-projection";
+import { isGateGovernedExecutor } from "@/lib/work-posture/gate-governed";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import type { ReviewerRoomClient } from "./semantic-review-room-projection";
 import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
@@ -124,6 +126,8 @@ export type WorkspaceWorkCapsuleRecord = {
   // without them simply yields no shape and no declared posture.
   scopeClaims?: unknown;
   activityKind?: string | null;
+  /** Workroom.executorKind — a Build Studio room is gate-governed (BI-D0DFE502). */
+  executorKind?: string | null;
   decisionScope?: string | null;
   workspaceState?: unknown;
   /** What the room was created to achieve. Required on the row, and supplied by
@@ -611,6 +615,7 @@ export async function loadWorkspaceWorkCaseDetail({
         scopeClaims: true,
         activityKind: true,
         decisionScope: true,
+        executorKind: true,
         workspaceState: true,
       },
       orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
@@ -728,6 +733,7 @@ export async function loadWorkspaceWorkCaseDetail({
       })?.shape
       ?? null,
     activityKind: anchoredCapsule?.activityKind ?? null,
+    gateGoverned: isGateGovernedExecutor(anchoredCapsule?.executorKind),
     scopeClaims: anchoredCapsule?.scopeClaims,
     now,
     processOverseerObservation: projectStoredWorkroomDriveObservation(anchoredCapsule?.workspaceState),
@@ -737,7 +743,10 @@ export async function loadWorkspaceWorkCaseDetail({
     boundary: projectDeclaredBoundary({
       claim: boundaryClaim,
       fallbackPurpose: item.description,
-      fallbackOutcome: anchoredCapsule?.objective ?? null,
+      fallbackOutcome: roomOutcome({
+        itemOutcome: await loadRoomItemOutcome(prismaClient as RoomItemOutcomeClient, anchoredCapsule?.backlogItemId),
+        objective: anchoredCapsule?.objective,
+      }),
       dueAt: iso(item.dueAt),
       sourceRefs,
     }),

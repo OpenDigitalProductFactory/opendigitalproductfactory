@@ -101,20 +101,23 @@ export async function readRetainedSmallCheck(db: SmallAcceptanceDb, itemId: stri
   return missing;
 }
 
-/** Reuse canonical completion and the sweep's retained projector after commit. */
+/**
+ * Refresh a done item's owed snapshot after a final-acceptance check commits.
+ * BI-C899BB40 (operator direction 2026-10-27): a done item owes no acceptance,
+ * so a passing check records nothing owed. A failing check is recorded as the
+ * failure it is, for the repair to cite; it never reopens delivered work.
+ */
 export async function refreshSmallAcceptanceSnapshot(db: SmallAcceptanceDb, itemId: string): Promise<void> {
   const item = await db.backlogItem.findUnique({ where: { itemId }, select: BACKLOG_COMPLETION_ITEM_SELECT });
   if (!item || item.status !== "done" || !isDirectMergePlatformWork(item)) return;
-  const { evaluateBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
-  const { retainedAcceptanceWithoutBinding } = await import("@/lib/backlog/acceptance-sweep/retained-acceptance");
   const { loadItemDeliveryActorIds } = await import("@/lib/backlog/acceptance-sweep/delivery-actors");
   const { recordOwedAcceptanceSnapshot } = await import("@/lib/backlog/acceptance-sweep/owed-snapshot");
   const actors = await loadItemDeliveryActorIds(db as unknown as Parameters<typeof loadItemDeliveryActorIds>[0], itemId);
   if (!actors.ok) throw new Error(`Delivery actors could not be read: ${actors.error}`);
-  const evaluation = await evaluateBacklogItemCompletion({ db: db as unknown as Parameters<typeof evaluateBacklogItemCompletion>[0]["db"],
-    item, rawManifest: undefined, evaluatedAt: new Date().toISOString(),
-    transitionObject: { kind: "backlog-item", id: itemId, expectedVersion: "done", targetState: "completion" } });
-  const projection = retainedAcceptanceWithoutBinding(evaluation.independentAcceptanceDecision, actors.data,
-    await readRetainedSmallCheck(db, itemId));
-  await recordOwedAcceptanceSnapshot({ db: db as unknown as Parameters<typeof recordOwedAcceptanceSnapshot>[0]["db"], backlogItemId: item.id, projection });
+  const check = await readRetainedSmallCheck(db, itemId);
+  const owed = check.state === "fail" ? [{ code: "ACCEPTANCE_EVIDENCE_REQUIRED" as const, state: "fail" as const,
+    accountableRole: "delivery-coordinator",
+    nextAction: "Delivery remains done. The final-acceptance check failed; file the repair as a new item and cite this check." }] : [];
+  await recordOwedAcceptanceSnapshot({ db: db as unknown as Parameters<typeof recordOwedAcceptanceSnapshot>[0]["db"], backlogItemId: item.id,
+    projection: { owed, owner: null, unroutable: [], closable: false, excludedAgentIds: [...actors.data].sort() } });
 }

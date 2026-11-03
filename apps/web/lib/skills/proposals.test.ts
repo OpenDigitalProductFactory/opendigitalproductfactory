@@ -57,6 +57,8 @@ const buildPrismaMock = () => {
   };
 
   const improvementProposal = {
+    findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+      [...state.proposals.values()].find(row => Object.entries(where).every(([key, value]) => row[key] === value)) ?? null),
     findUnique: vi.fn(async ({ where }: { where: { proposalId: string } }) => {
       return state.proposals.get(where.proposalId) ?? null;
     }),
@@ -121,6 +123,9 @@ const buildPrismaMock = () => {
   };
 
   const prisma = {
+    $executeRaw: vi.fn(async () => 1),
+    agentThread: { findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
+      ["thread-1", "thread-2"].includes(where.id) && where.userId === "user-1" ? { id: where.id } : null) },
     skillDefinition,
     improvementProposal,
     skillRevision,
@@ -182,6 +187,60 @@ beforeEach(() => {
 });
 
 describe("submitSkillImprovementProposal", () => {
+  const draft = { skillId: "build-page", proposedContent: "suggested body", title: "Suggestion", description: "Measured friction",
+    submittedById: "user-1", agentId: "AGT-1", routeContext: "/build", threadId: "thread-1" };
+
+  it("reuses an identical pending skill suggestion without changing the skill", async () => {
+    const first = await submitSkillImprovementProposal(draft);
+    expect(await submitSkillImprovementProposal(draft)).toMatchObject({ proposalId: first.proposalId, reused: true });
+    expect(state.proposals.size).toBe(1);
+    expect(state.skills.get("build-page")?.skillMdContent).toBe("v0 body — original");
+    expect(state.revisionRows).toHaveLength(0);
+  });
+
+  it.each(["submittedById", "agentId", "routeContext", "proposedContent", "description", "observedFriction"])("does not reuse another %s scope/content", async key => {
+    const first = await submitSkillImprovementProposal({ ...draft, threadId: null });
+    const different = await submitSkillImprovementProposal({ ...draft, threadId: null, [key]: "different" });
+    expect(different.proposalId).not.toBe(first.proposalId);
+    expect(state.proposals.size).toBe(2);
+  });
+
+  it("does not revive a reviewed suggestion", async () => {
+    const first = await submitSkillImprovementProposal(draft);
+    state.proposals.get(first.proposalId)!.status = "rejected";
+    expect((await submitSkillImprovementProposal(draft)).proposalId).not.toBe(first.proposalId);
+  });
+
+  it("isolates the target skill and current owned thread", async () => {
+    state.skills.set("second-skill", { skillId: "second-skill", category: "build", skillMdContent: "Original second body" });
+    const first = await submitSkillImprovementProposal(draft);
+    expect((await submitSkillImprovementProposal({ ...draft, skillId: "second-skill" })).proposalId).not.toBe(first.proposalId);
+    expect((await submitSkillImprovementProposal({ ...draft, threadId: "thread-2" })).proposalId).not.toBe(first.proposalId);
+  });
+
+  it.each(["foreign-thread", "cancelled-thread"])("refuses %s before storing a suggestion", async threadId => {
+    await expect(submitSkillImprovementProposal({ ...draft, threadId })).rejects.toThrow(/context|thread/i);
+    expect(state.proposals.size).toBe(0);
+    expect(mockPrisma.value!.improvementProposal.create).not.toHaveBeenCalled();
+  });
+
+  it("does not retry an uncertain transaction acknowledgement", async () => {
+    const uncertain = new Error("connection lost after commit acknowledgement became unknown");
+    mockPrisma.value!.$transaction.mockRejectedValueOnce(uncertain);
+    await expect(submitSkillImprovementProposal(draft)).rejects.toBe(uncertain);
+    expect(mockPrisma.value!.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries only confirmed rolled-back conflicts and bounds those retries", async () => {
+    const rollback = Object.assign(new Error("database-confirmed rollback"), { code: "P2034" });
+    mockPrisma.value!.$transaction.mockRejectedValueOnce(rollback);
+    await expect(submitSkillImprovementProposal(draft)).resolves.toMatchObject({ reused: false });
+    expect(mockPrisma.value!.$transaction).toHaveBeenCalledTimes(2);
+    mockPrisma.value!.$transaction.mockClear().mockRejectedValue(rollback);
+    await expect(submitSkillImprovementProposal(draft)).rejects.toBe(rollback);
+    expect(mockPrisma.value!.$transaction).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects unknown skill id", async () => {
     await expect(
       submitSkillImprovementProposal({

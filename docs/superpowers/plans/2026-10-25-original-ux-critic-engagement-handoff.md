@@ -28,7 +28,68 @@ Verification references: engagement-regression-suite; governed-integration-check
 original-ce-live-critic-result; attributable-routing-author-disposition.
 Requirement references: AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7.
 
-## Sequence
+## Current continuation sequence (October 26)
+
+The first request/dispatch repair is protected main. The first real CE1 run
+performed 17 governed Critic reads and received four images, but its reply was
+lost before contribution persistence. PR 6617/C175 repairs prospective first
+inspection/output retention; it does not recover or replay D170. Both original
+tasks stay held. Recovery 144 deployed exact C175 through SUR-F93FD184 (succeeded October 26,
+19:44:28Z); matching quiescence returned to NORMAL and canonical preflight
+verified served C175. The broader service/retirement evidence is still pending. Original acceptance and AC-1 through AC-7 below
+remain the finish line.
+
+1. Under the same owner and native DESIGN admission IRD-5D293B449758, consolidate
+   the finite recovery design and its actual compatibility/authority findings.
+   Preserve current native delegated/approval/deny behavior; do not invent a
+   manual gate. Keep original identity, scope, history and unknown costs intact.
+2. Select native Messages with real images and a response-only JSON function;
+   prove the installed strict wire and evidence representation against the
+   actual installed runtime and current 20000/8192/180s limits. Reuse registered
+   Critic preparation and finite governed preloading. Prove full source/guidance
+   traversal and exact model-delivered evidence; declare any distinct projection
+   or bounded basis and omissions explicitly. No count/generation or candidate
+   allocation is implied by metadata inspection. A known unsupported route holds
+   before allocation with its exact missing prerequisite.
+3. Claim concrete edit paths and resolve the impact contract, current funding
+   and scope conflicts. Refresh this immutable plan's native backlog coverage,
+   then make a normal implementation claim. Add first-failing tests before code.
+   Planned seams are the existing engagement binding/admission/result modules,
+   task submit/reconstruction/execution, finite-preload and capture/qualification
+   ports, strict provider wire, current authority and status projection. Reuse
+   existing TaskRun/TaskArtifact/ToolExecution/engagement stores; no false
+   initiative binding, replacement request, grant or parallel ledger.
+4. Implement typed server-issued policy/current authority binding, one additive
+   candidate and lifetime-safe concurrency/CAS. Extract shared bounded capture,
+   reservation/fence and result ports while preserving initiative v1 behavior.
+   Wire only the actually proven composition; preserve controlled three-reader
+   scope, full evidence, actual pixels, finite counters, expiry and no fallback.
+5. Test allowed existing delegation without a new prompt, genuinely required
+   approval and denial, forged/currently revoked authority, stale/wrong source
+   and images, exact count/generation payloads, quota/timeout/capture failure,
+   complete inventory, cross-family concurrent admission, lost response, failed
+   qualification accounting, late old/current results and atomic idempotent
+   Workroom return. Use real PostgreSQL interleavings in addition to unit mocks.
+   No synthetic test result becomes a live specialist contribution.
+6. Complete affected tests/types/guards, exact canonical integration, independent
+   source review and protected PR/queue checks. Coordinate one qualified release
+   and one native upgrade actor; verify exact served/cooperating runtime bytes.
+   Preserve every failed/unrun check as such, with no evidence retagging.
+7. Invoke the existing CE-1FE20783 through the repaired supported action only
+   after actual current authority and qualification admit it. Capture the real
+   AGT-906 response, actual criteria/findings, pinned evidence and execution refs,
+   empty calibration/advisory limits and original/current task relationship.
+   Verify persisted engagement result plus exactly-once original Workroom return.
+   Send that actual result to the original routing author for attributable
+   response and disposition. Do not replay CE724/f52 or claim d236 covered it.
+
+Open implementation prerequisites: one source-supported composition with a bounded qualification phase, complete
+input fit/filled prospective bounds, native authority resolution for the exact
+current action, source-scope/impact claims and fresh immutable plan coverage.
+The current design claim grants none of those operational facts. There is still
+no actual persisted Critic result or author disposition.
+
+## Original repair sequence (historical)
 
 1. Record the live trace and decision for code rather than generic configuration.
 Reconcile existing ownership and exact scope claims. Resolve impact advice for
@@ -53,7 +114,7 @@ style-drift-guard and doc-index/capability-completeness derived checks. Resolve
 additional shared-file impact obligations before editing those paths. Run exact
 canonical integration and required checks; publish a ready signed PR and use the
 protected merge queue. No test result is implied by this plan.
-6. Request canonical self-upgrade, verify served source, and fulfill original
+6. Historical intended sequence, superseded by the held-state continuation above: request canonical self-upgrade, verify served source, and fulfill original
 CE-724328D6 with its f52 artifact through the supported tool. Reconcile CE-1FE20783
 within its original research/no-runtime-mutation boundary. Associate any newer
 review explicitly. Read actual task/engagement result, provenance and Workroom

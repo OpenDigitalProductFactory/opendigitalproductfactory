@@ -47,7 +47,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 
 const SOURCE_LABELS: Record<string, string> = {
   seed:       "Seed data",
-  evaluated:  "Evaluated",
+  evaluated:  "Measurements",
   production: "Production observations",
 };
 

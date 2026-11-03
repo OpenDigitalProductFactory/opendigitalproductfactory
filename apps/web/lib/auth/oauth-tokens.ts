@@ -99,16 +99,29 @@ export const OAUTH_EXECUTION_AUTHORITY_SELECT = {
 type OAuthAuthorityRow = Omit<Prisma.McpApiTokenGetPayload<{ select: typeof OAUTH_EXECUTION_AUTHORITY_SELECT }>, "oauthFamilyKey">
   & { oauthFamilyKey?: string | null };
 
-/** Admission does not preserve revoked consent while a request waits in a queue. */
-export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
+export type OAuthExecutionAuthorityDetail = "token-kind-invalid" | "token-revoked"
+  | "client-missing" | "client-revoked" | "human-unavailable"
+  | "continuity-envelope-missing" | "continuity-evidence-missing"
+  | "consent-binding-missing" | "consent-envelope-missing" | "consent-invalid";
+
+type OAuthExecutionAuthorityObservation = { allowed: true }
+  | { allowed: false; detail: OAuthExecutionAuthorityDetail };
+
+/** First current refusal only; no identifiers or historical-cause inference.
+ * Query order and thrown storage errors are shared with execution. */
+export async function inspectOAuthExecutionAuthority(row: OAuthAuthorityRow,
   db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding" | "mcpApiToken" | "oAuthRefreshToken"> = prisma,
-): Promise<boolean> {
-  if (row.kind !== "oauth_access" || row.revokedAt || !row.oauthClient || row.oauthClient.revokedAt
-    || !await currentOAuthHuman(row.userId, db)) return false;
+): Promise<OAuthExecutionAuthorityObservation> {
+  if (row.kind !== "oauth_access") return { allowed: false, detail: "token-kind-invalid" };
+  if (row.revokedAt) return { allowed: false, detail: "token-revoked" };
+  if (!row.oauthClient) return { allowed: false, detail: "client-missing" };
+  if (row.oauthClient.revokedAt) return { allowed: false, detail: "client-revoked" };
+  if (!await currentOAuthHuman(row.userId, db)) return { allowed: false, detail: "human-unavailable" };
   if (!isCurrentOAuthAccessToken(row)) {
     // This is queued-work continuity, never bearer authentication. A rotated
     // credential can sustain only the same human/client/consent/scope envelope.
-    if (!row.oauthClientId || (!row.oauthFamilyKey && row.oauthClient.registrationKind !== "credentials")) return false;
+    if (!row.oauthClientId || (!row.oauthFamilyKey && row.oauthClient.registrationKind !== "credentials"))
+      return { allowed: false, detail: "continuity-envelope-missing" };
     const successor = await db.mcpApiToken.findFirst({ where: {
       kind: "oauth_access", userId: row.userId, oauthClientId: row.oauthClientId,
       authorityBindingId: row.authorityBindingId, agentId: row.agentId, resource: row.resource,
@@ -119,21 +132,30 @@ export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
     if (!successor || !isCurrentOAuthAccessToken(successor)) {
       // Accepted work belongs to the consent family, not to the client's next
       // network request. This does NOT make an expired bearer signable.
-      if (!row.oauthFamilyKey || !row.authorityBindingId) return false;
+      if (!row.oauthFamilyKey || !row.authorityBindingId) return { allowed: false, detail: "continuity-envelope-missing" };
       const refresh = await db.oAuthRefreshToken.findFirst({ where: {
         oauthFamilyKey: row.oauthFamilyKey, userId: row.userId, oauthClientId: row.oauthClientId,
         authorityBindingId: row.authorityBindingId, agentId: row.agentId, resource: row.resource ?? "",
         scopes: { hasEvery: row.publicScopes }, revokedAt: null, consumedAt: null, rotatedToId: null,
         expiresAt: { gt: new Date() },
       }, select: { id: true } });
-      if (!refresh) return false;
+      if (!refresh) return { allowed: false, detail: "continuity-evidence-missing" };
     }
   }
-  if (!row.authorityBindingId) return row.oauthClient?.registrationKind === "credentials";
-  if (!row.oauthClientId || !row.resource) return false;
+  if (!row.authorityBindingId) return row.oauthClient?.registrationKind === "credentials"
+    ? { allowed: true } : { allowed: false, detail: "consent-binding-missing" };
+  if (!row.oauthClientId || !row.resource) return { allowed: false, detail: "consent-envelope-missing" };
   const consent = await resolveOAuthConsent({ bindingId: row.authorityBindingId,
     userId: row.userId, clientId: row.oauthClientId, resource: row.resource, scopes: row.publicScopes }, db);
-  return Boolean(consent && consent.agentId === row.agentId);
+  return consent && consent.agentId === row.agentId
+    ? { allowed: true } : { allowed: false, detail: "consent-invalid" };
+}
+
+/** Admission does not preserve revoked consent while a request waits in a queue. */
+export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
+  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding" | "mcpApiToken" | "oAuthRefreshToken"> = prisma,
+): Promise<boolean> {
+  return (await inspectOAuthExecutionAuthority(row, db)).allowed;
 }
 
 /**

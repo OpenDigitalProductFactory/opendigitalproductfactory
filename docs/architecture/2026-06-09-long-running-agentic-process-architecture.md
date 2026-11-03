@@ -1,5 +1,14 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Repository intake:** the commissioned controller reads issues, Dependabot
+alerts and peer demand through the existing backlog origin reconciler. It
+records source snapshots without inflating unchanged demand or overwriting
+curated work. The four-hour schedule and Scheduled Work **Run now** action
+share one account concurrency lane and durable intake/heartbeat steps. Both
+check quiescence; the recurring trigger also honors the schedule enable switch.
+Denied security reads and ambiguous origins remain incomplete coverage. See the
+[repository intake repair plan](../superpowers/specs/2026-11-02-repository-security-intake-repair.md).
+
 **Operator provider pauses:** optional expiry runs through the existing jobs
 facade, with `ScheduledJob` holding the operation identity and resume time.
 A five-minute reconciliation job repairs overdue timers after restart or event
@@ -71,7 +80,7 @@ We have spent months hardening it and it remains fragile. The concrete, observed
 | Symptom | Mechanism in the code today | Memory / PR trail |
 |---|---|---|
 | **No task-level resume on restart** | Task results stored by **title**, matched on resume by string equality (`getCompletedTaskTitles()` [`build-orchestrator.ts:712`](../../apps/web/lib/build/build-orchestrator.ts)); a re-plan that renames/reorders tasks breaks the match → duplicate or skipped work. No per-step journal. | known limitation |
-| **Stranded builds** | `autoExecuteBuild()` is fire-and-forget in the portal process; a portal recycle kills it mid-flight. Recovery is a *boot hook* (`resumeStrandedBuildsOnBoot` [`instrumentation.ts:305`](../../apps/web/instrumentation.ts)) that re-dispatches stale rows — i.e. crash recovery is bolted on outside the execution model. | — |
+| **Stranded builds** | `autoExecuteBuild()` is fire-and-forget in the portal process; a portal recycle kills it mid-flight. Recovery is a *boot hook* (`resumeStrandedBuildsOnBoot` [`instrumentation.ts:305`](../../apps/web/instrumentation.ts)) that re-dispatches stale rows — i.e. crash recovery is bolted on outside the execution model. The hook runs every tick, so it records a skipped resume only when the skip reason changed since that build's previous resume row (`lib/build/resume-outcome-activity.ts`, BI-13971A7C). | — |
 | **Contradictory checkpoint states** | `buildExecState` can land in self-contradictory shapes (missing-step, error-without-fail, complete-no-verify); a second boot hook `recoverContradictoryBuildExecStatesOnBoot` [`instrumentation.ts:214`](../../apps/web/instrumentation.ts) classifies and clears them. | — |
 | **Self-upgrade kills in-session work** | A bundle-hash change recycles the portal container; the in-portal orchestrator dies. Quiescence + boot reconciliation (`reconcileSelfUpgradeRunsOnBoot` [`instrumentation.ts:119`](../../apps/web/instrumentation.ts)) patch around it. | self-upgrade-kills-in-session-ux |
 | **Lost task evidence** | `taskResults` write uses optimistic locking with `MAX_MERGE_RETRIES = 1` ([`build-orchestrator.ts`](../../apps/web/lib/build/build-orchestrator.ts)); on a second collision the write is **silently dropped** and the build proceeds as if it succeeded. | — |
@@ -275,6 +284,13 @@ checklist approval on every retry.
 | Authority is revoked or the request/artifact is superseded | Resume refuses the stale authority or evidence and supplies the supported repair; it never invents approval. |
 | No eligible replacement or a nonrepeatable effect is uncertain | Work remains visible with an accountable owner and reconciliation/compensation path; it is not silently marked successful. |
 
+**Current convergence follow-up (BI-1FDAA62B, BI-7DC3B91D):** the
+[agent execution conformance design](../superpowers/specs/2026-10-29-agent-execution-conformance-design.md)
+and [mapped plan](../superpowers/plans/2026-10-29-agent-execution-conformance-plan.md)
+apply this existing contract to the observed portal, native-tool, reviewer and
+result-persistence boundaries. They are draft repair/qualification scope, not
+a second engine or a declaration that the following acceptance matrix passed.
+
 Coverage belongs to the owning adapter's tests and runtime evidence. Updating
 this architecture does not establish fleet-wide conformance. The September 2026
 review incident proved the difference: receipt validation and completion were
@@ -328,6 +344,8 @@ A single pattern that every long-horizon process is an instance of. It is mostly
 **Implemented external Task slice (2026-08-31):** ordinary MCP `TaskRun` submissions now use the existing self-hosted Inngest substrate as a durable execution outbox. Submission commits the task and immutable request/authentication binding before enqueue; the worker claims it with the canonical heartbeat-aware compare-and-set transition, runs the unchanged governed executor, and emits status only after committed transitions. A scheduled two-minute reconciliation job re-enqueues bounded pending work after a portal restart or lost delivery. Streamable HTTP GET/SSE pushes MCP `notifications/tasks/status`; `tasks/get` and `tasks/list` remain the recovery and compatibility path. This realizes “notify, don't poll” as **push first, bounded polling second**—not push-only—and deliberately avoids caller-selected webhooks or a second task ledger.
 
 **Implemented upgrade drain that waits for work (2026-10-01, BI-F9EE05E5 slice A):** the `QuiescenceRun` coordinator (`queue/functions/quiescence-run.ts`) no longer stops in-flight work when a self-upgrade drains. Admission closes at drain start. TaskRuns are flipped to `quiescing` only once hard blockers clear (or on operator force), so live build phases run to completion and are never reaped while they still heartbeat. The wait checks once per tick and sleeps on an operator-control event between checks. It pauses in the non-terminal `awaiting-operator` status at a configurable bound (default 60 minutes), and an operator abort is recorded durably (`QuiescenceRun.abortRequestedAt/By`). The self-upgrade job runs as separate pre-drain, wait and swap steps (`self-upgrade-steps.ts`, `self-upgrade-swap.ts`) rather than one long request. The wait helpers live in `self-upgrade/drain-wait.ts`, admission re-assertion and the swap guard in `drain-admission.ts`, and the import-free status contract in `quiescence-contract.ts`. Reconcilers and the stuck-coordinator watchdog key on heartbeat and swap state, never on run age. Design: Activity Quiescence Protocol §11a.
+
+**Implemented sandbox lease reclaim (2026-10-28, sandbox containment spec AC-8):** each `taskrun-watchdog` tick, after the inert/stalled build reaper, runs `reclaimSandboxLeases` (`build/sandbox/sandbox-lease-reclaim.ts`). The reaper frees a build's worktree but not its `SandboxSlot` lease, so this pass releases leases held by missing, terminal or abandoned builds, and leases whose open build has no live `TaskRun` and no activity within `DPF_SANDBOX_LEASE_IDLE_MS` (default 60 minutes). It uses the reaper's liveness signals plus `FeatureBuild.updatedAt`. An idle build keeps its phase and re-acquires a slot on its next step. The pass is observe-only unless `DPF_SANDBOX_LEASE_RECLAIM_ENABLED=1`.
 
 **Implemented guard-finding repair (2026-09-30, BI-B2EEA6DE):** when a Build Studio build's finalize gauntlet fails on its own change, the review job hands the build back to its build phase and sends `build/gauntlet.repair`. That event-only function, registered in `queue/functions/index.ts` with per-build concurrency 1, dispatches one repair task through the orchestrator's specialist dispatch (`runGauntletRepairTask`) and returns the build to review. The bound (two hand-backs, then one operator escalation) and the state (`verificationOut.gauntletRepair`, pointing at the evidence record) live in `lib/build/gauntlet-repair.ts`.
 

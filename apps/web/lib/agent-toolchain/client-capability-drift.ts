@@ -96,6 +96,8 @@ export async function fileCapabilityReverification(
   const verified = drift.verifiedVersion ? `version ${drift.verifiedVersion}` : "no version";
   return ingest({
     title: `Re-verify ${drift.clientKind} capabilities for ${drift.clientVersion}`,
+    // BI-458CCA8D: done when the profile is verified for the version clients now run.
+    outcome: `The ${drift.clientKind} ${drift.clientVersion} capability profile is verified against its sources and a live probe, so rules that depend on it hold for that version.`,
     body: [
       `A ${drift.clientKind} connection reported version ${drift.clientVersion}. The client capability profile was verified on ${verified}.`,
       "",

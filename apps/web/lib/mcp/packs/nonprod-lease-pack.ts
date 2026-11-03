@@ -21,6 +21,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { resolveLeaseRequestTiming } from "@/lib/nonprod/environment-lease-timing";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { nonprodLeaseDefinitions as definitions } from "./nonprod-lease-definitions";
+import { listNonprodEnvironmentLeases, toolSafeLease } from "@/lib/nonprod/lease-queries";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
 // cases used, so the pack owns its inputs without depending on mcp-tools.ts
@@ -59,15 +60,6 @@ function nonnegativeNumber(value: unknown): number | undefined {
   return Number.isFinite(number) && number >= 0 ? number : undefined;
 }
 
-function toolSafeLease(lease: Record<string, unknown>): Record<string, unknown> {
-  const { ownerProcessIdentity: _sensitiveProcessIdentity, ...visibleLease } = lease;
-  return {
-    ...visibleLease,
-    expectedMemoryBytes: typeof lease.expectedMemoryBytes === "bigint"
-      ? Number(lease.expectedMemoryBytes)
-      : lease.expectedMemoryBytes,
-  };
-}
 
 function normalizedSlotBinding(value: unknown): {
   manifestVersion: 1;
@@ -99,24 +91,6 @@ function normalizedSlotBinding(value: unknown): {
   };
 }
 
-async function listNonprodEnvironmentLeases(): Promise<ToolResult> {
-  const {
-    listActiveNonprodEnvironmentLeases,
-    listQueuedNonprodEnvironmentLeases,
-  } = await import("@/lib/nonprod/environment-lease");
-  const [leases, queued] = await Promise.all([
-    listActiveNonprodEnvironmentLeases({}),
-    listQueuedNonprodEnvironmentLeases({}),
-  ]);
-  return {
-    success: true,
-    message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`,
-    data: {
-      leases: leases.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
-      queued: queued.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
-    },
-  };
-}
 
 async function lookupChangeOriginHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { lookupChangeOrigin } = await import("@/lib/contributor-change-lanes/origin-lookup");
@@ -148,6 +122,7 @@ async function lookupChangeOriginHandler(params: Record<string, unknown>): Promi
 async function claimNonprodEnvironmentLeaseHandler(
   params: Record<string, unknown>,
   userId: string,
+  context?: { agentId?: string; authSource?: string; apiTokenId?: string },
 ): Promise<ToolResult> {
   const { claimNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const stringValue = stringValueFor(params);
@@ -297,6 +272,50 @@ async function claimNonprodEnvironmentLeaseHandler(
     };
   }
 
+  const qualificationToken = stringValue("qualificationAdmissionToken");
+  const qualificationPlatform = stringValue("qualificationPlatform");
+  const qualificationCommand = stringValue("qualificationCommand");
+  let qualificationClaim: { digest: string; headSha: string; workroomId: string } | undefined;
+  if (qualificationToken) {
+    if (!hostResourceClaim || !qualificationCommand || (qualificationPlatform !== "linux" && qualificationPlatform !== "win32")) {
+      return { success: false, error: "invalid_qualification_claim",
+        message: "Qualification admission is valid only for a canonical host claim with an exact platform and command." };
+    }
+    const [{ prisma }, qualification, actorModule] = await Promise.all([
+      import("@dpf/db"),
+      import("@/lib/backlog/initiative-readiness/qualification-research-admission"),
+      import("@/lib/work-capsules/handler-actor"),
+    ]);
+    const verified = qualification.verifyQualificationExperimentAdmission(qualificationToken);
+    if (!verified.ok || verified.data.binding.phase !== "verify"
+      || verified.data.binding.executorMode !== "workroom-host"
+      || verified.data.binding.requiredPlatform !== qualificationPlatform
+      || !verified.data.binding.allowedPaths.every((path) => qualificationCommand.replaceAll("\\", "/").includes(path))) {
+      return { success: false, error: "invalid_qualification_claim",
+        message: "The qualification token, platform, or command does not match the signed verification binding." };
+    }
+    const binding = verified.data.binding;
+    const room = await prisma.workroom.findUnique({ where: { capsuleId: binding.workroomId }, select: {
+      workspaceState: true, worktreePath: true, headBranch: true, headSha: true,
+    } });
+    const workspace = room?.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
+      ? room.workspaceState as Record<string, unknown> : null;
+    const state = qualification.parseQualificationExperimentState(workspace?.qualificationExperimentAdmission);
+    const actor = await actorModule.workCapsuleActor(userId, context);
+    if (!room || room.worktreePath?.replaceAll("\\", "/") !== stringValue("worktreePath").replaceAll("\\", "/")
+      || room.headBranch !== stringValue("branchName") || room.headSha?.toLowerCase() !== binding.headSha.toLowerCase()
+      || !state || state.status !== "started" || state.token !== qualificationToken
+      || state.bindingDigest !== verified.data.bindingDigest || state.startCount !== 1
+      || actor.principalId !== binding.accountablePrincipalRef) {
+      return { success: false, error: "invalid_qualification_claim",
+        message: "The live Workroom, principal, source, or one-start state no longer matches the signed qualification binding." };
+    }
+    qualificationClaim = { digest: verified.data.bindingDigest, headSha: binding.headSha, workroomId: binding.workroomId };
+  } else if (params["qualificationPlatform"] !== undefined || params["qualificationCommand"] !== undefined) {
+    return { success: false, error: "invalid_qualification_claim",
+      message: "Qualification platform and command require a signed qualification admission token." };
+  }
+
   const gateIdentityValue = objectValue(params["gateIdentity"]);
   let gateKey: string | undefined;
   if (params["gateIdentity"] !== undefined) {
@@ -326,13 +345,13 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
 
   const result = await claimNonprodEnvironmentLease({
-    authenticatedUserId: userId,
+    authenticatedUserId: userId, authenticatedAgentId: context?.agentId,
     resumeLeaseId: stringValue("resumeLeaseId") || undefined,
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
     claimKey: gateKey ? `gate:${gateKey}` : stringValue("claimKey") || undefined,
-    purpose,
+    purpose: qualificationClaim ? `host-resource:qualification:${qualificationClaim.digest}` : purpose,
     url: url || "host://localhost",
     ports,
     expiresAt,
@@ -340,8 +359,8 @@ async function claimNonprodEnvironmentLeaseHandler(
     waitDeadlineAt,
     worktreePath: stringValue("worktreePath") || undefined,
     branchName: stringValue("branchName") || undefined,
-    buildId: stringValue("buildId") || undefined,
-    taskRunId: stringValue("taskRunId") || undefined,
+    buildId: qualificationClaim?.headSha ?? (stringValue("buildId") || undefined),
+    taskRunId: qualificationClaim?.workroomId ?? (stringValue("taskRunId") || undefined),
     cleanupCommand: stringValue("cleanupCommand") || undefined,
     slotManifestVersion: slotManifestVersion as 1 | undefined,
     productionBuild: stringValue("productionBuild") === "delegated" ? "delegated" : undefined,
@@ -431,7 +450,11 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
   if (result.status === "queued") {
     const { checkpointNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
-    const durableWait = await checkpointNonprodLeaseWait({
+    // A fresh preview checkpoint is already atomic with admission. Repeating it
+    // outside the lock could revive a wait that a concurrent release settled.
+    const durableWait = result.durableWaitTaskRunId
+      ? { taskRunId: result.durableWaitTaskRunId }
+      : await checkpointNonprodLeaseWait({
       db: (await import("@dpf/db")).prisma,
       userId,
       lease: result.lease,
@@ -472,7 +495,8 @@ async function claimNonprodEnvironmentLeaseHandler(
   };
 }
 
-async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
+async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unknown>, userId: string,
+  context?: { agentId?: string; approvedAuthorityEnvelopeId?: string | null }): Promise<ToolResult> {
   const { releaseNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
   const ownerSessionId = typeof params["ownerSessionId"] === "string"
@@ -491,7 +515,8 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
   }
   try {
     const lease = await releaseNonprodEnvironmentLease({
-      leaseId,
+      leaseId, authenticatedUserId: userId, authenticatedAgentId: context?.agentId,
+      approvedAuthorityEnvelopeId: context?.approvedAuthorityEnvelopeId,
       ...(ownerSessionId ? { ownerSessionId } : {}),
     });
     return {
@@ -584,10 +609,10 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  list_nonprod_environment_leases: () => listNonprodEnvironmentLeases(),
+  list_nonprod_environment_leases: (params) => listNonprodEnvironmentLeases(params),
   lookup_change_origin: (params) => lookupChangeOriginHandler(params),
-  claim_nonprod_environment_lease: (params, userId) => claimNonprodEnvironmentLeaseHandler(params, userId),
-  release_nonprod_environment_lease: (params) => releaseNonprodEnvironmentLeaseHandler(params),
+  claim_nonprod_environment_lease: (params, userId, context) => claimNonprodEnvironmentLeaseHandler(params, userId, context),
+  release_nonprod_environment_lease: (params, userId, context) => releaseNonprodEnvironmentLeaseHandler(params, userId, context),
   renew_nonprod_environment_lease: (params) => renewNonprodEnvironmentLeaseHandler(params),
 };
 

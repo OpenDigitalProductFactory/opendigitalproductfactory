@@ -30,7 +30,7 @@
  *   (PR-3c-5) earns only from `child-completion` evidence recorded after its
  *   token entered the stage.
  */
-import type { DrivePlan } from "./drive-resolution";
+import type { DrivePlan, DriveTokenPlan } from "./drive-resolution";
 
 /** The evidence kind a sub-shape child's success records on its parent stage (PR-3c-5). */
 export const CHILD_COMPLETION_EVIDENCE_KIND = "child-completion";
@@ -43,8 +43,7 @@ import {
   usesGraphConstructs,
   type DriveMarking,
   type DriveMarkingToken,
-  type DriveTokenPlan,
-} from "./drive-marking";
+} from "@dpf/validators/workroom/marking";
 import { workroomDriveTaskId } from "./drive-plan-stage";
 import { stageEvidenceKinds } from "./stage-briefing";
 import { earnEvidenceReceipts, type RecordedEvidence, type StageReceipt } from "./stage-evidence-receipts";
@@ -54,7 +53,7 @@ import {
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   receiptInRun,
   type WorkroomDriveReceipt,
-} from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 function storedDrive(workspaceState: unknown): Record<string, unknown> | null {
   const state = workspaceState && typeof workspaceState === "object" && !Array.isArray(workspaceState)

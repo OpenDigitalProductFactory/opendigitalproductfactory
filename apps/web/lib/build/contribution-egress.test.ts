@@ -1,11 +1,10 @@
+import { HIVE_RESULT_BUNDLE_SCHEMA_VERSION, projectHiveResultBundle } from "@dpf/validators/commons";
 import { describe, it, expect } from "vitest";
 import {
   parseRepoCoords,
   classifyEgress,
   CANONICAL_UPSTREAM_OWNER,
   CANONICAL_UPSTREAM_REPO,
-  HIVE_RESULT_BUNDLE_SCHEMA_VERSION,
-  projectHiveResultBundle,
 } from "./contribution-egress";
 
 describe("parseRepoCoords", () => {
@@ -49,6 +48,9 @@ describe("classifyEgress", () => {
 });
 
 describe("projectHiveResultBundle", () => {
+  it("holds invalid direct portable projection input without throwing", () => {
+    for (const value of [null, [], 3, "invalid"]) expect(projectHiveResultBundle(value as never)).toEqual({ projected: {}, violations: ["payload:invalid"] });
+  });
   it("keeps reviewable results, evidence, provenance, attribution, and an opaque receipt", () => {
     const result = projectHiveResultBundle({
       schemaVersion: HIVE_RESULT_BUNDLE_SCHEMA_VERSION,

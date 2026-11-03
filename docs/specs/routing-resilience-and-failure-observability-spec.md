@@ -180,6 +180,7 @@ Implementation shape:
    - `getExclusionReasonV2()` returns a clear reason such as `runtime_cooldown:rate_limit` when `unavailableUntilMs > now`.
 4. Preserve lifecycle writes only for durable conditions:
    - Auth/billing failures may disable provider lifecycle state after explicit classification.
+   - For a subscription OAuth sign-in, the explicit classification is the renewal's answer: only a confirmed refusal (RFC 6749 `invalid_grant`, or no refresh token) takes the account out of routing. A bare 401/403 from the token endpoint, or a second auth error after a successful renewal, keeps it routable behind the runtime cooldown; background renewal (`ops/subscription-oauth-renewal`) retries with backoff and raises a "sign in again" attention item only on a confirmed refusal (BI-A53C594E).
    - Rate limit and transient provider overload should open the runtime circuit, not permanently mutate `ModelProvider.status`.
    - Existing `ModelProfile.modelStatus = "degraded"` can remain for model quality/profile degradation, but it is not sufficient as the circuit gate because degraded endpoints are intentionally eligible today.
 5. Recovery:

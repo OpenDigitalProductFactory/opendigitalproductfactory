@@ -2,8 +2,8 @@ import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { Intent } from "@/components/ui/report-kit";
 import { isAwaitingOwnerDecision } from "@/lib/build/owner-decision-pending";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
-import type { ProactivityPlan, ProactivityResolverInput } from "@/lib/proactivity/proactivity-types";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityPlan, ProactivityResolverInput } from "@dpf/validators/workroom-policy/proactivity-types";
 import {
   deriveBuildStudioOperatorGuidance,
   type BuildStudioWorkflowAction,

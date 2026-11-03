@@ -1,3 +1,19 @@
+---
+# Doc-impact edges (BI-742D707B). Changing any file below flags this page in the
+# Docs Impact Gate: it states which hooks each client runs and how they reach it.
+# Without these edges the Grok hook plane lost two guards and this page never knew.
+relatedCode:
+  - packages/dpf-skill-pack/hooks/hooks.json
+  - packages/dpf-skill-pack/hooks/client-hook-planes.json
+  - packages/dpf-skill-pack/scripts/update_agent_toolchain.py
+  - packages/dpf-skill-pack/client-capabilities.json
+  - apps/web/lib/build/sandbox/grok-governance-seed.ts
+  - packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs
+  - packages/dpf-skill-pack/hooks/lib/hook-io.mjs
+  - packages/dpf-skill-pack/scripts/toolchain_convergence.py
+  - packages/dpf-skill-pack/scripts/grok_credential.py
+---
+
 # Agent-Client Capability Parity Tracker
 
 **Status:** Living record — the external coding clients change weekly; this is the dated, owned source of truth for what each does and what DPF depends on / should adopt.
@@ -17,6 +33,8 @@ Since 2026-10-13 the per-client capabilities that DPF rules depend on live in on
 
 - A connection that reports a client version newer than the profile's verified version marks that client "capabilities unverified for <version>" in `get_fleet_readiness` and files one backlog item, deduplicated on `client-capability:<client>@<version>`.
 - A weekly scheduled task (`client-capability-reverify-weekly`) reads only each row's `sources[]` and the CLI versions the updater reports. It files at most one proposal item per client and never edits the profile. A source that fails marks the row `verificationStale`; two failed runs in a row raise one platform notification.
+- Each pack-loading row lists in `writes[]` every file its adapter writes, who owns it, and whether the client's own CLI writes it (BI-1DCF9F23). Where a CLI covers a setting, the CLI is the only writer: `agy mcp add` owns Antigravity's MCP config, and the `claude`, `codex` and `grok` plugin commands own their caches and records. A direct write is allowed only where no CLI covers the setting; the `reason` says why, for example that `codex mcp add` cannot set headers. `scripts/single_writer_test.py` runs the updater against a fixture home with every CLI faked and fails on any undeclared write, or a write to a CLI-covered file.
+- The updater reports success only from each client's own read-back: Grok's plugin store, Antigravity's skills directory and MCP config, Codex's plugin source, the Claude caches and the shared copy's connector. A client whose CLI is missing reports `absent`, and a dry run reports `preview`.
 
 The sections after the matrix are the dated prose history. They stay as the record of how each finding was reached.
 
@@ -42,7 +60,7 @@ Rendered from [`packages/dpf-skill-pack/client-capabilities.json`](../../package
 | `codex` | cli | fires: PreToolUse shell; does not fire: PreToolUse ask; unproven: SessionStart, PreToolUse write, UserPromptSubmit, Stop, SessionEnd | hookSpecificOutput | codex exec with hook trust granted | 2026-07-07, v0.142.5 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11 (BI-883FC2FC): a lease-punt probe ran without hook trust and was denied with it. The ask tool is not named AskUserQuestion, so that matcher never fires (BI-B22DE548). Single plugin plane since #5636 (BI-2B634E68, codex-cli 0.155.0-alpha.16). |
 | `codex` | desktop | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the Codex desktop host. |
 | `codex` | ide | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the Codex IDE extension host. |
-| `grok` | cli | fires: SessionStart, PreToolUse shell, Stop; unproven: PreToolUse ask, PreToolUse write, UserPromptSubmit, SessionEnd | dual | headless grok -p | 2026-07-07, v0.2.87 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11.1 (BI-883FC2FC): a prisma migrate probe was denied in a DPF worktree and ran in a bare folder. Grok ignores plugin-bundled hooks. The SessionStart and Stop session plane is wired globally (BI-BCA23DBB) and was sampled live on 2026-07-26. |
+| `grok` | cli | fires: SessionStart, PreToolUse shell, PreToolUse write, Stop; unproven: PreToolUse ask, UserPromptSubmit, SessionEnd | dual | headless grok -p --always-approve | 2026-10-14, v1.0.52 | BI-742D707B live probe 2026-10-14, Grok 1.0.52 headless -p --always-approve: `npx tsc --version` was denied by raw-tool-guard (PreToolUse on run_terminal_command); a `write` of a root-clone file with the session rooted there was denied by root-clone-guard (Grok names its write tools write and search_replace, so the Write\|Edit\|MultiEdit matcher alone never fired); worktree-session-heartbeat wrote its marker at SessionStart and refreshed it at Stop. The marker was still present after exit, so SessionEnd stays unproven in headless mode. ask_user_question was not probed. Earlier: BI-883FC2FC (0.2.87) prisma migrate deny; Grok ignores plugin-bundled hooks. |
 | `grok` | desktop | hooks unproven | dual | none | no | No probe recorded for the Grok desktop app. |
 | `grok` | ide | hooks unproven | unknown | none | no | No Grok IDE host is known to DPF. |
 | `antigravity` | cli | hooks unproven | unknown | none | no | docs/architecture/agent-client-capability-parity.md governance table G3: hooks unproven, an honest gap |
@@ -101,6 +119,27 @@ Reconciles the "Functional proof on Codex/Grok still pending" line above (2026-0
 
 **Refresh ritual — operationalization (BI-4B8EABF8 follow-up).** The monthly ritual below is documented; wiring it as an actual `scheduledAgentTask` on the existing `agent-task-scheduler.ts` / `agent-task-dispatch.ts` substrate (read official docs → diff this tracker → file a BI per material drift → record sources + verification age) is the remaining code slice. No new cron — reuse the cognitive-load-migration scan substrate.
 
+## 2026-10-14 refresh (BI-742D707B — which hooks each client runs)
+
+The founder saw 33 DPF hooks in Codex and a different number elsewhere. All three plugin caches carried the same `hooks/hooks.json` (34 entries); the difference was in delivery:
+
+- **Claude Code** runs the plugin `hooks.json`: 34 of 34.
+- **Codex** loads the same file from its plugin cache and trusts 33. It does not run `WorktreeCreate`.
+- **Grok** ignores plugin-bundled hooks and ran a hand-kept list of 17. Two blocking guards never reached it: `raw-tool-guard.mjs` was listed for Grok but put in no matcher group, and the write-path `root-clone-guard.mjs` was missing. The drift test passed because it checked list membership, not the payload Grok receives.
+- **Antigravity** has no proven hook plane, so it runs none.
+
+Since this refresh, [`hooks/client-hook-planes.json`](../../packages/dpf-skill-pack/hooks/client-hook-planes.json) records, for each client, what delivers hooks and every entry left out, with its reason. Grok's `~/.grok/hooks/dpf-guards.json` is generated from `hooks.json` minus those exclusions (25 wired, 3 run inside `grok-session-start.mjs`, 6 excluded). A test fails when an entry is neither wired nor excluded with a reason for any client. The per-client table is generated into [`hooks/README.md`](../../packages/dpf-skill-pack/hooks/README.md#by-client); read the current counts there, not from this dated note.
+
+A live probe on Grok 1.0.52 found a second, older gap. Grok names its tools `write`, `search_replace` and `ask_user_question`, so the `Write|Edit|MultiEdit` and `AskUserQuestion` matchers never fired there, and the guards' own tool-name checks were Claude-only. Every write-path guard and the decision-routing guard had been failing open on Grok. The Grok matcher aliases and the shared `isFileWriteTool` / `isDecisionTool` sets in `hooks/lib/hook-io.mjs` now include those names. With that fix, raw-tool-guard and the write-path root-clone-guard denied live, and the session heartbeat was written at SessionStart and refreshed at Stop. The probe is recorded in `client-capabilities.json` (Grok cli hook plane).
+
+**Every client kind is named (2026-10-27).** `client-hook-planes.json` now covers each client kind the host run discovers (`toolchain_convergence.DISCOVERY`: Claude Code, Codex, Grok, Antigravity, VS Code, Cursor, Gemini CLI, OpenCode) plus the Build Studio sandbox, and a test fails when that list and `DISCOVERY` differ. The sandbox seed (`apps/web/lib/build/sandbox/grok-governance-seed.ts`) no longer keeps its own six-guard list (BI-413882E5). The sandbox has Node and no Python, so it runs the pack's `hooks/lib/grok-hook-plane.mjs` against the workspace pack; a test pins that output equal to the host generator's.
+
+**How existing installs get it.** The release pack carries every file in the pack tree, and its content digest changes with any hook or plane change (BI-4F9E3221). The hourly toolchain agent (a Windows scheduled task, a launchd agent on macOS, a systemd user unit on Linux; BI-65C17737) runs the signed updater when the digest changes. That run refreshes the Claude and Codex plugin caches and rewrites `~/.grok/hooks/dpf-guards.json`; a test covers an old hand-kept Grok file converging in one run. Each client loads the new hooks on its next restart. A Build Studio dispatch regenerates the sandbox file from the branch under build every time.
+
+**Grok's own config was breaking that upgrade (BI-E7806C0F).** Grok rewrites `~/.grok/config.toml` with fully quoted keys (`["mcp_servers"."dpf"]`). The updater's Grok credential step matched only `[mcp_servers.dpf]`, appended a second table, and Grok then refused to start ("duplicate key"). It now matches any spelling of the key and folds an existing duplicate back into one table on the next run.
+
+Still open: Grok SessionEnd is not shown to fire in headless mode, and `ask_user_question` was not probed live. Antigravity, VS Code, Cursor, Gemini CLI and OpenCode have no DPF hook adapter; the server-side controls stay their guarantee.
+
 ## Governance outcomes (G1–G9) — multi-client parity
 
 **Spec:** [`docs/superpowers/specs/2026-07-26-multi-client-governance-parity-design.md`](../superpowers/specs/2026-07-26-multi-client-governance-parity-design.md)  
@@ -148,6 +187,27 @@ Promote a suggested client only after each gate has evidence (or an explicit “
 9. **G9 Readiness** — bootstrap or dispatch readiness observable.
 
 Source checklist also lives in `packages/dpf-skill-pack/README.md` (adapter checklist section).
+
+**Codex connector declaration (BI-B6641BC2).** The updater refreshes its managed `X-DPF-Toolchain` header in inline and nested TOML header tables while preserving custom header values. A refresh without a delivered declaration keeps existing headers intact. Saved configuration convergence does not prove that an already-running client has reloaded it.
+
+### Adding a client (the updater's adapter contract, BI-D43723D7)
+
+Clients change weekly, so the updater finds them on every run instead of using a list fixed at bootstrap. A binary on `PATH` or an app bundle counts as installed. A config folder alone does not, because one is often left behind after an uninstall. `DISCOVERY` in `packages/dpf-skill-pack/scripts/toolchain_convergence.py` lists where each known client shows itself. An installed client with no adapter is reported `unproven` in the run report, never skipped. So is an adapted client whose app is present without the CLI DPF converges it through.
+
+A client is adapted when it has all three of these:
+
+1. **An adapter** in `update_agent_toolchain.py` with four parts:
+   - *discover*: a `resolve_<client>_binary` resolver and a `DISCOVERY` entry;
+   - *converge*: writes only through the client's own CLI wherever the CLI covers the setting;
+   - *verify*: a read-back of the client's own view, in `ConvergenceReport.readback_failure`;
+   - *prune*: removes records the client no longer needs, through its CLI.
+2. **A profile row** in `client-capabilities.json`, with its `writes[]` declaration and its `declarationCarrier`. The carrier must match `DEFAULT_CARRIERS`, and a client listed there counts as adapted.
+3. **Fixture tests** against a fixture home:
+   - a read-back case in `readback_test.py` where the write succeeds and the client's view differs;
+   - the single-writer run in `single_writer_test.py`;
+   - discovery cases in `discovery_test.py`.
+
+When an adapted client's version changes, the host agent's next run re-checks it. If the read-back fails at the new version, the agent records `unproven.<client>.<version>` with the failing read-back, keeps the last version that passed as the reference, and reports the host `failed`. After a day, that raises one attention item naming the client and version. The fix is a pack change, which then ships like any other release.
 
 ## What this currently tells us (the open adoption gaps)
 

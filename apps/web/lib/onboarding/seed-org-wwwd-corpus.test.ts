@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn(async () => ({ error: null })) }));
+
 import type { StoreWikiPageInput } from "@/lib/wiki/embeddings";
 import {
   seedOrgWwwdCorpus,
   ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
   type SeedOrgWwwdClient,
 } from "./seed-org-wwwd-corpus";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 type EmbedFn = (input: StoreWikiPageInput) => Promise<boolean>;
 
@@ -130,6 +133,8 @@ describe("seedOrgWwwdCorpus", () => {
     // Profile containers: the platform fallback row (FK target, seeded first
     // so the org profile's fallbackProfileId FK cannot violate) + the org row.
     expect(result.profileId).toBe(`org-perspective-${ORG}`);
+    // BI-23900D0A: every body write replaces the page's out-links.
+    expect(syncWikiPageLinks).toHaveBeenCalledWith(fake.db, expect.objectContaining({ organizationId: ORG }));
     expect(fake.profiles).toHaveLength(2);
     expect(fake.profiles[0]).toMatchObject({
       profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,

@@ -63,4 +63,17 @@ export const FLOW_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "workroom-queue-hold-release",
+    inngestId: "workroom/queue-hold-release",
+    honorsEnabledGate: true,
+    name: "Workroom queue hold release",
+    purpose:
+      "Releases Workrooms held after a provider failure once their hold is due (30 minutes, doubling for a room re-held within a day, up to 6 hours), so a transient rate limit cannot freeze rooms until someone resumes them by hand (BI-95638941). If it stops, held rooms stay held until resume_workroom_queue.",
+    cron: "3,8,13,18,23,28,33,38,43,48,53,58 * * * *",
+    cadence: "Every 5 minutes, offset by 3 minutes",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
 ] as const;

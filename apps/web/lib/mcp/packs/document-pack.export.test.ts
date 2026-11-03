@@ -10,6 +10,10 @@ const documentExport = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/documents/document-store", () => documentStore);
 vi.mock("@/lib/documents/document-office-export", () => documentExport);
+// BI-957915CB: every document tool resolves the person it acts for.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
 
 import { DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES, documentPack } from "./document-pack";
 
@@ -39,7 +43,7 @@ describe("doc_load exportFormat", () => {
     });
     const result = await documentPack.handlers.doc_load!({ documentId: "DOC-1", exportFormat: "docx" }, "user-1");
 
-    expect(documentExport.exportDocumentVersion).toHaveBeenCalledWith({ documentId: "DOC-1", version: 3, format: "docx" });
+    expect(documentExport.exportDocumentVersion).toHaveBeenCalledWith({ documentId: "DOC-1", version: 3, format: "docx", viewer: { principalId: "principal-user-1" } });
     expect(result.success).toBe(true);
     expect(result.data?.["export"]).toEqual({
       format: "docx",

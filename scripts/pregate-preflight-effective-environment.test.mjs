@@ -26,6 +26,7 @@ function fixture(t) {
   module("lib/ensure-compile-ready.mjs", `export const ensureCompileReady = () => ({ok:true});
     export const getChangedFilesAgainstMain = () => [];`);
   module("lib/gate-context.mjs", `export const buildGateContext = () => ({});`);
+  module("derived-artifacts-gate.mjs", `export const mergedBaseDerivedVerdict = () => ({status:"current",entries:[]});`);
   module("lib/pregate-preflight.mjs", `import {appendFileSync} from 'node:fs';
     export const PREFLIGHT_SKIP_ENV = 'DPF_FIXTURE_SKIP_PREFLIGHT';
     const entry = {id:'body-policy',name:'Body policy',commands:[['fixture',[]]]};

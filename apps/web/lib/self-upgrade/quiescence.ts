@@ -18,6 +18,8 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { reserveQuiescenceStart, advanceOwnedQuiescenceLevel, clearOwnedQuiescenceLevel, QuiescenceStartUncertainError,
+  type QuiescenceReservationDb } from "./quiescence-start-reservation";
 import { transitionState } from "./quiescence-state-write";
 export { transitionState, heartbeatQuiescenceRun } from "./quiescence-state-write";
 import { sanitizeForLog } from "@/lib/security/safe-log";
@@ -158,21 +160,12 @@ export async function setQuiescenceLevel(
   now: Date = new Date(),
   expectedRunId?: string,
 ): Promise<void> {
-  const config: QuiescenceConfig = {
-    level,
-    runId,
-    enteredAt: now.toISOString(),
-  };
   if (expectedRunId) {
-    await prisma.platformConfig.updateMany({
-      where: { key: QUIESCENCE_CONFIG_KEY, value: { path: ["runId"], equals: expectedRunId } },
-      data: { value: config as unknown as object },
-    });
-  } else await prisma.platformConfig.upsert({
-    where: { key: QUIESCENCE_CONFIG_KEY },
-    create: { key: QUIESCENCE_CONFIG_KEY, value: config as unknown as object },
-    update: { value: config as unknown as object },
-  });
+    if (level !== "normal" || runId !== null) throw new Error("Expected-owner clear must restore normal admission");
+    await clearOwnedQuiescenceLevel({ db: prisma as unknown as QuiescenceReservationDb,
+      configKey: QUIESCENCE_CONFIG_KEY, expectedRunId, now });
+  } else await advanceOwnedQuiescenceLevel({ db: prisma as unknown as QuiescenceReservationDb,
+    configKey: QUIESCENCE_CONFIG_KEY, level, runId, now });
   invalidateQuiescenceCache();
 }
 
@@ -213,6 +206,10 @@ export type StartQuiescenceOpts = {
   budgetMs?: number;
   targetVersion?: string;
   targetBundleHash?: string;
+  /** Native host effects must own their original drain rather than join one. */
+  ifBusy?: "join-active" | "refuse";
+  /** Bounded first acceptance for a persisted operator request identity. */
+  requestNotAfter?: Date;
   /**
    * Operator-acknowledged emergency override for the ship-phase
    * BuildPhaseRun blocker. Per spec §6.5 + taskrun-recovery.ts:191-197
@@ -242,7 +239,7 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
   runId: string;
   awaitReady: () => Promise<QuiescenceOutcome>;
 }> {
-  const runId = generateRunId(new Date());
+  const candidateRunId = generateRunId(new Date());
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
 
   // We populate initialSnapshot here so the row is always queryable as
@@ -252,9 +249,9 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
     thresholdMs: budgetMs,
   });
 
-  await prisma.quiescenceRun.create({
-    data: {
-      runId,
+  const reservation = await reserveQuiescenceStart({ db: prisma as unknown as QuiescenceReservationDb,
+    configKey: QUIESCENCE_CONFIG_KEY, ifBusy: opts.ifBusy ?? "join-active", requestNotAfter: opts.requestNotAfter, now: new Date(), runData: {
+      runId: candidateRunId,
       trigger: opts.trigger,
       triggerRefId: opts.triggerRefId,
       status: "pending",
@@ -268,9 +265,13 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
         : ([] as unknown as object),
     },
   });
+  const runId = reservation.runId;
+  invalidateQuiescenceCache();
 
-  const { jobs } = await import("@/lib/jobs");
-  await jobs.send({
+  if (reservation.created) {
+    const { jobs } = await import("@/lib/jobs");
+    try { await jobs.send({
+    id: `quiescence-start:${runId}`,
     name: "ops/quiescence.start",
     data: {
       runId,
@@ -281,12 +282,13 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
       // pauses for the operator. Other triggers keep the bounded defer.
       awaitOperatorAtBudget: opts.trigger === "self-upgrade",
     },
-  });
+    }); } catch { throw new QuiescenceStartUncertainError(runId); }
+  }
 
   return {
     runId,
     awaitReady: async () =>
-      (await import("./drain-wait")).awaitQuiescenceReady(runId, { budgetMs, followDrain: opts.trigger === "self-upgrade" }),
+      (await import("./drain-wait")).awaitQuiescenceReady(runId, { budgetMs: reservation.budgetMs, followDrain: opts.trigger === "self-upgrade" }),
   };
 }
 

@@ -27,8 +27,8 @@ import {
   type GppShapesContext,
 } from "../../../scripts/build-gpp-shapes";
 import { seedFor, SHUFFLE_SALTS, shuffledKeys } from "./__fixtures__/key-order";
-import { compileShapeDocument } from "./compile";
-import { decompile } from "./decompile";
+import { compileShapeDocument } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
 import { buildRatificationReport } from "./ratification-report";
 

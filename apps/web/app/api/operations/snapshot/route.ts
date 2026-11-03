@@ -13,7 +13,7 @@ export async function GET(): Promise<Response> {
     return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
-  const snapshot = await loadVersionedOperationsSnapshot();
+  const snapshot = await loadVersionedOperationsSnapshot({ viewer: session.user });
   if (!snapshot) {
     const response = apiErrorResponse(
       "OPERATIONS_NOT_CONFIGURED",

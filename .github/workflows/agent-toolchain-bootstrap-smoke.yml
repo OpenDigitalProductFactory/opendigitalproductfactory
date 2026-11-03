@@ -17,41 +17,34 @@ name: Agent toolchain bootstrap smoke (BI-4B17051B)
 permissions:
   contents: read
 
+# Required CI calls this workflow; keeping one implementation avoids duplicate
+# PR/push runs and gives merge_group the same toolchain checks (BI-A689AB68).
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "packages/dpf-bootstrap/**"
-      - "packages/dpf-skill-pack/scripts/**"
-      # hooks.json is the source of truth the updater's drift tests assert
-      # against; without it a guard added under hooks/ never runs this suite
-      # and the drift lands on main invisibly.
-      - "packages/dpf-skill-pack/hooks/**"
-      - "scripts/dpf-bootstrap-agent-toolchain.sh"
-      - "scripts/ensure-dpf-skill-pack.sh"
-      - "scripts/installer/lib/state.sh"
-      - "scripts/installer/install-state.schema.json"
-      - ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
-  push:
-    branches: [main]
-    paths:
-      - "packages/dpf-bootstrap/**"
-      - "packages/dpf-skill-pack/scripts/**"
-      # hooks.json is the source of truth the updater's drift tests assert
-      # against; without it a guard added under hooks/ never runs this suite
-      # and the drift lands on main invisibly.
-      - "packages/dpf-skill-pack/hooks/**"
-      - "scripts/dpf-bootstrap-agent-toolchain.sh"
-      - "scripts/ensure-dpf-skill-pack.sh"
-      - "scripts/installer/lib/state.sh"
-      - "scripts/installer/install-state.schema.json"
-      - ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
   group: agent-toolchain-bootstrap-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # BI-90C9478D (spec 2026-10-27-self-converging-agent-toolchain, M5): stock
+  # macOS ships Python 3.9 with no tomllib. The ubuntu job's python3 is 3.12+,
+  # so a newer-Python API (F2, F20) or a tomllib-only path (BI-6763D09E) used
+  # to merge unseen and break every Mac. This runs the same suites on the
+  # runner's system /usr/bin/python3, the interpreter the updater meets on a
+  # user's Mac. No setup action: the stock interpreter is the point.
+  stock-macos-python:
+    name: Stock macOS Python
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Skill-pack Python suites on the system python3
+        run: |
+          /usr/bin/python3 --version
+          /usr/bin/python3 -m unittest discover -s packages/dpf-skill-pack/scripts -p "*_test.py"
+
   posix-adapter-smoke:
     name: POSIX adapter smoke
     runs-on: ubuntu-latest

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -15,6 +16,78 @@ import {
   supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
+
+const waitFor = async (predicate, timeoutMs = 10_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for the Windows file-handle fixture.");
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+};
+
+test("Windows replacement preserves complete state until a non-delete-sharing reader releases it", {
+  skip: process.platform !== "win32",
+  timeout: 30_000,
+}, async t => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-gate-share-mode-"));
+  const stateFile = join(directory, "gate.json");
+  const readyFile = join(directory, "reader-ready");
+  const shared = {
+    branch: "fix/windows-share-mode",
+    sha: "a".repeat(40),
+    gatePassed: false,
+    leaseId: "NPEL-WINDOWS-SHARE",
+    evidenceId: "",
+    expiresAt: "2026-10-31T00:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+  };
+  writeLocalCiGateState(stateFile, { ...shared, status: "admitted" });
+  const admittedBytes = readFileSync(stateFile, "utf8");
+
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$stream = [System.IO.File]::Open($env:DPF_TEST_STATE_FILE, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::ReadWrite)",
+    "[System.IO.File]::WriteAllText($env:DPF_TEST_READY_FILE, 'ready')",
+    "try { [Console]::In.ReadLine() | Out-Null } finally { $stream.Dispose() }",
+  ].join("; ");
+  const helper = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    windowsHide: true,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, DPF_TEST_STATE_FILE: stateFile, DPF_TEST_READY_FILE: readyFile },
+  });
+  let helperError = "";
+  helper.stderr.on("data", chunk => { helperError += String(chunk); });
+  t.after(() => {
+    if (helper.exitCode === null) helper.kill();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  await waitFor(() => existsSync(readyFile) || helper.exitCode !== null);
+  assert.equal(existsSync(readyFile), true, helperError || `helper exited ${helper.exitCode} before acquiring the handle`);
+  let replacementError;
+  try {
+    writeLocalCiGateState(stateFile, { ...shared, status: "running" });
+  } catch (error) {
+    replacementError = error;
+  }
+  assert.ok(replacementError, "the held destination must reject the atomic replacement");
+  assert.equal(replacementError.syscall, "rename");
+  assert.equal(readFileSync(stateFile, "utf8"), admittedBytes,
+    "the first complete JSON record must remain byte-for-byte intact");
+  assert.deepEqual(readdirSync(directory).filter(name =>
+    name.startsWith(`.${basename(stateFile)}.`) && name.endsWith(".tmp")), []);
+
+  helper.stdin.end("release\n");
+  const exitCode = await new Promise((resolve, reject) => {
+    helper.once("error", reject);
+    helper.once("exit", code => resolve(code));
+  });
+  assert.equal(exitCode, 0, helperError);
+
+  writeLocalCiGateState(stateFile, { ...shared, status: "running" });
+  assert.equal(readLocalCiGateState(stateFile).status, "running");
+});
 
 test("completed PASS evidence receives bounded validity independent of its lease", () => {
   const issuedAt = "2026-08-09T10:00:00.000Z";

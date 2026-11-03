@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Readable approval questions — inert copy prototype</title>
+<style>
+:root{color-scheme:light dark;--dpf-bg:Canvas;--dpf-text:CanvasText;--dpf-muted:GrayText;--dpf-border:GrayText;--dpf-accent:Highlight;--dpf-on-accent:HighlightText}
+body{margin:0;padding:16px;background:var(--dpf-bg);color:var(--dpf-text);font:16px/1.5 system-ui}
+main{max-width:640px;margin:auto}article{padding:20px;border:1px solid var(--dpf-border);border-radius:12px;margin:20px 0}
+h1{font-size:24px}h2{font-size:20px;margin:8px 0}p{margin:12px 0}.muted{color:var(--dpf-muted)}
+button,select{font:inherit;min-height:44px;padding:8px 12px;background:var(--dpf-bg);color:var(--dpf-text);border:1px solid var(--dpf-border);border-radius:6px}
+button{cursor:var(--cursor-interaction,pointer)}button.primary{background:var(--dpf-accent);color:var(--dpf-on-accent)}
+.buttons{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}details{border-top:1px solid var(--dpf-border);padding:12px 0}summary{cursor:var(--cursor-interaction,pointer)}
+pre,dd{white-space:pre-wrap;overflow-wrap:anywhere}dt{font-weight:600}dd{margin:0 0 12px}select{max-width:100%}
+:focus-visible{outline:2px solid var(--dpf-accent);outline-offset:3px}[role=status]:empty{display:none}
+@media(max-width:360px){body{padding:8px}article{padding:16px}}
+</style>
+<main>
+<h1>Readable approval questions</h1><p class="muted">Design preview. Synthetic examples; buttons make no requests and authorize nothing.</p>
+<label>Example <select id="example"><option value="update">Request an app update</option><option value="merge">Combine work requests</option><option value="release">Release a test reservation</option><option value="report">Save a report</option><option value="handover">Continue existing work</option><option value="unknown">Unknown effect with material facts</option></select></label>
+<article aria-label="Proposed approval presentation"><p id="scope" class="muted"></p><h2 id="question"></h2><p id="description"></p><p id="consequence"></p><p id="recommendation" class="muted"></p><div id="facts"></div>
+<div class="buttons"><button class="primary" type="button">Authorize</button><button type="button">Decline</button></div><p role="status" aria-live="polite"></p>
+<details><summary>Why am I being asked?</summary><p>This covers one exact request. Identifying its operation does not prove its effects, approve later work or confirm completion.</p></details>
+<details><summary>Technical evidence</summary><p>The exact original parameters and binding remain available here. They are not replaced by this copy.</p><pre id="technical"></pre></details>
+</article></main>
+<script>
+(() => {
+const examples={
+update:{scope:'This app',question:'Request an app update?',description:'Asks the platform to run its standard update process.',consequence:'Release checks and the maintenance window can delay the request. Authorization does not mean the update is installed.',recommendation:'Review the exact request before authorizing.',technical:'request_self_upgrade · synthetic audit reason'},
+merge:{scope:'Work name unavailable',question:'Combine duplicate work requests?',description:'The requested operation is identified. Its affected work and exact effects are not verified in this view.',consequence:'Cannot be undone once it runs.',recommendation:'Keep this on hold until its scope and effect are clear.',technical:'merge_backlog_items · synthetic canonical and duplicate identities'},
+release:{scope:'Work name unavailable',question:'Release a shared test reservation?',description:'The requested operation is identified. The current reservation and its effects are not verified in this view.',consequence:'The recorded authority consequence remains visible; this preview does not declare the reservation safe to release.',recommendation:'Keep this on hold until its scope and effect are clear.',technical:'release_nonprod_environment_lease · synthetic reservation identity'},
+report:{scope:'Approval presentation repair',question:'Save this work result?',description:'Records your coworker’s reported result.',consequence:'This records a report; it does not mark the work complete.',recommendation:'Your coworker asks to save this result for the work record.',technical:'record_workroom_evidence · synthetic blocked report'},
+handover:{scope:'Approval presentation repair',question:'Let Codex continue this work?',description:'Continues the existing work under the existing account.',consequence:'Access stays limited to this work; existing permissions still apply.',recommendation:'Continue with the same assistant for this work.',technical:'reassign_workroom_executor · synthetic existing-work handover'},
+unknown:{scope:'Work name unavailable',question:'Review this coworker request?',description:'The effect of this exact request is unresolved.',consequence:'Its recorded material facts remain outside optional evidence.',recommendation:'Keep this on hold until its effect is clear.',facts:'Recipient: External recipient not verified. Amount: USD 125. Recurrence: monthly. Access change: not provided.',technical:'Unrecognized synthetic operation. Complete content remains inspectable.'}
+};
+function render(){const x=examples[document.getElementById('example').value];for(const key of ['scope','question','description','consequence','recommendation','technical'])document.getElementById(key).textContent=x[key];document.getElementById('facts').textContent=x.facts||'';document.querySelector('[role=status]').textContent='';for(const d of document.querySelectorAll('details'))d.open=false;}
+document.getElementById('example').addEventListener('change',render);
+for(const b of document.querySelectorAll('button'))b.addEventListener('click',()=>{document.querySelector('[role=status]').textContent='Preview only. No decision was saved and no action ran.';});render();
+})();
+</script></html>

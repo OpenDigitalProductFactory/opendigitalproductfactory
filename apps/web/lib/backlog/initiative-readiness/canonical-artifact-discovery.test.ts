@@ -77,7 +77,7 @@ describe("current canonical design observation", () => {
       return rooms.filter(room =>
       where.backlogItemId.in.includes(room.backlogItemId) && room.archivedAt === null
       && !where.status.notIn.includes(room.status)
-      && ["repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
+      && ["capsuleId", "repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
         where[key] === undefined || where[key] === room[key as keyof typeof room]))
       .map(({ backlogItemId, archivedAt, status, ...room }) => room);
     });
@@ -95,6 +95,17 @@ describe("current canonical design observation", () => {
     expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ repositoryFullName: "org/repo", headBranch: "fix/x",
         baseSha: BASE_SHA, headSha: HEAD_SHA, backlogItemId: { in: ["item-row", "BI-X"] }, archivedAt: null }) }));
+  });
+  it("selects the exact room even when another preserved room has the identical source tuple", async () => {
+    const { store, rooms } = multipleRooms();
+    rooms[1]!.headBranch = rooms[0]!.headBranch;
+    const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new" });
+    expect((await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never,
+      claimSource: { ...snapshot().room, workroomId: "WC-X" }, ports: { readCurrentArtifact } })).evidence)
+      .toEqual({ state: "verified", digest: "sha256:new" });
+    expect(readCurrentArtifact).toHaveBeenCalledWith(snapshot());
+    expect((await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never,
+      claimSource: snapshot().room, ports: { readCurrentArtifact } })).evidence).toEqual({ state: "unavailable" });
   });
   it("keeps an unscoped read ambiguous with the same multiple rooms", async () => {
     const { store } = multipleRooms(); const readCurrentArtifact = vi.fn();
@@ -270,6 +281,12 @@ function compareResponse(files: unknown) {
   } as unknown as Response;
 }
 
+/** BI-46E344FE: a multi-file repair binds the whole compared range, digest included. */
+function wholeRange() {
+  return { resolved: true, artifact: { kind: "repo-commit-range", ranges: [{ baseSha: BASE_SHA, headSha: HEAD_SHA }],
+    digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) } };
+}
+
 function args(fetchImpl: typeof fetch) {
   return {
     repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -304,10 +321,10 @@ describe("canonical design artifact discovery", () => {
       .toEqual({ resolved: true, artifact: { path, providerBlobId: BLOB_SHA } });
   });
 
-  it("refuses ambiguous implementation files rather than arbitrarily choosing one for PIR", async () => {
+  it("binds several implementation files as the whole range instead of choosing one (BI-46E344FE)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse(["apps/web/lib/a.ts", "apps/web/lib/b.ts"].map((filename) => ({ filename, sha: BLOB_SHA, status: "modified" }))));
     expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
-      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+      .toEqual(wholeRange());
   });
 
   // BI-09399355: a break-fix that bumps the plugin manifests alongside its one
@@ -332,13 +349,13 @@ describe("canonical design artifact discovery", () => {
   it.each([
     ["changes more than the version", '@@ -1,3 +1,3 @@\n-  "version": "0.2.5",\n+  "version": "0.2.6",\n-  "hooks": "a"\n+  "hooks": "b"'],
     ["arrives without a patch", undefined],
-  ])("keeps a manifest as a competing artifact when it %s", async (_label, patch) => {
+  ])("keeps a manifest in the reviewed range when it %s", async (_label, patch) => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "packages/dpf-skill-pack/.claude-plugin/plugin.json", sha: OTHER_BLOB_SHA, status: "modified", ...(patch ? { patch } : {}) },
       { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
     ]));
     expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
-      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+      .toEqual(wholeRange());
   });
 
   it("binds a version bump that is the whole repair", async () => {
@@ -347,13 +364,13 @@ describe("canonical design artifact discovery", () => {
       .toEqual({ resolved: true, artifact: { path: "packages/dpf-skill-pack/.claude-plugin/plugin.json", providerBlobId: OTHER_BLOB_SHA } });
   });
 
-  it("does not hide a second implementation artifact because it was deleted", async () => {
+  it("keeps a deleted implementation file in the reviewed range", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
       { filename: "apps/web/lib/b.ts", sha: OTHER_BLOB_SHA, status: "removed" },
     ]));
     expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
-      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+      .toEqual(wholeRange());
   });
 
   it("does not infer uniqueness after silently dropping malformed provider entries", async () => {

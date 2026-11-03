@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { GUARD_DID_NOT_RUN_MARKER } from "./finalize-stage-runner";
-import { priorGauntletFailure } from "./finalize-stage-wiring";
+import { priorGauntletFailure, priorScopedTestsFailure } from "./finalize-stage-wiring";
+import { SCOPED_TEST_RUNNER_IDENTITY } from "./scoped-test-failure";
 
 const record = (evidence: Record<string, unknown>) => ({ evidence });
 
@@ -25,5 +26,36 @@ describe("priorGauntletFailure", () => {
   it("returns null when nothing usable was recorded", () => {
     expect(priorGauntletFailure(undefined, GUARD_DID_NOT_RUN_MARKER)).toBeNull();
     expect(priorGauntletFailure({ evidence: { passed: false, failedGuards: [] } }, GUARD_DID_NOT_RUN_MARKER)).toBeNull();
+  });
+});
+
+// BI-33B54E4B: one tree re-ran its failing scoped tests 500 times. A confirmed
+// failure on the tree being tested, by the current runner, is reused.
+describe("priorScopedTestsFailure", () => {
+  const tree = "f".repeat(40);
+  const failing = {
+    tier: "in-platform-scoped-tests", passed: false, headTreeHash: tree, runner: SCOPED_TEST_RUNNER_IDENTITY,
+    failure: "tests", failingTests: ["lib/a.test.ts > b"],
+  };
+
+  it("reuses a confirmed failure on the same tree by the current runner", () => {
+    expect(priorScopedTestsFailure({ id: "t1", details: record(failing) }, tree))
+      .toEqual({ failure: "tests", failingTests: ["lib/a.test.ts > b"], recordId: "t1", treeSha: tree });
+  });
+
+  it("re-runs on another tree", () => {
+    expect(priorScopedTestsFailure({ id: "t1", details: record(failing) }, "e".repeat(40))).toBeNull();
+  });
+
+  it("re-runs a failure recorded by an older runner, which may have been the environment's fault", () => {
+    const { runner: _runner, ...older } = failing;
+    expect(priorScopedTestsFailure({ id: "t1", details: record(older) }, tree)).toBeNull();
+  });
+
+  it("never reuses a pass or a run that reached no verdict", () => {
+    expect(priorScopedTestsFailure({ id: "t1", details: record({ ...failing, passed: true }) }, tree)).toBeNull();
+    expect(priorScopedTestsFailure({ id: "t1", details: record({ ...failing, failure: "not-run" }) }, tree)).toBeNull();
+    expect(priorScopedTestsFailure(null, tree)).toBeNull();
+    expect(priorScopedTestsFailure({ id: "t1", details: record(failing) }, null)).toBeNull();
   });
 });

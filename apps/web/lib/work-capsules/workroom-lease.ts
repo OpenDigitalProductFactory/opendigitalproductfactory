@@ -16,6 +16,7 @@ import { leaseUntil } from "./work-capsule-branch-identity";
 import { isWorkCapsuleExecutorKind, type WorkCapsuleExecutorKind } from "@/lib/work-capsules";
 import { liveLeaseHeldByAnother } from "./scope-claim-lease";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import type { ExecutorCheckpoint } from "./executor-checkpoint";
 
 /** A renewal was refused because another principal holds a live lease. */
 export class WorkroomLeaseHeldError extends Error {
@@ -96,6 +97,8 @@ export async function heartbeatWorkCapsule(args: {
   actor: WorkCapsuleActor;
   now?: Date;
   onHeldByOther?: "refuse" | "keep";
+  /** Already validated by parseExecutorCheckpoint; replaces the previous one. */
+  checkpoint?: ExecutorCheckpoint;
 }) {
   const now = args.now ?? new Date();
   const nextLease = leaseUntil(now);
@@ -109,11 +112,20 @@ export async function heartbeatWorkCapsule(args: {
         current.leaseExpiresAt as Date,
       );
     }
+    let workspaceState: Record<string, unknown> | undefined;
+    if (args.checkpoint) {
+      // The row is locked above, so this read-merge-write cannot lose a concurrent change.
+      const stateRow = (await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId }, select: { workspaceState: true } })) as { workspaceState?: unknown } | null;
+      const state = stateRow?.workspaceState && typeof stateRow.workspaceState === "object" && !Array.isArray(stateRow.workspaceState)
+        ? stateRow.workspaceState as Record<string, unknown> : {};
+      workspaceState = { ...state, executorCheckpoint: { ...args.checkpoint, recordedAt: now.toISOString(), recordedByPrincipalId: args.actor.principalId } };
+    }
     const capsule = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
         leaseHolderPrincipalId: args.actor.principalId,
         leaseExpiresAt: nextLease,
+        ...(workspaceState ? { workspaceState } : {}),
       },
     });
     await recordActivity(tx, {

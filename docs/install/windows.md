@@ -378,6 +378,11 @@ drains the platform, then the native Edge agent on this machine stops Docker
 Desktop, shuts the VM down, clears Docker's stale socket folders, and starts
 Docker and DPF again. It never reboots Windows. Every install runs that agent
 for host upkeep; `-WithEdge` only adds network discovery (BI-28EFE18A).
+An install that predates the agent gets it with no manual step: the self-upgrade
+replaces `dpf-start.ps1`, and at the next sign-in that script installs the agent
+for the running release once the portal is healthy. Later releases upgrade the
+agent the same way. The result of each sign-in's check is in
+`%USERPROFILE%\.dpf\logs\host-convergence.log` (BI-084F85E5).
 
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init

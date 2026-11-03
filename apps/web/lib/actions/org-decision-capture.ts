@@ -28,6 +28,7 @@ import {
   validateOrgDecisionCapture,
   type OrgDecisionCaptureInput,
 } from "@/lib/wiki/org-decision-capture";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 export type CaptureOrgDecisionResult =
   | {
@@ -242,6 +243,7 @@ export async function captureOrgDecisionOutcome(
         changeSummary: `Standing answer captured from ${row.interactionId}`,
         createdById: userId,
       });
+      await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body: page.body });
 
       // Deliberation layer: embed so coworkers retrieve the ruling as WWWD
       // context. Best-effort — the gate-live material below is the enforcement.

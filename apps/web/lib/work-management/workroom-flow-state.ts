@@ -99,6 +99,18 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
   },
 };
 
+/**
+ * Hold lanes that mean "no demand": the drive parked the room awaiting a
+ * trigger (BI-C9F1DE01). Stage telemetry holds an idle room's open step on one
+ * of these lanes (or "idle"), so a run parked here is not in flow. Live flow
+ * load counts the same rooms out.
+ */
+export const IDLE_HOLD_LANES: ReadonlySet<string> = new Set([
+  "idle",
+  ...Object.values(FLOW_STATE_BY_ACTION_AND_REASON).flatMap((byReason) =>
+    Object.entries(byReason as Record<string, WorkroomFlowState>).filter(([, state]) => state === "awaiting-trigger").map(([reason]) => reason)),
+]);
+
 export type WorkroomFlowClassification = {
   state: WorkroomFlowState;
   /** The drive reason when the state is `blocked`, so a pile can say why. */

@@ -6,8 +6,8 @@ description: "One pass end to end: the room a coworker works in, the shape that 
 relatedCode:
   - apps/web/lib/work-management/room-shapes.ts
   - apps/web/lib/work-management/room-posture.ts
-  - apps/web/lib/work-posture/derive.ts
-  - apps/web/lib/work-posture/temporal-band.ts
+  - packages/validators/src/workroom-policy/derive.ts
+  - packages/validators/src/workroom-policy/temporal-band.ts
   - apps/web/lib/tak/consequential-tool-policy.ts
   - apps/web/lib/mcp-governed-execute.ts
   - apps/web/lib/work-management/room-participant-invitation-preflight.server.ts
@@ -59,6 +59,20 @@ from governed decisions, artifacts, actions, receipts, evidence, and — importa
 work left unresolved, each item with an explicit disposition.
 
 → [My Work and Workrooms](../workspace/work-rooms.md) is the full operator guide.
+
+A coworker releasing its own current file claims can use its existing authority
+when its lease and ownership still qualify. The release names the original
+acquisition: an old request cannot release a newer claim on the same file.
+Changed or unknown claims stop before another approval is created. Permissions
+and any required human decision still apply.
+
+DPF can also withdraw an unused release request when its records prove that
+the original claim ended or was replaced and that the request never started.
+It records the withdrawal without approving the request or performing a release.
+Requests that were approved, started, or lack reliable history stay untouched.
+An explicit policy requiring human approval still applies. The routine review
+works through bounded batches, so older uncertain records cannot hold up later
+requests that have complete evidence.
 
 ## 2. The shape bounds what may happen
 

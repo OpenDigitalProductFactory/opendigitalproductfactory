@@ -5,6 +5,9 @@
 // superuser's orphaned-approval item links to the absent delegate's newest
 // waiting request, where the card holds the only control.
 import { describe, expect, it, vi } from "vitest";
+const { humanRoomAccess } = vi.hoisted(() => ({ humanRoomAccess: vi.fn() }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: humanRoomAccess }));
+vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [] }));
 
 import { loadOnBehalfEnvelopeItem } from "./coworker-envelope";
 import { projectOrphanedApprovals, type OrphanEnvelopeRow } from "./orphaned-approval";
@@ -29,6 +32,19 @@ function db(row: unknown, owner: unknown = { email: "owner@x.test" }) {
 }
 
 describe("loadOnBehalfEnvelopeItem", () => {
+  it("checks the viewing admin's access before showing another owner's work name", async () => {
+    humanRoomAccess.mockClear();
+    humanRoomAccess.mockResolvedValue({ decision: { level: "none" } });
+    const store = { ...db(envelope({ manifestActionId: "record_workroom_evidence", argsJson: { capsuleId: "WC-PRIVATE", kind: "note", summary: "Reported" } })),
+      workroom: { findMany: vi.fn(async () => [{ id: "private-room", capsuleId: "WC-PRIVATE", title: "Private work", backlogItemId: "BI-PRIVATE" }]) },
+      backlogItem: { findMany: vi.fn(async () => []) },
+    };
+    const [item] = await loadOnBehalfEnvelopeItem(store as never, "env-1", "admin-viewer", NOW);
+    expect(humanRoomAccess).toHaveBeenCalledWith({ userId: "admin-viewer", workroomId: "private-room", requested: "content" }, store);
+    expect(item?.envelope?.decision.targetLabel).toBeUndefined();
+    expect(store.backlogItem.findMany).not.toHaveBeenCalled();
+  });
+
   it("loads another person's waiting request by id and marks it as theirs", async () => {
     const store = db(envelope());
     const [item] = await loadOnBehalfEnvelopeItem(store as never, "env-1", "admin-1", NOW);

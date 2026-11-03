@@ -32,10 +32,10 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
     description:
       "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers. " +
       "Call once before claim/release decisions; do not poll this tool in a tight loop. " +
-      "Cache the result for the current decision step; re-list only after a claim/release/renew you initiated.",
+      "Cache the result for the current decision step. Pass leaseId to read one exact persisted reservation, including terminal state; this does not release it or prove process cleanup.",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: { leaseId: { type: "string", description: "Optional exact lease ID for persisted reservation readback, including terminal rows." } },
       required: [],
     },
     requiredCapability: "view_platform",
@@ -152,6 +152,12 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
           },
           required: ["totalMemoryBytes", "availableMemoryBytes", "inferenceResident"],
         },
+        qualificationAdmissionToken: {
+          type: "string",
+          description: "Opaque server-issued verify-phase qualification binding used only by the canonical host runner.",
+        },
+        qualificationPlatform: { type: "string", enum: ["linux", "win32"] },
+        qualificationCommand: { type: "string" },
       },
       required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "expiresAt"],
     },

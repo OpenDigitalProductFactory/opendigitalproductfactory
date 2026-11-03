@@ -22,6 +22,7 @@ import {
   type ProductOutcomesDb,
   type ProductOutcomesTransactionalDb,
 } from "@/lib/product-management/outcomes-repository";
+import { designatePlatformWorkProduct, type DeliveredWorkOutcomeDb } from "@/lib/product-management/delivered-work-outcomes-repository";
 import type { ToolPack } from "../tool-pack";
 import { queueProductManagementPlaybookRefreshForObjective } from "@/lib/product-management/product-management-playbook-refresh";
 
@@ -210,6 +211,27 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+  },
+  {
+    name: "designate_platform_work_product",
+    description:
+      "Record which business Product the organization's platform development work serves, so delivered platform work records outcome observations against it automatically. Creates and activates the standing platform-work objective, which is the designation. Idempotent for the same Product; refused while another Product is designated. Pass the WWWD decision that settled the choice; the platform never infers the Product.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        productId: { type: "string", description: "Business Product row id in this organization." },
+        decisionRef: {
+          type: "string",
+          description: "The DecisionInteraction id (DI-...) of the business decision that chose this Product.",
+        },
+      },
+      required: ["productId", "decisionRef"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    // Decides whose product objectives receive the platform's delivered-work
+    // outcomes: a business ownership choice, so it is consult-gated.
+    consequence: "authority",
   },
 ];
 
@@ -491,6 +513,33 @@ async function observationHandler(
   });
 }
 
+async function designatePlatformWorkProductHandler(params: Record<string, unknown>) {
+  return guarded(async () => {
+    const decisionRef = optionalString(params["decisionRef"]);
+    if (!decisionRef || !/^DI-[A-Z0-9]+$/.test(decisionRef)) {
+      throw new Error("decisionRef must name the DecisionInteraction (DI-...) that chose this Product.");
+    }
+    const organizationId = await currentOrganizationId();
+    const result = await designatePlatformWorkProduct(prisma as unknown as DeliveredWorkOutcomeDb, {
+      organizationId,
+      productId: String(params["productId"] ?? ""),
+    });
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId: result.objectiveId,
+      sourceKind: "product-objective",
+      sourceId: result.objectiveId,
+      changedAt: new Date(),
+    });
+    return successful(
+      result.objectiveId,
+      result.created
+        ? `Platform work now records delivered outcomes against this Product (standing objective ${result.objectiveId}, decision ${decisionRef}).`
+        : `Platform work was already designated to this Product (standing objective ${result.objectiveId}).`,
+    );
+  });
+}
+
 export const productOutcomesPack: ToolPack = {
   packId: "product-outcomes",
   definitions,
@@ -504,6 +553,7 @@ export const productOutcomesPack: ToolPack = {
       observationHandler(params, false),
     correct_product_outcome_observation: (params) =>
       observationHandler(params, true),
+    designate_platform_work_product: (params) => designatePlatformWorkProductHandler(params),
   },
   grants: {
     create_product_objective: ["backlog_write"],
@@ -513,5 +563,6 @@ export const productOutcomesPack: ToolPack = {
     link_product_objective_work: ["backlog_write"],
     record_product_outcome_observation: ["backlog_write"],
     correct_product_outcome_observation: ["backlog_write"],
+    designate_platform_work_product: ["backlog_write"],
   },
 };

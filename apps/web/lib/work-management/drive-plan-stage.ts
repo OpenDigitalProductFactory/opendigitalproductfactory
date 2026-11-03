@@ -35,7 +35,7 @@ import {
   isCompletingWorkroomDriveReceiptAt,
   receiptInRun,
   type PriorWorkroomDrive,
-} from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 export function workroomDriveTaskId(roomId: string, shapeKey: string): string {
   return `workroom-${roomId}-${shapeKey}`;

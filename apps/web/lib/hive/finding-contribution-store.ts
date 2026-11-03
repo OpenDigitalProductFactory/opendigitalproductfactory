@@ -16,7 +16,7 @@ import {
   type ContributableProposal,
   type ContributionResult,
   type EscalationOutcome,
-} from "./finding-contribution";
+} from "@dpf/validators/commons/finding-contribution";
 
 export type FindingContributionDb = {
   improvementProposal: {

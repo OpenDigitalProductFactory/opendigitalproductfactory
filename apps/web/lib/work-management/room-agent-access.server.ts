@@ -12,6 +12,7 @@ import { currentUserContext } from "@/lib/govern/current-user-context";
 import { authorizeAgentRoomAccess } from "./room-agent-access";
 import type { WorkroomAccessDecision, WorkroomAccessLevel } from "./room-participation";
 import { authorizeWorkroomAccess } from "./room-participation";
+import { resolveWorkItemRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 export interface AgentRoomAccessResult {
@@ -30,7 +31,10 @@ export async function resolveAgentRoomAccess(input: {
   agentId: string;
   userId: string;
   requested: Exclude<WorkroomAccessLevel, "none">;
-  workItem: { id: string; evidence: unknown; assignedToAgentId: string | null; assignedToUserId: string | null };
+  workItem: {
+    id: string; evidence: unknown; assignedToAgentId: string | null; assignedToUserId: string | null;
+    sourceType?: string | null; sourceId?: string | null;
+  };
 }): Promise<AgentRoomAccessResult> {
   const human = await currentUserContext(input.userId);
   if (!human) return { decision: { level: "none", reason: "not-admitted" }, agentPrincipalId: null };
@@ -61,6 +65,8 @@ export async function resolveAgentRoomAccess(input: {
   const agentSensitivityClearance =
     (principal?.sensitivityClearance as string[] | undefined) ?? [...DEFAULT_AGENT_CLEARANCE];
   const policy = readWorkspaceRoomPolicy(input.workItem.evidence);
+  // The room's own ceiling: platform work reads as public (BI-ED5561BB, DI-5E19848444FC).
+  const sensitivityCeiling = await resolveWorkItemRoomSensitivityCeiling(input.workItem);
 
   // Capsule holder fields store the relational Principal.id (cuid); map them to
   // the canonical PRN so a capsule executor matches the room ref space.
@@ -97,7 +103,7 @@ export async function resolveAgentRoomAccess(input: {
     requested: input.requested, principalRef: humanPrincipal.principalId,
     assignedPrincipalRefs: humanRefs,
     discoverablePrincipalRefs: policy.discoverablePrincipalRefs ?? [],
-    sensitivityCeiling: policy.sensitivityCeiling ?? "internal",
+    sensitivityCeiling,
     sensitivityClearance: humanPrincipal.sensitivityClearance,
     isSuperuser: human.isSuperuser, principalKind: "human",
   });
@@ -110,7 +116,7 @@ export async function resolveAgentRoomAccess(input: {
     admittedPrincipalRefs,
     actionPrincipalRefs,
     discoverablePrincipalRefs: policy.discoverablePrincipalRefs ?? [],
-    sensitivityCeiling: policy.sensitivityCeiling ?? "internal",
+    sensitivityCeiling,
   });
 
   return { decision, agentPrincipalId };

@@ -18,13 +18,30 @@ import shutil
 import subprocess
 import sys
 import uuid
-try:
-    import tomllib
-except ImportError:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        tomllib = None
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import codex_toml  # noqa: E402  tomllib, tomli, or Codex's own parser on Python 3.9 (BI-90C9478D)
+
+
+class _Toml:
+    """The one TOML reader this module uses; `available()` replaces `tomllib is None`."""
+
+    @staticmethod
+    def loads(text: str, context_dir: Path | None = None) -> dict:
+        try:
+            return codex_toml.loads_any(text, context_dir=context_dir)
+        except codex_toml.UnsupportedToml as error:
+            raise PermissionPlanError(str(error)) from None
+        except codex_toml.CodexTomlUnavailable:
+            raise PermissionPlanError(RUNTIME_MESSAGE) from None
+
+
+tomllib = _Toml if codex_toml.available() else None
+
+
+def _toml_loads(text: str, context_dir: Path) -> dict:
+    """tomllib.loads, with the real file's folder as context on the Codex path."""
+    return tomllib.loads(text, context_dir) if tomllib is _Toml else tomllib.loads(text)
+RUNTIME_MESSAGE = 'Routine permission convergence requires Python 3.11+, tomli or the Codex CLI; configuration unchanged.'
 
 MARKER = '# DPF routine permissions v1; server authority and managed restrictions still apply.\n'
 
@@ -47,10 +64,10 @@ def _bytes(path: Path) -> bytes | None:
 
 def _load(path: Path, kind: str) -> tuple[dict, bytes | None]:
     if kind=='toml' and tomllib is None:
-        raise PermissionPlanError('Routine permission convergence requires Python 3.11+ or an available tomli parser; configuration unchanged.')
+        raise PermissionPlanError(RUNTIME_MESSAGE)
     raw = _bytes(path)
     try:
-        value = (json.loads(raw.decode('utf-8-sig')) if kind == 'json' else tomllib.loads(raw.decode('utf-8-sig'))) if raw is not None else {}
+        value = (json.loads(raw.decode('utf-8-sig')) if kind == 'json' else _toml_loads(raw.decode('utf-8-sig'), path.parent)) if raw is not None else {}
         if not isinstance(value, dict):
             raise ValueError()
         return value, raw
@@ -134,7 +151,7 @@ class PermissionPlan:
 
 def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, clients=('codex','claude-code','grok')) -> PermissionPlan:
     if tomllib is None:
-        raise PermissionPlanError('Routine permission convergence requires Python 3.11+ or an available tomli parser; configuration unchanged.')
+        raise PermissionPlanError(RUNTIME_MESSAGE)
     root = project_root.expanduser().absolute()
     if root.is_symlink() or getattr(root,'is_junction',lambda:False)():
         raise PermissionPlanError('Linked project root refused.')

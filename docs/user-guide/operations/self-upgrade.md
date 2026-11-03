@@ -184,6 +184,22 @@ Each client gets one of these labels:
   its copy predates this check.
 - **Not seen this week**: it has not connected in the last 7 days.
 
+When a client is behind, a **Why** line says what differs, for example that the files it loaded differ from the released ones.
+
+Each computer that runs these tools also keeps them current on its own. A background job checks hourly and at login, and the card shows how that job last did:
+- it updates on its own;
+- it has been failing, and since when;
+- it is waiting for a person;
+- it is turned off;
+- it could not reach the portal;
+- it runs a newer copy from its own source checkout.
+
+If a computer has been failing, or waiting for a person, for more than a day, one item appears in your attention list. It names the single thing needed, for example confirming that the portal's new identity is yours. A computer that is up to date, turned off or simply quiet raises nothing.
+
+When a client such as Grok or Codex updates itself and the DPF tools stop working with the new version, the item names that client and version. The fix is a DPF update for that version. It arrives like any other update, and you do not need to do anything on the computer.
+
+Each update also looks for agent tools installed since the last one. A tool DPF does not support yet, such as VS Code or the Gemini CLI, is listed in the update's report rather than skipped without a word. Old Claude Code records for project folders that no longer exist are removed once, through Claude Code itself, after a backup.
+
 After an update that ships new agent tools, the portal posts one notification
 that names the clients still behind. Restarting the portal without an update
 posts nothing. You do not need to run anything.

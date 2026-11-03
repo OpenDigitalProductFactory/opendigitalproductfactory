@@ -18,16 +18,12 @@
 import { isRecord } from "@/lib/shared/coerce";
 import type { ApprovalOutcomeState } from "@/lib/coworker/approval-outcome";
 
-import { WORKROOM_DRIVE_STALL_TICKS } from "./workroom-drive-hold";
-import { EXECUTOR_WRITEBACK_UNAVAILABLE_REASON } from "./workroom-drive-receipts";
+import { WORKROOM_DRIVE_STALL_TICKS } from "@dpf/validators/workroom-policy/drive-hold";
+import { EXECUTOR_WRITEBACK_UNAVAILABLE_REASON } from "@dpf/validators/workroom/receipts";
 
-export type PriorDriveForLatch = {
-  action: string;
-  reason: string;
-  stageKey: string | null;
-  /** The cycle the prior tick belonged to. Null when unknown. */
-  cycleKey: string | null;
-};
+/** Incumbent public name for the shared prior-tick representation (BI-DBA1FE11). */
+export type { PriorWorkroomDrive as PriorDriveForLatch } from "@dpf/validators/workroom/receipts";
+import type { PriorWorkroomDrive as PriorDriveForLatch } from "@dpf/validators/workroom/receipts";
 
 /**
  * Whether the writeback latch still holds for this stage.

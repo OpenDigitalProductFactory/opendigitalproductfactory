@@ -197,6 +197,20 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
       }
+      // BI-33B54E4B: a confirmed scoped-test or typecheck failure goes back to
+      // the coding agent with the failing tests named, through the same bound,
+      // then to the owner. Before this it ended here and the sweep re-ran the
+      // same failing tests on the same tree every 30 minutes.
+      if (finalize.status === "tests-failed") {
+        const routed = await step.run("route-test-failure-to-repair", async () => {
+          const { repairFailureForFinalize } = await import("@/lib/build/finalize-repair-routing");
+          const failure = repairFailureForFinalize(finalize);
+          if (!failure) return "not-routable" as const;
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, failure);
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
       // BI-AF072BE5: nothing was committed, so there is nothing to repair or
       // review. Tell the owner once; escalation ends the build's sweep.
       if (finalize.status === "no-change") {

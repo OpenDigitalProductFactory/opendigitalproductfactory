@@ -16,6 +16,7 @@
 // Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §4.6
 
 import { PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { agentAccessLocationLabel } from "@/lib/navigation/admin-location";
 
 /** Escape for HTML text and double-quoted attribute contexts. Every dynamic
  *  value below is attacker-influenced — a DCR client picks its own name, and
@@ -90,6 +91,21 @@ export function renderConsentRefusal(title: string, detail: string): string {
     title,
     `<h1>${esc(title)}</h1><p>${esc(detail)}</p>
 <p class="foot">Nothing was connected and no permission was granted. You can close this page.</p>`,
+  );
+}
+
+/**
+ * The browser is signed in as the platform automation persona, which never
+ * binds a person's interactive client (BI-F586F8A5). Name the account so the
+ * person sees why, and offer the one way forward: sign in as themself.
+ */
+export function renderAutomationAccountRefusal(account: string, signInUrl: string): string {
+  return shell(
+    "Sign in as yourself to connect",
+    `<h1>Sign in as yourself to connect</h1>
+<p>This browser is signed in as <strong>${esc(account)}</strong>, the platform automation account. A connection made here would act as that account, not as you.</p>
+<p><a href="${esc(signInUrl)}">Sign in as yourself</a> and you will come straight back to this request.</p>
+<p class="foot">Nothing was connected and no permission was granted.</p>`,
   );
 }
 
@@ -193,7 +209,7 @@ ${scopeRows}
 <button class="secondary" type="submit" name="decision" value="deny" formnovalidate>Cancel</button>
 </div>
 </form>
-<p class="foot">You can revoke this at any time in Admin &rsaquo; Platform Development &rsaquo; MCP.</p>`,
+<p class="foot">An administrator can end this connection at any time in ${esc(agentAccessLocationLabel())}.</p>`,
   );
 }
 

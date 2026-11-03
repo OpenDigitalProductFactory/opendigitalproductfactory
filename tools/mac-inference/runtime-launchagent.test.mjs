@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderRuntimeLaunchAgent, parseLaunchAgentStatus, createRuntimeLaunchAgent } from './runtime-launchagent.mjs';
+import * as nativeJobs from './runtime-launchagent.mjs';
 
 const absent = { code: 113, stderr: 'Could not find service "local.dpf-inference.test"', stdout: '' };
 const owned = { code: 0, stdout: 'program = /private/test/runtime/bin/dmr\npid = 123\n', stderr: '' };
@@ -64,4 +65,53 @@ test('failed process observation and surviving native children cannot prove clea
     second = args[0] === 'bootstrap' ? owned : absent; return { code: 0 };
   }, { processes: async () => [{ pid: 123 }] });
   await lingering.start(); await assert.rejects(lingering.stop(), /unconfirmed/);
+});
+
+const ownedSelection = { label: settings.label, program: '/private/test/runtime/bin/dmr',
+  runtimeManifestSha256: 'a'.repeat(64) };
+test('a fresh controller stops a prior managed job only after reading its current owned selection', async () => {
+  let state = owned; const calls = []; let authorityReads = 0;
+  const job = lifecycle(async args => {
+    calls.push(args); if (args[0] === 'print') return state;
+    if (args[0] === 'bootout') { state = absent; return { code: 0 }; }
+    throw new Error('Unexpected service mutation');
+  }, { runtimeManifestSha256: ownedSelection.runtimeManifestSha256,
+    readExistingOwnership: async () => ownedSelection, readAuthority: async () => { authorityReads++; } });
+  const result = await job.stop();
+  assert.equal(result.stopped, true); assert.equal(result.adoptedExisting, true);
+  assert.equal(calls.filter(args => args[0] === 'bootout').length, 1); assert.ok(authorityReads > 0);
+});
+test('missing or changed prior selection cannot authorize stopping a pre-existing service', async () => {
+  for (const selection of [null, { ...ownedSelection, label: 'foreign.service' },
+    { ...ownedSelection, program: '/foreign/bin/dmr' }, { ...ownedSelection, runtimeManifestSha256: 'b'.repeat(64) }]) {
+    const calls = []; const job = lifecycle(async args => { calls.push(args); return owned; },
+      { runtimeManifestSha256: ownedSelection.runtimeManifestSha256, readExistingOwnership: async () => selection });
+    await assert.rejects(job.stop(), /ownership/); assert.equal(calls.some(args => args[0] === 'bootout'), false);
+  }
+});
+test('reopened managed cleanup still refuses lost authority, foreign jobs and surviving descendants', async () => {
+  const options = { runtimeManifestSha256: ownedSelection.runtimeManifestSha256,
+    readExistingOwnership: async () => ownedSelection };
+  const calls = []; const fenced = lifecycle(async args => { calls.push(args); return owned; },
+    { ...options, readAuthority: async () => { throw new Error('fenced'); } });
+  await assert.rejects(fenced.stop(), /fenced/); assert.deepEqual(calls, []);
+  const foreign = lifecycle(async () => ({ ...owned, stdout: 'program = /foreign/dmr\npid = 44\n' }), options);
+  await assert.rejects(foreign.stop(), /unowned/);
+  const lingering = lifecycle(async () => absent, { ...options, processes: async () => [{ pid: 9 }] });
+  await assert.rejects(lingering.stop(), /unconfirmed/);
+});
+test('permanent job rendering is separate from the leased experiment and binds the active selection', () => {
+  const label = 'local.dpf-inference.managed', runtimeManifestSha256 = 'a'.repeat(64), qualificationReportSha256 = 'b'.repeat(64);
+  const selection = { schemaVersion: 1, status: 'active', label, program: '/private/test/runtime/bin/dmr',
+    port: settings.port, runtimeManifestSha256, qualificationReportSha256, actionKey: 'RA-BOUND' };
+  const args = { ...settings, label, selection, runtimeManifestSha256, qualificationReportSha256 };
+  const rendered = nativeJobs.renderManagedRuntimeLaunchAgent(args);
+  assert.match(rendered, /KeepAlive<\/key><true\/>/); assert.match(rendered, /127\.0\.0\.1/);
+  assert.match(rendered, /ThrottleInterval<\/key><integer>10<\/integer>/);
+  assert.doesNotMatch(rendered, /DPF_INFERENCE_LEASE_FILE|DPF_INFERENCE_EXPERIMENT_DEADLINE|\/bin\/sh/);
+  for (const change of [{ status: 'runtime-api-qualified' }, { label: 'local.dpf-inference.experiment' },
+    { program: '/foreign/bin/dmr' }, { port: 9000 }, { runtimeManifestSha256: 'c'.repeat(64) },
+    { qualificationReportSha256: 'c'.repeat(64) }, { actionKey: '' }]) {
+    assert.throws(() => nativeJobs.renderManagedRuntimeLaunchAgent({ ...args, selection: { ...selection, ...change } }), /selection/);
+  }
 });

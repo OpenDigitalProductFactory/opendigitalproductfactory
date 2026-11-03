@@ -10,6 +10,7 @@ import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror";
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review";
 import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage";
+import { ensureHarnessEvolutionLoopScheduledTask } from "./seed-harness-evolution-loop";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection";
 
@@ -53,6 +54,7 @@ const SEEDS: Array<[string, (db: never, now?: Date) => Promise<unknown>]> = [
   ["decision-engine-review", ensureDecisionEngineReviewScheduledTask],
   ["demand-scoring-steward", ensureDemandScoringStewardScheduledTask],
   ["discovery-triage", ensureDiscoveryTriageScheduledTask],
+  ["harness-evolution-loop", ensureHarnessEvolutionLoopScheduledTask],
   ["self-optimization-sweep", ensureSelfOptimizationSweepScheduledTask],
   ["sysml-projection", ensureSysmlProjectionScheduledTask],
 ];

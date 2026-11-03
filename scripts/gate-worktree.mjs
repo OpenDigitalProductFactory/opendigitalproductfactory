@@ -1719,8 +1719,8 @@ async function main() {
     if (disposition.action === "source-drift") stopOnSourceDrift(disposition.reasons);
   }
 
-  // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
-  // the single sandbox slot. A resumed claim already holds a place in line.
+  // BI-A254A94C: name the files that cost a diff the docs-only lane. A
+  // resumed claim already holds a place in line.
   if (!options.finalizeEvidence && !options.resumeLeaseId) {
     const sandbox = sandboxDecisionForHead({
       cwd: worktreePath,
@@ -1729,11 +1729,13 @@ async function main() {
         return result.status === 0 ? result.stdout.trim() : null;
       },
     });
-    if (sandbox) {
+    if (sandbox && sandbox.claim) {
       process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
-      if (!sandbox.claim) {
-        process.exit(0); // exit-0: docs-only diff; no lease claimed
-      }
+    } else if (sandbox) {
+      // BI-78176241: the documentation lane above records every docs-only
+      // diff it can verify. Reaching here means it declined this one, and an
+      // exit 0 with no record is a pass nobody can read — so gate it fully.
+      process.stdout.write("gate-worktree: docs-only diff, but the documentation evidence lane did not record it — running the full gate so this HEAD gets a verdict.\n");
     }
   }
 

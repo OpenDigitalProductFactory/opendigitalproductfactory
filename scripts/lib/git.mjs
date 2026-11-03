@@ -23,7 +23,9 @@ import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-function execOptions({ cwd = REPO_ROOT, maxBuffer, timeout, env, input, binary = false } = {}) {
+// The tracked inventory alone exceeds Node's 1 MiB default. Keep a finite
+// shared ceiling while preserving tighter or larger explicit caller limits.
+function execOptions({ cwd = REPO_ROOT, maxBuffer = 16 * 1024 * 1024, timeout, env, input, binary = false } = {}) {
   const options = {
     cwd,
     stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],

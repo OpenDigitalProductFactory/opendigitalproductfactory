@@ -32,6 +32,18 @@
       ]
     },
     {
+      "kind": "host-runtime",
+      "why": "Code that runs on the HOST, outside every container: the native agent and its installers, the autostart entrypoints and units, host convergence. A container self-upgrade can never install or replace a host service, and each OS has its own service manager, so a host change that converges on one platform silently strands the others. BI-084F85E5: BI-28EFE18A shipped the host-upkeep agent with an operator-action trailer, and no existing install on any platform received it.",
+      "patterns": [
+        "^scripts/installer/native-edge-host\\.(sh|ps1)$",
+        "^scripts/installer/dpf-start\\.consumer\\.(sh|ps1)$",
+        "^scripts/installer/lib/(host-convergence|autostart)\\.(sh|ps1)$",
+        "^scripts/installer/autostart-bridge\\.mjs$",
+        "^scripts/installer/[^/]+\\.(plist|service)\\.tmpl$",
+        "^services/edge-node-go/"
+      ]
+    },
+    {
       "kind": "git-hooks",
       "why": "Hook logic converges only when something re-runs the converger. BI-3727106F: 68 of 85 worktrees pushed ungated because convergence was install-time only.",
       "patterns": [
@@ -46,6 +58,15 @@
       "patterns": ["^config/"]
     }
   ],
+  "platformCoverage": {
+    "$comment": "BI-084F85E5: a change to a kind listed here must say how an EXISTING install converges on EVERY target platform. The decision reasons, together, must name each platform below: a decision per platform, or one reason naming all three. Saying it for one OS is how the others were stranded.",
+    "kinds": ["host-runtime"],
+    "platforms": {
+      "windows": "\\b(windows|win32)\\b",
+      "macos": "\\b(macos|mac os|darwin)\\b",
+      "linux": "\\blinux\\b"
+    }
+  },
   "imageCopy": {
     "$comment": "Files the portal image COPYs BY NAME are parsed live from these Dockerfiles. A rename or move breaks the image build for every install that upgrades. Directory COPY sources are not classified (they are app source, reached by the normal image rebuild); only single-file sources outside the ignore set are.",
     "dockerfiles": ["Dockerfile"],

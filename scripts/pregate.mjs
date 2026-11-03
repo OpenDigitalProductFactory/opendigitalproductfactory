@@ -21,7 +21,6 @@ import { runForegroundGate, withForegroundCancellation } from "./lib/foreground-
 export { runForegroundGate } from "./lib/foreground-gate-process.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
-import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,6 +125,19 @@ export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) 
     };
   }
   return { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" };
+}
+
+/**
+ * BI-25CB699C: a head that only merged origin/main onto a published, passed
+ * head (regenerated registry outputs included) takes the reduced tier —
+ * derived-artifact freshness, typecheck and affected tests — reusing that
+ * PASS for everything else. The reuse is recorded as a published-correction
+ * proof (gate-unrun, integration delegated); CI and the merge queue stay
+ * authoritative. Any other class, or a forced re-gate, runs the full gate.
+ */
+export function shouldTakeReducedTier({ args = [], classification = null } = {}) {
+  if (isRecordExemptInvocation(args) || args.includes(FORCE_RERUN_FLAG)) return false;
+  return classification === "main-refresh";
 }
 
 /**
@@ -865,21 +877,31 @@ async function main() {
     process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
   }
 
-  const preflightStatus = await runHostPreflight({ args });
-  if (preflightStatus !== 0) process.exit(preflightStatus);
-
-  // BI-A254A94C: the pre-push gate already exempts a docs-only diff. Do not
-  // spend the single sandbox slot on that diff. A mixed code file is named.
   if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
-    const sandbox = sandboxDecisionForHead();
-    if (sandbox) {
-      process.stdout.write(`pregate: ${sandbox.message}\n`);
-      if (!sandbox.claim) {
-        process.exit(0); // exit-0: docs-only diff; same predicate as pre-push; no lease claimed
+    // The probe only ever narrows work: a checkout without the correction
+    // module (or its packaged classifier) runs the full gate as before.
+    const correction = await import("./published-correction.mjs").catch(() => null);
+    if (correction && shouldTakeReducedTier({ args, classification: correction.reducedTierClassification() })) {
+      process.stdout.write("pregate: HEAD only merges origin/main onto a passed published head — running the reduced tier (derived-artifact freshness, typecheck, affected tests); the prior PASS covers the rest.\n");
+      try {
+        const result = await correction.verifyPublishedCorrection();
+        process.stdout.write(`pregate: reduced tier passed (${result.publicationCorrection.commands.length} command(s)); recorded as ${result.skipReason}. Full integration UNRUN, delegated to protected GitHub checks and the merge queue.\n`);
+        process.exit(0); // exit-0: reduced-tier proof recorded for this HEAD; pre-push accepts it, CI stays authoritative
+      } catch (error) {
+        process.stderr.write(`pregate: reduced tier failed — ${error.message}\npregate: fix the named check; re-gate fully only with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`);
+        process.exit(1);
       }
     }
   }
 
+  const preflightStatus = await runHostPreflight({ args });
+  if (preflightStatus !== 0) process.exit(preflightStatus);
+
+  // BI-78176241: a docs-only diff goes to the gate like any other. Its
+  // pre-admission documentation lane verifies the docs without a lease or the
+  // sandbox slot and writes the SHA-bound PASS that pregate:status and the
+  // publish guard read. Exiting here (BI-A254A94C) left no record, so every
+  // docs-only push needed an override.
   const useShell = shouldUseShell();
   const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {

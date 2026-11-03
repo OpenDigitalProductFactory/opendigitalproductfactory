@@ -1,5 +1,5 @@
 // Vector store on Postgres + pgvector. Exports VECTOR_COLLECTIONS, VectorPoint,
-// SearchResult, upsertVectors, searchSimilar, deleteVectors, scrollPoints,
+// SearchResult, upsertVectors, searchSimilar, searchLexical, deleteVectors, scrollPoints,
 // hashToNumber, ensureCollections, ensurePayloadIndexes and isVectorStoreHealthy.
 // Vectors live in the `vector_embedding` table (see the 20260714110000 migration);
 // access is raw SQL because Prisma can't model the `vector` type.
@@ -152,6 +152,60 @@ export async function searchSimilar(
     score: Number(r.score),
     payload: r.payload,
   }));
+}
+
+/**
+ * Embedding-free term match over payload text fields (BI-MCP-EFF-4F823E5B).
+ *
+ * The fallback for when a query cannot be embedded: the stored rows are
+ * healthy, only the query side needs the model. Score = fraction of terms
+ * found in any of `fields`, so it is NOT comparable with a cosine score.
+ * Exported for unit testing the SQL without a database.
+ */
+export function buildLexicalSql(
+  collection: string,
+  terms: string[],
+  fields: string[],
+  filter: VectorFilter | undefined,
+  limit: number,
+): { sql: string; params: unknown[] } {
+  const params: unknown[] = [collection];
+  const hits = terms.map((term) => {
+    params.push(`%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+    const p = `$${params.length}`;
+    const anyField = fields
+      .map((f) => `payload->>'${f.replace(/'/g, "''")}' ILIKE ${p}`)
+      .join(" OR ");
+    return `(CASE WHEN ${anyField} THEN 1 ELSE 0 END)`;
+  });
+  const filterSql = filter ? buildFilterSql(filter, params) : "";
+  const score = `(${hits.join(" + ")}) / ${Number(terms.length)}.0`;
+  const sql = `SELECT id, score, payload FROM (
+       SELECT point_id AS id, ${score} AS score, payload
+         FROM vector_embedding
+        WHERE collection = $1 ${filterSql}
+     ) scored
+     WHERE score > 0
+     ORDER BY score DESC
+     LIMIT ${Math.trunc(Number(limit))}`;
+  return { sql, params };
+}
+
+export async function searchLexical(
+  collection: string,
+  terms: string[],
+  fields: string[],
+  filter?: VectorFilter,
+  limit = 5,
+): Promise<SearchResult[]> {
+  if (terms.length === 0 || fields.length === 0) return [];
+  const { sql, params } = buildLexicalSql(collection, terms, fields, filter, limit);
+  const rows = (await prisma.$queryRawUnsafe(sql, ...params)) as Array<{
+    id: bigint | number;
+    score: number;
+    payload: Record<string, unknown>;
+  }>;
+  return rows.map((r) => ({ id: Number(r.id), score: Number(r.score), payload: r.payload }));
 }
 
 export async function deleteVectors(

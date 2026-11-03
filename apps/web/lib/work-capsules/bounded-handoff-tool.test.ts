@@ -26,3 +26,13 @@ describe("bounded handoff tool adapter",()=>{
   it("keeps omitted phase on the legacy adapter",()=>{expect(prepareBoundedHandoff({capsuleId:"WC-room",toExecutorKind:"codex-desktop"})).toBeUndefined();});
   it("refuses invalid explicit phase before the handler or cache",()=>{expect(prepareBoundedHandoff({...params,phase:"accept-for-another-agent"})).toMatchObject({refusal:{success:false,error:"handoff-invalid-input"}});});
 });
+describe("batched handover consequence (BI-D4144471)",()=>{
+  it("treats a batch dry run as a read: it changes nothing",async()=>{
+    expect(await boundedHandoffConsequenceForCall({...call,params:{capsuleIds:["WC-A","WC-B"],toExecutorKind:"claude-desktop"}})).toMatchObject({consequence:null,reason:"batch-handover-dry-run"});
+    expect(await boundedHandoffConsequenceForCall({...call,params:{capsuleIds:["WC-A"],toExecutorKind:"claude-desktop",dryRun:true}})).toMatchObject({consequence:null});
+  });
+  it("keeps authority for a batch apply",async()=>{
+    expect(await boundedHandoffConsequenceForCall({...call,params:{capsuleIds:["WC-A"],toExecutorKind:"claude-desktop",dryRun:false,planDigest:"d"}})).toMatchObject({consequence:"authority"});
+    expect(m.assess).not.toHaveBeenCalled();
+  });
+});

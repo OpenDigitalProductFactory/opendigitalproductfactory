@@ -426,9 +426,17 @@ Harness friction inside a worktree (missing pnpm on PATH, cross-workspace symlin
 
 Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inference, and semantic review can each retain several gigabytes of memory. The repository routes these commands through a governed host-resource runner. It measures available memory, preserves operating-system and resident-inference reserves, and admits only the work that fits. Inference is always single-flight.
 
-When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
+When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Resume the recorded attempt after capacity becomes available. Normal host-command completion stops renewal and reads its exact reservation once; it does not ask the operator to approve generic immediate release. A pending or unknown reservation remains explicit, and expiry does not prove the command passed or every descendant exited. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
+
+Server-authorized host qualification is currently unavailable. The normal host
+runner can supervise a command, but it reports with the same MCP credential as
+its caller, so the server cannot authenticate that the runner—not a direct
+caller—observed the claimed success. Do not manufacture or reuse a
+`DPF_QUALIFICATION_ADMISSION_TOKEN`; terminal recovery withholds it and the
+evidence writer refuses qualification payloads. Ordinary host-resource runs
+continue to provide capacity coordination only, not qualification evidence.
 
 #### Recover a review blocked by endpoint eligibility
 
@@ -450,6 +458,13 @@ the verification reference, exact request digest and confirmation. Within the
 original window it retains the request, deadline and remaining attempts. After
 expiry, only the existing qualified bounded-successor contract applies. Neither
 task completion nor successful source tests substitute for an independent verdict.
+
+When the execution outcome is unknown, the recovery guidance first directs you
+to the owned task details and complete execution settlement. This takes priority
+over expiry, remaining attempts and endpoint remediation. Reconcile every
+unresolved provider execution through its evidence owner before requesting any
+retry or successor. An elapsed deadline, inactive worker or empty local audit
+does not establish that the original execution and its effects have ended.
 
 #### Clean up when merged
 
