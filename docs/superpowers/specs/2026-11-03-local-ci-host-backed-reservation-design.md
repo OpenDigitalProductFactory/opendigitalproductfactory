@@ -20,6 +20,17 @@ may still fence when ungoverned host pressure arrives or actual gate-wide
 growth exceeds the calibrated envelope; that remains infrastructure evidence,
 never a verdict on the diff.
 
+## Delivery agreement
+
+The governed Workroom retains these medium-delivery acceptance criteria:
+
+1. An admitted gate cannot be starved by work admitted after it.
+2. The refusal happens at admission, where it is actionable, rather than
+   mid-build.
+3. No client-side headroom check is required for the pool to conserve capacity.
+4. A run that still cannot proceed is reported as infrastructure and re-runnable
+   on the same SHA, as today.
+
 ## Reproduction on the current tree
 
 The defect is present at `56f0b174b617a80c3cc160dd6e2c3287143c3652`.
