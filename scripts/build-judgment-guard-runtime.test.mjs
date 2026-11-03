@@ -6,11 +6,63 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { SOURCE_PATHS, PACKAGE_FILES, IDENTITY_PATH, ARTIFACT_DIRECTORY, buildArtifacts, staleArtifacts, readPackageFiles, verifyGuardClosure } from "./build-judgment-guard-runtime.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const source = (path) => readFileSync(join(root, path), "utf8");
 const hash = (text) => createHash("sha256").update(text).digest("hex");
+
+// Construct tiny approved test archives so malformed input reaches the parser,
+// rather than failing the outer archive-hash comparison first.
+function seal(header) {
+  header.fill(32, 148, 156);
+  header.write([...header].reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, "0") + "\0 ", 148, "ascii");
+  return header;
+}
+function tarFile({name = "package/value.js", contents = "safe", type = "0", size, prefix = ""} = {}) {
+  const bytes = Buffer.from(contents), header = Buffer.alloc(512);
+  header.write(name, 0, 100, "utf8");
+  header.write((size ?? bytes.length).toString(8).padStart(11, "0") + "\0", 124, "ascii");
+  header.write(type, 156, "ascii"); header.write(prefix, 345, 155, "utf8"); seal(header);
+  return Buffer.concat([header, bytes, Buffer.alloc((512 - bytes.length % 512) % 512)]);
+}
+function parseTar(tar) { const archive = gzipSync(tar); return readPackageFiles(archive, hash(archive)); }
+const terminated = (...entries) => Buffer.concat([...entries, Buffer.alloc(1024)]);
+
+test("hash-bound regular TAR bytes are returned without extraction", () => {
+  assert.equal(parseTar(terminated(tarFile())).get("package/value.js").toString(), "safe");
+});
+test("hash-bound TAR rejects changed checksums and non-octal sizes", () => {
+  const changed = tarFile(); changed[1] ^= 1;
+  assert.throws(() => parseTar(terminated(changed)), /Tar header checksum/);
+  const badSize = tarFile(); badSize.fill(120, 124, 136); seal(badSize.subarray(0, 512));
+  assert.throws(() => parseTar(terminated(badSize)), /Invalid tar number/);
+});
+test("hash-bound TAR refuses traversal, foreign roots and links", () => {
+  for (const entry of [tarFile({name:"package/../escape"}), tarFile({name:"/absolute"}), tarFile({prefix:"../escape"})])
+    assert.throws(() => parseTar(terminated(entry)), /Invalid package entry/);
+  for (const type of ["1", "2", "5"]) assert.throws(() => parseTar(terminated(tarFile({type}))), /Only regular package files/);
+});
+test("hash-bound TAR rejects duplicate entries and the entry-count ceiling", () => {
+  assert.throws(() => parseTar(terminated(tarFile(),tarFile())), /Duplicate or excessive/);
+  const entries = Array.from({length:1001},(_,i)=>tarFile({name:`package/file${i}`,contents:""}));
+  assert.throws(() => parseTar(terminated(...entries)), /Duplicate or excessive/);
+});
+test("hash-bound TAR rejects truncation, absent terminators and trailing bytes", () => {
+  assert.throws(() => parseTar(terminated(tarFile({size:4096}))), /Truncated package entry/);
+  assert.throws(() => parseTar(tarFile()), /Invalid tar termination/);
+  assert.throws(() => parseTar(Buffer.concat([terminated(tarFile()),Buffer.from("trailing")])), /Invalid tar termination/);
+  assert.throws(() => parseTar(tarFile().subarray(0,200)), /Invalid tar termination/);
+});
+test("archive bounds refuse oversized compressed and decompressed bytes", () => {
+  const oversized = Buffer.alloc(4 * 1024 * 1024 + 1);
+  assert.throws(() => readPackageFiles(oversized,hash(oversized)), /Bounded package archive/);
+  const bomb = gzipSync(Buffer.alloc(16 * 1024 * 1024 + 1));
+  assert.throws(() => readPackageFiles(bomb,hash(bomb)), error => error.code === "ERR_BUFFER_TOO_LARGE");
+  const compressed = gzipSync(terminated(tarFile())).subarray(0,20);
+  assert.throws(() => readPackageFiles(compressed,hash(compressed)), error => ["Z_BUF_ERROR","Z_DATA_ERROR"].includes(error.code));
+});
 
 test("generated runtime is deterministic and binds exact canonical source/output bytes", () => {
   const artifacts = buildArtifacts();

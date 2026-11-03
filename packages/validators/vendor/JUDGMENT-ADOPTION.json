@@ -16,7 +16,7 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "apps/web/lib/decision/self-review/measures.ts",
         "apps/web/lib/gpp/permit-claims.ts",
         "apps/web/lib/work-capsules.ts",
@@ -28,6 +28,40 @@
         "packages/validators/src/gpp/work-shape-contracts.ts",
         "packages/validators/src/judgment/scopes.ts",
         "packages/validators/src/operating-composition/composition.ts"
+      ],
+      "importers": [
+        "apps/web/lib/decision/self-review/measures.ts",
+        "apps/web/lib/gpp/permit-claims.ts",
+        "apps/web/lib/work-capsules.ts",
+        "apps/web/lib/work-management/source-registry.ts",
+        "packages/validators/src/commons/exchange.ts",
+        "packages/validators/src/decision-scope.ts",
+        "packages/validators/src/gpp/bindings-emit.ts",
+        "packages/validators/src/gpp/gpp-shape-schema.ts",
+        "packages/validators/src/gpp/work-shape-contracts.ts",
+        "packages/validators/src/judgment/component-identity.test.ts",
+        "packages/validators/src/operating-composition/composition.ts"
+      ],
+      "productionImporters": [
+        "apps/web/lib/decision/self-review/measures.ts",
+        "apps/web/lib/gpp/permit-claims.ts",
+        "apps/web/lib/work-capsules.ts",
+        "apps/web/lib/work-management/source-registry.ts",
+        "packages/validators/src/commons/exchange.ts",
+        "packages/validators/src/decision-scope.ts",
+        "packages/validators/src/gpp/bindings-emit.ts",
+        "packages/validators/src/gpp/gpp-shape-schema.ts",
+        "packages/validators/src/gpp/work-shape-contracts.ts",
+        "packages/validators/src/operating-composition/composition.ts"
+      ],
+      "testImporters": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs",
+        "examples/commons-exchange/run.mjs",
+        "examples/gpp-toolkit/run.mjs",
+        "examples/workroom-policies/run.mjs"
       ]
     },
     "packages/validators/src/bounded-trusted-json.ts": {
@@ -35,13 +69,36 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "packages/validators/src/commons/exchange.ts",
         "packages/validators/src/commons/result-intake.ts",
         "packages/validators/src/commons/result-projection.ts",
         "packages/validators/src/operating-composition/composition.ts",
         "packages/validators/src/operating-composition/qualification.ts",
         "packages/validators/src/trusted-agent-contracts.ts"
+      ],
+      "importers": [
+        "packages/validators/src/commons/exchange.ts",
+        "packages/validators/src/commons/result-intake.ts",
+        "packages/validators/src/commons/result-projection.ts",
+        "packages/validators/src/judgment/component-identity.test.ts",
+        "packages/validators/src/operating-composition/composition.ts",
+        "packages/validators/src/operating-composition/qualification.ts",
+        "packages/validators/src/trusted-agent-contracts.ts"
+      ],
+      "productionImporters": [
+        "packages/validators/src/commons/exchange.ts",
+        "packages/validators/src/commons/result-intake.ts",
+        "packages/validators/src/commons/result-projection.ts",
+        "packages/validators/src/operating-composition/composition.ts",
+        "packages/validators/src/operating-composition/qualification.ts",
+        "packages/validators/src/trusted-agent-contracts.ts"
+      ],
+      "testImporters": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/commons-exchange/run.mjs"
       ]
     },
     "packages/validators/src/judgment/index.ts": {
@@ -49,16 +106,36 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": []
+      "historicalImportersAtPreCutoverBase": [],
+      "importers": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "productionImporters": [],
+      "testImporters": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
+      ]
     },
     "packages/validators/src/judgment/scopes.ts": {
       "artifactSubpath": "./decision-scopes",
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "packages/validators/src/judgment/index.ts",
         "packages/validators/src/judgment/scoped-advice.ts"
+      ],
+      "importers": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "productionImporters": [],
+      "testImporters": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
       ]
     },
     "packages/validators/src/judgment/option-scoring.ts": {
@@ -66,7 +143,7 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "apps/web/lib/decision-perspective/option-recommendation.ts",
         "apps/web/lib/decision/band-telemetry.ts",
         "apps/web/lib/decision/decision-drift.test.ts",
@@ -89,6 +166,53 @@
         "packages/validators/src/judgment/index.ts",
         "packages/validators/src/judgment/scoped-advice.ts",
         "packages/validators/src/judgment/uncertain-retry.ts"
+      ],
+      "importers": [
+        "apps/web/lib/decision/band-telemetry.ts",
+        "apps/web/lib/decision/decision-drift.test.ts",
+        "apps/web/lib/decision/decision-drift.ts",
+        "apps/web/lib/decision/evidence-grounding.ts",
+        "apps/web/lib/decision/golden-decisions.ts",
+        "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+        "apps/web/lib/decision/kernel-consult-ledger.ts",
+        "apps/web/lib/decision/mcda-quality-gates.test.ts",
+        "apps/web/lib/decision/option-scoring.insufficient-signal.test.ts",
+        "apps/web/lib/decision/option-scoring.overlap-scan.test.ts",
+        "apps/web/lib/decision/principle-decide-signal-quality.ts",
+        "apps/web/lib/decision/recorded-citations.test.ts",
+        "apps/web/lib/decision/situational-weighting.backtest.test.ts",
+        "apps/web/lib/decision/three-band-verdict.test.ts",
+        "apps/web/lib/decision/uncertain-retry.test.ts",
+        "apps/web/lib/mcp/packs/principle-decide-pack.ts",
+        "apps/web/lib/wiki/principle-decide.test.ts",
+        "packages/validators/src/judgment/component-identity.test.ts",
+        "packages/validators/src/judgment/guard-runtime-parity.test.ts"
+      ],
+      "productionImporters": [
+        "apps/web/lib/decision/band-telemetry.ts",
+        "apps/web/lib/decision/decision-drift.ts",
+        "apps/web/lib/decision/evidence-grounding.ts",
+        "apps/web/lib/decision/golden-decisions.ts",
+        "apps/web/lib/decision/kernel-consult-ledger.ts",
+        "apps/web/lib/decision/principle-decide-signal-quality.ts",
+        "apps/web/lib/mcp/packs/principle-decide-pack.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/decision/decision-drift.test.ts",
+        "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+        "apps/web/lib/decision/mcda-quality-gates.test.ts",
+        "apps/web/lib/decision/option-scoring.insufficient-signal.test.ts",
+        "apps/web/lib/decision/option-scoring.overlap-scan.test.ts",
+        "apps/web/lib/decision/recorded-citations.test.ts",
+        "apps/web/lib/decision/situational-weighting.backtest.test.ts",
+        "apps/web/lib/decision/three-band-verdict.test.ts",
+        "apps/web/lib/decision/uncertain-retry.test.ts",
+        "apps/web/lib/wiki/principle-decide.test.ts",
+        "packages/validators/src/judgment/component-identity.test.ts",
+        "packages/validators/src/judgment/guard-runtime-parity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
       ]
     },
     "packages/validators/src/judgment/mcda-quality-gates.ts": {
@@ -96,10 +220,22 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "apps/web/lib/decision/mcda-quality-gates.test.ts",
         "packages/validators/src/judgment/index.ts",
         "packages/validators/src/judgment/option-scoring.ts"
+      ],
+      "importers": [
+        "apps/web/lib/decision/mcda-quality-gates.test.ts",
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "productionImporters": [],
+      "testImporters": [
+        "apps/web/lib/decision/mcda-quality-gates.test.ts",
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
       ]
     },
     "packages/validators/src/judgment/option-identities.ts": {
@@ -107,10 +243,23 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "apps/web/lib/decision/option-input-contract.ts",
         "packages/validators/src/judgment/index.ts",
         "packages/validators/src/judgment/scoped-advice.ts"
+      ],
+      "importers": [
+        "apps/web/lib/decision/option-input-contract.ts",
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "productionImporters": [
+        "apps/web/lib/decision/option-input-contract.ts"
+      ],
+      "testImporters": [
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
       ]
     },
     "packages/validators/src/judgment/uncertain-retry.ts": {
@@ -118,10 +267,25 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "apps/web/lib/decision/kernel-consult-ledger.ts",
         "apps/web/lib/decision/uncertain-retry.test.ts",
         "packages/validators/src/judgment/index.ts"
+      ],
+      "importers": [
+        "apps/web/lib/decision/kernel-consult-ledger.ts",
+        "apps/web/lib/decision/uncertain-retry.test.ts",
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "productionImporters": [
+        "apps/web/lib/decision/kernel-consult-ledger.ts"
+      ],
+      "testImporters": [
+        "apps/web/lib/decision/uncertain-retry.test.ts",
+        "packages/validators/src/judgment/component-identity.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
       ]
     },
     "packages/validators/src/judgment/scoped-advice.ts": {
@@ -129,8 +293,20 @@
       "owner": "DPF maintainers",
       "tracking": "BI-BDF358CB",
       "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
-      "importers": [
+      "historicalImportersAtPreCutoverBase": [
         "packages/validators/src/judgment/index.ts"
+      ],
+      "importers": [
+        "packages/validators/src/judgment/component-identity.test.ts",
+        "packages/validators/src/judgment/scoped-advice.test.ts"
+      ],
+      "productionImporters": [],
+      "testImporters": [
+        "packages/validators/src/judgment/component-identity.test.ts",
+        "packages/validators/src/judgment/scoped-advice.test.ts"
+      ],
+      "fixtureConsumers": [
+        "examples/scoped-judgment/run.mjs"
       ]
     }
   },
@@ -143,5 +319,6 @@
     },
     "builder": "scripts/build-judgment-guard-runtime.mjs",
     "policy": "Exact verified archive emitted closure; no parallel scorer or runtime package/registry dependency. Node20 proof required."
-  }
+  },
+  "inventoryBasis": "Current direct source imports and actual isolated manifest sources after cutover; historical pre-cutover importers are separate. No independent body retained."
 }
