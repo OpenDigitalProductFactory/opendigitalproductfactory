@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveCoworkerRuntimeMode } from "../components/agent/coworker-runtime-mode";
 import { chromium, type Browser, type BrowserContext } from "@playwright/test";
 import { isRecord } from "../lib/shared/coerce";
 import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
@@ -71,6 +72,11 @@ export async function verifyForegroundRecovery() {
     check(business?.archetype.archetypeId === "software-platform", "The served Finance fixture has the wrong business context");
     evidence.businessContext = { organizationId: business.organizationId, archetypeId: business.archetype.archetypeId };
     executedCaseIds.push("software-business-context");
+    const { isUnifiedCoworkerEnabled } = await import("../lib/shared/feature-flags");
+    const useUnifiedCoworker = await isUnifiedCoworkerEnabled();
+    const expectedMode = resolveCoworkerRuntimeMode({ pathname: "/finance", devMode: false,
+      useUnifiedCoworker, coworkerMode: "advise" }).coworkerMode;
+    evidence.runtimePosture = { useUnifiedCoworker, expectedMode, source: "existing runtime mode resolver; fixture does not change this setting" };
     const expenseState = async () => ({ claims: await prisma.expenseClaim.count(), items: await prisma.expenseItem.count() });
     const expensesBefore = await expenseState();
     check(expensesBefore.claims === 0 && expensesBefore.items === 0, "Readonly Finance fixture requires no existing expenses");
@@ -108,16 +114,20 @@ export async function verifyForegroundRecovery() {
     check(isRecord(receipt) && typeof receipt.taskRunId === "string" && typeof receipt.userMessageId === "string"
       && isRecord(requestData) && typeof requestData.threadId === "string" && typeof requestData.requestKey === "string", "Acceptance has no durable request/job identity");
     taskRunId = receipt.taskRunId;
+    evidence.acceptance = { taskRunId, userMessageId: receipt.userMessageId, threadId: requestData.threadId,
+      requestKey: requestData.requestKey, coworkerMode: requestData.coworkerMode ?? "advise" };
     const admittedRequest = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId },
       select: { initiatingAgentId: true, routeContext: true, a2aMetadata: true } });
     const retainedRequest = isRecord(admittedRequest.a2aMetadata) && isRecord(admittedRequest.a2aMetadata.foregroundRequest)
       ? admittedRequest.a2aMetadata.foregroundRequest : null;
     const submittedMode = requestData.coworkerMode ?? "advise", retainedMode = retainedRequest?.coworkerMode;
+    evidence.financeEntry = { initiatingAgentId: admittedRequest.initiatingAgentId, routeContext: admittedRequest.routeContext,
+      submittedMode, retainedMode, expectedMode };
+    write();
     assertForegroundFinanceEntry({ archetypeId: business.archetype.archetypeId,
-      routeContext: admittedRequest.routeContext ?? "", initiatingAgentId: admittedRequest.initiatingAgentId, submittedMode, retainedMode });
+      routeContext: admittedRequest.routeContext ?? "", initiatingAgentId: admittedRequest.initiatingAgentId, submittedMode, retainedMode, expectedMode });
     check(requestData.routeContext === admittedRequest.routeContext,
       "The readonly Finance request changed route or execution mode");
-    evidence.financeEntry = { initiatingAgentId: admittedRequest.initiatingAgentId, routeContext: admittedRequest.routeContext, submittedMode, retainedMode };
     executedCaseIds.push("native-finance-entry");
     const eventIds = async () => (await prisma.jobEvent.findMany({ where: { name: FOREGROUND_WORK_EVENT,
       data: { path: ["taskRunId"], equals: taskRunId } }, select: { id: true } })).map(event => event.id);
@@ -132,8 +142,6 @@ export async function verifyForegroundRecovery() {
         "Duplicate submission did not return the original saved identities");
       return waitForForegroundDelivery(prisma, { taskRunId: taskRunId!, beforeEventIds });
     };
-    evidence.acceptance = { taskRunId, userMessageId: receipt.userMessageId, threadId: requestData.threadId, requestKey: requestData.requestKey,
-      coworkerMode: requestData.coworkerMode ?? "advise" };
     const read = async () => {
       const row = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId: taskRunId! } });
       const progress = isRecord(row.progressPayload) ? row.progressPayload : {};

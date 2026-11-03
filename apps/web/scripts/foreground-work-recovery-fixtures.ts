@@ -22,10 +22,11 @@ export function readForegroundBuildEvidence(root: string, reused: string | undef
     staticRoot: resolve(buildRoot, "static"), layout: reused === "true" ? "standalone" : "root" };
 }
 
-/** The native Finance business page must retain its actual specialist and advice mode. */
-export function assertForegroundFinanceEntry(input: { archetypeId: string; routeContext: string; initiatingAgentId: string | null; submittedMode: unknown; retainedMode: unknown }) {
+/** The native Finance page must retain its specialist and the submitted runtime mode. */
+export function assertForegroundFinanceEntry(input: { archetypeId: string; routeContext: string; initiatingAgentId: string | null; submittedMode: unknown; retainedMode: unknown; expectedMode: unknown }) {
   if (input.archetypeId !== "software-platform" || input.routeContext !== "/finance"
-      || input.initiatingAgentId !== "finance-agent" || input.submittedMode !== "advise" || input.retainedMode !== "advise") throw new Error("Finance fixture context or coworker identity mismatch");
+      || input.initiatingAgentId !== "finance-agent" || (input.expectedMode !== "advise" && input.expectedMode !== "act")
+      || input.submittedMode !== input.expectedMode || input.retainedMode !== input.expectedMode) throw new Error("Finance fixture context or coworker identity mismatch");
 }
 
 /** One case inventory shared with the existing diff-impact planner. */
