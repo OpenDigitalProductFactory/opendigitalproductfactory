@@ -110,9 +110,13 @@ most fifty fresh, ready, expired or exhausted requests; unnormalized future
 strings cannot crowd out that batch. No retry count, deadline or authority is
 renewed. The worker still rechecks eligibility and execution authority.
 
-PostgreSQL's silent JSONPath datetime check identifies timestamps eligible for
+PostgreSQL 16's `pg_input_is_valid` checks canonical UTC timestamps before
 native ordering; it does not replace JavaScript's interpretation of older
-strings ([PostgreSQL JSON functions](https://www.postgresql.org/docs/17/functions-json.html)).
+strings ([PostgreSQL validity functions](https://www.postgresql.org/docs/16/functions-info.html#FUNCTIONS-INFO-VALIDITY)).
+Actual PostgreSQL tests rejected the earlier JSONPath datetime check: it
+returned NULL for valid JavaScript UTC `Z` strings and prevented convergence.
+Due or invalid legacy times normalize to the captured current time; valid
+future times retain their exact instant. Original request fences do not change.
 Added database coverage checks absent/invalid times, more than fifty future
 legacy waits, bounded convergence and unchanged request fences. These new
 database cases and served Finance acceptance remain unrun until their governed
