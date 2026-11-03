@@ -286,7 +286,11 @@ jobs:
             # complete this checkout's canonical production build. Bind the
             # existing deployment metadata only after those steps succeed.
             runtime_source_sha="$(git rev-parse HEAD)"
-            if [ "$runtime_source_sha" != "$GITHUB_SHA" ] || [ ! -f apps/web/.next/BUILD_ID ]; then
+            build_id=apps/web/.next/BUILD_ID
+            if [ "$DPF_REUSED_BUILD" = "true" ]; then
+              build_id=apps/web/.next/standalone/apps/web/.next/BUILD_ID
+            fi
+            if [ "$runtime_source_sha" != "$GITHUB_SHA" ] || [ ! -f "$build_id" ]; then
               echo "The foreground runtime has no matching production build"; exit 1
             fi
             export DEPLOYED_SHA="$runtime_source_sha"

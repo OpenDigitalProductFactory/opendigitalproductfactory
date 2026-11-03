@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 import { endpointGenuinelyClearsSensitivity } from "../lib/routing/sensitivity-clearance";
@@ -209,6 +211,29 @@ it("checks isolation early and again immediately before normal boot", () => {
 describe("required recovery workflow", () => {
   const ci = parse(readFileSync(new URL("../../../.github/workflows/ci.yml", import.meta.url), "utf8"));
   const ux = parse(readFileSync(new URL("../../../.github/workflows/ux-route-sweep.yml", import.meta.url), "utf8"));
+  it.each([
+    ["true", "standalone", true, 0],
+    ["false", "root", true, 0],
+    ["true", "root", true, 1],
+    ["false", "standalone", true, 1],
+    ["true", "standalone", false, 1],
+  ])("validates the served artifact layout and source: %s/%s/%s", (reused, layout, matching, expected) => {
+    const run = ux.jobs.sweep.steps.find((step: { name: string }) => step.name === "Start the portal").run as string;
+    const prefix = run.slice(0, run.indexOf("start_portal()"));
+    expect(prefix).toContain("The foreground runtime has no matching production build");
+    const root = mkdtempSync(join(tmpdir(), "foreground-build-binding-"));
+    try {
+      const id = join(root, layout === "root" ? "apps/web/.next/BUILD_ID"
+        : "apps/web/.next/standalone/apps/web/.next/BUILD_ID");
+      mkdirSync(dirname(id), { recursive: true }); writeFileSync(id, "synthetic-build");
+      const result = spawnSync("bash", ["-c", 'git() { printf "%s\\n" "$FIXTURE_SHA"; };\n' + prefix], {
+        cwd: root, encoding: "utf8", env: { PATH: process.env.PATH,
+          DPF_WORKFLOW_SCENARIO: "foreground-recovery", DPF_REUSED_BUILD: reused,
+          GITHUB_SHA: "a".repeat(40), FIXTURE_SHA: (matching ? "a" : "b").repeat(40) },
+      });
+      expect(result.status, result.stderr).toBe(expected);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
   it("runs the selected journey with a separate artifact and existing production build", () => {
     const job = ci.jobs["foreground-recovery-runtime"];
     expect(job?.uses).toBe("./.github/workflows/ux-route-sweep.yml");
