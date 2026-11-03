@@ -338,9 +338,8 @@ export async function callProvider(
   // AgentAllowanceExhaustedError, which routing skips without penalising the
   // endpoint. Any other gate failure is swallowed: the gate never breaks inference.
   if (attribution?.agentId && !reassessment) {
-    const { AgentAllowanceExhaustedError } = await import("@/lib/inference/budget-gate");
     try {
-      const { checkAgentBudgetFromRegistry, isPaidPerTokenProvider, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+      const { AgentAllowanceExhaustedError, checkAgentBudgetFromRegistry, isPaidPerTokenProvider, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
       const budget = await isPaidPerTokenProvider(providerId) ? await checkAgentBudgetFromRegistry(attribution.agentId) : null;
 
       if (budget?.status === "rejected") {
@@ -372,7 +371,7 @@ export async function callProvider(
         }
       }
     } catch (err) {
-      if (err instanceof AgentAllowanceExhaustedError) throw err;
+      if (err instanceof Error && err.name === "AgentAllowanceExhaustedError") throw err;
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
