@@ -25,11 +25,9 @@ never a verdict on the diff.
 The governed Workroom retains these medium-delivery acceptance criteria:
 
 1. An admitted gate cannot be starved by work admitted after it.
-2. The refusal happens at admission, where it is actionable, rather than
-   mid-build.
+2. The refusal happens at admission, where it is actionable, rather than mid-build.
 3. No client-side headroom check is required for the pool to conserve capacity.
-4. A run that still cannot proceed is reported as infrastructure and re-runnable
-   on the same SHA, as today.
+4. A run that still cannot proceed is reported as infrastructure and re-runnable on the same SHA, as today.
 
 ## Reproduction on the current tree
 
