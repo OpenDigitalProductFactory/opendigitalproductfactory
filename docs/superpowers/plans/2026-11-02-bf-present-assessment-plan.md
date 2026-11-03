@@ -1,5 +1,5 @@
 ---
-status: draft-not-admitted
+status: draft
 backlog: BI-7906C73E
 policy-authority-item: BI-39D9BA75
 ---

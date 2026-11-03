@@ -1,5 +1,5 @@
 ---
-status: draft-awaiting-independent-approval
+status: draft
 backlog: BI-39D9BA75
 delivery-backlog: BI-7906C73E
 subject-backlog: BI-PIR-7f040ec5
