@@ -135,7 +135,7 @@ Docker Model Runner stores runtime settings per model and mode through
 `/engines/_configure`. It forgets them on restart, and each configure call
 replaces the model's whole stored config. The local-model reconcile
 (`apps/web/lib/inference/local-model-context-reconcile.ts`) runs on boot and
-every 20 minutes, and keeps four things in place:
+every 20 minutes, and keeps five things in place:
 
 - **Context window:** the served `context-size` for the generation model.
 - **Residency:** `keep_alive: "-1"` for the generation model (BI-34F71E9D).
@@ -159,14 +159,26 @@ every 20 minutes, and keeps four things in place:
   bit-stable once drafts are accepted. To turn it off, set the PlatformConfig
   key `local.speculativeDecoding` to `"off"`; the next reconcile removes the
   flags.
+- **Host memory:** on a GPU engine (`-cuda`, `-metal`, `-vulkan` or `-rocm`),
+  the generation model gets `--no-mmap` ahead of any speculation pair
+  (BI-37A470F0). Docker Model Runner adds that flag itself only on macOS.
+  Elsewhere llama.cpp kept the whole GGUF memory-mapped although every layer
+  runs in VRAM: on a Windows RTX 4090 the 27B model held an 18.9 GB working set,
+  1.0 GB with the flag, with VRAM unchanged. A CPU-only engine keeps the mapping.
+
+Only the install portal runs this reconcile. The Build Studio sandbox
+(`DPF_ENVIRONMENT=sandbox`) reads its own database, so when it also reconciled
+the shared runner the two disagreed and the model reloaded on every pass; it now
+reports `skipped` and makes no write.
 
 Every context or residency write carries any other stored key (for example
 `runtime-flags` or `speculative`) back with it, so the reconcile never removes
 an operator's or a qualification run's setting. The reconcile only adds or
-removes the exact speculation pair; it never rewrites other runtime flags.
-Local thinking-budget evidence accepts `context-size`, `keep_alive` and that
-exact speculation pair, because none of them can change the chat template or
-parser. Any other stored key leaves that evidence unknown.
+removes its own flags (`--no-mmap` and the speculation pair, in that order); it
+never rewrites other runtime flags. Local thinking-budget evidence accepts
+`context-size`, `keep_alive` and exactly those managed flags, because none of
+them can change the chat template or parser. Any other stored key leaves that
+evidence unknown.
 
 ## Adding a New OAuth Provider
 
