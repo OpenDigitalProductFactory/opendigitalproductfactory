@@ -508,3 +508,29 @@ failed-copy terminal reporting, and retain the original memory and positive
 controls with observation enabled. Those PostgreSQL cases are not yet executed
 for this change. The earlier Windows host guard result remains INCONCLUSIVE;
 no exact-source integration, protected delivery or live acceptance is claimed.
+
+## November 3 bounded scale qualification plan
+
+Existing item BI-B47BB1D7; Workroom WC-54651F1C. Plan admission IRD-999518F97C46. Preparation only: not an admitted heavy execution or completed acceptance.
+
+Literal original scale criterion:
+> Prove bounded setup time and memory with a source dataset including at least this scale; publish timing and selected/copied counts without confidential values.
+
+The criterion does not require identical historic bytes. Use an explicitly synthetic 14,523,204-row PostgreSQL cohort; retain original NPEL-DD3E51BE41 source provenance UNKNOWN. Synthetic copy throughput cannot establish full installation startup or real-data UI fidelity. The current-source served preview remains separately required.
+
+Grounding: existing packages/db/src/sanitized-clone.postgres.test.ts provides random owned schema/public fixture names, actual copyRowsForSanitization/createSanitizedCloneWriter/observeSanitizedTableCopy, read-only source transaction and finally cleanup. QueueTelemetryEvent schema is packages/db/prisma/schema/work-coordination.prisma:947. It has eleven scalar/date columns, primary key and four secondary indexes; the existing three-column narrow JSON fixture is not identical.
+
+Plan:
+1. Extend the existing design with this bounded verification phase, keeping all six original criteria verbatim. Refresh immutable coverage and normal native admission before test implementation.
+2. Extend the existing PostgreSQL corpus with an opt-in scale case, never a default 14.5-million-row CI burden. Reuse actual QueueTelemetryEvent column/index shape via disposable fixture DDL and synthetic deterministic values. Never use or alter the installed table. Match source and destination metadata under unique owned names. Generate input server-side; retain no source-sized client array.
+3. Actual cursor 50; writer transaction ceiling 500; statement target128KiB; acquisition10s; transaction30s; original 20-minute clone ceiling unchanged. Source begins REPEATABLE READ READ ONLY after fixture preparation. Time fixture preparation separately, and include schema/index/copy/validation times explicitly. Do not label one-table elapsed as full-preview startup.
+4. Observe real-clock progress and scalar counts through existing observer. Compare independent source and destination COUNT, payload mismatch count and deterministic sanitization checks without string_agg of the cohort or row output. Exact 14,523,204 source/persisted rows required. Keep existing failures/duplicates/vector/wide-payload tests as separate behavioral proofs.
+5. Retained-heap measurement uses existing GC methodology with explicitly named sampling cadence and unchanged16MiB bound. Retain RSS/peak and runner resource identity separately. Existing per-window wide-payload controls remain authoritative for intra-transaction retention; sparse scale sampling cannot replace them. Record measurements and actual result even on timeout.
+6. Execute only on an ordinarily admitted existing qualification environment, one bounded run and cleanup of exact owned fixture names in finally. No new provider, production runner, live restore, retention/sampling/heap/timeout change, or competing preview. Resource admission must account for source/destination/index/WAL storage before setup.
+7. Changed test/design bytes need new exact-head qualification, independent assessment, normal protected PR and containing canonical delivery. Previous302e receipts are historical proof only for their bytes. After delivery, sole preview owner runs current-data full clone and served-route checks with identities, progress, readiness/failure fencing and cleanup evidence.
+
+Impact contract resolved on existing design and PostgreSQL test paths. It additionally retains related clone suites/both DB typechecks, doc-index check, preflight, exact-tree integration and PR health. No new application runtime path or UI surface. Rollback is normal source revert plus governed fixture cleanup. Any resource admission refusal stops the heavy run.
+
+Open decisions for implementation preparation: existing shared qualification command must support explicit opt-in without modifying unrelated CI selection. If no supported invocation exists, claim the minimal existing runner path and update impact/admission first. No test or environment run was started by this proposal.
+
+
