@@ -63,6 +63,10 @@ RAM:
 - The existing in-run watchdog still fences pressure caused by ungoverned host
   work, driver behaviour, or measurement drift.
 
+For a local build, the larger calibrated builder envelope is deliberately a
+conservative proxy for shared physical-host backing. It is not a measurement of
+native TypeScript 7 demand, an RSS attribution, or memory pinned by the lease.
+
 This uses the existing `resourceClass` and `expectedMemoryBytes` lease fields.
 It adds no table, enum, daemon, client-side retry loop, or memory-holding
 process.
@@ -85,8 +89,8 @@ the platform never loops an unchanged admission automatically.
 | AC-2 | OBJ-1 | With 12 GiB physical host memory, 40 GiB Docker memory, the 4 GiB floor, and the current local-build reserve, admission returns zero capacity with a physical-host-backing reason. It does not admit the old capacity-one scenario. |
 | AC-3 | OBJ-1 | Sufficient Docker and physical memory preserves the existing one- or two-slot result; VM and host shortfalls remain separately attributable in policy evidence. |
 | AC-4 | OBJ-2 | A version-1 local-CI lease stores a server-derived `resourceClass` (`docker-build` for a local build, `typescript` for delegated) and the exact host-backing envelope in `expectedMemoryBytes`; callers cannot supply or weaken those values. |
-| AC-5 | OBJ-2 | A later `host-heavy-resource` claim reads active, unexpired local-CI reservations in the same host reservation domain, so the existing host-resource policy queues rather than over-admitting. Terminal or expired local-CI leases do not consume the domain. |
-| AC-6 | OBJ-2 | Host-backed claim decisions serialize on the existing `host-heavy-resource` advisory lock before taking an environment-specific lock. The lock order is identical for local-CI and host-heavy claims, so two simultaneous claims cannot both decide from an empty reservation set. |
+| AC-5 | OBJ-2 | A later, genuinely competing `host-heavy-resource` claim reads active, unexpired local-CI reservations in the same host reservation domain, so the existing host-resource policy queues rather than over-admitting. Terminal or expired local-CI leases do not consume the domain. Duplicate local-CI slot protection remains the local-CI pool's responsibility. |
+| AC-6 | OBJ-2 | New host-backed claim decisions serialize on the existing `host-heavy-resource` advisory lock before taking an environment-specific lock. The lock order is identical for new local-CI and host-heavy claims, so two simultaneous new claims cannot both decide from an empty reservation set. A renewal, subscription, resume, or repeated claim for the current lease excludes its own row and cannot double-subtract or reject its already-held reservation. |
 | AC-7 | OBJ-3 | Release, cancellation, and expiry stop the reservation by changing the existing lease status; no second cleanup record or compensating process is required. The watchdog's `host-capacity-lost` outcome and same-SHA rerun semantics remain unchanged. |
 | AC-8 | OBJ-3 | Repeating an unchanged infrastructure failure is not automatic. Existing durable queue/resume behaviour may wake a queued claim when capacity is released, but it does not create a new attempt after a terminal fence. |
 
@@ -127,6 +131,14 @@ Claims for `local-integration-ci` and `host-heavy-resource` acquire the
 lock. After the shared lock is held, host-heavy admission reads active,
 unexpired reservations from both environments and excludes the exact lease
 being resumed.
+
+This shared domain governs competing kinds of DPF work; it does not replace the
+local-CI slot invariant or count the same gate twice. A new host-heavy request
+sees an active local-CI reservation. A repeated claim, subscription, resume, or
+heartbeat for that gate keeps the same row and excludes that row from any
+prospective-reservation calculation. Renewals continue through the existing
+renewal path and do not rerun new-admission policy against capacity the holder
+already owns.
 
 The policy remains conservative rather than pretending to know live RSS for
 each reservation. `expectedMemoryBytes` is the scheduling envelope, while
