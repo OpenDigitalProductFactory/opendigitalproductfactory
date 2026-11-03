@@ -134,6 +134,17 @@ A live probe on Grok 1.0.52 found a second, older gap. Grok names its tools `wri
 
 **Every client kind is named (2026-10-27).** `client-hook-planes.json` now covers each client kind the host run discovers (`toolchain_convergence.DISCOVERY`: Claude Code, Codex, Grok, Antigravity, VS Code, Cursor, Gemini CLI, OpenCode) plus the Build Studio sandbox, and a test fails when that list and `DISCOVERY` differ. The sandbox seed (`apps/web/lib/build/sandbox/grok-governance-seed.ts`) no longer keeps its own six-guard list (BI-413882E5). The sandbox has Node and no Python, so it runs the pack's `hooks/lib/grok-hook-plane.mjs` against the workspace pack; a test pins that output equal to the host generator's.
 
+**Hook output is proven per client (BI-5DD46FDA, BI-F17F2188, pack 0.2.20).** Plane membership says a hook runs; it does not say the client honours what the hook prints. Between 2026-10-07 and 10-14, Claude rejected the workroom-claim guard's top-level `"decision":"deny"` 477 times and ran the tool each time.
+- `hooks/lib/hook-output-contract.mjs` holds each client's output rules per event: Claude's and Codex's from their published hook references, Grok's from the probed envelope.
+- `hooks/hook-output-contract.test.mjs` runs every `hooks.json` entry each client runs, on fixture calls shaped as that client sends them, and fails naming the hook and the client.
+- The SessionStart self-test runs the same check on the installed copy.
+- The walk found three defects, all now fixed:
+  - `worktree-session-hygiene` emitted a SessionEnd `hookSpecificOutput`, which Claude rejects.
+  - `uncommitted-work-guard` emitted a Stop `hookSpecificOutput` on Codex.
+  - Grok's `write` / `search_replace` edits were judged by the session folder rather than the file. `hooks/lib/hook-io.mjs` now judges them by the file.
+
+`hook-io` now tells Codex from Claude by `turn_id`. `REWRITE_SURFACES` names the clients that may receive a rewritten command. Only Claude is listed today: Codex's rewrite has no live probe yet, and Grok has no rewrite channel.
+
 **How existing installs get it.** The release pack carries every file in the pack tree, and its content digest changes with any hook or plane change (BI-4F9E3221). The hourly toolchain agent (a Windows scheduled task, a launchd agent on macOS, a systemd user unit on Linux; BI-65C17737) runs the signed updater when the digest changes. That run refreshes the Claude and Codex plugin caches and rewrites `~/.grok/hooks/dpf-guards.json`; a test covers an old hand-kept Grok file converging in one run. Each client loads the new hooks on its next restart. A Build Studio dispatch regenerates the sandbox file from the branch under build every time.
 
 **Grok's own config was breaking that upgrade (BI-E7806C0F).** Grok rewrites `~/.grok/config.toml` with fully quoted keys (`["mcp_servers"."dpf"]`). The updater's Grok credential step matched only `[mcp_servers.dpf]`, appended a second table, and Grok then refused to start ("duplicate key"). It now matches any spelling of the key and folds an existing duplicate back into one table on the next run.
