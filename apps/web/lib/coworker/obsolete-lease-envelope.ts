@@ -76,7 +76,7 @@ function exactReleaseTarget(row: ObsoleteReleaseEnvelope): { leaseId: string; ow
 
 function endedWithoutResources(lease: ObsoleteReleaseTarget, target: { leaseId: string; ownerSessionId: string }, now: Date): boolean {
   return lease.leaseId === target.leaseId && lease.ownerSessionId === target.ownerSessionId
-    && ["cancelled", "expired"].includes(lease.status) && lease.slotManifestVersion === 1
+    && ["cancelled", "expired"].includes(lease.status)
     && lease.releasedAt instanceof Date && Number.isFinite(lease.releasedAt.getTime()) && lease.releasedAt <= now
     && lease.admittedAt === null && lease.activeKey === null && lease.slotKey === null
     && lease.ownerPid === null && lease.ownerProcessIdentity === null && lease.cleanupCommand === null

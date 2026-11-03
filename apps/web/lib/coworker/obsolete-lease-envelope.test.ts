@@ -68,7 +68,7 @@ describe("obsolete reservation approval settlement", () => {
     ["admitted", { admittedAt: now }], ["slot", { slotKey: "slot-0" }], ["active key", { activeKey: "pool:slot-0" }],
     ["PID", { ownerPid: 7 }], ["process identity", { ownerProcessIdentity: "unknown-process" }],
     ["cleanup", { cleanupCommand: "cleanup" }], ["resource", { resourceClass: "inference" }],
-    ["memory", { expectedMemoryBytes: 0n }], ["legacy manifest", { slotManifestVersion: null }],
+    ["memory", { expectedMemoryBytes: 0n }], ["unknown history without manifest", { slotManifestVersion: null, admissionHistoryVersion: null }],
     ["unknown terminal time", { releasedAt: null }], ["future terminal time", { releasedAt: new Date(now.getTime() + 1) }],
     ["foreign session", { ownerSessionId: "other-session" }], ["wrong target", { leaseId: "NPEL-other" }],
     ["unknown environment", { environmentKey: "unknown" }],

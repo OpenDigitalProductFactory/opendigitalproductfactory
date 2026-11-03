@@ -28,7 +28,7 @@ function domainDb(f: Fixture) {
   return { nonProductionEnvironmentLease: f.db.nonProductionEnvironmentLease, platformConfig: f.db.platformConfig,
     $transaction: f.db.$transaction.bind(f.db) };
 }
-async function realClaim(f: Fixture, queued: boolean) {
+async function realClaim(f: Fixture, queued: boolean, manifest: "supplied" | "absent" = "supplied") {
   const now = new Date();
   const pressure = { observedAt: now.toISOString(), availableMemoryBytes: queued ? 0 : 128 * 1024 ** 3,
     dockerAvailableMemoryBytes: queued ? 0 : 128 * 1024 ** 3, builderMemoryUsageBytes: [0, 0],
@@ -39,7 +39,8 @@ async function realClaim(f: Fixture, queued: boolean) {
     purpose: "Isolated admission-history producer test", url: "http://fixture.invalid", ports: [],
     expiresAt: new Date(now.getTime() + 120_000), requestedTtlMs: 120_000,
     waitDeadlineAt: new Date(now.getTime() + 120_000),
-    slotManifestVersion: 1, hostPressure: pressure, capacityBroker: async () => pressure, now });
+    ...(manifest === "supplied" ? { slotManifestVersion: 1 as const } : {}),
+    hostPressure: pressure, capacityBroker: async () => pressure, now });
 }
 async function parked(f: Fixture, leaseId: string) {
   const { toolExecutions, argsJson, ...row } = obsoleteEnvelope("approval", leaseId);
@@ -59,9 +60,10 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
   });
   afterAll(async () => { await f?.close(); });
 
-  it("the real queued claim and cancellation producer creates a genuinely eligible request", async () => {
-    const claim = await realClaim(f, true);
+  it.each(["supplied", "absent"] as const)("the real queued producer creates an eligible request with manifest %s", async manifest => {
+    const claim = await realClaim(f, true, manifest);
     expect(claim.status).toBe("queued");
+    expect(claim.lease.slotManifestVersion).toBe(manifest === "supplied" ? 1 : null);
     expect(claim.lease).toMatchObject({ admissionHistoryVersion: 1, firstAdmittedAt: null, admittedAt: null });
     await releaseNonprodEnvironmentLease({ db: domainDb(f), leaseId: claim.lease.leaseId, ownerSessionId: "this-session" });
     await parked(f, claim.lease.leaseId);
