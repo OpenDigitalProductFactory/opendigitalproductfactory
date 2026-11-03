@@ -117,8 +117,8 @@ describe("owned semantic review recovery readback", () => {
   it("returns a scoped current proof without authorizing a retry or exposing diagnostic text", async () => {
     db.runtimeVerification.findFirst.mockResolvedValue(verification());
     const result = await readSemanticReviewRecovery(task, "owner");
-    expect(result.details.remediation).toMatchObject({ state: "recorded", verificationId: "RV-OWN", executionSettled: true, retryAuthorized: false });
-    expect(result.details.nodes[0].settlement).toBe("verified");
+    expect(result.details.remediation).toMatchObject({ state: "incomplete-node-coverage", verificationId: "RV-OWN", executionSettled: false, retryAuthorized: false });
+    expect(result.details.nodes[0].settlement).toBe("unverified");
     expect(JSON.stringify(result)).not.toContain("private diagnostic details");
   });
   it("requires coverage of every unresolved node", async () => {
@@ -157,4 +157,19 @@ describe("shared remediation admission predicate", () => {
     if (reason === "empty-command") value.command = " ";
     expect(readSemanticReviewRemediation(value, binding, now.getTime())).toBeNull();
   });
+});
+
+it('projects native sealed no-dispatch proof while retaining the separate health and authority gates', async () => {
+ const clock=vi.spyOn(Date,'now').mockReturnValue(now.getTime());
+ try {
+ const identity={providerId:'local',modelId:'model',traceId:'trace',accountMode:'local'};
+ db.taskNode.findMany.mockResolvedValue([{...node,requestContract:{requestDigest:digest,generation:'original'},
+  outputSnapshot:{requestDigest:digest,providerSettlement:{schemaVersion:1,taskNodeId:node.taskNodeId,requestDigest:digest,generation:'original',sealed:true,events:[
+   {...identity,attemptId:'adapter',state:'adapter-registered'},{attemptId:'adapter',state:'adapter-not-dispatched'},
+  ]}}}]);
+ db.runtimeVerification.findFirst.mockResolvedValue(verification());
+ const result=await readSemanticReviewRecovery(task,'owner');
+ expect(result.details.nodes[0].settlement).toBe('verified');
+ expect(result.details.remediation).toMatchObject({executionSettled:true,retryAuthorized:false,state:'recorded'});
+ } finally { clock.mockRestore(); }
 });

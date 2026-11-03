@@ -1,3 +1,5 @@
+import { semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
+import { withProviderSettlementWriter, appendProviderSettlement, sealProviderSettlement, type ProviderSettlementEvent } from "../inference/provider-settlement";
 import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
 import { executionUncertaintyFromError } from "../shared/execution-uncertainty";
 import { randomUUID } from "node:crypto";
@@ -162,15 +164,34 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   onPhase("provider-call");
   let result: SemanticReviewResult;
   let capacityDeferral: ReturnType<typeof capacityDeferralProof> = null;
+  let providerSettlement: unknown = null;
+  const settlementBinding = { taskNodeId, requestDigest: packet.digest, generation };
+  const writeSettlement = async (event?: ProviderSettlementEvent) => {
+    if (!event && providerSettlement === null) return;
+    await prisma.$transaction(async tx => {
+      await assertFence(tx, row.taskRunId, generation);
+      const node = await tx.taskNode.findUnique({ where: { taskNodeId } });
+      const contract = object(node?.requestContract);
+      if (!node || contract.requestDigest !== packet.digest || contract.generation !== generation)
+        throw new Error("provider-settlement-node-binding-invalid");
+      const output = object(node.outputSnapshot);
+      const next = event ? appendProviderSettlement(output.providerSettlement, event, settlementBinding)
+        : sealProviderSettlement(output.providerSettlement, settlementBinding);
+      await tx.taskNode.update({ where: { taskNodeId }, data: {
+        outputSnapshot: json({ ...output, requestDigest: packet.digest, providerSettlement: next }),
+      } });
+      providerSettlement = next;
+    });
+  };
   try {
-    result = await withGovernedInferenceDeadline({
+    result = await withProviderSettlementWriter(event => writeSettlement(event), () => withGovernedInferenceDeadline({
       deadlineAt: packet.deadlineAt,
       verifyAuthority: async () => {
         const current = await prisma.taskRun.findUnique({ where: { taskRunId: row.taskRunId }, select });
         return current?.status === "working" && state(current).generation === generation
           && await verifySemanticReviewAuthority(packet, row.taskRunId);
       },
-    }, execute);
+    }, execute)).finally(() => writeSettlement());
   }
   catch (error) {
     // Only a direct typed pre-dispatch refusal proves no provider work began.
@@ -188,7 +209,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
       await prisma.$transaction(async (tx) => {
         await assertFence(tx, row.taskRunId, generation);
         await tx.taskNode.update({ where: { taskNodeId }, data: { status: "failed", completedAt: new Date(),
-          outputSnapshot: json({ requestDigest: packet.digest, providerOutcome: "unknown",
+          outputSnapshot: json({ requestDigest: packet.digest, ...(providerSettlement ? { providerSettlement } : {}), providerOutcome: "unknown",
             failure: safeBranchFailure(error, agentId, "provider-call") }) } });
       });
       throw error;
@@ -198,7 +219,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   await checkpointTransaction(packet.deadlineAt, async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
     await tx.taskNode.update({ where: { taskNodeId }, data: { status: "completed", completedAt: new Date(),
-      outputSnapshot: json({ requestDigest: packet.digest, result,
+      outputSnapshot: json({ requestDigest: packet.digest, result, ...(providerSettlement ? { providerSettlement } : {}),
         ...(capacityDeferral ? { providerOutcome: "not-dispatched", capacityDeferral } : {}),
         ...(result.routingEligibility ? { providerOutcome: "not-dispatched", routingEligibility: result.routingEligibility } : {}) }) } });
   });
@@ -254,6 +275,11 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
   if (await getQuiescenceLevel() !== "normal") throw new Error("semantic-review-recovery-quiescing");
   const publication = await prisma.$transaction(async (tx) => {
+    const originalNodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
+    if (originalNodes.length === 0 && (state(row).executionOutcome === "unknown" || String(state(row).reason).startsWith("provider-outcome-uncertain"))) throw new Error("semantic-review-execution-unresolved");
+    if (originalNodes.length > 100 || originalNodes.some(node => node.status !== "completed"
+      && (node.status !== "superseded" || object(node.outputSnapshot).providerOutcome === "unknown")
+      && !semanticNodeProviderSettled(node, packet.digest))) throw new Error("semantic-review-execution-unresolved");
     if (eligibilityBlocked) {
       if (!successor || successor.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-eligibility-remediation-required");
       const capsule = await tx.workroom.findUnique({ where: { capsuleId: packet.input.identity.capsuleId }, select: { id: true } });
@@ -263,7 +289,7 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
       if (!proof?.eligibilityVerified) throw new Error("semantic-review-eligibility-remediation-required");
       const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
       if (nodes.length > 100 || nodes.some(node => node.status !== "completed" && node.status !== "superseded"
-        && !proof.settledNodeIds.includes(node.taskNodeId))) throw new Error("semantic-review-execution-unresolved");
+        && !semanticNodeProviderSettled(node, packet.digest))) throw new Error("semantic-review-execution-unresolved");
     }
     const changed = await tx.taskRun.updateMany({ where: { taskRunId, status: row.status, updatedAt: row.updatedAt },
       data: { status: "submitted", progressPayload: progress(row, { state: "pending", generation: null,
@@ -327,14 +353,15 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
     if (changed.count !== 1) throw new Error("semantic-review-recovery-state-changed");
     const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
     if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
+    if (nodes.length === 0 && (state(row).executionOutcome === "unknown" || String(state(row).reason).startsWith("provider-outcome-uncertain"))) throw new Error("semantic-review-execution-unresolved");
     for (const node of nodes) {
       const output = object(node.outputSnapshot);
       if (node.status === "completed") {
         if (output.requestDigest !== packet.digest) throw new Error("semantic-review-checkpoint-binding-mismatch");
         const restored = restoreSemanticReviewCheckpoint(output.result, String(object(node.requestContract).agentId ?? "change-reviewer"));
         if (restored.decision === "fail" || object(output.result).decision === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
-      } else if (node.status !== "superseded") {
-        if (!proof.settledNodeIds.includes(node.taskNodeId)) throw new Error("semantic-review-execution-unresolved");
+      } else if (node.status !== "superseded" || output.providerOutcome === "unknown") {
+        if (!semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
         await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: { status: "failed", completedAt: new Date(),
           outputSnapshot: json({ ...output, requestDigest: packet.digest, providerOutcome: "unknown",
             remediationVerificationId: recovery.remediationVerificationId }) } });

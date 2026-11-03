@@ -1,3 +1,4 @@
+import { providerSettlementFetch, registerProviderSettlementAttempt, recordProviderAdmissionEnded } from "./provider-settlement";
 import { randomUUID } from "node:crypto";
 import { createResponseProducer, type ResponseProducer } from "../routing/response-producer";
 // apps/web/lib/ai-inference.ts
@@ -444,8 +445,13 @@ export async function callProvider(
   let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
   let investmentGuidance = "";
   const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
-  const actualFetch = parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch;
+  const settlementIdentity = { providerId, modelId, providerConnectionId: effectivePlan.providerConnectionId,
+    traceId: attribution?.traceId, accountMode: effectivePlan.providerConnectionId ? "credential" as const
+      : isLocalProviderId(providerId) ? "local" as const : "unresolved" as const };
+  const actualFetch = providerSettlementFetch(parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch, { adapterAttemptId: telemetryAttemptId, ...settlementIdentity });
+  let adapterEntered = false;
   try {
+    await registerProviderSettlementAttempt(telemetryAttemptId, settlementIdentity);
     const execute = async () => {
       await assertProviderDispatchCapacity(providerId);
       if (!isLocalProviderId(providerId)) {
@@ -468,6 +474,7 @@ export async function callProvider(
       currentInferenceSignal()?.throwIfAborted();
       if (reassessment) await assertReassessmentQualificationCurrent(reassessment.qualification);
       if (finite) await refreshReassessmentNativeRuntime(finite.qualification, actualFetch);
+      adapterEntered = true;
       return adapter.execute({
         providerId,
         modelId,
@@ -500,6 +507,7 @@ export async function callProvider(
     if (providedImageHashes && mcpSession?.recordImageInputDelivery) await mcpSession.recordImageInputDelivery({sha256:providedImageHashes,providerId,modelId,adapterKind:selector?.kind??String(executionAdapterRaw)}).catch(()=>console.warn("[image-input] delivery receipt unavailable; specialist completion remains held"));
     endTimer();
   } catch (err) {
+    if (!adapterEntered) await recordProviderAdmissionEnded(telemetryAttemptId);
     endTimer();
     const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
     const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code : "unknown";

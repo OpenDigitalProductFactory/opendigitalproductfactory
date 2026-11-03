@@ -1,3 +1,4 @@
+import { withProviderSettlementWriter } from "./provider-settlement";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -131,14 +132,16 @@ describe("callProvider", () => {
     const caller = new AbortController();
     const reason = new Error("utility expired in local queue");
     let observed: unknown;
-    const waiting = withInferenceCancellation(caller.signal,
-      () => callProvider("local", "test-model", [], "bounded utility"));
+    const events: any[] = [];
+    const waiting = withProviderSettlementWriter(async event => { events.push(event); }, () => withInferenceCancellation(caller.signal,
+      () => callProvider("local", "test-model", [], "bounded utility", undefined, undefined, undefined, undefined, {traceId:"queued-trace"})));
     const settled = waiting.catch(error => { observed = error; });
     try {
       await vi.waitFor(() => expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY).depth()).toBe(1));
       caller.abort(reason);
       await vi.waitFor(() => expect(observed).toBe(reason));
       expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY).depth()).toBe(0);
+      expect(events.map(event => event.state)).toEqual(["adapter-registered", "adapter-not-dispatched"]);
       expect(mockAdapterExecute).not.toHaveBeenCalled();
       expect(mockAcquireSlot).not.toHaveBeenCalled();
     } finally {

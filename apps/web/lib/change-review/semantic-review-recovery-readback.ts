@@ -1,3 +1,4 @@
+import { semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
 import { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
@@ -62,7 +63,7 @@ export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: s
   const now = Date.now();
   const nodes = await prisma.taskNode.findMany({
     where: { taskRun: { taskRunId: row.taskRunId, userId: callerUserId } },
-    select: { taskNodeId: true, status: true, updatedAt: true, outputSnapshot: true },
+    select: { taskNodeId: true, status: true, updatedAt: true, requestContract: true, outputSnapshot: true },
     orderBy: { taskNodeId: "asc" }, take: NODE_LIMIT + 1,
   });
   const truncated = nodes.length > NODE_LIMIT;
@@ -90,9 +91,9 @@ export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: s
   const proof = verification && verification.workCapsule?.capsuleId === capsuleId && observation.requestDigest
     ? readSemanticReviewRemediation(verification, { capsuleId: verification.workCapsuleId!,
       taskRunId: row.taskRunId, requestDigest: observation.requestDigest, updatedAt: row.updatedAt }, now) : null;
-  const unresolvedNodeIds = visible.filter(node => node.status !== "completed" && node.status !== "superseded")
+  const unresolvedNodeIds = visible.filter(node => node.status !== "completed" && (node.status !== "superseded" || isRecord(node.outputSnapshot) && node.outputSnapshot.providerOutcome === "unknown"))
     .map(node => node.taskNodeId);
-  const coverageComplete = !!proof && !truncated && unresolvedNodeIds.every(id => proof.settledNodeIds.includes(id));
+  const coverageComplete = !!proof && !truncated && (observation.classification !== "execution-uncertain" || visible.length > 0) && unresolvedNodeIds.every(id => visible.some(node => node.taskNodeId === id && semanticNodeProviderSettled(node, observation.requestDigest ?? "")));
   const remediationReady = coverageComplete && (!observation.eligibilityBlocked || proof!.eligibilityVerified);
   return { ...observation, details: {
     authority,
@@ -106,7 +107,7 @@ export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: s
         digestMatches, providerOutcome: digestMatches && output.providerOutcome === "not-dispatched" ? "not-dispatched"
           : output.providerOutcome === "inconclusive" ? "inconclusive" : "unknown",
         ...(routingEligibility.length ? { routingEligibility } : {}),
-        settlement: coverageComplete && proof!.settledNodeIds.includes(node.taskNodeId) ? "verified" : "unverified" };
+        settlement: semanticNodeProviderSettled(node, observation.requestDigest ?? "") ? "verified" : "unverified" };
     }),
     truncated, unresolvedNodeIds,
     remediation: { state: truncated ? "node-limit-exceeded" : remediationReady ? "recorded"

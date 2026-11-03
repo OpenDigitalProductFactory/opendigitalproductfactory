@@ -528,6 +528,13 @@ describe("expired review successor", () => {
       workCapsuleId: "room-1", runtimeTargetId: "runtime-1", kind: "health", status: "passed", command: "authorized runtime check",
       completedAt: new Date(), result: { semanticReviewRecovery: { taskRunId: "TR-1", requestDigest: state.packet.digest,
         executionSettled: true, settledNodeIds: [], observation: "Provider execution ended; endpoint probe passed." } } });
+    mocks.db.taskNode.findMany.mockResolvedValue([{taskNodeId:"observed-original",status:"failed",
+      requestContract:{requestDigest:state.packet.digest,generation:"original-generation"},
+      outputSnapshot:{requestDigest:state.packet.digest,providerOutcome:"unknown",providerSettlement:{schemaVersion:1,
+        taskNodeId:"observed-original",requestDigest:state.packet.digest,generation:"original-generation",sealed:true,events:[
+          {attemptId:"adapter-original",state:"adapter-registered",providerId:"local",modelId:"model",traceId:"trace",accountMode:"local"},
+          {attemptId:"adapter-original",state:"adapter-not-dispatched"},
+        ]}}}]);
     return { remediationVerificationId: "RV-1", expectedRequestDigest: state.packet.digest };
   }
 
@@ -576,9 +583,8 @@ describe("expired review successor", () => {
     const verification = await mocks.db.runtimeVerification.findUnique();
     verification.result.semanticReviewRecovery.settledNodeIds = ["lost-node"];
     mocks.db.taskNode.findMany.mockResolvedValue([{ taskNodeId: "lost-node", status: "running", outputSnapshot: null }]);
-    await retryPersistedSemanticReview("TR-1", "user-1", true, recovery);
-    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ where: { taskNodeId: "lost-node" },
-      data: expect.objectContaining({ status: "failed", outputSnapshot: expect.objectContaining({ providerOutcome: "unknown", remediationVerificationId: "RV-1" }) }) }));
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", true, recovery)).rejects.toThrow("semantic-review-execution-unresolved");
+    expect(mocks.db.taskRun.create).not.toHaveBeenCalled();
   });
 });
 
@@ -656,4 +662,39 @@ it("distinguishes an unavailable authority store from a denied grant", async () 
   expect(state.row.status).toBe("input-required");
   expect(state.row.progressPayload).toMatchObject({ semanticReview: { reason: "review-authority-unavailable" } });
   expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
+import { providerSettlementFetch, registerProviderSettlementAttempt } from "../inference/provider-settlement";
+import { semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
+it("retains sealed exact provider proof when a branch loses its semantic result after HTTP completion", async () => {
+  let node: any = null;
+  const realFetch = vi.fn(async () => {
+    expect(node.outputSnapshot.providerSettlement.events.at(-1).state).toBe("dispatching");
+    return new Response(JSON.stringify({id:"provider-original",choices:[{finish_reason:"stop"}]}));
+  });
+  mocks.db.taskNode.create.mockImplementation(async ({data}) => { node = {...data,id:"node-original"}; return node; });
+  mocks.db.taskNode.findUnique.mockImplementation(async () => node);
+  mocks.db.taskNode.update.mockImplementation(async ({data}) => { Object.assign(node,data); return node; });
+  mocks.dispatch.mockImplementation(async (_prompt,_context,branch) => branch("change-reviewer",async () => {
+    await registerProviderSettlementAttempt("adapter-original", {providerId:"local",modelId:"original-model",traceId:"original-trace",accountMode:"local"});
+    const fetch = providerSettlementFetch(realFetch as typeof globalThis.fetch,{
+      adapterAttemptId:"adapter-original",providerId:"local",modelId:"original-model",traceId:"original-trace",accountMode:"local",
+    });
+    await (await fetch("http://provider/v1/chat/completions",{method:"POST"})).text();
+    throw new Error("result publication interrupted");
+  }));
+  await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("result publication interrupted");
+  expect(node.status).toBe("failed");
+  expect(node.outputSnapshot.providerOutcome).toBe("unknown");
+  expect(semanticNodeProviderSettled(node,state.packet.digest)).toBe(true);
+  expect(realFetch).toHaveBeenCalledOnce();
+  expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
+it('refuses an unexpired retry with a fresh health assertion but no original provider ledger', async () => {
+  state.row.status='input-required';
+  (state.row.progressPayload as any).semanticReview.reason='provider-outcome-uncertain';
+  mocks.db.taskNode.findMany.mockResolvedValue([{taskNodeId:'lost',status:'failed',outputSnapshot:{requestDigest:state.packet.digest,providerOutcome:'unknown'}}]);
+  await expect(retryPersistedSemanticReview('TR-1','user-1',true)).rejects.toThrow('semantic-review-execution-unresolved');
+  expect(mocks.send).not.toHaveBeenCalled();
 });

@@ -1,6 +1,11 @@
+---
+status: active
+backlog: BI-346EF529
+---
+
 # Request-bound semantic provider settlement
 
-Status: proposed fix design and ordered plan; implementation and approval pending.
+Status: active fix design and ordered plan; independent review and deployment pending.
 Backlog: BI-346EF529. Workroom: WC-9B20E05C.
 Extends [shared reviewer control](2026-07-27-shared-change-reviewer-control-design.md).
 Owner: AGT-EXT-CODEX, chat 01a1741b-b5bb-7452-a3e6-affa024a7ac3.
@@ -153,3 +158,41 @@ A restarted collector may read recorded proof and append a validated observation
 it must not replay requests. Rollback disables consumption of new proof, retaining
 immutable observations and held tasks. Independent served acceptance uses owned
 fictional review fixtures; D62 is recovered only after actual native admission.
+
+## Implementation bounds and observation semantics
+
+The original TaskNode generation owns the critical ledger in outputSnapshot.
+The parent TaskRun write fence serializes registration, append and sealing.
+Sealing closes registration; a late fallback or duplicate acknowledgement is
+refused. Recovery reads the same original node/digest/generation predicate.
+Existing three-attempt review budgets and the 100-node recovery read bound stay
+unchanged. Each branch ledger allows 64 events; HTTP evidence buffers at most
+262144 bytes. Exceeding either bound cannot earn settlement. No full-install
+scan is introduced. Evidence remains in the original TaskNode while recovery
+is pending, under its existing retention/ownership lifecycle.
+
+The first implementation recognizes a fully consumed successful Chat Completions
+JSON response with a nonempty provider id and recognized finish reason. It does
+not infer cancellation acknowledgement from an abort, reader cancellation,
+transport closure, HTTP error, unsupported stream/protocol or idle runner.
+Unsupported adapter attempts remain registered and prevent complete proof.
+Provider cancellation acknowledgement remains unsupported where the provider
+has no authenticated request-specific terminal cancellation contract.
+
+A sealed provider proof can satisfy the existing node-coverage predicate, while
+fresh scoped health evidence, current authority, original budget, single-flight
+and writer-fence checks remain mandatory for bounded successor admission.
+Historical nodes without the critical ledger remain UNKNOWN. A successful
+source test or administrative task closeout never satisfies Failure Readiness.
+No database migration is required; this uses versioned optional TaskNode JSON.
+Canonical upgrade drains in-flight work before loading new producer code;
+restart alone changes no historical proof or recovery authorization.
+
+Recovery accepts sealed native original-node proof; a caller-authored health
+boolean or settledNodeIds list cannot establish provider settlement. The fresh
+health receipt still verifies scope/currency and any endpoint remediation.
+This intentionally keeps legacy UNKNOWN tasks held when they lack authentic
+original evidence. Adapter identity (provider/model/account mode/account/trace)
+is registered before waiting for compute admission. If admission ends before
+adapter execution, the same original writer records adapter-not-dispatched;
+that proof is rejected if any HTTP dispatch was observed for that adapter.
