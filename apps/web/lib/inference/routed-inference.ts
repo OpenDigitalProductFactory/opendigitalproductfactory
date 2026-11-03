@@ -683,8 +683,7 @@ async function routeAndCallAttempt(
       ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
-      inferenceMs: result.inferenceMs,
-      modelId: result.modelId,
+      inferenceMs: result.inferenceMs, modelId: result.modelId,
     });
 
     return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
@@ -766,8 +765,7 @@ async function routeAndCallAttempt(
     contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
-    inferenceMs: result.inferenceMs,
-    modelId: result.modelId,
+    inferenceMs: result.inferenceMs, modelId: result.modelId,
   });
 
   // 7. Normalize result to RoutedInferenceResult

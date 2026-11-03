@@ -185,10 +185,10 @@ async function zeroMarginalProviderIds(database: Pick<Prisma.TransactionClient, 
 
 /**
  * How a call on a provider is governed. "free": never counted or refused.
- * "priced": a recorded per-token price, so its spend shows in TokenUsage.costUsd
- * and the owner's dollar allowance can see it. "unpriced": paid, but with no
- * recorded price its cost records as $0, so the dollar allowance cannot see it
- * and the agent's token cap must keep applying.
+ * "priced": a recorded per-token price. "unpriced": paid, with no recorded
+ * price; logTokenUsage charges it an estimate (the model's profiled price, else
+ * $3/MTok), so the owner's dollar allowance still sees its spend. Both paid
+ * classes are governed the same way.
  */
 export type ProviderSpendClass = "free" | "priced" | "unpriced";
 
