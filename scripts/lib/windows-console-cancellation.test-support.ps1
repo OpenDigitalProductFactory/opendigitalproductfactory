@@ -215,6 +215,7 @@ public static class DpfConsoleFixture {
         public string cleanupFailure, probeExitedIdentity;
         public int? cleanupNativeError;
         public bool probeRetainedHandleObserved, probeRetainedHandleReleased;
+        public List<string> probeObservationEvents=new List<string>();
     }
     static void RecordObservationFailure(JobSnapshot snapshot,Exception error,string operation,int? pid,string identity) {
         if(snapshot.failure!=null) return; // Cleanup must never replace the primary failure.
@@ -242,11 +243,13 @@ public static class DpfConsoleFixture {
     }
     static void ObserveExitedMember(JobSnapshot snapshot,int pid,string expectedIdentity,ref IntPtr control,int budgetMs) {
         var elapsed=Stopwatch.StartNew();
+        int retainedObservations=0;
         while(elapsed.ElapsedMilliseconds<budgetMs) {
             var handle=OpenProcess(0x100000|0x1000,false,pid);
             if(handle==IntPtr.Zero) {
                 // Capture immediately: cleanup and later native calls may change it.
                 var error=new Win32Exception(Marshal.GetLastWin32Error());
+                snapshot.probeObservationEvents.Add("native-open-failed");
                 RecordObservationFailure(snapshot,error,"OpenProcess",pid,expectedIdentity);
                 return;
             }
@@ -257,14 +260,24 @@ public static class DpfConsoleFixture {
                 operation="exited-member-creation-identity";
                 if(observedIdentity!=expectedIdentity)
                     throw new InvalidOperationException("Exited probe PID was reused before native failure observation");
-                if(control!=IntPtr.Zero) snapshot.probeRetainedHandleObserved=true;
+                if(control!=IntPtr.Zero) {
+                    snapshot.probeRetainedHandleObserved=true;
+                    retainedObservations++;
+                    snapshot.probeObservationEvents.Add("retained-object-observed");
+                }
             } catch(Exception error) { RecordObservationFailure(snapshot,error,operation,pid,observedIdentity); }
             finally {
                 CloseObservationHandle(snapshot,handle,pid,observedIdentity,false);
-                if(control!=IntPtr.Zero) {
+                if(control!=IntPtr.Zero && snapshot.cleanupFailure==null)
+                    snapshot.probeObservationEvents.Add("observation-handle-released");
+                // Keep the control across two independently opened and identity-verified
+                // observations, closing each observation handle before releasing it.
+                if(control!=IntPtr.Zero && (retainedObservations>=2 || snapshot.failure!=null)) {
                     CloseObservationHandle(snapshot,control,pid,expectedIdentity,false);
                     control=IntPtr.Zero;
                     snapshot.probeRetainedHandleReleased=snapshot.cleanupFailure==null;
+                    if(snapshot.probeRetainedHandleReleased)
+                        snapshot.probeObservationEvents.Add("retained-control-released");
                 }
             }
             if(snapshot.failure!=null) return;
@@ -322,7 +335,11 @@ public static class DpfConsoleFixture {
                     if(!exiting.WaitForExit(Math.Max(0,Math.Min(3000,remainingBudgetMs-(int)elapsed.ElapsedMilliseconds)))) throw new InvalidOperationException("Exit probe did not terminate within its bound");
                     observation.probeExitedIdentity=identity;
                 } catch(Exception error) { RecordObservationFailure(observation,error,operation,memberPid,identity); }
-                finally { CloseObservationHandle(observation,retained,exitPid,identity,false); }
+                finally {
+                    CloseObservationHandle(observation,retained,exitPid,identity,false);
+                    if(observation.cleanupFailure==null)
+                        observation.probeObservationEvents.Add("original-probe-released");
+                }
                 if(observation.failure!=null) return observation;
                 // Exit signals termination, not process-object disappearance. Keep the
                 // original membership/creation identity while observing real native
@@ -411,7 +428,7 @@ function Wait-OwnedJobClosure([string]$Fault) {
             $exitRequest = Join-Path $config.evidenceDirectory 'probe-exit.request'
             if ($Fault -in @('exited-member','exited-member-retained')) { $exitPid = [int]((Get-Content -LiteralPath (Join-Path $config.evidenceDirectory 'probe-identity.json') -Raw | ConvertFrom-Json).pid) }
             $snapshot = [DpfConsoleFixture]::ObserveJob($Fault,$exitPid,$exitRequest,[Math]::Max(0,$budgetMs-[int]$elapsed.ElapsedMilliseconds))
-            $entry = @{ observedAt=[DateTime]::UtcNow.ToString('o'); elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure; failureOperation=$snapshot.failureOperation; failureNativeError=$snapshot.failureNativeError; failurePid=$snapshot.failurePid; failureIdentity=$snapshot.failureIdentity; cleanupFailure=$snapshot.cleanupFailure; cleanupNativeError=$snapshot.cleanupNativeError; probeExitedIdentity=$snapshot.probeExitedIdentity; probeRetainedHandleObserved=$snapshot.probeRetainedHandleObserved; probeRetainedHandleReleased=$snapshot.probeRetainedHandleReleased }
+            $entry = @{ observedAt=[DateTime]::UtcNow.ToString('o'); elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure; failureOperation=$snapshot.failureOperation; failureNativeError=$snapshot.failureNativeError; failurePid=$snapshot.failurePid; failureIdentity=$snapshot.failureIdentity; cleanupFailure=$snapshot.cleanupFailure; cleanupNativeError=$snapshot.cleanupNativeError; probeExitedIdentity=$snapshot.probeExitedIdentity; probeRetainedHandleObserved=$snapshot.probeRetainedHandleObserved; probeRetainedHandleReleased=$snapshot.probeRetainedHandleReleased; probeObservationEvents=@($snapshot.probeObservationEvents) }
             $snapshots.Add($entry)
             foreach ($field in @('failureOperation','failureNativeError','failurePid','failureIdentity','cleanupFailure','cleanupNativeError')) { $result[$field]=$entry[$field] }
             if ($snapshots.Count -eq 1) { $result.initialActiveCount=$entry.activeCount; $result.initialMembers=$entry.members }

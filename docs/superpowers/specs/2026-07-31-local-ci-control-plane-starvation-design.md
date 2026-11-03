@@ -25,8 +25,12 @@ fixtures retain real native provenance; they must not be rewritten as passes.
    bounded read-only OpenProcess attempts until a genuine native failure occurs.
    Compare every successful handle's creation time with the captured identity,
    close it on every path, and reject PID reuse or unreadable identity. Release
-   the control handle after its first successful observation. Never signal a
-   reopened PID, fabricate error87, or change the production observer.
+   the control handle only after two successful, creation-verified observations,
+   closing each observation handle first. On the decisive failing snapshot,
+   require ordered evidence of original probe-handle release, both observations
+   while the extra control is held, observation-handle closes, control release,
+   then the actual null OpenProcess/native87. Never signal a reopened PID,
+   fabricate error87, or change the production observer.
 3. Use only the remaining existing ten-second Job-drain budget, including the
    exit wait. Exhaustion remains non-success with explicit operation/provenance;
    retain primary and cleanup errors separately. No timeout increase or blind
@@ -35,7 +39,12 @@ fixtures retain real native provenance; they must not be rewritten as passes.
    control, with owned cleanup and the existing unrelated cancellation sentinel.
    Record RED and GREEN separately, check documentation/index and applicable
    source guards, obtain independent exact-source assessment, then qualify and
-   publish through the canonical gate and protected DCO PR/merge queue.
+   publish through the canonical gate and protected DCO PR/merge queue. The final
+   review packet must include the exact-head native Windows test command,
+   complete case outcomes and decisive retained-object snapshot, separately
+   from the canonical gate's web tests. Native review receipt
+   `cmw0dcarn0lr601lnbc1y5sri` remains FAIL; these changes address its ordering
+   and missing-primary-evidence findings and require independent reassessment.
 
 Acceptance is the live item's four recorded criteria: a deterministic retained
 handle regression; fail-closed identity/query/cleanup controls; all16 native
