@@ -3,7 +3,7 @@ status: draft
 backlog: BI-34955E1F
 epic: EP-LOCALCI-ADMITS
 workroom: WC-10581410
-research: initiative-d1a1dcf3-cd92-41ad-a7ae-4d27e14353b6
+research: initiative-ff4b0077-e962-4378-9255-3f0df6f9bc2f
 decision: DI-8C38441632ED
 builds-on: docs/superpowers/specs/2026-09-25-platform-owned-local-ci-memory-design.md
 ---
