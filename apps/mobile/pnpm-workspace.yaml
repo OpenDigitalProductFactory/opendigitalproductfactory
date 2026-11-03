@@ -44,6 +44,10 @@ overrides:
   # react-native's bundled renderer version changes on an SDK bump.
   react: 19.2.3
   react-dom: 19.2.3
+  # GHSA-3g3m-2fjr-6pw4 (Dependabot #254): patched glob floor for Expo and Jest.
+  'glob@<14.0.2': '14.0.2'
+  # GHSA-g3hv-75wg-m249 (Dependabot #255): patched minimatch floor.
+  'minimatch@<11.0.1': '11.0.1'
   # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
   # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
   # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
