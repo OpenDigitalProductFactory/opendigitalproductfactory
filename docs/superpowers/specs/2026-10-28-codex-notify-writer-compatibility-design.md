@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Keep Codex notify compatible with permission convergence
 
 Backlog: BI-34E03B27. Profile: fix. Declared small; effective medium because the existing permission writer is sensitive.
