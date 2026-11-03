@@ -12,7 +12,7 @@ The platform already has granular tools, standing grants, GPP bindings, workroom
 
 Refactor the existing projections and adapters. Keep OAuth transport authority, coworker grants, user capabilities, room membership and GPP consequential-action binding authoritative. No new permission engine, mega-tool, standing grant, global enforcement switch or paired-production write belongs to this work.
 
-The first refusal-loop correction is BI-PIR-d2257424 and is delivered. Existing BI-69415B68 owns GPP mediation and permits; BI-6DA17863 owns notation/compiler binding attachment; BI-43C3E914 owns stage tool declarations; BI-C8EC05C9 owns approval-envelope convergence; BI-D37B2C13 owns behavior-preserving Build Studio shape compilation. Reconcile their actual delivered behavior before changing it. The existing [compiler Phase 3 plan](../plans/2026-10-02-gpp-shape-notation-compiler-phase-3.md) already assigns binding attachment and emitted records to BI-6DA17863 coordinated with BI-69415B68; this design consumes that contract rather than opening a parallel permit implementation.
+The first refusal-loop correction is BI-PIR-d2257424 and is delivered. BI-69415B68 and BI-6DA17863 are completed GPP foundation and notation work; their status does not prove stage-permission steering exists. The current binding-attachment and stage-permission successor is existing BI-6B610D94, with draft design `2026-10-28-gpp-stage-permission-steering-design.md` and Workroom WC-E70788DE. BI-43C3E914 owns stage tool declarations; BI-C8EC05C9 owns approval-envelope convergence; BI-D37B2C13 owns behavior-preserving Build Studio shape compilation. Reuse these owners and their actual delivered behavior. The older [compiler Phase 3 plan](../plans/2026-10-02-gpp-shape-notation-compiler-phase-3.md) is historical design lineage, not a current delivery receipt for binding attachment.
 
 ## Design grounding
 
@@ -43,6 +43,7 @@ The first refusal-loop correction is BI-PIR-d2257424 and is delivered. Existing 
 | AC-ATTACH | OBJ-EXECUTION | Every admitted stage attaches all authorized required tools within its count and schema budget; deferred tools remain discoverable. Missing, over-cap and unknown required sets return an explicit held outcome before inference. |
 | AC-BOUND | OBJ-EXECUTION | A budget exception cannot replace the admitted surface with the full catalog. Unknown budget state is inconclusive and does not widen attachment or authority. |
 | AC-AUTH | OBJ-AUTHORITY | Revoked grants, removed membership, expired bindings and changed consequential parameters are refused at execution even if a prior attachment or approval existed. |
+| AC-STAGE | OBJ-AUTHORITY | Integration consumes the existing GPP owner's independently approved, delivered stage-permission contract: shape/stage version, actor, subject, gate decision, bounded capabilities and validity are bound before use; stage exit, rework and revocation prevent a new effect. Contextual approval and initiative completion remain blocked until the named dependency and served integration evidence pass. |
 | AC-REFUSAL | OBJ-RECOVERY | Same-turn settled refusal attempts are bounded; subsequent runs park unchanged blocked work and wake on an appropriate authority, evidence, stage or routing revision. Pending and inconclusive outcomes do not become refusal. |
 | AC-CLOSE | OBJ-RECOVERY | A linked Workroom consumes the same bound delivery shape and valid completion basis as its item. Closing a correctly accepted small item does not introduce unrelated generic plan/baseline gates. Changed scope, invalid evidence and failed gates remain held. |
 | AC-HUMAN | OBJ-HUMAN | Approval first view states the outcome, affected scope, consequence and expiry. Technical identities and receipt lineage are available under details. Authorization, execution and completion remain separate states. |
@@ -63,6 +64,21 @@ Attachment is an optimization, not permission. Validate the complete required se
 Reuse actual serialized provider-format definitions for measurement. Preserve deterministic order to support caching. Keep raw UTF-8 schema bytes, estimated definition tokens and provider-reported token usage distinct. A failed serialization is unavailable evidence, not a zero-cost surface.
 
 Use the existing disposition and TaskRun/workroom status projection for refusal parking. Identify the blocked stage, reason and relevant context revision, then suppress unchanged retries. Do not add an independent scheduler or status vocabulary. A grant update does not imply admission; revalidate all terms at wake and execution. Irrelevant changes must not restart the loop.
+
+## Binding-attachment dependency and integration boundary
+
+Independent spec-approval finding IF-487C4FD7855C31A2 identified that the prior draft named an unfinished foundation without an executable delivery dependency. The current owner is BI-6B610D94, not a new implementation in this initiative. Its clean source draft at commit `3d847f55f2a93c88f028dfa2b799fb2aa4d793a1` defines stage admission, positive proof at the reference monitor, sealed lineage, bounded consumption and revocation. Its recorded WWMD choice is DI-C6A267176992. Both that draft and this dependency remain subject to independent approval; neither is a delivered permit implementation.
+
+The handoff contract is explicit:
+
+| Owner | Required handoff | Consumer and stop condition |
+| --- | --- | --- |
+| BI-6B610D94 / WC-E70788DE | Independently approved design and plan, immutable delivered source and supported runtime capability identity; an activated bounded binding whose canonical verifier proves shape/stage, actor, subject, gate decision, constraints, validity and remaining use budget. | BI-8E7F0276 consumes the stage's declared required set and current verified authority. Missing or incompatible binding proof returns held/inconclusive; it never falls back to a standing-grant mutation or claims contextual approval. |
+| Existing GPP monitor and stage lifecycle under that owner | Positive proof before steering, exact consequential-action preservation, sealed lineage, fenced consumption, and revocation on stage exit/replacement/rework and grant or scope changes; observed recovery for an uncertain effect. | The initiative's AC-STAGE integration fixture exercises a covered ordinary call, a damaging call that retains its human gate, wrong actor/subject/stage/version, revocation, and an uncertain retry without a second effect. |
+
+This is a recorded external dependency, not a transfer of the other Workroom's ownership or a second permit engine. Its room remains within the recorded resume grace; do not take over or edit that checkout. BI-857D6FDD is the federated demand mirror and stays read-only here. Record the handoff on this initiative and the local BI-6B610D94 through normal evidence tools; do not change the completed foundation items or infer acceptance from their status.
+
+The count/schema admission correction, scheduled-refusal recovery and proportional closeout remain independently deliverable under current authority. They cannot activate a new binding, remove a consequential gate or satisfy AC-STAGE by themselves. Stage-permission integration and aggregate initiative completion are blocked until the owner's approved delivery and served tests satisfy this contract. If the owner changes its contract, obtain an independently reviewed scope amendment before changing the consumer. No enforcement promotion is authorized by this design.
 
 ## Human approval experience
 
@@ -116,12 +132,15 @@ These are design comparators, not proposed installations or procurement recommen
 
 ## Delivery and verification sequence
 
-1. Preserve delivered BI-PIR-d2257424 through its existing small-delivery path: PR #6259 merged as 647162a6e5b75a79e2930cc50dff656c64aff5e8, and the governed completion gate accepted its source/build/test and failing-to-passing evidence. Live observation still awaits a containing release.
-2. Reconcile delivered stage declarations, mediation and approval convergence with their owners; record actual remaining gaps.
-3. Record decomposition coverage for the live independent deliverables: BI-8E7F0276 attachment admission/measurement, BI-412A2F72 cross-run refusal parking, BI-038AA4BC approval presentation, existing BI-B8D36C62 proportional room closeout, and existing BI-0ACB97B5 investment roll-up. BI-PIR-d2257424 is the delivered refusal-loop correction. Reconcile the legacy owner's design and workroom before any overlapping edits.
-4. Independently review the canonical design and obtain its scope baseline; record plan coverage and dependencies before implementation.
-5. For each slice, reproduce the current defect or validate existing behavior, refactor the shared owner, run targeted verification, obtain exact-change review, publish through the protected PR/merge queue, and verify the served target after canonical advance.
-6. Promote named GPP enforcement bindings only under their existing owner and evidence contract. This design does not change global enforcement mode.
+The [backlog and planning contract](../../architecture/backlog-and-planning-runbook.md) orders scope approval before schema-v2 coverage: an independent passing spec approval mints the objective baseline; coverage then binds the plan to that baseline. A design review assesses the concrete decomposition and dependency contract below. The recorded coverage receipt is a subsequent implementation prerequisite. Requiring that receipt before minting its prerequisite baseline would create a cycle; no fabricated receipt or self approval is permitted.
+
+1. Preserve the existing delivered refusal correction BI-PIR-d2257424, investment metric BI-0ACB97B5 and approval presentation BI-038AA4BC with their own delivery evidence.
+2. Reconcile the external stage-permission dependency with BI-6B610D94 / WC-E70788DE. Its independently reviewed delivery and served conformance are required for AC-STAGE integration and aggregate completion; its current draft supplies design context only.
+3. Validate the concrete decomposition already mapped in the implementation sequence: BI-PIR-d2257424, BI-8E7F0276, BI-412A2F72, BI-B8D36C62, BI-038AA4BC and BI-0ACB97B5. Each is an existing live item with an independent delivery boundary. The external owner's work retains its own lifecycle and is not duplicated or reassigned.
+4. Have independent reviewers decide design-spec, spec-approval and architecture-review on the immutable design. A passing spec approval creates the canonical objective baseline. Open findings remain accountable to those reviewers.
+5. Record schema-v2 decomposition coverage with the approved baseline, immutable plan and all objective/contract/flow/acceptance mappings. Validate coverage and obtain independent plan review before implementation admission. A missing or invalid receipt holds implementation.
+6. For each local slice, reproduce the current defect or validate delivered behavior, refactor the shared owner, execute its affected tests and required gates, publish a DCO-signed PR through protected checks and the merge queue, and record served evidence where owed. Then verify AC-STAGE after the external owner's approved handoff is delivered. No current source or UI check substitutes for that integration result.
+7. Reconcile all acceptance criteria and measured outcomes before aggregate closeout. GPP enforcement promotion remains with its existing owner and promotion contract.
 
 ## Risks, compatibility and rollback
 
@@ -137,15 +156,15 @@ This draft was refreshed against source main 49d845230041e48237968659a5a72d0c41e
 
 - BI-PIR-d2257424 is delivered through PR #6259 and remains closed.
 - BI-0ACB97B5 is delivered and closed. The existing [investment allocation guide](../../user-guide/investment-allocation.md) and its owner-scoped implementation supply the cumulative allocation and honest usage coverage. Do not build another metric or infer funding from the administrator or installation.
-- Approval presentation has overlapping delivered implementation in PRs #6659, #6751 and #6812. The current card leads with a readable target, description, consequence and recommendation, with technical evidence under disclosure. Reconcile BI-038AA4BC against that delivery and its tests before changing the renderer.
+- Approval presentation has overlapping delivered implementation in PRs #6659, #6751 and #6812. The current card leads with a readable target, description, consequence and recommendation, with technical evidence under disclosure. DPF reconciled that delivery and its tests and closed BI-038AA4BC through IRD-906B32FFC923 on 2026-11-03 UTC; no new renderer change is owed by this slice.
 - BI-8E7F0276 remains an implementation gap: the general autonomous tool-budget path still truncates pinned names and falls back to the full authorized catalog when budgeting fails. Preserve the newer exact restricted-review and engagement surfaces while correcting that general path.
 - BI-412A2F72 remains the scheduled-refusal recovery owner. Confirm current TaskRun and scheduler behavior before changing persistence or wake rules.
 - BI-B8D36C62 remains the proportional Workroom completion owner. The current transition still calls the generic item projection without the room's bound shape. Coordinate receipt reuse with BI-9C018CEB; do not bypass the completion guard.
 
-The GPP mint still leaves stage/actor/subject shadow fields unbound. Existing binding-attach ownership and promotion prerequisites remain authoritative. This design does not promote enforcement.
+The GPP mint still leaves stage/actor/subject shadow fields unbound. BI-6B610D94 is the current owned successor, with the explicit handoff and blocked integration contract above; completed BI-69415B68 and BI-6DA17863 do not discharge that dependency. This design does not promote enforcement.
 
 The remaining implementation appetite is one independently reviewable delivery per unresolved slice. Existing delivered work is reconciled once, not repeated to satisfy this initiative. Current canonical scope approval, decomposition coverage and child gates are required before implementation.
 
 ## Status
 
-Canonical draft awaiting independent spec approval and live decomposition coverage. No new metric writer, UI rollout or live efficiency improvement is claimed. The first repair at da51395c715cbb6aa47c258d8229bbb6dcfa285e has canonical local-CI PASS cmv66dkn105x101o7ndislors (4,110 tests), independent semantic PASS cmv66mmea0cae01o7a1s14q1l and research receipt initiative-60f336b4-c1ec-4956-aedc-e1456dd2bd61. PR #6259 passed all 42 checks and merged as 647162a6e5b75a79e2930cc50dff656c64aff5e8; DPF's completion gate accepted source/build/test and failing-to-passing acceptance evidence and closed BI-PIR-d2257424. The current release does not contain it yet, so live observation remains pending. DPF executed the approved retirement of duplicate BI-737839B9; BI-0ACB97B5 remains the metric owner.
+Canonical draft awaiting independent spec approval and live decomposition coverage. No new metric writer, UI rollout or live efficiency improvement is claimed. The first repair at da51395c715cbb6aa47c258d8229bbb6dcfa285e has canonical local-CI PASS cmv66dkn105x101o7ndislors (4,110 tests), independent semantic PASS cmv66mmea0cae01o7a1s14q1l and research receipt initiative-60f336b4-c1ec-4956-aedc-e1456dd2bd61. PR #6259 passed all 42 checks and merged as 647162a6e5b75a79e2930cc50dff656c64aff5e8; DPF's completion gate accepted source/build/test and failing-to-passing acceptance evidence and closed BI-PIR-d2257424. The October 13 snapshot did not yet contain the first repair. This design records no current served-path observation or measured live refusal reduction for it. DPF executed the approved retirement of duplicate BI-737839B9; BI-0ACB97B5 remains the metric owner.
