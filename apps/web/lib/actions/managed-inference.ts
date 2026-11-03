@@ -70,6 +70,8 @@ export async function requestManagedInferenceTransition(input: {
   if (!principalId) return err("This change needs an active human operator account.");
   const original = await readManagedInferenceRequestState({ requestId: request.requestId });
   if (original?.recorded) return err(original.message);
+  const employee = await prisma.employeeProfile.findUnique({ where: { userId }, select: { id: true } });
+  if (!employee) return err("This change needs an employee profile linked to your operator account.");
   const first = await loadOffer(input.operation);
   if (!first.available) return err(first.message);
   if (first.token !== input.offerToken || (first.needsNodeGrant && input.allowNodeAction !== true)) return err("The host or change details have changed. Refresh them before proceeding.");
@@ -93,7 +95,7 @@ export async function requestManagedInferenceTransition(input: {
         parameters: fresh.parameters, controllerManifestSha256: fresh.controllerManifestSha256, nodeGrantConfirmed: fresh.needsNodeGrant },
       items: [{ itemType: "managed-inference", title: "Switch the qualified local inference engine",
         rollbackPlan: "Stop only the owned native service and descendants; restore recorded Docker model settings and endpoint selection. Retain the local fence when cleanup or authority is uncertain." }] });
-    await prisma.changeRequest.update({ where: { id: change.id }, data: { approvedById: userId } });
+    await prisma.changeRequest.update({ where: { id: change.id }, data: { approvedById: employee.id } });
     await signalSwapStarting(runId);
     queueAttempted = true;
     await withQuiescenceStartSerialization(prisma as unknown as QuiescenceReservationDb, "portal.quiescence", async port => {

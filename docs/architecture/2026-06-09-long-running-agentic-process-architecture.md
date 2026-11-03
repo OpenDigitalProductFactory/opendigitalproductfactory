@@ -8,6 +8,15 @@ pending; a response is not business-result acceptance. See the
 [implementation record](../superpowers/specs/2026-10-29-foreground-recovery-implementation.md)
 for source and unrun served-verification boundaries.
 
+**Repository intake:** the commissioned controller reads issues, Dependabot
+alerts and peer demand through the existing backlog origin reconciler. It
+records source snapshots without inflating unchanged demand or overwriting
+curated work. The four-hour schedule and Scheduled Work **Run now** action
+share one account concurrency lane and durable intake/heartbeat steps. Both
+check quiescence; the recurring trigger also honors the schedule enable switch.
+Denied security reads and ambiguous origins remain incomplete coverage. See the
+[repository intake repair plan](../superpowers/specs/2026-11-02-repository-security-intake-repair.md).
+
 **Operator provider pauses:** optional expiry runs through the existing jobs
 facade, with `ScheduledJob` holding the operation identity and resume time.
 A five-minute reconciliation job repairs overdue timers after restart or event
