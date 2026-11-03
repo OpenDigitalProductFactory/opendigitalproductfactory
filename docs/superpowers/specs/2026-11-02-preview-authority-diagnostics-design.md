@@ -60,3 +60,18 @@ Refactoring consolidates diagnostic validation in the existing event boundary ra
 Current native design admission is allowed, medium, low sensitivity. Funding scope is unresolved; no budget allocation is inferred. Implementation, coverage, research receipt, source qualification and live acceptance remain pending. This document does not clear DEV provisioning's original review hold.
 
 Primary risks are leaking arbitrary error material, confusing event time with request/ACK time, and accepting a late response as renewed authority. Test each at the existing summary/supervisor boundary. Revert the repair and its tests/docs together if required; preserve audit history and do not revive an expired lease. An unavailable transport diagnosis remains explicitly unresolved even if diagnostic retention improves.
+
+## Canonical item acceptance (verbatim)
+
+1. Reconcile original retained request/response and controller authority facts if available; distinguish client-ACK time from server commit, handler duration and later expiry. State missing evidence honestly; never manufacture recovery of an unavailable original timeline.
+2. Extend the existing bounded preview/supervisor diagnostic contract with only approved safe facts needed to identify last acknowledged expiry, renewal attempt/time/result and fence/cleanup disposition. Preserve sanitization: no raw child output, arbitrary error messages, credentials, host paths or source/customer rows.
+3. Use deterministic transport/supervisor behavior tests to cover delayed response before deadline, server commit with missing/late response, repeated uncertainty, late renewal after fence/finalization, and failed termination while preserving truthful command1/cleanup uncertainty.
+4. Diagnose and repair only the evidenced source cause. Keep exact owner/source/image/lease binding, fail-closed fencing at last acknowledged authority, restricted-table exclusion, bounded clone, source read-only behavior and writer cleanup. No blind timeout/TTL/startup-budget increase, exception date change or inference/approval bypass.
+5. After admitted design/implementation and applicable protected qualification, verify one ordinarily admitted preview reaches source/lease-bound READY and can run desktop acceptance, or reports the precise remaining infrastructure failure. A new attempt requires actual supported remediation, not an unchanged retry. Desktop web is the user-directed target; native iOS remains separate.
+6. Reservation terminality, follower exit0, source tests, build progress and client source review never stand in for READY/UX or writer-exit proof.
+
+## Traceability labels
+
+Flow references: renewal-acknowledgement; authority-fence; owned-cleanup.
+Verification references: deterministic source behavior tests; protected qualification; ordinarily admitted desktop preview.
+
