@@ -939,6 +939,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // destroyed run after run. The allowlist is shrink-only and its own
         // header prefers inventory listing; this is that move.
         "scripts/lib/lease-supervisor.test.mjs",
+        "scripts/lib/preview-authority-diagnostics.test.mjs",
         "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
