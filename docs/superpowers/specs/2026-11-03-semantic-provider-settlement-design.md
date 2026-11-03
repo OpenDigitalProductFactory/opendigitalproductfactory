@@ -107,18 +107,11 @@ repair to existing lifecycle contracts, with no new external dependency.
 
 ## Acceptance criteria
 
-AC-1 / OBJ-1: A durable immutable node/attempt binding exists before dispatch;
-failed binding prevents the effect. Fallbacks retain all attempts.
-AC-2 / OBJ-2: Response completion, acknowledged cancellation, client-only abort
-and unavailable provider observation remain distinct across restart.
-AC-3 / OBJ-3: Mismatched digest, node, account, generation, source, incomplete
-attempt set or stale proof refuses recovery; concurrency admits at most the
-existing single successor.
-AC-4 / OBJ-4: Historical missing proof remains UNKNOWN and can receive only an
-authorized non-accepting terminal disposition; it never earns a review pass.
-AC-5 / OBJ-1,OBJ-2,OBJ-3,OBJ-4: First-failing regression tests, targeted tests,
-both typechecks, canonical exact-tree integration, independent review and
-served acceptance demonstrate the contract. Unrun checks stay unrun.
+- AC-1 / OBJ-1: A durable immutable node/attempt binding exists before dispatch; failed binding prevents the effect. Fallbacks retain all attempts.
+- AC-2 / OBJ-2: Response completion, acknowledged cancellation, client-only abort and unavailable provider observation remain distinct across restart.
+- AC-3 / OBJ-3: Mismatched digest, node, account, generation, source, incomplete attempt set or stale proof refuses recovery; concurrency admits at most the existing single successor.
+- AC-4 / OBJ-4: Historical missing proof remains UNKNOWN and can receive only an authorized non-accepting terminal disposition; it never earns a review pass.
+- AC-5 / OBJ-1,OBJ-2,OBJ-3,OBJ-4: First-failing regression tests, targeted tests, both typechecks, canonical exact-tree integration, independent review and served acceptance demonstrate the contract. Unrun checks stay unrun.
 
 ## Ordered atomic delivery and backlog coverage
 
