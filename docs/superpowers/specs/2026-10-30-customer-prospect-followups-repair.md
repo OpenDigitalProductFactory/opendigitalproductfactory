@@ -77,3 +77,32 @@ original prototype and requested CE-98CCD5DB; no retroactive pre-code prototype
 or UX approval is claimed. Prior 51-test and TypeScript results remain historical
 source evidence until qualification of this integration. No outreach, schema,
 credential or permission change is introduced by this integration.
+
+## Served verification — 2 November 2026 America/Chicago
+
+Source `dbab7a784dc53c4d728dd83da9133bdcd5753482` includes protected main
+`49d845230041e48237968659a5a72d0c41e86322`. Eight affected suites passed
+50 tests; application and test TypeScript checks passed. This supersedes the
+historical test count for the current integration.
+
+On admitted disposable preview `NPEL-83DE58ED0E`, create a labelled synthetic
+account and opportunity through the served UI. Save an overdue date and action
+description, reload, and verify both persist. Returning Customer promotes the
+fixture above collapsed CRM detail. Its Set next step link selects the exact
+opportunity. Reschedule to a future date with a new description, reload, and
+verify persistence and removal from the overdue summary. All these steps passed;
+no existing customer record or mail was changed. Full and Simple views retain
+the actions. At 390×844 the document width is390px, with wrapped labels and
+visible action buttons. The viewport override was reset afterward.
+
+The measured UX manifest records109 visible main-content words against the
+committed145-word baseline. Installed axe-core found two serious violation rules,
+matching the baseline count, and an incomplete contrast check. This is not a
+clean accessibility verdict. Temporary browser test instrumentation was removed
+by reload. Native receipts, screenshots and detailed limits are in
+`DOC-C108E048`; author critique capture does not fulfill `CE-98CCD5DB`.
+
+The preview server was removed after verification. Its reservation release
+awaits DPF's separate cleanup approval. Independent UX review, exact-tree full
+gate, publication and deployment remain pending. This synthetic UI proof does
+not establish the real-email, coworker-provider or MSP acceptance milestones.
