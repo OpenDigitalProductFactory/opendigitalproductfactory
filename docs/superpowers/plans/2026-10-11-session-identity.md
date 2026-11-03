@@ -15,6 +15,14 @@ The restored account disclosure now incorporates the current header's help and f
 
 The old permission denial is resolved: live discovery confirms both UX-service tools callable. CE-93234362 records the original advisory engagement request; it is not a completed critique. Current main contains the preview binding, bounded clone and preview sign-in procedures, so this delivery will exercise those procedures rather than presume the October repair is still unavailable. No runtime or publication check is represented as passed before execution.
 
+## Served checkpoint and remaining checks — 2026-11-02
+
+Follow-up commit `476a7ac597c80ca80099674b604a2f558c654ca5` fixes a reproduced nested-feedback Escape regression. All 69 focused tests and both web typecheck programs pass. The admitted preview NPEL-B3441F1BE5 completed its sanitized clone, including 14,560,515 telemetry rows in bounded batches, and served that exact source with healthy database and event loop checks. A platform-issued automation session authenticated successfully; the browser rendered the persistent name and disclosure with email, role, organization, help, feedback and sign-out.
+
+The documents-page sweep failed against its frozen baseline: words 118 to 911, maximum choices 1 to 6, plus structural differences. It is not a passing UX measurement. The sweep wrote its generated report into the pinned checkout; the controller then recorded a source-binding heartbeat failure and stopped the preview. The report is preserved outside the source tree. Future measurement outputs must be isolated from the pinned source. The recorded choice between one consolidated account disclosure and separate account/help disclosures is DI-D79779F7D223; the native outcome writer records the agent following the high-confidence consolidation recommendation. The UX-fit manifest uses that actual option decision and does not claim the full-page sweep passed.
+
+Mobile/Simple-mode exercise, served nested-dialog and sign-out checks, full shared-layout coverage, integrated gate, independent review, PR, merge and deployment remain pending. The desktop screenshot is illustrative acceptance evidence for the running preview, not evidence of live deployment.
+
 ## Acceptance criteria
 
 - AC-ACCOUNT: The workforce shell displays the authenticated person's name with email fallback; an accessible disclosure shows account email, role, and organization, including on mobile and in Simple mode.
