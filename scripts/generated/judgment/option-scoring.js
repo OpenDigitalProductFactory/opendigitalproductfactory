@@ -1,4 +1,4 @@
-// Generated from packages/validators/src/judgment/option-scoring.ts by scripts/build-judgment-guard-runtime.mjs; do not edit.
+// Generated from @opendigitalproductfactory/dpf-scoped-judgment@0.1.0-candidate.3/dist/judgment/option-scoring.js by scripts/build-judgment-guard-runtime.mjs; do not edit.
 // Phase 2 Task 2.5 of the principles-as-wiki-kind plan: principle_decide
 // core math. Pure module — no I/O, no logging side effects. The Phase 2
 // Task 2.7 MCP handler is responsible for retrieving principles and

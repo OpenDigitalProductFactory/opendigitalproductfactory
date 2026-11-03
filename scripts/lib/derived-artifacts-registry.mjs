@@ -64,11 +64,13 @@ export function matchesAnyGlob(filePath, globs) {
 export const DERIVED_ARTIFACTS = [
   {
     id: "judgment-guard-runtime",
-    description: "Canonical judgment scorer -> dependency-free Node20 golden guard distribution",
+    description: "Verified scoped-judgment artifact -> dependency-free Node20 golden guard distribution",
     sourceGlobs: [
       "packages/validators/src/judgment/option-scoring.ts",
       "packages/validators/src/judgment/mcda-quality-gates.ts",
       "scripts/build-judgment-guard-runtime.mjs",
+      "packages/validators/vendor/JUDGMENT-ADOPTION.json",
+      "packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-*.tgz",
       "packages/repo-guard-runtime/package.json",
       "pnpm-lock.yaml",
     ],

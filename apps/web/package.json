@@ -78,7 +78,8 @@
     "recharts": "^3.10.1",
     "sharp": "^0.35.5",
     "undici": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@opendigitalproductfactory/dpf-scoped-judgment": "file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

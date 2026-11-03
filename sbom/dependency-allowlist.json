@@ -1161,6 +1161,18 @@
         "prod"
       ],
       "note": "BI-FCDCAE98: first-party private immutable artifact0.1.0-candidate.4, source OpenDigitalProductFactory/dpf-workroom@ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9, SHA256 42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44. Apache-2.0 LICENSE/NOTICE verified in archive; zero runtime dependencies. Local file archive with lock integrity; no npm registry provenance/download-age claim is applicable to this unreleased private candidate. Original source provenance, installed conformance, strict receiving matrix and independent review passed. Reuses extracted DPF implementation and retires nine duplicate bodies. Root dependency makes maintenance-script imports available in the existing filtered image runtime set."
+    },
+    "@opendigitalproductfactory/dpf-scoped-judgment": {
+      "added": "2026-11-02",
+      "workspaces": [
+        ".",
+        "apps/web",
+        "packages/validators"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "BI-BDF358CB: reviewed first-party immutable private artifact0.1.0-candidate.3 from OpenDigitalProductFactory/dpf-scoped-judgment@27a4cd62865e80685f4f12e43f6eb6c1b4b3483e, SHA25624fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837. Apache-2.0 LICENSE/NOTICE,19source provenance files, zero runtime dependencies; all18emitted files byte-identical to.2. Strict installed import/require shared identity and ESM+CJS declarations passed24.16/24.22.0/24.22.1, actual pinned DPF framework loader passed, Linux CI41562038388green, independent exact-source client review clear. No npm registry age/download/attestation claim applies to this unreleased file archive. Reuses existing DPF code while retiring nine bodies; no new third-party runtime dependency. Product receiving/integration/served acceptance remain separate."
     }
   },
   "retired": {

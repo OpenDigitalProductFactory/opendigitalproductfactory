@@ -1,0 +1,38 @@
+{
+  "kind": "private-installed-component-candidate",
+  "component": "@opendigitalproductfactory/dpf-scoped-judgment",
+  "version": "0.1.0-candidate.3",
+  "sourceRepository": "OpenDigitalProductFactory/dpf-scoped-judgment",
+  "sourceCommit": "27a4cd62865e80685f4f12e43f6eb6c1b4b3483e",
+  "tarball": "opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz",
+  "sha256": "24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837",
+  "toolchain": {
+    "buildNode": "24.16.0",
+    "typescript": "6.0.3"
+  },
+  "supportedNodeVersions": [
+    "24.16.0",
+    "24.22.0",
+    "24.22.1"
+  ],
+  "checks": {
+    "originalProvenanceFiles": 19,
+    "originalAdvisoryCases": 9,
+    "strictInstalledConsumer": "all3Nodeprofiles passed; no package symlink",
+    "publicExports": 8,
+    "sharedImportRequireValues": "all exports passed",
+    "declarations": "ESM and actual .cts compiled+executed",
+    "boundedJsonNormalAdverse": "passed",
+    "closedDeepExports": "pass",
+    "emittedParity": "all18dist files byte-identical to.2",
+    "actualFrameworkLoader": "cleaninstalled artifact through pinned Next CommonJS TS hook Node24.22.1 PASS;27rootexports identity and ordinary/adverseJSON",
+    "linuxStandaloneCI": "41562038388 PASS exact27a4cd6"
+  },
+  "independentReview": "Exact source27a4cd6/tree9f78009716b902b8f54befb3b3c3a619fd0dfdef/archive independently reviewed; no material findings. Reviewer read actual RED/GREEN logs, did not rerun. Client review, not native attestation.",
+  "publicPackagePublication": false,
+  "realDpfConsumerMigration": false,
+  "dpf2Migration": false,
+  "nativeOrProductionQualification": false,
+  "actualNode20Guard": false,
+  "previousCandidate": "candidate.2 remains immutable; previous33group TS7 matrices are historical and not relabeled.3"
+}

@@ -1,26 +1,34 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "owner": "@markdbodman",
-  "backlogItem": "BI-4DD124E7",
+  "backlogItem": "BI-BDF358CB",
   "license": "Apache-2.0",
-  "compiler": {
-    "name": "typescript",
-    "version": "6.0.3",
-    "target": "ES2022",
-    "module": "ES2022",
-    "newLine": "LF",
-    "removeComments": false,
-    "verbatimModuleSyntax": true,
-    "rewriteRelativeImportExtensions": true
+  "componentArtifact": {
+    "name": "@opendigitalproductfactory/dpf-scoped-judgment",
+    "version": "0.1.0-candidate.3",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz",
+    "sha256": "24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837",
+    "sourceRepository": "OpenDigitalProductFactory/dpf-scoped-judgment",
+    "sourceCommit": "27a4cd62865e80685f4f12e43f6eb6c1b4b3483e"
+  },
+  "builder": {
+    "path": "scripts/build-judgment-guard-runtime.mjs",
+    "sha256": "1e3942b1927c17d474399afc19acc5319e6dc558219a20ee47f1c7cfdabd9eb6",
+    "parser": "typescript@6.0.3",
+    "mode": "verified-emitted-file-copy"
   },
   "sources": {
     "packages/validators/src/judgment/option-scoring.ts": "4947e9f9ac5f8bb2e1964da42779fc8fa5ceefca69dfa9e8334a17e68fac2125",
     "packages/validators/src/judgment/mcda-quality-gates.ts": "ce54eeeaf08cd0e74264f6293352a1154ab075ffc2f55deb423e5f811a369e49"
   },
+  "emittedFiles": {
+    "dist/judgment/option-scoring.js": "d8cdbdc24a1615439d3f0cf18932925d52fc4762dda04abb49a2b078c0f3d0d9",
+    "dist/judgment/mcda-quality-gates.js": "c73ff85518b57dde033f6423c0f028b0741e5f52879cff29e03cf2b56e68671f"
+  },
   "outputs": {
     "scripts/generated/judgment/package.json": "230cbdd6c17ad56a2436422d7ec17f8bd0c91d8bc01847d5bdd591bec22ae83c",
-    "scripts/generated/judgment/option-scoring.js": "10ecc15dc84ace4548fb779186cfee608cab9611189473e74818baf691c8e3af",
-    "scripts/generated/judgment/mcda-quality-gates.js": "85cdb7319e371cb73201dc9d21e6e5580f74023d9ccc2f1214a84056d69c7640"
+    "scripts/generated/judgment/option-scoring.js": "d09dd7aba7c9b837ad8f487593492dda4e22b25a6ebb5565fa9135d3a0818947",
+    "scripts/generated/judgment/mcda-quality-gates.js": "b7a40c896cc72c3e0b2eea73a4ec8ba3a07a6bcc53a77c8947b5ee97a1acadce"
   },
   "runtimeDependencies": []
 }

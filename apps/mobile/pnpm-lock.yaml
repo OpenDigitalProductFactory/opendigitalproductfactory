@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@dpf/validators>@opendigitalproductfactory/dpf-scoped-judgment': file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
   '@dpf/validators>@opendigitalproductfactory/dpf-workroom': file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
   '@dpf/validators>@dpf/integration-shared': file:../../packages/integration-shared
   '@dpf/validators>zod': ^4.6.7
@@ -1273,6 +1274,11 @@ packages:
 
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
+
+  '@opendigitalproductfactory/dpf-scoped-judgment@file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz':
+    resolution: {integrity: sha512-77SKwqvxhXCgc5S+EdpYZy4RyEN9r7JJodUIJkoTD7CVzvI+Mpc0hnyw2cV3z2sjI/p0Cui4nn6S/ClfLrYLYw==, tarball: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz}
+    version: 0.1.0-candidate.3
+    engines: {node: 24.16.0 || 24.22.0 || 24.22.1}
 
   '@opendigitalproductfactory/dpf-workroom@file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz':
     resolution: {integrity: sha512-/e61NTK8mmb5XxBQIOdCLlDWDdV29MgpxLIB8s2nRtGgQ4czcrjS6izNxky7EsN5Gnql34mo/84ClJBRVrvYJQ==, tarball: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz}
@@ -5311,6 +5317,7 @@ snapshots:
   '@dpf/validators@file:../../packages/validators':
     dependencies:
       '@dpf/integration-shared': file:../../packages/integration-shared
+      '@opendigitalproductfactory/dpf-scoped-judgment': file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
       '@opendigitalproductfactory/dpf-workroom': file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
       zod: 4.6.7
 
@@ -6113,6 +6120,8 @@ snapshots:
       outvariant: 1.4.3
 
   '@open-draft/until@2.1.0': {}
+
+  '@opendigitalproductfactory/dpf-scoped-judgment@file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz': {}
 
   '@opendigitalproductfactory/dpf-workroom@file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz': {}
 

@@ -1,4 +1,4 @@
-// Generated from packages/validators/src/judgment/mcda-quality-gates.ts by scripts/build-judgment-guard-runtime.mjs; do not edit.
+// Generated from @opendigitalproductfactory/dpf-scoped-judgment@0.1.0-candidate.3/dist/judgment/mcda-quality-gates.js by scripts/build-judgment-guard-runtime.mjs; do not edit.
 // MCDA quality gates for principle_decide (BI-1D23EC26).
 //
 // DPF scores with a weighted-sum model (WSM / SAW), not Saaty AHP

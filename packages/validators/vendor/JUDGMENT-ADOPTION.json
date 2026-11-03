@@ -1,0 +1,147 @@
+{
+  "componentArtifact": {
+    "name": "@opendigitalproductfactory/dpf-scoped-judgment",
+    "version": "0.1.0-candidate.3",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz",
+    "sha256": "24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837",
+    "sourceRepository": "OpenDigitalProductFactory/dpf-scoped-judgment",
+    "sourceCommit": "27a4cd62865e80685f4f12e43f6eb6c1b4b3483e"
+  },
+  "backlogItem": "BI-BDF358CB",
+  "owner": "DPF maintainers",
+  "canonicalOwner": "OpenDigitalProductFactory scoped-judgment component maintainers",
+  "bridges": {
+    "packages/validators/src/decision-scopes.ts": {
+      "artifactSubpath": "./decision-scopes",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "apps/web/lib/decision/self-review/measures.ts",
+        "apps/web/lib/gpp/permit-claims.ts",
+        "apps/web/lib/work-capsules.ts",
+        "apps/web/lib/work-management/source-registry.ts",
+        "packages/validators/src/commons/exchange.ts",
+        "packages/validators/src/decision-scope.ts",
+        "packages/validators/src/gpp/bindings-emit.ts",
+        "packages/validators/src/gpp/gpp-shape-schema.ts",
+        "packages/validators/src/gpp/work-shape-contracts.ts",
+        "packages/validators/src/judgment/scopes.ts",
+        "packages/validators/src/operating-composition/composition.ts"
+      ]
+    },
+    "packages/validators/src/bounded-trusted-json.ts": {
+      "artifactSubpath": "./bounded-trusted-json",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "packages/validators/src/commons/exchange.ts",
+        "packages/validators/src/commons/result-intake.ts",
+        "packages/validators/src/commons/result-projection.ts",
+        "packages/validators/src/operating-composition/composition.ts",
+        "packages/validators/src/operating-composition/qualification.ts",
+        "packages/validators/src/trusted-agent-contracts.ts"
+      ]
+    },
+    "packages/validators/src/judgment/index.ts": {
+      "artifactSubpath": ".",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": []
+    },
+    "packages/validators/src/judgment/scopes.ts": {
+      "artifactSubpath": "./decision-scopes",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "packages/validators/src/judgment/index.ts",
+        "packages/validators/src/judgment/scoped-advice.ts"
+      ]
+    },
+    "packages/validators/src/judgment/option-scoring.ts": {
+      "artifactSubpath": "./option-scoring",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "apps/web/lib/decision-perspective/option-recommendation.ts",
+        "apps/web/lib/decision/band-telemetry.ts",
+        "apps/web/lib/decision/decision-drift.test.ts",
+        "apps/web/lib/decision/decision-drift.ts",
+        "apps/web/lib/decision/evidence-grounding.ts",
+        "apps/web/lib/decision/golden-decisions.ts",
+        "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+        "apps/web/lib/decision/kernel-consult-ledger.ts",
+        "apps/web/lib/decision/mcda-quality-gates.test.ts",
+        "apps/web/lib/decision/option-scoring.insufficient-signal.test.ts",
+        "apps/web/lib/decision/option-scoring.overlap-scan.test.ts",
+        "apps/web/lib/decision/principle-decide-signal-quality.ts",
+        "apps/web/lib/decision/recorded-citations.test.ts",
+        "apps/web/lib/decision/situational-weighting.backtest.test.ts",
+        "apps/web/lib/decision/three-band-verdict.test.ts",
+        "apps/web/lib/decision/uncertain-retry.test.ts",
+        "apps/web/lib/mcp/packs/principle-decide-pack.ts",
+        "apps/web/lib/wiki/principle-decide.test.ts",
+        "apps/web/lib/wiki/principle-decide.ts",
+        "packages/validators/src/judgment/index.ts",
+        "packages/validators/src/judgment/scoped-advice.ts",
+        "packages/validators/src/judgment/uncertain-retry.ts"
+      ]
+    },
+    "packages/validators/src/judgment/mcda-quality-gates.ts": {
+      "artifactSubpath": "./quality-gates",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "apps/web/lib/decision/mcda-quality-gates.test.ts",
+        "packages/validators/src/judgment/index.ts",
+        "packages/validators/src/judgment/option-scoring.ts"
+      ]
+    },
+    "packages/validators/src/judgment/option-identities.ts": {
+      "artifactSubpath": "./option-identities",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "apps/web/lib/decision/option-input-contract.ts",
+        "packages/validators/src/judgment/index.ts",
+        "packages/validators/src/judgment/scoped-advice.ts"
+      ]
+    },
+    "packages/validators/src/judgment/uncertain-retry.ts": {
+      "artifactSubpath": "./uncertain-retry",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "apps/web/lib/decision/kernel-consult-ledger.ts",
+        "apps/web/lib/decision/uncertain-retry.test.ts",
+        "packages/validators/src/judgment/index.ts"
+      ]
+    },
+    "packages/validators/src/judgment/scoped-advice.ts": {
+      "artifactSubpath": "./scoped-advice",
+      "owner": "DPF maintainers",
+      "tracking": "BI-BDF358CB",
+      "removalCondition": "Remove after all listed production and isolated consumers import the canonical package directly and source/emitted/mobile loader parity is verified. Tests alone do not extend the bridge lifetime.",
+      "importers": [
+        "packages/validators/src/judgment/index.ts"
+      ]
+    }
+  },
+  "hostAuthority": "DPF retains corpus, exact scope/actor/current admission/revocation, records and effect custody. No persisted-record migration.",
+  "rollback": "Protected source revert restores dependency, locks, callers, bridges and generated guard together; no data rewrite.",
+  "guardDistribution": {
+    "files": {
+      "dist/judgment/option-scoring.js": "d8cdbdc24a1615439d3f0cf18932925d52fc4762dda04abb49a2b078c0f3d0d9",
+      "dist/judgment/mcda-quality-gates.js": "c73ff85518b57dde033f6423c0f028b0741e5f52879cff29e03cf2b56e68671f"
+    },
+    "builder": "scripts/build-judgment-guard-runtime.mjs",
+    "policy": "Exact verified archive emitted closure; no parallel scorer or runtime package/registry dependency. Node20 proof required."
+  }
+}

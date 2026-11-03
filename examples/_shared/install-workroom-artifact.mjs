@@ -9,8 +9,16 @@ import { readRegularFile } from "./read-regular-file.mjs";
 const PACKAGE = "@opendigitalproductfactory/dpf-workroom";
 
 /** Install the pinned first-party artifact without inheriting the fixture's fake host packages. */
-export async function installWorkroomArtifact({ root, destination, artifact, node = process.execPath }) {
-  assert.equal(artifact?.name, PACKAGE, "Only the reviewed Workroom dependency is admitted");
+export async function installWorkroomArtifact(args) {
+  assert.equal(args.artifact?.name, PACKAGE, "Only the reviewed Workroom dependency is admitted");
+  return installFoundationArtifact(args);
+}
+
+/** Closed set of reviewed dependency-free foundations; all integrity and install guards apply. */
+export async function installFoundationArtifact({ root, destination, artifact, node = process.execPath }) {
+  const PACKAGE = artifact?.name;
+  assert(["@opendigitalproductfactory/dpf-workroom", "@opendigitalproductfactory/dpf-scoped-judgment"].includes(PACKAGE),
+    "Only reviewed dependency-free foundations are admitted");
   assert(typeof artifact.path === "string" && !isAbsolute(artifact.path)
     && artifact.path.startsWith("packages/validators/vendor/") && artifact.path.endsWith(".tgz")
     && !artifact.path.split(/[\\/]/).includes(".."), "Use the declared repository artifact");

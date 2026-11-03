@@ -92,6 +92,9 @@ importers:
 
   .:
     dependencies:
+      '@opendigitalproductfactory/dpf-scoped-judgment':
+        specifier: file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
       '@opendigitalproductfactory/dpf-workroom':
         specifier: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
         version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
@@ -153,6 +156,9 @@ importers:
       '@fullcalendar/timegrid':
         specifier: ^6.1.22
         version: 6.1.22(@fullcalendar/core@6.1.22)
+      '@opendigitalproductfactory/dpf-scoped-judgment':
+        specifier: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
       '@opendigitalproductfactory/dpf-workroom':
         specifier: file:../../packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
         version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
@@ -487,6 +493,9 @@ importers:
       '@dpf/integration-shared':
         specifier: workspace:*
         version: link:../integration-shared
+      '@opendigitalproductfactory/dpf-scoped-judgment':
+        specifier: file:vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
+        version: file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz
       '@opendigitalproductfactory/dpf-workroom':
         specifier: file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
         version: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz
@@ -1269,6 +1278,11 @@ packages:
 
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
+
+  '@opendigitalproductfactory/dpf-scoped-judgment@file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz':
+    resolution: {integrity: sha512-77SKwqvxhXCgc5S+EdpYZy4RyEN9r7JJodUIJkoTD7CVzvI+Mpc0hnyw2cV3z2sjI/p0Cui4nn6S/ClfLrYLYw==, tarball: file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz}
+    version: 0.1.0-candidate.3
+    engines: {node: 24.16.0 || 24.22.0 || 24.22.1}
 
   '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz':
     resolution: {integrity: sha512-/e61NTK8mmb5XxBQIOdCLlDWDdV29MgpxLIB8s2nRtGgQ4czcrjS6izNxky7EsN5Gnql34mo/84ClJBRVrvYJQ==, tarball: file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz}
@@ -5241,6 +5255,8 @@ snapshots:
 
   '@open-draft/until@2.1.0':
     optional: true
+
+  '@opendigitalproductfactory/dpf-scoped-judgment@file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz': {}
 
   '@opendigitalproductfactory/dpf-workroom@file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz': {}
 

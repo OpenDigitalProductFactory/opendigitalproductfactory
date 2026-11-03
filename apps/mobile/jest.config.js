@@ -40,7 +40,7 @@ module.exports = {
   setupFilesAfterEnv: ["./jest.setup.ts"],
   // BI-FCDCAE98: transform the shared package's emitted ESM inside Jest.
   transformIgnorePatterns: [
-    "node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|native-base|react-native-svg|react-native-sse|nativewind|zustand|@opendigitalproductfactory[/+]dpf-workroom(?=[/@])|@dpf[/+].*))"
+    "node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|native-base|react-native-svg|react-native-sse|nativewind|zustand|@opendigitalproductfactory[/+]dpf-(?:workroom|scoped-judgment)(?=[/@])|@dpf[/+].*))"
   ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",

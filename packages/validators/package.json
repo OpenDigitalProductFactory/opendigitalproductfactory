@@ -30,7 +30,8 @@
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
     "@opendigitalproductfactory/dpf-workroom": "file:vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@opendigitalproductfactory/dpf-scoped-judgment": "file:vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz"
   },
   "devDependencies": {
     "@types/node": "catalog:",

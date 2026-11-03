@@ -2437,6 +2437,18 @@
         "public-development-routing"
       ]
     },
+    "docs/architecture/scoped-judgment-adoption.md": {
+      "publicHref": "/architecture/scoped-judgment-adoption/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "scoped-judgment-ownership-and-receiving-boundary",
+        "one-implementation",
+        "dependency-free-safety-check-distribution",
+        "host-authority-and-rollback"
+      ]
+    },
     "docs/architecture/section-navigation.md": {
       "publicHref": "/architecture/section-navigation/",
       "portalHref": null,
