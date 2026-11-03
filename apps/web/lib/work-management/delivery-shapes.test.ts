@@ -80,3 +80,17 @@ describe("the five delivery shapes (BI-B90F7CBB, design §3.0)", () => {
     expect(isDeliveryShapeKey("obligation-assurance-watch")).toBe(false);
   });
 });
+
+describe("delivery author evidence declarations (BI-D95FD249)", () => {
+  it("declares only the internal writer on non-governed non-xlarge author stages", () => {
+    for (const [key, shape] of Object.entries(DELIVERY_SHAPES)) {
+      for (const stage of shape.stages) {
+        const author = key !== "delivery-xlarge" && stage.accountablePrincipalRef === "role:author"
+          && stage.advance.kind !== "governed-decision";
+        expect(stage.mandatedTools ?? [], `${key}/${stage.key}`)
+          .toEqual(author ? ["record_workroom_evidence"] : []);
+        if (author) expect(stage.tools).toContain("record_workroom_evidence");
+      }
+    }
+  });
+});

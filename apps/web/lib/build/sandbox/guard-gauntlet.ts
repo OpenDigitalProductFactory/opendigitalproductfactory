@@ -12,6 +12,13 @@
  * This runs the SAME script the external path runs. Reimplementing the checks
  * here would guarantee the two surfaces drift apart, which is the thing the
  * parity work exists to prevent (BI-CA6769FE).
+ *
+ * The guards do NOT run from the build's own tree. The agent that wrote the
+ * change can also edit `scripts/`, so a verdict from its copy of the guards is
+ * the agent grading itself. The gauntlet runs in a throwaway worktree holding
+ * the build's committed HEAD with `scripts/` restored from the build's base
+ * commit: the change is the data, the base commit is the grader
+ * (docs/superpowers/specs/2026-10-21-agent-sandbox-containment-and-grader-integrity-design.md, AC-6).
  */
 import { createHash } from "node:crypto";
 
@@ -27,9 +34,22 @@ const MAX_OUTPUT_CHARS = 20_000;
 /** Marks the end of the command so a non-zero exit can be read from stdout. */
 const EXIT_SENTINEL = "__DPF_GAUNTLET_EXIT__";
 
+/** Repository paths taken from the base commit rather than the build's tree. */
+export const GRADER_PATHS = ["scripts"] as const;
+
 export type GuardGauntletOutcome =
   /** The gauntlet ran to a verdict. */
-  | { ran: true; passed: boolean; failedGuards: string[]; output: string; treeSha: string | null; workdir: string; durationMs: number }
+  | {
+    ran: true;
+    passed: boolean;
+    failedGuards: string[];
+    output: string;
+    treeSha: string | null;
+    workdir: string;
+    durationMs: number;
+    /** The commit whose guard scripts produced this verdict. */
+    graderBaseSha: string;
+  }
   /**
    * The gauntlet could not run. This is NOT a failing verdict — reporting it as
    * one is the mistake `report-only-the-verdict-you-reached` names, and the
@@ -111,32 +131,122 @@ export async function readWorktreeTreeSha(
 }
 
 /**
- * Run the guard gauntlet in the build's worktree.
+ * The commit the build branched from: its merge base with origin/main.
+ * Null when it cannot be read, which the gauntlet treats as could-not-run.
+ */
+export async function resolveGraderBaseSha(
+  exec: SandboxExec,
+  containerId: string,
+  workdir: string,
+): Promise<string | null> {
+  try {
+    const out = await exec(containerId, `cd ${quote(workdir)} && git merge-base origin/main HEAD 2>/dev/null`);
+    const sha = out.trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Where the grader worktree for a build tree lives: beside it, never inside it. */
+export function graderDirFor(workdir: string): string {
+  return `${workdir.replace(/\/+$/, "")}.grader`;
+}
+
+/**
+ * Remove a grader worktree. Its node_modules entries are symlinks into the
+ * build tree, so they are unlinked first: removing the tree must never reach
+ * through a link into the build's own dependencies.
+ */
+export function buildGraderTeardownCommand(workdir: string, graderDir: string): string {
+  return [
+    `G=${quote(graderDir)}`,
+    `{ [ ! -d "$G" ] || find "$G" -maxdepth 5 -type l -name node_modules -exec rm -f {} + ; }`,
+    `{ git -C ${quote(workdir)} worktree remove --force "$G" >/dev/null 2>&1 || true; }`,
+    `rm -rf "$G"`,
+    `{ git -C ${quote(workdir)} worktree prune >/dev/null 2>&1 || true; }`,
+  ].join("; ");
+}
+
+/**
+ * Create the grader worktree: the build's committed HEAD, with GRADER_PATHS
+ * restored from `baseSha`, and the build tree's installed node_modules linked
+ * in so the guards have their runtime without a second install.
+ */
+export function buildGraderSetupCommand(input: { workdir: string; graderDir: string; baseSha: string }): string {
+  const { workdir, graderDir, baseSha } = input;
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) throw new Error(`not a commit sha: ${baseSha}`);
+  const linkNodeModules =
+    `(cd "$W" && find . -mindepth 1 -maxdepth 4 -type d -name node_modules -prune -print)`
+    + ` | while read -r rel; do rel="\${rel#./}"; [ -d "$(dirname "$G/$rel")" ] && ln -sfn "$W/$rel" "$G/$rel"; done; true`;
+  return [
+    `{ ${buildGraderTeardownCommand(workdir, graderDir)}; }`,
+    `W=${quote(workdir)}`,
+    `G=${quote(graderDir)}`,
+    `git -C "$W" worktree add --detach --force "$G" HEAD >/dev/null 2>&1`,
+    `git -C "$G" checkout ${baseSha} -- ${GRADER_PATHS.map(quote).join(" ")}`,
+    linkNodeModules,
+  ].join(" && ");
+}
+
+/**
+ * Run the guard gauntlet over the build's committed tree, with the guards
+ * taken from the build's base commit.
  *
  * `workdir` must be the build's own tree. With `DPF_BUILD_WORKTREE_ISOLATION` on
  * (the default) the agent CLIs work in `/workspace/.builds/<buildId>` while the
  * MCP file tools write to the shared root — gating the wrong one silently
  * verifies work that is not the work.
+ *
+ * `gitExec` runs the worktree setup and teardown; callers pass the serialized
+ * sandbox git path. It defaults to `exec`.
  */
 export async function runGuardGauntlet(input: {
   exec: SandboxExec;
+  gitExec?: SandboxExec;
   containerId: string;
   workdir: string;
   scriptPath?: string;
   now?: () => number;
 }): Promise<GuardGauntletOutcome> {
   const { exec, containerId, workdir } = input;
+  const gitExec = input.gitExec ?? exec;
   const scriptPath = input.scriptPath ?? "scripts/pregate-preflight.mjs";
   const now = input.now ?? (() => Date.now());
   const startedAt = now();
 
   const treeSha = await readWorktreeTreeSha(exec, containerId, workdir);
 
+  // Fail closed: without the base commit the only guards available are the
+  // build's own, and a verdict from those is not evidence.
+  const graderBaseSha = await resolveGraderBaseSha(exec, containerId, workdir);
+  if (!graderBaseSha) {
+    return {
+      ran: false,
+      reason: "The build's base commit could not be resolved, so there is no copy of the guards the build could not have edited. The gauntlet will not grade the build with its own guard scripts.",
+      workdir,
+      durationMs: now() - startedAt,
+    };
+  }
+
+  const graderDir = graderDirFor(workdir);
+  try {
+    await gitExec(containerId, buildGraderSetupCommand({ workdir, graderDir, baseSha: graderBaseSha }));
+  } catch (err) {
+    await gitExec(containerId, buildGraderTeardownCommand(workdir, graderDir)).catch(() => {});
+    return {
+      ran: false,
+      reason: `The grader worktree at base ${graderBaseSha.slice(0, 12)} could not be prepared: ${(err as Error)?.message ?? "unknown error"}`,
+      workdir,
+      durationMs: now() - startedAt,
+    };
+  }
+
   // The preflight exits non-zero on failure and execInSandbox rejects on a
   // non-zero exit, so the exit code is carried out through stdout instead. A
   // rejection here therefore means the command could not run at all.
   const command =
-    `cd ${quote(workdir)} && timeout ${GAUNTLET_TIMEOUT_SECONDS} node ${quote(scriptPath)} 2>&1; `
+    `cd ${quote(graderDir)} && timeout ${GAUNTLET_TIMEOUT_SECONDS} node ${quote(scriptPath)} 2>&1; `
     + `echo "${EXIT_SENTINEL}=$?"`;
 
   let raw: string;
@@ -149,6 +259,8 @@ export async function runGuardGauntlet(input: {
       workdir,
       durationMs: now() - startedAt,
     };
+  } finally {
+    await gitExec(containerId, buildGraderTeardownCommand(workdir, graderDir)).catch(() => {});
   }
 
   const exitMatch = new RegExp(`${EXIT_SENTINEL}=(\\d+)`).exec(raw);
@@ -196,5 +308,6 @@ export async function runGuardGauntlet(input: {
     treeSha,
     workdir,
     durationMs: now() - startedAt,
+    graderBaseSha,
   };
 }

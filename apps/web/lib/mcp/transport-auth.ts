@@ -10,12 +10,14 @@ import { isPatResolutionDisabled } from "@/lib/auth/oauth-policy";
 import type { PublicScope } from "@/lib/auth/oauth-scope-map";
 import type { McpAuthSource } from "@/lib/mcp/tool-tier";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
+import type { TaskExecutionFence } from "@/lib/shared/task-execution-fence";
 
 export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   threadId?: string | null;
   routeContext?: string | null;
   /** BI-B949993E: present only on session-JWT tokens minted for a governed TaskRun. */
   taskRunId?: string | null;
+  taskExecutionFence?: TaskExecutionFence | null;
   /** BI-05715F4C: the Workroom a room session token is bound to; set only on such a token. */
   workroomRef?: string | null;
   source: McpAuthSource;
@@ -129,6 +131,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
         threadId: session.threadId ?? null,
         routeContext: session.routeContext ?? null,
         taskRunId: session.taskRunId ?? null,
+        taskExecutionFence: session.taskExecutionFence,
         source: "session-jwt",
       },
       oauthGrantedScopes: [],

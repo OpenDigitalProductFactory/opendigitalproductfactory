@@ -501,7 +501,10 @@ describe("AC-3C-SEQ-IDENTICAL: sequential rooms are byte-identical to the pre-3c
     // A room whose backlog item is not live work (BI-72679FE0) is stood down by
     // the drive job after resolution (drive-work-item-gate.ts), which this golden
     // harness does not compose; drive-work-item-gate.test.ts reaches it.
-    const jobGateOnly = new Set<string>(["work_item_inactive"]);
+    // A room past the tick's agent capacity (BI-7C0B2BD6) is capped by the job
+    // after resolution; this harness supplies its own rooms, which are uncapped.
+    // drive-dispatch-cap.test.ts and workroom-drive-writeback-run.test.ts reach it.
+    const jobGateOnly = new Set<string>(["work_item_inactive", "awaiting_agent_capacity"]);
     const expected = [
       ...Object.values(DRIVE_REASONS_BY_ACTION).flat(),
       "executor_writeback_unavailable",

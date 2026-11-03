@@ -95,3 +95,30 @@ describe("buildFederatedWorkPage - deferral attribution (BI-9DA5F179)", () => {
     expect(page.items.map((i) => i.deferral)).toEqual([null, null]);
   });
 });
+
+describe("buildFederatedWorkPage claim presence (BI-91FC6B9A)", () => {
+  it("publishes a held claim and live Workrooms matched by semantic or row id", async () => {
+    const claimedAt = new Date("2026-10-28T00:00:00.000Z");
+    const store = {
+      ...db([
+        { ...row("BI-A"), id: "row-a", claimStatus: "active", claimedAt },
+        { ...row("BI-B"), id: "row-b" },
+        { ...row("BI-C"), id: "row-c" },
+      ]),
+      workroom: { findMany: vi.fn().mockResolvedValue([{ backlogItemId: "row-b" }, { backlogItemId: "BI-B" }]) },
+    };
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10, now: at });
+    expect(store.workroom.findMany).toHaveBeenCalledWith({
+      where: {
+        backlogItemId: { in: ["BI-A", "row-a", "BI-B", "row-b", "BI-C", "row-c"] },
+        status: { notIn: ["complete", "abandoned", "archived"] },
+      },
+      select: { backlogItemId: true },
+    });
+    expect(page.items.map((i) => i.claim)).toEqual([
+      { active: true, since: claimedAt.toISOString(), workrooms: 0 },
+      { active: true, since: null, workrooms: 2 },
+      { active: false, since: null, workrooms: 0 },
+    ]);
+  });
+});

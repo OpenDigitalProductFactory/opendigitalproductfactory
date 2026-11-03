@@ -173,7 +173,7 @@ function printHelp(): void {
       "  claude-code  .mcp.json snippet   (mcpServers.dpf, http transport)",
       "  codex        ~/.codex/config.toml snippet using bearer_token_env_var",
       "  grok         ~/.grok/config.toml snippet (same TOML shape as codex; also works for project .grok/config.toml)",
-      "  antigravity  ~/.antigravity/mcp_config.json snippet (mcpServers.dpf, http transport; confirm path per EP-ANTIGRAVITY-001 evidence gate)",
+      "  antigravity  ~/.gemini/config/mcp_config.json snippet (mcpServers.dpf, serverUrl; read by agy and Antigravity.app)",
       "  vscode       .vscode/mcp.json snippet (servers.dpf)",
       "  raw          Plaintext token only",
       "",

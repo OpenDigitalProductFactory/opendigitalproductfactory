@@ -161,6 +161,12 @@ export const PURPOSE_OPTIONS: ReadonlyArray<{
   { value: "participate-community", label: PURPOSE_LABEL["participate-community"] },
 ];
 
+/** Copy for the "other jobs" choice in the change form. Owned here so the panel adds no prose of its own. */
+export const SECONDARY_PURPOSES_COPY = {
+  legend: "Other jobs it also does",
+  hint: "Optional. Tick any other job this installation does. Developing the platform here lets it take on issue intake.",
+} as const;
+
 export const ENVIRONMENT_OPTIONS: ReadonlyArray<{
   value: InstallationEnvironmentClass;
   label: string;
@@ -231,6 +237,11 @@ export interface InstallationIdentityView {
   confirmationStatus: InstallationIntentConfirmationStatus;
   /** The identity actually in force, which the change form starts from. */
   declaration: InstallationIdentityDeclaration;
+  /**
+   * Other jobs the confirmed intent declares (DI-A6148958CADB). Optional so a
+   * view built before the field existed still renders as "none".
+   */
+  secondaryPurposes?: InstallationOperatingPurpose[];
   /** One sentence naming what this installation is. */
   headline: string;
   /** A second sentence for the pairing and the environment's authority, when either has something to say. */

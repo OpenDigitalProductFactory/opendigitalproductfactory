@@ -35,7 +35,7 @@ export async function loadAdoptionWorkspace(input: { organizationId: string; cur
       where: { organizationId, lifecycleStatus: { in: ["in_care", "placement_ready"] } },
       orderBy: [{ name: "asc" }],
       take: 200,
-      select: { id: true, name: true, animalRef: true, lifecycleStatus: true },
+      select: { id: true, name: true, animalRef: true, lifecycleStatus: true, custodyEpisodes: { where: { closedAt: null }, select: { id: true }, take: 1 } },
     }),
     loadWardWorkspace({ organizationId, db: prisma as unknown as WardStoreClient }),
     prisma.animalPlacement.findMany({
@@ -93,7 +93,12 @@ export async function loadAdoptionWorkspace(input: { organizationId: string; cur
       };
     }),
     placements: placements.map((p) => ({ placementId: p.id, version: p.version, animalName: p.animal.name, animalRef: p.animal.animalRef, adopterName: p.application.applicantName, placedAt: p.placedAt?.toISOString() ?? null })),
-    animals: animals.map((a) => ({ animalProfileId: a.id, name: a.name, animalRef: a.animalRef, ready: a.lifecycleStatus === "placement_ready" })),
+    // BI-785385B4: approval requires an open custody episode, so an animal
+    // without one is never offered as ready; it is sent to intake instead.
+    animals: animals.map((a) => {
+      const needsIntake = a.custodyEpisodes.length === 0;
+      return { animalProfileId: a.id, name: a.name, animalRef: a.animalRef, ready: a.lifecycleStatus === "placement_ready" && !needsIntake, needsIntake };
+    }),
     housing,
     currency: input.currency,
     limit: ADOPTION_QUEUE_LIMIT,

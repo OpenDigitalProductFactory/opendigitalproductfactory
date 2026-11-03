@@ -6,6 +6,11 @@ relatedCode:
   - apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx
   - apps/web/components/proactivity/ProactivityRosterList.tsx
   - apps/web/lib/proactivity/proactivity-roster.ts
+  - apps/web/lib/mcp/improvement-draft.ts
+  - apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts
+  - apps/web/lib/mcp/packs/scheduled-agent-task-pack.ts
+  - apps/web/lib/operate/scheduled-jobs/scheduled-reporting-authority.ts
+  - apps/web/lib/operate/scheduled-jobs/scheduled-reporting-run.ts
 ---
 
 ## What This Covers
@@ -63,6 +68,19 @@ No proactivity setting can bypass them:
 - **Adjust** any coworker in place — the change saves immediately and takes effect on its next scheduled work.
 - A coworker may also **propose** its own adjustment after a repeated pattern; you accept, keep, or narrow it from the ["Needs you" inbox](../workspace/attention-inbox.md).
 
+## Internal Learning Recommendations
+
+Under its current permissions and your recorded delegation, a coworker can save an
+internal improvement recommendation for review. Repeating the same pending draft
+from the same coworker and context reuses it, including its existing backlog entry.
+The draft uses the finding and evidence explicitly submitted; it does not copy
+unrelated conversation messages.
+
+Saving a recommendation does not apply a change, publish it, or alter a skill or
+anyone's permissions. Those actions keep their own controls. If you explicitly
+require approval for every change, that saved restriction still applies to the
+draft. An unavailable or cancelled conversation context stops the write.
+
 ## What the Dial Actually Changes
 
 Be aware of an honest limit: **the dial only changes behaviour for a coworker
@@ -72,28 +90,50 @@ switch that makes an idle coworker start working.
 
 ### What it does
 
-Six coworkers currently self-drive. Each does one concrete, repeatable,
-reversible piece of work on your behalf:
+Standing work is declared per coworker and per Workroom. The installed roster
+and its scheduled tasks show what is actually configured; the dial alone does
+not create a missing activity or prove its last run succeeded.
 
-| Coworker | What it does without being asked |
-|---|---|
-| Marketing Specialist | Reviews the marketing plan, records whether to keep or change the current campaign, and drafts its next asset for your review |
-| Finance Controller | Reports burn, revenue, and runway — and says what is unknown |
-| Inventory Specialist | Reviews stock position and flags what needs ordering |
-| Documentation Specialist | Refreshes the documentation health overview |
-| Platform Engineer | Reports platform posture |
-| Compliance Officer | Reports obligations and control reviews falling due, and any recurrence with no next date |
+Examples include marketing review, financial position, inventory review,
+documentation health, platform posture and compliance deadlines. Other roles
+also have declared recurring activities. This guide does not maintain a second
+inventory of the roster.
 
-The other coworkers on the roster have no standing work bound to them yet. Their
-Proactivity row is real — it changes how they behave in conversation — but
-turning one to Assertive will not produce work while you are away.
+### COO supervision and current delivery status
+
+The COO is responsible for operational follow-through across Workrooms, while
+each room's Process Overseer owns its specialist work. You should be able to ask
+the COO what advanced, what is blocked, who is resolving it and what decision
+needs you. A heartbeat, report or queued task is not proof that work advanced.
+
+The October 25 review found that the existing COO standing task reports stalls
+to the owner and the persona still describes an Advisor-only phase. Durable
+recovery supervision is being repaired under BI-4B48E7FE; this guide does not
+claim that the repair or its unattended recovery tests have passed. Unattended recovery verification remains pending. Existing Workroom owner, wait and recovery
+information remains authoritative while that work proceeds.
+
+### Which installation the COO coordinates
+
+The intended model gives each COO responsibility for its installation's work.
+The production COO follows the production business. The development COO follows
+development, testing and delivery, and asks the production COO for permitted
+business context that is missing locally. Sandbox and test work has a named
+parent owner, purpose and expiry; its evidence returns to that owner.
+
+The COO must identify which installation and source an answer comes from, and
+say when context is unavailable or stale. A copied database or test result does
+not establish a production decision or authorization. This coordination is an
+implementation requirement under BI-C43FD3E5; live COO-to-COO onboarding and
+recovery tests have not yet established it as working behavior.
 
 ### When it runs
 
-A self-driving coworker runs **weekly at Balanced** and **daily at Assertive**,
-each at its own off-peak time so they do not contend. At **Quiet** it does not
-self-drive at all. Changing the level takes effect on the coworker's next
-scheduled run, not immediately.
+Each declared activity has its own cadence. Balanced and Assertive select that
+activity's supported intensity; they do not universally mean weekly and daily.
+Quiet stands down optional coworker self-tasks. A room's declared obligations,
+explicit pause, deadlines and action-specific authority still follow its own
+governed process. Changing a briefing preference does not grant new authority or
+prove an existing recovery obligation has been fulfilled.
 
 **Your operating hours are read, not guessed.** When the business is closed, follow-up
 quietens down and the channel drops to in-app; when an obligation's deadline is approaching,
@@ -109,6 +149,27 @@ problems get worse while nobody is looking.
 Each run reads live records rather than a cached summary, and each task is
 written to be idempotent: a coworker that already produced today's brief or
 report refreshes it instead of producing a second one.
+
+### Routine observation watches
+
+An existing paused observation watch can be narrowed to **history reporting**.
+It keeps its original instructions, schedule, privacy limits and history.
+Routine observations are saved in request history. The first actionable change
+produces one in-app notice with the finding and recommendation; later reports
+stay in history while that condition remains open. Fresh observations must
+confirm resolution before the condition can close.
+
+This mode permits observation and reporting only. Required operational workflows
+keep their existing process. A real decision or sign-in problem parks the watch
+with its reason, and failed or missing observations never count as a healthy
+completed report. A provider that cannot enforce the limited access leaves the
+run unverified. Ask a coworker to configure the paused watch, then resume the
+same watch through its existing controls.
+
+Changing the watch's action boundary is a governed configuration choice. Its
+reports then go to history under that choice; existing data and action
+permissions still apply. Pausing stops future runs and keeps the history.
+Broader actions need their own current authorization.
 
 ### What it will not do
 

@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { err, ok } from "@/lib/shared/action-result";
 import { createHash } from "node:crypto";
 import { registerPrebuildTests } from "./self-upgrade-prebuild.test-support"; import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
-
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
 
@@ -28,7 +27,7 @@ const mocks = vi.hoisted(() => ({
   deferAdmittedRunForRedispatch: vi.fn(),
   updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
-  recordPromoterReadiness: vi.fn(),
+  recordPromoterReadiness: vi.fn(), recordReassessmentCompatibility: vi.fn(), runReassessmentCandidatePreflight: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   getRun: vi.fn(),
@@ -66,6 +65,7 @@ vi.mock("@/lib/self-upgrade/config", () => ({
   resolveSelfUpgradeHostIdentity: mocks.resolveSelfUpgradeHostIdentity, nextMaintenanceWindowStart: vi.fn(() => null),
 }));
 vi.mock("@/lib/self-upgrade/support", () => ({ readSelfUpgradeSupport: mocks.readSelfUpgradeSupport }));
+vi.mock("@/lib/self-upgrade/preflight", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/self-upgrade/preflight")>()), runReassessmentCandidatePreflight: mocks.runReassessmentCandidatePreflight }));
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 vi.mock("@/lib/self-upgrade/registry-release", () => ({ readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate }));
 vi.mock("@/lib/self-upgrade/doctools-release-image", () => ({ prePullReleaseDoctoolsImage: vi.fn(async () => ({ outcome: "present", image: `ghcr.io/o/dpf-doctools@sha256:${"e".repeat(64)}` })) }));
@@ -128,7 +128,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   deferAdmittedRunForRedispatch: mocks.deferAdmittedRunForRedispatch,
   updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
-  recordPromoterReadiness: mocks.recordPromoterReadiness,
+  recordPromoterReadiness: mocks.recordPromoterReadiness, recordReassessmentCompatibility: mocks.recordReassessmentCompatibility,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
   getRun: mocks.getRun,
@@ -242,7 +242,7 @@ const OK_RECOVERY_POINT = {
   ],
 };
 
-beforeEach(() => {
+beforeEach(() => { mocks.runReassessmentCandidatePreflight.mockReset().mockResolvedValue(ok({})); mocks.recordReassessmentCompatibility.mockReset().mockResolvedValue({});
   mocks.readSelfUpgradeSupport.mockImplementation(async (configuredEnabled: boolean) => ({
     configuredEnabled,
     supported: true,

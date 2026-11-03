@@ -3,15 +3,8 @@ import type { WorkroomParticipantRole } from "./room-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import { preferenceFromPreset, type GoldenTriangleNamedPreset } from "@/lib/golden-triangle/presets";
 
-export const WORKROOM_SHAPE_KEYS = [
-  "specialist-alignment",
-  "approval-sign-off",
-  "outward-review",
-  "change-consequential",
-  "escalation",
-  "craft-stewardship",
-] as const;
-export type WorkroomShapeKey = (typeof WORKROOM_SHAPE_KEYS)[number];
+import type { WorkroomShapeKey } from "@dpf/validators/gpp/work-vocabulary";
+export { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@dpf/validators/gpp/work-vocabulary";
 
 type ShapeRole = Extract<
   WorkroomParticipantRole,

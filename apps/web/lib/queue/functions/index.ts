@@ -4,12 +4,11 @@ import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
 import { rateRecovery } from "./rate-recovery";
 import { providerRecovery } from "./provider-recovery";
-import { subscriptionQuotaRecovery } from "./subscription-quota-recovery";
 import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator-pause";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
-import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
+import { ecosystemInboundTriage, ecosystemInboundTriageRequested } from "./ecosystem-inbound-triage";
 import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
@@ -33,6 +32,7 @@ import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { agentChildThreadRun } from "./agent-child-thread-run";
+import { workroomQueueHoldRelease } from "./workroom-queue-hold-release";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -44,6 +44,9 @@ import { capacityDrainScheduled } from "./capacity-drain";
 import { assuranceRemediationTeeUpScheduled } from "./assurance-remediation-teeup";
 import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import { subscriptionOAuthRenewal } from "./subscription-oauth-renewal";
+import { legacyProposalExpirySweep } from "./legacy-proposal-expiry-sweep";
+import { backlogOutcomeReconcile } from "./backlog-outcome-reconcile";
 import {
   contributorInventorySyncCron,
   contributorInventorySyncOnDemand,
@@ -59,6 +62,8 @@ import { workroomFlowReview } from "./workroom-flow-review";
 import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
+import { guardOutcomeClassify } from "./guard-outcome-classify";
+import { guardRetirementReview } from "./guard-retirement-review";
 import { a2aCollaborationHealthScan } from "./a2a-collaboration-health-scan";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
@@ -169,7 +174,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
-  subscriptionQuotaRecovery,
+  workroomQueueHoldRelease, // BI-95638941: provider-held Workrooms release themselves
   providerPauseReconcile,
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
@@ -192,6 +197,9 @@ export const scheduledFunctions = [
   assuranceRemediationTeeUpScheduled, // BI-7C121CCF: off-hours, budget-capped assurance remediation lane
   assuranceMergeGateScheduled, // BI-204EE70B P2.2: WWMD merge gate (dark — escalate-only until actuation enabled)
   tokenExpiryMonitor,
+  subscriptionOAuthRenewal, // BI-A53C594E: renew subscription OAuth sign-ins ahead of expiry, retry with backoff
+  legacyProposalExpirySweep, // BI-753D69A9: expire undecided legacy proposals under the approval lifetime
+  backlogOutcomeReconcile, // BI-8DE5429B: every open item gets an outcome; reopens and failures measured against it
   contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,
@@ -200,6 +208,8 @@ export const scheduledFunctions = [
   businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
+  guardOutcomeClassify, // BI-FEDD8F45: daily guard refusal classification + 365-day guard-outcome prune
+  guardRetirementReview, // BI-FEDD8F45: daily guard retirement review → one review item per guard (never disables)
   a2aCollaborationHealthScan, // BI-3003EE63: daily A2A edge health (failed/blocked/stuck/orphan) — slice 1 analyze+log
 
   workPatternProfileReview,
@@ -214,7 +224,7 @@ export const scheduledFunctions = [
   substrateReconciler,   // BI-903FB5F9/BI-547B788D: restart stopped required substrate; report a wedged Docker VM, every 5 min
   edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
-  worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
+  worktreeJanitor, // BI-42FA7DD8/BI-99395B29: platform-owned worktree reaper (Tier-A); daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
   regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00
@@ -256,6 +266,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  ecosystemInboundTriageRequested,
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand

@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { DataTable, FilterBar, StatusBadge, type Column } from "@/components/ui/report-kit";
 import { FormStatus } from "@/components/ui/form/FormStatus";
 import { SubmitButton } from "@/components/ui/form/SubmitButton";
-import { Surface } from "@/components/ui/Surface";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { Surface } from "@/components/ui/Surface";
 import { fieldControlClass } from "@/components/ui/form/styles";
 import { addProviderAccount } from "@/lib/actions/provider-accounts";
 import { completeProviderAccountSetup } from "@/lib/actions/provider-account-setup";
 import { providerAccountHref, type ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
+import { ProviderQuotaDetails } from "./ProviderQuotaDetails";
 export type { ProviderAccountOverviewRow } from "@/lib/inference/provider-account-view";
 
 export type ProviderAccountCatalogRow = {
@@ -31,9 +32,9 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const id = useId();
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [showCatalog, setShowCatalog] = useState(firstRun);
+  const [openRecoveryId, setOpenRecoveryId] = useState<string | null>(null);
   const [newProvider, setNewProvider] = useState<ProviderAccountCatalogRow | null>(null);
   const [label, setLabel] = useState("");
   const [method, setMethod] = useState("");
@@ -52,12 +53,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     if (trigger) (trigger.isConnected ? trigger : addProviderRef.current)?.focus();
   }, [newProvider]);
   const normalized = search.trim().toLocaleLowerCase();
-  const visibleRows = rows.filter(row => {
-    const state = row.readiness?.state ?? "unverified";
-    const matchesStatus = !statusFilter || (statusFilter === "enabled" ? ["enabled", "working"].includes(state)
-      : statusFilter === "waiting" ? ["waiting", "paused"].includes(state) : ["blocked", "unverified"].includes(state));
-    return matchesStatus && `${row.label} ${row.providerName} ${row.allowedWork} ${row.readiness?.label ?? row.statusLabel} ${row.readiness?.summary ?? ""}`.toLocaleLowerCase().includes(normalized);
-  });
+  const visibleRows = rows.filter(row => `${row.label} ${row.providerName} ${row.allowedWork} ${row.readiness?.label ?? row.statusLabel} ${row.readiness?.summary ?? ""}`.toLocaleLowerCase().includes(normalized));
   const catalogById = new Map(catalog.map(provider => [provider.providerId, provider]));
   const firstAccountByProvider = new Map<string, string>();
   for (const account of visibleRows) {
@@ -72,26 +68,30 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
         && supportsAccount(catalogById.get(row.providerId)) &&
         <button type="button" className="block py-2 text-xs text-[var(--dpf-accent)] disabled:opacity-50" disabled={pending} onClick={event => beginAccount(catalogById.get(row.providerId)!, event.currentTarget)}>{copy.addAccount}</button>}
     </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
-    { key: "status", header: copy.statusAndRouting ?? copy.readiness, cell: row => <div className="space-y-2">
+    { key: "status", header: copy.status ?? copy.statusAndRouting ?? copy.readiness, mobileFullWidth: true, cell: row => <div className="space-y-2">
       <StatusBadge domain="providerAccountReadiness" status={row.readiness?.state ?? "unverified"}
         label={row.readiness?.label ?? row.statusLabel} variant="solid" size="md" uppercase={false} />
       {row.readiness?.summary && <p className="m-0 text-sm">{row.readiness.summary}</p>}
       {row.eligibilitySummary && <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.eligibilitySummary}</p>}
     </div> },
-    { key: "allowed", header: copy.modelsAndWork ?? copy.allowedWork, cell: row => <div className="space-y-2">
+    { key: "allowed", header: copy.modelsAndWork ?? copy.allowedWork, mobileFullWidth: true, cell: row => <div className="space-y-2">
       <p className="m-0 text-sm">{row.modelSummary}</p>
       <StatusBadge intent="neutral" label={row.allowedWork} />
       <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</p>
     </div> },
-    { key: "capacity", header: copy.capacityAndChecks ?? copy.capacity, mobileFullWidth: true, cell: row => <div className="space-y-2 text-xs">
+    { key: "capacity", header: copy.capacityAndChecks ?? copy.capacity, mobileFullWidth: true, cell: row => {
+      const nextCheckAt = row.quotaRecovery ? row.quotaRecovery.nextCheckAt : row.quotaRecheckAt;
+      return <div className="space-y-2 text-xs">
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
         <dt className="text-[var(--dpf-muted)]">{copy.lastCheck}</dt><dd className="m-0">{row.lastCheckedAt ? <LocalTime value={row.lastCheckedAt} /> : copy.noCheckEvidence}</dd>
         <dt className="text-[var(--dpf-muted)]">{copy.lastSuccess}</dt><dd className="m-0">{row.lastSucceededAt ? <LocalTime value={row.lastSucceededAt} /> : copy.noSuccessEvidence}</dd>
       </dl>
-      <p className="m-0">{copy.nextCapacityCheck} {row.quotaRecheckAt ? <LocalTime value={row.quotaRecheckAt} /> : copy.noScheduledCheck}</p>
+      <p className="m-0">{copy.nextCapacityCheck} {nextCheckAt ? <LocalTime value={nextCheckAt} /> : copy.noScheduledCheck}</p>
       {row.readiness?.providerResetAt && <p className="m-0">{copy.providerResetEstimate} <LocalTime value={row.readiness.providerResetAt} /></p>}
       <p className="m-0 text-[var(--dpf-muted)]">{row.capacitySummary}</p>
-    </div> },
+      {row.quotaRecovery && <ProviderQuotaDetails key={row.connectionId} connectionId={row.connectionId} recovery={row.quotaRecovery} canWrite={canWrite} copy={copy}
+        open={openRecoveryId === row.connectionId} onOpenChange={open => setOpenRecoveryId(open ? row.connectionId : null)} />}
+    </div>; } },
     { key: "manage", header: copy.nextAction ?? copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="space-y-2">
       <Link href={providerAccountHref(row)} data-owner-first-next-action={row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="inline-block rounded border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-accent)]">{row.nextActionLabel ?? copy.manage}</Link>
       <Link href={providerAccountHref(row)} className="block py-2 text-xs text-[var(--dpf-accent)]">{copy.configureDetails}</Link>
@@ -116,13 +116,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
 
   return <section className="space-y-3" aria-label={copy.connection} aria-busy={pending}>
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts },
-        { kind: "select", key: "status", label: copy.readiness ?? copy.capacity, options: [
-          { value: "", label: copy.allAccountStates ?? "All accounts" },
-          { value: "enabled", label: copy.readinessEnabled ?? "Enabled" },
-          { value: "waiting", label: copy.waitingOrPaused ?? "Waiting or paused" },
-          { value: "attention", label: copy.readinessBlocked ?? "Needs attention" },
-        ] }]} value={{ query: search, status: statusFilter }} onChange={next => { setSearch(next.query ?? ""); setStatusFilter(next.status ?? ""); }} resultCount={visibleRows.length} />
+      <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts }]} value={{ query: search }} onChange={next => setSearch(next.query ?? "")} resultCount={visibleRows.length} />
       {canWrite && <button ref={addProviderRef} type="button" data-owner-first-next-action className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
     </div>
     <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense responsive ariaLabel={copy.connection} />

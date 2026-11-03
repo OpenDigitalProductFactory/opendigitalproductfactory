@@ -268,6 +268,74 @@ describe("evaluateProfessionDecisionGate", () => {
 // promoteProfessionPageMaterial writes), an architecture-tradeoff consult on
 // wsid-enterprise-architecture returns recommend with
 // professionProfileSelected=true instead of the 64-deferral coverage gap.
+describe("evaluateProfessionDecisionGate — the coworker's own proposal (BI-AE416D75)", () => {
+  function ledgerDb(agents: string[]) {
+    return {
+      ...makeDb(),
+      agent: {
+        findMany: vi.fn(async (args: { where: { agentId: { in: string[] } } }) =>
+          args.where.agentId.in.filter((id) => agents.includes(id)).map((agentId) => ({ agentId }))),
+      },
+      decisionShadowLedger: { upsert: vi.fn().mockResolvedValue({}) },
+    };
+  }
+  const eaCall = {
+    ...base,
+    agentIdentity: { agentId: "AGT-WS-EA", slugId: "ea-architect" },
+    caller: { agentId: "AGT-WS-EA", threadId: null },
+    options: ["aligned", "revise-before-building"],
+    domainClass: "architecture-tradeoff" as const,
+  };
+
+  it("records the proposal beside the kernel's pick and carries it into the shadow ledger", async () => {
+    const db = ledgerDb(["AGT-WS-EA"]);
+    await evaluateProfessionDecisionGate({
+      ...eaCall,
+      db: db as never,
+      proposedOptionId: "revise-before-building",
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval({ outcomeType: "escalate", options: eaCall.options, domainClass: "architecture-tradeoff" }),
+    });
+
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.agentId).toBe("AGT-WS-EA");
+    expect(data.recommendedOptionId ?? null).toBeNull();
+    expect((data.outcomePayload as Record<string, unknown>).proposedOptionId).toBe("revise-before-building");
+    const ledger = db.decisionShadowLedger.upsert.mock.calls[0]![0] as { create: Record<string, unknown> };
+    expect(ledger.create).toMatchObject({
+      agentId: "AGT-WS-EA",
+      activityType: "governed_decision_architecture_tradeoff",
+      proposedDecision: { recommendedOptionId: "revise-before-building", recommendedBy: "coworker" },
+    });
+  });
+
+  it("drops a proposal that is not one of the offered options", async () => {
+    const db = ledgerDb(["AGT-WS-EA"]);
+    await evaluateProfessionDecisionGate({
+      ...eaCall,
+      db: db as never,
+      proposedOptionId: "ship-it",
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval({ outcomeType: "escalate", options: eaCall.options, domainClass: "architecture-tradeoff" }),
+    });
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.outcomePayload).not.toHaveProperty("proposedOptionId");
+  });
+
+  it("records no coworker for an id no Agent row carries", async () => {
+    const db = ledgerDb([]);
+    await evaluateProfessionDecisionGate({
+      ...eaCall,
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval({ outcomeType: "escalate", options: eaCall.options }),
+    });
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.agentId ?? null).toBeNull();
+    expect(db.decisionShadowLedger.upsert).not.toHaveBeenCalled();
+  });
+});
+
 describe("evaluateProfessionDecisionGate — EA architecture-tradeoff acceptance", () => {
   function promotedCraftRow(slug: string) {
     return {

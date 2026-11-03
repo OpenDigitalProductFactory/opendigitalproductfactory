@@ -6,6 +6,8 @@ import {
   readCoworkerA2aTask,
 } from "./a2a-tasks";
 import type { CreateCoworkerEngagementInput, CoworkerEngagementResult } from "./engagements";
+const roomAccess = vi.hoisted(() => ({ allowed: false }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: async () => ({ decision: { level: roomAccess.allowed ? "content" : "none" } }) }));
 
 // These tests exercise the RECEIPT-BEARING path, which requires a signing secret.
 // Without one, createCoworkerA2aTask deliberately omits the receipt rather than
@@ -49,6 +51,17 @@ function db() {
 }
 
 describe("Coworker A2A task lifecycle", () => {
+  it("requires current room admission before returning a bound engagement over A2A", async () => {
+    const original = await db().coworkerEngagement.findUnique();
+    const engagement = { ...original, status: "completed", metadata: { fulfillment: { binding: { version: 1, engagementId: "CE-A2A", offerId: "offer-sales", serviceId: "svc-sales", providerAgentId: "sales-coworker", actorAgentId: "actor-1", userId: "user-1", workroomId: "WC-1", stageKey: "review", inputDigest: "a".repeat(64), artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40), path: "docs/design.md" } } }, result: { summary: "Private contribution" } } };
+    const fakeDb = { coworkerEngagement: { findUnique: async () => engagement }, workroom: { findUnique: async () => ({ id: "room-row-1" }) } };
+    roomAccess.allowed = false;
+    expect(await readCoworkerA2aTask("CE-A2A", { db: fakeDb, userId: "other-user" } as never)).toBeNull();
+    roomAccess.allowed = true;
+    const task = await readCoworkerA2aTask("CE-A2A", { db: fakeDb, userId: "user-1" } as never);
+    expect(task?.artifacts[0]?.parts[0]?.data).toEqual({ summary: "Private contribution" });
+    expect(await readCoworkerA2aTask("CE-A2A", { db: fakeDb })).toBeNull();
+  });
   it("maps engagement status to A2A task states with artifacts separated from messages", () => {
     expect(
       mapCoworkerEngagementToA2aTask({

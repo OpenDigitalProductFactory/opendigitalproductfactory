@@ -102,15 +102,13 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string, authMode:
     `url = "${url}"`,
     ...(mcpClientBearerHeaderRequired(url, "grok", authMode) ? [`bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`] : []),
   ].join("\n");
-  // Antigravity (Google): VS Code / Windsurf-derived agentic IDE. Its MCP config
-  // is a JSON block keyed by `mcpServers` (same shape as Claude Code's .mcp.json),
-  // consumed by both the IDE and the `agy` CLI. EP-ANTIGRAVITY-001 evidence gate
-  // (BI-47A81FEB): confirm the exact config path against a live install before
-  // this is automated in the bootstrap — the common 2026 locations are:
-  //   macOS/Linux: ~/.antigravity/mcp_config.json  (or the in-IDE MCP settings)
-  //   Windows:     %USERPROFILE%\.antigravity\mcp_config.json
-  // The JSON content itself is identical across platforms.
-  const antigravity = JSON.stringify({ mcpServers: { dpf: { type: "http", url, ...(mcpClientBearerHeaderRequired(url, "antigravity", authMode) ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}) } } }, null, 2);
+  // Antigravity (Google): the IDE and the `agy` CLI both read one JSON file,
+  // pinned against agy 1.4.3 (BI-4CB3C923):
+  //   macOS/Linux: ~/.gemini/config/mcp_config.json
+  //   Windows:     %USERPROFILE%\.gemini\config\mcp_config.json
+  // Its entry uses agy's own schema, what `agy mcp add` writes: `serverUrl`
+  // and `disabled`, not `url` and `type`.
+  const antigravity = JSON.stringify({ mcpServers: { dpf: { serverUrl: url, disabled: false, ...(mcpClientBearerHeaderRequired(url, "antigravity", authMode) ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } } : {}) } } }, null, 2);
   // VS Code: .vscode/mcp.json uses servers (not mcpServers)
   const vscode = JSON.stringify({ servers: { dpf: vscodeHttpEntry } }, null, 2);
   const syncCommand = ".\\scripts\\seed-worktree-mcp.ps1";

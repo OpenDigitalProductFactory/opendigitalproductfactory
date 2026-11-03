@@ -1,6 +1,48 @@
 {
   "scheduledWork": {
-    "lastResult": "Last result"
+    "lastResult": "Last result",
+    "intakeController": {
+      "title": "Issue intake controller",
+      "intro": "This installation reads and triages issues on the platform repository only after an owner commissions it. Every check below must pass first.",
+      "loading": "Checking…",
+      "loadFailed": "Could not check issue intake",
+      "retry": "Try again",
+      "commissioned": "Commissioned",
+      "notCommissioned": "Not commissioned",
+      "lapsed": "The commission no longer holds",
+      "commissionDetail": "{$room} for {$repository}, by {$by}:",
+      "room": "Controller room: {$room} for {$repository}",
+      "noRoom": "No issue-triage room exists yet, so there is nothing to commission.",
+      "checklist": "Commissioning checklist",
+      "status": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "unchecked": "Not checked"
+      },
+      "clause": {
+        "commission": "A controller room is recorded",
+        "room-found": "The controller room exists",
+        "room-live": "The room is open",
+        "work-shape": "The room watches issues (issue-triage-watch)",
+        "locally-owned": "The room belongs to this installation",
+        "upstream-configured": "Upstream GitHub repository is set",
+        "room-repository": "The room is for that repository",
+        "commission-repository": "The commission names that repository",
+        "room-owner": "The room has an owner here",
+        "commissioner-owns": "You own the room",
+        "production-install": "This is a production installation",
+        "operating-intent": "The installation purpose is confirmed",
+        "purpose": "Developing the platform is its main or another job"
+      },
+      "readOnly": "Only someone who can manage the platform can commission issue intake.",
+      "becomeOwner": "Become the room's owner",
+      "ownerConfirmTitle": "Take ownership of the room?",
+      "ownerConfirm": "You become the owner of {$room}. This is recorded on the room.",
+      "ownerConfirmHandover": "You become the owner of {$room}. {$names} stays in the room but is no longer its owner. This is recorded on the room.",
+      "commission": "Commission",
+      "working": "Working…",
+      "blockedBy": "Blocked by: {$clause}"
+    }
   },
   "accountableOwner": {
     "label": "Accountable owner:",
@@ -36,6 +78,36 @@
     "dialogMessage": "{$email} will be disconnected from {$client}. Everyone else stays connected. They can reconnect by signing in again. Why is their access ending?",
     "dialogPlaceholder": "For example: setup account nobody uses",
     "revokedNotice": ".input {$grants :integer}\n.input {$tokens :integer}\n.match $grants $tokens\none one {{Ended {$email}'s access (1 sign-in grant, 1 access token).}}\none * {{Ended {$email}'s access (1 sign-in grant, {$tokens} access tokens).}}\n* one {{Ended {$email}'s access ({$grants} sign-in grants, 1 access token).}}\n* * {{Ended {$email}'s access ({$grants} sign-in grants, {$tokens} access tokens).}}"
+  },
+  "accountAgentAccess": {
+    "heading": "Agent access for one account",
+    "intro": "Everything an account still uses to let AI agents act for it: personal tokens, sign-ins through each connected app, and automated-tool keys it owns. Handing over an account's work leaves all of this live.",
+    "accountLabel": "Account email",
+    "accountHint": "The person's sign-in email.",
+    "show": "Show access",
+    "loading": "Loading…",
+    "handedOver": "Work handed over {$when}. Its agent access is still live until someone ends it here.",
+    "inactive": "This account cannot sign in.",
+    "nothingLive": "This account holds no live agent access.",
+    "personalHeading": "Personal tokens",
+    "clientsHeading": "Connected apps",
+    "ownedHeading": "Automated-tool keys it owns",
+    "ownedHint": "These connect without a consent screen and act with this account's authority.",
+    "colName": "Name",
+    "colToken": "Token",
+    "colApp": "App",
+    "colClientId": "Client id",
+    "colAccessTokens": "Access tokens",
+    "colGrants": "Sign-in grants",
+    "colLastUsed": "Last used",
+    "colCreated": "Created",
+    "never": "never",
+    "end": "End this account's agent access",
+    "you": "This is your own account. End your own connections from each app instead.",
+    "dialogTitle": "End this account's agent access",
+    "dialogMessage": "Every personal token, app sign-in and automated-tool key that {$email} holds stops working now. Other people stay connected. The account can still sign in and connect again unless it is deactivated. Why is its access ending?",
+    "dialogPlaceholder": "For example: work handed over, account no longer used",
+    "endedNotice": "Ended {$email}'s agent access: {$tokens} token(s), {$grants} sign-in grant(s) and {$clients} automated-tool key(s)."
   },
   "closeAuthorisation": {
     "heading": "Let the acceptance sweep close finished work",
@@ -159,6 +231,49 @@
     "attentionTitle": "Phase routing needs attention",
     "resolvedSummary": "{$resolved} resolved: {$local} local, {$cloud} cloud."
   },
+  "managedRepository": {
+    "heading": "Managed repository",
+    "repositoryLabel": "GitHub repository",
+    "repositoriesLabel": "Repositories",
+    "save": "Save",
+    "cancel": "Cancel",
+    "notNow": "Not now",
+    "notSet": "Not set",
+    "setRepository": "Set repository",
+    "change": "Change",
+    "connect": "Connect GitHub",
+    "newCode": "Get a new code",
+    "checkAgain": "Check again",
+    "enterCode": "Enter this code on GitHub:",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "openGitHub": "Open GitHub",
+    "lastChecked": "Last checked:",
+    "status": {
+      "connected": "Connected",
+      "read-only": "Read only",
+      "no-access": "No access",
+      "login-expired": "Login expired",
+      "not-connected": "Not connected",
+      "check-failed": "Couldn't check"
+    },
+    "hint": {
+      "read-only": "This login can read but not label issues. Use an account with triage access.",
+      "no-access": "This login cannot see the repository. Log in with an account that can.",
+      "login-expired": "Log in again.",
+      "not-connected": "Log in so the platform can read and label its issues.",
+      "check-failed": "GitHub did not answer. Try again shortly."
+    },
+    "live": {
+      "status": "Status: {$status}",
+      "waiting": "Waiting for you to approve on GitHub.",
+      "loggedIn": "Logged in. Checking the repository.",
+      "expired": "The code expired."
+    },
+    "error": {
+      "unreachable": "Could not reach GitHub."
+    }
+  },
   "monitoringSettings": {
     "title": "Monitoring",
     "intro": "Monitoring (Prometheus and Grafana) watches this platform and its host. You can turn it on or off at any time.",
@@ -220,6 +335,32 @@
       "requestMismatch": "The request no longer matches what the platform sees. Refresh and try again.",
       "protocolUnavailable": "The host's change tool could not be verified, so nothing was changed. Open runtime health.",
       "unknown": "The platform returned an answer this page does not recognise."
+    }
+  },
+  "gateEfficacy": {
+    "title": "Gate efficacy",
+    "from": "From",
+    "to": "to",
+    "summaryRegion": "Summary",
+    "summary": "{$runs} guard checks recorded, {$classified} refusals classified. Unknown measures: {$unknown}.",
+    "none": "none",
+    "noDecision": "Nothing here needs your decision. Guards that look wasteful get a review item automatically.",
+    "stats": {
+      "checks": "Guard checks",
+      "checksHint": "last 14 days",
+      "refusals": "Refusals classified",
+      "waiting": "Approvals waiting",
+      "waitingHint": "requests, not cards",
+      "unknown": "Unknown measures"
+    },
+    "sections": {
+      "measures": "GPP §11 measures",
+      "guards": "Guards, most expensive first"
+    },
+    "tables": {
+      "gpp": "GPP §11 measures",
+      "proxies": "Subset proxies and approval load",
+      "breakdowns": "Breakdowns"
     }
   }
 }

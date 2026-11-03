@@ -7,29 +7,34 @@
 // or API-rate-limited provider is skipped while a healthy local floor remains.
 import { accountRuntimeKey } from "./provider-account-candidates";
 import { isAccountCapacityState } from "./provider-capacity/scopes";
+import { isProviderQuotaState } from "./provider-capacity/types";
+import { currentExecutionProof, type ExecutionProof } from "./provider-capacity/execution-proof";
 import { UNCONFIRMED_QUOTA_EXCLUSION } from "./subscription-quota-policy";
 
 export type CapacitySnapshot = {
   state: string;
-  /** Provider retry estimate or heuristic check eligibility; never proof of recovery. */
-  retryAtMs?: number | null;
   confidence?: "exact" | "header" | "heuristic" | "unknown";
+  quotaResetUnconfirmed?: boolean;
+  /** Epoch ms when a temporary limit lifts; null/undefined = unknown. */
+  retryAtMs?: number | null;
   /** Epoch ms when this snapshot was last observed; null/undefined = unknown. */
   observedAtMs?: number | null;
+  /** Most recent completed inference on this exact observation scope. */
   lastSuccessAtMs?: number | null;
+  observationSource?: string;
   /** Safe operator-facing recovery facts from the same validated observation. */
   safeSummary?: string | null;
   action?: string | null;
   isHumanActionRequired?: boolean;
-  /** Validated quota exhaustion whose reset is unknown; ordinary work cannot serve as a probe. */
-  quotaResetUnconfirmed?: boolean;
+  /** Supplied only after the capacity reader revalidates current persisted bindings. */
+  executionProof?: ExecutionProof;
 };
 
-/** Freeze only safe capacity facts beside each candidate's actual routing result. */
+/** Retain only safe observed facts beside a candidate's routing result. */
 export function capacityEvidenceForEndpoint(endpoint: { providerId: string; providerConnectionId?: string },
   snapshots: ReadonlyMap<string, CapacitySnapshot>): { capacityEvidence?: { provider?: CapacitySnapshot; account?: CapacitySnapshot } } {
   const provider = snapshots.get(endpoint.providerId);
-  const account = endpoint.providerConnectionId ? snapshots.get(accountRuntimeKey(endpoint.providerId, endpoint.providerConnectionId)) : undefined;
+  const account = endpoint.providerConnectionId ? snapshots.get(accountRuntimeKey(endpoint.providerId, endpoint.providerConnectionId)) : null;
   if (!provider && !account) return {};
   const project = (value: CapacitySnapshot): CapacitySnapshot => ({ state: value.state,
     retryAtMs: value.retryAtMs ?? null, observedAtMs: value.observedAtMs ?? null,
@@ -76,7 +81,6 @@ export function capacityRoutingExclusionReason(
   if (!snapshot) return null;
   const state = (snapshot.state ?? "").trim().toLowerCase();
   if (!state || state === "available" || state === "unknown") return null;
-
   if (snapshot.quotaResetUnconfirmed) return `provider capacity ${state}; ${UNCONFIRMED_QUOTA_EXCLUSION}; availability check required`;
 
   if (state === "quota_resets_at") {
@@ -109,7 +113,8 @@ function formatRetry(retryAtMs: number | null | undefined): string {
   return ` until ${new Date(retryAtMs).toISOString()}`;
 }
 
-export type CapacitySoftExcludeInput<T extends { providerId: string; providerConnectionId?: string }> = {
+type CapacityCandidate = { providerId: string; providerConnectionId?: string; providerConnectionVersion?: string; modelId?: string };
+export type CapacitySoftExcludeInput<T extends CapacityCandidate> = {
   endpoints: readonly T[];
   /** providerId → latest capacity snapshot (missing ⇒ available). */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot>;
@@ -127,7 +132,7 @@ export type CapacitySoftExcludeResult<T extends { providerId: string }> = {
  * at least one non-blocked peer remains (same degrade-not-lockout contract as
  * the runtime circuit breaker). Pure.
  */
-export function applyCapacitySoftExclusion<T extends { providerId: string; providerConnectionId?: string }>(
+export function applyCapacitySoftExclusion<T extends CapacityCandidate>(
   input: CapacitySoftExcludeInput<T>,
 ): CapacitySoftExcludeResult<T> {
   const blocked: Array<{ endpoint: T; reason: string }> = [];
@@ -136,12 +141,17 @@ export function applyCapacitySoftExclusion<T extends { providerId: string; provi
 
   for (const ep of input.endpoints) {
     const snap = input.capacityByProvider.get(ep.providerId);
+    const owned = ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null;
+    const proof = owned?.executionProof;
+    // This observation used Responses, not the separately constrained Codex CLI.
+    const checked = ep.providerId === "chatgpt" && owned?.state === "available" && proof
+      && currentExecutionProof(proof, proof, input.nowMs) && proof.providerId === ep.providerId
+      && proof.connectionId === ep.providerConnectionId && proof.modelId === ep.modelId && proof.accountVersion === ep.providerConnectionVersion;
     const inheritedAccountHealth = ep.providerConnectionId && ep.providerConnectionId !== `provider-default-${ep.providerId}` && snap && isAccountCapacityState(snap.state);
-    const providerSnapshot = inheritedAccountHealth ? null : snap;
-    const accountSnapshot = ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null;
+    const providerSnapshot = inheritedAccountHealth || checked && snap && isProviderQuotaState(snap.state) ? null : snap;
     const reason = capacityRoutingExclusionReason(providerSnapshot, input.nowMs)
-      ?? capacityRoutingExclusionReason(accountSnapshot, input.nowMs);
-    if (reason && (providerSnapshot?.quotaResetUnconfirmed || accountSnapshot?.quotaResetUnconfirmed)) quotaHeld.push({ endpoint: ep, reason });
+      ?? capacityRoutingExclusionReason(owned, input.nowMs);
+    if (reason && (providerSnapshot?.quotaResetUnconfirmed || owned?.quotaResetUnconfirmed)) quotaHeld.push({ endpoint: ep, reason });
     else if (reason) blocked.push({ endpoint: ep, reason });
     else live.push(ep);
   }
@@ -150,11 +160,6 @@ export function applyCapacitySoftExclusion<T extends { providerId: string; provi
     return { eligible: live, excluded: [...quotaHeld, ...blocked] };
   }
 
-  if (quotaHeld.length) {
-    const held = new Set(quotaHeld.map(entry => entry.endpoint));
-    return { eligible: input.endpoints.filter(endpoint => !held.has(endpoint)), excluded: quotaHeld };
-  }
-
   // All blocked (or none) — keep original list so a sole provider install still works.
-  return { eligible: [...input.endpoints], excluded: [] };
+  return { eligible: [...live, ...blocked.map(item => item.endpoint)], excluded: quotaHeld };
 }

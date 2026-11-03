@@ -6,6 +6,8 @@ order: 2
 
 ## Use This Doc For
 
+On narrow screens, the header's **Account and help** button contains page help, feedback and sign out. Installation identity and health remain visible. Escape closes the disclosure and returns focus to its button. Routing keeps its platform and workspace selectors beside each other; the live indicator retains refresh timing in its accessible description.
+
 - `/platform/ai`
 - `/platform/ai/capacity-continuity`
 - `/platform/ai/operations`
@@ -31,21 +33,19 @@ Choose a task, provider, data sensitivity and time window; the URL preserves tho
 
 ## Follow traffic
 
-The default view groups assignments on the left and providers on the right. Counts describe the recorded decisions in your scope. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. **Recent decisions** is a small preview; **View all** opens searchable traffic.
+Open **AI Coworker** from the header to discuss the current investigation. On narrower screens, use its robot icon. Opening the panel sends no message; close it to return to the same routing view. The launcher stays out of the routing content.
+
+The default view groups assignments on the left and providers on the right. Assignment badges count recorded decisions in your scope; provider cards show catalog model counts and the recorded provider status. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. Assignment and provider search show a result count and explain when nothing matches. Assignment search stays within the selected traffic scope; provider search covers the configured catalog. Clearing either search retains your filters. **Recent decisions** is a small preview; **View all** opens searchable traffic.
 
 On a narrow screen, traffic and evaluation rows keep their task and model together, with labeled outcome and cost values below. All four scope filters remain directly available.
 
-Select a decision to inspect its sensitivity, screening, exclusions, recorded attempts, tokens and cost in an overlay. Escape or Close returns to the same view. Attempts are ordered by their recorded start time. Missing traces or traces shared by several decisions cannot safely attribute attempts or cost, so the inspector states that limitation.
+Select a decision to inspect its sensitivity, screening, exclusions, recorded attempts, tokens and cost in an overlay. Escape or Close returns to the same view. Attempts are ordered by their recorded start time. Missing traces or traces shared by several decisions cannot safely attribute attempts or cost, so the inspector states that limitation. Provider and model names identify the selected route. Open **Source evidence identifiers** for its endpoint and receipt identifiers.
 
 Recorded cost uses correlated token usage when present, otherwise correlated route outcomes. Adapter estimates are displayed separately and are not added again to recorded cost. Coverage states how many decisions have prices. Unknown price does not mean free.
 
 ## Investigate stops and provider setup
 
 Data policy and clearance, token/context limits, quota/cooldown, payment, disabled configuration, sign-in, operator pause and unavailable capacity evidence are distinct reasons. Current provider restrictions come from the same read model as provider settings; an exclusion on an older decision is historical evidence, not a claim about current eligibility.
-
-A quota with no confirmed reset remains paused for ordinary work. An estimated retry time allows an availability check; it does not mean the account has recovered. DPF keeps the observed capacity and exclusion reason with each routing decision. If no eligible account remains, it reports the hold before starting a provider request. Completed recovery evidence must be newer than the quota observation; an old success cannot clear a newer limit.
-
-Supported ChatGPT and Codex subscription checks run at most hourly and may find recovery before a provider's estimated reset. They preserve manual pauses, sign-in changes and independent billing or access restrictions. A channel without a supported check remains explicitly held; retrying an uncertain review is not a recovery check.
 
 **Settings & overrides** opens the existing provider detail. The Providers navigation returns to the catalog; Traffic or Evaluation restores the routing scope. Provider settings remain the place to manage credentials, connections, operator pauses and sensitivity overrides. Risk acceptance still requires the existing warning, acknowledged scope, rationale and expiry. Revoking an override or lifting a pause does not clear another restriction. Assignment settings remain the place for coworker model pins.
 

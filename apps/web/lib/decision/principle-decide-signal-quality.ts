@@ -1,7 +1,7 @@
 // Build principle_decide signalQuality + operator summary (BI-1D23EC26).
 // Extracted from principle-decide-pack so the pack stays under the module-size ceiling.
 
-import type { DecisionResult } from "./option-scoring";
+import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 
 export type PrincipleDecideSignalQuality = {
   usable: boolean;

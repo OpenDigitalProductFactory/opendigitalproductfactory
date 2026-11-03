@@ -57,6 +57,29 @@ in `scopePolicy.hostUpkeep`; an operator who later disables it is not
 overridden. Without `-WithEdge` the node runs `DPF_EDGE_ROLE=host-upkeep`:
 heartbeat and the action channel, with no network sweep and no discovery.
 
+**Existing installs (BI-084F85E5).** A container self-upgrade cannot install a
+host service, so host-side pieces converge through the release assets. The
+self-upgrade sets `DPF_REMOTE_ACTION_DISPATCH_ENABLED=1` wherever
+`DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1` and the key is absent, and on Windows it
+replaces `dpf-start.ps1`, which runs at sign-in. Once the portal is healthy that
+script installs or upgrades the native agent for the running release and role,
+skipping the work when the agent is already current. It mints an enrollment
+token only for a machine that was never enrolled, and logs to
+`~/.dpf/logs/host-convergence.log`. A failure never blocks startup.
+
+On macOS and Linux the autostart launch script (`~/.dpf/dpf-autostart.sh`) lives
+outside the install directory, so it is now a one-line pointer to the shipped
+`scripts/installer/dpf-start.consumer.sh`, which does the same thing through
+`scripts/installer/lib/host-convergence.sh`. A launch script written before this
+change is bridged once by the self-upgrade itself (BI-EEFDB9E8). The promoter
+mounts the state directory, so after the release assets are committed
+`promote.sh` runs the shipped `scripts/installer/autostart-bridge.mjs` from the
+install root. That rewrites the launch script atomically into the pointer,
+keeping its install path and compose chain, and works for every launch script
+generation. The next boot or login then converges the host. A host-runtime
+change must now say how existing installs converge on Windows, macOS and Linux,
+or the Convergence-Impact gate fails it.
+
 ## Request and evidence flow
 
 1. The native Edge Node connects to the dedicated HTTPS action URL using its
@@ -90,6 +113,25 @@ disagreement restores that snapshot and reports only a fixed error code.
 Re-running the organization PKI workflow renews the client certificate without
 replacing the organization root. Registering the renewed certificate
 atomically marks the prior active certificate `superseded`.
+
+The authority-host repair in BI-AFDB58C8 distinguishes a valid client from an
+expired one. A valid client follows normal renewal. An expired authority-host
+client uses the existing restricted issuer, with the expected subject and
+client-auth usage checked against the existing root. The replacement pair is
+staged privately and checked before publication; a failure preserves the prior
+pair. It never makes an expired certificate acceptable to the action listener or
+changes the CA's expiry policy. A pre-existing repair lock or an unproven
+restoration stops another attempt for reconciliation by that operation's owner.
+
+The corrected Bash and PowerShell bootstraps and their shared public-certificate
+validator ship in the normal release assets. After canonical publication, the
+executing agent uses the supported authority PKI workflow and verifies the new
+certificate's actual validity and native registration. Updating source or
+installing the assets alone does not renew a certificate. An explicit disabled
+dispatch setting remains disabled; an absent setting retains the bootstrap's
+existing configured-channel behavior. Node trust, quarantine, revocation,
+action allow-lists and per-action approval still apply independently. Member
+recovery and continuous rotation remain separate from this authority-host repair.
 
 Use **Platform → Edge Nodes** for trust lifecycle decisions:
 

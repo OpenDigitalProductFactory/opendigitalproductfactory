@@ -1,5 +1,6 @@
 import { parseRetryAfterSeconds } from "./headers";
 import { classifyZaiCapacity } from "./zai";
+import { classifyAnthropicCapacity, isAnthropicProvider } from "./anthropic";
 import type {
   ProviderCapacityClassification,
   ProviderCapacityClassifierInput,
@@ -61,6 +62,10 @@ export function classifyProviderCapacity(
   if (isZaiProvider(input.providerId)) {
     const zai = classifyZaiCapacity(input);
     if (zai) return zai;
+  }
+  if (isAnthropicProvider(input.providerId)) {
+    const anthropic = classifyAnthropicCapacity(input);
+    if (anthropic) return anthropic;
   }
 
   const retryAfterSeconds = parseRetryAfterSeconds(input.headers, input.now);

@@ -252,3 +252,25 @@ describe("openAIAdapter", () => {
     });
   });
 });
+
+// Real model/list field shape captured during the original CE-724328D6 trace.
+describe("verified Codex catalog modalities", () => {
+  it("retains published image support without guessing capacity or tool capability", () => {
+    const card = openAIAdapter.extractModelCard("gpt-5.6-sol", { id: "gpt-5.6-sol", model: "gpt-5.6-sol", source: "codex_cli_model_list", inputModalities: ["text", "image"] });
+    expect(card.inputModalities).toEqual(["text", "image"]);
+    expect(card.capabilities.imageInput).toBe(true);
+    expect(card.capabilities.toolUse).toBeNull();
+    expect(card.maxInputTokens).toBeNull();
+    expect(card.maxOutputTokens).toBeNull();
+  });
+  it("honors an explicit text-only catalog model", () => {
+    const card = openAIAdapter.extractModelCard("unknown-model", { source: "codex_cli_model_list", inputModalities: ["text"] });
+    expect(card.capabilities.imageInput).toBe(false);
+  });
+  it.each([null, [], "image", ["image", 7], ["image", "unsupported"]])("keeps malformed catalog modalities unknown: %j", inputModalities => {
+    expect(openAIAdapter.extractModelCard("unknown-model", { source: "codex_cli_model_list", inputModalities }).capabilities.imageInput).toBeNull();
+  });
+  it("does not infer image support from an unrelated API extension", () => {
+    expect(openAIAdapter.extractModelCard("unknown-model", { inputModalities: ["text", "image"] }).capabilities.imageInput).toBeNull();
+  });
+});

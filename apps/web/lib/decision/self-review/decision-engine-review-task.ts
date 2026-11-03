@@ -67,6 +67,8 @@ export async function computeWeeklyReview(input: {
   const window = await loadReviewWindow(input.db, { now: input.now });
   const lines = computeReviewLines({
     rows: window.rows,
+    overdueRows: window.overdueRows,
+    overdueCoverage: window.overdueCoverage,
     materialCountByProfile: window.materialCountByProfile,
     now: input.now,
   });

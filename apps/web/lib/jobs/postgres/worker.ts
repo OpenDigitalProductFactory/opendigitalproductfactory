@@ -4,8 +4,9 @@
  * Runs inside the portal process; no extra container. It wakes on
  * `LISTEN dpf_jobs` and polls as a fallback, so a missed notification costs at
  * most one poll interval. Each wake fans out new events, then claims and
- * executes due runs up to its parallelism. Maintenance (lease recovery, wait
- * timeouts, cron ticks, retention) runs on its own interval.
+ * executes due runs up to its parallelism. Maintenance (lease recovery,
+ * terminal slot reclaim, wait timeouts, cron ticks, retention) runs on its
+ * own interval.
  */
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -141,6 +142,7 @@ export function createJobWorker(options: JobWorkerOptions): JobWorker {
 
   async function maintain(): Promise<void> {
     await store.recoverExpiredLeases(options.pool);
+    await store.reclaimTerminalSlots(options.pool);
     await store.expireWaits(options.pool);
     if (schedules.size > 0) await store.tickCrons(options.pool, schedules);
     if (Date.now() - lastPrune > 60 * 60_000) {

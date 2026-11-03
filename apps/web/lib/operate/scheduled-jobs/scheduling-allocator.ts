@@ -8,9 +8,8 @@
 // canonical map + live tasks), it nudges a colliding specific-time task to the
 // nearest free minute within its hour and reports the move.
 //
-// Scope: specific-time crons (concrete hour). Interval/"frequent" cadences
-// (hour `*`) are passed through — those come from code and are covered by the
-// CI contention guard, not operator task creation.
+// Scope: a single numeric minute and hour. Compound time fields pass through
+// unchanged; reducing a list, range or step to one tick would change its cadence.
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -21,9 +20,9 @@ export function tickOf(cron: string | null): string | null {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return null;
   const [minP, hourP] = parts as [string, string, string, string, string];
-  if (hourP === "*") return null;
-  const hour = parseInt(hourP, 10);
-  const minute = minP === "*" ? 0 : parseInt(minP, 10);
+  if (!/^\d+$/.test(minP) || !/^\d+$/.test(hourP)) return null;
+  const hour = Number(hourP);
+  const minute = Number(minP);
   if (Number.isNaN(hour) || Number.isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
     return null;
   }
@@ -57,10 +56,9 @@ export function deconflictCron(desired: string, occupied: ReadonlySet<string>): 
   const parts = desired.trim().split(/\s+/);
   if (parts.length !== 5) return { cron: desired, moved: false, note: null };
   const [minP, hourP, domP, monP, dowP] = parts as [string, string, string, string, string];
-  if (hourP === "*") return { cron: desired, moved: false, note: null }; // interval — leave to CI guard
-  const hour = parseInt(hourP, 10);
-  const minute = minP === "*" ? 0 : parseInt(minP, 10);
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return { cron: desired, moved: false, note: null };
+  if (tickOf(desired) === null) return { cron: desired, moved: false, note: null };
+  const hour = Number(hourP);
+  const minute = Number(minP);
 
   const tick = (m: number) => `${pad(hour)}:${pad(m)}`;
   if (!occupied.has(tick(minute))) return { cron: desired, moved: false, note: null };

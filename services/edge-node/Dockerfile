@@ -39,8 +39,9 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY patches ./patches
 
 # Every workspace package edge-node depends on (transitively). Today
-# that's @dpf/validators only; add more here if the dep tree grows.
+# validators also requires integration-shared; the context guard checks closure.
 COPY packages/validators ./packages/validators
+COPY packages/integration-shared ./packages/integration-shared
 
 # Edge-node's own package metadata. Source comes AFTER deps install so
 # source edits don't bust the install layer (Docker layer caching).

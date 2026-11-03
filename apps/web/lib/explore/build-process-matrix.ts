@@ -21,7 +21,7 @@ import type { BacklogItemWithRelations } from "./backlog";
 import { deliveryShapeSize } from "@/lib/work-management/delivery-shapes";
 import { BACKLOG_EFFORT_SIZES } from "./backlog";
 import type { BuildPhase, FeatureBuildKind } from "./feature-build-types";
-import { checkVerificationDepthRequirement } from "./verification-depth-requirement";
+import { checkTypecheckPassed, checkVerificationDepthRequirement } from "./verification-depth-requirement";
 import {
   FEATURE_BUILD_KIND_VALUES,
 } from "./feature-build-types";
@@ -700,12 +700,8 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       }
       return { allowed: true };
     }
-    case "verification-typecheck-passed": {
-      const verification = evidence.verificationOut as { testsFailed?: number; typecheckPassed?: boolean } | null | undefined;
-      if (!verification) return { allowed: false, reason: "A verification run (tests + typecheck) is required before review." };
-      if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
-      return { allowed: true };
-    }
+    case "verification-typecheck-passed":
+      return checkTypecheckPassed(evidence);
     case "verification-depth-satisfied":
       return checkVerificationDepthRequirement(evidence);
     case "acceptance-evaluated": {

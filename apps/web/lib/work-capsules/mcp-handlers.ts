@@ -1,3 +1,4 @@
+import { parseClaimInputs } from "./scope-claim-store";
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import { STAGE_EVIDENCE_OUTCOMES, type StageEvidenceOutcome } from "@/lib/work-management/stage-evidence-receipts";
 import { prisma } from "@dpf/db";
@@ -30,9 +31,7 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
-  SCOPE_KIND_SET,
   WORK_CAPSULE_WORKROOM_SHAPES,
-  type ScopeClaim,
   type WorkCapsuleEvidenceKind,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
@@ -54,6 +53,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { refuseUnlessRoomProvisions } from "./worktree-provision-gate";
 import { publicationRefusedToolResult } from "./publication-refusal";
 import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence-reach";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
@@ -62,13 +62,17 @@ import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
-import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
-import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { parseScopeReleaseRequest } from "./scope-release-targets";
+import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
+import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { isRecord } from "@/lib/shared/coerce";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  authorityDecisionId?: string;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -119,29 +123,15 @@ async function runAutoRenewedCapsuleWrite(args: {
   return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
-const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
-
-function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
-  const claims = params.claims;
-  if (!Array.isArray(claims)) return null;
-
-  const parsed: Array<Pick<ScopeClaim, "kind" | "value" | "intent">> = [];
-  for (const claim of claims) {
-    if (!claim || typeof claim !== "object") return null;
-    const candidate = claim as Record<string, unknown>;
-    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
-    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
-    const intent = typeof candidate.intent === "string" ? candidate.intent : "";
-    if (!SCOPE_KIND_SET.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
-      return null;
-    }
-    parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });
-  }
-
-  return parsed.length > 0 ? parsed : null;
-}
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions") {
+    return { success: false, error: "invalid_view", message: "view must be instances or definitions." };
+  }
+  if (params.view === "definitions") {
+    const { listReviewDefinitions } = await import("./list-review-definitions");
+    return listReviewDefinitions(params, userId, context);
+  }
   const status = stringParam(params, "status");
   const decisionScope = stringParam(params, "decisionScope");
   const portfolioRole = stringParam(params, "portfolioRole");
@@ -176,64 +166,8 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>, user
 }
 
 export async function getWorkCapsuleTool(params: Record<string, unknown>, userId?: string, context?: ToolContext): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  if (!capsuleId) {
-    return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
-  }
-  const { parseAfterSequence, readActivityAfter } = await import("./activity-log-read");
-  const afterSequence = parseAfterSequence(params["afterSequence"]);
-  if (afterSequence === null) {
-    return { success: false, error: "invalid_input", message: "afterSequence must be a non-negative integer." };
-  }
-  const capsule = await prisma.workroom.findUnique({
-    where: { capsuleId },
-    include: {
-      activities: {
-        orderBy: { recordedAt: "desc" },
-        take: 25,
-      },
-      taskRun: { select: { taskRunId: true, status: true } },
-    },
-  });
-
-  if (!capsule) {
-    return {
-      success: false,
-      error: "not_found",
-      message: `Work Capsule ${capsuleId} not found.`,
-    };
-  }
-  const { loadWorkroomRecoveryItems, projectWorkroomRecovery, boundWorkroomRecoveryReadback } = await import("./workroom-recovery-projection");
-  const { loadSemanticReviewRoomProjection } = await import("@/lib/work-management/semantic-review-room-projection");
-  const reviews = await loadSemanticReviewRoomProjection(prisma as never, [capsule.capsuleId], new Date());
-  const recoveryItems = await loadWorkroomRecoveryItems(prisma, [capsule]);
-  const investment = capsule.backlogItemId
-    ? await (await import("../portfolio/investment-balance-server")).projectItemInvestment(prisma, { itemId: capsule.backlogItemId, roomId: capsule.id })
-    : null;
-  const nestedCoordination = userId && context?.agentId
-    ? await (await import("@/lib/work-management/nested-room-coordination.server")).loadNestedRoomCoordination(prisma as never, {
-      roomId: capsule.id,
-      canReadRoom: async workroomId => (await (await import("@/lib/work-management/workroom-agent-access.server"))
-        .resolveAgentWorkroomAccess({ userId, agentId: context.agentId!, workroomId, requested: "content" })).decision.level === "content",
-    }).catch(() => ({ delegations: [], escalation: {
-      state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
-    } })) : null;
-  // BI-62514632: the room's log from a position the caller already holds.
-  const log = afterSequence === undefined ? null
-    : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
-  const message = `Loaded ${capsule.capsuleId}.`;
-  const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule, reviews,
-    recoveryItems.get(capsule.backlogItemId ?? "") ?? null), nestedCoordination, investment },
-    ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
-      { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);
-  if (!data) return { success: false, error: "workroom_recovery_budget_exceeded",
-    message: "Exact Workroom identity and recovery exceed the response budget. No partial identity or passing readiness is reported; bounded-detail repair is required." };
-  return {
-    success: true,
-    entityId: capsule.capsuleId,
-    message,
-    data,
-  };
+  const { readWorkroomDetail } = await import("./workroom-detail-read.server");
+  return readWorkroomDetail(params, userId, context);
 }
 
 export async function adoptWorktreeTool(
@@ -275,7 +209,11 @@ export async function claimCapsuleScopeTool(
   }
 
   const force = params["force"] === true;
+  const qualificationAdmissionToken = stringParam(params, "qualificationAdmissionToken") ?? undefined;
   const db = workCapsuleDb();
+  // GPP admission (BI-D1FB8C4D): a read-only room claims no paths.
+  const provisionRefusal = await refuseUnlessRoomProvisions(db, capsuleId, "claim_workroom_scope");
+  if (provisionRefusal) return provisionRefusal;
   let renewedCapsule;
   try {
     renewedCapsule = await runAutoRenewedCapsuleWrite({
@@ -288,6 +226,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        qualificationAdmissionToken,
         buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
@@ -295,6 +234,21 @@ export async function claimCapsuleScopeTool(
     const refusal = scopeClaimRefusal(error);
     if (refusal) return refusal;
     throw error;
+  }
+
+  if (qualificationAdmissionToken) {
+    const workspace = isRecord(renewedCapsule.workspaceState) ? renewedCapsule.workspaceState : {};
+    const state = parseQualificationExperimentState(workspace.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token) : null;
+    if (admission?.ok && admission.data.binding.executorMode === "native-edge") {
+      const currentActor = await actor(userId, context);
+      if (!currentActor.principalId) throw new Error("Native qualification requires an accountable principal.");
+      const queued = await materializeQualificationWindowsAction({ db: workCapsuleDb() as never,
+        capsuleId, requestedByUserId: userId, requestedByPrincipalId: currentActor.principalId,
+        authorityDecisionId: context?.authorityDecisionId });
+      if (!queued.ok) throw new Error(`Native qualification was not queued: ${queued.reason}`);
+      renewedCapsule = await renewLeaseAfterCapsuleWrite(capsuleId, currentActor);
+    }
   }
 
   return {
@@ -367,32 +321,13 @@ export async function releaseCapsuleScopeTool(
   userId: string,
   context: ToolExecutionContext | undefined,
 ): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
-  // looped on generic invalid_input — spell the contract and do not invite retry.
-  if (!Array.isArray(params.claims)) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message:
-        "release_capsule_scope requires claims as a non-empty array of {kind, value}. " +
-        "Example: { capsuleId: \"WC-…\", claims: [{ kind: \"path\", value: \"apps/web/lib/foo.ts\" }] }. " +
-        "Do NOT retry the same malformed payload (retryable: false).",
-      data: { retryable: false },
-    };
-  }
-  const claims = parseScopeReleaseClaims(params.claims);
-  if (!capsuleId || !claims) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message:
-        "capsuleId (WC-*) and at least one valid scope claim release are required " +
-        "(each claim needs kind in path|module|package|route|skill|prompt and a non-empty value). " +
-        "Do NOT retry without fixing the payload (retryable: false).",
-      data: { retryable: false },
-    };
-  }
+  const request = parseScopeReleaseRequest(params);
+  if (!request) return {
+    success: false, error: "invalid_input",
+    message: "Release requires expectedRoomId and the original complete claims (kind, value, intent, recordedByPrincipalId, releaseEpoch). Old requests cannot acquire today's targets; formulate a new intent from a committed owned claim. Do not retry this unchanged payload.",
+    data: { retryable: false },
+  };
+  const { capsuleId, claims, expectedRoomId } = request;
 
   const db = workCapsuleDb();
   try {
@@ -404,6 +339,7 @@ export async function releaseCapsuleScopeTool(
       write: (currentActor) => releaseWorkCapsuleScope({
         db,
         capsuleId,
+        expectedRoomId,
         claims,
         actor: currentActor,
         ownScopeOnly,
@@ -520,6 +456,9 @@ export async function planCapsuleWorktreeTool(
       message: `taxonomy must be one of: ${WORK_CAPSULE_BRANCH_TAXONOMIES.join(", ")}.`,
     };
   }
+  // GPP admission (BI-D1FB8C4D): a read-only room plans no worktree.
+  const provisionRefusal = await refuseUnlessRoomProvisions(workCapsuleDb(), capsuleId, "plan_workroom_worktree");
+  if (provisionRefusal) return provisionRefusal;
 
   let existingBranches = new Set<string>();
   try {
@@ -567,6 +506,13 @@ export async function heartbeatCapsuleTool(
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  let checkpoint;
+  if (params.checkpoint !== undefined) {
+    const { parseExecutorCheckpoint } = await import("./executor-checkpoint");
+    const parsed = parseExecutorCheckpoint(params.checkpoint);
+    if (!parsed.ok) return { success: false, error: "invalid_checkpoint", message: `${parsed.error} The lease was not renewed.` };
+    checkpoint = parsed.data;
+  }
 
   let capsule;
   try {
@@ -574,6 +520,7 @@ export async function heartbeatCapsuleTool(
       db: workCapsuleDb(),
       capsuleId,
       actor: await actor(userId, context),
+      checkpoint,
     });
   } catch (error) {
     if (!(error instanceof WorkroomLeaseHeldError)) throw error;
@@ -680,6 +627,7 @@ export async function recordCapsuleEvidenceTool(
       capsuleId,
       evidence,
       actor: currentActor,
+      taskRunId: context?.taskRunId ?? null,
     }),
   });
 

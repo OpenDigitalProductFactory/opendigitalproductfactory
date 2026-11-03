@@ -5,7 +5,7 @@
 // out that the value it offered was not accepted.
 
 import { computeNextRunAt, SCHEDULE_INTERVALS_MS } from "@/lib/inference/ai-provider-types";
-import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+import { computeNextCronFire } from "@/lib/operate/cron-next-run";
 import type { ActionResult } from "@/lib/shared/action-result";
 
 /** Named cadences offered as presets. A cron expression is also accepted. */
@@ -20,9 +20,7 @@ export type MutationResult = ActionResult<string>;
 
 /** A 5-field cron the scheduler can actually project a next run for. */
 export function isSupportedCron(schedule: string): boolean {
-  const parts = schedule.trim().split(/\s+/);
-  if (parts.length !== 5) return false;
-  return parts.every((p) => /^(\*|\*\/\d+|\d+(-\d+)?(,\d+(-\d+)?)*)$/.test(p));
+  return computeNextCronFire(schedule, new Date()) !== null;
 }
 
 export function isValidSchedule(schedule: string): boolean {
@@ -32,19 +30,16 @@ export function isValidSchedule(schedule: string): boolean {
 /** Next fire time for either cadence form. Null when the job will not fire. */
 export function projectNextRun(schedule: string, from: Date): Date | null {
   if (schedule === "disabled") return null;
-  if (isSupportedCron(schedule)) return computeNextCronRun(schedule, from);
-  return computeNextRunAt(schedule, from);
+  return computeNextRunAt(schedule, from) ?? computeNextCronFire(schedule, from);
 }
 
 
 /**
  * Cadences an agent-backed task can actually be retuned to.
  *
- * The agent dispatcher projects its next run with `computeNextCronRun`, which
- * treats minute and hour as CONCRETE fields — it cannot express "every 15
- * minutes" or "every hour". Offering those presets for an agent task would have
- * silently rescheduled it to midnight daily. Sub-daily cadences are therefore
- * refused for agent work with the reason, rather than accepted and mis-fired.
+ * Keep the existing daily/weekly/monthly preset vocabulary. Explicit cron
+ * expressions use the full UTC evaluator; retuning preset clock fields is a
+ * separate policy from computing an expression's next timestamp.
  */
 export const AGENT_RETUNABLE_TOKENS = ["daily", "weekly", "monthly"] as const;
 

@@ -1,0 +1,51 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-85389A35 (EP-5F6369AB). Migration 20261028060000_graph_relation_type adds the graph_relation_type lookup (GraphRelationType), the GraphRelationClass and GraphRelationStatus enums, an index on graph_edge.rel_type, and a NOT VALID foreign key from graph_edge.rel_type to the lookup. graph_edge.rel_type stops being free text: an unregistered relation type is refused from any writer, raw SQL included. Rows mirror packages/db/src/relation-vocabulary-entries.ts.",
+  "affectedCopies": [
+    "graph_relation_type rows: written by migrations only; relation-vocabulary.test.ts checks they cover every key in packages/db/src/relation-vocabulary-entries.ts",
+    "graph_edge.rel_type: written by upsertGraphEdge (packages/db/src/graph-sync.ts) and the code-graph projection (apps/web/lib/build/code-graph/graph-projection.ts), both of which now run assertRelationWrite before the write",
+    "Read by pg-graph.ts traversals and the admin graph explorer, whose relationship labels now come from the registry"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "public: a platform vocabulary of relation names, labels and classes. No organization, person or customer content.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Reference data shipped with the platform; identical on every install."
+  },
+  "migration": {
+    "name": "20261028060000_graph_relation_type",
+    "backfill": "None. The migration inserts all 66 registered types; on the dev install on 2026-10-28, every one of the 84,258 existing graph_edge rows names a registered type (verified in a rolled-back transaction). The foreign key is NOT VALID, so an install whose mirror holds an older unregistered type still migrates; the retype items BI-28C22BE3 and BI-92804832 validate it.",
+    "rollback": "Forward-only and additive. Dropping the constraint and table restores free-text rel_type; older code never reads the table."
+  },
+  "tests": [
+    "packages/db/src/relation-vocabulary.test.ts",
+    "packages/db/src/graph-sync.test.ts",
+    "apps/web/lib/graph/__tests__/explorer-vocabulary.test.ts",
+    "apps/web/lib/build/code-graph-refresh-reconcile.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:graph-relation-type",
+      "prismaModel": "GraphRelationType",
+      "lifecycleDisposition": "Reference data, changed only by migration; rows are never deleted while an edge uses them (ON DELETE RESTRICT).",
+      "fields": [
+        { "fieldId": "data:graph-relation-type#key", "resolution": "not-applicable", "reason": "UPPER_SNAKE relation-type key stored in graph_edge.rel_type.", "provenance": "packages/db/src/relation-vocabulary-entries.ts", "flags": [] },
+        { "fieldId": "data:graph-relation-type#relationClass", "resolution": "not-applicable", "reason": "Closed enum: semantic, structural, navigational or provenance; tells an analysis how to read the edge.", "provenance": "packages/db/src/relation-vocabulary-entries.ts", "flags": [] },
+        { "fieldId": "data:graph-relation-type#label", "resolution": "not-applicable", "reason": "Operator-facing label read source to target.", "provenance": "packages/db/src/relation-vocabulary-entries.ts", "flags": [] },
+        { "fieldId": "data:graph-relation-type#inverseLabel", "resolution": "not-applicable", "reason": "Operator-facing label read target to source.", "provenance": "packages/db/src/relation-vocabulary-entries.ts", "flags": [] },
+        { "fieldId": "data:graph-relation-type#status", "resolution": "not-applicable", "reason": "Closed enum: active, deprecated (writable until its owning item retypes the writer) or retired (refused).", "provenance": "packages/db/src/relation-vocabulary-entries.ts", "flags": [] }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:graph-edge",
+      "prismaModel": "GraphEdge",
+      "lifecycleDisposition": "Existing derived projection; rebuilt from relational sources. Gains a foreign key and an index, no column.",
+      "fields": [
+        { "fieldId": "data:graph-edge#relType", "resolution": "governed", "reason": "Now a foreign key to graph_relation_type.key (NOT VALID until the retype items finish).", "provenance": "Migration 20261028060000_graph_relation_type; BI-85389A35.", "flags": [] }
+      ]
+    }
+  ]
+}

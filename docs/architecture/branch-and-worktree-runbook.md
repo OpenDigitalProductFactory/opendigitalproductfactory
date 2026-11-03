@@ -26,14 +26,23 @@ The reason is the squash-merge above. Every merged PR gets a fresh SHA on `main`
 
 Reference: [`apps/web/lib/self-upgrade/local-changes-ledger.ts`](../../apps/web/lib/self-upgrade/local-changes-ledger.ts) (BI-75C4A412).
 
+## Read-only work needs no worktree
+
+Review, diagnosis, research and answering a question about the source change nothing, so they get no working copy. Create the room on the read-only shape (`create_workroom` with `workShape: "source-inquiry@1.0.0"`) and read through `read_source_at_version`, `search_source_at_version`, `list_source_directory` and `read_project_file`, or `git show origin/main:<path>` against the root clone. A `source-inquiry` room cannot reach worktree provisioning: `plan_workroom_worktree`, `claim_workroom_scope` and `adopt_worktree` refuse it with `worktree_provision_not_admitted`, and so does the WorktreeCreate hook while the session holds such a room. When the inquiry turns out to need a change, claim the item with a delivery shape; that claim is the route to a worktree ([design](../superpowers/specs/2026-10-14-worktree-provisioning-under-gpp-design.md), BI-D1FB8C4D).
+
 ## Creating a worktree
 
+Create worktrees through the governed path, which admits and binds the Workroom **before** the worktree exists:
+
 ```
-git worktree add D:/DPF-worktrees/<topic> -b <prefix>/<topic>     # Windows
-git worktree add ~/dpf-worktrees/<topic>  -b <prefix>/<topic>     # macOS / Linux
+bash scripts/new-dev-worktree.sh <topic> [<prefix>]          # manual path
 ```
 
-⟦runtime: install-local paths — the `D:/` form is the Windows install shape⟧ The dedicated sibling base is canonical for **all three** host CLI surfaces (Claude Code, Codex, Grok) per the 2026-06-05 unified-delivery-surfaces decision #1 — not Claude Code's default `.claude/worktrees/<random>` nesting, and not the older `D:/DPF-<topic>` alongside-the-clone form.
+Claude Code's auto-created worktrees go through the WorktreeCreate hook, which runs the same library (`scripts/lib/worktree-provision.mjs`). Both refuse, and create nothing, when the platform refuses or cannot be reached. Raw `git worktree add` bypasses the admission; a guard for it is BI-25A45D5C.
+
+**Break-glass.** When the platform is down and an operator authorizes recovery (AGENTS.md §1), set `DPF_WORKTREE_BREAK_GLASS="<operator: reason>"` for that one command. The worktree is created unbound with a `dpf-workroom-pending.json` marker in its git dir; bind it with `adopt_worktree` once the platform is back. Break-glass never overrides a refusal: a refusal is an authorization answer, not an outage.
+
+⟦runtime: install-local paths — the `D:/` form is the Windows install shape⟧ The dedicated sibling base (`<root>-worktrees/<topic>`) is canonical for **all three** host CLI surfaces (Claude Code, Codex, Grok) per the 2026-06-05 unified-delivery-surfaces decision #1 — not Claude Code's default `.claude/worktrees/<random>` nesting, and not the older `D:/DPF-<topic>` alongside-the-clone form.
 
 Never share a working tree across sessions: it causes index/HEAD collisions and cross-thread file sweeps.
 
@@ -46,6 +55,21 @@ From inside the new worktree, run `scripts/dpf-bootstrap-agent-toolchain.ps1` (W
 The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pack.{ps1,sh}` scripts now shim into the new bootstrap; both names continue to work for one release cycle. ⟦runtime: expiry UNANCHORED — names no release or date, so it cannot expire on its own; anchor it or drop the legacy names⟧
 
 Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector. See [`docs/operations/install.md`](../operations/install.md) for the readiness states and what each one means.
+
+## Routine client permissions
+
+Bootstrap also converges routine Codex, Claude and Grok permissions for the
+explicitly named source worktree through the signed updater's shared
+`--permissions-only` writer. Use that worktree as the client's actual workspace;
+the installed runtime remains an MCP administration context. Existing restrictive
+profiles, deny/ask rules and managed requirements keep their authority. A saved
+configuration does not widen an already-running managed chat.
+
+Routine independent review reuses the DEV task's existing scope, budget, grants
+and consent. No new approval is needed solely for a delivery phase. Source tests,
+protected publication and actual authority refusals still apply. See
+[routine development client permissions](../operations/install.md#routine-development-client-permissions)
+for backups, native diagnostics, parser compatibility and effective-session proof.
 
 ## Verification readiness classification
 
@@ -100,7 +124,20 @@ The worktree janitor (`scripts/worktree-janitor.mjs`, fleet backstop; and the Se
 The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the ending session's own node sidecars and releases the leases that session owns. It is scoped on purpose: a process counts as the session's only when its command line names the session's worktree *outside* `node_modules` (shared binaries prove nothing about ownership) and names no other worktree; and a lease is released only when its `ownerSessionId` is the ending session. A session started in the root clone therefore never reaps a sibling worktree's local-CI gate run, which is how three gate runs died by SIGTERM on 2026-09-06 (BI-B0122A22).
 
 - **Live-session gate.** A session writes a gitignored `.dpf-session-heartbeat.json` marker into its worktree, refreshed every turn by the `worktree-session-heartbeat` hook (SessionStart/Stop) and removed on SessionEnd. The janitor treats a fresh marker (TTL default 60 min, `DPF_WORKTREE_SESSION_HEARTBEAT_TTL_MIN`) as `KEEP`, **outranking** Tier-A eligibility — because a live session's tree first becomes Tier-A the moment its own PR merges, which is exactly when it must not be reaped.
+- **Workroom ownership is read in full or not at all.** The janitor reads every page of one `list_workrooms` observation. A row without a provable `worktreePath` is resolved through its own `get_workroom` detail read, and an expired observation is restarted rather than mixed with a new one. Any incomplete read keeps every ownership-dependent tree, and the `--json` report's `claims.reason` says why (BI-83345811). See the [janitor schedule guide](../install/worktree-janitor-schedule.md#who-owns-a-worktree-bi-83345811).
 - **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
+- **Unpushed-work backup.** Before a live run deletes a stale, unmerged branch (bash stale prune, or Node Tier B), it counts commits on no remote (`git rev-list --count refs/heads/<b> --not --remotes`). If any exist it writes `refs/janitor-backup/<YYYY-MM-DD>/<b>` at the tip and logs it; if that count or ref write fails, the worktree is kept (BI-EBBBDF40). Recover with `git branch <b> refs/janitor-backup/<date>/<b>`.
+
+## Branches left without a worktree
+
+The janitor deletes a branch only together with the worktree it removes, so a branch whose tree went some other way stays forever. `scripts/branch-reaper.mjs` (BI-88D75BA3) inventories those branches. Local deletion remains incomplete.
+
+- **Dry run by default.** `node scripts/branch-reaper.mjs` classifies and reports; `--live` prunes remote-tracking refs and reports local deletion as blocked (exit 3) when candidates exist; `--json` gives the full report.
+- **What it classifies as eligible.** A local branch whose work is already on `origin/main`: either an ancestor of it, or exactly the head commit a PR shipped into main whose merge commit is reachable from the observed main history (squash merge). The branch must also have no worktree, no open PR and no live Workroom, and must not be the current, `main`, `release/*`, `hotfix/*` or a pinned branch. Pin a branch by adding its name as a line in `<git-common-dir>/dpf-branch-pins`.
+- **Fails closed.** Missing exact branch identities, failed Git ownership reads, or an unreadable, malformed or limit-saturated open-PR inventory cannot authorize deletion. The observation must be installation-wide: an OAuth client credential sees only caller-visible rooms, so run it with the install's PAT. It reads branches only (`resolvePaths: false`) with a long read budget, because a large install's observation takes minutes.
+- **Local deletion gate.** A complete snapshot and a tip comparison do not protect a new claim or checkout admitted after observation. The executable deletion path returns `concurrent-ownership-fence-unavailable` and performs zero local-ref mutations. There is no override flag. BI-88D75BA3 stays open until admission and deletion share a verified ownership reservation.
+- **Each live cycle also** runs `git fetch --prune origin`, so remote-tracking refs for deleted remote branches go too.
+- **Stash census.** It reports the stash: entry count, how many are older than 7 or 30 days, and the oldest. It never drops an entry, because the stash stack is repository-wide and holds other sessions' work.
 
 ## Rebasing on a shallow clone — never a bare `git rebase origin/main`
 
@@ -124,7 +161,7 @@ Three paths remove a worktree, and all three end at the same classifier so they 
 2. **Merge event** (`build/pr-merged-reap`, BI-848360EF) — runs the janitor scoped to the merged branch with `--branch`. This is the path that covers the gap above.
 3. **Daily fleet sweep** (`worktreeJanitor`, 05:40) — the backstop for leftovers after a crash, and for clients that write no heartbeat.
 
-Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked.
+Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked. A Workroom claim counts only while the room is non-terminal and the server's liveness verdict does not mark it reapable (`isReapable` on `list_workrooms`); a missing or shortened verdict keeps the claim (BI-CAA84E43).
 
 Removal always goes through the junction-safe helper. A worktree here carries roughly 28 junctions into the root clone's `node_modules` and `apps/web/node_modules/*`; a recursive delete that follows one destroys the root clone's dependencies, which is what happened on 2026-08-15. Unlink each reparse point first, verify none remain, and only then remove the tree.
 

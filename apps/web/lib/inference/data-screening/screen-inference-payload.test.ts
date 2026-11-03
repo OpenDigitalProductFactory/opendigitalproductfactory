@@ -327,3 +327,38 @@ describe("a receipt says WHAT the matched message was, never what it said", () =
     expect(JSON.stringify(receipt)).not.toContain("invoice");
   });
 });
+
+describe("committed governance documentation screening (BI-12CD3010)", () => {
+  const prose = "A build coworker adding an Invoice table chooses DECIMAL(12,2). " +
+    "Compensation requires its own authority after rollback.";
+  const screen = (content: string, sensitivity: "internal" | "restricted" = "internal", residencyPolicy: "any_enabled" | "local_only" = "any_enabled") =>
+    screenInferencePayload({messages: [{role: "user", content}], systemPrompt: "",
+      taskType: "build-review", routeContext: {sensitivity,
+        residencyPolicy}});
+
+  it("does not impose local-only residency for the observed schema and rollback prose", () => {
+    const result = screen(prose);
+    expect(result.routeContext.sensitivity).not.toBe("restricted");
+    expect(result.routeContext.residencyPolicy).toBe("any_enabled");
+    expect(result.receipt.routeEffect).toBe("allow");
+    expect(result.receipt.classifiedDataClasses).not.toContain("payments-finance");
+    expect(result.receipt.rawPayloadStored).toBe(false);
+  });
+
+  it.each(["Please pay $125.00 for this invoice.", "Amount: $125.00\nInvoice",
+    "Due date: 2026-11-01\nInvoice", "Invoice due date: 2026-11-01", "Invoice for 125.00 USD",
+    "Invoice total: -125.00 USD", "Invoice from Acme for $125.00",
+    "Invoice: INV-1042\nAmount: $125.00.", "Invoice INV_1042", "Invoice $125.00",
+    "Invoice INV-1042 amount: $125.", "Employee salary is 125000.",
+    "Customer contact: pat@example.com."])("keeps mixed protected data fenced: %s", (record) => {
+    const result = screen(prose + "\n" + record);
+    expect(result.routeContext.residencyPolicy).toBe("local_only");
+    expect(result.receipt.routeEffect).toBe("local-only");
+    expect(JSON.stringify(result)).not.toContain(record);
+  });
+
+  it("preserves the explicit restricted floor and the owner's local-only setting", () => {
+    expect(screen(prose, "restricted").routeContext.sensitivity).toBe("restricted");
+    expect(screen(prose, "internal", "local_only").routeContext.residencyPolicy).toBe("local_only");
+  });
+});

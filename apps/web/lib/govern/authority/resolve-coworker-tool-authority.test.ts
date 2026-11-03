@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { classifyDeterministicAuthorityRefusal } from "./coworker-tool-authority-gate";
 import {
   deriveAllowedRouteContexts,
   deriveCoworkerApprovalPolicy,
@@ -8,7 +9,22 @@ import {
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
   resolveTrustedInitiativeItemId,
+  resolveSteering,
 } from "./resolve-coworker-tool-authority";
+
+describe("explicit owner approval floor", () => {
+  it.each([
+    { connectionDelegation: { authorityBindingId: "consent", agentId: "agent" } },
+    { roomAuthority: { actionBoundary: "preauthorized", memberOfRoom: true } },
+    { initiativeReviewBinding: {} as never },
+    { taskRunId: "TR-SCHED-1", toolName: "record_execution_evidence", roomMandatedTools: ["record_execution_evidence"] },
+    { taskRunId: "TR-SCHED-1", agentId: "AGT-WS-PLATFORM", toolName: "create_knowledge_article" },
+  ])("withholds automatic steering when the current policy explicitly requires approval: %j", extra => {
+    const input = { initiativeReviewBinding: null, roomAuthority: null, agentId: "agent", ...extra, hitlPolicy: " Always " };
+    expect(resolveSteering({ ...input, hitlPolicy: null })).not.toBe("none");
+    expect(resolveSteering(input)).toBe("none");
+  });
+});
 
 describe("deriveAllowedRouteContexts", () => {
   it("keeps surface-agnostic and wildcard tools route-neutral", () => {
@@ -47,6 +63,17 @@ describe("deriveCoworkerAuthoritySubject", () => {
       itemId: " BI-F0715C9C ",
       organizationId: "caller-org",
     })).toEqual({ kind: "backlog-item", id: "BI-F0715C9C" });
+  });
+
+  it("ignores a minted itemId on create_backlog_item and keeps it for existing-item tools", () => {
+    expect(deriveCoworkerAuthoritySubject({ itemId: "BI-NEW" }, "create_backlog_item"))
+      .toEqual({ kind: "platform", id: "dpf" });
+    expect(deriveCoworkerAuthoritySubject({ itemId: "BI-NEW", employeeId: "EMP-1" }, "create_backlog_item"))
+      .toEqual({ kind: "employee", id: "EMP-1" });
+    expect(deriveCoworkerAuthoritySubject({ itemId: "BI-NEW" }, "get_backlog_item"))
+      .toEqual({ kind: "backlog-item", id: "BI-NEW" });
+    expect(deriveCoworkerAuthoritySubject({ itemId: "BI-NEW" }, "update_backlog_item"))
+      .toEqual({ kind: "backlog-item", id: "BI-NEW" });
   });
 });
 
@@ -124,6 +151,81 @@ describe("resolveInitiativeAuthorityContext", () => {
       authenticatedOrganizationId: null,
       db,
     })).rejects.toThrow("requires an authenticated organization context");
+  });
+
+  // BI-5FDE148A: a caller-chosen id on create is the id being minted. Looking it
+  // up and throwing "does not exist" made every retry fail the same way.
+  it("does not look up a caller-chosen itemId when creating a backlog item", async () => {
+    const minted = "BI-5FDE148A";
+    const db = {
+      backlogItem: {
+        findUnique: async (args: unknown) => {
+          const itemId = (args as { where?: { itemId?: string } }).where?.itemId;
+          if (itemId === minted) throw new Error("findUnique must not look up the id being minted");
+          return null;
+        },
+      },
+    };
+    await expect(resolveInitiativeAuthorityContext({
+      params: { itemId: minted, title: "new" },
+      toolName: "create_backlog_item",
+      authenticatedOrganizationId: null,
+      db,
+    })).resolves.toEqual({
+      subject: { kind: "platform", id: "dpf" },
+      organizationId: null,
+    });
+    await expect(resolveInitiativeAuthorityContext({
+      params: { itemId: minted },
+      toolName: "create_backlog_item",
+      authenticatedOrganizationId: "org-canonical",
+      db,
+    })).resolves.toEqual({
+      subject: { kind: "platform", id: "dpf" },
+      organizationId: "org-canonical",
+    });
+  });
+
+  it("fails closed when a non-create tool names an item that does not exist", async () => {
+    for (const toolName of ["get_backlog_item", "update_backlog_item"] as const) {
+      const seen: string[] = [];
+      const db = {
+        backlogItem: {
+          findUnique: async (args: unknown) => {
+            seen.push((args as { where?: { itemId?: string } }).where?.itemId ?? "");
+            return null;
+          },
+        },
+      };
+      const error = await resolveInitiativeAuthorityContext({
+        params: { itemId: "BI-MISSING" },
+        toolName,
+        authenticatedOrganizationId: "org-canonical",
+        db,
+      }).then(() => null, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("does not exist");
+      expect(classifyDeterministicAuthorityRefusal(error)).toBe("authority_subject_not_found");
+      expect(seen).toEqual(["BI-MISSING"]);
+    }
+  });
+
+  it("classifies an organization mismatch and a missing organization context as settled refusals", async () => {
+    const mismatch = await resolveInitiativeAuthorityContext({
+      params: { itemId: "BI-F0715C9C" },
+      toolName: "get_backlog_item",
+      authenticatedOrganizationId: "org-canonical",
+      db: { backlogItem: { findUnique: async () => ({ itemId: "BI-F0715C9C", organizationId: "org-other" }) } },
+    }).then(() => null, (caught: unknown) => caught);
+    expect(classifyDeterministicAuthorityRefusal(mismatch)).toBe("authority_binding_mismatch");
+
+    const missingOrg = await resolveInitiativeAuthorityContext({
+      params: { itemId: "BI-F0715C9C" },
+      toolName: "update_backlog_item",
+      authenticatedOrganizationId: null,
+      db: { backlogItem: { findUnique: async () => ({ itemId: "BI-F0715C9C", organizationId: "org-canonical" }) } },
+    }).then(() => null, (caught: unknown) => caught);
+    expect(classifyDeterministicAuthorityRefusal(missingOrg)).toBe("authority_scope_missing");
   });
 });
 
@@ -234,6 +336,37 @@ describe("resolveBoundInitiativeReviewItem", () => {
       a2aMetadata: { ...task.a2aMetadata, trigger: "interactive" },
     }, "record_initiative_evidence")).toThrow("external MCP TaskRun");
   });
+
+  it("classifies binding, scope, and invalid-review failures as settled refusals", () => {
+    const refusalOf = (run: () => void) => {
+      try {
+        run();
+      } catch (error) {
+        return classifyDeterministicAuthorityRefusal(error);
+      }
+      throw new Error("expected a resolution refusal");
+    };
+    expect(refusalOf(() => resolveBoundInitiativeReviewItem(task, "record_initiative_design_review")))
+      .toBe("authority_binding_mismatch");
+    expect(refusalOf(() => resolveBoundInitiativeReviewItem({
+      ...task,
+      a2aMetadata: {
+        trigger: "external-mcp",
+        sourceRef: { kind: "mcp-token", id: "PAT-BI47" },
+        initiativeReviewBinding: { writerToolName: "record_initiative_evidence" },
+      },
+    }, "record_initiative_evidence"))).toBe("authority_binding_mismatch");
+    expect(refusalOf(() => resolveBoundInitiativeReviewItem({
+      ...task,
+      authorityScope: ["tool:read_source_at_version", "tool:record_initiative_evidence"],
+    }, "record_initiative_evidence"))).toBe("authority_scope_missing");
+    expect(refusalOf(() => resolveBoundInitiativeReviewItem({
+      ...task,
+      a2aMetadata: { ...task.a2aMetadata, trigger: "interactive" },
+    }, "record_initiative_evidence"))).toBe("authority_binding_mismatch");
+    expect(classifyDeterministicAuthorityRefusal(new Error("connect ETIMEDOUT"))).toBeNull();
+    expect(classifyDeterministicAuthorityRefusal(new Error('relation "BacklogItem" does not exist'))).toBeNull();
+  });
 });
 
 describe("deriveCoworkerApprovalPolicy", () => {
@@ -315,7 +448,15 @@ describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () 
     await expect(resolveTrustedInitiativeItemId({
       task: task("TR-SCHED-ABCD1234"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId,
     })).resolves.toBe("BI-ROUTED");
-    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234", "record_initiative_evidence");
+  });
+
+  it("takes a platform review run's subject from the review the platform issued its room (BI-AA47C672)", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-MERGED");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-PIR00001"), toolName: "record_initiative_post_implementation_review", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-MERGED");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-PIR00001", "record_initiative_post_implementation_review");
   });
 
   it("asks nothing for another tool or a non-scheduled run", async () => {

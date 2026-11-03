@@ -1,12 +1,6 @@
 import { APPROVAL_COMPLETION, checkRecoveredReviewAuthority, defaultGovernedToolPreflight } from "./mcp-governed-execute-preflight";
-// Single governed entry point for tool execution.
-//
-// All MCP-style callers (REST /api/mcp/call, the future JSON-RPC route, and
-// the in-platform agentic loop) should funnel through here so that the three
-// governance layers — user capability, agent grants, audit — are enforced in
-// one place. Today only agentic-loop writes ToolExecution rows; this wrapper
-// closes the audit gap on the REST and JSON-RPC paths and gives the future
-// external-MCP transport a stable hook.
+import { assertReassessmentToolCall, runReassessmentEffect } from "./routing/reassessment-execution-scope";
+// Shared governed entry for user capability, agent grants and durable audit.
 
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
@@ -180,7 +174,7 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
 
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
-  return defaultGovernedToolPreflight(event, oauthRoomRefusal);
+  return defaultGovernedToolPreflight(event, oauthRoomRefusal, findTool(event.toolName));
 }
 
 /**
@@ -214,10 +208,11 @@ async function callExecuteTool(
   // an approved run is first checked here (BI-F4EB23C1).
   const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
   if (refusal) return refusal;
-  if (ctx?.callerClient === APPROVAL_COMPLETION) {
-    const recoveryRefusal = await checkRecoveredReviewAuthority(userId, ctx);
-    if (recoveryRefusal) return recoveryRefusal;
-  }
+  const recoveryRefusal = await checkRecoveredReviewAuthority(userId, ctx);
+  if (recoveryRefusal) return recoveryRefusal;
+  const { scheduledReportingToolRefusal } = await import("./operate/scheduled-jobs/scheduled-reporting-authority");
+  const reportingRefusal = await scheduledReportingToolRefusal(toolName, userId, ctx, findTool(toolName));
+  if (reportingRefusal) return reportingRefusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -290,9 +285,13 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
 
 /** BI-5B34D277: an exception before the tool ran gives back the approval it reserved. */
 export async function governedExecuteTool(args: GovernedExecuteArgs): Promise<GovernedExecuteResult> {
+  args = { ...args, rawParams: assertReassessmentToolCall({ toolName: args.toolName, params: args.rawParams,
+    userId: args.userId, agentId: args.context?.agentId ?? "", taskRunId: args.context?.taskRunId,
+    executionFence: args.context?.taskExecutionFence }) };
   const run = newApprovalRun();
   try {
-    return await governedExecuteToolRun(args, run);
+    return await runReassessmentEffect({ kind: "tool", name: args.toolName, input: args.rawParams },
+      () => governedExecuteToolRun(args, run));
   } catch (err) {
     await releaseUnsettledApproval(run, args.toolName);
     throw err;
@@ -441,6 +440,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tool,
       agentGrantAllowed,
     );
+    if (authorityGate.outcome === "settled-command") return authorityGate.result;
     if (authorityGate.outcome === "settled") return settledApprovalResult(args.toolName, authorityGate);
     if (authorityGate.outcome === "reject") {
       const result: GovernedExecuteResult = {
@@ -461,6 +461,9 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       };
       if (
         authorityGate.rejection === "authority_denied"
+        || authorityGate.rejection === "authority_subject_not_found"
+        || authorityGate.rejection === "authority_binding_mismatch"
+        || authorityGate.rejection === "authority_scope_missing"
         || authorityGate.rejection === "approval_required"
         || consequence.consequential
       ) {
@@ -645,6 +648,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       threadId: args.context?.threadId,
       routeContext: args.context?.routeContext,
       taskRunId: args.context?.taskRunId,
+      taskExecutionFence: args.context?.taskExecutionFence,
       featureBuildId: args.context?.featureBuildId,
       coworkerMode: args.context?.coworkerMode,
       // Caller attribution for the decision ledger (BI-0EEBA669): without these three,
@@ -658,6 +662,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tokenGrantScopes: args.context?.tokenGrantScopes,
       governedReadToolCatalog: () => getAvailableTools(args.userContext, { mode: "advise",
         agentId: args.context?.agentId, roomAuthorizedGrants: args.context?.roomAuthority?.authorizedGrants }),
+      governedRoomAuthority: () => args.context?.roomAuthority ?? null,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { measureToolFidelity, GOLDEN_CASES, scoreToolFidelitySelection, scoreToolFidelityExecution, type RunTurnFn } from "./tool-fidelity-harness";
+import { measureToolFidelity, GOLDEN_CASES, buildToolFidelitySurface, scoreToolFidelitySelection, scoreToolFidelityExecution, type RunTurnFn } from "./tool-fidelity-harness";
 import { deriveMeasuredToolCeiling } from "./tool-fidelity-policy";
 
 describe("measureToolFidelity", () => {
@@ -11,9 +11,9 @@ describe("measureToolFidelity", () => {
   it("produces a fidelity curve that locates a model's cliff", async () => {
     // Fake model: selects the correct tool reliably at <=24 tools, then collapses
     // (picks nothing) above 24 — a realistic small-local-model cliff.
-    const runTurn: RunTurnFn = async ({ surfaceSize, taskClass }) => {
+    const runTurn: RunTurnFn = async ({ surfaceSize, prompt }) => {
       if (surfaceSize <= 24) {
-        const correct = GOLDEN_CASES.find((c) => c.taskClass === taskClass)!.correctToolNames[0];
+        const correct = GOLDEN_CASES.find((c) => c.prompt === prompt)!.correctToolNames[0];
         return { calledTool: correct };
       }
       return { calledTool: null };
@@ -33,11 +33,64 @@ describe("measureToolFidelity", () => {
   });
 });
 
+describe("question-complete authorized surfaces", () => {
+  const read = (name: string) => ({ name, description: "Injected read fixture", sideEffect: false,
+    requiredCapability: null, inputSchema: { type: "object", properties: {} } });
+  const required = ["list_backlog_items", "get_ai_platform_posture", "resolve_model_selection", "get_build_progress_visibility"];
+  const catalog = [...Array.from({ length: 48 }, (_, index) => read(`aaa_${index}`)), ...required.map(read)];
+  it.each([8, 15, 24, 32, 48])("pins each question's reader at size %i without padding or rewriting", size => {
+    const surface = buildToolFidelitySurface(catalog, size);
+    expect(surface).toHaveLength(size);
+    for (const name of required) expect(surface!.some(tool => tool.name === name)).toBe(true);
+    expect(surface!.every(tool => catalog.some(original => original === tool))).toBe(true);
+    expect(buildToolFidelitySurface([...catalog].reverse(), size)).toEqual(surface);
+  });
+  it("refuses a class-complete catalog missing the actual model resolver", () => {
+    expect(buildToolFidelitySurface([...catalog.filter(tool => tool.name !== "resolve_model_selection"),
+      read("get_build_engine_readiness"), read("get_self_upgrade_queue_status")], 8)).toBeNull();
+  });
+  it("refuses missing space, duplicate identities and non-integer surfaces", () => {
+    expect(buildToolFidelitySurface(catalog, 3)).toBeNull();
+    expect(buildToolFidelitySurface(catalog, 100)).toBeNull();
+    expect(buildToolFidelitySurface([...catalog, read(required[0]!)], 8)).toBeNull();
+    expect(buildToolFidelitySurface(catalog, 8.5)).toBeNull();
+  });
+  it.each([
+    { sideEffect: true }, { consequence: "authority" as const }, { requiresExternalAccess: true },
+    { secretResultKeys: ["secret"] },
+  ])("does not substitute an unsafe expected reader: %j", unsafe => {
+    expect(buildToolFidelitySurface(catalog.map(tool => tool.name === "resolve_model_selection"
+      ? { ...tool, ...unsafe } : tool), 8)).toBeNull();
+  });
+});
+
 const readTool = { name: "query_backlog", description: "Read backlog", requiredCapability: null,
   sideEffect: false, inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1 } },
     required: ["limit"], additionalProperties: false } };
 const golden = GOLDEN_CASES[0]!;
 const answer = { finishReason: "tool_calls", toolCalls: [{ name: "query_backlog", arguments: { limit: 2 } }] };
+
+describe("per-question golden authority", () => {
+  const tool = (name: string) => ({ ...readTool, name,
+    inputSchema: { type: "object", properties: {} } });
+  const choose = (name: string) => ({ finishReason: "tool_calls", toolCalls: [{ name, arguments: {} }] });
+  it.each([3, 5])("accepts the recorded provider-state reader for health question %i", index => {
+    expect(scoreToolFidelitySelection(GOLDEN_CASES[index]!, [tool("get_ai_platform_posture")],
+      choose("get_ai_platform_posture")).status).toBe("passed");
+  });
+  it.each(["get_build_engine_readiness", "get_self_upgrade_queue_status"])(
+    "does not accept %s as evidence of the next phase's selected model", name => {
+      expect(scoreToolFidelitySelection(GOLDEN_CASES[4]!, [tool(name)], choose(name)).status).toBe("failed");
+    });
+  it("accepts the actual per-phase model resolver", () => {
+    expect(scoreToolFidelitySelection(GOLDEN_CASES[4]!, [tool("resolve_model_selection")],
+      choose("resolve_model_selection")).status).toBe("passed");
+  });
+  it("does not accept a targeted workroom detail as current-build progress", () => {
+    expect(scoreToolFidelitySelection(GOLDEN_CASES[6]!, [tool("get_workroom")], choose("get_workroom")).status)
+      .toBe("failed");
+  });
+});
 
 describe("actual fidelity observations", () => {
   it("requires a valid actual first attached call, not prose", () => {

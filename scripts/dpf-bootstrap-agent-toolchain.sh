@@ -314,9 +314,9 @@ CODEX_BIN="$(resolve_codex_bin || true)"
 GROK_BIN="$(resolve_grok_bin || true)"
 AGY_BIN="$(resolve_agy_bin || true)"
 [ -n "$CLAUDE_BIN" ] && CLAUDE_PRESENT=1
-# Codex wiring is file-based (config.toml), so a present-but-not-on-PATH Codex
-# (or an existing Codex config dir) is still wirable.
-{ [ -n "$CODEX_BIN" ] || [ -f "$CODEX_CONFIG_PATH" ]; } && CODEX_PRESENT=1
+# Saved configuration may be provisioned before installation. Only a resolved
+# native binary (including bundled GUI paths above) proves the client is present.
+[ -n "$CODEX_BIN" ] && CODEX_PRESENT=1
 [ -n "$GROK_BIN" ] && GROK_PRESENT=1
 [ -n "$AGY_BIN" ] && AGY_PRESENT=1
 if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then
@@ -573,6 +573,21 @@ plugin_update_args=(--codex-plugin-only)
 if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
   fail "Plugin refresh failed; configuration planning stopped."
   exit 1
+fi
+
+# One shared writer owns routine permissions, separate from plugin refresh.
+permission_args=(--permissions-only --project-root "$REPO_ROOT")
+[ "$DRY_RUN" -eq 1 ] && permission_args+=(--dry-run)
+if bash "$PLUGIN_UPDATER" "${permission_args[@]}"; then
+  :
+else
+  permission_status=$?
+  if [ "$permission_status" -eq 2 ]; then
+    warn "Routine permissions unrun: use Python 3.11+ or an available tomli parser. Existing client setup continues."
+  else
+    fail "Routine permission convergence failed."
+    exit "$permission_status"
+  fi
 fi
 
 # --- Compute plan via Node bridge --------------------------------------------

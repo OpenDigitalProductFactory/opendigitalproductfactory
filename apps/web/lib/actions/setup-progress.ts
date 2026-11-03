@@ -2,12 +2,13 @@
 
 import { prisma } from "@dpf/db";
 import { resolveCloudProviderReadiness } from "@/lib/inference/cloud-provider-readiness";
-import { SETUP_STEPS, type StepStatus, type SetupContext } from "./setup-constants";
+import { SETUP_STEPS, type MonitoringCapabilityDecision, type StepStatus, type SetupContext } from "./setup-constants";
 import {
   projectSetupStepCompletion,
   projectSetupStepResolution,
 } from "@/lib/onboarding/setup-progress-projection";
 import { finalizeSetupCompletion } from "@/lib/onboarding/setup-progress-service.server";
+import { loadMonitoringCapabilityDecision } from "@/lib/platform-runtime/monitoring-switch-loader";
 
 const BOOTSTRAP_PLATFORM_ORG = {
   orgId: "ORG-PLATFORM",
@@ -73,6 +74,12 @@ export async function advanceStep(
   });
 
   const context = { ...(progress.context as SetupContext), ...contextUpdate };
+  const monitoringDecision = await loadMonitoringCapabilityDecision();
+  // Visiting the page, or Continue, does not choose monitoring. Only a recorded
+  // enabled/disabled decision completes it; the settings action already writes that.
+  if (progress.currentStep === "monitoring" && monitoringDecision === "undecided") {
+    return { ...progress, blocked: "monitoring-decision-required" as const };
+  }
 
   // The storefront step is only "complete" once the storefront actually exists.
   // The setup overlay's Continue must not advance past it (to operating-hours /
@@ -93,6 +100,7 @@ export async function advanceStep(
   const projection = projectSetupStepCompletion({
     completedStep: progress.currentStep as (typeof SETUP_STEPS)[number],
     steps: progress.steps as Record<string, StepStatus>,
+    monitoringDecision,
   });
 
   const updated = await prisma.platformSetupProgress.update({
@@ -116,10 +124,12 @@ export async function skipStep(progressId: string) {
   });
 
   const context = progress.context as SetupContext;
+  const monitoringDecision = await loadMonitoringCapabilityDecision();
   const projection = projectSetupStepResolution({
     resolvedStep: progress.currentStep as (typeof SETUP_STEPS)[number],
     resolution: "skipped",
     steps: progress.steps as Record<string, StepStatus>,
+    monitoringDecision,
   });
   const updatedContext = {
     ...context,
@@ -211,7 +221,48 @@ export async function getSetupContext(): Promise<SetupContext | null> {
   // the moment the owner connects a provider or completes its trust review, and
   // the guidance built from it would then be confidently wrong.
   const cloudProviderReadiness = await resolveSetupCloudReadiness();
-  return cloudProviderReadiness ? { ...stored, cloudProviderReadiness } : stored;
+  const monitoringCapabilityDecision = await loadMonitoringCapabilityDecision();
+  const base = cloudProviderReadiness ? { ...stored, cloudProviderReadiness } : { ...stored };
+  delete base.monitoringCapabilityDecision;
+  if (monitoringCapabilityDecision) base.monitoringCapabilityDecision = monitoringCapabilityDecision;
+  return base;
+}
+
+/**
+ * Apply a recorded monitoring decision to an open setup, or skip the step when
+ * it was never offered. Choosing on the settings page writes the decision on
+ * the host; this only moves the setup projection. Undecided leaves the step pending.
+ */
+export async function reconcileMonitoringSetupStep<T extends { id: string; currentStep: string; steps: unknown }>(
+  progress: T,
+): Promise<{ progress: T | null; monitoringCapabilityDecision: MonitoringCapabilityDecision | null }> {
+  const monitoringCapabilityDecision = await loadMonitoringCapabilityDecision();
+  const steps = (progress.steps ?? {}) as Record<string, StepStatus>;
+  if (monitoringCapabilityDecision === "undecided" || (steps.monitoring ?? "pending") !== "pending") {
+    return { progress, monitoringCapabilityDecision };
+  }
+  const projection = projectSetupStepResolution({
+    resolvedStep: "monitoring",
+    resolution: monitoringCapabilityDecision === "enabled" || monitoringCapabilityDecision === "disabled" ? "completed" : "skipped",
+    steps,
+    monitoringDecision: monitoringCapabilityDecision,
+  });
+  const updated = await prisma.platformSetupProgress.update({
+    where: { id: progress.id },
+    data: {
+      currentStep: projection.currentStep,
+      steps: projection.steps,
+      ...(projection.isComplete ? { completedAt: new Date() } : {}),
+    },
+  });
+  if (projection.isComplete) {
+    await finalizeSetupCompletion(updated.organizationId ?? null);
+    return { progress: null, monitoringCapabilityDecision };
+  }
+  return {
+    progress: { ...progress, currentStep: projection.currentStep, steps: projection.steps } as T,
+    monitoringCapabilityDecision,
+  };
 }
 
 /** Live readiness for setup guidance — see SetupContext.cloudProviderReadiness. */

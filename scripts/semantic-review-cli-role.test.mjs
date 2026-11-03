@@ -58,3 +58,84 @@ test("CLI refuses invalid roles and legacy receipts under the active contract", 
   writeFileSync(f.path, JSON.stringify({ ...f.receipt, schemaVersion: "semantic-change-review-receipt.v2", artifactType: undefined }));
   assert.notEqual(f.run("record", "--receipt-file", f.path, "--evidence-id", "evidence-1").status, 0);
 });
+
+test("pnpm separator and direct form record only an exact receipt", t => {
+  const f = fixture(t);
+  for (const args of [[], ["--"]]) {
+    const implicit = f.run(...args);
+    assert.equal(implicit.status, 0, implicit.stderr);
+    assert.match(implicit.stderr, /missing-receipt/);
+    assert.doesNotMatch(`${implicit.stderr}${implicit.stdout}`, /unknown command/);
+  }
+  const tampered = join(f.cwd, "tampered.json");
+  writeFileSync(tampered, JSON.stringify({ ...f.receipt, diffDigest: "e".repeat(64) }));
+  const record = (prefix, file) => f.run(...prefix, "record", "--receipt-file", file, "--evidence-id", "evidence-1", "--artifact-type", "spec");
+  for (const prefix of [[], ["--"]]) {
+    const rejected = record(prefix, tampered);
+    assert.notEqual(rejected.status, 0, prefix.join(" ") || "direct");
+    assert.match(rejected.stderr, /receipt identity does not match/);
+    assert.doesNotMatch(rejected.stderr, /unknown command/);
+  }
+  for (const prefix of [[], ["--"]]) {
+    const accepted = record(prefix, f.path);
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.match(accepted.stdout, /recorded pass receipt/);
+  }
+  assert.match(f.run("validate", "--artifact-type", "spec").stdout, /fresh-receipt/);
+  assert.match(f.run("--", "validate", "--artifact-type", "spec").stdout, /fresh-receipt/);
+  const wrongRole = f.run("--", "validate");
+  assert.doesNotMatch(wrongRole.stdout, /fresh-receipt/);
+  assert.match(wrongRole.stderr, /stale-receipt/);
+  const unknown = f.run("--", "nope");
+  assert.notEqual(unknown.status, 0);
+  assert.match(unknown.stderr, /unknown command: nope/);
+});
+
+test("pnpm separator and direct form keep exemption receipt checks", t => {
+  const f = fixture(t);
+  for (const prefix of [[], ["--"]]) {
+    const missing = f.run(...prefix, "record-exemption");
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /record-exemption requires --receipt-file/);
+    assert.doesNotMatch(missing.stderr, /unknown command: --/);
+  }
+  const sha = spawnSync("git", ["rev-parse", "HEAD"], { cwd: f.cwd, encoding: "utf8" });
+  assert.equal(sha.status, 0, sha.stderr);
+  const evidenceId = "evidence-exempt-1";
+  const exemption = {
+    evidenceId,
+    schemaVersion: "semantic-change-review-exemption.v1",
+    sourceHeadSha: sha.stdout.trim(),
+    baseTreeHash: f.receipt.baseTreeHash,
+    headTreeHash: f.receipt.headTreeHash,
+    diffDigest: f.receipt.diffDigest,
+    policyVersion: f.receipt.policyVersion,
+    capsuleId: "WC-TEST",
+    specialistIds: [],
+    nativeReview: "UNRUN",
+    reviewBasis: "operator-accepted-client-assessment",
+    independentReview: "UNVERIFIED",
+    approvedByUserId: "operator",
+    reason: "Audited source publication exception",
+    bindingDigest: "f".repeat(64),
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  };
+  const path = join(f.cwd, "exemption.json");
+  const write = (body) => writeFileSync(path, JSON.stringify(body));
+  write({ success: true, entityId: evidenceId, data: { exemption: { ...exemption, diffDigest: "e".repeat(64) } } });
+  for (const prefix of [[], ["--"]]) {
+    const rejected = f.run(...prefix, "record-exemption", "--receipt-file", path);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /exemption identity does not match/);
+    assert.doesNotMatch(rejected.stderr, /unknown command/);
+  }
+  write({ success: true, entityId: evidenceId, data: { exemption } });
+  for (const prefix of [[], ["--"]]) {
+    const accepted = f.run(...prefix, "record-exemption", "--receipt-file", path);
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.match(accepted.stdout, /recorded policy exception/);
+  }
+  assert.match(f.run("validate").stdout, /policy-exemption/);
+  assert.match(f.run("--", "validate").stdout, /policy-exemption/);
+  assert.match(f.run("--", "validate").stdout, /native review UNRUN/);
+});

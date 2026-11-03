@@ -244,6 +244,49 @@ describe("checkPhaseGate via the matrix — back-compat invariant", () => {
   });
 });
 
+describe("verification-typecheck-passed (BI-E4E70B9A)", () => {
+  const fb041879cd = {
+    typecheckPassed: true,
+    typecheck: "not_run",
+    tests: { failed: 0, passed: 0, note: "Sandbox command execution blocked" },
+    errors: ["Sandbox tools returned 'No active build'"],
+  };
+
+  it("refuses a typecheck that did not run even when typecheckPassed is true", () => {
+    const result = checkRequirement("verification-typecheck-passed", { verificationOut: fb041879cd });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain("did not run");
+      expect(result.reason).toContain("not a pass");
+    }
+    expect(checkPhaseGate("build", "review", { verificationOut: fb041879cd }).allowed).toBe(false);
+  });
+
+  it("refuses other not-run status strings the same way", () => {
+    for (const typecheck of ["skipped", "not-run", "pending", "blocked"]) {
+      const result = checkRequirement("verification-typecheck-passed", {
+        verificationOut: { typecheckPassed: true, typecheck },
+      });
+      expect(result.allowed, typecheck).toBe(false);
+    }
+  });
+
+  it("still passes an explicit typecheckPassed true with no contradicting typecheck field", () => {
+    expect(checkRequirement("verification-typecheck-passed", {
+      verificationOut: { typecheckPassed: true },
+    })).toEqual({ allowed: true });
+    expect(checkPhaseGate("build", "review", {
+      verificationOut: { typecheckPassed: true },
+    }).allowed).toBe(true);
+  });
+
+  it("still passes when the typecheck string says the check passed", () => {
+    expect(checkRequirement("verification-typecheck-passed", {
+      verificationOut: { typecheckPassed: true, typecheck: "pass" },
+    })).toEqual({ allowed: true });
+  });
+});
+
 describe("verification-depth-satisfied — shadow requirement", () => {
   const greenVerification = {
     testsPassed: 12,

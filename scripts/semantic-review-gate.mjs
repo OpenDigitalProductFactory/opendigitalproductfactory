@@ -51,7 +51,9 @@ function currentIdentity(receipt = null) {
 }
 
 const stateFile = git("rev-parse", "--git-path", "dpf-semantic-review-gate.json");
-const command = process.argv[2] ?? "validate";
+// First positional. scriptArgv drops the leading `--` pnpm 10 forwards, so
+// `pnpm review:semantic-gate -- record` is record, not an unknown command.
+const command = scriptArgv()[0] ?? "validate";
 
 if (command === "record-exemption") {
   const sourceFile = option("--receipt-file");

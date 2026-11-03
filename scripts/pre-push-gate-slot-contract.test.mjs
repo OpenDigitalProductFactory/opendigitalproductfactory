@@ -128,3 +128,25 @@ test("the hook's cloud-session reason matches the shared constant", async () => 
     "the inline reason in .githooks/pre-push-gate must equal CLOUD_AGENT_SESSION_OVERRIDE_REASON",
   );
 });
+
+// BI-FEDD8F45: every gate decision is recorded as a guard outcome run, and the
+// recorder can never change whether a push is allowed.
+test("the hook records its decision on exit, armed only after the exempt early exits", () => {
+  const trap = hook.indexOf("trap 'record_guard_outcome $?' EXIT");
+  const mainSkip = hook.indexOf('if [ "$branch" = "main" ]');
+  const firstGateDecision = hook.indexOf("pre-push-dco-check.mjs");
+  assert.notEqual(trap, -1, "the hook must record its decision through an EXIT trap");
+  assert.ok(trap > mainSkip, "detached/main/delete-only exits are not gate decisions and must not be recorded");
+  assert.ok(trap < firstGateDecision, "the trap must be armed before the first refusal path (DCO)");
+});
+
+test("the recorder runs in the background with output discarded and cannot fail the hook", () => {
+  assert.match(
+    hook,
+    /\( node scripts\/record-guard-outcome\.mjs --runner pre-push-gate [^)]*>\/dev\/null 2>&1 & \) \|\| true/,
+    "the recorder must be backgrounded, silent and status-neutral",
+  );
+  assert.match(hook, /\[ -f "scripts\/record-guard-outcome\.mjs" \] \|\| return 0/, "fixtures without the recorder skip it");
+  assert.match(hook, /guard_outcome_verdict="skipped"/, "a docs-only exemption is recorded as skipped, not passed");
+  assert.match(hook, /DPF_GUARD_OUTCOME_RUNNER=pre-push-gate node scripts\/pregate-preflight\.mjs/, "the override-path preflight records under the hook's runner");
+});

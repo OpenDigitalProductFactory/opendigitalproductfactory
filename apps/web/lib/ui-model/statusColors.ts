@@ -9,13 +9,8 @@
 //
 // NOTE: unrelated to apps/web/lib/reporting-types.ts (compliance-posture math).
 
-export type Intent =
-  | "success"
-  | "warning"
-  | "danger"
-  | "info"
-  | "neutral"
-  | "accent";
+import type { Intent } from "@dpf/storefront-templates/operations";
+export type { Intent } from "@dpf/storefront-templates/operations";
 
 export interface IntentStyle {
   /** Foreground (text/icon) color — a CSS value, always a --dpf-* token. */
@@ -57,8 +52,8 @@ export function intentStyle(intent: Intent): IntentStyle {
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   providerAccountReadiness: {
-    working: "success", enabled: "success", waiting: "warning", paused: "warning",
-    blocked: "danger", unverified: "neutral",
+    "verified-success": "success", enabled: "success", "temporary-wait": "warning", paused: "warning",
+    "action-required": "danger", unverified: "neutral",
   },
   // Discovered external MCP tool review state (BI-8B7B2FE9). Waiting for
   // review is a warning, never neutral: the tool is unavailable until a person acts.
@@ -102,6 +97,16 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   },
   // Build Studio owner proof. Missing, stale, failed, and not-applicable stay
   // visually distinct so absence is never mistaken for a pass.
+  // Managed repository login status (BI-985F4EC9, spec §3.4). Anything short
+  // of Connected needs the operator, so only Connected is success.
+  managedRepository: {
+    connected: "success",
+    "read-only": "warning",
+    "no-access": "danger",
+    "login-expired": "warning",
+    "not-connected": "neutral",
+    "check-failed": "warning",
+  },
   ownerProof: {
     passed: "success",
     failed: "danger",
@@ -598,6 +603,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     rate_limited: "warning",
     needs_credentials: "warning",
     no_models: "warning",
+    public_only: "warning",
     disabled: "neutral",
     unconfigured: "neutral",
     not_routable: "neutral",

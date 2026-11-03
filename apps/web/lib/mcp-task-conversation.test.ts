@@ -29,3 +29,9 @@ describe("remoteTaskConversation", () => {
   });
 });
 
+
+it("delivers validated provided pixels as image blocks alongside the unchanged request",()=>{
+ const image={type:"image_url" as const,image_url:{url:"data:image/png;base64,verified"}};
+ expect(remoteTaskConversation({systemPrompt:"Critic",prompt:"Original scope",visualInputs:[image]}).chatHistory)
+ .toEqual([{role:"user",content:[{type:"text",text:"Original scope"},image]}]);
+});

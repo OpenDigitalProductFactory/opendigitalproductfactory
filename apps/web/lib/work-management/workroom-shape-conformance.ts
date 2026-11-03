@@ -14,9 +14,9 @@ import {
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
-import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
-import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
-import { buildShapeFlowGraph, type GppFlowGraph } from "./work-shape-flow-graph";
+import { isCompletingWorkroomDriveReceipt } from "@opendigitalproductfactory/dpf-workroom/receipts";
+import { stageElementId } from "@opendigitalproductfactory/dpf-workroom/process/element-ids";
+import { buildShapeFlowGraph, type GppFlowGraph } from "@opendigitalproductfactory/dpf-workroom/flow-graph";
 
 export const WORKROOM_SHAPE_CONFORMANCE_DEVIATIONS = [
   "unresolved_work_shape",

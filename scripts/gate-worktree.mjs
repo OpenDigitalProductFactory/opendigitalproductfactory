@@ -19,12 +19,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 export { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
+import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -117,6 +119,7 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 import { decideTerminalClaim, isResumedGateRun, resumeClaimFields, verifyPinnedSource } from "./lib/gate-resume-pin.mjs";
 
@@ -1716,6 +1719,26 @@ async function main() {
     if (disposition.action === "source-drift") stopOnSourceDrift(disposition.reasons);
   }
 
+  // BI-A254A94C: name the files that cost a diff the docs-only lane. A
+  // resumed claim already holds a place in line.
+  if (!options.finalizeEvidence && !options.resumeLeaseId) {
+    const sandbox = sandboxDecisionForHead({
+      cwd: worktreePath,
+      git: (args) => {
+        const result = git(gitBin, args, worktreePath);
+        return result.status === 0 ? result.stdout.trim() : null;
+      },
+    });
+    if (sandbox && sandbox.claim) {
+      process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
+    } else if (sandbox) {
+      // BI-78176241: the documentation lane above records every docs-only
+      // diff it can verify. Reaching here means it declined this one, and an
+      // exit 0 with no record is a pass nobody can read — so gate it fully.
+      process.stdout.write("gate-worktree: docs-only diff, but the documentation evidence lane did not record it — running the full gate so this HEAD gets a verdict.\n");
+    }
+  }
+
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
     die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
@@ -1832,13 +1855,14 @@ async function main() {
       });
       nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
     }
-    expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,
       gitCommonDir,
       candidateGitDir,
     });
     hostPressureSamples.push(hostPressure);
+    const requestTiming = leaseRequestTiming({ now: new Date(), durationMs: leaseTtlMs, deadline });
+    expiresAt = requestTiming.expiresAt;
     let claimResponse;
     try {
       claimResponse = await mcpCall("claim_nonprod_environment_lease", {
@@ -1851,8 +1875,7 @@ async function main() {
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
-        expiresAt,
-        waitDeadlineAt: new Date(deadline).toISOString(),
+        ...requestTiming,
         worktreePath,
         gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,
@@ -2655,6 +2678,8 @@ async function main() {
   } : classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
     gateExitCode: runResult.status,
+    // Only this owner's signal handlers establish an observed interruption.
+    receivedSignal,
     // BI-FCC1DCB2: the conflicting paths, quoted only from THIS run's metadata.
     mergeConflict: metadataMergeConflictForRun(contentMetadata, { leaseId, sha }),
     // BI-B62A6686: P1001 on prisma migrate deploy is read from this run's log.
@@ -2980,7 +3005,6 @@ async function main() {
   }
   if (outcome.status === "blocked_child_signal_death") {
     process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
-    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
     process.exit(EXIT_CHILD_SIGNAL_DEATH);
   }
   die("gate failed");
@@ -3051,7 +3075,11 @@ function writeState(stateFile, {
 // check must survive symlinked invocation paths (macOS /var tmpdir, symlinked
 // checkouts) where argv[1] and import.meta.url spell the same file differently.
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    if (error?.hostTrustPrerequisite) {
+      process.stderr.write(`gate-worktree: ${error.message}\n`);
+      process.exit(88);
+    }
     die(error?.stack || String(error));
   });
 }

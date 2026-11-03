@@ -2,6 +2,10 @@ import type { ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { WORK_CAPSULE_EXECUTOR_KINDS, isWorkCapsuleExecutorKind } from "@/lib/work-capsules";
 
+import { parseBoundedHandoffCommand } from "./bounded-handoff-command";
+import { boundedHandoffRefusalResult, executeBoundedHandoff } from "./bounded-handoff";
+
+import { runBatchExecutorHandover } from "./batch-executor-handover";
 import { admitRoomAssistant } from "./room-ownership";
 import { reassignWorkCapsuleExecutor } from "./work-capsule-store";
 import { WorkroomLeaseHolderChangedError } from "./workroom-lease";
@@ -23,6 +27,23 @@ export async function reassignCapsuleExecutor(args: {
   db: CapsuleDb;
   resolveActor: () => Promise<WorkCapsuleActor>;
 }): Promise<ToolResult> {
+  // A set of rooms: dry run, then one approved apply that hands over each room
+  // through this same single-room path (BI-D4144471).
+  if (Object.hasOwn(args.params, "capsuleIds")) {
+    return runBatchExecutorHandover({
+      params: args.params,
+      db: args.db,
+      handOverOne: (params) => reassignCapsuleExecutor({ ...args, params }),
+    });
+  }
+  if (Object.hasOwn(args.params, "phase")) {
+    let command;
+    try {
+      command = parseBoundedHandoffCommand(args.params);
+      if (!command) throw new Error("The handoff phase could not be resolved.");
+      return await executeBoundedHandoff({ db: args.db, actor: await args.resolveActor(), command });
+    } catch (error) { return boundedHandoffRefusalResult(error, command); }
+  }
   const text = (key: string) => {
     const value = args.params[key];
     return typeof value === "string" && value.trim() ? value.trim() : null;

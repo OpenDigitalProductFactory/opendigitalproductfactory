@@ -193,7 +193,7 @@ export function IntakeOperations({ workspace }: { workspace: IntakeWorkspace }) 
       <form action={action} className="grid gap-3 md:grid-cols-2" aria-label="Admit an animal">
         <input type="hidden" name="intent" value="admit" />
         {workspace.existingAnimals.length > 0 ? (
-          <SelectField name="existingAnimalProfileId" label="Returning animal" selectClassName={CONTROL} value={existingId} onValueChange={setExistingId} options={[{ value: "", label: "New animal" }, ...workspace.existingAnimals.map((a) => ({ value: a.animalProfileId, label: `${a.name} · ${a.animalRef}` }))]} />
+          <SelectField name="existingAnimalProfileId" label="Returning animal" selectClassName={CONTROL} value={existingId} onValueChange={setExistingId} options={[{ value: "", label: "New animal" }, ...workspace.existingAnimals.map((a) => ({ value: a.animalProfileId, label: `${a.name} · ${a.animalRef}${a.needsCustody ? " (in care, no custody record yet)" : ""}` }))]} />
         ) : null}
         {!existingId ? (
           <>

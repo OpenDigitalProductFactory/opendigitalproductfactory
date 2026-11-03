@@ -686,6 +686,22 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
     expect(deliverables[2]!.dependsOn).toEqual(["child-1", "child-2"]);
   });
 
+  it("states each child's outcome first in its body (BI-458CCA8D)", async () => {
+    const { db, writes } = makeFakeDb(makeBuild());
+    await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+    const bodies = writes.backlogItemCreates.map((row) => String(row.body));
+    expect(bodies[0]).toMatch(/^## Outcome\nShow parts, as one independently shippable part of BI-/);
+    expect(bodies[2]).toMatch(/^## Outcome\nRestock view, as one/);
+    expect(bodies[0]).toContain("## Acceptance");
+  });
+
   it("records decompositionState on the Epic with operator + agent + timestamp", async () => {
     const { db, writes } = makeFakeDb(makeBuild());
     await approveDecomposition({

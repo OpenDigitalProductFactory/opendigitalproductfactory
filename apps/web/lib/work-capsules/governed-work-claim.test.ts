@@ -351,6 +351,8 @@ describe("claimGovernedBacklogWorkspace", () => {
       repositoryFullName: input.repositoryFullName,
       baseSha: "3333333333333333333333333333333333333333",
       headSha: "1111111111111111111111111111111111111111",
+      subjectItemId: "BI-ENTRY",
+      headBranch: "feat/entry",
     });
     expect(result).toMatchObject({
       ok: false,

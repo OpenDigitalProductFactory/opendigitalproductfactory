@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 678,
+  "routeCount": 683,
   "routes": [
     {
       "routePath": "/",
@@ -866,6 +866,17 @@
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
     },
     {
+      "routePath": "/api/documents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/documents/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/documents/[documentId]/content",
       "kind": "route",
       "segments": [
@@ -1541,6 +1552,18 @@
         "syncId"
       ],
       "file": "apps/web/app/api/platform/integrations/sync-progress/[syncId]/route.ts"
+    },
+    {
+      "routePath": "/api/platform/managed-inference",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "managed-inference"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/managed-inference/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/metrics",
@@ -2772,6 +2795,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/edge/actions/claim/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/actions/inference-admission",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "actions",
+        "inference-admission"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/actions/inference-admission/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/v1/edge/actions/result",
@@ -4292,6 +4329,22 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/workbooks/export/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/workspace/cases/[caseKey]/projection",
+      "kind": "route",
+      "segments": [
+        "api",
+        "workspace",
+        "cases",
+        "[caseKey]",
+        "projection"
+      ],
+      "dynamicParams": [
+        "caseKey"
+      ],
+      "file": "apps/web/app/api/workspace/cases/[caseKey]/projection/route.ts",
       "exposure": "authenticated"
     },
     {
@@ -5856,6 +5909,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/dev-loop/page.tsx"
+    },
+    {
+      "routePath": "/ops/gate-efficacy",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "gate-efficacy"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/gate-efficacy/page.tsx"
     },
     {
       "routePath": "/ops/health",

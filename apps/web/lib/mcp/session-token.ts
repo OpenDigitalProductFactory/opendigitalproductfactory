@@ -22,6 +22,7 @@
 
 import { SignJWT, jwtVerify } from "jose";
 import type { McpTokenCapability } from "@/lib/auth/mcp-api-token";
+import { parseTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
 
 const ISSUER = "dpf-mcp-internal";
 const AUDIENCE = "dpf-mcp-server";
@@ -67,6 +68,7 @@ export type McpSessionPayload = {
   routeContext?: string | null;
   /** BI-B949993E: governed TaskRun identity; the route derives the review binding from it. */
   taskRunId?: string | null;
+  taskExecutionFence?: TaskExecutionFence | null;
   /** Tool grants this session can exercise — same shape as `McpApiToken.scopes`.
    *  The route's existing scope-vs-tool gate runs identically against either. */
   scopes: string[];
@@ -91,11 +93,16 @@ export async function createMcpSessionToken(payload: McpSessionPayload): Promise
   if (payload.capability !== "read" && payload.capability !== "write") {
     throw new Error("createMcpSessionToken: capability must be 'read' or 'write'");
   }
+  const taskExecutionFence = payload.taskExecutionFence == null ? null : parseTaskExecutionFence(payload.taskExecutionFence);
+  if (payload.taskExecutionFence != null && (!payload.taskRunId || !taskExecutionFence)) {
+    throw new Error("A valid task execution fence requires its bound task.");
+  }
   return new SignJWT({
     agentId: payload.agentId ?? null,
     threadId: payload.threadId ?? null,
     routeContext: payload.routeContext ?? null,
     taskRunId: payload.taskRunId ?? null,
+    ...(taskExecutionFence ? { taskExecutionFence } : {}),
     scopes: payload.scopes,
     capability: payload.capability,
   })
@@ -137,12 +144,15 @@ export async function verifyMcpSessionToken(token: string): Promise<McpSessionPa
     if (!userId || !scopes || (capability !== "read" && capability !== "write")) {
       return null;
     }
+    const taskExecutionFence = payload.taskExecutionFence === undefined ? null : parseTaskExecutionFence(payload.taskExecutionFence);
+    if (payload.taskExecutionFence !== undefined && (!taskExecutionFence || typeof payload.taskRunId !== "string" || !payload.taskRunId)) return null;
     return {
       userId,
       agentId: typeof payload.agentId === "string" ? payload.agentId : null,
       threadId: typeof payload.threadId === "string" ? payload.threadId : null,
       routeContext: typeof payload.routeContext === "string" ? payload.routeContext : null,
       taskRunId: typeof payload.taskRunId === "string" ? payload.taskRunId : null,
+      ...(taskExecutionFence ? { taskExecutionFence } : {}),
       scopes,
       capability,
     };

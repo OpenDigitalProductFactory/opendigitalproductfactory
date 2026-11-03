@@ -32,6 +32,15 @@ vi.mock("./execution-adapter-registry", () => ({
   registerExecutionAdapter: vi.fn(),
 }));
 
+const observed = vi.hoisted(() => ({ slotError: undefined as unknown }));
+vi.mock("./cli-concurrency", async importOriginal => {
+  const actual = await importOriginal<typeof import("./cli-concurrency")>();
+  return { ...actual, withCliSlot: <T>(run: () => Promise<T>) => actual.withCliSlot(async () => {
+    try { return await run(); }
+    catch (error) { observed.slotError = error; throw error; }
+  }) };
+});
+
 // Mock child_process
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
@@ -71,6 +80,8 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 // can assert on the (path, content, mode) it was handed WITHOUT the content ever
 // touching a command string.
 const mockWriteSandboxFile = vi.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+const mockLedgerCount = vi.fn();
+vi.mock("@dpf/db", () => ({ prisma: { toolExecution: { count: (...args: unknown[]) => mockLedgerCount(...args) } } }));
 vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
@@ -137,6 +148,7 @@ function createMockProcess(stdout: string, exitCode = 0) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  observed.slotError = undefined;
   mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
   mockWriteSandboxFile.mockResolvedValue(undefined);
   vi.mocked(recordCliRateLimit).mockReset();
@@ -195,3 +207,70 @@ describe("native quota observations preserve execution uncertainty", () => {
       expect(clearCliRateLimit).not.toHaveBeenCalled();
     });
   });
+
+describe("native error observations cannot establish effect settlement", () => {
+  const quota = { type: "result", subtype: "success", is_error: true, result: "You've hit your weekly limit · resets 2am" };
+  const request = (taskRunId?: string) => makeRequest({
+    plan: makePlan({ providerConnectionId: "subscription-team" }),
+    mcpSession: { userId: "user-1", agentId: "build-specialist", threadId: "thread-1", ...(taskRunId ? { taskRunId } : {}) },
+    tools: [{ type: "function", function: { name: "record_workroom_evidence", description: "Record", parameters: {} } }],
+  });
+  beforeEach(() => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "fake-oauth-token" });
+    mockCreateMcpSessionToken.mockResolvedValue("test-native-session");
+    mockLedgerCount.mockReset();
+  });
+  it.each([0, 1])("preserves uncertainty after exit %s even when the task's audit is empty", async code => {
+    mockLedgerCount.mockResolvedValue(0);
+    let release!: () => void;
+    vi.mocked(recordCliRateLimit).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), code));
+    let rejected = false;
+    const result = cliAdapter.execute(request("TR-SCHED-B3D332F3")).catch(error => { rejected = true; return error; });
+    await vi.waitFor(() => expect(recordCliRateLimit).toHaveBeenCalledOnce());
+    expect(rejected).toBe(false);
+    expect(recordCliRateLimit).toHaveBeenCalledWith("claude-cli", "anthropic-sub",
+      "The native CLI reported a usage limit; its reset time is unknown.",
+      { providerId: "anthropic-sub", providerConnectionId: "subscription-team" });
+    release();
+    const error = await result;
+    expect(error).toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(error.diagnostics).toMatchObject({ exitCode: code, outerProcessClosed: true, childProcessClosure: "unverified",
+      terminalResult: { type: "result", status: "error", isError: true, hint: "quota" } });
+    if (code === 1) expect(error).toBe(observed.slotError);
+    expect(clearCliRateLimit).not.toHaveBeenCalled();
+    expect(mockSpawn).toHaveBeenCalledOnce();
+  });
+  it.each([0, 1])("preserves the same hold when quota recording fails after exit %s and an empty audit", async code => {
+    mockLedgerCount.mockResolvedValue(0);
+    vi.mocked(recordCliRateLimit).mockRejectedValueOnce(new Error("store unavailable"));
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), code));
+    const error = await cliAdapter.execute(request("TR-SCHED-B3D332F3")).catch(error => error);
+    expect(error).toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(error.diagnostics).toMatchObject({ exitCode: code, childProcessClosure: "unverified",
+      terminalResult: { hint: "quota" } });
+    if (code === 1) expect(error).toBe(observed.slotError);
+    expect(recordCliRateLimit).toHaveBeenCalledOnce();
+    expect(clearCliRateLimit).not.toHaveBeenCalled();
+    expect(mockSpawn).toHaveBeenCalledOnce();
+  });
+  it("keeps a nonquota error held when no audit rows establish complete effect capture", async () => {
+    mockLedgerCount.mockResolvedValue(0);
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ ...quota, result: "Authentication failed" }), 1));
+    const error = await cliAdapter.execute(request("TR-SCHED-B3D332F3")).catch(error => error);
+    expect(error).toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(error).toBe(observed.slotError);
+    expect(recordCliRateLimit).not.toHaveBeenCalled();
+    expect(clearCliRateLimit).not.toHaveBeenCalled();
+  });
+  it("keeps the hold when the governed ledger recorded a call", async () => {
+    mockLedgerCount.mockResolvedValue(2);
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), 1));
+    await expect(cliAdapter.execute(request("TR-SCHED-B3D332F3"))).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
+  });
+  it("keeps the hold without a TaskRun", async () => {
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), 1));
+    await expect(cliAdapter.execute(request())).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(mockLedgerCount).not.toHaveBeenCalled();
+  });
+});

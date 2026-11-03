@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SetupProgressBar } from "./SetupProgressBar";
 import {
-  SETUP_STEPS,
+  parseMonitoringCapabilityDecision,
   STEP_ROUTES,
+  visibleSetupSteps,
   type SetupStep,
   type StepStatus,
 } from "@/lib/actions/setup-constants";
@@ -36,10 +37,12 @@ export function buildStepTrigger(step: string, ctx: Record<string, string>): str
     "ai-providers": "AI Providers — choose a business-safe connection",
     "branding": "Branding — logo, colours, tagline",
     "business-context": "Your Business — describe what you do and who you serve",
+    "direction": "Your Direction — mission, vision and a few top-level outcomes",
     "operating-hours": "Operating Hours — when your business is open, and in what timezone",
     "storefront": "Storefront — customer-facing portal",
     "mailroom": "Mailroom — the mailboxes your business reads, and what happens to what arrives",
     "platform-development": "Platform Development — contribution and governance mode",
+    "monitoring": "Monitoring — choose whether this install watches itself",
     "build-studio": "Build Studio — custom feature development",
     "meet-your-coo": "Meet your AI COO — optionally choose how they are addressed",
     "workspace": "Workspace — day-to-day operations and guardrails",
@@ -60,6 +63,20 @@ export function buildStepTrigger(step: string, ctx: Record<string, string>): str
       ? `${ctx.cooConversationalName} · AI COO`
       : "COO";
     return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace and introduce their standing coworker as ${cooName}. Make clear that the conversational name does not change the coworker's AI identity, permissions, authority, or the owner's accountability. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+  }
+
+  if (step === "direction") {
+    return `[Setup step: ${label}]
+${contextLine}
+
+Explain in plain language that this step records the organization's mission (why it exists), vision (where it wants to be in a few years) and one to three top-level outcomes, each with an optional "how we'll know". Every AI coworker and every business, platform and profession decision is weighed against them. Make clear these are the owner's own words: offer to help word them if asked, but never propose them as decided and never fill the form. Skipping is fine; one reminder stays in Needs you until they are set. Keep it to 2-3 sentences.`;
+  }
+
+  if (step === "monitoring") {
+    return `[Setup step: ${label}]
+${contextLine}
+
+Explain that monitoring watches this platform and its host, and that the choice is the on/off control on this page. Choosing either option completes the step. Skipping leaves the choice open. Do NOT change the setting from the chat. Keep it to 2-3 sentences.`;
   }
 
   if (step === "mailroom") {
@@ -157,6 +174,12 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
         if (!pathname.startsWith(route)) router.push(route);
         return;
       }
+      if ("blocked" in updated && updated.blocked === "monitoring-decision-required") {
+        setBlockedMsg("Choose whether monitoring is on or off before continuing.");
+        const route = STEP_ROUTES["monitoring"] ?? "/admin/settings/monitoring";
+        if (!pathname.startsWith(route)) router.push(route);
+        return;
+      }
       setBlockedMsg(null);
       navigateToStep(updated.currentStep, !!updated.completedAt);
     });
@@ -183,9 +206,10 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
     }
   };
 
-  // Check if this is the last step
-  const currentIdx = SETUP_STEPS.indexOf(currentStep as SetupStep);
-  const isLastStep = currentIdx === SETUP_STEPS.length - 1;
+  const monitoringCapabilityDecision = parseMonitoringCapabilityDecision(setupContext.monitoringCapabilityDecision);
+  const offeredSteps = visibleSetupSteps(monitoringCapabilityDecision);
+  const currentIdx = offeredSteps.indexOf(currentStep as SetupStep);
+  const isLastStep = currentIdx === offeredSteps.length - 1;
 
   // Signal to the coworker panel that setup is active
   useEffect(() => {
@@ -216,6 +240,7 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
       <SetupProgressBar
         currentStep={currentStep}
         steps={steps}
+        monitoringCapabilityDecision={monitoringCapabilityDecision}
         onStepClick={handleStepClick}
       />
       {currentStep === "meet-your-coo" && (

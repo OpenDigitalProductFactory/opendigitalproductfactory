@@ -66,8 +66,8 @@ describe("deriveProviderHealth", () => {
     expect(h.adminActionHref).toBe("/platform/ai/providers/codex");
   });
 
-  it("inactive lifecycle → unconfigured", () => {
-    expect(base({ lifecycleStatus: "inactive" }).status).toBe("unconfigured");
+  it("inactive lifecycle alone does not establish disconnection", () => {
+    expect(base({ lifecycleStatus: "inactive" }).status).toBe("unknown");
   });
 
   // ── Runtime circuit takes precedence (most current signal) ──
@@ -202,19 +202,20 @@ describe("deriveProviderHealth", () => {
     expect(h.remediationKind).toBe("reauth");
   });
 
-  it("disabled with no recent signal → defaults to needs_reauth", () => {
+  it("disabled without failure evidence does not invent an authentication failure", () => {
     const h = base({ lifecycleStatus: "disabled" });
-    expect(h.status).toBe("needs_reauth");
+    expect(h.status).toBe("unknown");
   });
 
   it("needs_reauth wording differs for api_key vs oauth providers", () => {
     const oauth = base({
       lifecycleStatus: "disabled",
       authMethod: "oauth2_authorization_code",
+      recentOutcomes: [outcome({ ageMs: 1000, providerErrorCode: "auth" })],
     });
     expect(oauth.safeSummary).toMatch(/re-authentication|reconnect/i);
 
-    const apiKey = base({ lifecycleStatus: "disabled", authMethod: "api_key" });
+    const apiKey = base({ lifecycleStatus: "disabled", authMethod: "api_key", recentOutcomes: [outcome({ ageMs: 1000, providerErrorCode: "auth" })] });
     expect(apiKey.safeSummary).toMatch(/key/i);
   });
 
@@ -270,4 +271,10 @@ describe("deriveProviderHealth", () => {
       expect(h.safeSummary).not.toMatch(/codex|gpt-|claude-|modelId|providerId|ModelProvider/);
     }
   });
+});
+
+it("retains recent health evidence while local routing is paused", () => {
+  const health = base({ lifecycleStatus: "inactive", recentOutcomes: [outcome({ ageMs: 1000 })] });
+  expect(health.status).toBe("healthy");
+  expect(health.safeSummary).not.toMatch(/Not connected|Configure/);
 });

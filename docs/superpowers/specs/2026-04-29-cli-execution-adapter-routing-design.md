@@ -226,7 +226,9 @@ model AdapterRunTelemetry {
 }
 ```
 
-`userAccepted` is set asynchronously when a downstream signal lands (user keeps the reply, retries, or escalates). Acceptance is the canonical "did this adapter win?" signal.
+#### 4.3.1 Exact-response disposition (BI-A009189A; design 2026-10-31)
+
+The [exact-response routing feedback design](./2026-10-31-exact-response-routing-feedback-design.md) is the canonical feedback extension to §4.3. This parent retains the adapter architecture; feedback objectives, acceptance criteria, authorization, audit and UX live in the dedicated design.
 
 ### 4.4 Hard-coded CLI special case removal
 
@@ -918,6 +920,21 @@ schema, provider enablement, credentials, budgets, privacy policy, review
 identity or retry authority is introduced. Existing controls still decide
 which fallback is eligible; if none is eligible, the result remains a truthful
 infrastructure failure.
+
+### Dated Claude CLI weekly limit (BI-6C8E2561, 2026-10-21)
+
+The Claude CLI states a spent weekly limit as `resets Oct 20, 4pm (UTC)`:
+month, day, clock and IANA zone, but no year. The recorder only read Codex's
+`try again at <date>` form, so this banner took the 60-second default. On the
+live install the `anthropic-sub` pool read healthy from October 16 to October 20
+16:00 UTC, and the capacity drain, the agent-task dispatcher and the Workroom
+drive all counted it as capacity.
+
+The recorder now reads that form. The year is the occurrence nearest now, and
+the clock is converted through the named zone. The reset is recorded as
+`quota_resets_at` with exact confidence, so `getAllCliPoolStatuses` reports the
+pool exhausted until then. The clock-only banner above still names no day, and
+an unknown zone names no instant: both keep the bounded backoff.
 
 ## 18. References
 

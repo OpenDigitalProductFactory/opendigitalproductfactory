@@ -6,6 +6,7 @@ import { runEcosystemInboundTriage } from "./inbound-triage-runner";
 vi.mock("@/lib/federation/demand-exchange", () => ({
   decodeDemandMirrorPayload: (payload: unknown) => payload,
 }));
+vi.mock("./dependabot-reader", () => ({ readDependabotAlerts: async () => ({ ok: true, alerts: [] }) }));
 
 const commissioned = async () => ({
   commissioned: true as const,
@@ -22,6 +23,16 @@ const issue = {
 };
 
 describe("runEcosystemInboundTriage", () => {
+  it("keeps issue intake but reports unavailable security coverage", async () => {
+    const result = await runEcosystemInboundTriage({
+      loadCommission: commissioned, readIssues: async () => ({ ok: true, issues: [issue] }),
+      readPeerDemand: async () => [], readAlerts: async () => ({ ok: false, error: "Dependabot HTTP 403" }),
+      ingest: vi.fn().mockResolvedValue({ itemId: "BI-ISSUE", created: false, outcome: "unchanged" }),
+    });
+    expect(result).toMatchObject({ ran: true, complete: false, unchanged: 1,
+      sourceErrors: [{ source: "dependabot", error: "Dependabot HTTP 403" }] });
+  });
+
   it("marks a successful empty scan as complete", async () => {
     expect(await runEcosystemInboundTriage({
       loadCommission: commissioned,
@@ -120,9 +131,22 @@ describe("runEcosystemInboundTriage", () => {
     expect(filed).toMatchObject({
       source: "user-request",
       workType: "bug",
-      origin: { kind: "ecosystem-upstream-issue", id: "412" },
+      origin: { kind: "ecosystem-upstream-issue", id: "opendigitalproductfactory/opendigitalproductfactory#412" },
+      reconcile: expect.objectContaining({ repository: "opendigitalproductfactory/opendigitalproductfactory", legacyId: "412" }),
     });
     expect(filed.body).toContain("dpf-agent-9f2c");
+  });
+
+  it("surfaces a needs-review origin in the run summary without filing work", async () => {
+    const ingest = vi.fn().mockResolvedValue({ itemId: "", created: false, outcome: "needs-review", reviewCandidates: ["BI-A", "BI-B"] });
+    const result = await runEcosystemInboundTriage({
+      loadCommission: commissioned,
+      readIssues: async () => ({ ok: true, issues: [issue] }),
+      readPeerDemand: async () => [],
+      ingest,
+    });
+    expect(result).toMatchObject({ ran: true, complete: false, ingested: 0, needsReview: 1,
+      reviews: [{ origin: "ecosystem-upstream-issue:opendigitalproductfactory/opendigitalproductfactory#412", candidates: ["BI-A", "BI-B"] }] });
   });
 
   it("still files peer demand when the upstream issue read fails", async () => {

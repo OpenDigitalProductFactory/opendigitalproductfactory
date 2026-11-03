@@ -44,3 +44,16 @@ describe("workroom-drive wiring", () => {
     }
   });
 });
+
+// BI-1DDCE164: the live loader dropped the objective and the bound item, so every
+// live stage brief went out with no subject; only test rooms carried one.
+describe("workroom-drive live loader carries the room's subject", () => {
+  it("maps the objective and the bound backlog item key onto the driven room", () => {
+    expect(drive).toMatch(/objective:\s*row\.objective/);
+    expect(drive).toMatch(/workItemKey:\s*workItemKeyOf\(/);
+  });
+
+  it("stops the stage tasks of rooms the drive no longer selects", () => {
+    expect(drive).toContain("deactivateUndrivenRoomTasks(");
+  });
+});

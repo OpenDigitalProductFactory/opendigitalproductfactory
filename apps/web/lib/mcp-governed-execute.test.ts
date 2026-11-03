@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: vi.fn(async () => ({ progressPayload: {}, a2aMetadata: {} })) } } }));
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: vi.fn(async () => null) }));
 import {
   _setGovernanceForTests,
   agentHasAnyGrant,
@@ -14,6 +16,7 @@ import type { RoomParticipantInvitationPreflight } from "./work-management/room-
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
+import { coworkerAuthorityInputFixture as authorityInput } from "../test-support/coworker-authority-input-fixture";
 
 const preflightMocks = vi.hoisted(() => {
   const roomItem = {
@@ -51,63 +54,6 @@ let executeMock: ReturnType<typeof vi.fn> & ExecuteFn;
 let approvalEnvelopeCreate: AuthorityApprovalEnvelopeCreate;
 let approvalTaskResume: AuthorityApprovalTaskResume;
 let approvalEnvelopeFinalize: AuthorityApprovalEnvelopeFinalize;
-function authorityInput(
-  overrides: Partial<CoworkerAuthorityInput> = {},
-): CoworkerAuthorityInput {
-  return {
-    authContext: {
-      principalId: "PRN-1",
-      principalAliases: [],
-      population: "workforce",
-      platformRole: "HR-000",
-      isSuperuser: true,
-      employeeId: "EMP-1",
-      managerScope: { directReportIds: [], indirectReportIds: [] },
-      teamIds: [],
-      accountScope: {
-        accountIds: [],
-        contactIds: [],
-        partnerAccountIds: [],
-      },
-      sensitivityClearance: [
-        "public",
-        "internal",
-        "confidential",
-        "restricted",
-      ],
-      authentication: {
-        source: "session",
-        methods: ["mfa"],
-        contextClassReference: null,
-      },
-      actingHumanUserId: "user-1",
-      actingAgentId: "AGT-100",
-      delegationGrantIds: [],
-      grantedCapabilities: ["view_platform", "view_backlog", "manage_backlog"],
-    },
-    action: {
-      toolName: "query_backlog",
-      requiredCapability: "view_platform",
-      agentGrantAllowed: true,
-      sideEffect: false,
-      executionMode: "immediate",
-      routeContext: "/ops",
-      approvalPolicy: "none",
-    },
-    subject: { kind: "platform", id: "dpf" },
-    delegation: null,
-    integration: { required: false, state: "not-required" },
-    dataPolicy: {
-      sensitivity: "internal",
-      maskingRequired: false,
-      maskingSatisfied: true,
-      decisionVersionsCurrent: true,
-    },
-    task: null,
-    rawParams: {},
-    ...overrides,
-  };
-}
 function applyAuthorityOverrides(
   overrides: Parameters<typeof _setGovernanceForTests>[0],
 ): void {
@@ -520,13 +466,8 @@ describe("governedExecuteTool — resilience", () => {
   });
 });
 
-// BI-16A80690: some MCP clients serialize array/object tool args as JSON
-// strings on the wire. governedExecuteTool is the single funnel for all MCP
-// wire transports, so it re-hydrates those strings (schema-driven) before the
-// tool switch sees them. These tests use the REAL principle_decide schema from
-// PLATFORM_TOOLS (resolved by findTool) and assert via the executeTool spy that
-// the handler receives native values — locking BOTH the JSON-string and the
-// already-structured shapes.
+// BI-16A80690: use the real principle_decide schema to verify that serialized
+// JSON arguments and structured arguments both reach the handler as native values.
 describe("governedExecuteTool — JSON-string arg coercion (BI-16A80690)", () => {
   const STRUCTURED_OPTIONS = [
     { id: "a", description: "Option A" },

@@ -88,7 +88,7 @@ describe("interceptToolCallAsProposal: a room cadence's declared writes run (BI-
     const resolveMandatedTools = vi.fn(async () => ["record_execution_evidence", "record_workroom_evidence"]);
     const result = await interceptToolCallAsProposal({ ...call, execute }, { persistence: messages(), resolveMandatedTools });
     expect(result).toBeNull();
-    expect(resolveMandatedTools).toHaveBeenCalledWith({ taskRunId: "TR-SCHED-1234ABCD", agentId: "AGT-WS-PORTFOLIO" });
+    expect(resolveMandatedTools).toHaveBeenCalledWith({ taskRunId: "TR-SCHED-1234ABCD", agentId: "AGT-WS-PORTFOLIO", toolName: call.toolName, params: call.args });
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -110,12 +110,23 @@ describe("interceptToolCallAsProposal: a room cadence's declared writes run (BI-
     expect(result?.data?.status).toBe("proposed");
   });
 
-  it("never consults the mandate outside a propose boundary", async () => {
+  it("rechecks scheduled effects outside proposal mode without changing a current act boundary", async () => {
     const resolveMandatedTools = vi.fn(async () => []);
     expect(await interceptToolCallAsProposal(
       { ...call, proposeSideEffects: false, execute: async () => PENDING },
       { persistence: messages(), resolveMandatedTools },
     )).toBeNull();
+    expect(resolveMandatedTools).toHaveBeenCalledOnce();
+  });
+
+  it("does not read a stage mandate for reads or nonscheduled acts outside proposal mode", async () => {
+    const resolveMandatedTools = vi.fn(async () => []);
+    for (const override of [{ toolDef: { sideEffect: false } }, { taskRunId: "TR-MCP-EXTERNAL" }, { taskRunId: null }]) {
+      expect(await interceptToolCallAsProposal(
+        { ...call, ...override, proposeSideEffects: false, execute: async () => PENDING },
+        { persistence: messages(), resolveMandatedTools },
+      )).toBeNull();
+    }
     expect(resolveMandatedTools).not.toHaveBeenCalled();
   });
 });

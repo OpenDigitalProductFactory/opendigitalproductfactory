@@ -91,6 +91,8 @@ async function dispatchIdeateForApprovedBuildInner(params: {
   requestedReusabilityScope?: string;
   /** Bypass the designDoc idempotency guard (a fix-loop regeneration). */
   forceRegenerate?: boolean;
+  /** BI-3E57890E: the fix loop revising a plan-phase design saves the revision. */
+  allowPlanPhaseDesignRevision?: boolean;
 }): Promise<DispatchOutcome> {
   const {
     buildId,
@@ -99,6 +101,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
     requestedUserContext,
     requestedReusabilityScope,
     forceRegenerate = false,
+    allowPlanPhaseDesignRevision = false,
   } = params;
 
   const logActivity = async (summary: string): Promise<void> => {
@@ -334,7 +337,10 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         return { kind: "deferred-capacity", reason: "waiting for the platform upgrade to finish", durationMs: 0 };
       }
     }
-    try {
+    // BI-3E57890E: a plan-phase design revision runs inside the open plan
+    // phase. Reopening the finished ideate row would leave it open for good
+    // (only ideate → plan closes it), and quiescence reads it as in flight.
+    if (!allowPlanPhaseDesignRevision) try {
       const { startBuildPhaseRun } = await import("./build-phase-run");
       // Await the start. A later release must not race an unawaited insert
       // that would reopen the row after the attempt has already stopped.
@@ -482,7 +488,10 @@ async function dispatchIdeateForApprovedBuildInner(params: {
       "saveBuildEvidence",
       { buildId, field: "designDoc", value: ideateResult.designDoc },
       userId,
-      authoringAgentId ? { agentId: authoringAgentId } : {},
+      {
+        ...(authoringAgentId ? { agentId: authoringAgentId } : {}),
+        ...(allowPlanPhaseDesignRevision ? { allowPlanPhaseDesignRevision: true } : {}),
+      },
     );
 
     if (!saveResult.success) {
@@ -762,8 +771,17 @@ export function fixDiagnosisProblem(brief: unknown, designDoc: unknown): string 
 export async function dispatchDesignReviewFixLoop(params: {
   buildId: string;
   userId: string;
+  /**
+   * BI-3E57890E: a failing INDEPENDENT design review (design-spec,
+   * spec-approval, architecture-review) to revise from, in place of the build's
+   * own designReview. Its findings seed round 1; the revision is saved even
+   * though the build is in plan, and the feature regeneration path is used
+   * whatever the build kind, because the reviewer judged the design itself.
+   */
+  failedReview?: DesignReviewVerdict;
 }): Promise<{ kind: string; rounds: number }> {
-  const { buildId, userId } = params;
+  const { buildId, userId, failedReview } = params;
+  const independent = failedReview?.decision === "fail";
   const log = (s: string) =>
     prisma.buildActivity
       .create({ data: { buildId, tool: "design_fix_loop", summary: s.slice(0, 240) } })
@@ -799,7 +817,7 @@ export async function dispatchDesignReviewFixLoop(params: {
     });
     if (!build) return { kind: "build-not-found", rounds: 0 };
 
-    let review = build.designReview as DesignReviewVerdict;
+    let review = independent ? failedReview : (build.designReview as DesignReviewVerdict);
     if (review?.decision !== "fail") return { kind: "no-failed-review", rounds: 0 };
 
     // Fix builds: regenerating the designDoc cannot fill the missing fixContext
@@ -817,7 +835,7 @@ export async function dispatchDesignReviewFixLoop(params: {
     // The safety rule lives in fix-context-diagnosis.ts: a diagnosis is either
     // grounded or refused. A refusal escalates exactly as before — a guess
     // recorded as fact would become the evidence the plan phase builds on.
-    if (build.kind === "fix") {
+    if (build.kind === "fix" && !independent) {
       const { executeTool: runTool } = await import("@/lib/mcp-tools");
       const { buildFixDiagnosisPrompt, parseFixDiagnosis, isDiagnosisRefusal } = await import(
         "@/lib/build/fix-context-diagnosis"
@@ -918,7 +936,10 @@ export async function dispatchDesignReviewFixLoop(params: {
       round += 1;
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
-      const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
+      const regen = await dispatchIdeateForApprovedBuild({
+        buildId, userId, priorReviewFeedback: feedback,
+        ...(independent ? { allowPlanPhaseDesignRevision: true } : {}),
+      });
       if (regen.kind === "deferred-capacity") {
         // BI-5098ECEC: a busy host says nothing about the design. Give the round
         // back and stop; the reconciler resumes the loop when the host frees.

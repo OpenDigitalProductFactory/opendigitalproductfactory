@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn(async () => ({ error: null })) }));
+
 import {
   normalizeGapTopic,
   gapFingerprint,
   recordCoverageGap,
   type RecordCoverageGapClient,
 } from "./coverage-gap";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 describe("normalizeGapTopic", () => {
   it("lowercases, collapses whitespace, and strips trailing punctuation", () => {
@@ -81,6 +84,8 @@ describe("recordCoverageGap", () => {
     });
     expect(fake.pages[0].body).toContain("weekend pricing");
     expect(fake.revisions).toHaveLength(1);
+    // BI-23900D0A: every body write replaces the page's out-links.
+    expect(syncWikiPageLinks).toHaveBeenCalledWith(fake.db, expect.objectContaining({ organizationId: ORG, pageId: "wp_1" }));
   });
 
   it("is idempotent — the same question coalesces to one draft (dedup by fingerprint slug)", async () => {

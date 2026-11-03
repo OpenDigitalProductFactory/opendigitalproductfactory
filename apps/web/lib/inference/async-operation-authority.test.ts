@@ -6,6 +6,9 @@ import {
   type AsyncOperationAuthorityDatabase,
 } from "./async-operation-authority";
 
+const access = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/work-management/workroom-agent-access.server', () => ({ resolveCanonicalWorkroomActorAccess: access }));
+
 const digest = "a".repeat(64);
 
 function database(input?: {
@@ -71,36 +74,17 @@ describe("resolveServerOwnedAsyncOperationBinding", () => {
     })).rejects.toBeInstanceOf(AsyncOperationAuthorizationError);
   });
 
-  it("resolves a Workroom only for its exact executor, lease holder, or active participant", async () => {
-    const workroom = {
-      id: "workroom-row-1",
-      capsuleId: "WC-1",
-      executorRef: "session-1",
-      leaseHolderPrincipalId: "principal-lease",
-      participants: [{ principalId: "principal-participant", lifecycle: "active" }],
-    };
-    await expect(resolveServerOwnedAsyncOperationBinding({
-      request: { kind: "workroom", workroomId: "WC-1", requestKey: "logical-1", requestDigest: digest },
-      actor: { userId: "user-2", agentId: "session-1", principalId: null, isSuperuser: false },
-      db: database({ workroom }),
-    })).resolves.toEqual({
-      kind: "workroom",
-      workroomId: "workroom-row-1",
-      requestKey: "logical-1",
-      requestDigest: digest,
-    });
-
-    await expect(resolveServerOwnedAsyncOperationBinding({
-      request: { kind: "workroom", workroomId: "WC-1", requestKey: "logical-1", requestDigest: digest },
-      actor: { userId: "user-2", agentId: null, principalId: "principal-participant", isSuperuser: false },
-      db: database({ workroom }),
-    })).resolves.toMatchObject({ workroomId: "workroom-row-1" });
-
-    await expect(resolveServerOwnedAsyncOperationBinding({
-      request: { kind: "workroom", workroomId: "WC-1", requestKey: "logical-1", requestDigest: digest },
-      actor: { userId: "other", agentId: "other", principalId: "other-principal", isSuperuser: false },
-      db: database({ workroom }),
-    })).rejects.toBeInstanceOf(AsyncOperationAuthorizationError);
+  it("uses current canonical room action admission, never executor or lease identity", async () => {
+    const workroom = { id: "workroom-row-1", capsuleId: "WC-1", executorRef: "agent-1",
+      leaseHolderPrincipalId: "principal-1", participants: [{ principalId: "principal-1", lifecycle: "active" }] };
+    const actor = { userId: "user-1", agentId: "agent-1", principalId: "principal-1", isSuperuser: true };
+    const db = database({ workroom });
+    const input = { request: { kind: "workroom" as const, workroomId: "WC-1", requestKey: "logical-1", requestDigest: digest }, actor, db };
+    access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+    await expect(resolveServerOwnedAsyncOperationBinding(input)).rejects.toThrow("ASYNC_OPERATION_AUTHORITY_DENIED");
+    access.mockResolvedValue({ decision: { level: "action", reason: "authorized" } });
+    await expect(resolveServerOwnedAsyncOperationBinding(input)).resolves.toMatchObject({ workroomId: "workroom-row-1" });
+    expect(access).toHaveBeenLastCalledWith({ actor, workroomId: "workroom-row-1", requested: "action" }, db);
   });
 
   it("allows a superuser but fails closed for missing records and malformed identity", async () => {

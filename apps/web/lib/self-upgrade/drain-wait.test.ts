@@ -22,8 +22,8 @@ const db = vi.hoisted(() => ({
   platformConfigUpsert: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
+vi.mock("@dpf/db", () => {
+  const prisma = {
     taskRun: { findMany: db.taskRunFindMany, updateMany: db.taskRunUpdateMany },
     buildPhaseRun: { findMany: db.buildPhaseRunFindMany, updateMany: db.buildPhaseRunUpdateMany },
     $executeRaw: db.executeRaw,
@@ -35,8 +35,9 @@ vi.mock("@dpf/db", () => ({
       updateMany: db.quiescenceRunUpdateMany,
     },
     platformConfig: { findUnique: db.platformConfigFindUnique, upsert: db.platformConfigUpsert },
-  },
-}));
+  };
+  return { prisma: { ...prisma, $transaction: async (body: (tx: typeof prisma) => Promise<unknown>) => body(prisma) } };
+});
 
 const sendMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/jobs", () => ({ jobs: { send: sendMock } }));
@@ -382,6 +383,7 @@ describe("admission stays closed while a self-upgrade drain is live (restart mid
 
   it("reassertDrainingLevel closes admission again after an external reset to normal", async () => {
     level("normal", null);
+    db.quiescenceRunFindUnique.mockResolvedValue({ runId: "QR-1", status: "draining" });
     expect(await reassertDrainingLevel("QR-1")).toBe(true);
     expect(upsertedLevels()).toEqual([expect.objectContaining({ level: "draining", runId: "QR-1" })]);
   });

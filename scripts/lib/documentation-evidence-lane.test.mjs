@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifySlotRecord } from "./pregate-status.mjs";
 import { readLocalCiGateState } from "./local-ci-gate-state.mjs";
-import { collectToolchainFingerprint, defaultBuildStrategy } from "./local-integration-ci.mjs";
+import { collectToolchainFingerprint, createToolchainFingerprint, resolveLocalCiTestProfile, defaultBuildStrategy } from "./local-integration-ci.mjs";
 import {
   classifyMergeTreeResult,
   couldBeDocumentationFiles,
@@ -255,4 +255,21 @@ describe("pre-admission immutable gate identity", () => {
       "OpenDigitalProductFactory/opendigitalproductfactory",
     );
   });
+});
+
+it("forced exhaustive selection changes the real pre-admission gate key and final fingerprint", async () => {
+  const { deriveGateKey } = await import("../../apps/web/lib/gates/gate-run-identity.ts");
+  const defaults = collectToolchainFingerprint({ buildStrategy: "merge-queue", env: {} });
+  const forced = collectToolchainFingerprint({ buildStrategy: "merge-queue", env: { DPF_LOCAL_CI_VITEST_EXHAUSTIVE: "  verify selection  " } });
+  const identity = (toolchainFingerprint) => createPreAdmissionGateIdentity({
+    repository: "OpenDigitalProductFactory/opendigitalproductfactory",
+    plan: { headTreeSha: TREE, digest: "b".repeat(64) }, toolchainFingerprint,
+  });
+  assert.notEqual(deriveGateKey(identity(defaults.toolchainFingerprint)), deriveGateKey(identity(forced.toolchainFingerprint)));
+  assert.equal(createToolchainFingerprint({ ...defaults.toolchain,
+    testProfile: resolveLocalCiTestProfile({ DPF_LOCAL_CI_TEST_WORKERS: "4", DPF_LOCAL_CI_VITEST_EXHAUSTIVE: " " }),
+  }).toolchainFingerprint, defaults.toolchainFingerprint, "empty override preserves the prior default identity");
+  assert.equal(createToolchainFingerprint({ ...defaults.toolchain,
+    testProfile: resolveLocalCiTestProfile({ DPF_LOCAL_CI_VITEST_EXHAUSTIVE: "verify selection" }),
+  }).toolchainFingerprint, forced.toolchainFingerprint, "collector and explicit profile use the same normalized override");
 });

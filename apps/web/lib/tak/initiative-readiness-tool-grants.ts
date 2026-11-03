@@ -95,6 +95,12 @@ export type InitiativeReviewBindingPacket = {
       repositoryFullName: string;
       revisionId: string;
       valueDigest: string;
+    }
+    | {
+      kind: "repo-commit-range";
+      repositoryFullName: string;
+      ranges: Array<{ baseSha: string; headSha: string }>;
+      digest: string;
     };
 };
 
@@ -192,6 +198,8 @@ export type InitiativeRecoveryCanonicalArtifact =
   // bound by revision id and value digest and read with
   // `read_build_artifact_revision`. No repository artifact exists for it.
   | { resolved: true; kind: "feature-build-revision"; revisionId: string; valueDigest: string; buildId: string }
+  // BI-46E344FE: a merged repair's whole change, for the post-implementation review.
+  | { resolved: true; kind: "repo-commit-range"; ranges: Array<{ baseSha: string; headSha: string }>; digest: string }
   | { resolved: false; nextAction: string };
 
 type ResolvedRecoveryArtifact = Extract<InitiativeRecoveryCanonicalArtifact, { resolved: true }>;
@@ -644,7 +652,8 @@ function requestCoworkerPacket(args: {
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" && args.artifact.kind !== "document-version" ? args.artifact : null;
+  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" && args.artifact.kind !== "document-version"
+    && args.artifact.kind !== "repo-commit-range" ? args.artifact : null;
   const reviewSha = repoArtifact?.commitSha ?? args.dispatch.headSha;
   const readerTool = args.artifact?.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : IMMUTABLE_READER_TOOL;
   const objective = formatInitiativeReviewObjective({ ...args.dispatch,
@@ -690,6 +699,10 @@ function requestCoworkerPacket(args: {
         revisionId: args.artifact.revisionId,
         valueDigest: args.artifact.valueDigest,
       }
+      : args.artifact.kind === "repo-commit-range"
+      ? { kind: "repo-commit-range" as const, repositoryFullName: args.dispatch.repositoryFullName,
+        ranges: args.artifact.ranges.map((range) => ({ baseSha: range.baseSha, headSha: range.headSha })),
+        digest: args.artifact.digest }
       : {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: args.dispatch.repositoryFullName,

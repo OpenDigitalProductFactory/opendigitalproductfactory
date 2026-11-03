@@ -2,13 +2,13 @@ import type { PerformanceMetricDefinition } from "@dpf/storefront-templates";
 
 export type MetricUnit = PerformanceMetricDefinition["unit"];
 
-export function formatMetricValue(value: number | null, unit: MetricUnit): string {
+export function formatMetricValue(value: number | null, unit: MetricUnit, currency = "USD"): string {
   if (value === null) return "Not available";
   switch (unit) {
     case "currency":
       return new Intl.NumberFormat("en-US", {
         style: "currency",
-        currency: "USD",
+        currency,
       }).format(value);
     case "percent":
     case "rate":

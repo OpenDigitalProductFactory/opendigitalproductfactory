@@ -509,7 +509,10 @@ commissioning action evaluate one predicate, and refuse with
    install whose class is only the undeclared cautious default, cannot become the
    controller even with a local Workroom.
 8. The installation operating intent is valid, confirmed and has `evolve-dpf` as its
-   primary purpose.
+   primary purpose or as a declared secondary purpose. An install that operates an
+   organisation can also own platform repository follow-through (kernel decision
+   DI-A6148958CADB, 2026-10-21); the operator declares secondary purposes on the
+   installation identity panel.
 
 Only a user with `manage_platform` whose active human principal owns the Workroom may
 commission it. The queue function runs with a concurrency limit of one. A failing or
@@ -527,10 +530,14 @@ and repeated-poll checks pass. Retain old evidence for audit and rollback of the
 reader; no destructive migration or new model is required by this amendment.
 
 **Operating contract.** Separate intake detection from the weekly voting digest.
-The proposed internal target is hourly detection, acknowledgement and assignment
-within one business day, a disposition within two business days, and a weekly
-update while unresolved. These targets require owner ratification before being
-published as customer commitments. Urgent service, safety or security impact
+The owner ratified these internal targets on 2026-10-21 (the originally proposed
+hourly / one-day / two-day / weekly set was declined as too aggressive): detection
+every four hours, acknowledgement and assignment of external submissions within
+two business days, a triage disposition within five business days, and a
+meaningful progress update every two weeks while unresolved. The scheduled job's
+default cadence is every four hours; an install may tune it on the scheduled-work
+register. These are internal targets, not published customer commitments, until
+the owner says otherwise. Urgent service, safety or security impact
 uses the existing incident/escalation path. Routine external acknowledgement
 precedes internal suggestions; delivery order still considers severity, evidenced
 impact, age, dependencies and available capacity. Unknown origin remains visible
@@ -546,6 +553,40 @@ canonical item for disposition. Follow pagination to completion and distinguish
 partial reads from an empty queue. Comments, edits, closure and reopen events
 must reconcile through the existing issue bridge and source registry. Preserve
 source evidence and canonical delivery state when retiring duplicate imports.
+
+**Identity decision (BI-952F08BA, 2026-10-20).** Kernel decision DI-0C1759862297
+chose this section's design over BI-952F08BA's original schema acceptance criteria
+(a `sourceSystem` enum, an `upstreamRecordKey` column and a database unique
+constraint). Those criteria are superseded; no migration is part of this item.
+The delivered shape uses existing primitives only:
+
+- The origin id of an upstream issue is `owner/repo#<number>`, lowercased, taken
+  from the issue URL and falling back to the commissioned repository. An issue
+  with no resolvable repository is refused, never filed under a bare number.
+  The `intake_origin` payload records `source.repository`, `source.url`,
+  `source.state` and a content/state `source.fingerprint`.
+- `ingestBacklogItem` reconciles only when the caller opts in with `reconcile`;
+  other detectors keep their recurrence semantics (non-terminal match plus an
+  occurrence bump). A reconciled origin matches its item in every status. It
+  never bumps `occurrenceCount`, changes status or creates a second item. A new
+  `intake_origin` event with `change.kind` of `edited`, `closed` or `reopened`
+  is appended to the same item only when the fingerprint differs from the last
+  recorded one.
+- Legacy `[origin:ecosystem-upstream-issue:<n>]` markers are dual-read. A legacy
+  item matches only when its stored source URLs name exactly the same
+  repository. One mapping activity (`payload.mapping`, legacy id to qualified
+  id) is then appended, once. A legacy item whose URL names another repository
+  is a different issue. An unresolvable legacy item, or more than one
+  claimant, returns `needs-review`: nothing is created and no status changes.
+- The scheduled run summary reports created, unchanged, changed, recurred,
+  needs-review and failed counts, and names each origin awaiting review.
+
+Issue #4563 is the measured case. Its retired intake (BI-EADA73BA) and its
+re-created intake (BI-41C048D8) both carry the legacy marker and the same URL,
+so it now stops for review until an owner reconciles the pair. The sweep still
+reads open issues only, so a closure is not observed until the issue is read
+again. Closure and reopen events become complete when the reader moves to an
+incremental `state=all` read, which belongs to the reconciliation item (BI-CCD8D841) in the controller plan.
 
 **Action and communication.** Every unresolved actionable issue has an accountable
 owner, next action, due date, blocker and source link in the existing Work/Attention

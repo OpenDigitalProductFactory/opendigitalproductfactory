@@ -23,6 +23,8 @@ export type StatusBadgeProps = IntentProps & {
   variant?: Variant;
   size?: Size;
   uppercase?: boolean;
+  /** Body foreground on tinted/outlined labels; preserves semantic background and intent. */
+  textTone?: "intent" | "body";
   className?: string;
 };
 
@@ -31,16 +33,17 @@ const SIZE_CLASS: Record<Size, string> = {
   md: "px-2.5 py-1 text-xs leading-5",
 };
 
-function variantStyle(variant: Variant, intent: Intent): CSSProperties {
+function variantStyle(variant: Variant, intent: Intent, textTone: "intent" | "body"): CSSProperties {
   const { fg, border, softBg } = intentStyle(intent);
+  const text = textTone === "body" ? "var(--dpf-text)" : fg;
   switch (variant) {
     case "solid":
       return { backgroundColor: fg, borderColor: fg, color: "var(--dpf-surface-1)" };
     case "soft":
-      return { backgroundColor: softBg, borderColor: "transparent", color: fg };
+      return { backgroundColor: softBg, borderColor: "transparent", color: text };
     case "outline":
     default:
-      return { backgroundColor: "transparent", borderColor: border, color: fg };
+      return { backgroundColor: "transparent", borderColor: border, color: text };
   }
 }
 
@@ -53,6 +56,7 @@ export function StatusBadge({
   variant = "outline",
   size = "sm",
   uppercase = true,
+  textTone = "intent",
   className = "",
   ...rest
 }: StatusBadgeProps) {
@@ -74,7 +78,7 @@ export function StatusBadge({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={variantStyle(variant, intent)}
+      style={variantStyle(variant, intent, textTone)}
     >
       <span className="truncate">{text}</span>
     </span>

@@ -16,7 +16,8 @@
 #   IPv4 only. A loopback-http choice for Codex or Grok lives in that client's
 #   own config, never here (BI-8FD7C0C9).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
-#                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
+#                         only: DPF_MCP_CA_FILE, explicit DPF_PKI_TRUST_BUNDLE,
+#                         process NODE_EXTRA_CA_CERTS, then the install's .env,
 #                         then saved NODE_EXTRA_CA_CERTS, then ~/.dpf/pki/root_ca.crt.
 # Persisted for the installing user in the User environment (the Windows analog
 # of the POSIX env file + launchctl). Idempotent: a value already set is not
@@ -32,7 +33,7 @@ function Get-DpfInstallEnvValue {
     param([Parameter(Mandatory)][string]$InstallDir, [Parameter(Mandatory)][string]$Name)
     $envPath = Join-Path $InstallDir ".env"
     if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { return "" }
-    $line = Get-Content -LiteralPath $envPath | Where-Object { $_ -match "^$([Text.RegularExpressions.Regex]::Escape($Name))=" } | Select-Object -Last 1
+    $line = Get-Content -LiteralPath $envPath -Encoding UTF8 | Where-Object { $_ -match "^$([Text.RegularExpressions.Regex]::Escape($Name))=" } | Select-Object -Last 1
     if (-not $line) { return "" }
     return ($line.Substring($Name.Length + 1)).Trim().Trim('"')
 }
@@ -63,10 +64,13 @@ function Resolve-DpfMcpClientEnv {
     $bundle = ""
     if ($mcpUrl -like "https://*") {
         $defaultRoot = Join-Path (Join-Path (Join-Path $HomeDir ".dpf") "pki") "root_ca.crt"
-        $candidates = @($ExplicitBundle, (Get-DpfInstallEnvValue -InstallDir $InstallDir -Name "DPF_PKI_TRUST_BUNDLE"), ([string](& $GetUserEnv "NODE_EXTRA_CA_CERTS")), $defaultRoot)
+        # Selected configuration is authoritative even when broken. Never hide
+        # a missing override by substituting a different trust anchor.
+        $candidates = @($env:DPF_MCP_CA_FILE, $ExplicitBundle, $env:NODE_EXTRA_CA_CERTS, (Get-DpfInstallEnvValue -InstallDir $InstallDir -Name "DPF_PKI_TRUST_BUNDLE"), ([string](& $GetUserEnv "NODE_EXTRA_CA_CERTS")))
         foreach ($candidate in $candidates) {
-            if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { $bundle = $candidate; break }
+            if ($candidate) { $bundle = $candidate; break }
         }
+        if (-not $bundle -and (Test-Path -LiteralPath $defaultRoot -PathType Leaf)) { $bundle = $defaultRoot }
     }
     return [pscustomobject]@{ McpUrl = $mcpUrl; CaBundle = $bundle }
 }

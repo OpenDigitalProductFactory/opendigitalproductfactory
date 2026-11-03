@@ -131,7 +131,7 @@ test("allows root-clone git drift commands only with the explicit maintenance by
 });
 
 test("blocks direct Write/Edit targets when a surface is accidentally rooted at the merge checkout", () => {
-  for (const toolName of ["Write", "Edit", "MultiEdit"]) {
+  for (const toolName of ["Write", "Edit", "MultiEdit", "write", "search_replace"]) {
     const verdict = decideFileWrite({
       toolName,
       toolInput: { file_path: "apps/web/lib/routing/types.ts" },

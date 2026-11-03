@@ -8,7 +8,8 @@ import { sendMcpTaskRunExecutionEvent } from "@/lib/queue/mcp-task-run-events";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { createSemanticReviewRequest, parseSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { createSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { readPersistedSemanticReviewRequest as requestFor } from "./semantic-review-request-store";
 import { createPrismaSemanticReviewSingleFlightStore, deterministicTaskRunId } from "./semantic-review-single-flight";
 import { verifySemanticReviewAuthority } from "./semantic-review-authority";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
@@ -78,17 +79,6 @@ export async function enqueueSemanticReview(taskRunId: string): Promise<boolean>
   if (reserved.count !== 1) return false;
   try { await sendMcpTaskRunExecutionEvent(taskRunId, eventId); return true; }
   catch { return false; } // Persisted intent remains eligible for bounded reconciliation.
-}
-
-async function requestFor(row: Run): Promise<SemanticReviewRequest | null> {
-  const artifact = await prisma.taskArtifact.findUnique({
-    where: { artifactId: `semantic-review-request:${row.taskRunId}` }, select: { taskRunId: true, parts: true },
-  });
-  if (!artifact || artifact.taskRunId !== row.id || !Array.isArray(artifact.parts)) return null;
-  const packet = parseSemanticReviewRequest(object(artifact.parts[0]).data);
-  const metadata = object(row.a2aMetadata);
-  return packet && packet.actor.userId === row.userId && packet.gateKey === metadata.gateKey
-    && packet.input.identity.capsuleId === metadata.capsuleId && packet.digest === state(row).requestDigest ? packet : null;
 }
 
 type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";

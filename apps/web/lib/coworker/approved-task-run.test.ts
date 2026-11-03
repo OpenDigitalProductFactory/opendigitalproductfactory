@@ -55,6 +55,12 @@ beforeEach(() => {
 });
 
 describe("runApprovedTaskRequest", () => {
+  it("does not revive an uncertain legacy review when its old approval arrives", async () => {
+    const { db, resume } = fixtures({ task: { progressPayload: { executionUncertainty: { settlement: "unknown" } } } });
+    expect(await runApprovedTaskRequest(envelope, { db: db as never, resume: resume as never }))
+      .toEqual({ status: "not-run", reason: "task-bound" });
+    expect(resume).not.toHaveBeenCalled();
+  });
   it("resumes the waiting task as the coworker it asked for, under the credential that submitted it", async () => {
     const { db, resume } = fixtures();
     await expect(runApprovedTaskRequest(envelope, { db: db as never, resume: resume as never }))

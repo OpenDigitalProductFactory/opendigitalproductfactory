@@ -3,6 +3,52 @@ import { describe, expect, it } from "vitest";
 import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary, readinessShapeFromWorkShape } from "./entry-adapter";
 
 import { baseline, item, readyActivities, receipt, transitionObject } from "./entry-adapter.test-fixtures";
+import { decisionForIndependentReview } from "./design-phase-recovery";
+
+describe("medium repair of an independently approved legacy scope", () => {
+  it("keeps a stale approved baseline with its independent amendment writer", () => {
+    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+      ? { ...activity, payload: { ...baseline, profile: "fix", artifactRef: {
+        kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+        providerBlobId: "b".repeat(40), path: "docs/superpowers/specs/existing.md",
+      } } } : activity);
+    const projection = projectBacklogItemReadiness({
+      item: { ...item, type: "product", workType: "bug", workShape: "delivery-medium@1.0.0",
+        body: "## Acceptance\n- preserve the approved scope" },
+      activities, target: "implementation", transitionObject, authorization: "pass", capsuleIdentity: "pass",
+      currentDesign: { state: "verified", digest: "sha256:amended" }, evaluatedAt: "2026-10-19T11:00:00.000Z",
+    });
+    const owed = projection.decision.unmet.find(entry => entry.code === "OBJECTIVE_BASELINE_REQUIRED");
+    expect(projection.baselineId).toBe("baseline-1");
+    expect(owed).toMatchObject({ state: "stale", accountableRole: "design-checklist-reviewer" });
+    expect(owed?.nextAction).not.toContain("No spec approval is needed");
+    expect(decisionForIndependentReview("record_initiative_design_review", {
+      implementation: projection.decision,
+    })?.unmet).toContainEqual(owed);
+  });
+
+  it.each(["body", "unapproved", "inherited"])("does not grant an amendment route for %s scope", scenario => {
+    const scope = { ...baseline, profile: "fix", origin: scenario === "body" ? "item-body" : undefined,
+      approvalReceiptId: scenario === "unapproved" ? "" : baseline.approvalReceiptId,
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+        providerBlobId: "b".repeat(40), path: "docs/superpowers/specs/existing.md" } };
+    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+      ? { ...activity, payload: scope } : activity);
+    const projection = projectBacklogItemReadiness({
+      item: { ...item, type: "product", workType: "bug", workShape: "delivery-medium@1.0.0",
+        body: "## Acceptance\n- preserve scope ownership" },
+      activities: scenario === "inherited" ? [] : activities,
+      ...(scenario === "inherited" ? { inheritedScope: { parentItemId: item.itemId,
+        coverageActivityId: "parent-coverage", activities } } : {}),
+      target: "implementation", transitionObject, authorization: "pass", capsuleIdentity: "pass",
+      currentDesign: { state: "verified", digest: "sha256:amended" }, evaluatedAt: "2026-10-19T11:00:00.000Z",
+    });
+    expect(projection.decision.unmet.find(entry => entry.code === "OBJECTIVE_BASELINE_REQUIRED")?.accountableRole)
+      .not.toBe("design-checklist-reviewer");
+    expect(decisionForIndependentReview("record_initiative_design_review", { implementation: projection.decision }))
+      .toBeNull();
+  });
+});
 
 function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
   const decision = projectBacklogItemReadiness({
@@ -226,6 +272,26 @@ describe("projectBacklogItemReadiness", () => {
 
     expect(projection.governed).toBe(true);
     expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
+  });
+
+  it("quotes a bound design with no marked objectives on the design requirements (BI-93A0E9A7)", () => {
+    const parserError = "The artifact has no marked objective statements.";
+    const project = (scopeManifestError?: string) => projectBacklogItemReadiness({
+      item, activities: [], target: "plan", transitionObject, authorization: "pass",
+      capsuleIdentity: "pass", evaluatedAt: "2026-10-25T00:00:00.000Z",
+      ...(scopeManifestError ? { currentDesign: { state: "verified" as const, digest: "sha256:unmarked", scopeManifestError } } : {}),
+    });
+    for (const code of ["CANONICAL_DESIGN_REQUIRED", "SPEC_APPROVAL_REQUIRED"] as const) {
+      const nextAction = project(parserError).decision.unmet.find((entry) => entry.code === code)?.nextAction ?? "";
+      expect(nextAction).toContain(parserError);
+      expect(nextAction).toContain("OBJ-");
+      expect(nextAction).toContain("AC/OBJ table rows");
+      expect(nextAction).toContain("record_initiative_design_review");
+    }
+    const generic = project().decision.unmet.find((entry) => entry.code === "CANONICAL_DESIGN_REQUIRED")?.nextAction ?? "";
+    expect(generic).not.toContain(parserError);
+    expect(generic).not.toContain("OBJ-");
+    expect(generic).toContain('record_initiative_design_review(gate: "design-spec")');
   });
 
   it("fails closed for an implementation claim with only textual spec and plan hints", () => {
@@ -695,6 +761,14 @@ describe("v3: the bound delivery shape keys the gates", () => {
     it("leaves an unshaped item on the v2 table", () => {
       expect(unmet(project({ workShape: null }))).toContain("RESEARCH_REQUIRED");
     });
+  });
+
+  it("hands the active build's reviewed design through the summary projection (BI-8ECF7B5C)", () => {
+    const base = { item: { ...item, workShape: "delivery-medium@1.0.0", deliverySensitivity: "low" as const, body: "just prose" },
+      activities: [], hasSpec: false, hasPlan: false, evaluatedAt: "2026-10-13T00:00:00.000Z" };
+    const withDesign = projectBacklogItemReadinessSummary({ ...base, buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 3 } });
+    expect(withDesign.decisions.implementation.verdict).toBe("allowed");
+    expect(projectBacklogItemReadinessSummary(base).decisions.implementation.unmet.map((e) => e.code)).toContain("RESEARCH_REQUIRED");
   });
 
   it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {

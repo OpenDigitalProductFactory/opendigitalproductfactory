@@ -232,6 +232,10 @@ export function productionAcceptanceSweepPorts(db: SweepDb, now: Date, agentId: 
       }
       return outcomes;
     },
+    confirm: async (item) => {
+      const { advanceSubmitterConfirmation } = await import("./submitter-confirmation");
+      return advanceSubmitterConfirmation(item, productionSubmitterConfirmationPorts(db, now, agentId, write));
+    },
     resolveCloseAuthorisation: (): Promise<CloseAuthorisation> =>
       resolveCloseAuthorisation(agentId, productionCloseAuthorisationPorts(db)),
     close: async (item, decision, authorisation) => {
@@ -248,6 +252,98 @@ export function productionAcceptanceSweepPorts(db: SweepDb, now: Date, agentId: 
           }),
         } }),
       });
+    },
+  };
+}
+
+type ConfirmationActivityRow = { kind: string; recordedAt: Date; payload: unknown };
+type ConfirmationClient = {
+  backlogItem: { findUnique(args: unknown): Promise<{ itemId: string; body: string | null; lifecycleTags: string[];
+    activities: ConfirmationActivityRow[] } | null> };
+  backlogItemActivity: { create(args: unknown): Promise<unknown> };
+};
+
+/**
+ * The submitter question's I/O (BI-C899BB40). Reads one item's closure,
+ * confirmation rows and source changes; posts through the existing forge
+ * adapter with the managed-repository controller login only; notifies a
+ * founder demand cluster through the existing disposition notices; files a
+ * miss through fileAcceptanceMiss; records each step inside the sweep fence.
+ */
+export function productionSubmitterConfirmationPorts(
+  db: SweepDb,
+  now: Date,
+  agentId: string,
+  write: <T>(callback: (tx: SweepDb & SweepLeaseClient) => Promise<T>) => Promise<T>,
+): import("./submitter-confirmation").SubmitterConfirmationPorts {
+  const client = db as unknown as ConfirmationClient;
+  return {
+    now,
+    loadState: async (item) => {
+      const { SUBMITTER_CONFIRMATION_ACTIVITY_KIND } = await import("./acceptance-sweep-page");
+      const row = await client.backlogItem.findUnique({
+        where: { id: item.id },
+        select: { itemId: true, body: true, lifecycleTags: true,
+          activities: { where: { kind: { in: ["status_change", SUBMITTER_CONFIRMATION_ACTIVITY_KIND, "intake_origin"] } },
+            orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: 200,
+            select: { kind: true, recordedAt: true, payload: true } } },
+      });
+      const closure = row?.activities.find((activity) => activity.kind === "status_change");
+      if (!row || !closure || !closure.payload || typeof closure.payload !== "object" || Array.isArray(closure.payload)) return null;
+      const after = (activity: ConfirmationActivityRow) => activity.recordedAt.getTime() >= closure.recordedAt.getTime();
+      return {
+        itemId: row.itemId,
+        body: row.body,
+        lifecycleTags: row.lifecycleTags ?? [],
+        closure: { recordedAt: closure.recordedAt, payload: closure.payload as Record<string, unknown> },
+        records: row.activities.filter((activity) => activity.kind === SUBMITTER_CONFIRMATION_ACTIVITY_KIND && after(activity)),
+        sourceChanges: row.activities.flatMap((activity) => {
+          if (activity.kind !== "intake_origin" || !after(activity)) return [];
+          const change = (activity.payload as { change?: { kind?: unknown } } | null)?.change;
+          return typeof change?.kind === "string" ? [{ recordedAt: activity.recordedAt, kind: change.kind }] : [];
+        }),
+      };
+    },
+    postIssueComment: async (repository, number, body) => {
+      const { resolveRepositoryControllerToken } = await import("@/lib/contributor-change-lanes/github-rest-reader");
+      const token = await resolveRepositoryControllerToken(db as never);
+      if (!token) return { sent: false, reason: "no-credential", message: "No managed-repository controller login is connected." };
+      const { GitHubForgeAdapter } = await import("@/lib/forge/github-adapter");
+      const posted = await new GitHubForgeAdapter({ token }).commentOnIssue({ repository, number, body, egressClass: "own-repo" });
+      if (posted.ok) return { sent: true, url: posted.commentUrl };
+      // Network, 5xx and rate limits are retryable; 401/403/404/422 are not.
+      return { sent: false, reason: posted.retryable || posted.category === "retryable" ? "transient" : "permanent",
+        message: `${posted.category}: ${posted.message}` };
+    },
+    notifyCluster: async (clusterId, message) => {
+      try {
+        const { prisma: client } = await import("@dpf/db");
+        const cluster = await client.founderDemandCluster.findUnique({ where: { clusterId }, include: { members: true } });
+        if (!cluster) return { sent: true, queued: 0 };
+        const { queueFounderDispositionNotices } = await import("@/lib/federation/demand-disposition");
+        // Its own notice identity, so the peer does not dedupe it against the
+        // cluster's original acceptance notice.
+        const result = await queueFounderDispositionNotices(client as never, {
+          clusterId: `${cluster.clusterId}:delivered`, decision: "accepted", message,
+          members: cluster.members.map((member) => ({ originInstallationId: member.originInstallationId,
+            envelopeId: member.envelopeId, mirrorRefs: member.mirrorRefs })),
+        });
+        return { sent: true, queued: result.queued };
+      } catch (error) {
+        // A database or delivery-queue error is not a property of the cluster: retry.
+        return { sent: false, reason: "transient", message: error instanceof Error ? error.message : "unknown error" };
+      }
+    },
+    fileCorrective: async (args) => {
+      const { fileAcceptanceMiss } = await import("@/lib/backlog/pr-submit-awaiting-acceptance");
+      return fileAcceptanceMiss(args);
+    },
+    record: async (item, payload, summary) => {
+      const { SUBMITTER_CONFIRMATION_ACTIVITY_KIND } = await import("./acceptance-sweep-page");
+      await write((tx) => (tx as unknown as ConfirmationClient).backlogItemActivity.create({ data: {
+        backlogItemId: item.id, kind: SUBMITTER_CONFIRMATION_ACTIVITY_KIND, summary: summary.slice(0, 500),
+        payload, recordedByAgentId: agentId,
+      } }));
     },
   };
 }

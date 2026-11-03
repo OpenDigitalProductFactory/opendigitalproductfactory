@@ -112,6 +112,7 @@ function existingRun(
     id: "task-internal",
     taskRunId: "TR-MCP-REAPER-STALLED",
     userId: "user-1",
+    currentAgentId: params.agentId,
     threadId: "thread-external",
     contextId: "thread-external",
     status,
@@ -146,7 +147,7 @@ describe("reaper-stalled terminal writer resumption", () => {
     });
     db.update.mockResolvedValue({});
     db.updateMany.mockResolvedValue({ count: 1 });
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue(existingRun("working"));
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "build-specialist",
       displayName: "Build Lead",

@@ -5,6 +5,7 @@
 // copied closure, and passes against the live repo.
 
 import assert from "node:assert/strict";
+import { readFileSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { test } from "node:test";
@@ -150,4 +151,22 @@ test("the checked-in fixtures copy every module their copies statically import",
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /\[fixture-script-imports\] OK/);
+});
+
+// Conformance: the real copied-package fixture must remain visible to the shared guard.
+test("the copied-package binder closure is checked, including a missing-helper negative control", () => {
+  const file = "packages/dpf-skill-pack/hooks/worktree-create.test.mjs";
+  const source = readFileSync(path.join(REPO_ROOT, file), "utf8");
+  const copies = findFixtureCopies(source, path.join(REPO_ROOT, file));
+  assert.ok(copies.some(copy => copy.dest === "source checkout #1/scripts/lib/mcp-host-trust.mjs"),
+    "the real binder dependency loop must be visible to the existing copy parser");
+  const io = { repoRoot: REPO_ROOT,
+    readSource: absolute => { try { return readFileSync(absolute, "utf8"); } catch { return null; } },
+    isDirectory: absolute => statSync(absolute, { throwIfNoEntry: false })?.isDirectory() ?? false };
+  assert.deepEqual(findMissingFixtureImports([{ file, source }], io, {}), []);
+  const removed = source.replace('"scripts/lib/foreground-gate-process.mjs", ', "");
+  assert.notEqual(removed, source, "the negative control must remove the actual helper copy");
+  const missing = findMissingFixtureImports([{ file, source: removed }], io, {});
+  assert.ok(missing.some(entry => entry.importer === "scripts/lib/mcp-host-trust.mjs"
+    && entry.missing === "source checkout #1/scripts/lib/foreground-gate-process.mjs"));
 });

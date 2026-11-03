@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { renderConsentPage, renderConsentRefusal, htmlResponse } from "./oauth-consent-page";
 import type { PublicScope } from "./oauth-scope-map";
+import { adminPageLocationLabel } from "@/lib/navigation/admin-location";
 
 const assistant = {
   kind: "resolved" as const,
@@ -27,6 +28,13 @@ const base = {
 };
 
 describe("consent rendering", () => {
+  // BI-DB506554: the footer named "Admin › Platform Development › MCP", which no menu shows.
+  it("names the menu path to the agent access controls from the navigation model", () => {
+    const html = renderConsentPage(base);
+    const path = adminPageLocationLabel("/admin/platform-development").replace(/&/g, "&amp;");
+    expect(html).toContain(`in ${path} › Agent access for one account.`);
+    expect(html).not.toContain("Platform Development &rsaquo; MCP");
+  });
   it("shows routine delegation and retained checks beside the requested permissions", () => {
     const html = renderConsentPage(base);
     expect(html).toContain("without another approval for each action");

@@ -16,11 +16,8 @@ export const AUTONOMY_LEVELS = ["shadow", "propose", "supervised", "autopilot"] 
 export type AutonomyLevel = (typeof AUTONOMY_LEVELS)[number];
 
 /** Buckets actions by reversibility / blast radius. */
-export type RiskClass =
-  | "read-only"
-  | "internal-reversible"
-  | "internal-irreversible"
-  | "outbound-or-floor"; // the kernel floor: irreversible/outbound/financial/access-control
+import type { RiskClass } from "@dpf/validators/policy-types";
+export type { RiskClass } from "@dpf/validators/policy-types";
 
 /**
  * Highest autonomy a risk-class may ever reach. The kernel floor is capped at

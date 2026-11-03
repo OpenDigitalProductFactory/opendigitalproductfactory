@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { CARE_INTAKE_SOURCE_MODES } from "@dpf/db/healthcare-care-intake";
+
 import { buildAnimalIntakeRequirementSnapshot } from "./intake-policy";
 import {
   IntakeCommandError,
@@ -74,6 +76,24 @@ describe("recordAnimalIntake", () => {
     expect(packet.requirementSnapshot).toEqual(buildAnimalIntakeRequirementSnapshot());
     expect(packet.patientProfileId).toBeUndefined();
     expect(tx.resourceCapacityAllocation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ resourceId: "kennel-1", idempotencyKey: "intake:req-1" }) }));
+  });
+
+  // BI-6A41ADCD: the packet and its first status event carry a sourceMode that
+  // CareIntakePacket_source_mode_check / CareIntakeStatusEvent_source_mode_check
+  // accept. "operator" is not in that vocabulary, so every admission rolled back
+  // with a 23514 and the page said only "The intake could not be saved".
+  it("records the admission in a source mode the intake tables accept", async () => {
+    const { db, tx } = fixture();
+    tx.animalProfile.findFirst.mockImplementation(async (args: { where: { animalRef?: string } }) =>
+      args.where.animalRef ? { animalRef: args.where.animalRef } : null);
+
+    await recordAnimalIntake({ db, context: CONTEXT, command: COMMAND });
+
+    const packet = (tx.careIntakePacket.create.mock.calls[0]![0] as { data: Row }).data;
+    const statusEvent = (tx.careIntakeStatusEvent.create.mock.calls[0]![0] as { data: Row }).data;
+    expect(CARE_INTAKE_SOURCE_MODES).toContain(packet.sourceMode);
+    expect(CARE_INTAKE_SOURCE_MODES).toContain(statusEvent.sourceMode);
+    expect(packet.sourceMode).toBe("staff-assisted");
   });
 
   it("opens a legal hold as its own stage and records the hold facts on the episode", async () => {

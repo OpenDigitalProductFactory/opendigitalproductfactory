@@ -6,6 +6,8 @@ middle, ~half a day of work end-to-end.
 
 **Current procedure:** this page records the historical rollout. The [build gate runbook](../architecture/build-gate-runbook.md) owns current verification, including the public documentation build added after a post-merge Liquid rendering failure (BI-B97611BC).
 
+The same merge-authority rule now covers agent toolchain bootstrap checks: POSIX adapter smoke and stock macOS Python run as a reusable CI dependency of required Merge Readiness. Their failures cannot be hidden behind a successful independent workflow. See the [contributor gate guide](../testing/pre-pr-gate.md#where-ci-runs-it) for current scope and diagnostics.
+
 ## What motivated this
 
 A 2-day CodeQL burn-down absorbed 100+ alerts that landed on `main` BEFORE

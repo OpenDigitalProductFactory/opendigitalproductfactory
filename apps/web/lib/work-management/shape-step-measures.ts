@@ -88,6 +88,30 @@ function weigh(rows: readonly StepSnapshot[]): Weighted {
   return w;
 }
 
+/** A step's typical wait over its snapshots (dwell − process), or null when it is too few to measure. */
+export function typicalStepWaitMs(rows: readonly StepSnapshot[]): number | null {
+  const w = weigh(rows);
+  if (w.exits < MIN_BASELINE_EXITS || w.processExits === 0) return null;
+  const dwellMs = w.dwell / w.exits;
+  return dwellMs - Math.min(dwellMs, w.process / w.processExits);
+}
+
+/**
+ * The pile where the most waiting accrues: rooms held × the step's typical
+ * wait (spec §8, Lean VSM). A step too few to measure is never ranked on a
+ * guessed wait; only when no held step is measured does rooms held decide.
+ */
+export function topByWaitTimesQueue<T extends { roomsHeld: number; waitMs: number | null }>(piles: readonly T[]): T | null {
+  const held = piles.filter((pile) => pile.roomsHeld > 0);
+  const measured = held.filter((pile) => pile.waitMs != null);
+  const score = measured.length > 0 ? (pile: T) => pile.roomsHeld * pile.waitMs! : (pile: T) => pile.roomsHeld;
+  let top: T | null = null;
+  for (const pile of measured.length > 0 ? measured : held) {
+    if (!top || score(pile) > score(top) || (score(pile) === score(top) && pile.roomsHeld > top.roomsHeld)) top = pile;
+  }
+  return top;
+}
+
 export function computeShapeStepMeasures(input: {
   shapeRef: string;
   stages: readonly { key: string; title: string }[];

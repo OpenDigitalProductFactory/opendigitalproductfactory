@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const bindingPorts = vi.hoisted(() => ({ load: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/lib/runtime-coordination/small-acceptance-binding.server", () => ({
+  loadSmallAcceptanceContext: bindingPorts.load,
+  refreshSmallAcceptanceSnapshot: bindingPorts.refresh,
+}));
+
 const mockPrisma = {
   runtimeTarget: {
     create: vi.fn(),
@@ -9,6 +15,7 @@ const mockPrisma = {
   },
   runtimeVerification: {
     create: vi.fn(),
+    findUnique: vi.fn(),
   },
   buildActivity: {
     create: vi.fn(),
@@ -40,11 +47,39 @@ vi.mock("@/lib/identity/principal-linking", () => ({
 
 function resetMocks() {
   vi.clearAllMocks();
+  bindingPorts.load.mockReset(); bindingPorts.refresh.mockReset();
+  mockPrisma.runtimeVerification.findUnique.mockReset();
   mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma));
 }
 
 describe("runtime coordination MCP tools", () => {
   beforeEach(() => resetMocks());
+
+  it("composes authoritative Small binding and projection with the authenticated actor", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-26T10:04:00Z"));
+      bindingPorts.load.mockResolvedValue({ itemId: "BI-ONE", closureId: "closure-1", workCapsuleId: "room-1",
+        repositoryFullName: "owner/repo", headSha: "a".repeat(40), mergeCommitSha: "b".repeat(40), servedSha: "c".repeat(40),
+        deploymentRunId: "SUR-1", deploymentCompletedAt: "2026-10-26T10:00:00.000Z", effectiveShape: "small",
+        closureRecordedAt: "2026-10-26T10:01:00.000Z" });
+      mockPrisma.runtimeVerification.findUnique.mockResolvedValue(null);
+      mockPrisma.runtimeVerification.create.mockImplementation(async ({ data }) => ({ id: "native-row", ...data }));
+      const { recordRuntimeVerificationTool } = await import("@/lib/runtime-coordination/mcp-handlers");
+      const result = await recordRuntimeVerificationTool({ verificationId: "RV-BOUND", kind: "final-acceptance", status: "passed",
+        workCapsuleId: "room-1", backlogActivityId: "closure-1", command: "drive canonical recovery",
+        startedAt: "2026-10-26T10:02:00Z", completedAt: "2026-10-26T10:03:00Z", result: { observed: "not-dispatched refusal" },
+      }, "user-1", { agentId: "codex" });
+      expect(result.success).toBe(true);
+      expect(mockPrisma.runtimeVerification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+        result: expect.objectContaining({ smallRuntimeAcceptance: expect.objectContaining({
+          actor: { userId: "user-1", agentId: "codex", principalId: "principal-agent" },
+        }) }),
+      }) }));
+      expect(bindingPorts.load).toHaveBeenCalledTimes(2);
+      expect(bindingPorts.refresh).toHaveBeenCalledWith(mockPrisma, "BI-ONE");
+    } finally { vi.useRealTimers(); }
+  });
 
   it("exposes bounded projection verification without business identity parameters", async () => {
     const { runtimeCoordinationPack } = await import("./runtime-coordination-pack");

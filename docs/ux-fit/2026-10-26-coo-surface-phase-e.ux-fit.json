@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "extra-fields-in-details",
+  "decisionInteractionId": "DI-B79D1F597C08",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "extra-fields-in-details",
+      "add-coo-columns",
+      "new-ops-coo-route"
+    ]
+  },
+  "notes": "Phase E continues the recorded /ops/workrooms inventory refactor (DI-B79D1F597C08, docs/ux-fit/2026-10-13-workrooms-human-operations.ux-fit.json). Extra COO fields (last cycle/action, ticks, next wake, span, unowned/paused, escalation, missing acks) stay inside existing row details plus one Supervision disclosure so default-visible words and primary actions do not grow. Title and Open room both use the room case URL. Broadcast is MCP-only on this slice."
+}

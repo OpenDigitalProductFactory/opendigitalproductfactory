@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "entry": "kernel/index.ts",
+  "runtimeDependencies": [],
+  "sources": [
+    "packages/storefront-templates/src/operations/contracts.ts",
+    "packages/storefront-templates/src/operations/semantic-intent.ts",
+    "packages/storefront-templates/src/operations/source-health.ts",
+    "packages/storefront-templates/src/operations/template.ts",
+    "packages/storefront-templates/src/operations/snapshot.ts",
+    "packages/storefront-templates/src/operations/customer.ts",
+    "packages/storefront-templates/src/operations/custody.ts",
+    "packages/storefront-templates/src/operations/index.ts"
+  ],
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3"
+  },
+  "license": "Apache-2.0",
+  "sourceBaseline": "4fa796b64425b6129f172a01b89d8c8887c065fc",
+  "qualification": "Synthetic software/customer and custody read-model fixtures. No authenticated host authority, live business outcome, command execution, UI accessibility/mobile or production qualification."
+}

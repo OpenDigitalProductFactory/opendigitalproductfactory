@@ -283,6 +283,7 @@ export async function runContributorInventorySync(
           headBranch?: string;
           state?: "open" | "merged" | "closed";
           isDraft?: boolean;
+          mergedAt?: string | null;
         } | null;
         if (!payload?.repositoryFullName || typeof payload.number !== "number" || !payload.url || !payload.headBranch) {
           return [];
@@ -298,6 +299,7 @@ export async function runContributorInventorySync(
           headBranch: payload.headBranch,
           state: payload.state,
           isDraft: payload.isDraft === true,
+          mergedAt: typeof payload.mergedAt === "string" ? payload.mergedAt : null,
         }];
       });
       await applyObservedPullRequestsToBacklog(observations);

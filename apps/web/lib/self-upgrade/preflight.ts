@@ -6,6 +6,10 @@ import type { ReadinessOwner, VerifiedReleaseIdentity } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
 import { resolveSelfUpgradeHostIdentity, type SelfUpgradeHostIdentity } from "./config";
+import { readReassessmentImageContract, reassessmentRefusalDetail, refuseReassessmentWithDetail, type ReassessmentContractPorts } from "@/lib/mcp-task-reassessment-contract";
+import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
+import { resolvePulledReleaseImage } from "./release-image-reference";
+import type { ReassessmentRuntimeCompatibility } from "@/lib/shared/reassessment-owner-versions";
 
 type EmitFailure = (runId: string) => Promise<unknown>;
 
@@ -15,6 +19,7 @@ type PromoterRuntime = Pick<
 >;
 type RecordReadiness = typeof import("./run-store").recordPromoterReadiness;
 type FailRun = typeof import("./run-store").failRun;
+type RecordCompatibility = typeof import("./run-store").recordReassessmentCompatibility;
 type ReadinessFailure = { code: string; message: string; remediation?: string };
 
 type PrePullDoctools = typeof import("./doctools-release-image").prePullReleaseDoctoolsImage;
@@ -22,6 +27,63 @@ type PrePullDoctools = typeof import("./doctools-release-image").prePullReleaseD
 export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
   | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" | "doctools-prepull-failed" };
+
+export type ReassessmentCandidatePreflightResult = ActionSuccess<{ proof?: ReassessmentRuntimeCompatibility }>
+  | { ok: false; reason: "reassessment-compatibility-unproven" };
+
+/** Prove the candidate's packaged owners without branding the executing portal. */
+export async function runReassessmentCandidatePreflight(params: {
+  runId: string; targetSha: string; composeProject?: string; release?: VerifiedReleaseIdentity; dryRun?: boolean;
+  stage: "preflight" | "swap"; failRun: FailRun; emitFailure: EmitFailure; recordCompatibility: RecordCompatibility;
+  runDocker?: ReassessmentContractPorts["runDocker"];
+}): Promise<ReassessmentCandidatePreflightResult> {
+  if (params.dryRun) return ok({});
+  const targetSha = params.targetSha, releaseDigest = params.release?.configDigest, hasRelease = params.release !== undefined;
+  const runDocker: ReassessmentContractPorts["runDocker"] = params.runDocker ?? (async args => {
+    const nameIndex = args.indexOf("--name");
+    const result = await runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192,
+      ...(nameIndex >= 0 ? { containerName: args[nameIndex + 1] } : {}) });
+    if (result.outputLimitExceeded) refuseReassessmentWithDetail("docker-output-oversized");
+    return result;
+  });
+  try {
+    if (!/^[a-f0-9]{40}$/.test(targetSha)) refuseReassessmentWithDetail("target-sha-invalid");
+    if (hasRelease && (typeof releaseDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(releaseDigest))) refuseReassessmentWithDetail("release-identity-invalid");
+    const project = params.composeProject ?? "dpf";
+    if (!releaseDigest && !/^[a-z0-9][a-z0-9_-]*$/.test(project)) refuseReassessmentWithDetail("compose-project-invalid");
+    const inspect = async () => {
+      const result = await runDocker(["image", "inspect", "--format", "{{.Id}}", `${project}-portal`]);
+      const value = result.stdout.trim();
+      if (result.exitCode !== 0 || !/^sha256:[a-f0-9]{64}$/.test(value)) {
+        refuseReassessmentWithDetail(`source-image-unresolved (${project}-portal): ${(result.stderr.trim() || value || "no id").slice(0, 300)}`);
+      }
+      return value;
+    };
+    const release = params.release;
+    // BI-A9BA9583: the engine names a pulled release by its config digest on
+    // the classic image store but by its index (channel) digest on the
+    // containerd store; release-image-reference.ts resolves either.
+    const resolveRelease = async (): Promise<{ ref: string; id: string }> => {
+      const resolution = await resolvePulledReleaseImage(runDocker, `ghcr.io/${release!.ghcrOwner}/dpf-portal`, release!);
+      return resolution.image ?? refuseReassessmentWithDetail(`release-image-unresolved: ${resolution.attempts.join("; ")}`);
+    };
+    const resolved = release ? await resolveRelease() : null;
+    const configDigest = resolved?.id ?? await inspect();
+    const proof = await readReassessmentImageContract(configDigest, targetSha, runDocker);
+    if (!releaseDigest && await inspect() !== configDigest) refuseReassessmentWithDetail(`image-moved: ${project}-portal changed during the probe`);
+    try {
+      await params.recordCompatibility(params.runId, { stage: params.stage, observedAt: new Date().toISOString(), proof });
+    } catch (error) { refuseReassessmentWithDetail(`proof-unrecorded: ${getErrorMessage(error)}`); }
+    return ok({ proof });
+  } catch (error) {
+    // BI-578131A3: callers keep the typed reason; the run row carries the cause.
+    const detail = reassessmentRefusalDetail(error);
+    const subcode = detail.split(/[\s:(]/, 1)[0] || "unspecified";
+    await params.failRun(params.runId, `reassessment-compatibility-unproven: ${detail}`, `reassessment-compatibility-unproven: ${subcode}`);
+    await params.emitFailure(params.runId);
+    return { ok: false, reason: "reassessment-compatibility-unproven" };
+  }
+}
 
 /**
  * Resolve the host path bound to /backups in the readiness container, mirroring

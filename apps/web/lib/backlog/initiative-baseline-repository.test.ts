@@ -51,7 +51,9 @@ const locator = {
   providerBlobId: "b".repeat(40),
 };
 
-const boundTask = { taskRunId: "TR-MCP-SPEC-BOUND", requestDigest: "9".repeat(64) };
+const boundTask = { taskRunId: "TR-MCP-SPEC-BOUND", requestDigest: "9".repeat(64), executionFence: {
+  schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "9".repeat(64),
+} };
 const boundApproval = { itemId: "BI-TEST", profile: "feature" as const, artifactRole: "design-spec" as const,
   artifactRef: locator, expectedCurrentBaselineId: null, supersessionDispositions: [], resolvedFindingRefs: [],
   reason: "Independent review.", reviewerUserId: "user-reviewer", reviewerAgentId: "agent-reviewer",
@@ -103,7 +105,7 @@ function boundPublication() {
     policyVersion: "authority-v1", organizationId: "org-1", rationale: { taskRunId: boundTask.taskRunId },
   }));
   const task = { id: "task-row", taskRunId: boundTask.taskRunId, userId: boundApproval.reviewerUserId,
-    currentAgentId: boundApproval.reviewerAgentId, status: "working", a2aMetadata: {
+    currentAgentId: boundApproval.reviewerAgentId, status: "working", progressPayload: {} as Record<string, unknown>, a2aMetadata: {
       trigger: "external-mcp", requestDigest: boundTask.requestDigest, initiativeReviewBinding: {
         writerToolName: "record_initiative_design_review", itemId: boundApproval.itemId, gate: "spec-approval",
         artifactRef: locator, expectedCurrentBaselineId: null,
@@ -179,6 +181,39 @@ describe("recordInitiativeSpecApproval", () => {
     expect(state.activities.filter((row) => row.kind === "initiative_scope_baseline")).toHaveLength(1);
     expect(mocks.documentCreate).toHaveBeenCalledOnce();
     expect(mocks.pinCreate).toHaveBeenCalledOnce();
+  });
+
+  it.each(["input-required", "completed", "failed"])("does not append a baseline for a %s task", async (status) => {
+    const state = boundPublication();
+    state.task.status = status;
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(mocks.documentCreate).not.toHaveBeenCalled();
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+  });
+
+  it.each(["uncertainty", "reservation", "dispatch", "authority"])("refuses a baseline after its execution %s changes", async (change) => {
+    const state = boundPublication();
+    if (change === "uncertainty") state.task.progressPayload.executionUncertainty = { settlement: "unknown" };
+    if (change === "reservation") state.task.progressPayload.resumeReservedAt = "later";
+    if (change === "dispatch") state.task.progressPayload.dispatch = { claimedAt: "later" };
+    if (change === "authority") state.task.progressPayload.reviewExecutionAuthority = { schemaVersion: 1, tokenId: "later" };
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+  });
+
+  it("reads a genuine retained baseline after a task hold without creating another effect", async () => {
+    const state = boundPublication();
+    const first = await recordInitiativeSpecApproval(boundApproval);
+    if (!first.ok) throw new Error("Expected an original retained baseline.");
+    state.task.status = "input-required";
+    state.task.progressPayload.executionUncertainty = { settlement: "unknown" };
+    mocks.activityCreate.mockClear(); mocks.pinCreate.mockClear(); mocks.documentCreate.mockClear();
+    expect(await recordInitiativeSpecApproval(boundApproval)).toMatchObject({ ok: true, baselineId: first.baselineId, deduplicated: true });
+    expect(mocks.activityCreate).not.toHaveBeenCalled();
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+    expect(mocks.documentCreate).not.toHaveBeenCalled();
   });
 
   it("preserves a rejecting spec verdict instead of creating an approval baseline", async () => {

@@ -142,7 +142,7 @@ export async function loadProviderHealthBatch(
       const lifecycle = providersById.get(providerId)?.status;
       result.set(providerId, {
         status: "rejected",
-        configured: lifecycle !== undefined && lifecycle !== "unconfigured" && lifecycle !== "inactive",
+        configured: lifecycle !== undefined && lifecycle !== "unconfigured",
       });
     }
   }

@@ -39,6 +39,8 @@ function invalid(error: string): InitiativeScopeManifestResult {
   return { ok: false, code: "manifest-invalid", error };
 }
 
+export const NO_MARKED_OBJECTIVE_STATEMENTS = "The artifact has no marked objective statements.";
+
 /** GFM removes the slash immediately before a pipe before parsing inline text. */
 function tableCells(line: string): string[] | null {
   const cells: string[] = [];
@@ -158,7 +160,7 @@ export function parseInitiativeScopeManifest(
     });
   }
 
-  if (objectives.length === 0) return invalid("The artifact has no marked objective statements.");
+  if (objectives.length === 0) return invalid(NO_MARKED_OBJECTIVE_STATEMENTS);
   if (acceptance.length === 0) return invalid("The artifact has no marked acceptance statements.");
   for (const entry of acceptance) {
     const unknownLinks = entry.objectiveIds.filter(id => !objectiveIds.has(id));

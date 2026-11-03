@@ -80,6 +80,52 @@ The contract remains `get_my_approval_status`, `readApprovalOutcome` and
 `apps/web/lib/coworker/approval-outcome-store.test.ts`. LIVE-DISCOVERY denotes
 canonical MCP pending-mode verification after deployment.
 
+**Pending discovery scope clarification — BI-83638ACC**
+
+The canonical `ec7d2fe41d9393180f6003b946291b83cd464fa1` install reproduced a
+scope error after the operator's October 25 update. The same signed-in Inbox
+showed ten routine envelopes, while the COO called pending discovery and
+received zero requests for its own user/assistant pair. It then incorrectly
+reported that the owner's whole Inbox was empty. The store's isolation worked;
+the result contract did not make its inventory limit sufficiently explicit.
+This is separate from BI-372D6E2E's displayed overflow count, BI-61DE8177's
+orphaned owner warning, and BI-0012E6CA's expiry behavior; all three delivered
+items were read before this repair was scoped.
+
+The objective is truthful scope, without an additional reader or broader
+authority. Extend the existing pending-mode handler result with a scope naming
+the authenticated delegating user and current coworker, an explicit
+`coversOwnerInbox: false`, and `ownerInboxTotal: null`. Null means unmeasured,
+not zero. The handler derives identity from execution context; supplied identity
+fields cannot influence the query or scope. Existing approvals, `hasMore` and
+Inbox location retain their meaning. Exact-ID results remain byte-for-byte
+unchanged. No other coworker's rows, raw arguments, new grants, approval,
+retry, ownership transfer, schema or migration belongs to this repair.
+
+Ordered implementation and verification:
+
+1. `SCOPE-RED`: fail handler regressions for empty, nonempty and bounded pages,
+   including caller-supplied identity and unchanged exact mode. Reuse the store's
+   existing user/assistant isolation tests; never add an all-owner query.
+2. `SCOPE-CONTRACT`: add the scoped metadata at the existing handler boundary.
+   Empty-result copy must explicitly say that the owner's Inbox may still have
+   requests from other coworkers. Nonempty and bounded results carry the same
+   coverage limit, without implying a complete owner inventory.
+3. `SCOPE-GREEN`: run graph-related and colocated pack/store tests, both web
+   typechecks and applicable guards. Update the existing Inbox guide. Record
+   this item's evidence separately from the related human-presentation work
+   BI-038AA4BC, even if they publish in the same approval-contract change set.
+4. `SCOPE-LIVE`: after ordinary gate, independent review, protected publication
+   and canonical deployment, repeat the read-only user request and compare the
+   response with the owner's actual Inbox. Tests of transport metadata cannot
+   establish that a model obeyed it; retain a failed or unrun live result as such.
+
+Acceptance is explicit scope and unknown owner total on every pending page,
+correct empty-page guidance, unchanged authenticated intersection, unchanged
+exact results and no new action. There is no data migration or compatibility
+removal; existing callers may ignore the additive fields. Broader owner-inbox
+reading and deterministic response validation remain outside this bounded fix.
+
 The 53 existing approval-location/isolation/settlement/recovery tests passed on
 f881fcb84de1bb07748f017ce07ecb85042507ac; their target sources match the base
 above. Live preflight confirmed served e4edd79cd6cf includes PR #4908. Existing

@@ -10,7 +10,10 @@ const now = new Date("2026-09-23T00:00:00Z");
 const room = { id: "room-row", capsuleId: "WC-1", backlogItemId: "BI-1",
   repositoryFullName: "org/repo", headSha: head,
   scopeClaims: [{ workShape: "delivery-break-fix@1.0.0" }] };
-function setup(overrides: Record<string, unknown> = {}) {
+function queryText(query: TemplateStringsArray | { strings: readonly string[] }) {
+  return ("strings" in query ? query.strings : query).join("");
+}
+function setup(overrides: Record<string, unknown> = {}, failedRead?: "reviewers" | "initiative") {
   const payload = { schemaVersion: 1, receiptId: "pir-1", policyVersion: "initiative-readiness.v3",
     gate: "post-implementation-review", decision: "pass", artifactDigest: "digest",
     artifactAuthorRef: "author", reviewerPrincipalId: "reviewer", reviewerAgentId: "agent",
@@ -21,16 +24,36 @@ function setup(overrides: Record<string, unknown> = {}) {
     authoritySnapshot: { decision: "allow", effectiveHumanCapability: "manage_backlog",
       effectiveAgentGrant: "initiative_post_implementation_review", tokenScope: "write",
       organizationId: "org", actionKey: "review", policyVersion: "authority.v1" }, ...overrides };
+  const queryRaw = vi.fn();
+  queryRaw.mockImplementation(async (query: TemplateStringsArray | { strings: readonly string[] }) => {
+    const sql = queryText(query);
+    if (sql.includes("candidates AS MATERIALIZED")) {
+      if (failedRead === "reviewers") throw new Error("Reviewer source unavailable");
+      return [];
+    }
+    if (sql.includes('FROM "BacklogItemActivity"')) {
+      if (failedRead === "initiative") throw new Error("Initiative source unavailable");
+      return [{ id: "pir-1", backlogItemId: "item-row",
+        gateKey: "post-implementation-review", recordedAt: now, payload }];
+    }
+    if (sql.includes('FROM "WorkCapsuleActivity"')) return [];
+    throw new Error("Unexpected evidence query");
+  });
   return { workroomActivity: { findMany: vi.fn().mockResolvedValue([]) },
-    taskRun: { findMany: vi.fn().mockResolvedValue([]) },
     backlogItem: { findMany: vi.fn().mockResolvedValue([{ id: "item-row", itemId: "BI-1" }]) },
-    $queryRaw: vi.fn().mockResolvedValue([{ id: "pir-1", backlogItemId: "item-row",
-      gateKey: "post-implementation-review", recordedAt: now, payload }]) };
+    $queryRaw: queryRaw };
 }
 
 describe("governed initiative evidence in a Workroom", () => {
   it("exposes the real PIR and matches its required step without claiming completion", async () => {
-    const result = await loadWorkroomExecutionEvidence(setup(), [room], now);
+    const db = setup();
+    const result = await loadWorkroomExecutionEvidence(db, [room], now);
+    expect(result.partial).toBe(false);
+    expect(result.reviewerRuns).toEqual([]);
+    const queries = db.$queryRaw.mock.calls.map(([query]) => queryText(query));
+    expect(queries.filter(sql => sql.includes("candidates AS MATERIALIZED"))).toHaveLength(1);
+    expect(queries.filter(sql => sql.includes('FROM "BacklogItemActivity"'))).toHaveLength(1);
+    expect(queries.filter(sql => sql.includes('FROM "WorkCapsuleActivity"'))).toHaveLength(1);
     expect(result.receipts).toContainEqual(expect.objectContaining({ receiptId: "pir-1", status: "observed",
       rawRef: { table: "BacklogItemActivity", id: "pir-1" },
       processEvidence: { definitionRef: "delivery-break-fix@1.0.0", stageKey: "post-implementation-review",
@@ -62,9 +85,16 @@ describe("governed initiative evidence in a Workroom", () => {
     expect(result.receipts[0].summary).toContain("post-implementation-review: fail, 2 findings");
   });
   it("reports unavailable initiative evidence instead of a complete empty result", async () => {
-    const db = setup(); db.$queryRaw.mockRejectedValue(new Error("unavailable"));
+    const db = setup({}, "initiative");
     const result = await loadWorkroomExecutionEvidence(db, [room], now);
     expect(result.receipts).toEqual([]);
     expect(result.partial).toBe(true);
+    expect(result.attentionReason).toBeNull();
+  });
+  it("retains initiative evidence when the candidate read fails", async () => {
+    const result = await loadWorkroomExecutionEvidence(setup({}, "reviewers"), [room], now);
+    expect(result.partial).toBe(true);
+    expect(result.attentionReason).toContain("could not be read");
+    expect(result.receipts).toContainEqual(expect.objectContaining({ receiptId: "pir-1" }));
   });
 });

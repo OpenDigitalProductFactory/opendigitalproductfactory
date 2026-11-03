@@ -19,6 +19,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { spawn } from "node:child_process";
 import { materializeBearer } from "./mcp-credential.mjs";
+import { resolveHostMcpTrust, describeMcpTransportError } from "./mcp-host-trust.mjs";
 
 let callId = 0;
 
@@ -133,14 +134,18 @@ export async function mcpPost(method, params, {
   allowNonLoopbackEndpoint = false,
   accept,
   fetchImpl,
+  requestImpl,
+  resolveTrust = resolveHostMcpTrust,
+  connection,
   label,
+  env = process.env,
 } = {}) {
   if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
   if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
   // BI-78B653D5: `bearerToken` is a PAT string or a self-refreshing
   // client_credentials bearer (scripts/lib/mcp-credential.mjs). Materialize
   // it once per call so a long-running gate always sends a live token.
-  const bearerValue = await materializeBearer(bearerToken);
+
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("mcpCall: timeoutMs must be a positive number");
   }
@@ -160,7 +165,7 @@ export async function mcpPost(method, params, {
   // appeared in ambient state -- a copied-in, stale or tampered `.mcp.json`
   // -- naming any other host is refused. Callers with their own operator signal
   // (a --mcp-url flag) can still pass allowNonLoopbackEndpoint directly.
-  if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl)) {
+  if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl, env)) {
     throw new Error(
       `mcpCall: refusing to send a bearer token to ${mcpUrl}. Only loopback MCP `
       + "endpoints and the install's configured origin (PUBLIC_URL, DPF_MCP_URL or "
@@ -169,6 +174,8 @@ export async function mcpPost(method, params, {
     );
   }
 
+  // A token refresh can send client credentials: authorize its endpoint first.
+  const bearerValue = await materializeBearer(bearerToken);
   const callLabel = label ?? (method === "tools/call" && params?.name ? params.name : method);
   const body = buildJsonRpcBody(method, params);
   const headers = {
@@ -187,7 +194,7 @@ export async function mcpPost(method, params, {
     return { status: response.status, text: await response.text(), via: "fetch" };
   }
 
-  const injectedTransport = process.env.DPF_GATE_CURL_BIN;
+  const injectedTransport = env.DPF_GATE_CURL_BIN;
   if (injectedTransport) {
     const text = await callInjectedCurlTransport({
       command: injectedTransport,
@@ -200,13 +207,15 @@ export async function mcpPost(method, params, {
   }
 
   const url = new URL(mcpUrl);
-  const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
+  const trust = url.protocol === "https:" ? resolveTrust({ mcpUrl, env, connection }) : null;
+  const requestFn = requestImpl ?? (url.protocol === "https:" ? httpsRequest : httpRequest);
   return new Promise((resolve, reject) => {
     const timeoutError = () => Object.assign(
       new Error(`mcpCall: ${callLabel} timed out after ${timeoutMs}ms`), { code: "ETIMEDOUT" });
     const req = requestFn(url, {
       method: "POST",
       agent: false,
+      ...trust?.tlsOptions,
       headers: {
         ...headers,
         "Content-Length": Buffer.byteLength(body),
@@ -223,7 +232,7 @@ export async function mcpPost(method, params, {
     const deadline = setTimeout(() => req.destroy(timeoutError()), timeoutMs);
     req.once("close", () => clearTimeout(deadline));
     req.setTimeout(timeoutMs, () => req.destroy(timeoutError()));
-    req.on("error", reject);
+    req.on("error", error => reject(url.protocol === "https:" ? describeMcpTransportError(error, { phase: "request" }) : error));
     req.write(body);
     req.end();
   });
@@ -242,6 +251,12 @@ export async function mcpPost(method, params, {
  */
 export async function mcpCall(toolName, args, options = {}) {
   const reply = await mcpPost("tools/call", { name: toolName, arguments: args }, options);
+  if (reply.status === 401 || reply.status === 403) {
+    const code = reply.status === 401 ? "mcp_authentication_failed" : "mcp_authorization_failed";
+    throw Object.assign(new Error(`${code}: HTTP ${reply.status}; verified transport succeeded. ${reply.status === 401
+      ? "Check the existing credential's validity; no identity was changed."
+      : "The current identity lacks authority for this operation; use its governed grant remedy."}`), { code });
+  }
   try {
     return extractToolResult(JSON.parse(reply.text));
   } catch (error) {

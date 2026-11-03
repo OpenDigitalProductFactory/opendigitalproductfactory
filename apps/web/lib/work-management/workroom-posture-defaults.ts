@@ -23,7 +23,7 @@
 import { prisma } from "@dpf/db";
 import { isGoldenTrianglePreference } from "@/lib/golden-triangle/persistence";
 
-import type { RoomPostureDeclaration } from "@/lib/work-posture";
+import type { RoomPostureDeclaration } from "@dpf/validators/workroom-policy";
 
 const PLATFORM_PROFILE_ID = "mark-dpf-platform";
 const DEFAULT_KEY = "workroomPostureDefault";

@@ -88,3 +88,15 @@ export type CloseIssueOutcome = "closed" | "already-closed";
 export type CloseIssueResult =
   | (Exclude<RemoteIssueResult, ForgeFailure> & { outcome: CloseIssueOutcome })
   | ForgeFailure;
+
+/** One comment on an existing issue (BI-C899BB40: the submitter confirmation question). */
+export interface CommentOnIssueInput {
+  repository: ForgeRepository;
+  number: number;
+  body: string;
+  egressClass: EgressClass;
+}
+
+export type CommentOnIssueResult =
+  | (Exclude<RemoteIssueResult, ForgeFailure> & { commentId: string; commentUrl: string })
+  | ForgeFailure;

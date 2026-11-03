@@ -114,3 +114,19 @@ BI-56E9CEC2 remain separate. Managed dependency readiness (including current
 pinned compiler aliases) is inspected independently before expanding this fix.
 No other session's worktree is used. No runtime assets are edited and no manual
 image or deployment path is introduced.
+
+The AC-HOST-003 continuation in WC-7A91FE56 narrows the shared preflight and PR
+readiness environment classifier to runtime diagnostic lines. Static import
+guards can exit 1 and explain `ERR_MODULE_NOT_FOUND`; that explanation remains
+a violation and blocks admission/readiness. Genuine loader absence remains an
+environment limitation, while explicit observer cancellation, timeout and
+runner failure retain precedence. Actual child-exit regressions cover both
+static diagnostics, native loader absence and the shared readiness consumer.
+
+The same continuation separates generic policy intent from actual local Vitest
+coverage. BI-2227C37C permits affected local selection while cloud verification
+remains exhaustive. A completed exact-stage receipt establishes actual local
+coverage; absent or conflicting evidence remains unknown. New receipts persist
+selection mode and reason. The supported exhaustive override participates in
+the existing pre-admission execution fingerprint, preserving successful-only
+reuse for the requested scope. Historical receipts remain unchanged.

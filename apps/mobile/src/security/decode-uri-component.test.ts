@@ -1,5 +1,5 @@
 // Regression for GHSA-vcc3-ghjq-m6fr (Dependabot #156): the query parser that
-// expo-router actually loads must use the patched decode-uri-component 0.5.0
+// expo-router actually loads must use the patched decode-uri-component 0.5.1
 // (override + patch in apps/mobile/pnpm-workspace.yaml). Moved here from
 // scripts/security/ when apps/mobile became its own workspace (plan
 // 2026-09-08 M6): the parser only exists in this tree. Node's own resolver is
@@ -37,6 +37,25 @@ describe("mobile query parser (decode-uri-component)", () => {
       `,
       ],
       { timeout: 2000, encoding: "utf8" },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+  it("bounds decoding work for distinct malformed runs (GHSA-qr28-fpjm-wq7f)", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["-e", `
+        const assert = require("node:assert/strict");
+        const parser = require(${JSON.stringify(consumerPath)});
+        const hex = value => value.toString(16).padStart(2, "0");
+        const chunks = Array.from({ length: 32000 }, (_, value) =>
+          "%" + hex(value >>> 8) + "%" + hex(value & 255) + "x");
+        const decoded = parser.parse("value=" + chunks.join("") + "%zz").value;
+        assert.equal(typeof decoded, "string");
+        assert.ok(decoded.endsWith("%zz"));
+      `],
+      { timeout: 5000, encoding: "utf8" },
     );
     expect(result.error).toBeUndefined();
     expect(result.stderr).toBe("");

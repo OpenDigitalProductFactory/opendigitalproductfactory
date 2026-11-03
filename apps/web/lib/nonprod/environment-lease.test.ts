@@ -19,84 +19,10 @@ import {
   NONPROD_OWNER_PROVIDERS,
 } from "./environment-lease";
 
-const NOW = new Date("2026-07-28T21:00:00.000Z");
+import { NOW, lease, db, admitted } from "./__tests__/environment-lease-fixtures";
 beforeEach(() => {
   vi.clearAllMocks();
 });
-function lease(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "row-1",
-    leaseId: "NPEL-1",
-    claimKey: "gate:session-1:sha",
-    environmentKey: "local-integration-ci",
-    activeKey: null,
-    slotKey: null,
-    status: "queued",
-    ownerProvider: "codex",
-    ownerSessionId: "session-1",
-    purpose: "CI",
-    worktreePath: null,
-    branchName: null,
-    buildId: null,
-    taskRunId: null,
-    slotManifestVersion: null,
-    url: "http://localhost:3010",
-    ports: [3010],
-    cleanupCommand: null,
-    resourceClass: null,
-    expectedMemoryBytes: null,
-    ownerPid: null,
-    ownerProcessIdentity: null,
-    evidenceRecordId: null,
-    requestedTtlMs: DEFAULT_LEASE_TTL_MS,
-    expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
-    releasedAt: null,
-    queuedAt: NOW,
-    admittedAt: null,
-    cancelledAt: null,
-    heartbeatAt: NOW,
-    phase: "waiting",
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  };
-}
-
-function db() {
-  const database = {
-    $executeRaw: vi.fn().mockResolvedValue(1),
-    nonProductionEnvironmentLease: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findUnique: vi.fn().mockResolvedValue(null),
-      create: vi.fn().mockResolvedValue(lease()),
-      update: vi.fn().mockResolvedValue(lease()),
-      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-    },
-    platformConfig: {
-      findUnique: vi.fn().mockResolvedValue(null),
-    },
-    externalEvidenceRecord: {
-      findUnique: vi.fn().mockResolvedValue(null),
-    },
-    $transaction: vi.fn(),
-  };
-  database.$transaction.mockImplementation(
-    async (body: (tx: typeof database) => Promise<unknown>) => body(database),
-  );
-  return database;
-}
-
-function admitted(overrides: Record<string, unknown> = {}) {
-  return lease({
-    status: "active",
-    slotKey: "slot-0",
-    activeKey: "local-integration-ci:slot-0",
-    admittedAt: NOW,
-    phase: "admitted",
-    ...overrides,
-  });
-}
-
 function configuredPool(requestedCapacity: 1 | 2 = 1) {
   return {
     value: {
@@ -149,6 +75,68 @@ describe("NONPROD_OWNER_PROVIDERS", () => {
 });
 
 describe("durable nonproduction admission", () => {
+  it("uses relative duration after approval but preserves the independent queued deadline", async () => {
+    const mockDb = db();
+    const deadline = new Date(NOW.getTime() + 600_000);
+    const queued = lease({ requestedTtlMs: 120_000, expiresAt: deadline });
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null).mockResolvedValueOnce(admitted());
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([queued]);
+    const result = await claim(mockDb, {
+      expiresAt: new Date(NOW.getTime() - 60_000), requestedTtlMs: 120_000, waitDeadlineAt: deadline,
+    });
+    expect(result.status).toBe("admitted");
+    expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ requestedTtlMs: 120_000, expiresAt: deadline }),
+    });
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { id: "row-1" },
+      data: expect.objectContaining({ status: "active", expiresAt: new Date(NOW.getTime() + 120_000) }),
+    });
+  });
+
+  it("does not revive a cancelled identity when new relative timing is valid", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValueOnce(lease({ status: "cancelled" }));
+    const result = await claim(mockDb, {
+      claimKey: "plain-request", requestedTtlMs: 120_000, waitDeadlineAt: new Date(NOW.getTime() + 600_000),
+    });
+    expect(result.status).toBe("terminal");
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expired absolute proposal without lease or queue mutations", async () => {
+    const mockDb = db();
+    await expect(claim(mockDb, { expiresAt: NOW }))
+      .rejects.toThrow("nonprod_lease_request_expired");
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+    expect(recordQueueTransition).not.toHaveBeenCalled();
+  });
+
+  it("rechecks expiry after waiting for the environment lock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const mockDb = db();
+      mockDb.$executeRaw.mockImplementation(async () => {
+        vi.setSystemTime(new Date(NOW.getTime() + 2_000));
+        return 1;
+      });
+      await expect(claim(mockDb, {
+        now: undefined, expiresAt: new Date(NOW.getTime() + 1_000),
+      })).rejects.toThrow("nonprod_lease_request_expired");
+      expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+      expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+      expect(mockDb.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("lists admitted and queued leases without changing the legacy admitted list", async () => {
     const mockDb = db();
     await listActiveNonprodEnvironmentLeases({ db: mockDb as never, now: NOW });

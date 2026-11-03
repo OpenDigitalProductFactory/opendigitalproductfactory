@@ -5,7 +5,7 @@ import {
 import {
   createVersionedOperationsSnapshot,
   type VersionedOperationsSnapshot,
-} from "./operations-snapshot";
+} from "@dpf/storefront-templates/operations";
 
 function attachExactPayloadBytes(
   snapshot: VersionedOperationsSnapshot,

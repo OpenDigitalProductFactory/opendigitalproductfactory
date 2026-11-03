@@ -3,8 +3,18 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { ReviewerExecutionList } from "./ReviewerExecutionList";
-import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
+import type { ReviewerExecutionObservation, ReviewerRunSnapshot } from "@/lib/work-management/semantic-review-room-projection";
 import { loadSemanticReviewRoomProjection } from "@/lib/work-management/semantic-review-room-projection";
+// Isolate presentation from candidate SQL; the PostgreSQL suite covers discovery.
+vi.mock("@/lib/work-management/review-room-candidates", () => ({
+  loadReviewRoomCandidates: async (db: { taskRun: { findMany(): Promise<ReviewerRunSnapshot[]> } }, capsuleIds: string[]) => ({
+    rows: (await db.taskRun.findMany()).map(row => ({ ...row, capsuleId: capsuleIds[0], reviewKind: "semantic-review",
+      createdAt: row.updatedAt, ambiguousReviewKind: false, progressTruncated: false, nodesTruncated: false,
+      initiativeBinding: null, bindingTruncated: false, requestDigest: null, requesterAgentId: null,
+      metadataTrigger: null, roomRepositoryFullName: null, roomHeadBranch: null, roomHeadSha: null, roomBacklogItemId: null })),
+    partial: false, partialCapsuleIds: [],
+  }),
+}));
 vi.mock("@/components/platform/StalledTaskRecoveryActions", () => ({
   StalledTaskRecoveryActions: ({ taskRunId, reviewBudget }: { taskRunId: string; reviewBudget: unknown }) =>
     <div data-testid="recovery">{taskRunId} {JSON.stringify(reviewBudget)}</div>,
@@ -99,5 +109,38 @@ describe("reviewer execution inside a Workroom", () => {
     render(<ReviewerExecutionList runs={[{ ...run, requesterName: "Alex", reason: "unparseable-review-response,unparseable-review-response" }]} />);
     expect(screen.getByText(/Requester: Alex/)).toBeInTheDocument();
     expect(screen.getAllByText("The reviewer response could not be validated. No review verdict was accepted.")).toHaveLength(1);
+  });
+});
+
+
+describe("ordinary initiative review disclosure", () => {
+  it.each(["current", "historical"] as const)("keeps %s originals inspectable without native semantic retry", identityScope => {
+    render(<ReviewerExecutionList runs={[{ ...run, identityScope, reviewKind: "initiative-review",
+      reviewGate: "spec-approval", artifactVersion: "artifact-before-head", sourceHeadSha: "current-head",
+      recoveryWait: true, nextAction: "retry-review", executionUncertain: true }]} />);
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
+    expect(screen.queryByText(/confirm recovery|bounded successor|Inspect the current request/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Spec approval/)).toBeInTheDocument();
+    expect(screen.getByText(/Source: current-head/)).toBeInTheDocument();
+    expect(screen.getByText(/Artifact: artifact-before-head/)).toBeInTheDocument();
+    expect(screen.getByText("Inspect this original request.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Request history" })).toHaveAttribute("href", "/api/internal/tasks/TR-1");
+  });
+  it("retains both review families for one ambiguous task without duplicate keys", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<ReviewerExecutionList runs={[run, { ...run, reviewKind: "initiative-review", reviewGate: "spec-approval" }]} />);
+      expect(screen.getAllByRole("link", { name: "Request history" })).toHaveLength(2);
+      expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+  it("retains conflicting original requests as separate disclosures", () => {
+    render(<ReviewerExecutionList runs={["TR-A", "TR-B"].map(taskRunId => ({ ...run, taskRunId,
+      reviewKind: "initiative-review", reviewGate: "architecture-review", identityConflict: true }))} />);
+    expect(screen.getAllByRole("link", { name: "Request history" })).toHaveLength(2);
+    expect(screen.getAllByText("Review requests conflict.")).toHaveLength(2);
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
   });
 });

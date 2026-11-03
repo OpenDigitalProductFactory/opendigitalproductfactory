@@ -18,6 +18,9 @@ import { projectInvocationAttribution, recordedDriveTask } from "./invocation-at
 import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
 import { loadWorkroomDisplayTitles, workroomDisplayTitle, type WorkroomTitleDb } from "./workroom-display-titles.server";
 import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "@/lib/work-management/semantic-review-room-projection";
+import { readPendingGovernedDecisions, governedDecisionStage } from "@/lib/work-management/workroom-stage-decision";
+import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -103,13 +106,31 @@ export async function loadCapsuleLivenessInventory(
     take: args.take,
     select: args.portalSummary
       ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
-      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false,
+          createdByPrincipalId: true, requestedByPrincipalId: true } : INVENTORY_SELECT,
   });
   const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
   // One bounded review read for the page, never one query per room. A truncated
   // history stays unknown; the detail action narrows the observation to a room.
   const reviews = await loadSemanticReviewRoomProjection(db, rows.map(row => row.capsuleId), now);
   const recoveryItems = await loadWorkroomRecoveryItems(db, rows);
+  // Only real decision rows need shape metadata. One bounded read, no scope
+  // packets on the normal inventory query or in the display projection.
+  const decisionRooms = args.portalSummary ? rows.filter(row => readPendingGovernedDecisions(row.workspaceState).length > 0) : [];
+  const decisionsById = new Map<string, Array<{ title: string; condition: string }>>();
+  if (decisionRooms.length) {
+    const definitions = await db.workroom.findMany({ where: { capsuleId: { in: decisionRooms.map(row => row.capsuleId) } },
+      select: { capsuleId: true, scopeClaims: true }, take: decisionRooms.length }).catch(() => []);
+    const definitionsById = new Map(definitions.map(row => [row.capsuleId, row.scopeClaims]));
+    for (const room of decisionRooms) {
+      const shape = resolveWorkShapeClaim(definitionsById.get(room.capsuleId));
+      const definition = shape ? readWorkShapeDefinitionContract(shape) : null;
+      decisionsById.set(room.capsuleId, readPendingGovernedDecisions(room.workspaceState).flatMap(pending => {
+        const stage = governedDecisionStage(definition, pending.stageKey);
+        return stage ? [{ title: stage.title, condition: stage.condition }] : [];
+      }));
+    }
+  }
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
   const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
@@ -163,9 +184,11 @@ export async function loadCapsuleLivenessInventory(
       ...rest,
       ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
       ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        lastCycleKey: drive.lastCycleKey,
         attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
+      ...(args.portalSummary ? { decisions: decisionsById.get(row.capsuleId) ?? [] } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
-      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null),
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null, now),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,

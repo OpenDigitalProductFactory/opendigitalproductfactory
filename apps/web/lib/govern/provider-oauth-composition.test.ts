@@ -8,7 +8,7 @@ vi.mock("@/lib/credential-crypto", () => ({ encryptSecret: (value: string) => `e
 vi.mock("@/lib/govern/activate-provider", () => ({ activateProvider: vi.fn() }));
 vi.mock("@/lib/portal-url", () => ({ getStablePortalUrl: () => "https://localhost" }));
 vi.mock("@/lib/inference/provider-account-management", () => ({ ACCOUNT_ACCESS_RESET: {}, invalidateProviderAccountProofs: vi.fn() }));
-import { refreshOAuthToken } from "./provider-oauth";
+import { isConfirmedReauthenticationRequired, refreshOAuthToken } from "./provider-oauth";
 import type { ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 import { getActiveAccountBearerToken } from "@/lib/inference/active-provider-account-verification";
 
@@ -95,7 +95,7 @@ describe("active and scoped OAuth renewal composition", () => {
 
   it("cannot expire a credential after Disable while refresh failure is pending", async () => {
     const active = snapshot();
-    vi.mocked(fetch).mockImplementation(async () => { rows.codex!.status = "disabled"; return new Response("expired", { status: 401 }); });
+    vi.mocked(fetch).mockImplementation(async () => { rows.codex!.status = "disabled"; return new Response(JSON.stringify({ error: "invalid_grant" }), { status: 401 }); });
     expect(await refreshOAuthToken("codex", active.connectionId, active)).toEqual({ error: expect.stringContaining("changed") });
     expect(db.credentialEntry.updateMany).not.toHaveBeenCalled();
   });
@@ -115,6 +115,47 @@ describe("active and scoped OAuth renewal composition", () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "invalid_grant" }), { status }));
     expect(await refreshOAuthToken("codex", active.connectionId, active)).toEqual({ error: "Selected account re-authentication required" });
     expect(db.credentialEntry.updateMany).toHaveBeenCalledExactlyOnceWith({ where: expect.objectContaining({ id: active.credentialEntryId }), data: { status: "expired" } });
+  });
+
+  // BI-A53C594E: a 401/403 without an RFC 6749 invalid_grant code is not proof the
+  // grant is dead. On 2026-10-21 one such refusal took anthropic-sub dark for six
+  // days; the same refresh token renewed on its first later attempt.
+  it.each([401, 403])("treats a bare HTTP %s as a retryable renewal failure, not a refused grant", async status => {
+    const active = snapshot();
+    vi.mocked(fetch).mockResolvedValue(new Response("<html>blocked</html>", { status }));
+    const result = await refreshOAuthToken("codex", active.connectionId, active);
+    expect(result).toEqual({ error: `OAuth token renewal failed (HTTP ${status})` });
+    expect(isConfirmedReauthenticationRequired("error" in result ? result.error : "")).toBe(false);
+    expect(db.credentialEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("records the refusal status and OAuth error code, never token values", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const active = snapshot();
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }));
+    await refreshOAuthToken("codex", active.connectionId, active);
+    const logged = warn.mock.calls.map(args => args.join(" ")).join("\n");
+    expect(logged).toContain("HTTP 400");
+    expect(logged).toContain("invalid_grant");
+    expect(logged).not.toContain("shared-refresh");
+    warn.mockRestore();
+  });
+
+  it("treats a legacy unscoped bare 401 as retryable without expiring the stored credential", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response("nope", { status: 401 }));
+    expect(await refreshOAuthToken("codex")).toEqual({ error: "OAuth token renewal failed (HTTP 401)" });
+    expect(db.credentialEntry.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Selected account re-authentication required", true],
+    ["OAuth token expired — admin must re-authenticate", true],
+    ["Re-authentication required", true],
+    ["OAuth token renewal failed (HTTP 401)", false],
+    ["OAuth token renewal unavailable (HTTP 503)", false],
+    ["Token refresh network error", false],
+  ])("classifies %j as confirmed sign-in loss: %s", (error, confirmed) => {
+    expect(isConfirmedReauthenticationRequired(error)).toBe(confirmed);
   });
 
   it("keeps an unknown OAuth 400 distinct from invalid credentials", async () => {

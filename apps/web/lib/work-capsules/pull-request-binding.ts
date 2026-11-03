@@ -22,6 +22,7 @@
 // Pure and total: the caller supplies the observations and performs the writes.
 
 import type { PullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
+import { authoredHeadSha } from "./authored-head";
 
 /** The Workroom fields this rule needs. */
 export type BindablePullRequestRoom = {
@@ -29,6 +30,8 @@ export type BindablePullRequestRoom = {
   repositoryFullName: string | null;
   headBranch: string | null;
   headSha?: string | null;
+  /** A head equal to this is the claim-time base, not an authored head. */
+  baseSha?: string | null;
   pullRequestNumber: number | null;
   pullRequestUrl: string | null;
 };
@@ -88,6 +91,8 @@ function branchKey(repositoryFullName: string, headBranch: string): string {
  * A replacement requires the room's full authored head to match the observation.
  * The caller journals the prior binding atomically so current identity can change
  * without rewriting delivery history. Legacy rooms without a full head retain it.
+ * A head equal to the room's base is the claim-time base, not an authored head,
+ * so such a room binds as headless (BI-A7797C2C, see authored-head.ts).
  * Every room that is not bound appears in `skipped` with the reason, so a caller
  * can report its own coverage instead of implying it looked everywhere.
  */
@@ -107,7 +112,8 @@ export function resolvePullRequestBindings(input: {
   const skipped: PullRequestBindingSkip[] = [];
 
   for (const room of [...input.rooms].sort((a, b) => a.capsuleId.localeCompare(b.capsuleId))) {
-    const exactHead = /^[a-f0-9]{40}$/i.test(room.headSha ?? "");
+    const head = authoredHeadSha(room);
+    const exactHead = /^[a-f0-9]{40}$/i.test(head ?? "");
     if (!exactHead && room.pullRequestNumber != null && room.pullRequestUrl) {
       skipped.push({ capsuleId: room.capsuleId, reason: "already-bound" });
       continue;
@@ -119,7 +125,7 @@ export function resolvePullRequestBindings(input: {
     const chosen = chooseObservation(
       (byBranch.get(branchKey(room.repositoryFullName, room.headBranch)) ?? []).filter(
         (observation) =>
-          (!room.headSha || observation.headSha.toLowerCase() === room.headSha.toLowerCase()) &&
+          (!head || observation.headSha.toLowerCase() === head.toLowerCase()) &&
           (exactHead || room.pullRequestNumber == null || observation.number === room.pullRequestNumber) &&
           (exactHead || !room.pullRequestUrl || observation.url === room.pullRequestUrl),
       ),

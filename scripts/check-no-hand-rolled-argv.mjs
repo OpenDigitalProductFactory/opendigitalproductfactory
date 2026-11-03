@@ -65,7 +65,6 @@ export const ALLOWLIST = new Map([
   ["scripts/lib/local-ci-failure-summary.mjs", POSITIONAL],
   ["scripts/merge-readiness-policy.mjs", POSITIONAL],
   ["scripts/pr-health.mjs", POSITIONAL],
-  ["scripts/semantic-review-gate.mjs", POSITIONAL],
 ]);
 
 const ARRAY_WALK = "indexOf|lastIndexOf|findIndex|findLastIndex|find|findLast|forEach|map|flatMap|filter|reduce|some|every|entries|keys|values|at|shift|splice";

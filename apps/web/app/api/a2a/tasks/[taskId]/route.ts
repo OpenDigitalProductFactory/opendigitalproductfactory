@@ -17,7 +17,7 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
   const session = await auth();
   if (!session?.user) return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   const { taskId } = await context.params;
-  const task = await readCoworkerA2aTask(taskId);
+  const task = await readCoworkerA2aTask(taskId, { userId: session.user.id });
   if (!task) return apiErrorResponse("NOT_FOUND", "Task not found", 404);
   return NextResponse.json(task);
 }

@@ -84,9 +84,15 @@ sharing or refreshing.
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
-- **Awaiting acceptance** — Delivered (for example merged) but not yet proven to
-  meet its acceptance criteria. It is not done, and it is not counted in epic
-  progress.
+- **Awaiting acceptance** — Delivered (for example merged) but not yet closed.
+  It is not done, and it is not counted in epic progress. Most items do not wait
+  here: once its change merges, an item closes on its own and the acceptance
+  sweep finishes the move. Only items tagged `contractual` wait for a separate
+  acceptance, because a customer was promised one. If something is still wrong
+  after a change ships, report it as a new item.
+
+When you file an item, say what will be true, and for whom, once it is done (the
+**Outcome** field). Add how you will know only when that is not obvious.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
 - **Deferred** — Parked but still wanted. A deferral records why it is parked,
   what event should resume it, who owns that decision, and when it must be

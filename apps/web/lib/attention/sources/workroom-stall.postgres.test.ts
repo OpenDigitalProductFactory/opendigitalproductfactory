@@ -1,7 +1,7 @@
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { nextDriveHold, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
+import { nextDriveHold, type WorkroomDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 
 import { loadRoomStallRows } from "./workroom-stall";
 

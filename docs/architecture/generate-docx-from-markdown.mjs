@@ -31,7 +31,8 @@
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -67,8 +68,7 @@ async function renderMermaidDiagrams(diagramsDir) {
   console.log(`Rendering ${mmdFiles.length} Mermaid diagrams from ${diagramsDir}...`);
   const renderer = availableMermaidRenderer();
   if (mmdFiles.length > 0 && !renderer) {
-    console.warn(`  WARN: no Mermaid renderer available; the committed diagram images are used as they are.${MERMAID_RENDERER_HINT}`);
-    return;
+    throw new Error(`No Mermaid renderer available; publication requires fresh SVG and PNG diagrams.${MERMAID_RENDERER_HINT}`);
   }
 
   for (const file of mmdFiles) {
@@ -76,20 +76,29 @@ async function renderMermaidDiagrams(diagramsDir) {
     const base = file.replace(".mmd", "");
     const pngOutput = join(pngDir, `${base}.png`);
     const svgOutput = join(svgDir, `${base}.svg`);
-    const configMtime = existsSync(mmdConfig) ? statSync(mmdConfig).mtimeMs : 0;
-    const freshnessFloor = Math.max(statSync(input).mtimeMs, configMtime);
-    if (existsSync(svgOutput) && statSync(svgOutput).mtimeMs >= freshnessFloor) {
-      console.log(`  ${file} -> up to date`);
-      continue;
-    }
     console.log(`  ${file} -> svg, png`);
+    // Checkout timestamps cannot establish that both companions match the source.
+    // Fresh paths also prevent a successful-but-outputless local renderer from
+    // qualifying an old publication image. Publish only a complete rendered pair.
+    const staging = mkdtempSync(join(tmpdir(), "dpf-docx-mermaid-"));
     try {
       const configFile = existsSync(mmdConfig) ? mmdConfig : undefined;
-      renderMermaid({ input, output: svgOutput, configFile, background: "white", renderer });
-      renderMermaid({ input, output: pngOutput, configFile, background: "white", scale: 4, renderer });
+      const stagedSvg = join(staging, `${base}.svg`);
+      const stagedPng = join(staging, `${base}.png`);
+      renderMermaid({ input, output: stagedSvg, configFile, background: "white", renderer });
+      renderMermaid({ input, output: stagedPng, configFile, background: "white", scale: 4, renderer });
+      for (const output of [stagedSvg, stagedPng]) {
+        if (!existsSync(output) || statSync(output).size === 0) {
+          throw new Error(`Renderer produced no nonempty ${extname(output)} output`);
+        }
+      }
+      copyFileSync(stagedSvg, svgOutput);
+      copyFileSync(stagedPng, pngOutput);
     } catch (err) {
       const message = err?.stderr?.toString?.().split("\n")[0] || err?.message || "Unknown render error";
-      console.error(`  WARN: Failed to render ${file}: ${message}`);
+      throw new Error(`Failed to render ${file}; publication aborted: ${message}`, { cause: err });
+    } finally {
+      rmSync(staging, { recursive: true, force: true });
     }
   }
 }

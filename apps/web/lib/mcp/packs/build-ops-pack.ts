@@ -145,7 +145,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_endpoint_tests",
-    description: "Run scoped endpoint diagnostics; provider detail routes default to quick probes. Use allEndpoints/allModels only for exhaustive diagnostics. concurrencyOnly observes two local calls without grading. fidelityOnly observes a bounded local tool-selection and governed-read matrix without changing ratings or tool caps; requires explicit provider/account/model and attributable runtime identity.",
+    description: "Run scoped endpoint diagnostics; provider detail routes default to quick probes. Use allEndpoints/allModels only for exhaustive diagnostics. concurrencyOnly observes two local calls without grading. fidelityOnly performs one explicit local tool-selection and governed-read observation, or returns its existing checkpoint; explicit continuation builds the matrix without changing ratings or caps.",
     inputSchema: {
       type: "object",
       properties: {
@@ -154,7 +154,9 @@ const definitions: ToolDefinition[] = [
         taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
         probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: true for coworker calls)" },
         concurrencyOnly: { type: "boolean", description: "Run exactly two local calls in one 30-second observation. Requires explicit endpointId and modelId; incompatible with probesOnly=true, taskType, allModels or allEndpoints. Preserves completion/admission evidence; never updates capability ratings." },
-        fidelityOnly: { type: "boolean", description: "Observe nine golden prompts at surfaces 8/15/24/32/48, at most 45 local turns in four minutes. Requires explicit endpointId, modelId and providerConnectionId; incompatible with other modes/exhaustive scopes. Preserves failures and unknowns; no production cap or rating writes." },
+        fidelityOnly: { type: "boolean", description: "Perform one scheduled observation under existing admission and execution policies. Requires explicit endpoint/account/model and fidelityObservationIndex. Nine prompts at each surface 8/15/24/32/48 require 45 explicit distinct continuations. Replaying an index returns stored progress; held or unknown execution is never retried. No production cap or rating writes." },
+        fidelityObservationIndex: { type: "integer", minimum: 0, maximum: 44, description: "Required for fidelityOnly. Start at 0; continue using the returned checkpoint.nextIndex and fidelityRunId. Each request runs at most one case." },
+        fidelityRunId: { type: "string", description: "Server-issued fidelity run ID, required after index 0. Bound to current authority, source, runtime, account and catalog. Cannot resume legacy matrix runs." },
         providerConnectionId: { type: "string", description: "Exact configured account identity, required for fidelityOnly." },
         allEndpoints: { type: "boolean", description: "Explicitly test every active LLM endpoint. Use only when the user asks for all endpoints." },
         allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
@@ -516,7 +518,9 @@ async function runEndpointTestsHandler(
     const { runLocalToolFidelityDiagnostic } = await import("@/lib/operate/tool-fidelity-runner");
     return runLocalToolFidelityDiagnostic({ endpointId: typeof params["endpointId"] === "string" ? params["endpointId"] : "",
       modelId: typeof params["modelId"] === "string" ? params["modelId"] : "",
-      providerConnectionId: typeof params["providerConnectionId"] === "string" ? params["providerConnectionId"] : "" }, userId, context);
+      providerConnectionId: typeof params["providerConnectionId"] === "string" ? params["providerConnectionId"] : "",
+      fidelityRunId: typeof params["fidelityRunId"] === "string" ? params["fidelityRunId"] : undefined,
+      fidelityObservationIndex: typeof params["fidelityObservationIndex"] === "number" ? params["fidelityObservationIndex"] : undefined }, userId, context);
   }
   const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
   const request = buildEndpointTestRunRequest(params, context);

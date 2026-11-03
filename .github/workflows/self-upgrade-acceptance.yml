@@ -41,6 +41,38 @@ jobs:
             echo "sensitive=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # BI-578131A3: the portal addresses release images by digest, and Docker
+  # names a pulled image differently per image store (config digest on the
+  # classic store, index digest on the containerd store, the Docker Desktop
+  # default). SUR-F2A0D477 refused every release on containerd while every
+  # mocked test and this workflow's classic-store runner stayed green. Prove
+  # the resolver against a real daemon on BOTH stores.
+  image-store-addressing:
+    needs: classify
+    if: needs.classify.outputs.sensitive == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [classic, containerd]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Switch the daemon to the containerd image store
+        if: matrix.store == 'containerd'
+        run: |
+          echo '{"features":{"containerd-snapshotter":true}}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          docker info --format '{{json .DriverStatus}}'
+      - name: Resolve and run a real multi-arch image by its frozen digests
+        env:
+          DPF_REQUIRE_DOCKER: "1"
+          DPF_EXPECT_IMAGE_STORE: ${{ matrix.store }}
+        run: node --test scripts/release-image-reference.docker.test.mjs
+
   acceptance:
     needs: classify
     if: needs.classify.outputs.sensitive == 'true'
@@ -94,7 +126,7 @@ jobs:
       - name: Fast harness invariants
         run: |
           test "$(node -p "require('./promoter-contract.json').readinessProtocolFloorSha")" = "$DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA"
-          node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
+          node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs scripts/promote-source-identity.test.mjs
       - name: Build candidate promoter with immutable contract identity
         run: |
           contract_digest="sha256:$(sha256sum promoter-contract.json | cut -d' ' -f1)"
@@ -106,6 +138,14 @@ jobs:
           image_digest="$(docker image inspect "$image" --format '{{.Id}}')"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$GITHUB_SHA"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opendpf.promoter.contract-digest"}}')" = "$contract_digest"
+          # The artifact must read materialized source with the same LFS
+          # filters as the portal, independent of caller/global Git config.
+          docker run --rm --read-only --network none --entrypoint sh "$image" -ec '
+            git lfs version
+            test "$(git config --system --get filter.lfs.process)" = "git-lfs filter-process"
+            test "$(git config --system --get filter.lfs.required)" = "true"
+          '
+          DPF_PROMOTE_IDENTITY_TEST_IMAGE="$image" node --test scripts/promote-source-identity.test.mjs
           mkdir -p "$DPF_N1_EVIDENCE" "$RUNNER_TEMP/dpf-state" "$RUNNER_TEMP/dpf-backups"
           printf '%s\n' "{\"candidateSha\":\"${GITHUB_SHA}\",\"candidateDigest\":\"${image_digest}\",\"contractDigest\":\"${contract_digest}\"}" > "$DPF_N1_EVIDENCE/artifact.json"
           echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"

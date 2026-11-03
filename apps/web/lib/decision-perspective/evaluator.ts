@@ -19,6 +19,7 @@ import { resolveGateRecommendedOptionId } from "./option-recommendation";
 import type { AlignmentCorpora } from "./alignment-criteria";
 import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
 import { getRecentOverrideCount } from "./override-count";
+import { resolveGateDecisionAgentId } from "@/lib/decision/decision-shadow-ledger-bridge";
 import { contentAwareDirectionalOutcome } from "./directional-outcome";
 
 // Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
@@ -407,6 +408,8 @@ export async function evaluatePerspectiveGate(input: {
   question: string;
   options: string[];
   scoredOptions?: DecisionScoredOption[];
+  /** The calling coworker's own proposal (BI-AE416D75); see persistDecisionInteraction. */
+  proposedOptionId?: string | null;
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   declarations?: DecisionDeclarations;
@@ -425,6 +428,8 @@ export async function evaluatePerspectiveGate(input: {
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
   alignmentCorpora?: AlignmentCorpora;
+  /** Caller-recorded facts merged into the ledger payload; the gate's own fields win. */
+  outcomePayloadExtra?: Record<string, unknown>;
   /**
    * BI-7FFFBEE3 slice B: "shadow" when the caller will not act on this verdict.
    * Recorded on the row so the owner inbox never lists it as a decision.
@@ -444,6 +449,10 @@ export async function evaluatePerspectiveGate(input: {
   // ultimately resolved to (BI-1BE30A9A).
   const gateKey: DecisionGateKey = isWwwd ? "org-business" : "build-studio";
   const now = input.now ?? new Date();
+  // BI-AE416D75: attribute a coworker's WWWD decision to it, so the decision
+  // reaches the shadow ledger (the BI-6082C235 backfill did this once; nothing
+  // did it for later rows).
+  const agentId = isWwwd ? await resolveGateDecisionAgentId(input.db, input.caller?.agentId) : null;
 
   let resolved;
   let profile: DecisionPerspectiveProfile = MARK_DPF_PLATFORM_PROFILE;
@@ -515,6 +524,8 @@ export async function evaluatePerspectiveGate(input: {
       phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
       gateKey,
       gateFallbackUsed: isWwwd && !orgProfileSelected,
+      agentId,
+      proposedOptionId: input.proposedOptionId ?? null,
       outcomePayloadExtra: {
         ...(isWwwd ? { orgProfileSelected, caller: input.caller ?? null } : {}),
         ...(input.enforcement === "shadow" ? { enforcement: "shadow" } : {}),
@@ -721,7 +732,10 @@ export async function evaluatePerspectiveGate(input: {
     phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
     gateKey,
     gateFallbackUsed: isWwwd && !orgProfileSelected,
+    agentId,
+    proposedOptionId: input.proposedOptionId ?? null,
     outcomePayloadExtra: {
+      ...(input.outcomePayloadExtra ?? {}),
       ...(isWwwd ? {
         orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
         caller: input.caller ?? null,

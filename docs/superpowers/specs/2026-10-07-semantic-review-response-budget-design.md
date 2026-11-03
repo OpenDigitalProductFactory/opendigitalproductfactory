@@ -140,6 +140,48 @@ passing controls in the loader/context suites on 2026-10-11. Research receipt
 `initiative-917ba525-be6f-4117-a6ca-3f237aa6af9a` records the run. No green
 implementation, deployed repair or recovered review is claimed by this design.
 
+## Follow-up: admit the bounded thinking plan (2026-10-24)
+
+Continuation owner: BI-128AEC8D, WC-BCF94ED5. Source base
+`c49c13e5d2f5e1f87aa9b35011085ebb56368c14` already bounds fixed thinking
+inside an activity's total completion allowance at plan binding. Admission
+instead compared the unbounded proportional thinking request with that total.
+For a 50,000-token high-depth request, this rejected a 32,768-token thinking
+request before the existing binder could fit it within the 16,384-token total.
+
+The three routes for review `TR-GATE-84A3E645E0C53BA4A72E9FC8` on
+2026-10-24 each excluded all 13 Anthropic API candidates for that exact fixed
+thinking condition. Their declared output limits were 64,000–128,000 tokens.
+The other candidates remained excluded for confidential clearance or structured
+output support. These observations establish a calculation defect; they do not
+establish that any provider completed the review.
+
+Reuse the existing binder's calculation in admission and execution: reserve the
+greater of 2,048 tokens or one quarter of the activity total for final output,
+bounded by the total minus one, and cap the requested thinking inside the
+remainder. A 16,384-token allowance therefore retains at most 12,288 thinking
+tokens and at least 4,096 final-output tokens. Keep provider minimum thinking
+requirements, invalid-value checks, known output/context capacity, input limits,
+high effort, confidentiality and structured-output gates intact. No configuration,
+credential, permission, retry-budget or review-verdict changes are part of this
+repair. Calls without an activity retain their existing behavior.
+
+Delivery sequence and additional acceptance under OBJ-1:
+
+1. Reproduce the admission/binding contradiction for Anthropic and Google with
+   high-depth input above the activity total. Confirm normal and recipe plans
+   carry the same bounded settings; a provider minimum that cannot fit refuses.
+2. Share the existing bounded-thinking implementation, and verify the actual
+   route selects the capable confidential endpoint while excluding insufficient
+   output capacity, unknown capacity, missing schema support and missing clearance.
+3. Run source tests, typechecks, canonical verification and protected publication.
+   After governed deployment, obtain fresh scoped remediation evidence before
+   using supported recovery of the saved review. A source test is not a native
+   verdict; original review and recovery histories remain intact.
+
+No operator UI, schema or documented user action changes. The existing activity
+contract and this design remain the architecture and contributor reference.
+
 ## Existing architecture
 
 - [Activity routing harness](2026-06-28-activity-level-ai-routing-harness-design.md)

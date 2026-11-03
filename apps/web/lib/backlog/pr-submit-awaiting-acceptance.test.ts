@@ -7,6 +7,8 @@ const {
   mockBacklogCreate,
   mockBacklogUpdate,
   mockActivityCreate,
+  mockActivityFindMany,
+  mockItemLock,
   mockWorkroomFindMany,
   mockWorkroomUpdateMany,
   mockTransaction,
@@ -17,6 +19,8 @@ const {
   mockBacklogCreate: vi.fn(),
   mockBacklogUpdate: vi.fn(),
   mockActivityCreate: vi.fn(),
+  mockActivityFindMany: vi.fn(),
+  mockItemLock: vi.fn(),
   mockWorkroomFindMany: vi.fn(),
   mockWorkroomUpdateMany: vi.fn(),
   mockTransaction: vi.fn(),
@@ -33,7 +37,7 @@ vi.mock("@dpf/db", () => ({
     },
     backlogItemActivity: {
       create: mockActivityCreate,
-      findMany: vi.fn(),
+      findMany: mockActivityFindMany,
     },
     workroom: {
       findMany: mockWorkroomFindMany,
@@ -78,18 +82,21 @@ function prPayload(overrides: Record<string, unknown> = {}) {
 describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
   beforeEach(() => {
     mockBacklogFindMany.mockReset();
-    mockBacklogFindUnique.mockReset();
+    mockBacklogFindUnique.mockReset().mockResolvedValue({ status: "open" });
     mockBacklogFindFirst.mockReset();
     mockBacklogCreate.mockReset();
     mockBacklogUpdate.mockReset();
     mockActivityCreate.mockReset();
+    mockActivityFindMany.mockReset().mockResolvedValue([]);
+    mockItemLock.mockReset().mockResolvedValue([]);
     mockWorkroomFindMany.mockReset();
     mockWorkroomUpdateMany.mockReset();
     mockTransaction.mockReset();
     mockTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        backlogItem: { update: mockBacklogUpdate },
-        backlogItemActivity: { create: mockActivityCreate },
+        backlogItem: { update: mockBacklogUpdate, findUnique: mockBacklogFindUnique },
+        backlogItemActivity: { create: mockActivityCreate, findMany: mockActivityFindMany },
+        $queryRaw: mockItemLock,
       }),
     );
   });
@@ -222,7 +229,159 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(mockBacklogUpdate).not.toHaveBeenCalled();
   });
 
+  it.each(["webhook", "observed", "sweep"])("preserves an explicit reopen when the old PR returns via %s", async (entry) => {
+    const url = prPayload().pull_request.html_url;
+    mockWorkroomFindMany.mockResolvedValue([
+      { id: "room-1", backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126, pullRequestUrl: url },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    mockBacklogFindUnique.mockResolvedValue({ status: "open" });
+    mockActivityFindMany.mockResolvedValue([
+      { id: "old-submit", recordedAt: new Date("2026-10-21T15:30:00Z"), payload: { actuator: "pr-submit-awaiting-acceptance", to: "awaiting-acceptance", pullRequestNumber: 5126, pullRequestUrl: url } },
+      { id: "reopen", recordedAt: new Date("2026-10-25T17:07:00Z"), payload: { from: "done", to: "open", reason: "Original acceptance incomplete" } },
+    ]);
+    const result = entry === "sweep" ? await sweepPrSubmittedBacklogItems()
+      : entry === "observed" ? await applyObservedPullRequestsToBacklog([{
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory", number: 5126,
+        url, title: "fix: BI-CA54ACC8", headBranch: "feat/example", state: "merged", isDraft: false,
+      }]) : await applyGitHubPullRequestToBacklog(prPayload());
+    expect(result.moved).toEqual([]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+    expect(mockActivityCreate).not.toHaveBeenCalled();
+  });
+
+  it.each(["different PR", "different repository", "withdrawal"])("still advances after %s history", async (historyCase) => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    mockActivityFindMany.mockResolvedValue([
+      { id: "old-submit", recordedAt: new Date("2026-10-21T15:30:00Z"), payload: {
+        actuator: "pr-submit-awaiting-acceptance", to: "awaiting-acceptance",
+        pullRequestNumber: historyCase === "different PR" ? 100 : 5126,
+        pullRequestUrl: historyCase === "different repository" ? "https://github.com/other/repo/pull/5126" : prPayload().pull_request.html_url,
+      } },
+      { id: "reopen", recordedAt: new Date("2026-10-25T17:07:00Z"), payload: {
+        from: "awaiting-acceptance", to: "open",
+        ...(historyCase === "withdrawal" ? { actuator: "pr-submit-awaiting-acceptance" } : {}),
+      } },
+    ]);
+    const result = await applyGitHubPullRequestToBacklog(prPayload());
+    expect(result.moved).toEqual(["BI-CA54ACC8"]);
+    expect(mockActivityFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { backlogItemId: "row-1", kind: "status_change" },
+    }));
+  });
+
+  it.each(["webhook", "observed", "sweep"])("preserves a reopen without a prior advance by the older merged PR via %s", async (entry) => {
+    const url = prPayload().pull_request.html_url;
+    mockWorkroomFindMany.mockResolvedValue([
+      { backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126, pullRequestUrl: url },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    mockActivityFindMany.mockResolvedValue([
+      { id: "reopen", recordedAt: new Date("2026-10-25T19:49:40.888Z"), payload: { from: "done", to: "open" } },
+    ]);
+    const observation = {
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory", number: 5126,
+      url, title: "fix: BI-CA54ACC8", headBranch: "feat/example", state: "merged" as const, isDraft: false,
+      mergedAt: "2026-10-16T05:09:48Z",
+    };
+    const result = entry === "sweep" ? await sweepPrSubmittedBacklogItems()
+      : entry === "observed" ? await applyObservedPullRequestsToBacklog([observation])
+      : await applyGitHubPullRequestToBacklog(prPayload({ pull_request: {
+        ...prPayload().pull_request, merged: true, state: "closed", merged_at: observation.mergedAt,
+      } }));
+    expect(result.moved).toEqual([]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+    expect(mockActivityCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([null, "invalid", "2026-10-25T19:49:40.888Z"])("preserves a reopen when merge time is missing, invalid or equal (%s)", async (mergedAt) => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([{ id: "row-1", itemId: "BI-CA54ACC8", status: "open" }]);
+    mockActivityFindMany.mockResolvedValue([
+      { id: "reopen", recordedAt: new Date("2026-10-25T19:49:40.888Z"), payload: { from: "awaiting-acceptance", to: "open" } },
+    ]);
+    expect((await applyGitHubPullRequestToBacklog(prPayload({ pull_request: {
+      ...prPayload().pull_request, merged: true, state: "closed", merged_at: mergedAt,
+    } }))).moved).toEqual([]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("permits a genuinely later merged delivery after a reopen", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([{ id: "row-1", itemId: "BI-CA54ACC8", status: "open" }]);
+    mockActivityFindMany.mockResolvedValue([
+      { id: "reopen", recordedAt: new Date("2026-10-25T19:49:40.888Z"), payload: { from: "done", to: "open" } },
+    ]);
+    expect((await applyGitHubPullRequestToBacklog(prPayload({ pull_request: {
+      ...prPayload().pull_request, merged: true, state: "closed", merged_at: "2026-10-25T20:00:00Z",
+    } }))).moved).toEqual(["BI-CA54ACC8"]);
+  });
+
+  it("preserves an explicit reopen when timestamps tie and legacy history has no PR URL", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    const recordedAt = new Date("2026-10-25T17:07:00Z");
+    mockActivityFindMany.mockResolvedValue([
+      { id: "a-reopen", recordedAt, payload: { from: "done", to: "open" } },
+      { id: "z-submit", recordedAt, payload: { actuator: "pr-submit-awaiting-acceptance", to: "awaiting-acceptance", pullRequestNumber: 5126 } },
+    ]);
+    expect((await applyGitHubPullRequestToBacklog(prPayload())).moved).toEqual([]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("recognizes the original PR when a sweep room has a repository but no URL", async () => {
+    mockWorkroomFindMany.mockResolvedValue([
+      { backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126, pullRequestUrl: null,
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    mockActivityFindMany.mockResolvedValue([
+      { id: "old-submit", recordedAt: new Date("2026-10-21T15:30:00Z"), payload: {
+        actuator: "pr-submit-awaiting-acceptance", to: "awaiting-acceptance", pullRequestNumber: 5126,
+        pullRequestUrl: prPayload().pull_request.html_url,
+      } },
+      { id: "reopen", recordedAt: new Date("2026-10-25T17:07:00Z"), payload: { from: "done", to: "open" } },
+    ]);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves a sparse sweep room alone when its PR repository cannot be established", async () => {
+    mockWorkroomFindMany.mockResolvedValue([
+      { backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126, pullRequestUrl: null, repositoryFullName: null },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([]);
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a status changed after the candidate was read", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    mockBacklogFindUnique.mockResolvedValue({ status: "retired" });
+    expect((await applyGitHubPullRequestToBacklog(prPayload())).moved).toEqual([]);
+    expect(mockItemLock).toHaveBeenCalledOnce();
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+    expect(mockActivityCreate).not.toHaveBeenCalled();
+  });
+
   it("returns a withdrawn PR from awaiting-acceptance to open", async () => {
+    mockBacklogFindUnique.mockResolvedValue({ status: "awaiting-acceptance" });
     mockWorkroomFindMany.mockResolvedValue([
       { id: "room-1", backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126 },
     ]);
@@ -244,8 +403,9 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
   });
 
   it("sweeps workrooms that already have a PR number", async () => {
+    mockBacklogFindUnique.mockResolvedValue({ status: "in-progress" });
     mockWorkroomFindMany.mockResolvedValue([
-      { id: "room-1", backlogItemId: "BI-E54F7F87", pullRequestNumber: 4972 },
+      { id: "room-1", backlogItemId: "BI-E54F7F87", pullRequestNumber: 4972, repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" },
     ]);
     mockBacklogFindMany.mockResolvedValue([
       { id: "row-2", itemId: "BI-E54F7F87", status: "in-progress", claimStatus: "active" },
@@ -303,5 +463,63 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(result.itemId).toBe("BI-ACC-TEST");
     expect(mockBacklogCreate).toHaveBeenCalled();
     expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("a merged PR closes the twins it closes (BI-91FC6B9A)", () => {
+  const MARKER = "[origin:tool-defect:surface_open]";
+  const PEER = "inst_0123456789abcdef0123456789abcdef";
+
+  beforeEach(() => {
+    mockBacklogFindMany.mockReset();
+    mockBacklogFindUnique.mockReset().mockResolvedValue({ status: "open" });
+    mockBacklogUpdate.mockReset();
+    mockActivityCreate.mockReset();
+    mockActivityFindMany.mockReset().mockResolvedValue([]);
+    mockItemLock.mockReset().mockResolvedValue([]);
+    mockWorkroomFindMany.mockReset().mockResolvedValue([]);
+    mockTransaction.mockReset().mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        backlogItem: { update: mockBacklogUpdate, findUnique: mockBacklogFindUnique },
+        backlogItemActivity: { create: mockActivityCreate, findMany: mockActivityFindMany },
+        $queryRaw: mockItemLock,
+      }),
+    );
+  });
+
+  const merged = (body: string) => prPayload({
+    action: "closed",
+    pull_request: { ...prPayload().pull_request, state: "closed", merged: true, merged_at: "2026-10-28T00:00:00Z", title: "fix: surface_open", body },
+  });
+
+  it("moves this install's own same-origin item when the PR delivers the peer's mirror, and never moves the mirror", async () => {
+    mockBacklogFindMany
+      .mockResolvedValueOnce([{ id: "row-peer", itemId: "BI-PEER", status: "open", claimStatus: null, workType: "bug",
+        body: `x\n\n${MARKER}\n[origin:federatedWork:${PEER}:BI-PEER]` }])
+      .mockResolvedValueOnce([{ id: "row-local", itemId: "BI-LOCAL", status: "open", claimStatus: null, workType: "bug", body: `y\n\n${MARKER}` }]);
+
+    const result = await applyGitHubPullRequestToBacklog(merged("Closes BI-PEER"));
+
+    expect(result.moved).toEqual(["BI-LOCAL"]);
+    expect(mockBacklogFindMany.mock.calls[1]![0].where).toEqual({
+      status: { in: [...CODING_POOL_STATUSES] },
+      AND: [
+        { OR: [{ body: null }, { NOT: { body: { contains: "[origin:federatedWork:inst_" } } }] },
+        { OR: [{ body: { contains: MARKER } }] },
+      ],
+    });
+    expect(mockActivityCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        backlogItemId: "row-local",
+        payload: expect.objectContaining({ reason: "Same defect as BI-PEER, delivered by merged PR #5126", to: "awaiting-acceptance" }),
+      }),
+    }));
+    expect(mockBacklogUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expand an unmerged PR to twins", async () => {
+    mockBacklogFindMany.mockResolvedValueOnce([{ id: "row-a", itemId: "BI-CA54ACC8", status: "open", claimStatus: null, workType: "bug", body: `x\n\n${MARKER}` }]);
+    await applyGitHubPullRequestToBacklog(prPayload());
+    expect(mockBacklogFindMany).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,10 +10,12 @@
 //
 // The rule is read from the item, the one record that says whether work is
 // wanted:
-//   - parked (done, deferred, retired): the room stands down entirely.
+//   - parked (done, deferred, retired): the room stands down entirely, its
+//     escalations included: there is no work left to coordinate.
 //   - delivered (awaiting-acceptance): no agent runs and no agent-side hold is
-//     raised, but a person stage (the acceptance itself) still asks.
-// A conformance stop or escalation is never hidden; a person must still see it.
+//     raised, but a person stage (the acceptance itself) and an escalation
+//     still ask.
+// A conformance stop is never hidden; a person must still see it.
 // A stood-down room records do_not_wake/work_item_inactive, which deactivates
 // its task and replaces its pause, so an existing stall card leaves on the next
 // tick with no data repair. When the item is reopened the next tick plans it
@@ -39,8 +41,11 @@ const AGENT_SIDE_PAUSES: ReadonlySet<string> = new Set(["executor_writeback_unav
 
 function standsDown(plan: DrivePlan, standing: WorkItemStanding): boolean {
   if (standing === "active") return false;
-  if (plan.action === "stop" || plan.action === "escalate" || plan.action === "do_not_wake") return false;
+  if (plan.action === "stop" || plan.action === "do_not_wake") return false;
+  // Parked work has nothing left to coordinate, so its escalation asks a question
+  // nobody needs answered; a delivered item's escalation still governs acceptance.
   if (standing === "parked") return true;
+  if (plan.action === "escalate") return false;
   return plan.action === "dispatch_agent" || (plan.action === "pause" && AGENT_SIDE_PAUSES.has(plan.reason));
 }
 

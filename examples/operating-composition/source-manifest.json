@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "entry": "kernel/operating-composition/index.ts",
+  "sources": [
+    "packages/validators/src/bounded-trusted-json.ts",
+    "packages/validators/src/decision-scopes.ts",
+    "packages/validators/src/operating-composition/composition.ts",
+    "packages/validators/src/operating-composition/qualification.ts",
+    "packages/validators/src/operating-composition/legacy-fingerprint.ts",
+    "packages/validators/src/operating-composition/index.ts"
+  ],
+  "canonicalJsonSource": "packages/integration-shared/src/canonical-json.ts",
+  "thirdPartyRuntimeDependencies": [],
+  "internalRuntimeLeaf": "@dpf/integration-shared/canonical-json (copied exact source only)",
+  "toolchain": { "node": "24.16.0", "typescript": "6.0.3" },
+  "sourceBaseline": "4fa796b64425b6129f172a01b89d8c8887c065fc",
+  "license": "Apache-2.0",
+  "qualification": "Synthetic composition/fact-query and exact-subject receipt fixture; no real authentication, production review, model execution, routing, authority admission or runtime qualification."
+}

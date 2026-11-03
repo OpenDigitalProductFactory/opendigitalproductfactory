@@ -28,6 +28,30 @@ If you only want the guided experience, use [Build Studio](../build-studio/index
 
 > **One process, five surfaces.** Build Studio, Claude, Codex, Grok, and Antigravity are interchangeable adapters behind one contract wherever each surface's host capabilities are available: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) and the [Antigravity first-class support design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-17-antigravity-first-class-support-design.md).
 
+### Routine permissions and existing authority
+
+Agents own routine setup and verification for a delegated DEV task. Bootstrap
+uses one shared permission writer for Codex, Claude and Grok, scoped to the
+named source project or governed worktree. It retains explicit restrictive
+settings, deny/ask rules, managed policy, hooks and model/provider choices.
+The installed runtime is an MCP administration context; source coding belongs
+in its separate checkout and worktree.
+
+A configured file proves configuration only. The convergence report separates
+that state from native trust, supported sandbox behavior, restart requirements
+and actual session verification. Check the running session's source roots,
+network access, MCP grants and supported local sign-in route before claiming
+routine work is autonomous. A saved global flag cannot widen a managed chat.
+Older Python without a TOML parser leaves this permission scope explicitly
+unrun while existing skills-and-connector setup continues.
+
+Routine independent review uses the current task's existing delegation; moving
+to review or publication does not create another consent question. External
+provider sign-in, new spend and work outside that delegation retain their owner.
+The client allowlist never supplies DPF server authority. See the
+[installation procedure](../../operations/install.md#routine-development-client-permissions)
+and [worktree procedure](../../architecture/branch-and-worktree-runbook.md#routine-client-permissions).
+
 ### How the pieces fit together
 
 Every surface — the four external agent clients and Build Studio — plugs into the same coordination plane and the same governed lifecycle. The diagram below is the mental model for the rest of this guide:
@@ -402,9 +426,17 @@ Harness friction inside a worktree (missing pnpm on PATH, cross-workspace symlin
 
 Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inference, and semantic review can each retain several gigabytes of memory. The repository routes these commands through a governed host-resource runner. It measures available memory, preserves operating-system and resident-inference reserves, and admits only the work that fits. Inference is always single-flight.
 
-When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
+When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Resume the recorded attempt after capacity becomes available. Normal host-command completion stops renewal and reads its exact reservation once; it does not ask the operator to approve generic immediate release. A pending or unknown reservation remains explicit, and expiry does not prove the command passed or every descendant exited. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
+
+Server-authorized host qualification is currently unavailable. The normal host
+runner can supervise a command, but it reports with the same MCP credential as
+its caller, so the server cannot authenticate that the runner—not a direct
+caller—observed the claimed success. Do not manufacture or reuse a
+`DPF_QUALIFICATION_ADMISSION_TOKEN`; terminal recovery withholds it and the
+evidence writer refuses qualification payloads. Ordinary host-resource runs
+continue to provide capacity coordination only, not qualification evidence.
 
 #### Recover a review blocked by endpoint eligibility
 
@@ -426,6 +458,13 @@ the verification reference, exact request digest and confirmation. Within the
 original window it retains the request, deadline and remaining attempts. After
 expiry, only the existing qualified bounded-successor contract applies. Neither
 task completion nor successful source tests substitute for an independent verdict.
+
+When the execution outcome is unknown, the recovery guidance first directs you
+to the owned task details and complete execution settlement. This takes priority
+over expiry, remaining attempts and endpoint remediation. Reconcile every
+unresolved provider execution through its evidence owner before requesting any
+retry or successor. An elapsed deadline, inactive worker or empty local audit
+does not establish that the original execution and its effects have ended.
 
 #### Clean up when merged
 

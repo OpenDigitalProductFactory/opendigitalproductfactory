@@ -95,6 +95,15 @@ override; do not invent a PASS or repeat full validation merely to repair text.
 Allowed overrides are reported as **UNRUN**, and protected checks still apply.
 These metadata checks run even when local guard results are reused or skipped.
 
+Readiness resolves main and the candidate to immutable commits before classifying
+the change or running guards. Its guard plan, baseline comparisons and local
+receipt use that same pair. A concurrent fetch in another worktree may advance
+the shared main reference; the report shows that newer value separately and
+does not claim the earlier checks cover it. A later invocation selecting a new
+base cannot reuse the old pair's receipt. Candidate, commit metadata, working
+tree, command plan, dependency, toolchain or environment changes still prevent
+reuse. Failed or inconclusive historical runs remain unchanged.
+
 ### Corrections after publication
 
 A failed GitHub check or merge attempt does not automatically send the entire
@@ -118,6 +127,14 @@ and accepted initial-publication evidence for its published source. A qualified
 canonical record or a previously allowed recorded override can anchor it. An
 open PR by itself, a new correction record or a prose trailer cannot. Initial
 publication keeps its existing requirements.
+
+After an interrupted push, a retained correction may recover its original
+anchor even when its affected-check proof has expired. The verifier qualifies
+that retained record at its original completion time, checks its repository,
+branch and PR, and rederives both Git trees. GitHub must still name the
+record's candidate, its original anchor, or the published head bound when
+that record completed. Recovery preserves every timestamp and requires fresh
+affected checks; it does not renew the expired proof.
 
 Unchanged bytes or a commit-message correction execute no source suite. Changed
 bytes use the existing affected-test/package planner and execute its checks;
@@ -178,3 +195,18 @@ is terminated, recovery is a separately authorized, auditable operation.
 ## Tests & CI
 
 The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).
+
+**Hosted production-build profile**
+
+The BI-07BCDD1E correction aligns PR production builds with the existing
+non-experimental merge-group/release profile. Experimental filesystem-cache
+restoration/enablement is removed from this CI job; the build command,
+selection, required checks, time bounds and exact-tree artifact handoff remain.
+
+A hosted-runner shutdown after compilation leaves production-build completion
+inconclusive. Preserve source SHA, actual checkout/integration SHA, event,
+cache setting and failure history. A successful manual source-branch run does
+not certify a different PR merge candidate. Use the actual protected PR/queue
+results and `pr:health` before claiming green; never create a replacement
+success status for an interrupted run. See the
+[bounded design](../superpowers/specs/2026-07-26-ci-evidence-efficiency-design.md).

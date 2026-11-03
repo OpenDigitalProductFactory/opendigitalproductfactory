@@ -3,6 +3,7 @@ import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from
 import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
+import { digestBuildArtifactValue } from "@/lib/build/build-artifact-provenance";
 
 import { prisma } from "@dpf/db";
 import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
@@ -89,6 +90,11 @@ function designAcceptanceCriteriaCount(designDoc: unknown): number {
 function designReviewPassed(designReview: unknown): boolean {
   return Boolean(designReview && typeof designReview === "object"
     && (designReview as Record<string, unknown>).decision === "pass");
+}
+
+/** The digest of the stored plan, in the form a plan revision records it (BI-6F2872FC). */
+function currentBuildPlanDigest(buildPlan: unknown): string | null {
+  return buildPlan == null ? null : `sha256:${digestBuildArtifactValue(buildPlan)}`;
 }
 
 function codes(decision: InitiativeReadinessDecision) {
@@ -207,6 +213,10 @@ export async function enforceBuildInitiativeReadiness(args: {
       deliverySensitivity: facts.deliverySensitivity,
     },
     buildDesign: facts.buildDesign,
+    // BI-6F2872FC: only at plan -> build does the plan under review have to be
+    // the covered one. Later phases may normalize the stored plan while
+    // building, and that must not retroactively stale the entry it passed.
+    ...(args.expectedPhase === "plan" ? { buildPlanDigest: currentBuildPlanDigest(build.buildPlan) } : {}),
     activities: build.originator.activities as InitiativeReadinessActivity[],
     inheritedScope: facts.inheritedScope,
     target: args.target,

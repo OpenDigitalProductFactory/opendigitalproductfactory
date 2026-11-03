@@ -3,7 +3,7 @@
 // escalated to the operator. Never an endless re-review of the same tree.
 import { describe, expect, it } from "vitest";
 
-import { buildGauntletRepairTask, buildReviewRepairTask, decideGauntletRepair, GAUNTLET_REPAIR_MAX_ATTEMPTS, repairTaskFor } from "./gauntlet-repair";
+import { buildGauntletRepairTask, buildReviewRepairTask, decideGauntletRepair, escalationIssuesFor, GAUNTLET_REPAIR_MAX_ATTEMPTS, readGauntletRepairState, repairTaskFor } from "./gauntlet-repair";
 
 const failure = { treeSha: "t1", recordId: "rec-1", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"] };
 
@@ -90,5 +90,37 @@ describe("review-finding repair", () => {
   it("shares one attempt bound with guard hand-backs", () => {
     const afterGuards = { source: "guards" as const, failedGuards: ["x"], treeSha: "t", recordId: "r", attempts: GAUNTLET_REPAIR_MAX_ATTEMPTS };
     expect(decideGauntletRepair(afterGuards, { treeSha: "t2", recordId: null, failedGuards: ["Semantic change review"], source: "review", findings }).action).toBe("escalate");
+  });
+});
+
+// BI-33B54E4B: a confirmed scoped-test failure goes back to the coding agent with
+// the failing tests named, through the same bound, then to the owner.
+describe("scoped-test repair", () => {
+  const findings = [{ severity: "important", description: "Failing test: lib/queue/functions/self-upgrade.test.ts > skip-before-drain guards > marks a pre-created queued run skipped" }];
+  const state = { source: "tests" as const, findings, failedGuards: ["Scoped tests"], treeSha: "t", recordId: "t1", attempts: 1 };
+
+  it("briefs the failing tests and carries the recorded test output", () => {
+    const task = repairTaskFor(state, "AssertionError: expected vi.fn() to be called with arguments");
+    expect(task.title).toMatch(/Fix failing tests/);
+    expect(task.implement).toContain("self-upgrade.test.ts > skip-before-drain guards");
+    expect(task.implement).toContain("AssertionError: expected vi.fn()");
+    expect(task.implement).toMatch(/never weaken, skip or delete a test/i);
+    expect(task.verify).toMatch(/scoped tests and typecheck pass/);
+  });
+
+  it("keeps the tests source when the state is read back", () => {
+    expect(readGauntletRepairState({ gauntletRepair: state })).toMatchObject({ source: "tests", findings });
+  });
+
+  it("escalates with the still-failing tests named", () => {
+    expect(escalationIssuesFor({ ...state }, 2)).toEqual([{
+      severity: "important",
+      description: "Scoped test still failing after 2 repair attempt(s): Failing test: lib/queue/functions/self-upgrade.test.ts > skip-before-drain guards > marks a pre-created queued run skipped",
+    }]);
+  });
+
+  it("shares the bound with earlier guard hand-backs", () => {
+    const afterGuards = { source: "guards" as const, failedGuards: ["Style Drift Guard"], treeSha: "t", recordId: "r", attempts: GAUNTLET_REPAIR_MAX_ATTEMPTS };
+    expect(decideGauntletRepair(afterGuards, { ...state }).action).toBe("escalate");
   });
 });

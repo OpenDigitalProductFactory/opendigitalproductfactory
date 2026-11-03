@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { AiOperationsMap } from "./AiOperationsMap";
+import { OperationsMapRefreshProvider } from "./operations-map-refresh-context";
 import type { OperationsMapData } from "@/lib/ai-operations-map/load-map-data";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 import { useSearchParams } from "next/navigation";
@@ -193,6 +194,7 @@ export function OperationsMapLiveShell({
         error={refreshError}
         onRefresh={refreshNow}
       />
+      <OperationsMapRefreshProvider value={refreshNow}>
       <AiOperationsMap
         routingManagement={data.routingManagement}
         initialTechnicalOpen={initialTechnicalOpen}
@@ -207,6 +209,7 @@ export function OperationsMapLiveShell({
         evidenceRange={data.evidenceRange}
         onReplayWindowChange={handleReplayWindowChange}
       />
+      </OperationsMapRefreshProvider>
     </div>
   );
 }
@@ -241,8 +244,9 @@ function OpsMapFreshnessBar({
       data-opsmap-freshness
       className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-xs text-[var(--dpf-muted)]"
     >
-      <span aria-live="polite">
-        {refreshing ? "Refreshing…" : `Live view · ${ageLabel} · auto-refresh every ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`}
+      <span aria-live="polite" title={`Auto-refresh every ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`}>
+        <span aria-hidden>{refreshing ? "Refreshing…" : `Live · ${ageLabel}`}</span>
+        <span className="sr-only">{refreshing ? "Refreshing…" : `Live view · ${ageLabel} · auto-refresh every ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`}</span>
         {error ? (
           <span className="ml-2 text-[var(--dpf-error)]">Last refresh failed: {error}</span>
         ) : null}

@@ -1,7 +1,7 @@
 /**
  * Inbound ecosystem triage runner (BI-F47386ED) — the impure edge.
  *
- * Reads both inbound transports, maps them through the pure mappers, and files
+ * Reads issues, security alerts and peer demand through the pure mappers, and files
  * everything via the existing backlog front door. Kept separate from the cron so
  * the cron stays a thin trigger and this stays callable from a tool or a test.
  */
@@ -11,18 +11,21 @@ import type { RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-re
 import type { IntakeControllerVerdict } from "./intake-controller-authority";
 import {
   mapPeerDemandMirrors,
+  mapDependabotAlerts,
   mapUpstreamIssues,
   runInboundIssueTriage,
   type InboundEcosystemItem,
+  type InboundIngestOutcome,
   type InboundTriageResult,
 } from "./inbound-issue-triage";
+import type { RepositoryAlertRead } from "./dependabot-reader";
 
 export type InboundTriageOutcome =
-  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[] } & InboundTriageResult)
+  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[]; scannedAt?: string; issueReadComplete?: boolean } & InboundTriageResult)
   | { ran: false; reason: string };
 
 export interface InboundSourceError {
-  source: "upstream-issue" | "peer-demand";
+  source: "upstream-issue" | "peer-demand" | "dependabot";
   error: string;
 }
 
@@ -32,8 +35,9 @@ export interface InboundTriageRunnerDeps {
   loadCommission?: () => Promise<IntakeControllerVerdict>;
   /** Reads issues from the commissioned repository — never a fallback one. */
   readIssues?: (repo: RepoIdentity) => Promise<{ ok: boolean; issues?: unknown[]; error?: string }>;
+  readAlerts?: (repo: RepoIdentity) => Promise<RepositoryAlertRead>;
   readPeerDemand?: () => Promise<Array<{ mirrorId: string; payload: unknown }>>;
-  ingest?: (input: unknown) => Promise<{ itemId: string; created: boolean }>;
+  ingest?: (input: unknown) => Promise<InboundIngestOutcome>;
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
 }
 
@@ -58,24 +62,43 @@ export async function runEcosystemInboundTriage(
   }
   if (!commission.commissioned) return { ran: false, reason: commission.reason };
   const { repo } = commission;
+  const scannedAt = new Date().toISOString();
+  let issueReadComplete = false;
 
   const items: InboundEcosystemItem[] = [];
   const sourceErrors: InboundSourceError[] = [];
 
   // Transport 1 — upstream issues filed by the relay.
   const readIssues = deps.readIssues ?? (async (target: RepoIdentity) => {
-    const { readUpstreamIssues } = await import("./upstream-issue-reader");
-    return readUpstreamIssues({ state: "open", repo: target });
+    const { readControllerIssues } = await import("./upstream-issue-reader");
+    const { prisma } = await import("@dpf/db");
+    const job = await prisma.scheduledJob.findUnique({ where: { jobId: "ecosystem-inbound-issue-triage" }, select: { runCursor: true } });
+    return readControllerIssues(target, job?.runCursor ?? null);
   });
   try {
     const issueResult = await readIssues(repo);
     if (!issueResult.ok || !Array.isArray(issueResult.issues)) {
       sourceErrors.push({ source: "upstream-issue", error: ("error" in issueResult ? issueResult.error : null) ?? "Issue read returned no valid issue list" });
     } else {
-      items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0]));
+      issueReadComplete = true;
+      items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0], repo));
     }
   } catch (error) {
     sourceErrors.push({ source: "upstream-issue", error: getErrorMessage(error) });
+  }
+
+  // Independent coverage: a security permission failure cannot erase issue work
+  // or be reported as a clean repository. The same commission owns both reads.
+  try {
+    const readAlerts = deps.readAlerts ?? (async (target: RepoIdentity) => {
+      const { readDependabotAlerts } = await import("./dependabot-reader");
+      return readDependabotAlerts({ repo: target });
+    });
+    const alerts = await readAlerts(repo);
+    if (!alerts.ok) sourceErrors.push({ source: "dependabot", error: alerts.error });
+    else items.push(...mapDependabotAlerts(alerts.alerts, repo));
+  } catch (error) {
+    sourceErrors.push({ source: "dependabot", error: getErrorMessage(error) });
   }
 
   // Transport 2 — peer-side federated demand envelopes.
@@ -100,7 +123,12 @@ export async function runEcosystemInboundTriage(
   const ingest = deps.ingest ?? (async (input: unknown) => {
     const { ingestBacklogItem } = await import("@/lib/operate/backlog-ingest");
     const filed = await ingestBacklogItem(input as Parameters<typeof ingestBacklogItem>[0]);
-    return { itemId: filed.itemId, created: filed.created };
+    return {
+      itemId: filed.itemId,
+      created: filed.created,
+      outcome: filed.outcome,
+      reviewCandidates: filed.reviewCandidates,
+    };
   });
 
   const result = await runInboundIssueTriage({
@@ -115,5 +143,6 @@ export async function runEcosystemInboundTriage(
   });
 
   // Keep partial work, but never project a failed source as a quiet, complete scan.
-  return { ran: true, ...result, complete: sourceErrors.length === 0 && result.failed === 0, sourceErrors };
+  return { ran: true, ...result, complete: sourceErrors.length === 0 && result.failed === 0 && result.needsReview === 0,
+    sourceErrors, scannedAt, issueReadComplete: issueReadComplete && result.failed === 0 };
 }

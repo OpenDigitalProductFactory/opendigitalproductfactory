@@ -63,6 +63,25 @@ export function matchesAnyGlob(filePath, globs) {
 
 export const DERIVED_ARTIFACTS = [
   {
+    id: "judgment-guard-runtime",
+    description: "Canonical judgment scorer -> dependency-free Node20 golden guard distribution",
+    sourceGlobs: [
+      "packages/validators/src/judgment/option-scoring.ts",
+      "packages/validators/src/judgment/mcda-quality-gates.ts",
+      "scripts/build-judgment-guard-runtime.mjs",
+      "packages/repo-guard-runtime/package.json",
+      "pnpm-lock.yaml",
+    ],
+    artifactPaths: [
+      "scripts/generated/judgment/package.json",
+      "scripts/generated/judgment/option-scoring.js",
+      "scripts/generated/judgment/mcda-quality-gates.js",
+      "scripts/generated/judgment/manifest.json",
+    ],
+    generate: ["node", "scripts/build-judgment-guard-runtime.mjs"],
+    check: ["node", "scripts/build-judgment-guard-runtime.mjs", "--check"],
+  },
+  {
     id: "doc-index",
     description: "Doc corpus index (link/anchor resolution)",
     sourceGlobs: ["docs/**/*.md", "apps/web/lib/docs/doc-link-resolver.mjs"],
@@ -143,7 +162,10 @@ export const DERIVED_ARTIFACTS = [
     id: "doc-diagrams",
     description: "Rendered Mermaid diagram SVGs + manifest",
     sourceGlobs: ["docs/user-guide/**/*.md", "docs/architecture/**/*.md"],
-    artifactPaths: ["docs/user-guide/assets/diagrams/**"],
+    artifactPaths: [
+      "docs/user-guide/assets/diagrams/**",
+      "apps/web/lib/docs/diagram-versions.generated.mjs",
+    ],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
     // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:

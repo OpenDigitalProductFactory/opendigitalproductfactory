@@ -1,3 +1,4 @@
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 // BI-754C9E82 — proactivity plan ENFORCEMENT on scheduled runs. Split from
 // agent-task-scheduler.test.ts (module-size ratchet): same mock harness, only
 // the enforcement describe block lives here.
@@ -5,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
+  loadScheduledRoomAuthorityLive: vi.fn(),
   prisma: {
     $transaction: vi.fn(),
     scheduledAgentTask: {
@@ -91,24 +93,22 @@ vi.mock("@/lib/optimization/self-optimization-sweep", () => ({
   runSelfOptimizationSweep: mocks.runSelfOptimizationSweep,
 }));
 
+vi.mock("@/lib/work-management/room-stage-mandate", async importOriginal => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  loadScheduledRoomAuthorityLive: mocks.loadScheduledRoomAuthorityLive,
+}));
+import { scheduledDeliveryFixture, SCHEDULED_DELIVERY_NOW } from "@/lib/work-management/__fixtures__/scheduled-delivery-authority";
+import { scheduleWorkroomAgentTask } from "@/lib/queue/functions/workroom-drive-scheduling";
+import { loadScheduledRoomAuthority } from "@/lib/work-management/room-stage-mandate";
 import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
-// Pin the wall clock. The daily-cron re-arm assertion below compares
-// nextRunAt against Date.now(), so a real clock makes it time-of-day
-// dependent: the `7 14 * * *` schedule's next tick can fall <60min out when
-// the suite runs shortly before the daily tick. computeNextCronRun resolves
-// "14:07" with host-LOCAL Date methods (setHours/getDate), so the danger
-// window is local time-of-day — a UTC-instant pin would still land inside it
-// on a host whose local clock reads ~13:xx. Constructing FIXED_NOW from local
-// components keeps the local time-of-day fixed at 09:00 on ANY host timezone,
-// leaving the next 14:07 tick ~5h out. Only Date is faked (not timers) so real
-// setTimeout/await in the code under test still resolves.
-// (Month is 0-indexed: 6 = July.)
-const FIXED_NOW = new Date(2026, 6, 12, 9, 0, 0, 0);
+// Keep the daily cron's next 14:07 UTC tick more than 60 minutes away in every
+// host timezone. Only Date is faked so asynchronous work keeps real timers.
+const FIXED_NOW = new Date("2026-07-12T09:00:00.000Z");
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim runs before execution; default to a WON
   // claim so these plan-behavior tests exercise the work.
   mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
@@ -331,6 +331,138 @@ describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E8
     expect(deltaMinutes).toBeGreaterThan(60);
   });
 
+  it("BI-0A82D3B4 re-arms six-hour work after the real scheduler completes its loop", async () => {
+    vi.setSystemTime(new Date("2026-10-19T00:25:00.000Z"));
+    arrangeMarketingSelfTask();
+    const taskId = "self-marketing-specialist-user-1";
+    const task = {
+      taskId,
+      agentId: "marketing-specialist",
+      title: "Refresh the acquisition campaign brief",
+      prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+      routeContext: "/customer/marketing",
+      schedule: "23 */6 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 1,
+      lastThreadId: "thread-1",
+      taskRunId: "TR-PRIOR-MARKETING-RUN",
+      taskConfig: { trigger: { kind: "user-request" } },
+    };
+    const taskBefore = structuredClone(task);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue(task);
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.prisma.toolExecution.findMany.mockResolvedValue([]);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Saved the updated campaign brief.",
+      executedTools: [{
+        name: "create_marketing_campaign_brief",
+        args: {},
+        result: { success: true, message: "Saved campaign brief brief-1" },
+      }],
+    });
+
+    await executeScheduledAgentTask(taskId);
+
+    expect(mocks.runAgenticLoop).toHaveBeenCalledOnce();
+    expect(mocks.runAgenticLoop).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: "thread-1",
+      taskRunId: "TR-SCHED-MKTG1",
+    }));
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "task-run-row-1" },
+      data: expect.objectContaining({ status: "completed", completedAt: expect.any(Date) }),
+    }));
+    const completed = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      ([arg]) => arg.where.taskId === taskId && arg.data.lastStatus === "ok",
+    );
+    expect(completed?.[0].data).toEqual({
+      lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+      lastStatus: "ok",
+      lastError: null,
+      lastThreadId: "thread-1",
+      taskRunId: "TR-SCHED-MKTG1",
+      nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      attempts: 0,
+    });
+    expect(mocks.prisma.scheduledJob.updateMany).toHaveBeenCalledWith({
+      where: { jobId: taskId },
+      data: {
+        lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+        lastStatus: "ok",
+        lastError: null,
+        nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      },
+    });
+    expect(mocks.prisma.agentThread.upsert).toHaveBeenCalledWith({
+      where: { userId_contextKey: { userId: "user-1", contextKey: `scheduled:${taskId}` } },
+      update: {},
+      create: { userId: "user-1", contextKey: `scheduled:${taskId}` },
+    });
+    expect(task).toEqual(taskBefore);
+    expect(mocks.prisma.scheduledAgentTask.create).not.toHaveBeenCalled();
+  });
+
+  it("BI-0A82D3B4 returns exhausted retries to the six-hour cron after its loop fails", async () => {
+    vi.setSystemTime(new Date("2026-10-19T00:25:00.000Z"));
+    arrangeMarketingSelfTask();
+    const taskId = "self-marketing-specialist-user-1";
+    const task = {
+      taskId,
+      agentId: "marketing-specialist",
+      title: "Refresh the acquisition campaign brief",
+      prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+      routeContext: "/customer/marketing",
+      schedule: "23 */6 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 2,
+      lastThreadId: "thread-1",
+      taskRunId: "TR-PRIOR-MARKETING-RUN",
+      taskConfig: { trigger: { kind: "user-request" } },
+    };
+    const taskBefore = structuredClone(task);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue(task);
+    mocks.prisma.userFact.findMany.mockResolvedValue([assertiveOverrideFact("marketing-specialist")]);
+    mocks.runAgenticLoop.mockRejectedValue(new Error("LLM unavailable"));
+
+    await executeScheduledAgentTask(taskId);
+
+    expect(mocks.runAgenticLoop).toHaveBeenCalledOnce();
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "task-run-row-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        completedAt: expect.any(Date),
+        progressPayload: { error: "LLM unavailable" },
+      }),
+    }));
+    const failed = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      ([arg]) => arg.where.taskId === taskId && arg.data.lastStatus === "error",
+    );
+    expect(failed?.[0].data).toEqual({
+      lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+      lastStatus: "error",
+      lastError: "LLM unavailable",
+      taskRunId: "TR-SCHED-MKTG1",
+      nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      attempts: 0,
+    });
+    expect(mocks.prisma.scheduledJob.updateMany).toHaveBeenCalledWith({
+      where: { jobId: taskId },
+      data: {
+        lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+        lastStatus: "error",
+        lastError: "LLM unavailable",
+        nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      },
+    });
+    expect(task).toEqual(taskBefore);
+    expect(mocks.prisma.scheduledAgentTask.create).not.toHaveBeenCalled();
+  });
+
   it("resets attempts on success", async () => {
     arrangeMarketingSelfTask();
     mocks.prisma.userFact.findMany.mockResolvedValue([]);
@@ -346,5 +478,66 @@ describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E8
         data: expect.objectContaining({ lastStatus: "ok", attempts: 0 }),
       }),
     );
+  });
+});
+
+
+describe("scheduled delivery authority transport (BI-D95FD249)", () => {
+  it.each(["preauthorized", "propose", "advise", "revoked"] as const)("preserves nullable-holder enqueue provenance and %s room scope at the scheduler", async actionBoundary => {
+    arrangeMarketingSelfTask();
+    vi.setSystemTime(SCHEDULED_DELIVERY_NOW);
+    const f = scheduledDeliveryFixture();
+    const tx = {
+      workroom: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        findUnique: vi.fn(async () => ({ workspaceState: { workroomDrive: f.room.workspaceState.workroomDrive }, objective: "Repair" })),
+        update: vi.fn(async ({ data }: { data: { workspaceState: typeof f.room.workspaceState } }) => { f.room.workspaceState = data.workspaceState; }),
+      },
+      scheduledAgentTask: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn(async ({ create }: { create: typeof f.task }) => { Object.assign(f.task, create); return f.task; }),
+      },
+      workroomActivity: { create: vi.fn(async () => ({})) },
+    };
+    const queued = await scheduleWorkroomAgentTask({ $transaction: async (run: (client: typeof tx) => Promise<boolean>) => run(tx) } as never, {
+      taskId: f.task.taskId, agentId: f.task.agentId, ownerUserId: f.task.ownerUserId,
+      title: "Repair", prompt: "Use record_workroom_evidence for repair evidence", now: SCHEDULED_DELIVERY_NOW,
+      stage: { ...f.task.taskConfig.workroomStage, tools: ["record_workroom_evidence"] },
+      dispatchScope: f.checkpoint.dispatchScope,
+      lease: { roomId: f.room.id, holderPrincipalId: null, expiresAt: new Date(SCHEDULED_DELIVERY_NOW.getTime() + 600_000) },
+    }, () => SCHEDULED_DELIVERY_NOW);
+    expect(queued).toBe(true);
+    expect(f.task.taskConfig.workroomDispatchCheckpoint.authority.holderPrincipalId).toBeNull();
+    f.run.startedAt = SCHEDULED_DELIVERY_NOW;
+    const declaredBoundary = actionBoundary === "revoked" ? "preauthorized" : actionBoundary;
+    f.roomTurn.actionBoundary = declaredBoundary;
+    if (actionBoundary === "revoked") f.deps.loadAuthorStageAutonomy.mockResolvedValue(() => ({ roleBindings: {}, withheldBecause: "Funding revoked after enqueue" }));
+    const { withWorkroomPostureClaim } = await import("@/lib/work-management/workroom-posture-claim");
+    f.room.scopeClaims = withWorkroomPostureClaim(f.room.scopeClaims, { actionBoundary: declaredBoundary }, SCHEDULED_DELIVERY_NOW);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({ ...f.task, schedule: "7 14 * * *", timezone: "UTC", routeContext: "/ops/workrooms", attempts: 0 });
+    mocks.prisma.taskRun.create.mockImplementation(async ({ data }) => {
+      f.run.a2aMetadata = data.a2aMetadata; return { id: "run-row", taskRunId: f.run.taskRunId, contextId: "thread-1" };
+    });
+    mocks.loadScheduledRoomAuthorityLive.mockImplementation(async ({ taskRunId, agentId }) =>
+      loadScheduledRoomAuthority(f.db, { taskRunId, agentIds: [agentId] }, f.deps));
+    mocks.getAvailableTools.mockImplementation(async (_user, options) => options.mode === "advise" ? [] : [{ name: "record_workroom_evidence", inputSchema: {}, sideEffect: true }]);
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Evidence handled", executedTools: [{ name: "record_workroom_evidence", result: { success: true } }] });
+    await executeScheduledAgentTask(f.task.taskId);
+    expect(f.run.a2aMetadata.workroomDispatchCheckpoint).toEqual(f.task.taskConfig.workroomDispatchCheckpoint);
+    expect(mocks.getAvailableTools).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      mode: actionBoundary === "advise" ? "advise" : "act", ...(actionBoundary !== "revoked" ? { roomAuthorizedGrants: f.roomTurn.authorizedGrants } : {}),
+    }));
+    if (actionBoundary === "advise") {
+      expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
+      expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ lastStatus: "error", lastError: expect.stringContaining("withheld at the advise action boundary") }),
+      }));
+      return;
+    }
+    expect(mocks.runAgenticLoop).toHaveBeenCalledWith(expect.objectContaining({
+      proposeSideEffects: true,
+      ...(actionBoundary !== "revoked" ? { workroomId: f.room.capsuleId,
+        roomAuthority: expect.objectContaining({ actionBoundary: actionBoundary === "preauthorized" ? "propose" : actionBoundary }) } : {}),
+    }));
   });
 });

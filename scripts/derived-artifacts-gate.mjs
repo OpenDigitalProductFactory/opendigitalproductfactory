@@ -33,9 +33,11 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
+import { classifyDocsOnlyDiff } from "./lib/ci-evidence-plan.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
-import { gitText } from "./lib/git.mjs";
+import { gitText, gitTextOrNull } from "./lib/git.mjs";
+import { classifySpawnResult, SPAWN_OUTCOME } from "./check-guards.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -76,25 +78,28 @@ export function planRegenerate(stagedFiles, registry = DERIVED_ARTIFACTS, binary
  * replaces the assumption "docs-only diff => safe" with "docs-only diff AND
  * no registered artifact invalidated by it is stale => safe".
  */
-function isRegisteredArtifactOutput(filePath, registry) {
-  return registry.some((entry) => matchesAnyGlob(filePath, entry.artifactPaths ?? []));
-}
-
 export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, runCheck = () => true) {
-  // BI-AC48D79F: registered artifact outputs (e.g. doc-index.generated.json)
-  // are regenerated and staged by pre-commit when their docs sources change.
-  // They are not runtime sources. Counting them as "non-docs runtime" made
-  // the freshness branch unreachable, so every indexed-docs push needed a
-  // sandbox gate or an override.
-  const nonDocChanges = diffFiles.filter(
-    (f) => !isRegisteredArtifactOutput(f, registry) && !/^docs\/|^memory\/|\.md$/.test(f),
-  );
-  if (nonDocChanges.length > 0) {
-    return { exempt: false, reason: "non-docs runtime changes present", files: nonDocChanges };
+  // BI-78176241: "docs-only" is decided by the evidence planner's classifier,
+  // the same one the documentation evidence lane and CI use. A registered
+  // artifact output (e.g. doc-index.generated.json) rides with its docs
+  // source (BI-AC48D79F); its freshness is checked below.
+  const docs = classifyDocsOnlyDiff(diffFiles, { registry });
+  if (docs.nonDocFiles.length > 0) {
+    return { exempt: false, reason: "non-docs runtime changes present", files: docs.nonDocFiles };
+  }
+  if (docs.workspaceRequiredFiles.length > 0) {
+    return { exempt: false, reason: "docs diff changes an executable standard the workspace build reads", files: docs.workspaceRequiredFiles };
+  }
+  if (!docs.docsOnly) {
+    return { exempt: false, reason: "empty diff — nothing for the docs-only exemption to cover", files: [] };
   }
 
   const affected = affectedEntries(diffFiles, registry);
-  const stale = affected.filter((entry) => !runCheck(entry));
+  const checked = affected.map((entry) => ({
+    entry,
+    outcome: normalizeDerivedCheckResult(runCheck(entry)),
+  }));
+  const stale = checked.filter((row) => row.outcome === "stale").map((row) => row.entry);
   if (stale.length > 0) {
     return {
       exempt: false,
@@ -102,8 +107,101 @@ export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, r
       staleArtifacts: stale.map((e) => e.id),
     };
   }
+  const unrun = checked.filter((row) => row.outcome === "unrun").map((row) => row.entry);
+  if (unrun.length > 0) {
+    return {
+      exempt: true,
+      reason: "docs diff, affected checks could not run on this host — not a staleness verdict",
+      unrunArtifacts: unrun.map((e) => e.id),
+    };
+  }
 
   return { exempt: true, reason: affected.length > 0 ? "docs diff, all affected artifacts fresh" : "docs-only diff, no registered artifact touched" };
+}
+
+/** A boolean check stays compatible; "unrun" is an environment result, not stale. */
+export function normalizeDerivedCheckResult(value) {
+  if (value === true || value === "fresh") return "fresh";
+  if (value === "unrun") return "unrun";
+  return "stale";
+}
+
+function checkOutput(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value.toString === "function" && !Array.isArray(value)) {
+    try { return value.toString("utf8"); } catch { return String(value); }
+  }
+  return "";
+}
+
+const TOOLCHAIN_MISSING = /command not found|not recognized as an internal or external command|Cannot find module|ERR_MODULE_NOT_FOUND/i;
+
+/**
+ * A checker that never started, or started and could not find its toolchain,
+ * is "unrun". A checker that ran and exited non-zero is "stale".
+ * Uses classifySpawnResult so a spawn ENOENT is not the same verdict as exit 1
+ * (BI-20B40955, BI-BD7E0319).
+ */
+export function classifyDerivedArtifactCheck(error) {
+  if (!error) return "fresh";
+  const stdout = checkOutput(error.stdout);
+  const stderr = checkOutput(error.stderr);
+  const ran = typeof error.status === "number";
+  const spawnResult = ran
+    ? { status: error.status, signal: error.signal ?? null, stdout, stderr }
+    : { error, status: null, signal: error.signal ?? null, stdout, stderr };
+  const classified = classifySpawnResult(spawnResult);
+  if (classified.outcome === SPAWN_OUTCOME.RUNNER_FAILURE) return "unrun";
+  if (classified.outcome === SPAWN_OUTCOME.OK) return "fresh";
+  if (error.status === 127 || TOOLCHAIN_MISSING.test(`${stdout}\n${stderr}`)) return "unrun";
+  return "stale";
+}
+
+/**
+ * Whether this diff should take the single local-CI sandbox slot.
+ * Docs-only (the pre-push predicate) does not. A mixed code file is named.
+ */
+export function decideSandboxAdmission(exemption) {
+  if (!exemption || exemption.exempt) {
+    const reason = exemption?.reason ?? "docs-only diff";
+    return {
+      claim: false,
+      message: `docs-only diff — sandbox not claimed (${reason}). Mixing a code file into this change is what would cost the exemption.`,
+    };
+  }
+  if (Array.isArray(exemption.files) && exemption.files.length > 0) {
+    return {
+      claim: true,
+      message: `sandbox required (${exemption.reason}) — these files forfeit the docs-only exemption: ${exemption.files.join(", ")}`,
+    };
+  }
+  const stale = Array.isArray(exemption.staleArtifacts) && exemption.staleArtifacts.length > 0
+    ? `: ${exemption.staleArtifacts.join(", ")}`
+    : "";
+  return {
+    claim: true,
+    message: `sandbox required (${exemption.reason}${stale}).`,
+  };
+}
+
+/** Null when the merge base cannot be resolved — the caller must not treat that as exempt. */
+export function sandboxDecisionForHead({
+  cwd = REPO_ROOT,
+  git = (args) => gitTextOrNull(args, { cwd }),
+  runCheck = (entry) => runCheckLive(entry, cwd),
+  registry = DERIVED_ARTIFACTS,
+} = {}) {
+  const mergeBase = git(["merge-base", "HEAD", "origin/main"]);
+  if (!mergeBase) return null;
+  const diff = git(["diff", "--name-only", mergeBase, "HEAD"]);
+  if (diff == null) return null;
+  const files = String(diff).split(/\r?\n/).filter(Boolean);
+  try {
+    return decideSandboxAdmission(evaluatePushExemption(files, registry, runCheck));
+  } catch {
+    // An unreadable evidence policy cannot classify anything; it is not exempt.
+    return null;
+  }
 }
 
 /**
@@ -131,10 +229,61 @@ export function isMergeQueueContext(env = process.env) {
  */
 export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => true, { mergeQueue = false } = {}) {
   return registry.map((entry) => {
-    const ok = runCheck(entry);
-    const tolerated = !ok && mergeQueue === true && entry.mergeQueueRaceTolerant === true;
-    return { entry, ok, tolerated };
+    const outcome = normalizeDerivedCheckResult(runCheck(entry));
+    const ok = outcome !== "stale";
+    const tolerated = outcome === "stale" && mergeQueue === true && entry.mergeQueueRaceTolerant === true;
+    return { entry, ok, tolerated, outcome };
   });
+}
+
+/** Registry entries whose sources OR outputs appear in `files`. */
+export function entriesTouchedBy(files, registry = DERIVED_ARTIFACTS) {
+  return registry.filter((entry) => files.some((f) => (
+    matchesAnyGlob(f, entry.sourceGlobs ?? []) || matchesAnyGlob(f, entry.artifactPaths ?? [])
+  )));
+}
+
+/**
+ * BI-1A06A1AF. CI judges freshness on the pull_request merge (main + branch);
+ * preflight runs check-all on HEAD. Those agree for every entry whose inputs
+ * changed on at most one side since the merge base: a branch-only change is
+ * the HEAD verdict, a main-only change inherits main's. An entry whose inputs
+ * (sources or outputs) changed on BOTH sides is exposed: its merged output is
+ * something neither tree generated, so HEAD cannot predict CI.
+ */
+export function evaluateMergedBaseExposure({ branchFiles = [], mainFiles = [], registry = DERIVED_ARTIFACTS } = {}) {
+  const onMain = new Set(entriesTouchedBy(mainFiles, registry).map((entry) => entry.id));
+  return entriesTouchedBy(branchFiles, registry).filter((entry) => onMain.has(entry.id));
+}
+
+/**
+ * Merged-base freshness verdict for HEAD against `baseRef`.
+ *   current — HEAD contains baseRef; check-all on HEAD is CI's verdict
+ *   clear   — behind, but no entry is exposed on both sides
+ *   stale   — exposed entries; CI's merge cannot be judged fresh from HEAD
+ *   unrun   — the merge base could not be computed (runner failure, not STALE)
+ */
+export function mergedBaseDerivedVerdict({
+  cwd = REPO_ROOT,
+  baseRef = "origin/main",
+  git = (args) => gitTextOrNull(args, { cwd }),
+  registry = DERIVED_ARTIFACTS,
+} = {}) {
+  const mergeBase = git(["merge-base", "HEAD", baseRef]);
+  const behindText = mergeBase ? git(["rev-list", "--count", `HEAD..${baseRef}`]) : null;
+  if (!mergeBase || behindText == null) return { status: "unrun", baseRef, entries: [] };
+  const behind = Number(String(behindText).trim());
+  if (!Number.isFinite(behind)) return { status: "unrun", baseRef, entries: [] };
+  if (behind === 0) return { status: "current", baseRef, behind, mergeBase, entries: [] };
+  const list = (range) => {
+    const out = git(["diff", "--name-only", "--no-renames", ...range]);
+    return out == null ? null : String(out).split(/\r?\n/).filter(Boolean);
+  };
+  const branchFiles = list([mergeBase, "HEAD"]);
+  const mainFiles = list([mergeBase, baseRef]);
+  if (branchFiles == null || mainFiles == null) return { status: "unrun", baseRef, entries: [] };
+  const entries = evaluateMergedBaseExposure({ branchFiles, mainFiles, registry });
+  return { status: entries.length ? "stale" : "clear", baseRef, behind, mergeBase, entries };
 }
 
 // ── IO-touching implementations used by the CLI ────────────────────────────
@@ -171,10 +320,10 @@ export function resolveDerivedArtifactInvocation(
   return resolveHostCommandInvocation(argv[0], argv.slice(1), { platform, env });
 }
 
-function execDerivedArtifactCommand(argv, stdio) {
+function execDerivedArtifactCommand(argv, stdio, cwd = REPO_ROOT) {
   const invocation = resolveDerivedArtifactInvocation(argv);
   return execFileSync(invocation.command, invocation.args, {
-    cwd: REPO_ROOT,
+    cwd,
     stdio,
   });
 }
@@ -183,12 +332,12 @@ function runCommand(argv) {
   execDerivedArtifactCommand(argv, "inherit");
 }
 
-function runCheckLive(entry) {
+function runCheckLive(entry, cwd = REPO_ROOT) {
   try {
-    execDerivedArtifactCommand(entry.check, "pipe");
-    return true;
-  } catch {
-    return false;
+    execDerivedArtifactCommand(entry.check, "pipe", cwd);
+    return "fresh";
+  } catch (error) {
+    return classifyDerivedArtifactCheck(error);
   }
 }
 
@@ -251,6 +400,9 @@ function cmdPushExempt(baseRef) {
     return 0;
   }
   console.log(`[pre-push-gate] derived-artifact registry: NOT exempt (${result.reason}).`);
+  if (result.files?.length) {
+    console.log(`[pre-push-gate]   non-docs: ${result.files.join(", ")}`);
+  }
   if (result.staleArtifacts) {
     for (const id of result.staleArtifacts) {
       const entry = DERIVED_ARTIFACTS.find((e) => e.id === id);
@@ -264,7 +416,11 @@ function cmdCheckAll() {
   const mergeQueue = isMergeQueueContext();
   const results = evaluateCheckAll(DERIVED_ARTIFACTS, runCheckLive, { mergeQueue });
   let failed = false;
-  for (const { entry, ok, tolerated } of results) {
+  for (const { entry, ok, tolerated, outcome } of results) {
+    if (outcome === "unrun") {
+      console.log(`[derived-artifacts] ${entry.id}: UNRUN — the checker could not run on this host; this is not a staleness verdict`);
+      continue;
+    }
     if (ok) {
       console.log(`[derived-artifacts] ${entry.id}: fresh`);
       continue;

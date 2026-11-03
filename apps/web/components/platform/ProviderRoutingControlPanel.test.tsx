@@ -16,3 +16,12 @@ it("keeps shared-auth navigation and simultaneous restrictions visible to a read
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.getByText(/Resuming preserves/)).toBeTruthy();
 });
+
+it("shows health separately and explains which traffic a pause blocks", () => {
+  const pw = { provider: { providerId: "local", status: "inactive", endpointType: "llm", defaultConnectionStatus: "paused", operatorPause: { resumeAt: null } }, credential: null } as unknown as ProviderWithCredential;
+  render(<MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}><ProviderRoutingControlPanel pw={pw} canWrite={true} view={{ eligibility: { state: "disabled", eligible: false, label: "Paused", reason: "Paused by an operator." }, restrictions: [{ key: "operator", summary: "Paused by an operator.", until: null }], healthSummary: "Connection health has not been verified.", weeklyHint: null }} /></MessagesProvider>);
+  expect(screen.getByText("Health")).toBeTruthy();
+  expect(screen.getByText(/Health checks continue/)).toBeTruthy();
+  expect(screen.getByText(/including chat and embeddings/)).toBeTruthy();
+  expect(screen.queryByText("Paused by an operator.")).toBeNull();
+});

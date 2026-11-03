@@ -29,6 +29,7 @@ interface TrendMetricOption {
   key: string;
   label: string;
   unit: MetricUnit;
+  currency?: string;
 }
 
 export function PerformanceTrendPanel({
@@ -55,7 +56,7 @@ export function PerformanceTrendPanel({
         periodKey: point.periodKey,
         periodLabel: point.periodLabel,
         value,
-        formattedValue: formatMetricValue(value, selected.unit),
+        formattedValue: formatMetricValue(value, selected.unit, selected.currency),
       };
     });
   }, [points, selected]);

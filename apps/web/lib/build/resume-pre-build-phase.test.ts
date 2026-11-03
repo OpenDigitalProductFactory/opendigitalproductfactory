@@ -13,12 +13,21 @@ const platformDevConfigFindUniqueMock = vi.fn();
 const autoResolveDecomposeMock = vi.fn();
 const buildActivityFindManyMock = vi.fn();
 const backlogItemActivityFindFirstMock = vi.fn();
+const buildActivityCreateMock = vi.fn();
+const decideRegenerationMock = vi.fn();
+vi.mock("@/lib/build/plan-traceability-regeneration", () => ({
+  PLAN_TRACEABILITY_REGENERATION_TOOL: "plan-coverage:regenerated",
+  decidePlanTraceabilityRegeneration: (...args: unknown[]) => decideRegenerationMock(...args),
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
     platformDevConfig: { findUnique: (...args: unknown[]) => platformDevConfigFindUniqueMock(...args) },
-    buildActivity: { findMany: (...args: unknown[]) => buildActivityFindManyMock(...args) },
+    buildActivity: {
+      findMany: (...args: unknown[]) => buildActivityFindManyMock(...args),
+      create: (...args: unknown[]) => buildActivityCreateMock(...args),
+    },
     backlogItemActivity: { findFirst: (...args: unknown[]) => backlogItemActivityFindFirstMock(...args) },
     // abandonStrandedPreBuild wraps its work in a $transaction; run the callback
     // immediately with a tx exposing the row re-check + mutation methods.
@@ -72,6 +81,7 @@ import {
   STRANDED_ABANDON_MS,
   reviewIncompleteBackoff,
   countReviewIncompleteStreak,
+  countPlanReviewIncompleteStreak,
   REVIEW_INCOMPLETE_BACKOFF_BASE_MS,
   REVIEW_INCOMPLETE_BACKOFF_MAX_MS,
   countUnchangedRefusalStreak,
@@ -81,18 +91,49 @@ import {
 } from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
-  it("preserves a saved plan when reviewer execution was incomplete", async () => {
-    findUniqueMock.mockResolvedValue({
-      designDoc: { x: 1 },
-      buildPlan: { tasks: [{ title: "Implement callback" }] },
-      planReview: { decision: "fail", reviewIncomplete: true, issues: [] },
-    });
+  // BI-8925E227: an incomplete plan review is a reviewer outage, not a verdict.
+  // Keep the plan, back off, then re-run the review — never skip it forever.
+  const incompletePlan = {
+    designDoc: { x: 1 },
+    buildPlan: { tasks: [{ title: "Implement callback" }] },
+    planReview: { decision: "fail", reviewIncomplete: true, issues: [] },
+  };
+  const incompleteRow = (minutesAgo: number) => ({
+    summary: "Plan review: fail. Review incomplete: 0 of 2 reviewers returned a usable verdict. Retry the review; do not revise the document for a reviewer outage.",
+    createdAt: new Date(Date.now() - minutesAgo * 60_000),
+  });
+
+  it("backs off after an incomplete plan review, preserving the plan", async () => {
+    findUniqueMock.mockResolvedValue(incompletePlan);
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(5)]);
     const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
     expect(result).toMatchObject({ kind: "skipped" });
+    expect((result as { reason: string }).reason).toMatch(/could not be completed 1x.*next retry/);
     expect(dispatchPlanMock).not.toHaveBeenCalled();
     expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
     expect(executeToolMock).not.toHaveBeenCalled();
   });
+
+  it("re-runs the review of the saved plan once the backoff is due, without regenerating it", async () => {
+    findUniqueMock.mockResolvedValue(incompletePlan);
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(31)]);
+    const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewBuildPlan", { buildId: "FB-INCOMPLETE" }, "u", { featureBuildId: "FB-INCOMPLETE" });
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ kind: "resumed", via: "executeTool:reviewBuildPlan" });
+  });
+
+  it("counts only consecutive incomplete plan reviews", () => {
+    const now = new Date();
+    expect(countPlanReviewIncompleteStreak([
+      { summary: incompleteRow(0).summary, createdAt: now },
+      { summary: incompleteRow(0).summary, createdAt: new Date(now.getTime() - 1) },
+      { summary: "Plan review: pass. ok", createdAt: new Date(now.getTime() - 2) },
+      { summary: incompleteRow(0).summary, createdAt: new Date(now.getTime() - 3) },
+    ])).toEqual({ streak: 2, lastAt: now });
+    expect(countPlanReviewIncompleteStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+
   beforeEach(() => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
@@ -109,6 +150,32 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
     attestIdeateResearchMock.mockReset().mockResolvedValue({ recorded: true, reason: "research receipt recorded" });
     buildActivityFindManyMock.mockReset().mockResolvedValue([]);
+    buildActivityCreateMock.mockReset().mockResolvedValue({});
+    decideRegenerationMock.mockReset().mockResolvedValue({ due: false, reason: "plan-lanes-not-owed" });
+  });
+
+  // BI-6F2872FC: a legacy plan names no acceptance ids, so it can never be
+  // covered. When only the plan lanes refuse, it is regenerated once.
+  it("regenerates an untraceable plan once when only the plan lanes refuse the build", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" },
+      originatingBacklogItemId: "item-row",
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "plan lanes" });
+    decideRegenerationMock.mockResolvedValue({ due: true });
+    const out = await resumePreBuildPhase({ buildId: "FB-TRACE", phase: "plan", userId: "uT" });
+    expect(decideRegenerationMock).toHaveBeenCalledWith({ buildId: "FB-TRACE", originatorRowId: "item-row", buildPlan: { tasks: [{ title: "t" }] } });
+    expect(buildActivityCreateMock).toHaveBeenCalledWith({ data: expect.objectContaining({ buildId: "FB-TRACE", tool: "plan-coverage:regenerated" }) });
+    expect(dispatchPlanMock).toHaveBeenCalledWith({ buildId: "FB-TRACE", userId: "uT", forceRegenerate: true });
+    expect(out).toMatchObject({ kind: "resumed", via: "dispatchPlanForApprovedBuild:traceability" });
+  });
+
+  it("keeps the plan when regeneration cannot move the build", async () => {
+    findUniqueMock.mockResolvedValue({ designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" } });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "design lanes" });
+    const out = await resumePreBuildPhase({ buildId: "FB-KEEP", phase: "plan", userId: "uK" });
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "skipped" });
   });
 
   // BI-00588B51: builds reviewed while the room refused the research receipt

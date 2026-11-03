@@ -38,6 +38,19 @@ describe.skipIf(!url)("acceptance lease transactions on PostgreSQL", () => {
     for (const table of ["BacklogItem", "BacklogItemActivity", "WorkCapsule", "WorkCapsuleActivity"]) {
       await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
     }
+    // Prisma qualifies enum casts with the adapter schema. Keep the cloned
+    // columns' actual enum types by exposing compatible schema-local domains.
+    const enumDomains = await pool.query<{ ddl: string }>(`
+      SELECT DISTINCT format('CREATE DOMAIN %I.%I AS %I.%I', $1::text, e.typname, en.nspname, e.typname) AS ddl
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_type t ON t.oid = a.atttypid
+      JOIN pg_type e ON e.oid = CASE WHEN t.typtype = 'e' THEN t.oid ELSE t.typelem END
+      JOIN pg_namespace en ON en.oid = e.typnamespace
+      WHERE n.nspname = $1::text AND a.attnum > 0 AND NOT a.attisdropped AND e.typtype = 'e'
+    `, [schema]);
+    for (const { ddl } of enumDomains.rows) await pool.query(ddl);
     await pool.query('CREATE TABLE effects (port text NOT NULL)');
   });
   beforeEach(async () => {

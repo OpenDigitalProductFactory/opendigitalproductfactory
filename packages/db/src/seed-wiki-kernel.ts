@@ -28,13 +28,14 @@ import {
 import {
   appendRevision,
   attachSource,
-  linkPages,
   upsertWikiPage,
   type WikiPagePrincipleInput,
   type WikiPageKind,
   type WikiPageStatus,
 } from "./wiki-store";
 import { applyWikiSlugMigrations } from "./wiki-slug-migrations";
+import { replaceWikiPageOutLinks } from "./wiki-links";
+import { projectWikiLinksToGraph } from "./graph-sync";
 import {
   parseFrontmatter as parseFrontmatterShared,
   extractWikilinks as extractWikilinksShared,
@@ -507,13 +508,11 @@ async function seedWikiPages(
     const fromId = slugToId.get(fromSlug);
     if (!fromId) continue;
     for (const toSlug of extractWikilinks(body)) {
-      const toId = slugToId.get(toSlug);
-      if (!toId) {
-        orphanLinks.push({ from: fromSlug, to: toSlug });
-        continue;
-      }
-      await linkPages(prisma, { fromPageId: fromId, toPageId: toId });
+      if (!slugToId.has(toSlug)) orphanLinks.push({ from: fromSlug, to: toSlug });
     }
+    // Replace semantics (BI-23900D0A): the stored links become exactly what the
+    // body says, so a link removed from the file is removed from the install.
+    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body }, projectWikiLinksToGraph);
   }
 
   return { count: files.length, slugToId, orphanLinks, pages };

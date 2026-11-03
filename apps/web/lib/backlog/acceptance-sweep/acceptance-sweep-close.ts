@@ -1,6 +1,8 @@
 import type { completeBacklogItemTransition } from "@/lib/backlog/initiative-readiness/backlog-terminal-transition";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
+
 import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
 import {
   CLOSE_AUTHORISATION_CONFIG_KEY,
@@ -29,14 +31,14 @@ type Complete = typeof completeBacklogItemTransition;
 export type CloseOutcome =
   | { outcome: "closed"; authorityDecisionId: string }
   | { outcome: "refused"; code: string; authorityDecisionId: string }
-  | { outcome: "skipped"; reason: "status-changed" | "not-found" };
+  | { outcome: "skipped"; reason: "status-changed" | "not-found" | "owned-by-peer-installation" };
 
 export type AcceptanceSweepCloseDb = {
   backlogItem: {
     findUnique(args: {
       where: { id: string };
-      select: { status: true; organizationId: true };
-    }): Promise<{ status: string; organizationId: string | null } | null>;
+      select: { status: true; organizationId: true; body: true };
+    }): Promise<{ status: string; organizationId: string | null; body?: string | null } | null>;
   };
 };
 
@@ -70,8 +72,10 @@ export async function closeAllowedAcceptanceItem(input: {
   const { item, decision, authorisation, agentId } = input;
   // Never asked to close anything else; refuse rather than trust the caller.
   if (decision.verdict !== "allowed") throw new Error(`Refusing to close ${item.itemId}: completion verdict is ${decision.verdict}.`);
-  const row = await input.db.backlogItem.findUnique({ where: { id: item.id }, select: { status: true, organizationId: true } });
+  const row = await input.db.backlogItem.findUnique({ where: { id: item.id }, select: { status: true, organizationId: true, body: true } });
   if (!row) return { outcome: "skipped", reason: "not-found" };
+  // BI-C5794F1D: the page already excludes mirrors; this holds even if one arrives.
+  if (peerOwnedStatusRefusal(item.itemId, row.body)) return { outcome: "skipped", reason: "owned-by-peer-installation" };
   if (row.status !== AWAITING_ACCEPTANCE) return { outcome: "skipped", reason: "status-changed" };
 
   const organizationId = row.organizationId ?? "platform";

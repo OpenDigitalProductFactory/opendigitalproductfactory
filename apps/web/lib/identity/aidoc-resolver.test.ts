@@ -73,6 +73,17 @@ describe("AIDoc canonical authority", () => {
     const changed = projectInternalAIDoc({ ...base, agent: agent("AGT-EXT-CODEX", ["registry_read", "backlog_write"]) });
     expect(changed.operating_profile_fingerprint).not.toBe(second.operating_profile_fingerprint);
   });
+  it("preserves the issued legacy digest and does not relabel omitted governance as complete composition", () => {
+    const base = { gaid: "gaid:priv:dpf.internal:codex", principalRef: "PRN-CODEX", modelConfig: null };
+    const source = agent("AGT-EXT-CODEX", ["registry_read"]);
+    const first = projectInternalAIDoc({ ...base, agent: source });
+    expect(first.operating_profile_fingerprint).toBe("bff4e251504d69ab780a31297588a6c5c1484d84b1234ce731b7e99b3af6b91c");
+    const governed = projectInternalAIDoc({ ...base, agent: { ...source, governanceProfile: {
+      autonomyLevel: "supervised", hitlPolicy: "always", allowDelegation: false, maxDelegationRiskBand: "low",
+    } } });
+    expect(governed.hitl_profile).not.toEqual(first.hitl_profile);
+    expect(governed.operating_profile_fingerprint).toBe(first.operating_profile_fingerprint);
+  });
 });
 
 describe("resolveInternalAIDoc", () => {

@@ -33,7 +33,9 @@ export async function resumePreviewQueue(pin, deps = {}) {
   if (Object.keys(flags).some(key => typeof pin[key] !== 'string' || !pin[key].trim() || /[\r\n\0]/.test(pin[key]))
       || !isAbsolute(pin.worktree) || !/^[a-f0-9]{40}$/.test(pin.sha) || pin.branch === 'HEAD'
       || !/^NPEL-[A-Z0-9]+$/.test(pin.resumeLeaseId) || !/^TR-[A-Z0-9-]+$/.test(pin.taskRunId)
-      || !['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+      || !['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password
+      // DPF_MCP_URL is persisted as <PUBLIC_URL>/api/mcp/v1?tier=full; refuse any other query.
+      || (endpoint.search && endpoint.search !== '?tier=full') || endpoint.hash) {
     return { code: 64, reason: 'invalid-pin' };
   }
   const remaining = Date.parse(pin.waitDeadline) - (deps.now ?? Date.now)();

@@ -10,6 +10,7 @@ import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadWorkroomStallItems } from "./sources/workroom-stall";
+import { loadWorkroomOverseerItems } from "./sources/workroom-overseer";
 import { loadWorkroomRebindItems } from "./sources/workroom-rebind";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadScheduledJobAttentionItems, type ScheduledJobAttentionDb } from "./sources/scheduled-job";
@@ -18,6 +19,7 @@ import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
 import { loadOrphanedApprovalItems } from "./sources/orphaned-approval";
 import { loadPlatformHealthItems } from "./sources/platform-health";
+import { loadAgentToolchainItems } from "./sources/agent-toolchain";
 import {
   loadCoworkerMemoryItems,
   type CoworkerMemoryAttentionDb,
@@ -30,6 +32,7 @@ import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-cap
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
 import { loadMailroomItemAttentionItems } from "./sources/mailroom-item";
 import { loadContributionSetupItems } from "./sources/contribution-setup";
+import { loadOrganizationDirectionItems } from "./sources/organization-direction";
 import { loadBusinessJourneyItems } from "./sources/business-journey";
 import {
   loadOutboundItems,
@@ -95,6 +98,8 @@ export function filterAttentionForAudience(
 /** Options every caller resolves from the authenticated session. Both ids are
  *  the READING user: attention is projected for one person at a time. */
 export type AttentionLoadOptions = {
+  /** Inbox supplies its bounded envelope page separately, with total and cursor. */
+  includeCoworkerEnvelopes?: boolean;
   aiReadinessUserId?: string;
   /** The reader's user id, used to scope CoworkerActionEnvelope proposals to
    *  their delegating user. Omitted → the envelope source is not registered at
@@ -118,6 +123,8 @@ export function attentionSourceLoaders(
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
     { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
+    // What the drive's per-room overseer duty could not resolve itself (BI-8E1486FA).
+    { source: "workroom-stall", load: () => loadWorkroomOverseerItems(db) },
     { source: "workroom-rebind", load: () => loadWorkroomRebindItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
     // Cron-backed ScheduledJob failures and an uncommissioned issue intake (BI-FD40397B).
@@ -132,6 +139,7 @@ export function attentionSourceLoaders(
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
+    { source: "agent-toolchain", load: () => loadAgentToolchainItems(db) },
     { source: "business-journey", load: () => loadBusinessJourneyItems(db) },
     { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
     {
@@ -141,6 +149,7 @@ export function attentionSourceLoaders(
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     { source: "mailroom-item", load: () => loadMailroomItemAttentionItems(db) },
     { source: "contribution-setup", load: () => loadContributionSetupItems(db) },
+    { source: "organization-direction", load: () => loadOrganizationDirectionItems(db) },
     {
       // Pure registry arithmetic — no query, so it costs nothing per load. The
       // clock is the measurement clock: real time in production, the pinned
@@ -152,7 +161,7 @@ export function attentionSourceLoaders(
     {
       source: "provider-credential",
       load: async () => [
-        ...(await loadProviderCredentialItems()),
+        ...(await loadProviderCredentialItems(db)),
         ...(await loadProviderSuitabilityDriftItems(db)),
       ],
     },
@@ -166,7 +175,7 @@ export function attentionSourceLoaders(
         ),
     });
   }
-  if (opts.delegatingUserId) {
+  if (opts.delegatingUserId && opts.includeCoworkerEnvelopes !== false) {
     loaders.push({
       source: "coworker-envelope",
       load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),

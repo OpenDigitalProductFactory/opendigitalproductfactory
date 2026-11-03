@@ -7,7 +7,14 @@ import type { PortalContextEnvelope } from "./types";
 type WorkProjection = PortalContextEnvelope["work"];
 
 describe("resolvePortalAuthority", () => {
-  it("allows the current executor or scope-claim principal to act on a capsule without broad platform role", () => {
+  it("uses the server's current action decision and still requires a live room lease", () => {
+    const input = { user: { id: "user-1" }, platformRole: "none", domainTools: [], roomActionAccess: true,
+      work: { ...emptyWork(), capsule: capsuleAnchor() } };
+    expect(resolvePortalAuthority(input).canActOnCapsule).toBe(true);
+    expect(resolvePortalAuthority({ ...input, roomActionAccess: false }).canActOnCapsule).toBe(false);
+    expect(resolvePortalAuthority({ ...input, work: { ...emptyWork(), capsule: capsuleAnchor({ isLeaseExpired: true }) } }).canActOnCapsule).toBe(false);
+  });
+  it("does not infer action authority from executor or scope-claim locators", () => {
     const executorAuthority = resolvePortalAuthority({
       user: { id: "user-1", isSuperuser: false },
       userPrincipalId: "principal-1",
@@ -53,8 +60,9 @@ describe("resolvePortalAuthority", () => {
       promotionReviewerGrantKeys: [],
     });
 
-    expect(executorAuthority.canActOnCapsule).toBe(true);
-    expect(scopeClaimAuthority.canActOnCapsule).toBe(true);
+    expect(executorAuthority.canActOnCapsule).toBe(false);
+    expect(executorAuthority.canActOnBuild).toBe(false);
+    expect(scopeClaimAuthority.canActOnCapsule).toBe(false);
     expect(unrelatedAuthority.canActOnCapsule).toBe(false);
   });
 

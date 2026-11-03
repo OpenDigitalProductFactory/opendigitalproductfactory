@@ -24,6 +24,18 @@ test("rejects source work when five independent future slices have no live cover
   assert.match(verdict.reason, /live backlog coverage receipt/i);
 });
 
+test("gates Grok's write and search_replace tools like Write and Edit (BI-742D707B)", async () => {
+  for (const toolName of ["write", "search_replace"]) {
+    const verdict = await decide({
+      toolName,
+      toolInput: { file_path: "apps/web/lib/demand/federated.ts" },
+      plans: [{ path: "docs/superpowers/plans/federated.md", text: mappedPlan.replace("receipt-live", "pending") }],
+      checkReceipt: async () => ({ ok: true, valid: true }),
+    });
+    assert.equal(verdict.block, true, toolName);
+  }
+});
+
 test("allows a legitimately atomic phased plan after its receipt is revalidated", async () => {
   const plan = mappedPlan.replace("Decision: decomposed", "Decision: atomic");
   const verdict = await decide({

@@ -135,6 +135,20 @@ describe("loadInstallationIdentityView", () => {
     expect(workSync?.rationale).toContain("no established federation link");
   });
 
+  it("exposes the secondary purposes the confirmed intent declares", async () => {
+    const { store, db } = configStore({
+      [OPERATING_INTENT_CONFIG_KEY]: { ...CONFIRMED_DEV_INTENT, primaryPurpose: "operate-organization", secondaryPurposes: ["evolve-dpf"] },
+    });
+    const view = await loadInstallationIdentityView(db, store, { readText: stateText("production"), env: {} });
+    expect(view.secondaryPurposes).toEqual(["evolve-dpf"]);
+  });
+
+  it("reports no secondary purposes when no readable record exists", async () => {
+    const { store, db } = configStore({});
+    const view = await loadInstallationIdentityView(db, store, { readText: stateText("production"), env: {} });
+    expect(view.secondaryPurposes).toEqual([]);
+  });
+
   it("reports the resolved class, not the class a portal declaration asked for", async () => {
     const { store, db } = configStore({
       [OPERATING_INTENT_CONFIG_KEY]: CONFIRMED_DEV_INTENT,

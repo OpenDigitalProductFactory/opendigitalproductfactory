@@ -1,3 +1,4 @@
+import { projectVitestCoverage, resolveVitestExhaustiveReason } from "./local-ci-vitest-selection.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -92,7 +93,9 @@ export function resolveLocalCiTestProfile(env = process.env) {
     throw new Error("DPF_LOCAL_CI_TEST_WORKERS must be an integer from 1 to 4");
   }
   const initialWorkers = Number(requested ?? HOST_TEST_INITIAL_WORKERS);
-  return { initialWorkers, retryWorkers: Math.min(Number(HOST_TEST_RETRY_WORKERS), initialWorkers) };
+  const exhaustiveReason = resolveVitestExhaustiveReason(env);
+  return { initialWorkers, retryWorkers: Math.min(Number(HOST_TEST_RETRY_WORKERS), initialWorkers),
+    ...(exhaustiveReason ? { exhaustiveReason } : {}) };
 }
 
 export function resolveCommandInvocation(command, baseEnv = process.env) {
@@ -346,7 +349,7 @@ export function createToolchainFingerprint(input) {
     nodeOptions: input.nodeOptions ?? "",
     testNodeOptions: input.testNodeOptions ?? "",
   };
-  if (input.testProfile && input.testProfile.initialWorkers !== Number(HOST_TEST_INITIAL_WORKERS)) {
+  if (input.testProfile && (input.testProfile.initialWorkers !== Number(HOST_TEST_INITIAL_WORKERS) || input.testProfile.exhaustiveReason)) {
     toolchain.testProfile = input.testProfile;
   }
   return {
@@ -498,7 +501,7 @@ export function createLocalIntegrationPlan(input) {
     // Fast PR guard parity runs before the expensive test/build gates.
     ...guardCommands,
     // Fail fast on the definitive compile/type-generation proof before spending
-    // the shared sandbox on the exhaustive suite. A red typecheck cannot become
+    // the shared sandbox on the selected local suite. A red typecheck cannot become
     // green after tests, while successful candidates still execute every gate.
     // Typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
@@ -540,5 +543,18 @@ export function createLocalIntegrationPlan(input) {
     executionLane,
     testProfile,
     commands,
+  };
+}
+
+export function projectLocalCiEvidence({ evidencePlan, evidencePlanPath, vitestReceipt, ...input }) {
+  return {
+    plannedExecutionLane: evidencePlan?.executionLane ?? null,
+    evidencePlan: evidencePlan ? {
+      path: evidencePlanPath, digest: evidencePlan.digest,
+      plannerVersion: evidencePlan.plannerVersion, policyVersion: evidencePlan.policyVersion,
+      evidenceTier: evidencePlan.evidenceTier, executionLane: evidencePlan.executionLane,
+      fullSuite: evidencePlan.fullSuite, basis: "planned-policy",
+    } : null,
+    vitestCoverage: projectVitestCoverage({ receipt: vitestReceipt, ...input }),
   };
 }

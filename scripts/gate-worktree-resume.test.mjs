@@ -55,6 +55,9 @@ function makeWorktree() {
   git(["add", "README.md"]);
   git(["commit", "-q", "-m", "init"]);
   git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  writeFileSync(join(dir, "runtime.mjs"), "export const candidate = true;\n");
+  git(["add", "runtime.mjs"]);
+  git(["commit", "-q", "-m", "runtime candidate"]);
   return { dir, sha: git(["rev-parse", "HEAD"]) };
 }
 

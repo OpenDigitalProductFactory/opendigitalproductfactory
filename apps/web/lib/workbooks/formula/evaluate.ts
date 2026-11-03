@@ -37,6 +37,9 @@ const CONSTANTS: Record<string, FormulaValue> = {
   no: false,
 };
 
+/** Names a formula may use that are not columns (true/false/null/yes/no). */
+export const FORMULA_CONSTANT_NAMES: ReadonlySet<string> = new Set(Object.keys(CONSTANTS));
+
 /**
  * Excel → jsep-friendly normalization: drop leading `=`, `<>`→`!=`, `=`→`==`,
  * `[Name]`→name. Transforms are applied only OUTSIDE string literals, so an

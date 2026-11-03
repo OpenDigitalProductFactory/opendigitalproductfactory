@@ -11,7 +11,6 @@
 // The legacy pure scorer emits ToolFidelitySample[] to store in
 // ModelProfile.customScores (via tool-fidelity-policy).
 
-import { TASK_CLASSES } from "@/lib/tak/intent-taxonomy";
 import { fromJSONSchema } from "zod";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
@@ -26,34 +25,47 @@ export interface GoldenCase {
 }
 
 /**
- * A small golden set derived from the task-class taxonomy: for each class, a few
- * live-state prompts whose correct answer is one of the class's authoritative
- * tools. Kept in-repo so the curve is reproducible; extend as classes are added.
+ * Per-question readers, not the taxonomy's broader class-level evidence set.
+ * Keep prompts/order stable; changed expectations produce a new goldenDigest.
  */
-export const GOLDEN_CASES: readonly GoldenCase[] = TASK_CLASSES.flatMap((def) => {
-  const prompts: Record<string, string[]> = {
-    "backlog-status": [
-      "have the pressing issues been resolved?",
-      "how many backlog items are still open?",
-      "what's the current status of the backlog?",
-    ],
-    "provider-health": [
-      "is the local model provider healthy right now?",
-      "which model will run the next build phase?",
-      "are any AI endpoints offline?",
-    ],
-    "capsule-status": [
-      "what phase is the current build in?",
-      "how far along is this work capsule?",
-      "is the build making progress?",
-    ],
-  };
-  return (prompts[def.taskClass] ?? []).map((prompt) => ({
-    taskClass: def.taskClass,
-    prompt,
-    correctToolNames: def.authoritativeToolNames,
-  }));
-});
+export const GOLDEN_CASES: readonly GoldenCase[] = [
+  ...["have the pressing issues been resolved?", "how many backlog items are still open?",
+    "what's the current status of the backlog?"].map(prompt => ({
+    taskClass: "backlog-status", prompt, correctToolNames: ["list_backlog_items", "query_backlog"],
+  })),
+  { taskClass: "provider-health", prompt: "is the local model provider healthy right now?",
+    correctToolNames: ["get_ai_platform_posture"] },
+  { taskClass: "provider-health", prompt: "which model will run the next build phase?",
+    correctToolNames: ["resolve_model_selection"] },
+  { taskClass: "provider-health", prompt: "are any AI endpoints offline?",
+    correctToolNames: ["get_ai_platform_posture"] },
+  ...["what phase is the current build in?", "how far along is this work capsule?",
+    "is the build making progress?"].map(prompt => ({
+    taskClass: "capsule-status", prompt, correctToolNames: ["get_build_progress_visibility"],
+  })),
+];
+
+/** Only original authorized definitions; missing question coverage is unrun. */
+export function buildToolFidelitySurface(
+  catalog: readonly ToolDefinition[], surfaceSize: number,
+): ToolDefinition[] | null {
+  if (!Number.isSafeInteger(surfaceSize) || surfaceSize <= 0
+    || new Set(catalog.map(tool => tool.name)).size !== catalog.length) return null;
+  const reads = catalog.filter(tool => tool.sideEffect === false && !tool.consequence && !tool.consequenceForCall
+    && !tool.requiresExternalAccess && !tool.secretResultKeys?.length)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const pinned = new Set<string>();
+  for (const golden of GOLDEN_CASES) {
+    const matches = reads.filter(tool => golden.correctToolNames.includes(tool.name));
+    const selected = matches.find(tool => !Array.isArray(tool.inputSchema.required) || tool.inputSchema.required.length === 0)
+      ?? matches[0];
+    if (!selected) return null;
+    pinned.add(selected.name);
+  }
+  if (pinned.size > surfaceSize || reads.length < surfaceSize) return null;
+  return [...reads.filter(tool => pinned.has(tool.name)), ...reads.filter(tool => !pinned.has(tool.name))]
+    .slice(0, surfaceSize);
+}
 
 export type RunTurnFn = (input: {
   prompt: string;

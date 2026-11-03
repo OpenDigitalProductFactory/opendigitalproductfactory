@@ -91,6 +91,8 @@ export function directiveOf(source) {
   return match ? match[1] : null;
 }
 
+const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+
 /** Value-import specifiers of a module (type-only imports are erased by the compiler and cannot reach a bundle). */
 export function valueImportSpecifiers(source) {
   const out = [];
@@ -99,6 +101,9 @@ export function valueImportSpecifiers(source) {
     if (typeOnly) continue;
     out.push(specifier);
   }
+  // A dynamic import() is still a value edge. The production build follows it
+  // (BI-FBA996A4); a static-only walk reported the client module as safe.
+  for (const match of source.matchAll(DYNAMIC_IMPORT_RE)) out.push(match[1]);
   return out;
 }
 

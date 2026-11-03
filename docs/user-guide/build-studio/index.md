@@ -24,7 +24,7 @@ development workload.
 
 ### Development Workrooms
 
-Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view.
+Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view. These groups come from the same room-health definition as **Operations > Workrooms**, so a room reads the same on both pages. A room ready to promote is waiting on a person to close it out, so it appears under **Needs attention** on both.
 
 The hub refreshes through one live connection and retains confirmed cards while reconnecting. **Inspect** opens the canonical Workroom, while **Resume**, **Review**, **Handoff**, and pull-request links appear only when the recorded Workroom facts support them. Use **Load older tasks** for the next signed, bounded page. Completion, failure, expiry, approval, review, and takeover attention link back to the same Workroom and are deduplicated, so reading or dismissing a notification does not recreate it. Create/adopt controls remain below the hub. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.
 
@@ -92,9 +92,13 @@ does not certify or activate a coworker.
 
 Build Studio turns the requested outcome into an evidence-backed problem statement and acceptance criteria. It searches the existing codebase and platform guidance before proposing change.
 
+Independent reviewers also check the design before building starts. If one of them fails it, Build Studio revises the design from the reviewer's findings, rewrites the plan to match, and the reviewer checks the new version. It does this at most twice. If the reviewer still fails the design, the build comes to you with the findings that are still open.
+
 ### Plan
 
 The AI Coworker creates or refines the implementation plan, including affected files, tests, documentation impact, dependencies, and risk controls. Routine plan progression can remain under coworker custody; unresolved product judgment or elevated consequence returns to you as a clear decision.
+
+Each plan task names the acceptance criteria it delivers. When the work is large, or the files the plan touches make it so, the platform checks that every approved acceptance criterion is covered by some task, records that coverage against the reviewed plan, and asks an independent reviewer to approve the plan before building starts. If a plan cannot be traced to the criteria, the activity log says which criteria no task covers. A plan written before tasks named their criteria is regenerated once so it can be traced. None of this waits on you.
 
 ### Build
 

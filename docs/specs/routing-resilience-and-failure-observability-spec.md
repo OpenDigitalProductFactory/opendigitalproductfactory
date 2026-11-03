@@ -56,6 +56,23 @@ outlive account deletion. Native execution with uncertain side effects stops
 fallback and redispatch. The [capacity refactor plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
 records source qualification and served acceptance separately.
 
+The R2 source for [restricted present reassessment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+adds a stricter execution mode. It binds one qualified in-process HTTP
+composition under normal routing, sensitivity and account constraints. A changed
+account, configuration, tool surface or required bound refuses further execution;
+it cannot select another provider, native adapter or textual tool fallback.
+Credential reads cannot renew credentials or mutate the account. Ordinary
+fallback behavior below is unchanged.
+
+Each actual HTTP request, including an adapter retry, requires a captured
+reservation and consumes the immutable start and time limits. Each tool effect
+uses the same pre-effect capture boundary. Failed observation after a start
+retains uncertain consumption and holds subsequent effects, while a genuine
+committed writer receipt takes precedence. These source controls neither settle
+historical effects nor prove served acceptance. Finite total-token execution
+still requires a qualified input-bound producer; the normal 50,000-token
+positive case remains incomplete.
+
 The material repo anchors are:
 
 - `apps/web/lib/routing/fallback.ts`
@@ -163,6 +180,7 @@ Implementation shape:
    - `getExclusionReasonV2()` returns a clear reason such as `runtime_cooldown:rate_limit` when `unavailableUntilMs > now`.
 4. Preserve lifecycle writes only for durable conditions:
    - Auth/billing failures may disable provider lifecycle state after explicit classification.
+   - For a subscription OAuth sign-in, the explicit classification is the renewal's answer: only a confirmed refusal (RFC 6749 `invalid_grant`, or no refresh token) takes the account out of routing. A bare 401/403 from the token endpoint, or a second auth error after a successful renewal, keeps it routable behind the runtime cooldown; background renewal (`ops/subscription-oauth-renewal`) retries with backoff and raises a "sign in again" attention item only on a confirmed refusal (BI-A53C594E).
    - Rate limit and transient provider overload should open the runtime circuit, not permanently mutate `ModelProvider.status`.
    - Existing `ModelProfile.modelStatus = "degraded"` can remain for model quality/profile degradation, but it is not sufficient as the circuit gate because degraded endpoints are intentionally eligible today.
 5. Recovery:

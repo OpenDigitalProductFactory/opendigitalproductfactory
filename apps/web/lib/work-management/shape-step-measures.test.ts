@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeShapeStepMeasures, type StepSnapshot } from "./shape-step-measures";
+import { computeShapeStepMeasures, topByWaitTimesQueue, typicalStepWaitMs, type StepSnapshot } from "./shape-step-measures";
 
 const H = 3_600_000;
 const NOW = new Date("2026-10-14T12:00:00Z");
@@ -101,5 +101,21 @@ describe("computeShapeStepMeasures", () => {
       now: NOW,
     });
     expect(steps[0]!.exits).toBe(0);
+  });
+});
+
+describe("typicalStepWaitMs", () => {
+  it("is dwell minus process, weighted by exits, and null below five exits", () => {
+    expect(typicalStepWaitMs([snap("merge", 2, 3, 10, 1), snap("merge", 1, 3, 20, 3)])).toBe(13 * H);
+    expect(typicalStepWaitMs([snap("merge", 2, 4, 10, 1)])).toBeNull();
+    expect(typicalStepWaitMs([snap("merge", 2, 6, 10, null)])).toBeNull();
+  });
+});
+
+describe("topByWaitTimesQueue", () => {
+  it("picks the most rooms held × wait among measured piles, falling back to rooms held when none is measured", () => {
+    expect(topByWaitTimesQueue([{ id: "a", roomsHeld: 9, waitMs: 1 }, { id: "b", roomsHeld: 2, waitMs: 10 }, { id: "c", roomsHeld: 50, waitMs: null }])?.id).toBe("b");
+    expect(topByWaitTimesQueue([{ id: "a", roomsHeld: 3, waitMs: null }, { id: "b", roomsHeld: 7, waitMs: null }])?.id).toBe("b");
+    expect(topByWaitTimesQueue([{ id: "a", roomsHeld: 0, waitMs: 99 }])).toBeNull();
   });
 });

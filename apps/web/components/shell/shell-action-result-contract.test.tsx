@@ -11,6 +11,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { withMessages } from "@/test-support/with-messages";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 let pathname = "/workspace";
@@ -86,6 +87,22 @@ function renderHeader(navMode: "worker" | "operator" = "operator") {
     />,
   );
 }
+
+it("closes nested feedback before closing account actions on consecutive Escape presses", () => {
+  render(withMessages(<Header platformRole="OWNER" brandName="Acme" brandLogoUrl={null} userId="user-1" />));
+  const account = screen.getByRole("button", { name: "Account and help" });
+  fireEvent.click(account);
+  const feedback = screen.getByRole("button", { name: /^feedback$/i });
+  fireEvent.click(feedback);
+  expect(screen.getByRole("dialog", { name: /send feedback/i })).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: /send feedback/i })).not.toBeInTheDocument();
+  expect(account).toHaveAttribute("aria-expanded", "true");
+  expect(feedback).toHaveFocus();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(account).toHaveAttribute("aria-expanded", "false");
+  expect(account).toHaveFocus();
+});
 
 const sections: ShellNavSection[] = [
   {

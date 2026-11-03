@@ -29,17 +29,20 @@ agents that held broad credentials and met no gate at the moment a damaging acti
 |---|---|
 | Sandboxing cut permission prompts by 84% internally; the post names "approval fatigue" as the risk it addresses. **Vendor-reported.** | Anthropic Engineering, *Making Claude Code more secure and autonomous with sandboxing*, 2025-10-20 — <https://anthropic.com/engineering/claude-code-sandboxing> |
 | Users approve about 93% of permission prompts. Anthropic describes the old choice as manual approval, skip-permissions, or high-maintenance sandboxes. Its classifier reports a 17% false-negative rate on real overeager actions (n=52). **Vendor-reported.** | Anthropic Engineering, *How we built Claude Code auto mode*, 2026-03-25 — <https://www.anthropic.com/engineering/claude-code-auto-mode> |
-| Users approve 97% of permission prompts but reject 39% of plans. In a controlled study (n=1,053), people caught a disguised dangerous command 13.6% of the time: about 17% early in a session and about 5% after 50 or more prompts. Auto mode became the default on 2026-08-14. **Vendor-reported.** | Claude blog, *Auto mode is now the default in Claude Code*, 2026-08-07 — <https://claude.com/blog/auto-mode-default-in-claude-code> |
+| Field observations report 97% approval of permission prompts and 39% rejection of plans. Separately, a controlled study of 1,053 paid testers in a test environment found that human review caught a dangerous command 13.6% of the time: about 17% early in a session and about 5% after 50 or more prompts. The study changed only the displayed prompt; approving it did not execute a dangerous command. These are distinct evidence populations and tasks. Auto mode became the default for new Pro, Max, and Team sessions on 2026-08-14. **Vendor-reported, not a GPP evaluation.** | Anthropic, *Auto mode is now the default in Claude Code for Pro, Max, and Team plans*, 2026-08-07; source rechecked 2026-10-16 — <https://claude.com/resources/articles/auto-mode-default-in-claude-code> |
 | A red-team exercise in which an employee was phished produced malicious exfiltration in 24 of 25 attempts. The stated principle is to design for containment at the environment layer first. **Vendor-reported.** | Anthropic Engineering, *How we contain Claude across products*, 2026-05-25 — <https://www.anthropic.com/engineering/how-we-contain-claude> |
 | A prompt-injection chain against classifier-gated auto mode achieved remote code execution in 60–80% of attempts (disclosed 2026-08-26). CSA advises treating the classifier as a productivity control, not a substitute for sandboxing, egress control or credential isolation. | Cloud Security Alliance Labs research note, 2026-08/09 — <https://labs.cloudsecurityalliance.org/research/csa-research-note-claude-code-automode-prompt-injection-2026/> |
 | In a field study, adherence to permission warnings fell substantially over three weeks; warnings that change appearance slowed the decline. | Vance et al., *Tuning Out Security Warnings*, MIS Quarterly 42(2), 2018 — <https://misq.umn.edu/pub/skin/frontend/default/misq/pdf/V42I2/14124_RA_VanceJenkins.pdf> |
 | In MFA "push bombing", attackers repeat approval prompts until a person accepts one; this was the entry vector in the 2022 Uber breach. Approval floods become an attack surface. | BleepingComputer — <https://www.bleepingcomputer.com/news/security/mfa-fatigue-attacks-are-putting-your-organization-at-risk/amp/> |
 
-**What the evidence supports.** The strongest data point for GPP is the gap between how people
-treat plans and how they treat prompts. Users reject plans at a meaningful rate and approve
-prompts almost by reflex. People can supervise well when asked about a decision, and poorly when
-asked about each tool call. GPP moves the human checkpoint from the tool call to the decision
-that authorizes a class of tool calls.
+**What the evidence supports.** The vendor field observations and controlled experiment
+motivate investigating the limits of repetitive approval prompts and alternatives to them.
+A rejection rate alone does not establish whether a plan decision was correct, and the field
+metrics are not results from the controlled tester cohort. The experiment measured detection
+of a displayed dangerous command in a test environment, not business outcomes or GPP.
+The proposed GPP design moves a checkpoint to a scoped decision that can authorize a bounded
+class of tool calls, while requiring enforcement on every call. Its efficacy remains unmeasured
+by this evidence; it needs its own implementation, failure-case testing and assessment.
 
 **What the evidence does not support.** No independent survey was found that measures how many
 users run YOLO or skip-permission modes. Do not cite an adoption rate.

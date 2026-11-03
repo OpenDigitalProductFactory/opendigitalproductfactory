@@ -8,10 +8,10 @@ import { describe, expect, it } from "vitest";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { getWorkShape, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import { lowerToDefinition } from "./emit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { lowerToDefinition } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { legacyDroppedFields } from "./legacy";
+import { legacyDroppedFields } from "@dpf/validators/gpp/legacy";
 import { buildRatificationReport } from "./ratification-report";
 
 function shape(key: string): WorkShapeDefinition {

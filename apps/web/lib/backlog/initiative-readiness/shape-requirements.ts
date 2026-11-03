@@ -155,7 +155,8 @@ function medium(facts: InitiativeReadinessFacts, target: ReadinessTarget): Shape
     req("RESEARCH_REQUIRED", facts.research, "design-author"),
     // The item body is the design: acceptance criteria in the body mint the
     // baseline (design §4, "baseline from item, not from spec").
-    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "product-owner"),
+    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline,
+      facts.objectiveBaselineRequiresReview ? "design-checklist-reviewer" : "product-owner"),
   );
   if (target === "plan") return rows;
   rows.push(

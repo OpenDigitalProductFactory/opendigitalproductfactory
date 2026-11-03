@@ -13,8 +13,11 @@ vi.mock("@/lib/git-utils", () => gitUtils);
 
 const repositoryArtifact = vi.hoisted(() => ({
   readRepositoryProviderBlob: vi.fn(),
+  isCanonicalRepositorySource: vi.fn(),
 }));
 vi.mock("@/lib/backlog/initiative-readiness/repository-artifact", () => repositoryArtifact);
+const componentSource = vi.hoisted(() => ({ prepare: vi.fn() }));
+vi.mock("../workroom-repository-source", () => ({ prepareWorkroomRepositorySource: componentSource.prepare }));
 
 const db = vi.hoisted(() => ({
   prisma: {
@@ -44,11 +47,70 @@ const EXPECTED_TOOLS = [
 beforeEach(() => {
   vi.clearAllMocks();
   gitUtils.isGitAvailable.mockResolvedValue(true);
+  repositoryArtifact.isCanonicalRepositorySource.mockResolvedValue(true);
+  componentSource.prepare.mockResolvedValue(null);
   gitUtils.gitBlobId.mockResolvedValue({ blobId: "blob-1" });
   repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
     ok: false,
     code: "IMMUTABLE_SOURCE_UNAVAILABLE",
     error: "provider unavailable",
+  });
+});
+
+describe("exact public component source", () => {
+  const repositoryFullName = "OpenDigitalProductFactory/dpf-workroom";
+  const version = "a".repeat(40), expectedBlobId = "b".repeat(40);
+  const admission = { itemId: "BI-COMPONENT", workroomId: "WC-COMPONENT", repositoryFullName,
+    branchName: "codex/component", headSha: version, isCurrent: async () => true };
+  it.each(["read_source_at_version", "search_source_at_version"])("%s never substitutes the installation's local Git", async tool => {
+    repositoryArtifact.isCanonicalRepositorySource.mockResolvedValue(false);
+    componentSource.prepare.mockResolvedValue({ sourceAdmission: admission });
+    repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({ ok: true,
+      data: Buffer.from("export const component = true;\n"), blobId: expectedBlobId });
+    gitUtils.gitBlobId.mockResolvedValue({ blobId: expectedBlobId });
+    gitUtils.gitShow.mockResolvedValue({ content: "wrong local repository" });
+    gitUtils.gitGrep.mockResolvedValue({ results: [{ path: "package.json", line: 1, text: "wrong local repository" }] });
+    const result = await versionHistoryPack.handlers[tool]!({ repositoryFullName, version, expectedBlobId,
+      path: "package.json", glob: "package.json", query: "component", workroomId: "WC-COMPONENT" }, "human", { agentId: "assistant" });
+    expect(result.success).toBe(true);
+    expect(gitUtils.gitShow).not.toHaveBeenCalled();
+    expect(gitUtils.gitGrep).not.toHaveBeenCalled();
+    expect(gitUtils.gitBlobId).not.toHaveBeenCalled();
+    expect(repositoryArtifact.readRepositoryProviderBlob).toHaveBeenCalledWith(expect.objectContaining({
+      repositoryFullName, commitSha: version, sourceAdmission: admission }));
+  });
+  it("refuses foreign source without actor-admitted selection before any Git/provider read", async () => {
+    repositoryArtifact.isCanonicalRepositorySource.mockResolvedValue(false);
+    const result = await versionHistoryPack.handlers.read_source_at_version!({ repositoryFullName, version,
+      expectedBlobId, path: "package.json" }, "human", { agentId: "assistant" });
+    expect(result.success).toBe(false);
+    expect(gitUtils.gitBlobId).not.toHaveBeenCalled();
+    expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
+  });
+  it.each(["repository", "head", "blob", "revoked"])("refuses a selected %s mismatch before reading source", async drift => {
+    repositoryArtifact.isCanonicalRepositorySource.mockResolvedValue(false);
+    componentSource.prepare.mockResolvedValue({ sourceAdmission: { ...admission, isCurrent: async () => drift !== "revoked" } });
+    const result = await versionHistoryPack.handlers.read_source_at_version!({
+      repositoryFullName: drift === "repository" ? "other/repo" : repositoryFullName,
+      version: drift === "head" ? "c".repeat(40) : version,
+      expectedBlobId: drift === "blob" ? undefined : expectedBlobId,
+      path: "package.json", workroomId: "WC-COMPONENT" }, "human", { agentId: "assistant" });
+    expect(result.success).toBe(false);
+    expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
+    expect(gitUtils.gitShow).not.toHaveBeenCalled();
+  });
+  it("withholds bytes when selected actor admission is revoked during the provider read", async () => {
+    let current = true;
+    repositoryArtifact.isCanonicalRepositorySource.mockResolvedValue(false);
+    componentSource.prepare.mockResolvedValue({ sourceAdmission: { ...admission, isCurrent: async () => current } });
+    repositoryArtifact.readRepositoryProviderBlob.mockImplementation(async () => {
+      current = false; return { ok: true, data: Buffer.from("do not disclose"), blobId: expectedBlobId };
+    });
+    const result = await versionHistoryPack.handlers.read_source_at_version!({ repositoryFullName, version,
+      expectedBlobId, path: "package.json", workroomId: "WC-COMPONENT" }, "human", { agentId: "assistant" });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("do not disclose");
+    expect(componentSource.prepare).toHaveBeenCalledWith({ workroomId: "WC-COMPONENT", userId: "human", agentId: "assistant" });
   });
 });
 
@@ -398,14 +460,58 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect(res.error).toBe("no such path");
   });
 
-  it("all git tools short-circuit when git history is unavailable", async () => {
+  it("git-only tools short-circuit when git history is unavailable", async () => {
     gitUtils.isGitAvailable.mockResolvedValue(false);
-    for (const t of ["read_source_at_version", "search_source_at_version", "list_source_directory", "compare_versions"]) {
+    for (const t of ["read_source_at_version", "list_source_directory", "compare_versions"]) {
       const res = await versionHistoryPack.handlers[t]({ path: "x", query: "x", from: "a" }, "u1");
       expect(res.success, t).toBe(false);
       if (t === "read_source_at_version") expect(res.message, t).toContain("repositoryFullName");
       else expect(res.message, t).toBe("Git not available.");
     }
+  });
+
+  it("searches one immutable provider file when the live git volume is unavailable", async () => {
+    gitUtils.isGitAvailable.mockResolvedValue(false);
+    repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
+      ok: true,
+      data: Buffer.from("no match\nterminalWriterDispatchContract here\nsecond terminalWriterDispatchContract\n", "utf8"),
+      blobId: "b".repeat(40),
+    });
+    const res = await versionHistoryPack.handlers.search_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      query: "terminalWriterDispatchContract",
+      glob: "apps/web/lib/routing/execution-adapter-types.ts",
+      version: "a".repeat(40),
+      expectedBlobId: "b".repeat(40),
+      offset: 1,
+      maxResults: 1,
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      data: {
+        results: [{ path: "apps/web/lib/routing/execution-adapter-types.ts", line: 3, text: "second terminalWriterDispatchContract" }],
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        blobId: "b".repeat(40),
+        offset: 1,
+        hasMore: false,
+      },
+    });
+    expect(repositoryArtifact.readRepositoryProviderBlob).toHaveBeenCalledWith({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      commitSha: "a".repeat(40),
+      path: "apps/web/lib/routing/execution-adapter-types.ts",
+      expectedBlobId: "b".repeat(40),
+    });
+  });
+
+  it("names the immutable locator needed for provider-backed search", async () => {
+    gitUtils.isGitAvailable.mockResolvedValue(false);
+    const res = await versionHistoryPack.handlers.search_source_at_version({ query: "needle", glob: "*.ts", version: "main" }, "u1");
+    expect(res).toMatchObject({ success: false, error: "immutable_search_locator_required" });
+    expect(res.message).toContain("repositoryFullName");
+    expect(res.message).toContain("40-character commit");
+    expect(res.message).toContain("one exact source path");
   });
 
   it("search_source_at_version returns a deterministic page and continuation offset", async () => {
@@ -446,6 +552,7 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     }));
     const search = versionHistoryPack.definitions.find((tool) => tool.name === "search_source_at_version")!;
     expect(search.inputSchema.properties).toEqual(expect.objectContaining({
+      repositoryFullName: expect.objectContaining({ type: "string" }),
       offset: expect.objectContaining({ type: "number" }),
       expectedBlobId: expect.objectContaining({ type: "string" }),
     }));

@@ -12,7 +12,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { err, ok } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import type { IntakeControllerReadiness } from "@/lib/ecosystem/intake-controller-readiness";
 import {
   retireAllSpent,
   retireWork,
@@ -116,4 +117,79 @@ export async function commissionIntakeControllerAction(
   if (!result.ok) return err(result.error);
   revalidatePath(JOBS_PATH);
   return ok(`Issue intake commissioned to ${result.data.workroomCapsuleId} for ${result.data.repositoryFullName}.`);
+}
+
+async function viewerPrincipalRecordId(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const { resolveActiveHumanPrincipalRecordIdForUser } = await import("@/lib/identity/principal-linking");
+  return resolveActiveHumanPrincipalRecordIdForUser(userId);
+}
+
+export type IntakeControllerPanelState = ActionResult<{ readiness: IntakeControllerReadiness; canManage: boolean }>;
+
+/**
+ * The commissioning checklist for the issue intake controller: each AC-1 clause
+ * with pass/fail, evaluated as if the signed-in person commissioned it now.
+ */
+export async function loadIntakeControllerPanelAction(): Promise<IntakeControllerPanelState> {
+  await requireRead();
+  try {
+    const session = await auth();
+    const user = session?.user;
+    const userId = typeof user?.id === "string" ? user.id : null;
+    const canManage = Boolean(user)
+      && can({ platformRole: user!.platformRole, isSuperuser: user!.isSuperuser }, "manage_platform");
+    const { loadIntakeControllerReadiness } = await import("@/lib/ecosystem/intake-controller-readiness");
+    const readiness = await loadIntakeControllerReadiness({ viewerPrincipalRecordId: await viewerPrincipalRecordId(userId) });
+    return ok({ readiness, canManage });
+  } catch (error) {
+    const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+    return err(getErrorMessage(error));
+  }
+}
+
+/**
+ * Make the signed-in platform manager the owner (Process Overseer) of the issue
+ * intake controller room, through the same governed writer and access rule as
+ * appoint_room_coordinator. Any current coordinator is stood down and the
+ * handover is recorded on the room.
+ */
+export async function becomeIntakeControllerOwnerAction(workroomCapsuleId: string): Promise<MutationResult> {
+  const { userId } = await requireManage();
+  const principalRecordId = await viewerPrincipalRecordId(userId);
+  if (!userId || !principalRecordId) {
+    return err("Your account has no active person record that can own the room.");
+  }
+  const [{ prisma }, readinessModule, { coordinatorAppointmentAccessRefusal }, { executeCoordinatorAppointment }] =
+    await Promise.all([
+      import("@dpf/db"),
+      import("@/lib/ecosystem/intake-controller-readiness"),
+      import("@/lib/work-capsules/oauth-workroom-ownership"),
+      import("@/lib/work-management/execute-coordinator-appointment.server"),
+    ]);
+  const result = await readinessModule.appointIntakeControllerOwner({
+    capsuleId: workroomCapsuleId,
+    userId,
+    principalRecordId,
+    loadReadiness: () => readinessModule.loadIntakeControllerReadiness({ viewerPrincipalRecordId: principalRecordId }),
+    accessRefusal: coordinatorAppointmentAccessRefusal,
+    resolvePrincipalRef: async (id) =>
+      (await prisma.principal.findUnique({ where: { id }, select: { principalId: true } }))?.principalId ?? null,
+    appoint: executeCoordinatorAppointment,
+    recordActivity: async ({ capsuleId, userId: recordedById, summary, principalRef }) => {
+      const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+      if (!room) return;
+      await prisma.workroomActivity.create({
+        data: {
+          workCapsuleId: room.id,
+          kind: "governed-action",
+          summary,
+          recordedById,
+          payload: { action: "appoint_room_coordinator", principalRef, via: JOBS_PATH, backlogItemId: "BI-FD40397B" },
+        },
+      });
+    },
+  });
+  if (result.ok) revalidatePath(JOBS_PATH);
+  return result;
 }

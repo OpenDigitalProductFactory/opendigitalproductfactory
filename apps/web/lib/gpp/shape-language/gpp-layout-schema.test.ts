@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { gppLayoutSchema } from "./gpp-layout-schema";
+import { gppLayoutSchema } from "@dpf/validators/gpp/gpp-layout-schema";
 
 type JsonObject = Record<string, unknown>;
 

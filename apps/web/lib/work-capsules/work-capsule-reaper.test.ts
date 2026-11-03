@@ -309,6 +309,16 @@ describe("annotateDeliveredSignals (procedural, local git — no LLM, no GitHub 
     expect(rows[2].deliveredSignal).toBeUndefined(); // no sha → never probed
   });
 
+  // BI-A7797C2C: the claim-time base is a trunk commit, so it is always reachable.
+  it("never probes a head that is still the claim-time base", async () => {
+    const base = "1".repeat(40);
+    const rows = [capsule({ capsuleId: "WC-JUST-CLAIMED", headSha: base, baseSha: base, headBranch: "fix/x" })] as any[];
+    const reachable = vi.fn(async () => true);
+    await annotateDeliveredSignals(rows, { repoRoot: "/repo", hasTrunk: async () => true, reachable });
+    expect(reachable).not.toHaveBeenCalled();
+    expect(rows[0].deliveredSignal).toBeUndefined();
+  });
+
   it("SHORT-CIRCUITS on a repo-less runtime (no local trunk) — leaves every signal null", async () => {
     const rows = [capsule({ capsuleId: "WC-MERGED", headSha: "aaa" })] as any[];
     const reachable = vi.fn();
@@ -364,6 +374,37 @@ describe("annotateProviderDeliverySignals (BI-9FF39058)", () => {
         repositoryFullName: merged.repositoryFullName,
         pullRequestNumber: 5090,
         headSha: "c".repeat(40),
+      }),
+    ] as any[];
+
+    await annotateProviderDeliverySignals(rows, [payload], NOW);
+
+    expect(rows[0].deliveredSignal).toEqual({ merged: true });
+    expect(rows[1].deliveredSignal).toBeUndefined();
+  });
+
+  it("treats a head still equal to the claim-time base as headless: delivered by its own branch's merged PR", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const payload = createPullRequestObservation(merged as never);
+    const base = "1".repeat(40);
+    const rows = [
+      capsule({
+        capsuleId: "WC-CLAIM-BASE",
+        repositoryFullName: merged.repositoryFullName,
+        pullRequestNumber: 5090,
+        headBranch: merged.headBranch,
+        headSha: base,
+        baseSha: base,
+      }),
+      capsule({
+        capsuleId: "WC-OTHER-BRANCH",
+        repositoryFullName: merged.repositoryFullName,
+        pullRequestNumber: 5090,
+        headBranch: "fix/elsewhere",
+        headSha: base,
+        baseSha: base,
       }),
     ] as any[];
 

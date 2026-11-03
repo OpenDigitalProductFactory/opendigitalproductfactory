@@ -241,7 +241,8 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
   it("uses the existing diagnostic entry for an explicit fidelity selection and original context", async () => {
     const context = { agentId: "agent", threadId: "thread" };
     fidelityRunner.runLocalToolFidelityDiagnostic.mockResolvedValue({ success: true, message: "observed" });
-    const selection = { endpointId: "local", modelId: "ai/model", providerConnectionId: "local-account" };
+    const selection = { endpointId: "local", modelId: "ai/model", providerConnectionId: "local-account",
+      fidelityObservationIndex: 3, fidelityRunId: "fidelity-server-issued" };
     const result = await buildOpsPack.handlers.run_endpoint_tests({ ...selection, fidelityOnly: true }, "u1", context);
     expect(result.success).toBe(true);
     expect(fidelityRunner.runLocalToolFidelityDiagnostic).toHaveBeenCalledWith(selection, "u1", context);

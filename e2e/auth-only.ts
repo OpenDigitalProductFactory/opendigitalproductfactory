@@ -13,6 +13,7 @@
  */
 import globalSetup from "./global-setup";
 import type { FullConfig } from "@playwright/test";
+import { sanitizeForLog } from "../scripts/lib/safe-log.mjs";
 
 // An async IIFE, not top-level await: the repo root has no "type": "module", so tsx
 // transforms this to CJS and esbuild rejects top-level await in that output format.
@@ -21,7 +22,12 @@ void (async () => {
     // globalSetup ignores its config argument; the cast keeps the shared signature.
     await globalSetup({} as FullConfig);
   } catch (err) {
-    console.error("[auth-only] login bootstrap failed:", err);
+    // CodeQL js/log-injection (#481): the bootstrap error can carry the
+    // rejected login text. sanitizeForLog strips CR/LF before it is logged.
+    console.error(
+      "[auth-only] login bootstrap failed:",
+      sanitizeForLog(err instanceof Error ? (err.stack ?? err.message) : String(err)),
+    );
     process.exit(1);
   }
 })();

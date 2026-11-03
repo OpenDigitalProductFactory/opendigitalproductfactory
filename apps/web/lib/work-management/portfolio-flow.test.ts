@@ -104,6 +104,25 @@ describe("shapeItemType", () => {
     ["cross-cutting-portfolio-standup", null],
   ])("%s → %s", (key, type) => expect(shapeItemType(key)).toBe(type));
 
+  // BI-C9F1DE01: a room parked with no demand (its item inactive, a quiet
+  // posture) keeps its run open with an idle hold. Live load does not count it,
+  // so neither does a week's end.
+  it("leaves a run parked in an idle hold out of flow load from the week it was parked", () => {
+    const W = 7 * 24;
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-3", "foundational"), room("WC-4", "foundational")],
+      rows: [
+        row("WC-3", "reproduce", "enqueued", 5 * W),
+        row("WC-3", "reproduce", "held", 5 * W),
+        row("WC-4", "reproduce", "enqueued", 5 * W),
+        row("WC-4", "reproduce", "started", 5 * W),
+        { ...row("WC-4", "reproduce", "held", 2 * W + 24), laneKey: "work_item_inactive" },
+      ],
+      now,
+    });
+    expect(flows.find((flow) => flow.key === "foundational")!.weeklyFlowLoad).toEqual([0, 0, 0, 2, 2, 1, 1, 1]);
+  });
+
   it("draws a weekly trend for every measure, oldest week first", () => {
     const W = 7 * 24;
     const flows = computePortfolioFlow({
@@ -127,6 +146,25 @@ describe("shapeItemType", () => {
     // In flow at each week's end: only WC-3, from the first week end after it entered.
     expect(f.weeklyFlowLoad).toEqual([0, 0, 0, 1, 1, 1, 1, 1]);
     expect(f.weeklyFlowLoad).toHaveLength(8);
+  });
+
+  it("marks the week a shape version replaced an earlier one in the same portfolio", () => {
+    const W = 7 * 24;
+    const v2 = (r: QueueTelemetryRow) => ({ ...r, queueKey: r.queueKey.replace(SHAPE, "delivery-small@1.1.0") });
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-1", "foundational"), room("WC-2", "foundational"), room("WC-3", "manufactureAndDeliver")],
+      rows: [
+        ...run("WC-1", 6 * W, 1),
+        // v1.1.0 first runs 13 days ago in Foundational: the week before this one.
+        ...run("WC-2", 2 * W - 24, 1).map(v2),
+        // In Manufacturing it is the only version seen, so nothing is replaced.
+        ...run("WC-3", 2 * W - 24, 1).map(v2),
+      ],
+      now,
+    });
+    const foundational = flows.find((f) => f.key === "foundational")!;
+    expect(foundational.weeklyVersionChanges).toEqual([[], [], [], [], [], [], ["delivery-small@1.1.0"], []]);
+    expect(flows.find((f) => f.key === "manufactureAndDeliver")!.weeklyVersionChanges.flat()).toEqual([]);
   });
 
   it("stops counting a cancelled run as in flow when it was cancelled, and keeps it out of flow time", () => {

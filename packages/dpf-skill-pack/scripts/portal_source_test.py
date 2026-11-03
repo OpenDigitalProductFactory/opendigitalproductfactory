@@ -146,6 +146,16 @@ class OriginTest(unittest.TestCase):
             origins = portal_source.configured_origins(home, {"DPF_MCP_URL": "https://other.example:8443/api/mcp/v1"})
         self.assertEqual(origins, ["https://other.example:8443", "https://dpf.example", "https://localhost"])
 
+    def test_configured_origins_read_agy_serverurl_entries(self) -> None:
+        # agy writes serverUrl, not url (BI-4CB3C923).
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg = updater.antigravity_mcp_config_path(home)
+            cfg.parent.mkdir(parents=True)
+            cfg.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://agy.example/api/mcp/v1", "disabled": False}}}))
+            origins = portal_source.configured_origins(home, {})
+        self.assertEqual(origins, ["https://agy.example"])
+
 
 def _tar(entries: list[tuple[str, bytes, bytes]]) -> bytes:
     """entries: (name, type flag, bytes or link target)."""
@@ -368,6 +378,14 @@ class FromPortalEndToEndTest(unittest.TestCase):
 
 
 class ChildArgvTest(unittest.TestCase):
+    def test_preserves_client_selection_and_preview(self) -> None:
+        for selector in ("--codex-only", "--claude-only"):
+            with self.subTest(selector=selector):
+                self.assertEqual(portal_source.child_argv([
+                    "--from-portal", "https://x", "--expect-installation", "did_1",
+                    selector, "--dry-run", "--project-root", "/repo",
+                ]), [selector, "--dry-run", "--project-root", "/repo"])
+
     def test_strips_portal_flags_in_both_spellings(self) -> None:
         argv = ["--from-portal", "https://x", "--expect-installation=did_1", "--approve-identity-change",
                 "--skill-pack-path", "/p", "--dry-run", "--report-json", "r.json"]

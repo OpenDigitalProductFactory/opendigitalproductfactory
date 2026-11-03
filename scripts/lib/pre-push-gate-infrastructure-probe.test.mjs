@@ -2,6 +2,8 @@
 // (BI-02E5F2A1, DI-FC5699629694). Every side effect is injected: no host, no
 // portal, no credential file is touched.
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -18,7 +20,15 @@ import {
 } from "./pre-push-gate-infrastructure-probe.mjs";
 
 const MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
-const PAT_ENV = { DPF_MCP_BEARER_TOKEN: "pat-placeholder-not-a-real-token" };
+// BI-17DFD47E: with no credentials file named, the resolver falls back to the
+// host's ~/.dpf/mcp-client-credentials.json, and on any machine that has one
+// the real client credentials outrank the fixture. Every test env names a file
+// that does not exist, so the host's credentials are never read.
+const NO_CREDENTIALS_FILE = join(tmpdir(), `dpf-probe-test-no-credentials-${process.pid}.json`);
+const PAT_ENV = {
+  DPF_MCP_BEARER_TOKEN: "pat-placeholder-not-a-real-token",
+  DPF_MCP_CLIENT_CREDENTIALS_FILE: NO_CREDENTIALS_FILE,
+};
 
 function baseProbeInput(overrides = {}) {
   return {
@@ -29,6 +39,11 @@ function baseProbeInput(overrides = {}) {
     portalUrl: "http://localhost:3001",
     ports: [3001, 5433],
     env: PAT_ENV,
+    resolveCredential: ({ mcpUrl, env }) => {
+      assert.equal(mcpUrl, MCP_URL);
+      assert.equal(env, PAT_ENV, "the probe forwards its explicit environment");
+      return { kind: "pat", source: "test-fixture", bearer: PAT_ENV.DPF_MCP_BEARER_TOKEN };
+    },
     now: (() => { let t = 1_000; return () => (t += 5); })(),
     ...overrides,
   };
@@ -179,10 +194,15 @@ test("probe: a queued claim still means the pool answers — refused, nothing le
   assert.match(result.refusal, /release failed/, "an unreleased probe lease is surfaced, not hidden");
 });
 
-test("probe: no configured credential is not infrastructure evidence", async () => {
+test("probe: credential-resolution refusal is not infrastructure evidence", async () => {
   let called = false;
   const call = async () => { called = true; };
-  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {} }));
+  const resolveCredential = ({ mcpUrl, env }) => {
+    assert.equal(mcpUrl, MCP_URL);
+    assert.deepEqual(env, {});
+    throw new Error("no fixture credential");
+  };
+  const result = await probeGateInfrastructure(baseProbeInput({ call, env: {}, resolveCredential }));
   assert.equal(result.ok, false);
   assert.equal(result.outcome, "no-credential");
   assert.equal(called, false);

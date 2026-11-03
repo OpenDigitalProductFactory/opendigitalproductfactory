@@ -26,8 +26,8 @@ import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-manage
 // executable-construct table is a mutable copy so a case can switch the
 // parallel flag off (the kill switch); it starts as the real table.
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
-vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+vi.mock("@dpf/validators/gpp/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/validators/gpp/executable-constructs")>();
   flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
   flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
   return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };
@@ -300,9 +300,11 @@ describe("applyDrivePlan lease expiry", () => {
     driveDb.workroomActivity.create.mockClear();
     // Simulate controller loss immediately after the scheduling transaction.
     fx.persist.mockRejectedValueOnce(new Error("controller lost"));
-    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+    // BI-7C0B2BD6: the failure is the room's, recorded on the tick, not the tick's end.
+    const lost = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
       listRooms: async () => [room()], effects: fx,
-    })).rejects.toThrow("controller lost");
+    });
+    expect(lost.plans).toEqual([expect.objectContaining({ action: "error", reason: "controller lost" })]);
     expect(driveDb.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
       workspaceState: { unrelated: true, workroomDispatchCheckpoint: expect.objectContaining({
         version: 1, revision: 1, objective: "Review evidence",
@@ -331,7 +333,8 @@ describe("applyDrivePlan lease expiry", () => {
     });
     driveDb.scheduledAgentTask.findUnique.mockImplementation(async () => task);
     fx.persist.mockRejectedValueOnce(new Error("controller lost"));
-    await expect(runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).rejects.toThrow("controller lost");
+    expect((await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).plans)
+      .toEqual([expect.objectContaining({ action: "error", reason: "controller lost" })]);
     const confirmed = structuredClone(workspace.workroomDispatchCheckpoint);
     // A replacement reconstructs from durable state; the original snapshot is absent.
     // The task may already have executed and become inactive. Do not touch it.
@@ -340,9 +343,10 @@ describe("applyDrivePlan lease expiry", () => {
     if (caseName === "missing") task = null;
     if (caseName === "foreign-agent") task = Object.assign({}, task, { agentId: "replacement-agent" });
     if (caseName === "changed-stage") task = Object.assign({}, task, { taskConfig: { workroomStage: { shapeKey: "other", shapeVersion: "1", stageKey: "other", tools: [] } } });
-    const replay = runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
-    if (caseName === "matching") await replay;
-    else await expect(replay).rejects.toThrow(/identity reconciliation/);
+    const replay = await runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
+    if (caseName !== "matching") {
+      expect(replay.plans).toEqual([expect.objectContaining({ action: "error", reason: expect.stringMatching(/identity reconciliation/) })]);
+    }
     expect(driveDb.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
     expect(workspace.workroomDispatchCheckpoint).toEqual(confirmed);
     expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
@@ -366,9 +370,10 @@ describe("applyDrivePlan lease expiry", () => {
   it("refuses corrupt checkpoint history before queueing another task", async () => {
     const fx = persistedLease();
     driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { workroomDispatchCheckpoint: { version: 2, revision: 5 } } });
-    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+    const refused = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
       listRooms: async () => [room()], effects: fx,
-    })).rejects.toThrow(/checkpoint/);
+    });
+    expect(refused.plans).toEqual([expect.objectContaining({ action: "error", reason: expect.stringMatching(/checkpoint/) })]);
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
@@ -516,7 +521,8 @@ describe("stage-declared tools reach the dispatched task", () => {
       stageKey: "sweep",
       tools: ["read_codebase_manifest", "list_patch_posture"],
     });
-    expect(call?.prompt).toContain("Tools for this stage: read_codebase_manifest, list_patch_posture.");
+    const facts = JSON.parse(call!.prompt.split("\n").find((line) => line.startsWith("{"))!);
+    expect(facts.stageTools).toEqual(call!.stage.tools);
   });
 
   it("leaves an undeclared stage exactly as before: no tools, no tools line", async () => {

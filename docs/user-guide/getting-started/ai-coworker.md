@@ -29,6 +29,16 @@ For example, **Estate Discovery** publishes its real Discovery Method, target, c
 
 ## Quick Actions
 
+In **Finance**, the opening briefing keeps urgent owner decisions visible, even
+when they concern another area. Otherwise it gives Finance decisions priority
+and keeps routine unrelated decisions in your **Needs-you inbox**, with the
+correct count. It does not move work or answer a decision for you.
+
+On **Spend** and expense pages, a nonempty briefing also points to the existing
+expense-entry form and explains what to prepare. You can always use **Spend →
+My Expenses → New Expense Claim**. When no decision needs you, the normal
+briefing stays silent; the entry action remains on the page.
+
 Each page has skill buttons that trigger common tasks. These appear at the top of the coworker panel when you open it. Examples:
 
 - On the **Compliance** page: "Gap assessment", "Posture report", "Onboard a regulation"
@@ -60,6 +70,8 @@ The coworker operates within a two-layer authorization model:
 - **How you approve** — when an action needs you, the coworker raises an approval request for that exact action and waits. The request appears on the coworker's message, with **Authorize** and **Decline**, and in **Needs you**. Authorize runs the action once, exactly as asked, under your authority; the coworker then continues with the result. A request waits up to seven days (15 minutes for an action that reaches outside the platform). If nobody answers in time it shows as **Expired unanswered**, nothing changes, and **Ask again** puts it back in front of you
 - **Only the person asked decides** — a request lends your authority, so only you can decide it. For a scheduled task, that is the task's owner. An admin can decide on someone's behalf when that person has left or cannot sign in: they open the request's link, choose **Decide on their behalf**, and give a reason. The decision, the admin and the reason are recorded and shown on the request
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
+
+An **Authorized, but did not complete** result keeps the approval separate from execution. When a saved execution proves the failure reason, the result explains it and offers **Inspect original Workroom** if you still have access. Missing or conflicting evidence stays explicit. An inspection link does not authorize another attempt.
 
 On a business Product's **Direction** page, informational cards and links do
 not send a coworker prompt. **Preview a demand review** first shows the product

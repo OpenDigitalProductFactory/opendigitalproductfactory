@@ -3,6 +3,16 @@ status: active
 ---
 # Provider configuration UX review — incomplete
 
+## Current reconciliation — November 2, 2026 (Chicago)
+
+This dated section supersedes the publication and implementation status in the historical notes below. Protected PRs 6801 and 6831 delivered model-bound hourly recovery and the dense provider comparison, including additional accounts and narrow-screen label corrections. Their rendered fixture checks and independent client assessments remain separately scoped; both explicitly retain incomplete native Critic and real-account acceptance. This branch preserves those newer implementations and the approved prototype bytes. It removes the superseded automatic recovery worker and old authentication relocation rather than adding a second scheduler or undoing the new opt-in execution-proof contract.
+
+The remaining source repair handles a resolved `success:false` consultation result, retains retry behavior and acknowledges an accepted request. Unknown native CLI quota holds retain their explicit uncertainty and safe routing evidence; an OAuth Responses success cannot clear a separately constrained native CLI pool. The new cross-channel regression failed before that guard and passed afterward. The reconciled eight-suite run passed 169 tests; both web TypeScript programs, application boundaries and style/token checks passed. These are source checks, not a new served-page pass.
+
+The original service engagement CE-9A18E31A was independently read as requested, unbound and without a completed result. Its supported original fulfillment now requires an owned immutable rendered-capture manifest before first dispatch; no TaskRun was started by the refused unrendered request. The separate present-assessment route does not apply to this unbound request and was not used to create a replacement. The original profession response resolving to software-engineer remains excluded as UX evidence.
+
+Current browser blocker: the application's Browser switch visibly reads enabled, but the browser tool still reports local browser use disabled after a fresh tool session. DPF's native page evaluator separately returned browser_use_unavailable and retryable=false. No screenshots were substituted, no browser permissions were expanded, and no code-only output is represented as the requested rendered Critic review. Capture the preserved prototype through restored supported browser access, save the real owned document versions and manifest, then fulfill the original engagement and disposition its actual findings. Real provider recovery, served validation, protected publication and independent acceptance remain owed before this thread can be archived.
+
 **Decision: defer readiness.** The compact revision is a design draft responding to the operator's explicit feedback. No completed UX Design Critic review or calibrated design-quality verdict has been obtained. Do not publish the earlier sparse implementation as an accepted UX design.
 
 - [Preserved first prototype](2026-10-15-provider-readiness.html) — unchanged from committed revision 767d937b28265e0741d01beafe61302d2c392304.

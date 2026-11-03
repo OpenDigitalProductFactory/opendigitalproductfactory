@@ -22,6 +22,7 @@ export const PRODUCT_ROUTE_CONTEXT = {
     "link_product_objective_work",
     "record_product_outcome_observation",
     "correct_product_outcome_observation",
+    "designate_platform_work_product",
     "evaluate_org_business_decision",
     "wiki_query",
     "search_knowledge",

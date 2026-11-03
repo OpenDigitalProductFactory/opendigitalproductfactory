@@ -304,7 +304,7 @@ function result<T>(outcome: ActionResult<T>): ToolResult {
     : { success: false, error: outcome.error, message: outcome.error };
 }
 
-async function manage(params: Record<string, unknown>): Promise<ToolResult> {
+async function manage(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const accounts = await import("@/lib/inference/provider-account-management");
   const providerId = typeof params.providerId === "string" ? params.providerId : "";
@@ -314,6 +314,33 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
   const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
   if (!connection || (providerId && providerId !== connection.providerId)) return { success: false, error: "Provider account not found", message: "Provider account not found" };
   switch (params.operation) {
+    case "restore-pause": {
+      if (!userId || connectionId !== `provider-default-${connection.providerId}` || connection.connectionId !== connectionId || Object.keys(params).some(key => !["operation", "connectionId", "providerId", "expectedOperationId"].includes(key))
+        || typeof params.expectedOperationId !== "string" || !params.expectedOperationId.trim())
+        return { success: false, error: "Restore accepts only the exact existing pause identity", message: "Choose the persisted operator pause to restore" };
+      try {
+        const { restoreOperatorProviderPause } = await import("@/lib/inference/provider-operator-pause");
+        const out = await restoreOperatorProviderPause({ providerId: connection.providerId, connectionId, expectedOperationId: params.expectedOperationId, actorId: userId });
+        return { success: true, message: out.outcome === "already-restored" ? "Original pause is already restored" : out.deliveryPending ? "Original pause restored; automatic resume may be delayed" : "Original pause restored", data: out };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Pause restoration unavailable; refresh the current provider state";
+        return { success: false, error: message, message };
+      }
+    }
+    case "stop-quota-recovery": {
+      if (Object.keys(params).some(key => !["operation", "connectionId", "providerId"].includes(key)))
+        return { success: false, error: "Stop accepts only the existing account identity", message: "Stop accepts only the existing account identity" };
+      const { stopSubscriptionQuotaRecovery } = await import("@/lib/inference/subscription-quota-recovery");
+      const out = await stopSubscriptionQuotaRecovery(connectionId);
+      return { success: out.ok, message: out.message, data: out, ...(out.ok ? {} : { error: out.message }) };
+    }
+    case "recheck-quota": {
+      const { recheckSubscriptionQuota } = await import("@/lib/inference/subscription-quota-recovery");
+      if (typeof params.modelId !== "string" || !params.modelId.trim() || (params.hourly !== undefined && typeof params.hourly !== "boolean"))
+        return { success: false, error: "Choose an exact model and valid recovery commission", message: "Choose an exact model and valid recovery commission" };
+      const out = await recheckSubscriptionQuota(connectionId, params.modelId, params.hourly as boolean | undefined);
+      return { success: out.ok, message: out.message, data: out, ...(out.ok ? {} : { error: out.message }) };
+    }
     case "discover": {
       const { discoverProviderAccountModels } = await import("@/lib/inference/provider-account-discovery");
       return result(await discoverProviderAccountModels(connectionId));
@@ -349,7 +376,7 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
 }
 
 const providerAccountHandlers: Record<string, ToolPackHandler> = {
-  manage_provider_account: (params) => manage(params),
+  manage_provider_account: (params, userId) => manage(params, userId),
   get_provider_accounts: async (params) => {
     const { getProviderAccounts } = await import("@/lib/inference/ai-provider-data");
     const limit = typeof params.limit === "number" && Number.isFinite(params.limit) ? Math.min(100, Math.max(1, Math.trunc(params.limit))) : 25;

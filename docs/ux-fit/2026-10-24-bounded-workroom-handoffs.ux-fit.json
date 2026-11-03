@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "existing-room-activity",
+  "decisionInteractionId": "DI-B0BD5CAC4737",
+  "scope": {
+    "files": [
+      "apps/web/lib/work-capsules/agent-activity-presenter.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "existing-room-activity",
+      "dedicated-handoff-panel"
+    ]
+  }
+}

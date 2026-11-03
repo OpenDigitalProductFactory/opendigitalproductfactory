@@ -77,3 +77,59 @@ People affected: operators choosing provider accounts and coworkers waiting for 
 Observed live verification on October 15 (America/Chicago): both ChatGPT and Codex completed their existing governed verification requests before October20 reset estimates, yet neither existing persistent quota hold changed. This confirms that response success and routing-state reconciliation are separate concerns. The new worker must be deployed and exercised before claiming live recovery.
 
 Source-local evidence: affected production and test TypeScript programs passed; 82 focused tests passed before final hard-failure coverage, and the later focused verification run passed 74 tests including the provider-auth suite and hard-failure stop case. These counts overlap and are not a combined total. Local gate checks required design-grounding path correction and module-size reduction; neither initial failure was hidden. Shared merged build, semantic review and served acceptance remain required.
+
+
+## October 28 status visibility delivery
+
+Current implementation owner BI-2ECA4E9C, co-delivery Workroom WC-80CD8A18. Preserve original WC-01B6B6AF ownership of quota recovery and original UX Critic engagement CE-9A18E31A. This source unit adapts only the existing status projection and overview presentation from immutable bdc9160a5283046361d8f2c2c4f05bd2cff82849; it does not deliver the whole parent. Current base 9390ade4d9320d8a8b929025a2cd73d042e98dcb.
+
+OBJ-STATUS: see whether each account can answer, with the reason, directly in the provider list.
+REQ-STATUS: prominent semantic status distinguishes recent account success, enabled without proof, temporary wait, manual pause, hard connection failure and missing observation. Data permission remains separate and cannot imply availability.
+FLOW-STATUS: canonical account and routing/capacity reads -> pure readiness projection -> existing provider account DataTable status column.
+CONTRACT-STATUS: existing account identity, CapacitySnapshot, ProviderRoutingControlView and report-kit StatusBadge; no new persistence or routing policy.
+VERIFY-STATUS: ProviderAccountsOverview.test.tsx regression (11 pass/1 fail before repair), provider-account readiness/overview tests, both web typechecks, governed merged-code gate, requested original UX Critic findings and canonical preview themes/mobile/keyboard.
+
+Ordered atomic status repair:
+1. Retain the failing current-tree usage-wait list test and add account-owned readiness cases.
+2. Adapt existing pure projector using current canonical field types, preserving account ownership and all holds; never borrow shared/default success for another account.
+3. Wire projected state, reason and existing observed/reset facts into the existing list with a prominent shared semantic badge. Preserve account creation and labels.
+4. Run affected tests/typechecks and exact-tree gate, obtain original owed design critique, then publish through the protected queue and verify served UI on the containing runtime.
+
+These steps jointly deliver one status visibility contract. Hourly recovery, consultation settlement, durable accepted chat continuation and source sensitivity classification are independent existing scopes and remain open. The prior prototype and dense direction remain the design baseline; no new dashboard or permission change is introduced. Reuse the existing UX decision evidence and obtain actual fresh served measurements; requested critique is not a completed review.
+
+### Retained parent acceptance (coverage only, not all delivered by this slice)
+
+- AC-1: Consultation produces result, acknowledgement or explicit actionable failure, including resolved success:false; retry can run again.
+- AC-2: Configured account status prominently distinguishes green enabled/working, yellow paused/temporary wait, red hard credential/billing failure, neutral uncertainty. Allowed work stays separate.
+- AC-3: Active install-owned ChatGPT/Codex quota holds get bounded hourly inference rechecks before distant reset; completed inference clears only unchanged proven quota ownership.
+- AC-4: Manual pause/disable/disconnect and hard auth/billing holds survive quota revalidation; concurrent changes prevent stale success writes.
+- AC-5: Affected tests/typecheck and governed served UI evidence cover failure, recovery, themes, mobile and keyboard before done.
+
+Current atomic status coverage receipt: cmvssicjk0l4001my9kaf4hel, bound to published b0bf19165486ec0a5f61e5d6c11e261eddb2300f / cbe4f708b6a808179a467099f7c6d188d06fb7bb. Author research: initiative-62e6ca23-f250-41e1-9bc3-1540028c5723. These receipts authorize the described implementation slice, not specialist approval, served verification or delivery of the other parent criteria.
+
+## October 31 independent review corrections
+
+An owner-requested independent code reviewer found three P2 defects in the retained status slice: additional accounts could appear ready without shared routing evidence, a recent account success could hide a globally inactive provider, and saved authentication methods were compared with input-form identifiers. WC-80CD8A18 now requires the shared routing observation, preserves the router's active/degraded lifecycle eligibility, and labels canonical `api-key` and `workload-identity` methods. An additional account still does not inherit the default account's credential failure. No routing admission, recovery authority, credential scope or persistence policy changes.
+
+The existing quota-recovery executor WC-2CCBB706 confirmed this correction is separate from its `quotaRecovery` additions. Native approval cmvwzxeze3ueb01pns5p2w6g8 recorded the coordinated overview source/test claims; the executor released its finished read claim on this document before the normal edit claim. Preserve that executor's fields when the branches integrate.
+
+Tests were added before production edits: 12 failed while 17 controls passed. After correction, the readiness, overview and existing component suites passed 47 cases across three files, and both web TypeScript programs passed. Missing evidence, inactive/disabled/paused/unconfigured providers, active/degraded controls and canonical authentication labels are covered. These are source checks, not actual provider responses. The earlier exact-tree gate on retained 1b976bea does not qualify the new commit; fresh governed integration and independent re-review remain required.
+
+Served theme/mobile/keyboard measurements and the original UX engagement remain owed. The earlier quota-executor capture of a canonical-account versus legacy-control mismatch is historical negative evidence. The separate quota repair subsequently passed its isolated served fixture checks and merged in PR #6801; that does not establish real provider availability. The parent readiness and business-email acceptance remain open.
+
+### Mobile label completeness
+
+Exact-source cloud run 41294946163 passed on 3ac4cd66b796bc060b3a322ab31432c14486a330, including the production build, 216 eligible route measurements and 16 synthetic recovery scenarios. Visual inspection of its 320px mobile capture exposed truncation of the primary status and allowed-work badges. Page-width and accessibility checks did not detect that defect. Give both cells the existing DataTable `mobileFullWidth` layout, retaining the shared StatusBadge, desktop structure and all numeric budgets. Verify the resulting full labels in current-source mobile captures in both themes before handoff. Synthetic recovery evidence does not establish real subscription capacity or fulfill original engagement CE-9A18E31A.
+
+## October 31 integration with delivered quota controls
+
+The quota repair merged as `10da4ec877fd362f0455a0865c9e2a9f3b853cf7` after protected CI `41259182040` passed. Its completed room WC-2CCBB706 was archived before the ordinary claims for the shared files were admitted to WC-80CD8A18. The first conflicting claim was refused and no force claim was used.
+
+The integration preserves connection-keyed `quotaRecovery`, the single open recovery disclosure, write permissions, locale time zone, proof/model/observation fields, current proof validation and independent routing holds. The readiness badge continues to use the shared projector, and account-local success never adopts default-account authentication or a default recovery commission.
+
+New combined regressions first exposed two loader failures (25 controls passed) and a contradictory rendered schedule (19 controls passed). The overview now uses the durable commission's next check, including an explicitly stopped commission, and a globally inactive provider offers no capacity check while retaining its proof and limits. All six affected readiness, overview, disclosure and capacity suites then passed 92 tests. Initial typechecks encountered an old generated Prisma client after the schema merge; local generation is build preparation, not a product fix. Exact merged-code gating, independent review, original CE-9A18E31A and new bounded served evidence are still required for this changed candidate. No mailbox, live provider, or MSP acceptance is claimed.
+
+
+### Provider evidence vocabulary
+
+Protected CI caught the new provider projection using the Work Atlas working/waiting/blocked vocabulary. Account evidence does not describe a workroom or delegated job's progress. The transient account states now name their actual evidence: verified-success, temporary-wait and action-required. Existing labels, colors, routing decisions and restriction precedence remain unchanged. These values are not persisted and need no migration. The Work Atlas guard and its shrinking allowlist remain unchanged; the real failing guard is included in focused verification.

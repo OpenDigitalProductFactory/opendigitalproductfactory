@@ -84,6 +84,8 @@ export const openAIAdapter: ProviderAdapter = {
       title?: string;
       description?: string;
       max_tokens?: number;
+      // The authenticated Codex model/list catalog publishes these directly.
+      inputModalities?: unknown;
       capabilities?: Record<string, unknown>;
       tags?: string[];
       // Which provider ran the discovery (codex vs chatgpt share the same path)
@@ -91,12 +93,18 @@ export const openAIAdapter: ProviderAdapter = {
     };
 
     const isChatGptDiscovery = raw.source === "chatgpt_backend_discovery";
+    const catalogModalities = raw.source === "codex_cli_model_list"
+      && Array.isArray(raw.inputModalities) && raw.inputModalities.length > 0
+      && raw.inputModalities.every(value => value === "text" || value === "image")
+      ? [...new Set(raw.inputModalities)] as Array<"text" | "image"> : null;
+    const inputModalities = catalogModalities ?? ["text"];
     // codex provider routes to api.openai.com/v1/responses and supports custom
     // function tools. chatgpt provider routes to chatgpt.com/backend-api and
     // only supports built-in Codex tools (apply_patch, shell, etc.).
     const isChatGptSubscription = isChatGptDiscovery && raw.discoveredForProvider === "chatgpt";
 
     const capabilities = { ...EMPTY_CAPABILITIES };
+    if (catalogModalities) capabilities.imageInput = catalogModalities.includes("image");
     if (isChatGptDiscovery && raw.capabilities) {
       capabilities.streaming = raw.capabilities.streaming === true ? true : null;
       capabilities.imageInput = raw.capabilities.image_input === true
@@ -117,14 +125,14 @@ export const openAIAdapter: ProviderAdapter = {
 
       modelFamily: null,
       modelClass: classifyModel(modelId, {
-        input: ["text"],
+        input: inputModalities,
         output: ["text"],
       }),
 
       maxInputTokens: raw.max_tokens ?? null,
       maxOutputTokens: null,
 
-      inputModalities: ["text"],
+      inputModalities,
       outputModalities: ["text"],
 
       capabilities,

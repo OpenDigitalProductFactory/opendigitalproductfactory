@@ -1,3 +1,6 @@
+import { gitTextOrNull } from "./git.mjs";
+import { reusablePassedStage, stageIdentityMatches } from "./local-ci-stage-receipt.mjs";
+
 // Affected-test selection for the local-CI vitest stage (BI-2227C37C).
 //
 // AGENTS.md §4: "Fast local checks (typecheck, lint, affected tests — no
@@ -78,7 +81,7 @@ export function resolveVitestSelection({
     reason,
   });
 
-  const optOut = String(env?.[EXHAUSTIVE_ENV] ?? "").trim();
+  const optOut = resolveVitestExhaustiveReason(env);
   if (optOut) return exhaustive(`opt-out:${optOut}`);
 
   const base = String(baseRef ?? "").trim();
@@ -104,4 +107,55 @@ export function resolveVitestSelection({
     extraArgs: [`--changed=${base}`],
     reason: `changed-since:${base}`,
   };
+}
+
+/** Shared by selection and the pre-admission/final toolchain fingerprint. */
+export function resolveVitestExhaustiveReason(env = process.env) {
+  return String(env?.[EXHAUSTIVE_ENV] ?? "").trim();
+}
+
+export function resolveVitestMaxDurationMs(env = process.env) {
+  const value = Number(env.DPF_LOCAL_CI_VITEST_MAX_DURATION_MS);
+  return Number.isInteger(value) && value > 0 ? value : 30 * 60 * 1_000;
+}
+
+/** An unreadable diff is unknown, never evidence of zero affected tests. */
+export function changedFilesAgainst(baseRef, { readGit = gitTextOrNull } = {}) {
+  if (!baseRef) return null;
+  const text = readGit(["diff", "--name-only", `${baseRef}...HEAD`], { cwd: process.cwd() });
+  return typeof text === "string" ? text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) : null;
+}
+
+export function resolveVitestExecution({ integrationTreeSha, initialWorkers = 4, ...input }) {
+  const selection = resolveVitestSelection(input);
+  return { selection, identity: { integrationTreeSha,
+    command: [`pnpm --filter web exec vitest run --maxWorkers=${initialWorkers} --reporter=verbose`, ...selection.extraArgs].join(" "),
+    maxDurationMs: resolveVitestMaxDurationMs(input.env),
+  } };
+}
+
+/** Completed coverage comes from the exact stage receipt, never the policy plan. */
+export function projectVitestCoverage({ receipt, now = Date.now, ...input }) {
+  const { selection, identity } = resolveVitestExecution(input);
+  const unknown = (reason, status = "unknown") => ({ basis: "stage-receipt", status,
+    mode: "unknown", reason, fullSuite: null, selectedTestCount: null });
+  if (!receipt) return unknown("receipt-missing", "unrun");
+  if (!/^[a-f0-9]{40}$/i.test(input.integrationTreeSha ?? "")) return unknown("tree-unresolved");
+  if (receipt.schemaVersion !== 1 || receipt.stage !== selection.stage
+    || !stageIdentityMatches(receipt.identity, identity)) return unknown("receipt-identity-mismatch");
+  if (receipt.selection && (receipt.selection.mode !== selection.mode || receipt.selection.stage !== selection.stage
+    || JSON.stringify(receipt.selection.extraArgs) !== JSON.stringify(selection.extraArgs)
+    || typeof receipt.selection.reason !== "string" || !receipt.selection.reason.trim())) return unknown("receipt-selection-conflict");
+  if (!["running", "passed", "test-failure", "runner-termination"].includes(receipt.status)) return unknown("receipt-status-invalid");
+  if (!reusablePassedStage({ receipt, stage: selection.stage, identity })) return unknown("stage-incomplete", receipt.status);
+  const lastAttempt = Array.isArray(receipt.attempts) ? receipt.attempts.at(-1) : null;
+  const completedAt = Date.parse(receipt.completedAt);
+  const startedAt = Date.parse(receipt.startedAt);
+  if (!Number.isFinite(completedAt) || completedAt > now()
+    || (Number.isFinite(startedAt) && completedAt < startedAt) || lastAttempt?.classification !== "passed"
+    || lastAttempt.status !== 0 || lastAttempt.signal || lastAttempt.error
+    || lastAttempt.deadlineExceeded || lastAttempt.closeTimedOut) return unknown("completion-unverified");
+  return { basis: "stage-receipt", status: "passed", mode: selection.mode,
+    reason: receipt.selection?.reason ?? "selection-reason-unrecorded",
+    fullSuite: selection.mode === "exhaustive", selectedTestCount: null };
 }

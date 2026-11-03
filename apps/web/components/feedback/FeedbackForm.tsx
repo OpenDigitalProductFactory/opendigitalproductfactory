@@ -6,6 +6,7 @@ import { submitReport } from "@/lib/quality-queue";
 import { useAsyncAction } from "@/lib/shared/use-save-state";
 import { SaveStateIndicator } from "@/components/ui/SaveStateIndicator";
 import { UpstreamEscalation } from "./UpstreamEscalation";
+import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 
 type Props = {
   routeContext: string;
@@ -87,7 +88,7 @@ export function FeedbackForm({
           <button
             type="button"
             onClick={onClose}
-            className="mx-auto mt-3 block rounded-md border border-[var(--dpf-border)] px-3 py-1 text-xs text-[var(--dpf-text)]"
+            className={`${SHELL_TAP_TARGET_CLASS} mx-auto mt-3 block rounded-md border border-[var(--dpf-border)] px-3 py-1 text-xs text-[var(--dpf-text)]`}
           >
             Close
           </button>
@@ -102,7 +103,7 @@ export function FeedbackForm({
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5 text-xs text-[var(--dpf-text)]"
+          className={`${SHELL_TAP_TARGET_CLASS} w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5 text-xs text-[var(--dpf-text)]`}
         >
           <option value="runtime_error">Bug Report</option>
           <option value="feedback">Suggestion</option>
@@ -124,7 +125,7 @@ export function FeedbackForm({
           onClick={handleSubmit}
           disabled={!description.trim() || submitAction.status === "pending"}
           aria-busy={submitAction.status === "pending"}
-          className="flex-1 rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className={`${SHELL_TAP_TARGET_CLASS} flex-1 rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-50`}
         >
           {submitAction.status === "pending" ? "Submitting…" : "Submit"}
         </button>
@@ -132,7 +133,7 @@ export function FeedbackForm({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)]"
+            className={`${SHELL_TAP_TARGET_CLASS} rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)]`}
           >
             Cancel
           </button>

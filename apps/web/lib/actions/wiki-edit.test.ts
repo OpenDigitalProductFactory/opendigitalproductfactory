@@ -9,11 +9,12 @@ vi.mock("@dpf/db", () => ({
     organization: { findFirst: vi.fn() },
     wikiPage: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     wikiPageRevision: { create: vi.fn(), findFirst: vi.fn() },
-    wikiPageLink: { upsert: vi.fn() },
+    wikiPageLink: { upsert: vi.fn(), findMany: vi.fn(async () => []), deleteMany: vi.fn(), createMany: vi.fn() },
   },
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@dpf/db/graph-sync", () => ({ projectWikiLinksToGraph: vi.fn(async () => undefined) }));
 
 // BI-8AC24F3D: mocked so the callsite wiring is what is under test here; the
 // helper's own contract is covered in lib/wiki/craft-override-promotion.test.ts.
@@ -326,7 +327,7 @@ describe("saveWikiOverlayEdit — override a kernel page", () => {
 // ─── Wikilink graph sync ───────────────────────────────────────────────────
 
 describe("saveWikiOverlayEdit — wikilink graph", () => {
-  it("upserts WikiPageLink edges for every resolvable [[wikilink]] in the body", async () => {
+  it("replaces WikiPageLink rows with every resolvable [[wikilink]] in the body (BI-23900D0A)", async () => {
     (prisma.wikiPage.findFirst as ReturnType<typeof vi.fn>)
       // Scope check (existing overlay).
       .mockResolvedValueOnce({
@@ -337,13 +338,17 @@ describe("saveWikiOverlayEdit — wikilink graph", () => {
         pageKind: "entity",
       })
       // upsertWikiPage existing lookup.
-      .mockResolvedValueOnce({ id: "wp_self" })
-      // First wikilink target lookup → resolves.
-      .mockResolvedValueOnce({ id: "wp_target_a" })
-      // Second wikilink target lookup → resolves.
-      .mockResolvedValueOnce({ id: "wp_target_b" })
-      // Third wikilink target lookup → dangling.
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce({ id: "wp_self" });
+    // One batched target lookup: the org's own page, plus a kernel page reached
+    // through a labelled link. The dangling slug resolves to nothing.
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      { id: "wp_target_a", slug: "entities/target-a", organizationId: "org_test" },
+      { id: "wp_kernel_b", slug: "entities/target-b", organizationId: null },
+    ]);
+    // The page already links to a page its new body no longer names.
+    (prisma.wikiPageLink.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      { toPageId: "wp_removed" },
+    ]);
     (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       id: "wp_self",
       slug: "entities/foo",
@@ -358,21 +363,27 @@ describe("saveWikiOverlayEdit — wikilink graph", () => {
       slug: "entities/foo",
       pageKind: "entity",
       title: "Foo",
-      body: `## Definition\n\nFoo references [[entities/target-a]] and [[entities/target-b]] and [[entities/missing]]. Also [[raw-sources/articles/skip]].`,
+      body: `## Definition
+
+Foo references [[entities/target-a]] and [[entities/target-b|the kernel B]] and [[entities/missing]]. Also [[raw-sources/articles/skip]].`,
     });
 
-    // Two resolvable targets → two link upserts. The dangling slug and
-    // the raw-source citation are skipped.
-    expect(prisma.wikiPageLink.upsert).toHaveBeenCalledTimes(2);
-    const linkArgs = (prisma.wikiPageLink.upsert as ReturnType<typeof vi.fn>).mock.calls.map(
-      (c) => c[0].create,
-    );
-    expect(linkArgs).toEqual(
-      expect.arrayContaining([
+    const lookup = (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(lookup.where).toEqual({
+      slug: { in: ["entities/target-a", "entities/target-b", "entities/missing"] },
+      OR: [{ organizationId: "org_test" }, { organizationId: null }],
+    });
+    expect(prisma.wikiPageLink.deleteMany).toHaveBeenCalledWith({
+      where: { fromPageId: "wp_self", toPageId: { in: ["wp_removed"] } },
+    });
+    expect(prisma.wikiPageLink.createMany).toHaveBeenCalledWith({
+      data: [
         { fromPageId: "wp_self", toPageId: "wp_target_a" },
-        { fromPageId: "wp_self", toPageId: "wp_target_b" },
-      ]),
-    );
+        { fromPageId: "wp_self", toPageId: "wp_kernel_b" },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.wikiPageLink.upsert).not.toHaveBeenCalled();
   });
 });
 

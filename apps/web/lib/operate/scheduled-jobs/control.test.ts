@@ -26,6 +26,27 @@ import {
 } from "./intake-controller-commission";
 
 describe("schedule validation", () => {
+  it("BI-0A82D3B4 rejects invalid fields and impossible dates instead of accepting a fallback schedule", () => {
+    for (const invalid of ["60 * * * *", "0 24 * * *", "*/0 * * * *", "0 0 31 2 *", "23 */6/2 * * *", "0 1-3/2/9 * * *"]) {
+      expect(isSupportedCron(invalid)).toBe(false);
+      expect(isValidSchedule(invalid)).toBe(false);
+    }
+  });
+
+  it("BI-0A82D3B4 projects the next matching six-hour UTC fire", () => {
+    expect(projectNextRun("23 */6 * * *", new Date("2026-10-18T19:44:22.832Z"))?.toISOString())
+      .toBe("2026-10-19T00:23:00.000Z");
+  });
+
+  it.each(["0 */0x2 * * *", "0 */+2 * * *", "0 */2e0 * * *", "0 */2.0 * * *"])("BI-0A82D3B4 rejects nondecimal step spelling in operator schedule %s", (cron) => {
+    expect(isSupportedCron(cron)).toBe(false);
+    expect(isValidSchedule(cron)).toBe(false);
+  });
+
+  it.each(["0 */0x2 * * *", "0 */+2 * * *", "0 */2e0 * * *", "0 */2.0 * * *"])("BI-0A82D3B4 does not project a nondecimal step spelling in %s", (cron) => {
+    expect(projectNextRun(cron, new Date("2026-10-19T01:00:00.000Z"))).toBeNull();
+  });
+
   it("accepts a cron expression as a first-class cadence", () => {
     // The old editor only knew eight named tokens, so most of the live register
     // could not be retuned at all.
@@ -48,13 +69,10 @@ describe("schedule validation", () => {
 
 describe("projectNextRun", () => {
   it("projects a cron cadence", () => {
-    // computeNextCronRun reads cron fields in the host timezone (the server runs
-    // UTC), so assert on local wall-clock fields rather than a UTC instant.
     const from = new Date("2026-08-22T02:30:00.000Z");
     const next = projectNextRun("0 3 * * *", from);
     expect(next).not.toBeNull();
-    expect(next!.getHours()).toBe(3);
-    expect(next!.getMinutes()).toBe(0);
+    expect(next!.toISOString()).toBe("2026-08-22T03:00:00.000Z");
     expect(next!.getTime()).toBeGreaterThan(from.getTime());
   });
 

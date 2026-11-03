@@ -5,6 +5,7 @@ import { DOCUMENT_MARKDOWN_OPTIONS } from "@/components/shared/markdown-document
 import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/documents/document-store";
+import { resolveDocumentViewer } from "@/lib/documents/document-access";
 import { loadRenditionTextPreview, renditionFailureMessage } from "@/lib/documents/document-content";
 import { officeSourceExtension } from "@/lib/documents/conversion/formats";
 import { getConverterAvailability } from "@/lib/documents/conversion/availability";
@@ -40,9 +41,11 @@ export default async function DocumentDetailPage({ params }: Props) {
   if (!session?.user) redirect("/login");
 
   const { documentId } = await params;
+  // A document this person may not read is not found (BI-957915CB).
+  const viewer = await resolveDocumentViewer(session.user.id);
   const [document, references] = await Promise.all([
-    loadManagedDocument({ documentId: decodeURIComponent(documentId) }),
-    listManagedDocumentReferences(decodeURIComponent(documentId)),
+    loadManagedDocument({ documentId: decodeURIComponent(documentId), viewer }),
+    listManagedDocumentReferences(decodeURIComponent(documentId), viewer),
   ]);
   if (!document) notFound();
 
