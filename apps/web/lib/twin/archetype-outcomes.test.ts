@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-
 import { buildArchetypeOutcomes } from "./archetype-outcomes";
+
+describe("unproven delivery", () => {
+  it("labels historical adoption episodes as outcomes rather than unique animals", () => {
+    const projection = buildArchetypeOutcomes({ archetypeId: "pet-rescue", currency: "USD", locale: "en-US", paidRevenue: 0, deliveredJobs: null, adoptionOutcomes: 2 });
+    expect(projection.outcomes.find((item) => item.key === "animals-placed")).toMatchObject({ label: "Adoption outcomes", value: "2 outcomes" });
+  });
+  it("does not turn paid invoices into completed customer work", () => {
+    const projection = buildArchetypeOutcomes({ archetypeId: "saas-platform", currency: "USD", locale: "en-US", paidRevenue: 200, deliveredJobs: null });
+    expect(projection.outcomes.find((item) => item.key === "delivered")).toMatchObject({ value: "Unavailable", hint: "Delivery source unavailable" });
+  });
+});
 
 /** Select by key: tile order is part of the design and changes deliberately,
  *  so an assertion about donations should not break when a tile moves. */
@@ -21,7 +31,7 @@ describe("buildArchetypeOutcomes", () => {
       deliveredJobs: 4,
       donationTotals: [{ currency: "USD", amount: 275, count: 3 }],
       animalsInCare: { total: 6, onHold: 5, available: 1, pending: 0 },
-      animalsPlaced: 2,
+      adoptionOutcomes: 2,
       fostersActive: null,
     });
 
@@ -30,11 +40,11 @@ describe("buildArchetypeOutcomes", () => {
       "Animals in care",
       "Kennels",
       "Donations received",
-      "Animals placed",
+      "Adoption outcomes",
       "Fosters active",
     ]);
     expect(outcome(projection, "donations-received")?.value).toContain("$275");
-    expect(outcome(projection, "animals-placed")?.value).toBe("2 animals");
+    expect(outcome(projection, "animals-placed")?.value).toBe("2 outcomes");
     expect(outcome(projection, "fosters-active")?.value).toBe("Unavailable");
     expect(outcome(projection, "fosters-active")?.hint).toMatch(/no foster record source/i);
   });
@@ -48,7 +58,7 @@ describe("buildArchetypeOutcomes", () => {
       deliveredJobs: 0,
       donationTotals: [],
       animalsInCare: { total: 6, onHold: 5, available: 1, pending: 0 },
-      animalsPlaced: 0,
+      adoptionOutcomes: 0,
       fostersActive: null,
     });
 
@@ -67,7 +77,7 @@ describe("buildArchetypeOutcomes", () => {
       deliveredJobs: 0,
       donationTotals: [],
       animalsInCare: { total: 4, onHold: 1, available: 2, pending: 1 },
-      animalsPlaced: 0,
+      adoptionOutcomes: 0,
       fostersActive: null,
     });
 
@@ -83,7 +93,7 @@ describe("buildArchetypeOutcomes", () => {
       deliveredJobs: 0,
       donationTotals: [],
       animalsInCare: { total: 0, onHold: 0, available: 0, pending: 0 },
-      animalsPlaced: 0,
+      adoptionOutcomes: 0,
       fostersActive: null,
     });
 
@@ -100,7 +110,7 @@ describe("buildArchetypeOutcomes", () => {
       deliveredJobs: 0,
       donationTotals: [],
       animalsInCare: null,
-      animalsPlaced: null,
+      adoptionOutcomes: null,
       fostersActive: null,
     });
 
@@ -201,7 +211,7 @@ describe("kennel capacity", () => {
     deliveredJobs: 0,
     donationTotals: [],
     animalsInCare: { total: 6, onHold: 5, available: 1, pending: 0 },
-    animalsPlaced: 0,
+    adoptionOutcomes: 0,
     fostersActive: null,
   };
 

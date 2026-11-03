@@ -88,6 +88,30 @@ describe("merge_backlog_items per-call consequence", () => {
     });
   });
 
+  it("narrows reconcileOnly without relying on a mutable item snapshot", async () => {
+    db.backlogItemFindUnique.mockRejectedValue(new Error("classification must not need a state snapshot"));
+    const resolved = await resolveCallConsequence(tool, call({
+      canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: true,
+    }));
+    expect(resolved).toEqual({
+      consequence: null,
+      refinement: { declared: "irreversible", reason: "completed-merge-reconciliation-only" },
+    });
+    expect(db.backlogItemFindUnique).not.toHaveBeenCalled();
+    expect(db.workroomCount).not.toHaveBeenCalled();
+  });
+
+  it.each([false, "true", 1, null, {}])("does not select reconcile-only for %j", async (reconcileOnly) => {
+    db.backlogItemFindUnique.mockImplementation(async ({ where }: { where: { itemId: string } }) =>
+      where.itemId === "BI-C" ? canonical : { ...duplicate, body: "Unproven different observation" },
+    );
+    const resolved = await resolveCallConsequence(tool, call({
+      canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly,
+    }));
+    expect(resolved.consequence).toBe("irreversible");
+    expect(resolved.refinement?.reason).not.toBe("completed-merge-reconciliation-only");
+  });
+
   it("reaches a person when the duplicate has a live Workroom", async () => {
     db.workroomCount.mockResolvedValue(1);
     const resolved = await resolveCallConsequence(tool, call({ canonicalItemId: "BI-C", duplicateItemId: "BI-D" }));

@@ -51,6 +51,7 @@ exports[`shapeSignature > gives every current and frozen prior shape a signature
   "security-incident-command@1.0.0": "⬆ escalation ✋ claim · AI declare → AI scope → ◇ Person authorize-containment [role:security-owner] → ◇ Person stand-down [role:security-owner] → ● success | ⊗ failure | ⧖ budget",
   "service-dispatch-cycle@1.0.0": "✋ claim 📅 deadline-horizon · AI assign → ◇ Person commit [role:operations-owner] → AI coordinate → ● success | ⊗ failure | ⧖ budget",
   "setup-business-understanding@1.0.0": "✋ claim · AI ask ⇄ → AI capture ⇄ → ◇ Person settle [role:owner] → ● success | ⊗ failure | ⧖ budget",
+  "source-inquiry@1.0.0": "✋ claim · Person inquire → Person answer → ● success | ⊗ failure | ⧖ budget",
   "time-off-policy-currency@1.0.0": "⏱ cadence ⬆ escalation · AI detect-drift → AI draft-revision → ◇ Person publish [role:people-owner] → ● success | ⊗ failure | ⧖ budget",
   "ux-critique-pass@1.0.0": "✋ claim ⏱ cadence · AI observe → AI ground → ◇ Person adjudicate [role:design-owner] → ● success | ⊗ failure | ⧖ budget",
   "vendor-renewal-watch@1.0.0": "📅 deadline-horizon ⏱ cadence · AI read → AI report → ◇ Person decide [role:finance-owner] → ● success | ⊗ failure | ⧖ budget",

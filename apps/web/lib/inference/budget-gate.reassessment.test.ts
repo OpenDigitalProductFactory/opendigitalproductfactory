@@ -25,6 +25,17 @@ describe("restricted review current normal budget", () => {
     vi.resetAllMocks();
     db.agent.findUnique.mockResolvedValue(currentRow());
   });
+  it.each(["ux-design-critic", "AGT-906"])("loads the real bundled Critic registry for %s and keeps narrower live limits", async agentId => {
+    db.agent.findUnique.mockResolvedValue({ id: "canonical-critic-row", agentId: "AGT-906", executionConfig: {
+      id: "critic-execution-config", agentId: "canonical-critic-row", executionType: "in_process",
+      dailyTokenLimit: 100000, perTaskTokenLimit: 10000, timeoutSeconds: 90, maxTokens: 4096,
+    } });
+    const config = await readReassessmentBudgetConfiguration(agentId);
+    expect(db.agent.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-906" } }));
+    expect(config).toMatchObject({ registryAgentId: "AGT-906", registryAgentName: "ux-design-critic",
+      registryLimits: { dailyTokenLimit: 200000, perTaskTokenLimit: 20000, timeoutSeconds: 180, maxTokens: 8192 },
+      configuredDailyLimit: 100000, configuredPerTaskLimit: 10000, configuredTimeoutMs: 90000, configuredMaxOutputTokens: 4096 });
+  });
   it("reads the canonical execution row and retains both origins with stable digests", async () => {
     const config = await read();
     expect(db.agent.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-REVIEW" } }));

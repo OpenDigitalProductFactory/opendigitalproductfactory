@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "extend-canonical-pager",
+  "decisionInteractionId": "DI-E746B2B56F67",
+  "scope": { "files": ["apps/web/components/ui/report-kit/DataTable.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["extend-canonical-pager", "route-only-pager"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Canonical DEV 047c routing Evaluation targets measured below44px in six viewport/theme contexts. Standalone comparison measured44x44 in320px light/dark with working page1-to-2 and no overflow. Extend shared DataTable minimum target tokens. This direction is not a native Critic receipt or containing-release acceptance; remeasure the actual portal after a release containing the repair."
+  }
+}

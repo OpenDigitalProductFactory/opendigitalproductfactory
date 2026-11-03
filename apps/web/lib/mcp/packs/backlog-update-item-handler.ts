@@ -13,6 +13,7 @@ import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
 import { BACKLOG_SENSITIVITY_VALUES, isBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
+import { OUTCOME_MAX_LENGTH } from "@/lib/backlog/intake-outcome";
 import {
   resolveProductManagementScopeRefs,
   type ProductManagementScope,
@@ -82,6 +83,13 @@ export async function handleUpdateBacklogItem(
   if (typeof params["workType"] === "string") data["workType"] = params["workType"];
   if (typeof params["source"] === "string") data["source"] = params["source"];
   if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
+  // BI-8DE5429B: a person or agent correcting the outcome states it, which
+  // replaces a derived draft. An empty value cannot clear it: every item keeps one.
+  const statedOutcome = cleanOptionalString(params["outcome"]);
+  if (statedOutcome) {
+    data["outcome"] = statedOutcome.slice(0, OUTCOME_MAX_LENGTH);
+    data["outcomeSource"] = "stated";
+  }
   if (typeof params["scopeKind"] === "string") {
     const scopeKind = params["scopeKind"].trim();
     if (!(BACKLOG_SCOPE_KIND_VALUES as readonly string[]).includes(scopeKind)) {

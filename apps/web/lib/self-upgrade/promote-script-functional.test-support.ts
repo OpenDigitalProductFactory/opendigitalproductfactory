@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { SCOPE_EPOCH_WRITER_PATHS } from "../work-capsules/scope-epoch-contract";
 
 // Shared harness for the promote.sh functional suites: a real Git repo, a fake
 // `docker` + `curl` on PATH, and the signed install-state envelope the script
@@ -26,6 +27,13 @@ export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
 export function reassessmentCapabilityFixture(sourceSha: string): string {
   return JSON.stringify({ schemaVersion: 1, sourceSha, sourceContentHash: "a".repeat(64), contractSha256: "b".repeat(64),
     owners: Object.fromEntries(["transport", "approval", "worker", "writer"].map(owner => [owner, { version: 2, sourceSha256: "e".repeat(64) }])) });
+}
+
+/** Explicit compatible observation for fake Docker; not a real image proof. */
+export function scopeWriterCapabilityFixture(sourceSha: string): string {
+  return JSON.stringify({ schemaVersion: 1, version: 1, sourceSha,
+    sourceContentHash: "a".repeat(64), contractSha256: "b".repeat(64),
+    writers: Object.fromEntries(SCOPE_EPOCH_WRITER_PATHS.map(path => [path, "e".repeat(64)])) });
 }
 
 let bashDrivePrefix: string | undefined;
@@ -103,6 +111,15 @@ done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 # Operation and format are argv fields, never substrings of a temporary path.
 case "\${1-}" in
+  run)
+    probe_path=
+    for probe_path in "$@"; do :; done
+    if [ "$probe_path" = /app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs ]; then
+      [ -n "\${DPF_TEST_SCOPE_WRITER_REPORT:-}" ] || exit 78
+      printf '%s' "$DPF_TEST_SCOPE_WRITER_REPORT"
+      exit 0
+    fi
+    ;;
   create) printf "candidate-container"; exit 0 ;;
   rm) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG"; exit 0 ;;
   cp)
@@ -233,6 +250,9 @@ case "$*" in
     effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
     printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
       "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
+    dispatch="\${DPF_REMOTE_ACTION_DISPATCH_ENABLED-}"
+    if [ "\${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}" != x ]; then dispatch="$(sed -n 's/^DPF_REMOTE_ACTION_DISPATCH_ENABLED=//p' "$env_file" | tail -n 1 | tr -d \"\\\"'\\r\")"; fi
+    printf 'dispatch service=%s value=%s process_present=%s\\n' "$service" "\${dispatch:-0}" "\${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}" >> "$DOCKER_LOG"
     ;;
   *"ps -a --services"*)
     # Services this fake install has ever created (any state). Empty by default.
@@ -276,7 +296,12 @@ export function runPromote(opts: {
   backup: string;
   targetSha: string;
   fakeBin: string;
+  /** Explicit fake observation; empty or malformed input exercises refusal. */
+  scopeWriterReport?: string;
   composeEnvFile?: string;
+  dispatchOverride?: string;
+  configuredOverride?: string;
+  dryRun?: boolean;
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
   activityRecoveryDecision?: "recover" | "not-needed" | "blocked";
@@ -343,6 +368,8 @@ export function runPromote(opts: {
   if (opts.existingServices) writeFileSync(inventoryPath, opts.existingServices.join("\n"));
   const exports = [
     "unset DPF_STATE_DIR",
+    opts.dispatchOverride === undefined ? "unset DPF_REMOTE_ACTION_DISPATCH_ENABLED" : `export DPF_REMOTE_ACTION_DISPATCH_ENABLED=${shellQuote(opts.dispatchOverride)}`,
+    opts.configuredOverride === undefined ? "unset DPF_EDGE_ACTION_DISPATCH_CONFIGURED" : `export DPF_EDGE_ACTION_DISPATCH_CONFIGURED=${shellQuote(opts.configuredOverride)}`,
     // promote.sh writes `git config --global`; confine it to a scratch file so
     // a test run never rewrites the developer's real ~/.gitconfig (BI-249EEA02).
     `export GIT_CONFIG_GLOBAL=${shellQuote(toBashPath(join(opts.backup, "gitconfig")))}`,
@@ -351,6 +378,7 @@ export function runPromote(opts: {
     ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
     `export DPF_TEST_REASSESSMENT_REPORT=${shellQuote(reassessmentCapabilityFixture(opts.targetSha))}`,
+    `export DPF_TEST_SCOPE_WRITER_REPORT=${shellQuote(opts.scopeWriterReport ?? scopeWriterCapabilityFixture(opts.targetSha))}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
     `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${shellQuote(toBashPath(secretPath))}`,
@@ -420,7 +448,7 @@ export function runPromote(opts: {
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
     ] : []),
   ];
-  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
+  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade${opts.dryRun ? " --dry-run" : ""}`], {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };

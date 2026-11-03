@@ -1,22 +1,29 @@
-// BI-42399593: the platform records a product outcome observation when
-// platform work is delivered, against an objective it derives from the work's
-// epic (or the standing platform-work objective). No person is in the loop.
-// The measure and its rules live in ./delivered-work-outcomes.
+// BI-8DE5429B (reworks BI-42399593): the platform records, with no person in
+// the loop, whether a backlog item's OWN outcome held: achieved at delivery,
+// regressed when it is reopened from done, not achieved when failing evidence
+// lands while it is done. Each observation references the item
+// (ProductOutcomeObservation.backlogItemId) and carries its outcome text and
+// source. The objective it hangs on, derived from the item's epic or the
+// standing platform-work objective, is only the roll-up (WWMD
+// DI-19ED69C312FC). The rules live in ./delivered-work-outcomes.
+
+import { resolveItemOutcome } from "@/lib/backlog/intake-outcome";
 
 import {
-  DELIVERED_WORK_DECISION_REFS,
-  DELIVERED_WORK_MEASURE_DEFINITION,
-  DELIVERED_WORK_OUTCOME_METHOD,
   DELIVERY_OBSERVATION_SOURCE_KIND,
   EPIC_OBJECTIVE_SOURCE_KIND,
-  HOLD_WINDOW_DAYS,
-  LOOKBACK_DAYS,
+  ITEM_OUTCOME_DECISION_REFS,
+  ITEM_OUTCOME_MEASURE_DEFINITION,
+  ITEM_OUTCOME_METHOD,
+  ITEM_OUTCOME_RESULT_FOR_EVENT,
   PLATFORM_WORK_OBJECTIVE_SOURCE_KIND,
-  computeDeliveredWorkHoldRate,
-  deliveredWorkWindow,
-  deliveryObservationSourceRef,
+  classifyItemOutcomeActivity,
   isPlatformWorkScope,
-  type DeliveredWorkFact,
+  itemOutcomeSourceRef,
+  itemOutcomeValue,
+  outcomeDigest,
+  type ItemOutcomeEvent,
+  type ItemOutcomeResult,
 } from "./delivered-work-outcomes";
 import {
   ProductOutcomeConflictError,
@@ -28,31 +35,41 @@ import {
   type ProductOutcomesTransactionalDb,
 } from "./outcomes-repository";
 
-/** Matured deliveries read per observation; a cohort beyond this is reported as truncated. */
-const MAX_COHORT_DELIVERIES = 2000;
+/** Item events read per reconciliation run; more are reported as truncated and read next run. */
+const MAX_EVENTS_PER_RUN = 500;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const PLATFORM_SCOPE_FILTER = [{ scopeKind: null }, { scopeKind: { in: ["platform", "common", "unknown"] } }];
 
 type ObjectiveRef = { id: string; objectiveId: string; organizationId: string; productId: string; status: string };
-type DeliveredItem = {
-  id: string; itemId: string; status: string; scopeKind: string | null; businessProductId: string | null;
+type OutcomeItem = {
+  id: string; itemId: string; title: string; body: string | null; workType: string | null;
+  outcome: string | null; outcomeSource: string | null;
+  status: string; scopeKind: string | null; businessProductId: string | null;
   organizationId: string | null; epicId: string | null; completedAt: Date | null;
   epic: { epicId: string; title: string; description: string | null } | null;
 };
-type ActivityRow = { backlogItemId: string; kind: string; recordedAt: Date; payload: unknown };
+type ActivityRow = { id: string; backlogItemId: string; kind: string; recordedAt: Date; payload: unknown };
+
+const OUTCOME_ITEM_SELECT = {
+  id: true, itemId: true, title: true, body: true, workType: true, outcome: true, outcomeSource: true,
+  status: true, scopeKind: true, businessProductId: true, organizationId: true, epicId: true, completedAt: true,
+  epic: { select: { epicId: true, title: true, description: true } },
+};
 
 /**
- * The client the recorder runs on: the transition's own transaction client in
- * production, so an observation commits with the delivery it describes.
+ * The client the recorder runs on: the transition's own transaction client at
+ * delivery, so an observation commits with the delivery it describes.
  */
 export type DeliveredWorkOutcomeDb = ProductOutcomesDb & {
   backlogItem: ProductOutcomesDb["backlogItem"] & {
-    findUnique(args: unknown): Promise<DeliveredItem | null>;
-    findMany(args: unknown): Promise<{ id: string; itemId: string; status: string }[]>;
+    findUnique(args: unknown): Promise<OutcomeItem | null>;
+    findMany(args: unknown): Promise<OutcomeItem[]>;
   };
   backlogItemActivity: { findMany(args: unknown): Promise<ActivityRow[]> };
   productObjective: ProductOutcomesDb["productObjective"] & { findMany(args: unknown): Promise<ObjectiveRef[]> };
   productOutcomeObservation: {
     findFirst(args: unknown): Promise<{ id: string } | null>;
+    findMany(args: unknown): Promise<{ sourceRef: string | null }[]>;
     create(args: { data: Record<string, unknown> }): Promise<Record<string, unknown>>;
     count(args: unknown): Promise<number>;
   };
@@ -65,11 +82,10 @@ export type DeliveredWorkOutcomeSkipReason =
   | "no-platform-work-product"
   | "platform-work-product-ambiguous"
   | "objective-not-active"
-  | "already-recorded"
-  | "no-matured-cohort";
+  | "already-recorded";
 
 export type DeliveredWorkOutcomeResult =
-  | { recorded: true; observationId: string; objectiveId: string; objectiveCreated: boolean; value: number }
+  | { recorded: true; observationId: string; objectiveId: string; objectiveCreated: boolean; result: ItemOutcomeResult; value: number }
   | { recorded: false; reason: DeliveredWorkOutcomeSkipReason };
 
 /** The repository's writers expect `$transaction`; we are already inside one. */
@@ -92,10 +108,10 @@ function measureContract(): Pick<CreateProductObjectiveInput,
   | "baselineNarrative" | "targetNarrative" | "reviewCadence" | "reviewAt" | "ownerPrincipalId"> {
   return {
     measureKind: "percentage",
-    measureDefinition: DELIVERED_WORK_MEASURE_DEFINITION,
+    measureDefinition: ITEM_OUTCOME_MEASURE_DEFINITION,
     measureUnit: null,
     baselineValue: null,
-    // Every delivered item holding is the definition of the outcome, not a benchmark.
+    // Every item's outcome holding is the definition of the roll-up, not a benchmark.
     targetValue: 100,
     baselineNarrative: null,
     targetNarrative: null,
@@ -159,10 +175,10 @@ export async function designatePlatformWorkProduct(
   const objective = await createActiveObjective(db, {
     organizationId: input.organizationId,
     productId: input.productId,
-    title: "Delivered platform work holds",
-    problemStatement: "Platform work merges and closes without anyone recording whether it achieved its purpose.",
+    title: "Delivered platform work achieves its outcomes",
+    problemStatement: "Platform work merges and closes without anyone recording whether each item achieved its own outcome.",
     outcomeHypothesis:
-      "Platform work that is delivered stays delivered: it is not reopened and records no failing evidence after delivery.",
+      "Each delivered platform item achieves the outcome it states: it is not reopened and records no failing evidence after delivery.",
     origin: { sourceKind: PLATFORM_WORK_OBJECTIVE_SOURCE_KIND, sourceRef: input.productId },
   });
   return { created: true, objectiveId: objective.objectiveId };
@@ -171,7 +187,7 @@ export async function designatePlatformWorkProduct(
 async function epicObjective(
   db: DeliveredWorkOutcomeDb,
   standing: ObjectiveRef,
-  epic: NonNullable<DeliveredItem["epic"]>,
+  epic: NonNullable<OutcomeItem["epic"]>,
 ): Promise<{ objective: ObjectiveRef; created: boolean }> {
   const existing = await db.productObjective.findFirst({
     where: { organizationId: standing.organizationId, sourceKind: EPIC_OBJECTIVE_SOURCE_KIND, sourceRef: epic.epicId },
@@ -180,120 +196,159 @@ async function epicObjective(
   const objective = await createActiveObjective(db, {
     organizationId: standing.organizationId,
     productId: standing.productId,
-    title: `Delivered work holds: ${epic.title}`.slice(0, 240),
+    title: `Item outcomes hold: ${epic.title}`.slice(0, 240),
     problemStatement: epic.description?.trim() ? epic.description.trim().slice(0, 4000) : null,
-    outcomeHypothesis: `Work delivered under ${epic.epicId} achieves its purpose: ${epic.title}`,
+    outcomeHypothesis: `Each item delivered under ${epic.epicId} achieves its own outcome: ${epic.title}`,
     origin: { sourceKind: EPIC_OBJECTIVE_SOURCE_KIND, sourceRef: epic.epicId },
   });
   return { objective, created: true };
 }
 
-async function maturedFacts(db: DeliveredWorkOutcomeDb, item: DeliveredItem, observedAt: Date) {
-  const window = deliveredWorkWindow(observedAt);
-  const deliveries = await db.backlogItemActivity.findMany({
-    where: {
-      kind: "status_change",
-      recordedAt: { gte: window.from, lte: window.to },
-      payload: { path: ["to"], equals: "done" },
-      backlogItem: { epicId: item.epicId, businessProductId: null, OR: PLATFORM_SCOPE_FILTER },
-    },
-    select: { backlogItemId: true, kind: true, recordedAt: true, payload: true },
-    orderBy: { recordedAt: "asc" },
-    take: MAX_COHORT_DELIVERIES,
-  });
-  const firstDelivery = new Map<string, Date>();
-  for (const row of deliveries) if (!firstDelivery.has(row.backlogItemId)) firstDelivery.set(row.backlogItemId, row.recordedAt);
-  const ids = [...firstDelivery.keys()];
-  if (ids.length === 0) return { facts: [] as DeliveredWorkFact[], window, truncated: false };
-  const [items, later] = await Promise.all([
-    db.backlogItem.findMany({ where: { id: { in: ids } }, select: { id: true, itemId: true, status: true } }),
-    db.backlogItemActivity.findMany({
-      where: {
-        backlogItemId: { in: ids },
-        recordedAt: { gte: window.from },
-        OR: [{ kind: "status_change", payload: { path: ["from"], equals: "done" } }, { kind: "evidence" }],
-      },
-      select: { backlogItemId: true, kind: true, recordedAt: true, payload: true },
-    }),
-  ]);
-  const facts = items.map((row) => ({
-    itemId: row.itemId,
-    status: row.status,
-    deliveredAt: firstDelivery.get(row.id)!,
-    laterActivities: later.filter((activity) => activity.backlogItemId === row.id),
-  }));
-  return { facts, window, truncated: deliveries.length >= MAX_COHORT_DELIVERIES };
+type RollupTarget =
+  | { resolved: true; objective: ObjectiveRef; created: boolean }
+  | { resolved: false; reason: DeliveredWorkOutcomeSkipReason };
+
+/** The roll-up objective an item's observation hangs on: its epic's, or the standing one. */
+async function rollupObjective(db: DeliveredWorkOutcomeDb, item: OutcomeItem): Promise<RollupTarget> {
+  if (!isPlatformWorkScope(item)) return { resolved: false, reason: "out-of-scope" };
+  const standing = await activeStandingObjectives(db, item.organizationId);
+  if (standing.length === 0) return { resolved: false, reason: "no-platform-work-product" };
+  if (standing.length > 1) return { resolved: false, reason: "platform-work-product-ambiguous" };
+  const target = item.epic ? await epicObjective(db, standing[0]!, item.epic) : { objective: standing[0]!, created: false };
+  if (target.objective.status !== "active") return { resolved: false, reason: "objective-not-active" };
+  return { resolved: true, ...target };
 }
 
 /**
- * Record the outcome observation for one delivered item. Reads and writes on
- * `db` only; the caller decides the transaction and swallows failures, so a
- * recording problem never blocks a delivery.
+ * Record one observation of an item's own outcome. Reads and writes on `db`
+ * only; the caller decides the transaction and swallows failures, so a
+ * recording problem never blocks a delivery or a reopen.
  */
-export async function recordDeliveredWorkOutcome(
+async function recordItemOutcome(
   db: DeliveredWorkOutcomeDb,
-  input: { backlogItemRowId: string; observedAt: Date },
+  item: OutcomeItem,
+  event: { kind: ItemOutcomeEvent; ref: string; observedAt: Date; activityId?: string },
 ): Promise<DeliveredWorkOutcomeResult> {
-  const item = await db.backlogItem.findUnique({
-    where: { id: input.backlogItemRowId },
-    select: {
-      id: true, itemId: true, status: true, scopeKind: true, businessProductId: true,
-      organizationId: true, epicId: true, completedAt: true,
-      epic: { select: { epicId: true, title: true, description: true } },
-    },
-  });
-  if (!item) return { recorded: false, reason: "item-not-found" };
-  if (item.status !== "done") return { recorded: false, reason: "not-delivered" };
-  if (!isPlatformWorkScope(item)) return { recorded: false, reason: "out-of-scope" };
-
-  const standing = await activeStandingObjectives(db, item.organizationId);
-  if (standing.length === 0) return { recorded: false, reason: "no-platform-work-product" };
-  if (standing.length > 1) return { recorded: false, reason: "platform-work-product-ambiguous" };
-
-  const target = item.epic ? await epicObjective(db, standing[0]!, item.epic) : { objective: standing[0]!, created: false };
-  if (target.objective.status !== "active") return { recorded: false, reason: "objective-not-active" };
-
-  const deliveredAt = item.completedAt ?? input.observedAt;
-  const sourceRef = deliveryObservationSourceRef(item.itemId, deliveredAt);
+  const target = await rollupObjective(db, item);
+  if (!target.resolved) return { recorded: false, reason: target.reason };
+  const sourceRef = itemOutcomeSourceRef(item.itemId, event.kind, event.ref);
   const prior = await db.productOutcomeObservation.findFirst({
-    where: { objectiveId: target.objective.id, sourceKind: DELIVERY_OBSERVATION_SOURCE_KIND, sourceRef },
+    where: { sourceKind: DELIVERY_OBSERVATION_SOURCE_KIND, sourceRef },
     select: { id: true },
   });
   if (prior) return { recorded: false, reason: "already-recorded" };
 
-  const { facts, window, truncated } = await maturedFacts(db, item, input.observedAt);
-  const rate = computeDeliveredWorkHoldRate(facts);
-  if (!rate) return { recorded: false, reason: "no-matured-cohort" };
-
+  // An item filed before the outcome field, and not yet backfilled, is
+  // measured against the outcome the backfill would give it.
+  const outcome = item.outcome && item.outcomeSource
+    ? { outcome: item.outcome, outcomeSource: item.outcomeSource }
+    : resolveItemOutcome(item);
+  const result = ITEM_OUTCOME_RESULT_FOR_EVENT[event.kind];
+  const value = itemOutcomeValue(result);
   const observation = await recordProductOutcomeObservation(inTransaction(db), {
     organizationId: target.objective.organizationId,
     objectiveId: target.objective.objectiveId,
-    observedAt: input.observedAt,
-    numericValue: rate.value,
-    narrative: null,
+    observedAt: event.observedAt,
+    numericValue: value,
+    narrative: outcome.outcome,
     sourceKind: DELIVERY_OBSERVATION_SOURCE_KIND,
     sourceRef,
     confidence: null,
     provenance: {
-      method: DELIVERED_WORK_OUTCOME_METHOD,
-      decisionRefs: [...DELIVERED_WORK_DECISION_REFS],
+      method: ITEM_OUTCOME_METHOD,
+      decisionRefs: [...ITEM_OUTCOME_DECISION_REFS],
       recordedBy: "platform",
-      deliveredItemId: item.itemId,
-      deliveredAt: deliveredAt.toISOString(),
+      itemId: item.itemId,
+      event: event.kind,
+      result,
+      outcome: outcome.outcome,
+      outcomeSource: outcome.outcomeSource,
+      outcomeDigest: outcomeDigest(outcome.outcome),
       epicId: item.epic?.epicId ?? null,
-      cohort: { from: window.from.toISOString(), to: window.to.toISOString(), holdWindowDays: HOLD_WINDOW_DAYS, lookbackDays: LOOKBACK_DAYS, truncated },
-      numerator: rate.numerator,
-      denominator: rate.denominator,
-      notHeld: rate.notHeld.slice(0, 50),
+      ...(event.activityId ? { activityId: event.activityId } : {}),
     },
     recordedByPrincipalId: null,
     supersedesObservationId: null,
+    backlogItemId: item.id,
   });
   return {
     recorded: true,
     observationId: String(observation.observationId),
     objectiveId: target.objective.objectiveId,
     objectiveCreated: target.created,
-    value: rate.value,
+    result,
+    value,
   };
+}
+
+/** At delivery: the item's outcome is achieved (delivery closes an item by default). */
+export async function recordDeliveredWorkOutcome(
+  db: DeliveredWorkOutcomeDb,
+  input: { backlogItemRowId: string; observedAt: Date },
+): Promise<DeliveredWorkOutcomeResult> {
+  const item = await db.backlogItem.findUnique({ where: { id: input.backlogItemRowId }, select: OUTCOME_ITEM_SELECT });
+  if (!item) return { recorded: false, reason: "item-not-found" };
+  if (item.status !== "done") return { recorded: false, reason: "not-delivered" };
+  const deliveredAt = item.completedAt ?? input.observedAt;
+  return recordItemOutcome(db, item, { kind: "delivered", ref: deliveredAt.toISOString(), observedAt: input.observedAt });
+}
+
+export type ItemOutcomeEventsResult = {
+  scanned: number;
+  recorded: number;
+  byResult: Partial<Record<ItemOutcomeResult, number>>;
+  skipped: Partial<Record<DeliveredWorkOutcomeSkipReason, number>>;
+  truncated: boolean;
+};
+
+/**
+ * After delivery: reopens from done record regressed, and failing evidence
+ * while done records not achieved. Read from the item's own activity, so
+ * every status writer is covered without each one calling a hook. Bounded
+ * and idempotent (one observation per activity row).
+ */
+export async function recordItemOutcomeEvents(
+  db: DeliveredWorkOutcomeDb,
+  input: { now: Date; lookbackDays?: number; limit?: number },
+): Promise<ItemOutcomeEventsResult> {
+  const limit = input.limit ?? MAX_EVENTS_PER_RUN;
+  const since = new Date(input.now.getTime() - (input.lookbackDays ?? 7) * DAY_MS);
+  const activities = await db.backlogItemActivity.findMany({
+    where: {
+      recordedAt: { gte: since, lte: input.now },
+      backlogItem: { businessProductId: null, OR: PLATFORM_SCOPE_FILTER },
+      OR: [
+        { kind: "status_change", payload: { path: ["from"], equals: "done" } },
+        { kind: "evidence", backlogItem: { status: "done" } },
+      ],
+    },
+    select: { id: true, backlogItemId: true, kind: true, recordedAt: true, payload: true },
+    orderBy: { recordedAt: "asc" },
+    take: limit,
+  });
+  const result: ItemOutcomeEventsResult = {
+    scanned: activities.length, recorded: 0, byResult: {}, skipped: {}, truncated: activities.length >= limit,
+  };
+  if (activities.length === 0) return result;
+  const items = await db.backlogItem.findMany({
+    where: { id: { in: [...new Set(activities.map((row) => row.backlogItemId))] } },
+    select: OUTCOME_ITEM_SELECT,
+  });
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const activity of activities) {
+    const item = byId.get(activity.backlogItemId);
+    if (!item) continue;
+    const kind = classifyItemOutcomeActivity(activity, item);
+    if (!kind) continue;
+    const outcome = await recordItemOutcome(db, item, {
+      kind, ref: activity.id, observedAt: activity.recordedAt, activityId: activity.id,
+    });
+    if (outcome.recorded) {
+      result.recorded += 1;
+      result.byResult[outcome.result] = (result.byResult[outcome.result] ?? 0) + 1;
+    } else {
+      result.skipped[outcome.reason] = (result.skipped[outcome.reason] ?? 0) + 1;
+    }
+  }
+  return result;
 }

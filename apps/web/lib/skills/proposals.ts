@@ -5,9 +5,10 @@
 // the row, the snapshot, and the new SkillDefinition.skillMdContent all move
 // together — partial state cannot persist on a transient DB failure.
 
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 
 import { prisma } from "@dpf/db";
+import { isRolledBackPostgresConflict } from "@/lib/shared/postgres-transaction-conflict";
 
 const PROPOSAL_ID_PREFIX = "IP-SKL";
 const REVISION_ID_PREFIX = "SREV";
@@ -50,6 +51,7 @@ export type SubmitSkillImprovementProposalInput = {
 
 export type SubmitSkillImprovementProposalResult = {
   proposalId: string;
+  reused: boolean;
 };
 
 /**
@@ -62,21 +64,10 @@ export type SubmitSkillImprovementProposalResult = {
 export async function submitSkillImprovementProposal(
   input: SubmitSkillImprovementProposalInput,
 ): Promise<SubmitSkillImprovementProposalResult> {
-  const skill = await prisma.skillDefinition.findUnique({
-    where: { skillId: input.skillId },
-    select: { skillId: true },
-  });
-  if (!skill) {
-    throw new Error(`[skill-proposals] unknown skillId: ${input.skillId}`);
-  }
   if (typeof input.proposedContent !== "string" || input.proposedContent.length === 0) {
     throw new Error("[skill-proposals] proposedContent must be a non-empty string");
   }
-
-  const proposalId = makeProposalId();
-  await prisma.improvementProposal.create({
-    data: {
-      proposalId,
+  const draft = {
       title: input.title.slice(0, 200),
       description: input.description,
       category: "skill",
@@ -88,11 +79,34 @@ export async function submitSkillImprovementProposal(
       conversationExcerpt: input.proposedContent,
       observedFriction: input.observedFriction ?? null,
       targetSkillId: input.skillId,
-      status: "proposed",
-    },
-  });
-
-  return { proposalId };
+  };
+  const key = `skill-draft:${createHash("sha256").update(JSON.stringify(draft)).digest("hex")}`;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+        if (draft.threadId !== null) {
+          const thread = await tx.agentThread.findFirst({
+            where: { id: draft.threadId, userId: draft.submittedById, cancelledAt: null }, select: { id: true },
+          });
+          if (!thread) throw new Error("[skill-proposals] The suggestion thread context is no longer available to this user.");
+        }
+        const skill = await tx.skillDefinition.findUnique({ where: { skillId: input.skillId }, select: { skillId: true } });
+        if (!skill) throw new Error(`[skill-proposals] unknown skillId: ${input.skillId}`);
+        const existing = await tx.improvementProposal.findFirst({
+          where: { ...draft, status: "proposed" }, select: { proposalId: true }, orderBy: { createdAt: "asc" },
+        });
+        if (existing) return { proposalId: existing.proposalId, reused: true };
+        const saved = await tx.improvementProposal.create({
+          data: { ...draft, proposalId: makeProposalId(), status: "proposed" }, select: { proposalId: true },
+        });
+        return { proposalId: saved.proposalId, reused: false };
+      }, { isolationLevel: "Serializable", maxWait: 5_000, timeout: 20_000 });
+    } catch (error) {
+      // Unknown commit acknowledgements are not proof of rollback.
+      if (attempt >= 2 || !isRolledBackPostgresConflict(error)) throw error;
+    }
+  }
 }
 
 export type ApproveSkillImprovementProposalInput = {

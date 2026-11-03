@@ -224,7 +224,7 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value === value.trim();
 
 /** Resume the original engagement through the existing governed durable task runner. */
-export async function fulfillCoworkerEngagement(engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext, db?: Prisma.TransactionClient): Promise<ToolResult> {
+export async function fulfillCoworkerEngagement(engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext, db?: Prisma.TransactionClient, rawParams?: Record<string, unknown>): Promise<ToolResult> {
   if (!context?.agentId || !context.apiTokenId || !context.userContext
     || (context.authSource !== "oauth" && context.authSource !== "pat")) return { success: false, error: "engagement_verified_context_required", message: "An authenticated coworker connection is required to fulfill this request." };
   const prisma = db ?? (await import("@dpf/db")).prisma;
@@ -252,10 +252,40 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
           data: { engagementId, taskRunId, observedEngagementStatus: engagement.status, nextAction: "Observe this same engagementId again; inspect engagement-result-projection phase timings if it persists.", executionRequested: false } };
       }
     }
+    if (record(engagement.metadata).presentAssessment !== undefined && !db) {
+      await (await import("@/lib/coworker-service-catalog/engagement-present-assessment")).reconcileEngagementPresentObservation(engagementId);
+    }
     const latest = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
-    return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
+    return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, presentAssessment: record(latest?.metadata ?? engagement.metadata).presentAssessment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
   }
   const supplied = record(locator);
+  if (supplied.presentAssessment !== undefined) {
+    if (supplied.presentAssessment !== true || Object.keys(supplied).length !== 1 || !rawParams
+      || canonicalJson(rawParams) !== canonicalJson({ engagementId, fulfillment: locator })) {
+      return { success: false, error: "engagement_present_packet_invalid", message: "Use the original engagementId and fulfillment:{presentAssessment:true}; the original source, identity and limits stay server-owned." };
+    }
+    if (record(engagement.metadata).presentAssessment !== undefined) return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
+    const token: RemoteTaskSubmitAuth = { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource };
+    const { withEngagementPresentRequest } = await import("@/lib/coworker-service-catalog/engagement-present-assessment");
+    const { presentAssessmentRequestKey } = await import("@/lib/coworker-service-catalog/engagement-present-policy");
+    try {
+      const outcome = await withEngagementPresentRequest({ engagementId, userId, token, context, rawParams }, binding => submitRemoteCoworkerTask({
+        token, userContext: context.userContext!, params: { agentId: binding.providerAgentId, routeContext: context.routeContext ?? "/area/platform",
+          title: `Present advisory assessment: ${engagementId}`, objective: engagement.requestedOutcome,
+          prompt: buildEngagementTaskPrompt(binding, engagement), idempotencyKey: presentAssessmentRequestKey(engagementId), riskClass: "read",
+          authorityScope: ["coworker_engagement_write", "file_read", "registry_read", ...ENGAGEMENT_READ_TOOLS.map(name => `tool:${name}`)], engagementBinding: binding } }));
+      if (outcome.kind === "invalid_params") return { success: false, error: "engagement_present_packet_invalid", message: outcome.message };
+      if (outcome.result.isError === true && record((await prisma.coworkerEngagement.findUnique({ where: { engagementId } }))?.metadata).presentAssessment !== undefined) {
+        return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
+      }
+      return { success: outcome.result.isError !== true, entityId: engagementId, message: "The original engagement's separately attributed finite assessment state is persisted.", data: { engagementId, task: outcome.result } };
+    } catch (error) {
+      const persisted = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
+      if (record(persisted?.metadata).presentAssessment !== undefined) return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
+      return { success: false, error: "engagement_present_refused", message: error instanceof Error ? error.message : "Current finite assessment authority could not be verified.",
+        data: { engagementId, executionRequested: false, action: "Inspect this original engagement's current native authority/configuration failure; do not create a replacement or replay the held task." } };
+    }
+  }
   if (Object.keys(supplied).some(key => !["workroomId", "stageKey", "artifactRef", "guidanceArtifacts", "visualEvidenceRef"].includes(key))) return { success: false, error: "engagement_locator_invalid", message: "Use the original artifact and current room stage; original request inputs cannot be replaced." };
   const room = typeof supplied.workroomId === "string" ? await prisma.workroom.findUnique({ where: { capsuleId: supplied.workroomId }, select: { headSha: true } }) : null;
   const binding = parseEngagementTaskBinding({

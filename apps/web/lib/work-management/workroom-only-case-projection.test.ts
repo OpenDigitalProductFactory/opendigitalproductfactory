@@ -192,6 +192,24 @@ describe("loadWorkroomOnlyCaseDetail", () => {
     expect(detail!.room!.purpose).toContain("September ledger");
   });
 
+  it("shows the outcome of the backlog item the room carries, read live (BI-8DE5429B)", async () => {
+    const findFirst = vi.fn(async () => ({ outcome: "Finance sees every overdue invoice in one list." }));
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
+      prismaClient: { ...client(room({ backlogItemId: "BI-OUT1", objective: "Claim-at-start binding for BI-OUT1" })), backlogItem: { findFirst, findMany: vi.fn(async () => []) } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail!.room!.outcome.statement).toBe("Finance sees every overdue invoice in one list.");
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [{ itemId: "BI-OUT1" }, { id: "BI-OUT1" }] } }));
+  });
+
+  it("keeps the room's own objective as its outcome when the item has none yet", async () => {
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
+      prismaClient: { ...client(room({ backlogItemId: "BI-OUT1" })), backlogItem: { findFirst: vi.fn(async () => ({ outcome: null })), findMany: vi.fn(async () => []) } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail!.room!.outcome.statement).toContain("September ledger");
+  });
+
   it("states the fields it does not know rather than implying a value", async () => {
     const detail = await load(room());
     expect(detail!.summary.urgencyLabel).toBe("Not recorded");

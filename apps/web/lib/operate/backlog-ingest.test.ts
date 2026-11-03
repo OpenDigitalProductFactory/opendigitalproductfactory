@@ -1,4 +1,22 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const semanticMemory = vi.hoisted(() => ({
+  searchPlatformKnowledge: vi.fn(async () => ({ status: "ok", results: [] })),
+  storePlatformKnowledge: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/semantic-memory", () => semanticMemory);
+
+// Fake-store tests must supply their advisory dependencies instead of reaching
+// the host's embedding service. The mock fences the network; these assertions
+// also catch a newly omitted dependency even when its advisory error is caught.
+afterEach(() => {
+  try {
+    expect(semanticMemory.searchPlatformKnowledge).not.toHaveBeenCalled();
+    expect(semanticMemory.storePlatformKnowledge).not.toHaveBeenCalled();
+  } finally {
+    vi.clearAllMocks();
+  }
+});
 
 import {
   backlogOriginMarker,
@@ -11,6 +29,8 @@ import {
   validateIngestInput,
   type IngestBacklogStore,
 } from "./backlog-ingest";
+
+const quiet = { indexKnowledge: () => {}, listRepoFiles: async () => [] as string[], searchSimilarItems: async () => ({ status: "ok", results: [] }) };
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -149,7 +169,7 @@ describe("ingestBacklogItem", () => {
         itemIdPrefix: "IMP",
         origin: { kind: "improvement", id: "IP-6F240" },
       },
-      { store, indexKnowledge },
+      { store, ...quiet, indexKnowledge },
     );
 
     expect(result.created).toBe(true);
@@ -180,12 +200,12 @@ describe("ingestBacklogItem", () => {
     const { store, activities } = makeStore();
     await ingestBacklogItem(
       { title: "Work keeps piling up", workType: "bug", source: "automated-detection", origin: { kind: "flow-bottleneck", id: "wr:x|y" }, routing },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
     expect(activities[0]).toMatchObject({ kind: "intake_origin", payload: { routing } });
     await expect(ingestBacklogItem(
       { title: "Bad", workType: "bug", source: "automated-detection", routing: { ...routing, question: 3 } },
-      { store: makeStore().store, indexKnowledge: () => {} },
+      { store: makeStore().store, ...quiet },
     )).rejects.toThrow(/routing.question must be 1/);
   });
 
@@ -207,7 +227,7 @@ describe("ingestBacklogItem", () => {
         source: "automated-detection",
         origin: { kind: "improvement", id: "IP-6F240" },
       },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
 
     // implementationCandidates is always present (BI-1A1EC5EC) and empty on the
@@ -233,7 +253,7 @@ describe("ingestBacklogItem", () => {
     const { store, created, activities } = makeStore();
     const result = await ingestBacklogItem(
       { title: "Hand-filed", workType: "chore", source: "user-request", itemId: "BI-PORT-005" },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
     expect(result.itemId).toBe("BI-PORT-005");
     expect(created[0].itemId).toBe("BI-PORT-005");
@@ -247,7 +267,7 @@ describe("ingestBacklogItem", () => {
 
     await ingestBacklogItem(
       { title: "Linked to an epic", workType: "feature", source: "user-request", epicId: "EP-INTAKE-UNIFY" },
-      { store, indexKnowledge: () => {} },
+      { store, ...quiet },
     );
 
     expect(created[0].epicId).toBe("epic-cuid-123");
@@ -264,7 +284,7 @@ describe("ingestBacklogItem", () => {
         organizationId: "org-1",
         businessProductId: "product-events",
       },
-      { store: scoped.store, indexKnowledge: () => {} },
+      { store: scoped.store, ...quiet },
     );
 
     expect(scoped.created[0]).toMatchObject({
@@ -287,7 +307,7 @@ describe("ingestBacklogItem", () => {
         workType: "feature",
         source: "user-request",
       },
-      { store: legacy.store, indexKnowledge: () => {} },
+      { store: legacy.store, ...quiet },
     );
     expect(legacy.created[0]).not.toHaveProperty("demandStage");
     expect(legacy.activities).toHaveLength(0);
@@ -298,7 +318,7 @@ describe("ingestBacklogItem", () => {
     await expect(
       ingestBacklogItem(
         { title: "bad", workType: "bug", source: "user-request", status: "open" },
-        { store, indexKnowledge: () => {} },
+        { store, ...quiet },
       ),
     ).rejects.toThrow(/triageOutcome is required/);
     expect(created).toHaveLength(0);
@@ -317,7 +337,7 @@ describe("ingestBacklogItem", () => {
           workType: "feature",
           source: "user-request",
         },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+        { store, ...quiet, listRepoFiles: async () => REPO },
       );
 
       expect((result.implementationCandidates ?? []).map((c) => c.path)).toEqual([
@@ -337,7 +357,7 @@ describe("ingestBacklogItem", () => {
 
       const result = await ingestBacklogItem(
         { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+        { store, ...quiet, listRepoFiles: async () => REPO },
       );
 
       expect(result.created).toBe(true);
@@ -350,7 +370,7 @@ describe("ingestBacklogItem", () => {
 
       const result = await ingestBacklogItem(
         { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => [] },
+        { store, ...quiet, listRepoFiles: async () => [] },
       );
 
       expect(result.implementationCandidates).toEqual([]);
@@ -364,7 +384,7 @@ describe("ingestBacklogItem", () => {
         { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
         {
           store,
-          indexKnowledge: () => {},
+          ...quiet,
           listRepoFiles: async () => {
             throw new Error("disk gone");
           },
@@ -381,7 +401,7 @@ describe("ingestBacklogItem", () => {
 
       await ingestBacklogItem(
         { title: "Add a payroll remittance ledger", workType: "feature", source: "user-request" },
-        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+        { store, ...quiet, listRepoFiles: async () => REPO },
       );
 
       expect(
@@ -520,9 +540,34 @@ function issueInput(n: number, overrides: {
   };
 }
 
-const quiet = { indexKnowledge: () => {}, listRepoFiles: async () => [] as string[], searchSimilarItems: async () => ({ status: "ok", results: [] }) };
 
 describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-952F08BA)", () => {
+  it("keeps independent source fingerprints on an item shared by issue and peer origins", async () => {
+    const mem = memoryStore([{ itemId: "BI-SHARED", body: `- ${issueUrl(9)}\n[origin:ecosystem-upstream-issue:${REPO}#9]\n[origin:ecosystem-peer-demand:fdm_1]` }]);
+    const peer = { ...issueInput(9), origin: { kind: "ecosystem-peer-demand", id: "fdm_1" },
+      reconcile: { repository: "", sourceUrl: null, state: "open", fingerprint: "peer-fingerprint" } };
+    await ingestBacklogItem(issueInput(9), { store: mem.store, ...quiet });
+    await ingestBacklogItem(peer, { store: mem.store, ...quiet });
+    const count = mem.activities.length;
+    expect((await ingestBacklogItem(issueInput(9), { store: mem.store, ...quiet })).outcome).toBe("unchanged");
+    expect((await ingestBacklogItem(peer, { store: mem.store, ...quiet })).outcome).toBe("unchanged");
+    expect(mem.activities).toHaveLength(count);
+    expect(mem.items).toHaveLength(1);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("excludes peer-owned mirror copies when reconciling a locally owned issue", async () => {
+    const body = `- ${issueUrl(4389)}\n\n[origin:ecosystem-upstream-issue:4389]`;
+    const mem = memoryStore([
+      { itemId: "BI-LOCAL", body },
+      { itemId: "BI-MIRROR", body: `${body}\n\n[origin:federatedWork:inst_peer:BI-MIRROR]` },
+    ]);
+    const result = await ingestBacklogItem(issueInput(4389), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ itemId: "BI-LOCAL", created: false, outcome: "unchanged" });
+    expect(mem.items).toHaveLength(2);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
   it("exports a qualified marker helper keyed on repository and number", () => {
     expect(qualifiedIssueOriginId("OpenDigitalProductFactory/OpenDigitalProductFactory", 12)).toBe(`${REPO}#12`);
     expect(parseGithubIssueUrl(issueUrl(4563))).toEqual({ repository: REPO, number: 4563 });
@@ -683,7 +728,7 @@ describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-9
       itemId: "BI-DONE",
       status: "done",
       body: `- ${issueUrl(9)}\n\n[origin:ecosystem-upstream-issue:${REPO}#9]`,
-    }], [{ backlogItemId: "cuid-seed-1", kind: "intake_origin", payload: { source: { fingerprint: "fp-closed", state: "closed" } } }]);
+    }], [{ backlogItemId: "cuid-seed-1", kind: "intake_origin", payload: { origin: { kind: "ecosystem-upstream-issue", id: `${REPO}#9` }, source: { fingerprint: "fp-closed", state: "closed" } } }]);
     const result = await ingestBacklogItem(issueInput(9, { fingerprint: "fp-open", state: "open" }), { store: mem.store, ...quiet });
     expect(result).toMatchObject({ created: false, outcome: "changed", itemId: "BI-DONE" });
     const events = mem.activities.filter((a) => (a.payload as { change?: unknown }).change);

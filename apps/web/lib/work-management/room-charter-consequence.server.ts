@@ -24,6 +24,7 @@ import {
   resolveRoomCharter,
 } from "./room-charter";
 import { resolveRoomMessagingWorkItem } from "./room-participant-invitation-preflight.server";
+import { resolveWorkItemRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 function text(params: Record<string, unknown>, key: string): string | null {
@@ -48,7 +49,8 @@ export async function inviteRoomParticipantConsequence(call: ToolCallConsequence
   const principal = await ensureAgentPrincipalIdentity(agent.agentId);
 
   const policy = readWorkspaceRoomPolicy(item.evidence);
-  const roomSensitivityCeiling = policy.sensitivityCeiling ?? "internal";
+  // The room's own ceiling, so platform work reads as public (BI-ED5561BB).
+  const roomSensitivityCeiling = await resolveWorkItemRoomSensitivityCeiling(item);
   const decision = evaluateCharterAdmission({
     charter: resolveRoomCharter({ charter: policy.charter, sensitivityCeiling: roomSensitivityCeiling }),
     invitee: {

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   designatePlatformWorkProduct,
   recordDeliveredWorkOutcome,
+  recordItemOutcomeEvents,
 } from "./delivered-work-outcomes-repository";
 import { ProductOutcomeConflictError, ProductOutcomeNotFoundError } from "./outcomes-repository";
 
@@ -12,7 +13,9 @@ const at = (daysAgo: number) => new Date(observedAt.getTime() - daysAgo * day);
 
 type Row = Record<string, unknown>;
 type Item = {
-  id: string; itemId: string; status: string; scopeKind: string | null; businessProductId: string | null;
+  id: string; itemId: string; title: string; body: string | null; workType: string | null;
+  outcome: string | null; outcomeSource: string | null;
+  status: string; scopeKind: string | null; businessProductId: string | null;
   organizationId: string | null; epicId: string | null; completedAt: Date | null;
 };
 type Activity = { id: string; backlogItemId: string; kind: string; recordedAt: Date; payload: Row };
@@ -40,6 +43,7 @@ function store(seed: { items: Item[]; activities?: Activity[]; objectives?: Row[
     if (!where) return true;
     if ("epicId" in where && item.epicId !== where.epicId) return false;
     if ("businessProductId" in where && item.businessProductId !== where.businessProductId) return false;
+    if ("status" in where && item.status !== where.status) return false;
     if (Array.isArray(where.OR)) {
       return (where.OR as Row[]).some((clause) => "scopeKind" in clause && (clause.scopeKind === null
         ? item.scopeKind === null
@@ -58,7 +62,9 @@ function store(seed: { items: Item[]; activities?: Activity[]; objectives?: Row[
       },
       findFirst: async () => null,
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
-        items.filter((item) => where.id.in.includes(item.id)).map(({ id, itemId, status }) => ({ id, itemId, status })),
+        items.filter((item) => where.id.in.includes(item.id)).map((item) => ({
+          ...item, epic: epics.find((entry) => entry.id === item.epicId) ?? null,
+        })),
     },
     backlogItemActivity: {
       findMany: async ({ where }: { where: Row }) => activities.filter((row) => {
@@ -71,11 +77,14 @@ function store(seed: { items: Item[]; activities?: Activity[]; objectives?: Row[
           if (!item || !itemMatches(item, where.backlogItem as Row)) return false;
         }
         if (Array.isArray(where.OR)) {
+          const item = items.find((entry) => entry.id === row.backlogItemId);
           return (where.OR as Row[]).some((clause) => clause.kind === row.kind
-            && pathEquals(row.payload, clause.payload as { path: string[]; equals: unknown }));
+            && pathEquals(row.payload, clause.payload as { path: string[]; equals: unknown })
+            && (!clause.backlogItem || (item !== undefined && itemMatches(item, clause.backlogItem as Row))));
         }
         return true;
-      }).sort((left, right) => left.recordedAt.getTime() - right.recordedAt.getTime()),
+      }).sort((left, right) => left.recordedAt.getTime() - right.recordedAt.getTime())
+        .slice(0, (where as { take?: number }).take ?? Infinity),
     },
     product: {
       findFirst: async ({ where }: { where: Row }) =>
@@ -102,6 +111,8 @@ function store(seed: { items: Item[]; activities?: Activity[]; objectives?: Row[
     productOutcomeObservation: {
       findFirst: async ({ where }: { where: Row }) => observations.find((row) =>
         Object.entries(where).every(([key, value]) => row[key] === value)) ?? null,
+      findMany: async ({ where }: { where: Row }) => observations.filter((row) =>
+        Object.entries(where).every(([key, value]) => row[key] === value)),
       count: async () => observations.length,
       create: async ({ data }: { data: Row }) => {
         const row = { id: `observation-row-${++sequence}`, ...data };
@@ -122,35 +133,22 @@ const standing = {
 
 function platformItem(id: string, overrides: Partial<Item> = {}): Item {
   return {
-    id, itemId: `BI-${id.toUpperCase()}`, status: "done", scopeKind: "platform", businessProductId: null,
+    id, itemId: `BI-${id.toUpperCase()}`, title: `Item ${id}`, body: null, workType: "feature",
+    outcome: `Outcome of ${id} holds for its users.`, outcomeSource: "stated",
+    status: "done", scopeKind: "platform", businessProductId: null,
     organizationId: null, epicId: "epic-row-1", completedAt: at(0), ...overrides,
   };
 }
 
-function deliveredAt(itemRowId: string, daysAgo: number, id = `act-${itemRowId}-${daysAgo}`): Activity {
-  return { id, backlogItemId: itemRowId, kind: "status_change", recordedAt: at(daysAgo), payload: { from: "in-progress", to: "done" } };
-}
 
-describe("recordDeliveredWorkOutcome", () => {
-  it("records the epic's matured hold rate once per delivery, creating the epic objective on first use", async () => {
-    const fake = store({
-      objectives: [{ ...standing }],
-      items: [
-        platformItem("now"),
-        platformItem("a"),
-        platformItem("b"),
-        platformItem("c", { status: "open" }),
-      ],
-      activities: [
-        deliveredAt("a", 40), deliveredAt("b", 30), deliveredAt("c", 20),
-        { id: "reopen-c", backlogItemId: "c", kind: "status_change", recordedAt: at(10), payload: { from: "done", to: "open" } },
-      ],
-    });
+describe("recordDeliveredWorkOutcome (BI-8DE5429B)", () => {
+  it("records the item's own outcome as achieved, once, on its epic's objective (created on first use)", async () => {
+    const fake = store({ objectives: [{ ...standing }], items: [platformItem("now")] });
 
     const first = await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt });
     const second = await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt });
 
-    expect(first).toMatchObject({ recorded: true, objectiveCreated: true, value: 66.666667 });
+    expect(first).toMatchObject({ recorded: true, objectiveCreated: true, result: "achieved", value: 100 });
     expect(second).toEqual({ recorded: false, reason: "already-recorded" });
     const epicObjective = fake.objectives.find((row) => row.sourceKind === "epic");
     expect(epicObjective).toMatchObject({
@@ -160,35 +158,41 @@ describe("recordDeliveredWorkOutcome", () => {
     expect(fake.observations).toHaveLength(1);
     expect(fake.observations[0]).toMatchObject({
       objectiveId: epicObjective!.id,
+      backlogItemId: "now",
       sourceKind: "delivery",
-      sourceRef: `BI-NOW@${at(0).toISOString()}`,
-      numericValue: 66.666667,
+      sourceRef: `BI-NOW:delivered:${at(0).toISOString()}`,
+      numericValue: 100,
+      narrative: "Outcome of now holds for its users.",
       recordedByPrincipalId: null,
       provenance: expect.objectContaining({
-        method: "delivered-work-hold-rate.v1",
-        deliveredItemId: "BI-NOW",
-        numerator: 2,
-        denominator: 3,
-        notHeld: [{ itemId: "BI-C", reason: "reopened" }],
+        method: "item-outcome.v1",
+        itemId: "BI-NOW",
+        event: "delivered",
+        result: "achieved",
+        outcome: "Outcome of now holds for its users.",
+        outcomeSource: "stated",
+        outcomeDigest: expect.stringMatching(/^sha256:[0-9a-f]{16}$/),
       }),
     });
   });
 
-  it("records work with no epic on the standing platform-work objective", async () => {
+  it("measures an item not yet backfilled against the outcome the backfill would give it", async () => {
     const fake = store({
       objectives: [{ ...standing }],
-      items: [platformItem("now", { epicId: null }), platformItem("a", { epicId: null }), platformItem("x")],
-      activities: [deliveredAt("a", 30), deliveredAt("x", 30)],
+      items: [platformItem("now", { epicId: null, outcome: null, outcomeSource: null, title: "Export CSV" })],
     });
 
     const result = await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt });
 
-    expect(result).toMatchObject({ recorded: true, objectiveId: "OBJ-STANDING", objectiveCreated: false, value: 100 });
-    expect(fake.observations[0]).toMatchObject({ provenance: expect.objectContaining({ denominator: 1 }) });
+    expect(result).toMatchObject({ recorded: true, objectiveId: "OBJ-STANDING", objectiveCreated: false });
+    expect(fake.observations[0]).toMatchObject({
+      narrative: '"Export CSV" is in place and working for the people it is for.',
+      provenance: expect.objectContaining({ outcomeSource: "derived" }),
+    });
   });
 
   it("records nothing, and says why, when no business Product is designated for platform work", async () => {
-    const fake = store({ items: [platformItem("now")], activities: [deliveredAt("now", 30)] });
+    const fake = store({ items: [platformItem("now")] });
 
     expect(await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt }))
       .toEqual({ recorded: false, reason: "no-platform-work-product" });
@@ -196,10 +200,7 @@ describe("recordDeliveredWorkOutcome", () => {
   });
 
   it("leaves archetype and business-Product work to their own objectives", async () => {
-    const fake = store({
-      objectives: [{ ...standing }],
-      items: [platformItem("now", { scopeKind: "archetype-leaf" })],
-    });
+    const fake = store({ objectives: [{ ...standing }], items: [platformItem("now", { scopeKind: "archetype-leaf" })] });
 
     expect(await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt }))
       .toEqual({ recorded: false, reason: "out-of-scope" });
@@ -212,23 +213,10 @@ describe("recordDeliveredWorkOutcome", () => {
       .toEqual({ recorded: false, reason: "not-delivered" });
   });
 
-  it("does not invent a rate before any delivery has matured", async () => {
-    const fake = store({
-      objectives: [{ ...standing }],
-      items: [platformItem("now"), platformItem("a")],
-      activities: [deliveredAt("a", 3)],
-    });
-
-    expect(await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt }))
-      .toEqual({ recorded: false, reason: "no-matured-cohort" });
-    expect(fake.observations).toHaveLength(0);
-  });
-
   it("respects an epic objective someone closed", async () => {
     const fake = store({
       objectives: [{ ...standing }, { ...standing, id: "closed-row", objectiveId: "OBJ-CLOSED", status: "closed", sourceKind: "epic", sourceRef: "EP-ONE" }],
-      items: [platformItem("now"), platformItem("a")],
-      activities: [deliveredAt("a", 30)],
+      items: [platformItem("now")],
     });
 
     expect(await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt }))
@@ -243,6 +231,45 @@ describe("recordDeliveredWorkOutcome", () => {
 
     expect(await recordDeliveredWorkOutcome(fake.db as never, { backlogItemRowId: "now", observedAt }))
       .toEqual({ recorded: false, reason: "platform-work-product-ambiguous" });
+  });
+});
+
+describe("recordItemOutcomeEvents (BI-8DE5429B)", () => {
+  it("records a reopen as regressed and failing evidence while done as not achieved, each once", async () => {
+    const fake = store({
+      objectives: [{ ...standing }],
+      items: [
+        platformItem("reopened", { status: "open", completedAt: null }),
+        platformItem("failed", { completedAt: at(3) }),
+        platformItem("building", { status: "in-progress", completedAt: null }),
+      ],
+      activities: [
+        { id: "act-reopen", backlogItemId: "reopened", kind: "status_change", recordedAt: at(2), payload: { from: "done", to: "open" } },
+        { id: "act-fail", backlogItemId: "failed", kind: "evidence", recordedAt: at(1), payload: { evidenceKind: "manual_fail" } },
+        { id: "act-pass", backlogItemId: "failed", kind: "evidence", recordedAt: at(1), payload: { evidenceKind: "manual_check" } },
+        { id: "act-wip", backlogItemId: "building", kind: "evidence", recordedAt: at(1), payload: { evidenceKind: "test_fail" } },
+      ],
+    });
+
+    const first = await recordItemOutcomeEvents(fake.db as never, { now: observedAt });
+    const second = await recordItemOutcomeEvents(fake.db as never, { now: observedAt });
+
+    expect(first).toMatchObject({ recorded: 2, byResult: { regressed: 1, "not-achieved": 1 }, truncated: false });
+    expect(second).toMatchObject({ recorded: 0, skipped: { "already-recorded": 2 } });
+    expect(fake.observations.map((row) => [row.backlogItemId, row.sourceRef, row.numericValue])).toEqual([
+      ["reopened", "BI-REOPENED:reopened:act-reopen", 0],
+      ["failed", "BI-FAILED:failing-evidence:act-fail", 0],
+    ]);
+  });
+
+  it("ignores activity older than the lookback window", async () => {
+    const fake = store({
+      objectives: [{ ...standing }],
+      items: [platformItem("old", { status: "open", completedAt: null })],
+      activities: [{ id: "act-old", backlogItemId: "old", kind: "status_change", recordedAt: at(30), payload: { from: "done", to: "open" } }],
+    });
+
+    expect(await recordItemOutcomeEvents(fake.db as never, { now: observedAt })).toMatchObject({ scanned: 0, recorded: 0 });
   });
 });
 

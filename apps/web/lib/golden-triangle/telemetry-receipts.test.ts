@@ -79,3 +79,16 @@ describe("listRecentPostureReceipts", () => {
     expect(await listRecentPostureReceipts(10, throwing)).toEqual([]);
   });
 });
+
+
+describe("explicit human calibration", () => {
+  it.each([undefined, null, "agent"] as const)("does not treat %s provenance as human acceptance", feedbackSource => {
+    const result = receiptFromTelemetry(row({ feedbackSource, feedbackPrincipalId: "actor" }), ASSURED, decoded);
+    expect(result.receipt.actual.accepted).toBeNull();
+  });
+  it("requires an attributable human and preserves both positive and negative dispositions", () => {
+    expect(receiptFromTelemetry(row({ feedbackSource: "human", feedbackPrincipalId: null }), ASSURED, decoded).receipt.actual.accepted).toBeNull();
+    expect(receiptFromTelemetry(row({ feedbackSource: "human", feedbackPrincipalId: "person" }), ASSURED, decoded).receipt.actual.accepted).toBe(true);
+    expect(receiptFromTelemetry(row({ feedbackSource: "human", feedbackPrincipalId: "person", userAccepted: false }), ASSURED, decoded).receipt.actual.accepted).toBe(false);
+  });
+});

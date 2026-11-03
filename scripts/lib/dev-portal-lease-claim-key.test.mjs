@@ -123,14 +123,14 @@ test('configuration rejects the original root checkout mount and missing prerequ
   assert.throws(() => assertPreviewConfig(production, identity), /identity_mismatch/);
 });
 test('actual Docker mount and source/lease labels must match the admitted preview', () => {
-  const actual = { Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' }], Config: { Labels: previewOverride(identity).services['dev-portal'].labels, Env: ["DPF_ENVIRONMENT_CLASS=development", `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
+  const actual = { NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } }, Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' }], Config: { Labels: previewOverride(identity).services['dev-portal'].labels, Env: ["DPF_ENVIRONMENT_CLASS=development", `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
   assertPreviewContainer(actual, identity);
   actual.Mounts[0].Source = '/root';
   assert.throws(() => assertPreviewContainer(actual, identity), /actual_mount_mismatch/);
 });
 test('actual Docker Desktop Windows mount identifies only its admitted host worktree', () => {
   const windows = { ...identity, worktree: 'D:/DPF-worktrees/scoped-investment-balance' };
-  const actual = { Mounts: [{ Type: 'bind', Source: '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', Destination: '/workspace' }], Config: { Labels: previewOverride(windows).services['dev-portal'].labels, Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${windows.sha}`, `DPF_PREVIEW_LEASE_ID=${windows.leaseId}`] } };
+  const actual = { NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } }, Mounts: [{ Type: 'bind', Source: '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', Destination: '/workspace' }], Config: { Labels: previewOverride(windows).services['dev-portal'].labels, Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${windows.sha}`, `DPF_PREVIEW_LEASE_ID=${windows.leaseId}`] } };
   assertPreviewContainer(actual, windows);
   for (const wrong of ['/run/desktop/mnt/host/e/DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-source-root', 'DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-worktrees/../DPF-source-root']) {
     actual.Mounts[0].Source = wrong;
@@ -140,6 +140,7 @@ test('actual Docker Desktop Windows mount identifies only its admitted host work
 
 const macIdentity = { ...identity, worktree: '/Users/markbodman/dpf-worktrees/reusable-continuation' };
 const actualForMount = (source, target = macIdentity) => ({
+  NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } },
   Mounts: [{ Type: 'bind', Source: source, Destination: '/workspace' }],
   Config: { Labels: previewOverride(target).services['dev-portal'].labels,
     Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${target.sha}`, `DPF_PREVIEW_LEASE_ID=${target.leaseId}`] },
@@ -834,7 +835,7 @@ test('the existing preview config and actual-container boundaries both enforce t
   assertPreviewConfig(config, identity);
   config.services['dev-portal'].volumes.pop();
   assert.throws(() => assertPreviewConfig(config, identity), /declaration_mount_mismatch/);
-  const container = { Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' },
+  const container = { NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } }, Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' },
     { Type: 'bind', Source: identity.declarationPath, Destination: PREVIEW_DECLARATION_TARGET, RW: true }],
     Config: { Labels: previewOverride(identity).services['dev-portal'].labels,
       Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
@@ -935,4 +936,35 @@ test('initializer source mutation still refuses portal startup and cleans up', a
   }), /preview_source_changed/);
   assert.equal(calls.some(c => Array.isArray(c) && c[0] === 'up' && c.at(-1) === 'dev-portal'), false);
   assert.equal(calls.at(-1), 'cleanup');
+});
+
+
+test('preview prerequisite failure preserves the error without requesting immediate lease release', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-preview-finalize-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const calls = [];
+  const server = createServer((request, response) => {
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const packet = JSON.parse(body);
+      if (packet.method === 'tools/call') calls.push(packet.params.name);
+      response.end(JSON.stringify({ jsonrpc: '2.0', id: packet.id, result: {
+        content: [{ type: 'text', text: JSON.stringify({ success: true }) }],
+      } }));
+    });
+  });
+  await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { main } = await import('./dev-preview-runtime.mjs');
+  await assert.rejects(main({
+    DPF_DEV_WORKTREE: directory,
+    DPF_DEV_PORTAL_LEASE_ID: 'NPEL-PREREQUISITE-FIXTURE',
+    DPF_DEV_PORTAL_OWNER_SESSION_ID: 'fixture-owner',
+    DPF_INSTALL_STATE_PATH: join(directory, 'missing-install-state.json'),
+    DPF_MCP_CLIENT_CREDENTIALS_FILE: join(directory, 'absent-private-credentials.json'),
+    DPF_MCP_BEARER_TOKEN: 'fixture-local-only',
+    DPF_MCP_URL: 'http://127.0.0.1:' + server.address().port + '/api/mcp/v1',
+  }), { code: 'ENOENT' });
+  assert.deepEqual(calls, [], 'missing retained admission must not request release or broaden readback');
 });

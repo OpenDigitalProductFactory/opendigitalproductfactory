@@ -13,6 +13,10 @@ import { prisma } from "@dpf/db";
 import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import {
+  buildScopedLedgerPeriodReport, isLedgerMonth, LEDGER_PERIOD_LIMITS,
+  type ScopedLedgerPeriodReport,
+} from "./ledger-period-report";
+import {
   buildOrgChartOfAccounts,
   resolvePostingAccounts,
   type DeterminableAccount,
@@ -25,13 +29,8 @@ import {
   buildReversalPostingLines,
   isPeriodLocked,
   validateJournalEntry,
-  computeTrialBalance,
-  deriveFinancialStatements,
   periodKeyOf,
   type LedgerAccountType,
-  type TrialBalanceAccount,
-  type TrialBalance,
-  type FinancialStatements,
 } from "./ledger";
 
 // ─── Chart-of-accounts seeding ───────────────────────────────────────────────
@@ -403,78 +402,76 @@ export async function postBillFinalized(billId: string): Promise<PostBillResult>
 
 // ─── General-ledger report (read model) ──────────────────────────────────────
 
-export type GeneralLedgerReport = {
-  /** The period this report covers ("YYYY-MM"), or null for all-time. */
-  periodKey: string | null;
-  currency: string;
-  trialBalance: TrialBalance;
-  statements: FinancialStatements;
-  /** True when the org has no posted journal entries yet (empty-state signal). */
-  isEmpty: boolean;
-};
+const periodEntrySelect = {
+  id: true, organizationId: true, periodKey: true, status: true, currency: true,
+  sourceType: true, sourceId: true, reversalOfId: true, _count: { select: { lines: true } },
+} as const;
+const periodLineSelect = {
+  journalEntryId: true, accountId: true, debit: true, credit: true, currency: true,
+} as const;
 
-/**
- * Build the general-ledger report — a trial balance and the balance sheet + income
- * statement derived from it — from posted journal lines. This is the *read* side of
- * the ledger: the books are derived from the one journal, never recomputed ad hoc
- * from sub-ledger documents. Pass a `periodKey` ("YYYY-MM") to scope to a fiscal
- * period, or omit for all-time.
- */
-export async function getGeneralLedgerReport(periodKey?: string): Promise<GeneralLedgerReport> {
-  const org = await prisma.organization.findFirst({ select: { id: true } });
-  const currency = await getOrgBaseCurrency();
-
-  const emptyReport: GeneralLedgerReport = {
-    periodKey: periodKey ?? null,
-    currency,
-    trialBalance: { rows: [], totalDebit: 0, totalCredit: 0, balanced: true },
-    statements: {
-      incomeStatement: { revenue: 0, expenses: 0, netIncome: 0 },
-      balanceSheet: { assets: 0, liabilities: 0, equity: 0, netIncome: 0, balanced: true },
-    },
-    isEmpty: true,
-  };
-  if (!org) return emptyReport;
-
-  const accountRows = await prisma.ledgerAccount.findMany({
-    where: { organizationId: org.id },
-    orderBy: { code: "asc" },
-    select: { id: true, code: true, name: true, type: true },
+/** Exact management-ledger month. No implicit organization, global currency or partial sum. */
+export async function getScopedLedgerPeriodReport(
+  organizationId: string, periodKey: string, checkedAt = new Date(),
+): Promise<ScopedLedgerPeriodReport> {
+  if (!isLedgerMonth(periodKey)) return buildScopedLedgerPeriodReport({
+    organizationId, periodKey, checkedAt, accounts: [], entries: [], linkedEntries: [], truncated: false,
   });
+  return getGeneralLedgerReport(organizationId, periodKey, checkedAt);
+}
 
-  const lineRows = await prisma.journalLine.findMany({
-    where: {
-      journalEntry: {
-        organizationId: org.id,
-        status: "posted",
-        ...(periodKey ? { periodKey } : {}),
-      },
-    },
-    select: { accountId: true, debit: true, credit: true },
-  });
-
-  const accounts: TrialBalanceAccount[] = accountRows.map((a) => ({
-    accountId: a.id,
-    code: a.code,
-    name: a.name,
-    type: a.type as LedgerAccountType,
-  }));
-  const lines = lineRows.map((l) => ({
-    accountId: l.accountId,
-    debit: Number(l.debit),
-    credit: Number(l.credit),
-  }));
-
-  const trialBalance = computeTrialBalance(accounts, lines);
-  const statements = deriveFinancialStatements(trialBalance);
-
-  return {
-    periodKey: periodKey ?? null,
-    currency,
-    trialBalance,
-    statements,
-    isEmpty: lineRows.length === 0,
-  };
+/** One bounded canonical read for an explicit month or explicit all-recorded selection. */
+export async function getGeneralLedgerReport(
+  organizationId: string, periodKey: string | null, checkedAt = new Date(),
+): Promise<ScopedLedgerPeriodReport> {
+  const empty = { organizationId, periodKey, checkedAt, accounts: [], entries: [], linkedEntries: [], truncated: false };
+  if (!organizationId.trim() || (periodKey !== null && !isLedgerMonth(periodKey))) return buildScopedLedgerPeriodReport(empty);
+  return prisma.$transaction(async tx => {
+    const effective = { in: ["posted", "reversed"] };
+    const scope = { organizationId, ...(periodKey === null ? {} : { periodKey }), status: effective };
+    const [accounts, entries, lines] = await Promise.all([
+      tx.ledgerAccount.findMany({ where: { organizationId }, orderBy: { id: "asc" },
+        take: LEDGER_PERIOD_LIMITS.accounts + 1,
+        select: { id: true, organizationId: true, code: true, name: true, type: true, currency: true } }),
+      tx.journalEntry.findMany({ where: scope, orderBy: { id: "asc" },
+        take: LEDGER_PERIOD_LIMITS.entries + 1, select: periodEntrySelect }),
+      tx.journalLine.findMany({ where: { journalEntry: scope }, orderBy: { id: "asc" },
+        take: LEDGER_PERIOD_LIMITS.lines + 1, select: periodLineSelect }),
+    ]);
+    if (accounts.length > LEDGER_PERIOD_LIMITS.accounts || entries.length > LEDGER_PERIOD_LIMITS.entries
+      || lines.length > LEDGER_PERIOD_LIMITS.lines) {
+      return buildScopedLedgerPeriodReport({ ...empty, truncated: true });
+    }
+    const referenced = [...new Set(entries.flatMap(e => [e.reversalOfId,
+      e.sourceType === "JournalEntry" ? e.sourceId : null]).filter((id): id is string => Boolean(id)))];
+    const reversed = entries.filter(e => e.status === "reversed").map(e => e.id);
+    const linked = referenced.length || reversed.length ? await tx.journalEntry.findMany({
+      where: { organizationId, status: effective, id: { notIn: entries.map(e => e.id) }, OR: [
+        { id: { in: referenced } }, { sourceType: "JournalEntry", sourceId: { in: reversed } },
+        { reversalOfId: { in: reversed } },
+      ] }, orderBy: { id: "asc" }, take: LEDGER_PERIOD_LIMITS.entries + 1, select: periodEntrySelect,
+    }) : [];
+    if (entries.length + linked.length > LEDGER_PERIOD_LIMITS.entries) {
+      return buildScopedLedgerPeriodReport({ ...empty, truncated: true });
+    }
+    const linkedLines = linked.length ? await tx.journalLine.findMany({
+      where: { journalEntry: { organizationId, status: effective, id: { in: linked.map(e => e.id) } } },
+      orderBy: { id: "asc" }, take: LEDGER_PERIOD_LIMITS.lines + 1, select: periodLineSelect,
+    }) : [];
+    if (lines.length + linkedLines.length > LEDGER_PERIOD_LIMITS.lines) {
+      return buildScopedLedgerPeriodReport({ ...empty, truncated: true });
+    }
+    const groups = new Map<string, Array<{ accountId: string; debit: string; credit: string; currency: string }>>();
+    for (const line of [...lines, ...linkedLines]) {
+      const rows = groups.get(line.journalEntryId) ?? [];
+      rows.push({ accountId: line.accountId, debit: String(line.debit), credit: String(line.credit), currency: line.currency });
+      groups.set(line.journalEntryId, rows);
+    }
+    const normalize = (rows: typeof entries) => rows.map(({ _count, ...entry }) => ({ ...entry,
+      lineCount: _count.lines, lines: groups.get(entry.id) ?? [],
+    }));
+    return buildScopedLedgerPeriodReport({ ...empty, accounts, entries: normalize(entries), linkedEntries: normalize(linked) });
+  }, { isolationLevel: "RepeatableRead", timeout: 15000 });
 }
 
 // ─── Fixed-asset depreciation → GL ───────────────────────────────────────────

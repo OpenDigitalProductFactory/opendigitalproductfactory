@@ -21,7 +21,7 @@
 // Bounded: readiness is read for at most REVIEW_STAGE_RESOLUTIONS_PER_TICK
 // rooms a tick; the rest keep their attention plan until a later tick.
 
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { DriveReasonFor } from "@/lib/work-management/drive-conclusion";
 import { resolveDrivePlan, type DrivePlan, type DriveResolutionInput } from "@/lib/work-management/drive-resolution";
 import {
@@ -195,7 +195,7 @@ export function createLiveReviewStageDeps(): ReviewStageDeps {
       const [{ readWorkroomPostureClaim }, { readWorkroomShapeClaim }, { shapeBiasFor }, { resolveRoomActionBoundary }] = await Promise.all([
         import("@/lib/work-management/workroom-posture-claim"),
         import("@/lib/work-management/workroom-shape-claim"),
-        import("@/lib/work-posture/derive"),
+        import("@dpf/validators/workroom-policy/derive"),
         import("@/lib/work-management/room-turn-authority"),
       ]);
       const actionBoundary = resolveRoomActionBoundary({

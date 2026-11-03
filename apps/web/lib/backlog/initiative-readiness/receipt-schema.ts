@@ -132,7 +132,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNonEmptyString);
 }
 
-function isArtifactRef(value: unknown): value is InitiativeArtifactRef {
+export function isInitiativeArtifactRef(value: unknown): value is InitiativeArtifactRef {
   if (!value || typeof value !== "object") return false;
   const ref = value as Record<string, unknown>;
   if (ref.kind === "feature-build-revision") return isNonEmptyString(ref.revisionId);
@@ -180,7 +180,7 @@ export function validateInitiativeGateReceiptDraft(
   if (!draft || typeof draft !== "object"
     || !INITIATIVE_GATE_KEYS.includes(draft.gate)
     || !(["pass", "fail", "not-applicable"] as const).includes(draft.decision)
-    || !isArtifactRef(draft.artifactRef)
+    || !isInitiativeArtifactRef(draft.artifactRef)
     || typeof draft.reason !== "string"
     || !isStringArray(draft.findingRefs)
     || !isStringArray(draft.resolvedFindingRefs)) {

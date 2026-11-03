@@ -18,10 +18,10 @@ import { prisma } from "@dpf/db";
 import { ALL_ARCHETYPES, deriveOperationalValueStream } from "@dpf/storefront-templates";
 
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
-import type { ProactivityActivityFamily } from "@/lib/proactivity/proactivity-types";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityActivityFamily } from "@dpf/validators/workroom-policy/proactivity-types";
 import { getEffectivePostureForAgent } from "@/lib/golden-triangle/persistence";
-import type { ArchetypeStreamInput } from "@/lib/work-posture";
+import type { ArchetypeStreamInput } from "@dpf/validators/workroom-policy";
 
 import type { WorkroomPostureContext } from "./room-posture";
 import { getWorkroomPostureDefault } from "./workroom-posture-defaults";

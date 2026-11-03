@@ -13,7 +13,7 @@
 // record it. Identity plumbing lives under Technical detail.
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
@@ -22,6 +22,8 @@ import { OnBehalfDecision, decidedOnBehalfText } from "./OnBehalfDecision";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 import { envelopeInboxRoute, envelopeResultRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
 import { SOURCE_CATALOG } from "@dpf/i18n";
+import { useMessagesContext } from "@/lib/i18n/messages-context";
+import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
 
 const COPY = SOURCE_CATALOG.approvals.card;
 const EXPIRED = SOURCE_CATALOG.approvals.expiredUnanswered;
@@ -40,8 +42,10 @@ type Execution = { status: "executed" | "failed" | "not-run"; message: string };
 
 export function CoworkerEnvelopeApproval({
   approval,
+  technicalDetail,
 }: {
   approval: AttentionEnvelopeApproval;
+  technicalDetail?: ReactNode;
 }) {
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -55,6 +59,8 @@ export function CoworkerEnvelopeApproval({
   // BI-7BCC87BB: who decided for whom, when an admin decided on the owner's behalf.
   const [onBehalfNote, setOnBehalfNote] = useState<string | null>(null);
   const decision = approval.decision;
+  const { locale } = useMessagesContext();
+  const primary = envelopePrimaryDecision(decision, locale);
 
   // BI-F4EB23C1: a decision that never answered is reconciled against what the
   // server recorded. The card never sends the decision again on its own.
@@ -174,6 +180,69 @@ export function CoworkerEnvelopeApproval({
 
   return (
     <div className="space-y-3">
+      <section className="space-y-2 break-words text-dpf-body text-dpf-text">
+        <p className="text-dpf-caption text-dpf-muted">{primary.target}</p>
+        <p>{primary.description}</p>
+        <p>{primary.consequence}</p>
+        <p className="text-dpf-caption text-dpf-muted">{COPY.recommendationLabel}: {primary.recommendation}</p>
+        {primary.facts.length > 0 ? <dl className="grid gap-2 sm:grid-cols-2">
+          {primary.facts.map((fact, index) => <Fact key={`${fact.label}-${index}`} label={fact.label} value={fact.value} wide />)}
+        </dl> : null}
+      </section>
+      {approval.expiredUnanswered ? (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--dpf-text)]" role="note">
+            {reraised ? EXPIRED.asked : EXPIRED.explanation}
+          </p>
+          {reraised ? null : (
+            <Button size="sm" variant="secondary" disabled={pending || !approval.reraiseHref} onClick={() => void askAgain()}>
+              {pending ? EXPIRED.asking : EXPIRED.askAgain}
+            </Button>
+          )}
+        </div>
+      ) : outcome ? (
+        <div className="space-y-1" role="status">
+          <p className="text-xs font-semibold text-[var(--dpf-text)]">
+            {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
+          </p>
+          {onBehalfNote ? <p className="text-xs text-[var(--dpf-muted)]">{onBehalfNote}</p> : null}
+        </div>
+      ) : unknown ? (
+        <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
+          <p>{COPY.unknownResult}</p>
+          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeResultRoute(approval.envelopeId)}>
+            {COPY.unknownLink}
+          </a>
+        </div>
+      ) : approval.actionable && approval.onBehalf ? (
+        <OnBehalfDecision
+          ownerLabel={approval.onBehalf.ownerLabel}
+          pending={pending}
+          onDecide={(choice, reason) => void decide(choice, reason)}
+        />
+      ) : approval.actionable ? (
+        <EnvelopeDecisionButtons
+          pending={pending}
+          onAuthorize={() => void decide("approve")}
+          onDecline={() => void decide("decline")}
+        />
+      ) : (
+        <p className="text-xs text-[var(--dpf-muted)]">
+          This request is closed. Your coworker can ask again.
+        </p>
+      )}
+
+      {error ? (
+        <p className="text-xs text-[var(--dpf-error)]" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <details>
+        <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.whyDisclosure}</summary>
+        <p className="text-dpf-body text-dpf-text">{COPY.whyPlain}</p>
+      </details>
+      <details>
+        <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.technicalEvidence}</summary>
       <Surface padding="sm" rounded="md">
         {decision.kind === "handover" && decision.handover ? (
           <HandoverDecision approval={approval} decision={decision} handover={decision.handover} />
@@ -253,55 +322,10 @@ export function CoworkerEnvelopeApproval({
           </details>
         ) : null}
       </Surface>
+      {technicalDetail}
+      </details>
 
-      {approval.expiredUnanswered ? (
-        <div className="space-y-2">
-          <p className="text-xs text-[var(--dpf-text)]" role="note">
-            {reraised ? EXPIRED.asked : EXPIRED.explanation}
-          </p>
-          {reraised ? null : (
-            <Button size="sm" variant="secondary" disabled={pending || !approval.reraiseHref} onClick={() => void askAgain()}>
-              {pending ? EXPIRED.asking : EXPIRED.askAgain}
-            </Button>
-          )}
-        </div>
-      ) : outcome ? (
-        <div className="space-y-1" role="status">
-          <p className="text-xs font-semibold text-[var(--dpf-text)]">
-            {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
-          </p>
-          {onBehalfNote ? <p className="text-xs text-[var(--dpf-muted)]">{onBehalfNote}</p> : null}
-        </div>
-      ) : unknown ? (
-        <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
-          <p>{COPY.unknownResult}</p>
-          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeResultRoute(approval.envelopeId)}>
-            {COPY.unknownLink}
-          </a>
-        </div>
-      ) : approval.actionable && approval.onBehalf ? (
-        <OnBehalfDecision
-          ownerLabel={approval.onBehalf.ownerLabel}
-          pending={pending}
-          onDecide={(choice, reason) => void decide(choice, reason)}
-        />
-      ) : approval.actionable ? (
-        <EnvelopeDecisionButtons
-          pending={pending}
-          onAuthorize={() => void decide("approve")}
-          onDecline={() => void decide("decline")}
-        />
-      ) : (
-        <p className="text-xs text-[var(--dpf-muted)]">
-          This request is closed. Your coworker can ask again.
-        </p>
-      )}
 
-      {error ? (
-        <p className="text-xs text-[var(--dpf-error)]" role="alert">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

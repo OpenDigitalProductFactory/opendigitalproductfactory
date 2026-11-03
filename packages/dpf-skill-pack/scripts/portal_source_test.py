@@ -378,6 +378,14 @@ class FromPortalEndToEndTest(unittest.TestCase):
 
 
 class ChildArgvTest(unittest.TestCase):
+    def test_preserves_client_selection_and_preview(self) -> None:
+        for selector in ("--codex-only", "--claude-only"):
+            with self.subTest(selector=selector):
+                self.assertEqual(portal_source.child_argv([
+                    "--from-portal", "https://x", "--expect-installation", "did_1",
+                    selector, "--dry-run", "--project-root", "/repo",
+                ]), [selector, "--dry-run", "--project-root", "/repo"])
+
     def test_strips_portal_flags_in_both_spellings(self) -> None:
         argv = ["--from-portal", "https://x", "--expect-installation=did_1", "--approve-identity-change",
                 "--skill-pack-path", "/p", "--dry-run", "--report-json", "r.json"]

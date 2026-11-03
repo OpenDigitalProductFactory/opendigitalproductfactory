@@ -60,7 +60,21 @@ describe("searchPlatformKnowledge reports that it could not look", () => {
 });
 
 describe("a capacity deferral is not a model failure (BI-339C441F root cause)", () => {
-  it("names local-CI capacity, and says it is retryable", async () => {
+  it("preserves an operator-pause reason without blaming local CI", async () => {
+    vi.mocked(generateEmbeddingDetailed).mockResolvedValue({
+      status: "deferred", reason: "Provider routing is paused by an operator. Resume the provider before retrying.",
+    });
+    const search = await searchPlatformKnowledge({ query: "q" });
+    expect(search.status).toBe("unavailable");
+    if (search.status === "unavailable") {
+      expect(search.code).toBe("search_deferred");
+      expect(search.reason).toContain("paused by an operator");
+      expect(search.reason).not.toContain("local CI");
+      expect(search.reason).toContain("retryable");
+    }
+  });
+
+  it("preserves the capacity reason, and says it is retryable", async () => {
     // The root cause: embeddings come from the LOCAL provider, so
     // assertLocalProviderCapacityAvailable throws whenever a
     // local-integration-ci lease is active or queued. That was collapsed to
@@ -75,7 +89,7 @@ describe("a capacity deferral is not a model failure (BI-339C441F root cause)", 
     expect(search.status).toBe("unavailable");
     if (search.status === "unavailable") {
       expect(search.code).toBe("search_deferred");
-      expect(search.reason).toContain("local CI");
+      expect(search.reason).toContain("local-ci-active-capacity-reservation");
       expect(search.reason).toContain("retryable");
       // Must NOT blame the model — the backend is healthy throughout.
       expect(search.reason).not.toContain("failed");

@@ -505,6 +505,18 @@ Functional UX journeys remain separate evidence. This sweep measures structural
 and cognitive-load budgets; it does not prove login, persistence, or workflow
 outcomes.
 
+The same workflow separately runs `e2e/managed-inference-control.spec.ts` against
+its served portal and seeded Linux fixture. The local provider-detail route remains
+excluded from generic budget accounting; this focused check verifies its unavailable
+engine control at 1366px and 390px, a real Refresh status server response, no offered
+activation or rollback on an unqualified host, no pending operation, and component
+viewport bounds. Its screenshots and layout attachments are retained in
+`apps/web/test-results/managed-inference-control` within `ux-route-budget-report`.
+The test is enabled only in the existing measurement runtime and starts no model or
+native transition. Collection and typechecking are not executed browser evidence;
+qualified Mac installation, activation, rollback and useful DPF timing acceptance
+still require their own live receipts.
+
 ## Baseline snapshot
 
 Checked-in seed report (structure only; metrics fill from calibration runs):

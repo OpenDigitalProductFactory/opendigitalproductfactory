@@ -82,18 +82,26 @@ describe("persisted initiative review outcome", () => {
     const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
     expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, snapshot)).toBe(true);
     expect(db.update).not.toHaveBeenCalled();
-    expect(db.updateMany.mock.calls[0][0].where).toEqual({ taskRunId: snapshot.taskRunId, status: snapshot.status, updatedAt: snapshot.updatedAt });
+    expect(db.updateMany.mock.calls[0][0].where).toEqual({ taskRunId: snapshot.taskRunId, status: snapshot.status, updatedAt: snapshot.updatedAt, archivedAt: null });
     const data = db.updateMany.mock.calls[0][0].data;
     expect(data.status).toBe("completed");
     expect(data.progressPayload).toMatchObject({ auditMarker: "retain", reviewOutcome: { receiptId: "receipt" }, requiresApproval: false });
     expect(data.progressPayload).not.toHaveProperty("terminalWriterWait");
     expect(data.progressPayload).not.toHaveProperty("approvalEnvelopeId");
   });
-  it.each(["canceled", "failed", "rejected", "archived", "quiescing", "unknown"])("does not revive a %s task from a receipt", async status => {
+  it.each(["canceled", "rejected", "archived", "quiescing", "unknown"])("does not revive a %s task from a receipt", async status => {
     const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
     expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, { ...snapshot, status })).toBe(false);
     expect(db.update).not.toHaveBeenCalled();
     expect(db.updateMany).not.toHaveBeenCalled();
+  });
+  it("settles a failed review only from its verified exact-task receipt", async () => {
+    const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
+    expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, { ...snapshot, status: "failed" })).toBe(true);
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { taskRunId: snapshot.taskRunId, status: "failed", updatedAt: snapshot.updatedAt, archivedAt: null },
+      data: expect.objectContaining({ status: "completed" }),
+    }));
   });
   it("yields when cancellation or a newer attempt wins during receipt lookup", async () => {
     db.updateMany.mockResolvedValue({ count: 0 });

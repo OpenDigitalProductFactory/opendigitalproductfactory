@@ -84,7 +84,10 @@ describe("Work activity page", () => {
     expect(html).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
     expect(html).toContain("/workspace/cases/work-capsule%3AWC-RUN");
     expect(html).not.toContain("Session payables-session");
-    expect(html).toContain("Session release-session");
+    // Session attribution remains on the linked room evidence. The bounded
+    // owner projection deliberately does not duplicate raw executor identity.
+    expect(html).not.toContain("Session release-session");
+    expect(html).toContain("blocked: waiting on reviewer");
   });
 
   it("does not claim work is executing without evidence", async () => {

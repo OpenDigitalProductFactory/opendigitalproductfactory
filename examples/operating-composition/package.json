@@ -1,0 +1,5 @@
+{
+  "name": "operating-composition-isolated-consumer", "version": "0.0.0", "private": true,
+  "type": "module", "license": "Apache-2.0",
+  "dependencies": { "@dpf/integration-shared": "0.0.1" }, "scripts": { "test": "node run-isolated.mjs" }
+}

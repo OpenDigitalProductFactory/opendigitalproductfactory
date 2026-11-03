@@ -101,3 +101,11 @@ export function formatBriefingMessage(
   if (!content) return null;
   return { role: "user", content: `[SESSION BRIEFING]\n${content}` };
 }
+
+/** User identity is already bound by the briefing key; omit it from model input.
+ * Normalize the generated heading of cached projections too. Facts and notes
+ * remain intact and pass through the ordinary sensitive-data screen.
+ */
+export function formatUserBriefingMessage(content: string | null | undefined) {
+  return formatBriefingMessage(content?.replace(/^BRIEFING — [^\r\n]*/, "BRIEFING — Current user"));
+}

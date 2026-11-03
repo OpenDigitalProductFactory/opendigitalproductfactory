@@ -244,6 +244,11 @@ macOS / Linux:
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
 ```
 
+`--codex-only` selects Codex configuration, hooks and routine permissions.
+It does not configure Grok, Claude or Antigravity, so unrelated client settings
+cannot block a Codex repair. Omit the client selector to update all supported
+clients. Shared pack files and client discovery remain common maintenance.
+
 Start a new Codex thread after the updater finishes; skills and MCP tools are
 loaded at session start.
 
@@ -331,6 +336,7 @@ The agent asks the user once before it runs this, and never shows the user the c
 Then the updater inside the verified pack runs, and the pin is written after it succeeds. That run (`scripts/toolchain_convergence.py`):
 
 - writes the declaration into each client's connector: the `X-DPF-Toolchain: pack=…;digest=…;client=…` header for Claude Code, Codex and Antigravity, and `dpf_pack`, `dpf_digest`, `dpf_client` on Grok's literal URL. The carrier per client is the manifest's `clients[kind].declarationCarrier`;
+  Codex merges only its managed `X-DPF-Toolchain` header into inline or nested TOML header tables, preserving custom header values. A refresh without a declaration leaves those headers intact (BI-B6641BC2).
 - converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
 - with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
 

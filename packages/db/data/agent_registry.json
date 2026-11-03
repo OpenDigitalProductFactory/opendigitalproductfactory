@@ -1255,12 +1255,15 @@
           "per_task_limit": 20000
         },
         "tool_grants": [
+          "file_read",
+          "initiative_design_review",
           "registry_read",
           "backlog_read",
           "release_gate_create",
           "acceptance_package_write",
           "decision_record_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "workroom_evidence_write"
         ],
         "memory": {
           "type": "session",

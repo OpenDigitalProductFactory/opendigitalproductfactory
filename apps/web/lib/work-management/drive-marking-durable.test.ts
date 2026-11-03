@@ -39,8 +39,8 @@ import { buildWorkroomPostureClaim } from "./workroom-posture-claim";
 
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
 
-vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+vi.mock("@dpf/validators/gpp/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/validators/gpp/executable-constructs")>();
   flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
   flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
   return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };

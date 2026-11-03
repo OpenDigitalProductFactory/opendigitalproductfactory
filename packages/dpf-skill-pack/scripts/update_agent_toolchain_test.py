@@ -141,6 +141,63 @@ class WriteTextIfChangedTest(unittest.TestCase):
             ]), 1)
 
 
+class ClientSelectionTest(unittest.TestCase):
+    """A selected-client repair must not depend on another client's settings."""
+
+    def run_update(self, flags, malformed_client=None):
+        import contextlib
+        import io
+        import routine_permissions
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "repo"
+            (project / ".git").mkdir(parents=True)
+            (project / "AGENTS.md").write_text("DPF source")
+            (project / "packages/dpf-skill-pack").mkdir(parents=True)
+            if malformed_client:
+                config = home / ("." + malformed_client) / "config.toml"
+                config.parent.mkdir(parents=True)
+                config.write_text('[broken = "unterminated')
+                original = config.read_bytes()
+            output = io.StringIO()
+            with patch.object(updater, "home_dir", return_value=home), patch.object(
+                routine_permissions, "apply_permissions", return_value=[]
+            ) as apply, patch.object(updater, "install_grok_hooks", return_value="preview") as grok, patch.object(
+                updater, "ensure_antigravity_mcp_config", return_value="preview"
+            ) as antigravity, contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                code = updater.main(["--skill-pack-path", str(Path(__file__).resolve().parents[1]),
+                    "--project-root", str(project), "--dry-run", "--skip-codex-cli-install",
+                    "--skip-claude-cli-install", "--skip-grok-cli-install", *flags])
+            if malformed_client:
+                self.assertEqual(config.read_bytes(), original)
+            return code, grok.call_count, antigravity.call_count, apply.call_count, output.getvalue()
+
+    @NEEDS_ANY_TOML
+    def test_codex_only_ignores_malformed_grok_config(self):
+        code, grok, antigravity, apply, output = self.run_update(["--codex-only"], "grok")
+        self.assertEqual(code, 0, output)
+        self.assertEqual((grok, antigravity, apply), (0, 0, 1))
+
+    @NEEDS_ANY_TOML
+    def test_codex_only_still_refuses_malformed_codex_config(self):
+        code, _, _, apply, _ = self.run_update(["--codex-only"], "codex")
+        self.assertEqual(code, 1)
+        self.assertEqual(apply, 0)
+
+    @NEEDS_ANY_TOML
+    def test_unfiltered_update_still_checks_grok(self):
+        code, grok, antigravity, apply, _ = self.run_update([], "grok")
+        self.assertEqual(code, 1)
+        self.assertEqual((grok, antigravity, apply), (1, 1, 0))
+
+    @NEEDS_ANY_TOML
+    def test_claude_only_ignores_other_client_configs(self):
+        code, grok, antigravity, apply, output = self.run_update(["--claude-only"], "grok")
+        self.assertEqual(code, 0, output)
+        self.assertEqual((grok, antigravity, apply), (0, 0, 1))
+
+
 class InstallGrokHooksTest(unittest.TestCase):
     """The plane-1 guards reach Grok only via ~/.grok/hooks (BI-883FC2FC)."""
 

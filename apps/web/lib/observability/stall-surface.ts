@@ -14,8 +14,8 @@
 // Pure + unit-tested; the watchdog applies the result in its stall transaction.
 
 import type { BuildFailureAxis } from "@/lib/build/progress-visibility-types";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export type StallReason =
   | "heartbeat_timeout"

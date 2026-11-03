@@ -157,6 +157,58 @@ The common contract is only real if each tool's actual client config enforces it
 
 **Net:** Claude's client is already near-conformant; Codex's is the drift source (generic plugins/MCP servers → orphaned sidecars → blocked upgrades). The bootstrap script converges both to one DPF-scoped baseline (DPF MCP only + dpf-platform only + worktree trust + worktree base + reaping hooks); anything outside that baseline is reported, not silently tolerated.
 
+### 4.4 Contributor preview browser-session isolation (BI-A8183B4B)
+
+The governed preview and installed portal can share localhost with different
+ports and signing secrets. Cookie scope excludes ports. The existing sandbox
+cookie namespace therefore needs the same bounded extension for the preview.
+At fbe8c75ca511701a93a89103f7324aea84c4fb75, `govern/auth.ts` selects a distinct
+name only for sandbox; `scripts/lib/dev-preview-runtime.mjs` supplies the
+preview's development class and nonempty `DPF_PREVIEW_LEASE_ID`. The automation
+sign-in route already imports the exported cookie name and secure policy.
+
+**AC1:** An admitted development preview uses `dpf-preview.authjs.session-token`;
+ordinary portal and sandbox names stay unchanged. A lease marker alone outside
+the development class does not change production authentication.
+**AC2:** Auth.js and automation sign-in retain one cookie-name source of truth,
+including encoding salt, HTTPS-derived secure flag, httpOnly and sameSite=lax.
+No identity, credential, grant, redirect or CSRF policy is loosened.
+**AC3:** Prove preview/portal/sandbox coexistence and a preview next-step
+save/readback under the existing governed runtime. Source tests alone do not
+establish runtime recovery or complete BI-3C34D453.
+
+Ordered atomic repair plan (all delivered by BI-A8183B4B):
+
+1. **REPRODUCE:** Import the actual Auth.js configuration with isolated envs;
+   fail the preview/portal namespace comparison. Retain controls for sandbox,
+   ordinary development, production with stray lease marker and HTTPS policy.
+2. **ISOLATE:** Extend the existing name selection only when development class
+   and the canonical nonempty preview lease marker agree; keep sandbox first.
+   The preview name must not begin with either existing session name: Auth.js
+   groups chunks by prefix, so a suffix alone does not isolate the sessions.
+3. **VERIFY:** Run auth configuration, automation sign-in, auth utilities and
+   graph-related tests, both web typechecks, affected guards and exact gate.
+4. **ACCEPT:** On a governed preview, authenticate with the existing automation
+   persona, coexist with the installed portal, save a future next step and
+   verify persisted readback. Release the preview and record partial/unrun
+   results explicitly. Merge through a protected DCO PR; no live manual build.
+
+Observed Save failure in NPEL-9E16DBBD9A had no session cookie and redirected
+to /welcome without persistence. The shared cookie name is source-confirmed;
+cross-tab causality remains a hypothesis until controlled runtime verification.
+
+The first suffix-based repair passed configuration tests but the governed
+preview still lost its session on navigation. Real Auth.js session-handler
+regressions now reproduce two source failures: the portal deletes the preview
+cookie as a chunk, and simultaneous portal/preview JWTs make the portal session
+unreadable. Both fail with the suffix and pass with the separate prefix;
+legitimate preview chunking remains covered. This establishes the library
+interaction, not a new served coexistence or next-step save acceptance pass.
+No independent phase ships useful behavior, so this plan is deliberately atomic.
+Related completed BI-6B109903 concerns generated declarations; BI-10AC904B
+concerns source/dependency binding. BI-94C4722B concerns deployment renders.
+None supplies browser-cookie isolation; their controls remain intact.
+
 ## 5. Research & Benchmarking (per AGENTS.md §10)
 
 - **Claude Code execution model.** Native git-worktree support defaults to a managed worktrees dir; subagents/sidecars are child processes; MCP servers configured per-project via `.mcp.json`. *Adopted:* worktree-per-session, MCP-per-worktree. *Gap it creates:* default nesting + no reaping → sprawl + orphaned children. Doctrine must align to the real default, not an idealized path.

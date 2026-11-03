@@ -21,7 +21,7 @@ import { recordedCitationsFromSources } from "./recorded-citations";
 import { reverifyCitations } from "./evidence-reverifier";
 import { createRepoLocatorResolver } from "./locator-resolver";
 import { decisionInteractionRowToEvaluation } from "@/lib/decision-perspective/persistence";
-import type { DecisionResult } from "./option-scoring";
+import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 import type { DecisionCallerContext } from "./caller-context";
 
 const REAL_EXCERPT = 'return "grounded value";';

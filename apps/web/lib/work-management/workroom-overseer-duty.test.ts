@@ -91,6 +91,24 @@ describe("R5: of two live rooms for one item, the merged one is closed", () => {
     expect(actions.map((a) => a.room.capsuleId)).toEqual(["WC-MERGED"]);
   });
 
+  it.each([null, "unknown-delivery", "obligation-assurance-watch"])(
+    "does not treat a sibling with shape %s as another delivery room",
+    (shapeKey) => {
+      const merged = room({ id: "row-m", capsuleId: "WC-MERGED", merged: true, itemStatus: "awaiting-acceptance" });
+      const sibling = room({ id: "row-s", capsuleId: "WC-STATUS-CHECK", shapeKey, merged: null, authoredHead: false, inScan: false });
+      expect(planOverseerDuty([merged, sibling], NOW)).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["standing", { idempotencyKey: "standing-room:test:v1" }],
+    ["terminal", { status: "archived" }],
+  ] as const)("does not count a %s sibling toward R5", (_label, exclusion) => {
+    const merged = room({ id: "row-m", capsuleId: "WC-MERGED", merged: true });
+    const sibling = room({ id: "row-s", capsuleId: "WC-OTHER", inScan: false, ...exclusion });
+    expect(planOverseerDuty([merged, sibling], NOW)).toEqual([]);
+  });
+
   it("does not fire for a lone merged room with a live lease", () => {
     expect(only([room({ merged: true })])).toBeNull();
   });

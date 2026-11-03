@@ -1,4 +1,4 @@
-import { immutableArtifactIdentity, parseInitiativeReviewArtifactRef, type InitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
+import { immutableArtifactIdentity, parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
@@ -13,8 +13,8 @@ import {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
-import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
+import { currentBaseline, parseBaselinePayloads, type BaselinePayload } from "./baseline-head";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
 import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
@@ -29,6 +29,7 @@ import { resolveReviewerIdentity } from "./reviewer-identity";
 import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 import { defaultLoadMergedRepairSource, mergedRepairCommits, type MergedRepairSource } from "./merged-repair-source";
 import { discoverCommitRangeArtifact, type CommitRange } from "./repo-commit-range";
+import { resolveQualificationAdmission, type QualificationAdmissionRoute } from "./qualification-terminal-admission";
 
 export type { MergedRepairSource } from "./merged-repair-source";
 export { defaultLoadMergedRepairSource } from "./merged-repair-source";
@@ -74,21 +75,21 @@ type TerminalEscalation = {
   // (shape-requirements.ts small() and medium()), so the research lane's
   // escalation is addressed to the author, not to a reviewer (BI-7876699F).
   accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author" | "product-owner";
-  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item" | "update_backlog_item_status";
+  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item" | "update_backlog_item_status" | "claim_workroom_scope";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
 };
 
+export type { QualificationAdmissionRoute } from "./qualification-terminal-admission";
+
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
+  qualificationAdmission?: QualificationAdmissionRoute;
 };
 
-export type BaselinePayload = Record<string, unknown> & {
-  baselineId: string;
-  supersedesBaselineId: string | null;
-  artifactRef?: InitiativeReviewArtifactRef;
-};
+export { currentBaseline, parseBaselinePayloads } from "./baseline-head";
+export type { BaselinePayload } from "./baseline-head";
 
 export type TerminalRecoveryPorts = {
   /** Live scope declaration, shared with claim-time canonical artifact discovery. */
@@ -127,6 +128,7 @@ export type TerminalRecoveryPorts = {
   discoverCommitRange?(args: { repositoryFullName: string; ranges: CommitRange[] }): Promise<Awaited<ReturnType<typeof discoverCommitRangeArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
   loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
+  resolveQualificationAdmission?(args: { itemId: string; refusedWorkroomId: string | null; currentAgentId: string | null }): Promise<QualificationAdmissionRoute | null>;
 };
 
 /** The PIR's bound artifact: one repair blob at `commitSha`, or the whole commit range (BI-46E344FE). */
@@ -152,33 +154,6 @@ function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string
       nextAction,
     }],
   };
-}
-
-export function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
-  const rows: BaselinePayload[] = [];
-  for (const payload of payloads) {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-    const row = payload as Record<string, unknown>;
-    if (typeof row.baselineId !== "string"
-      || (row.supersedesBaselineId !== null && typeof row.supersedesBaselineId !== "string")) return null;
-    const artifactRef = parseInitiativeReviewArtifactRef(row.artifactRef) ?? undefined;
-    rows.push({
-      ...row,
-      baselineId: row.baselineId,
-      supersedesBaselineId: row.supersedesBaselineId as string | null,
-      ...(artifactRef ? { artifactRef } : {}),
-    });
-  }
-  return rows;
-}
-
-export function currentBaseline(rows: BaselinePayload[]): BaselinePayload | null {
-  const superseded = new Set(rows.map((row) => row.supersedesBaselineId).filter((id): id is string => Boolean(id)));
-  const heads = rows.filter((row) => !superseded.has(row.baselineId));
-  if (heads.length !== 1) return null;
-  const expected = heads[0]!.baselineId;
-  const validation = validateInitiativeBaselineChainHead(rows, expected);
-  return validation.ok ? heads[0]! : null;
 }
 
 async function defaultLoadLiveRooms(args: {
@@ -419,7 +394,6 @@ async function defaultLoadObjectiveMappingHistory(args: {
   return loadObjectiveMappingHistoryFromDb(prisma, args);
 }
 
-/** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
 export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadBacklogBody: async (itemId) => (await prisma.backlogItem.findUnique({
     where: { itemId }, select: { body: true },
@@ -457,6 +431,7 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   discoverCommitRange: (args) => discoverCommitRangeArtifact(args),
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
   loadPlanArtifact: loadPlanReviewArtifact,
+  resolveQualificationAdmission: resolveQualificationAdmission,
 };
 
 import { classifyHistoricalObjectiveMappingArtifacts } from "./objective-mapping-history-artifacts";
@@ -488,6 +463,24 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const researchLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "RESEARCH_REQUIRED");
   if (researchLane) {
+    const qualification = await ports.resolveQualificationAdmission?.({
+      itemId: args.decision.subject.id,
+      refusedWorkroomId: args.refusedWorkroomId,
+      currentAgentId: args.currentAgentId,
+    });
+    if (qualification) {
+      return {
+        ...researchLaneEscalation(),
+        qualificationAdmission: qualification,
+        escalations: [{
+          accountableRole: "design-author",
+          toolName: "claim_workroom_scope",
+          grant: "backlog_write",
+          reason: "research-evidence-required",
+          nextAction: "Replay the opaque server-issued qualificationAdmissionToken through claim_workroom_scope on the named Workroom. This admits one bounded test-only experiment and does not satisfy research.",
+        }],
+      };
+    }
     return researchLaneEscalation();
   }
   const roomArgs = {

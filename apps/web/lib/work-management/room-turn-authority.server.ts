@@ -11,7 +11,7 @@ import "server-only";
 import { prisma } from "@dpf/db";
 
 import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
-import { shapeBiasFor } from "@/lib/work-posture/derive";
+import { shapeBiasFor } from "@dpf/validators/workroom-policy/derive";
 import { isGateGovernedExecutor } from "@/lib/work-posture/gate-governed";
 
 import { getWorkShape } from "./work-shapes";

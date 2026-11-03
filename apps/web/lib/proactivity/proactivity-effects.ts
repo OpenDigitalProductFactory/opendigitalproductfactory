@@ -4,7 +4,7 @@
 // The resolver also computes monitoring/approval/escalation fields, but those
 // are display-only today — rendering them as effects was the mislabel this
 // module replaces (enforcement is tracked separately on the epic).
-import type { ProactivityLevel } from "./proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export type CoworkerSelfTaskCadenceInfo = {
   /** True when the coworker is registered in COWORKER_SELF_TASKS. */

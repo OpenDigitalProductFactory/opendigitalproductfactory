@@ -10,7 +10,8 @@
 import { isBareQuestion } from "../question-quality";
 export { isBareQuestion } from "../question-quality";
 
-export type LedgerScope = "wwmd" | "wwwd" | "wsid";
+export type { DecisionScope as LedgerScope } from "@dpf/validators/decision-scopes";
+import type { DecisionScope as LedgerScope } from "@dpf/validators/decision-scopes";
 
 /** The DecisionInteraction columns the measures read (joined with the profile kind). */
 export type ReviewLedgerRow = {

@@ -1,8 +1,8 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import type { CommunicationAdapter } from "./channel-types";
 
-export function createInAppAdapter(): CommunicationAdapter {
+export function createInAppAdapter(db: { notification: Pick<Prisma.TransactionClient["notification"], "create"> } = prisma): CommunicationAdapter {
   return {
     key: "in-app",
     channel: "in-app",
@@ -24,7 +24,7 @@ export function createInAppAdapter(): CommunicationAdapter {
         };
       }
 
-      const notification = await prisma.notification.create({
+      const notification = await db.notification.create({
         data: {
           userId: input.target.recipientUserId,
           type: input.target.targetType === "work-item" ? "work-queue" : "communication",

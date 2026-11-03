@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 
-import { decide, type DecisionPrinciple } from "./option-scoring";
+import { decide, type DecisionPrinciple } from "@dpf/validators/judgment/option-scoring";
 
 const structuredPrinciple = (id: string): DecisionPrinciple => ({
   id,

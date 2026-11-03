@@ -470,7 +470,7 @@ export async function searchPlatformKnowledge(params: {
       status: "unavailable",
       code: deferred ? "search_deferred" : "search_unavailable",
       reason: deferred
-        ? `semantic search is deferred while local CI holds host capacity (${embedded.reason}) — retryable`
+        ? `semantic search is deferred (${embedded.reason}) — retryable`
         : `the embedding step failed (${embedded.reason})`,
       results: [],
     };

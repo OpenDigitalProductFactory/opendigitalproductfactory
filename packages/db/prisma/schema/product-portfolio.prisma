@@ -275,8 +275,12 @@ model ProductOutcomeObservation {
   provenance              Json?
   recordedByPrincipalId   String?
   supersedesObservationId String?                    @unique
+  // BI-8DE5429B (WWMD DI-19ED69C312FC): the backlog item whose own outcome
+  // this observation measures; null for a business Product measure.
+  backlogItemId           String?
   createdAt               DateTime                   @default(now())
   objective               ProductObjective           @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  backlogItem             BacklogItem?               @relation("ProductOutcomeObservationItem", fields: [backlogItemId], references: [id], onDelete: SetNull)
   recordedByPrincipal     Principal?                 @relation("ProductOutcomeObservationRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: SetNull)
   supersedes              ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection", fields: [supersedesObservationId], references: [id], onDelete: Restrict)
   supersededBy            ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection")
@@ -284,6 +288,7 @@ model ProductOutcomeObservation {
   @@index([objectiveId, observedAt])
   @@index([sourceKind, sourceRef])
   @@index([recordedByPrincipalId])
+  @@index([backlogItemId])
 }
 
 // Organization-owned commercial promise for a business Product

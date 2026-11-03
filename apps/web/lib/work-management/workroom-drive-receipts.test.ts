@@ -6,7 +6,7 @@ import {
   appendCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceiptAt,
-} from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 describe("appendCompletingWorkroomDriveReceipt", () => {
   it("refuses blocked as a completing kind", () => {

@@ -521,7 +521,9 @@ export function projectBacklogItemReadiness(args: {
     ...args.item,
     recordedProfiles: own.current ? [own.current.profile] : [],
   });
-  const governed = profile !== null;
+  // Invalid persisted classification still owes a refusal; only absent legacy
+  // applicability may use the ungoverned terminal path.
+  const governed = profile !== null || args.item.workType != null;
   const evidence = receipts.states;
   const shape = readinessShapeFromWorkShape(args.item.workShape);
   // The derivations below serve the proportional gate table only, so they key on
@@ -711,6 +713,8 @@ export function projectBacklogItemReadinessSummary(args: {
    * decision still wins; absent both, completion is projected as before.
    */
   completionDecision?: InitiativeReadinessDecision | null;
+  /** The active build's reviewed design, as its build gates pass it (BI-6F2872FC AC-6). */
+  buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
 }) {
   const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
@@ -730,6 +734,7 @@ export function projectBacklogItemReadinessSummary(args: {
       authorization: "pass",
       capsuleIdentity: "pass",
       artifactHints: { hasSpec: args.hasSpec, hasPlan: args.hasPlan },
+      buildDesign: args.buildDesign ?? null,
       evaluatedAt: args.evaluatedAt,
     });
     return [target, projected.decision];

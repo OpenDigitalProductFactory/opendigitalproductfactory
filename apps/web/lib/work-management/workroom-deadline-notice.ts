@@ -17,7 +17,7 @@ import "server-only";
 import { notifyAttentionLiveOrThrow, resolveOperatorRecipient } from "@/lib/attention/notify-live";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 
-import type { PendingDeadlineNotice } from "./drive-deadlines";
+import type { PendingDeadlineNotice } from "@dpf/validators/workroom-policy/drive-deadlines";
 
 export async function notifyWorkroomDeadline(input: {
   room: { capsuleId: string; ownerUserId: string | null };

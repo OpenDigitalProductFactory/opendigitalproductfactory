@@ -1,3 +1,4 @@
+import { toLivingBusinessSnapshot } from "@dpf/storefront-templates/operations";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,7 +10,6 @@ import {
   isReservationQueueKey,
   isUpcomingReservation,
   liveCapacityChips,
-  loadLivingBusinessSnapshot,
   longestWaitMs,
   proposeCogAllocation,
   reservationsToQueueItems,
@@ -252,7 +252,7 @@ describe("living-business-snapshot — pure helpers", () => {
   });
 });
 
-describe("loadLivingBusinessSnapshot — loader", () => {
+describe("loadTwinFromVersionedFixture — loader", () => {
   const emptyRoster = { employeeProfile: { findMany: async () => [] }, agent: { findMany: async () => [] } };
 
   it("returns null when no org is configured", async () => {
@@ -268,7 +268,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       hospitalityResource: { findMany: async () => [] },
       hospitalityCapacityAllocation: { findMany: async () => [] },
     } as unknown as LivingBusinessClient;
-    expect(await loadLivingBusinessSnapshot({ db, now: NOW })).toBeNull();
+    expect(await loadTwinFromVersionedFixture({ db, now: NOW })).toBeNull();
   });
 
   it("projects a live snapshot for a configured food-hospitality org", async () => {
@@ -327,7 +327,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       hospitalityCapacityAllocation: { findMany: async () => [] },
     } as unknown as LivingBusinessClient;
 
-    const snap = await loadLivingBusinessSnapshot({ db, now: NOW });
+    const snap = await loadTwinFromVersionedFixture({ db, now: NOW });
     expect(snap).not.toBeNull();
     expect(snap!.live).toBe(true);
     // presence carries both the human and the AI coworker
@@ -384,6 +384,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       storefrontConfig: {
         findFirst: async () => ({
           id: "sf-rescue",
+          organizationId: "org-rescue",
           timezone: "America/Chicago",
           archetype: { archetypeId: "pet-rescue", name: "Pet rescue" },
         }),
@@ -409,31 +410,32 @@ describe("loadLivingBusinessSnapshot — loader", () => {
           { amount: 75, currency: "USD" },
         ],
       },
-      adoptableAnimal: {
-        count: async () => 2,
-        groupBy: async () => [
-          { status: "hold", _count: { _all: 3 } },
-          { status: "available", _count: { _all: 1 } },
-          { status: "adopted", _count: { _all: 2 } },
-        ],
+      animalProfile: {
+        count: async (args: unknown) => (args as { where: { lifecycleStatus: unknown } }).where.lifecycleStatus === "placement_ready" ? 1 : 4,
+      },
+      animalCustodyEpisode: {
+        count: async (args: unknown) => {
+          const where = (args as { where: { outcomeType?: string; legalHoldActive?: boolean } }).where;
+          return where.outcomeType === "adoption" ? 2 : where.legalHoldActive ? 3 : 0;
+        },
       },
     } as unknown as LivingBusinessClient;
 
-    const snapshot = await loadLivingBusinessSnapshot({ db, now: NOW });
+    const snapshot = await loadTwinFromVersionedFixture({ db, now: NOW, viewer: { platformRole: "HR-000", isSuperuser: false } });
 
     expect(snapshot?.outcomesHeading).toBe("Mission impact");
     expect(snapshot?.outcomes?.map((outcome) => outcome.label)).toEqual([
       "Animals in care",
       "Kennels",
       "Donations received",
-      "Animals placed",
+      "Adoption outcomes",
       "Fosters active",
     ]);
     expect(snapshot?.outcomes?.[0]?.value).toBe("4 animals");
-    expect(snapshot?.outcomes?.[0]?.hint).toBe("3 on hold · 1 available");
+    expect(snapshot?.outcomes?.[0]?.hint).toBe("3 on hold · 1 placement ready");
     expect(snapshot?.outcomes?.[1]?.value).toBe("Not recorded");
     expect(snapshot?.outcomes?.[2]?.value).toContain("$275");
-    expect(snapshot?.outcomes?.[3]?.value).toBe("2 animals");
+    expect(snapshot?.outcomes?.[3]?.value).toBe("2 outcomes");
     expect(snapshot?.outcomes?.[4]).toMatchObject({
       value: "Unavailable",
       hint: "No foster record source yet",
@@ -505,3 +507,8 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     expect(operations!.telemetry.payloadBytes).toBeLessThan(100_000);
   });
 });
+
+async function loadTwinFromVersionedFixture(opts?: Parameters<typeof loadVersionedOperationsSnapshot>[0]) {
+  const snapshot = await loadVersionedOperationsSnapshot(opts);
+  return snapshot ? toLivingBusinessSnapshot(snapshot) : null;
+}

@@ -311,15 +311,15 @@ describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
 
   it("write tools require work_capsule_write", () => {
     expect(isToolAllowedByGrants("create_workroom", ["work_capsule_write"])).toBe(true);
-    expect(isToolAllowedByGrants("plan_workroom_worktree", ["work_capsule_write"])).toBe(true);
     expect(isToolAllowedByGrants("record_workroom_evidence", ["work_capsule_write"])).toBe(true);
     expect(isToolAllowedByGrants("heartbeat_workroom", ["work_capsule_read"])).toBe(false);
-    expect(isToolAllowedByGrants("plan_workroom_worktree", ["work_capsule_read"])).toBe(false);
+    expect(isToolAllowedByGrants("plan_workroom_worktree", ["work_capsule_write"])).toBe(false); // BI-D1FB8C4D
   });
 
-  it("adoption requires work_capsule_adopt", () => {
+  it("adoption requires work_capsule_adopt, which implies worktree provisioning", () => {
     expect(isToolAllowedByGrants("adopt_worktree", ["work_capsule_adopt"])).toBe(true);
     expect(isToolAllowedByGrants("adopt_worktree", ["work_capsule_write"])).toBe(false);
+    expect(isToolAllowedByGrants("plan_workroom_worktree", ["work_capsule_adopt"])).toBe(true);
   });
 });
 

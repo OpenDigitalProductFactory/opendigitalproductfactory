@@ -27,6 +27,8 @@ import type { WorkShapeDefinition, WorkShapeStage } from "./work-shapes";
  *   read           → the coworker read baseline
  *   write-internal → the lifecycle receipts and evidence a delivery writes
  *   write-source   → edit, run and commit source in the governed sandbox
+ *   worktree-provision → plan the room's worktree and claim its paths
+ *                    (BI-D1FB8C4D; xlarge never provisions: it decomposes)
  * Deliberately absent: `authority`, `outward` and `irreversible` classes —
  * promotion, publication and backlog status moves stay governed decisions.
  */
@@ -34,6 +36,7 @@ export const DELIVERY_ACTIVITY_GRANTS: readonly string[] = [
   "tool:read",
   "tool:write-internal",
   "tool:write-source",
+  "tool:worktree-provision",
 ];
 
 export const DELIVERY_BREAK_FIX_SHAPE_KEY = "delivery-break-fix";

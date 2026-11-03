@@ -11,6 +11,8 @@ function fixture(status = "expired") {
     branchName: "fix/owned", taskRunId, slotManifestVersion: 1, slotKey: "slot-1",
     activeKey: status === "active" ? "local-integration-ci:slot-1" : null,
     ownerPid: null as number | null, ownerProcessIdentity: null as string | null,
+    cleanupCommand: null, resourceClass: null, expectedMemoryBytes: null, buildId: null,
+    url: "http://localhost:3010", ports: [3010],
   };
   const wait = {
     ...lease, schemaVersion: 1, kind: "nonprod-lease-wait", state: status === "active" ? "admitted" : "waiting",

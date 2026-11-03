@@ -19,13 +19,35 @@ export function renderRuntimeLaunchAgent({ label, packageRoot, stateRoot, port, 
   if (!isAbsolute(leaseFile) || !Number.isFinite(Date.parse(hardDeadline))) throw new Error('Bounded experiment lease required');
   const environment = { ...candidateEnvironment({ packageRoot, stateRoot, port }), LLAMA_ARGS: '',
     DPF_INFERENCE_LEASE_FILE: leaseFile, DPF_INFERENCE_EXPERIMENT_DEADLINE: hardDeadline };
+  return renderJob({ label, packageRoot, stateRoot, environment, keepAlive: false });
+}
+// Rendering has no service effects and does not authenticate this selection.
+// Only the signed host procedure may supply its verified durable active record.
+// A qualified experiment report is deliberately not a permanent selection.
+export function renderManagedRuntimeLaunchAgent({ label, packageRoot, stateRoot, port,
+  selection, runtimeManifestSha256, qualificationReportSha256 }) {
+  if (label !== 'local.dpf-inference.managed' || selection?.schemaVersion !== 1 || selection.status !== 'active'
+    || selection.label !== label || selection.program !== join(packageRoot, 'bin/dmr') || selection.port !== port
+    || !/^[a-f0-9]{64}$/.test(runtimeManifestSha256 ?? '')
+    || !/^[a-f0-9]{64}$/.test(qualificationReportSha256 ?? '')
+    || selection.runtimeManifestSha256 !== runtimeManifestSha256
+    || selection.qualificationReportSha256 !== qualificationReportSha256
+    || !/^[A-Za-z][A-Za-z0-9_-]{1,95}$/.test(selection.actionKey ?? '')) {
+    throw new Error('Managed active selection is missing, uncommitted or changed');
+  }
+  identity({ label });
+  const environment = { ...candidateEnvironment({ packageRoot, stateRoot, port }), LLAMA_ARGS: '' };
+  return renderJob({ label, packageRoot, stateRoot, environment, keepAlive: true });
+}
+function renderJob({ label, packageRoot, stateRoot, environment, keepAlive }) {
   const envXml = Object.entries(environment).map(([key, value]) => '<key>' + xml(key) + '</key><string>' + xml(value) + '</string>').join('\n');
   return '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>\n'
     + '<key>Label</key><string>' + xml(label) + '</string>\n'
     + '<key>ProgramArguments</key><array><string>' + xml(join(packageRoot, 'bin/dmr')) + '</string><string>serve</string></array>\n'
     + '<key>EnvironmentVariables</key><dict>' + envXml + '</dict>\n'
     + '<key>WorkingDirectory</key><string>' + xml(stateRoot) + '</string>\n'
-    + '<key>RunAtLoad</key><true/><key>KeepAlive</key><false/>\n'
+    + '<key>RunAtLoad</key><true/><key>KeepAlive</key><' + (keepAlive ? 'true' : 'false') + '/>\n'
+    + (keepAlive ? '<key>ThrottleInterval</key><integer>10</integer>\n' : '')
     + '<key>AbandonProcessGroup</key><false/><key>ExitTimeOut</key><integer>10</integer>\n'
     + '<key>StandardOutPath</key><string>' + xml(join(stateRoot, 'logs/daemon.out.log')) + '</string>\n'
     + '<key>StandardErrorPath</key><string>' + xml(join(stateRoot, 'logs/daemon.err.log')) + '</string>\n'
@@ -52,7 +74,8 @@ export async function ownedRuntimeProcesses(workspaceRoot) {
   });
 }
 export function createRuntimeLaunchAgent({ label, program, plistPath, stateRoot, workspaceRoot,
-  readAuthority, run = launchctl, processes = ownedRuntimeProcesses, onEvent = async () => {}, delay = pause }) {
+  readAuthority, readExistingOwnership, runtimeManifestSha256,
+  run = launchctl, processes = ownedRuntimeProcesses, onEvent = async () => {}, delay = pause }) {
   const { domain, target } = identity({ label });
   let attempted = false;
   const inspect = async () => parseLaunchAgentStatus(await run(['print', target]));
@@ -78,10 +101,27 @@ export function createRuntimeLaunchAgent({ label, program, plistPath, stateRoot,
       throw new Error('LaunchAgent did not reach running state');
     },
     async stop() {
-      if (!attempted) return { stopped: true, bootstrapAttempted: false };
+      let adoptedExisting = false;
+      const assertExistingOwnership = async () => {
+        // The managed host procedure supplies this read while holding its
+        // operation lock. Never adopt an occupied label from process status
+        // alone: bind the current durable selection to the expected payload.
+        await readAuthority();
+        const selection = await readExistingOwnership();
+        if (!/^[a-f0-9]{64}$/.test(runtimeManifestSha256 ?? '')
+          || selection?.label !== label || selection?.program !== program
+          || selection?.runtimeManifestSha256 !== runtimeManifestSha256) {
+          throw new Error('Existing LaunchAgent ownership is unverified or changed');
+        }
+      };
+      if (!attempted) {
+        if (!readExistingOwnership) return { stopped: true, bootstrapAttempted: false };
+        await assertExistingOwnership(); adoptedExisting = true;
+      }
       const current = await inspect();
       if (current.exists) {
         if (current.program !== program) throw new Error('Refusing to stop an unowned LaunchAgent');
+        if (adoptedExisting) await assertExistingOwnership();
         const result = await run(['bootout', target]);
         // Reconcile the actual job/process state even after a lost acknowledgement.
         await onEvent({ phase: 'bootout-attempted', acknowledged: result.code === 0, label });
@@ -89,7 +129,9 @@ export function createRuntimeLaunchAgent({ label, program, plistPath, stateRoot,
       for (let n = 0; n < 100; n++) {
         const remaining = await inspect();
         if (remaining.exists && remaining.program !== program) throw new Error('LaunchAgent ownership changed during cleanup');
-        if (!remaining.exists && (await processes(workspaceRoot)).length === 0) return { stopped: true, bootstrapAttempted: true };
+        if (!remaining.exists && (await processes(workspaceRoot)).length === 0) {
+          return { stopped: true, bootstrapAttempted: attempted, ...(adoptedExisting ? { adoptedExisting: true } : {}) };
+        }
         await delay(100);
       }
       throw new Error('Owned native process cleanup unconfirmed');

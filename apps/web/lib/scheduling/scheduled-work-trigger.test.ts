@@ -5,8 +5,8 @@ import {
   SCHEDULED_WORK_TRIGGER_KINDS,
   temporalInputForTrigger,
   withScheduledWorkTrigger,
-} from "./scheduled-work-trigger";
-import { resolveTemporalBand } from "@/lib/work-posture";
+} from "@dpf/validators/workroom-policy/scheduled-work-trigger";
+import { resolveTemporalBand } from "@dpf/validators/workroom-policy";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 
 const NINE_TO_FIVE: WeeklySchedule = {

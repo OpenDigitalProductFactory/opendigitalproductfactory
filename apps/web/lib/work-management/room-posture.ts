@@ -9,8 +9,9 @@
 // the coworker's inherited posture) are pre-resolved by the loader and handed
 // in as `context`, exactly as `structure` and `sourceHealth` already are.
 //
-// The tighten-only invariant is enforced inside resolveWorkPosture, so nothing
-// assembled here can widen what a coworker may do unattended.
+// The resolver keeps declaration and hard-policy floors. A trusted gateGoverned
+// fact lets the owner's room default set the action boundary before those floors;
+// the host derives that fact from the actual executor. Posture grants no authority.
 import {
   resolveWorkPosture,
   type ArchetypeStreamInput,
@@ -18,8 +19,8 @@ import {
   type ResolvedWorkPosture,
   type RoomPostureDeclaration,
   type WorkStakesInput,
-} from "@/lib/work-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 import type { LowTrafficWindow } from "@/lib/self-upgrade/auto-window";

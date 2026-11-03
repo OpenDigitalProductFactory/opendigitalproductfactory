@@ -555,7 +555,7 @@ human, not to quietly inherit someone else's judgement.
 
 Registry and scope policy: `packages/db/src/wiki-taxonomy.ts`, `packages/db/src/dimension-scope.ts`,
 `packages/db/src/profession-local-axes.ts`. Scoring:
-`apps/web/lib/decision/option-scoring.ts`. Confidence and inference:
+`packages/validators/src/judgment/option-scoring.ts`. Confidence and inference:
 `apps/web/lib/decision-perspective/material.ts`, `.../stance-promotion.ts`,
 `.../weight-inference.ts`.
 

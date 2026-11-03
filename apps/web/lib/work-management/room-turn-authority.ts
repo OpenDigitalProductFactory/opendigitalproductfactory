@@ -14,7 +14,7 @@
 // a room may narrow what a coworker's standing grants permit; it never widens.
 import { COWORKER_READ_BASELINE_GRANTS, grantsSatisfyRequirement, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import { shapeDefaultPriority, type WorkroomShapeKey } from "./room-shapes";
 
@@ -122,6 +122,10 @@ export const WORK_SHAPE_CAPABILITY_GRANTS: Readonly<Record<string, readonly stri
   ],
   // Reversible source work inside the governed sandbox worktree.
   "write-source": ["sandbox_execute"],
+  // Provision a source worktree: plan it and claim the paths it will edit
+  // (BI-D1FB8C4D). Separate from write-internal so a read-only shape that
+  // records its own evidence cannot reach worktree provisioning.
+  "worktree-provision": ["worktree_provision"],
 };
 
 export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {

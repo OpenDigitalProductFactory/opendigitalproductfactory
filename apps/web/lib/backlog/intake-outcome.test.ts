@@ -57,24 +57,37 @@ describe("the shared ingest front door captures the outcome (every path that fil
     searchSimilarItems: async () => ({ status: "ok", results: [] }),
   });
 
-  it("stores the outcome in the body and reports it stated", async () => {
+  it("stores the stated outcome in the outcome field, keeps how-we'll-know in the body", async () => {
     const { fake, create } = store();
     const result = await ingestBacklogItem({
       title: "Overdue invoices view", workType: "feature", source: "user-request",
       body: "Asked for by finance.", outcome: "Finance sees every overdue invoice in one list.",
       howWeKnow: "Finance stops exporting to a spreadsheet.",
     }, deps(fake));
-    const body = (create.mock.calls[0]![0] as unknown as { data: { body: string } }).data.body;
-    expect(body.startsWith("## Outcome\nFinance sees every overdue invoice in one list.")).toBe(true);
-    expect(body).toContain("## How we'll know\nFinance stops exporting to a spreadsheet.");
-    expect(body).toContain("Asked for by finance.");
+    const data = (create.mock.calls[0]![0] as unknown as { data: { body: string; outcome: string; outcomeSource: string } }).data;
+    expect(data.outcome).toBe("Finance sees every overdue invoice in one list.");
+    expect(data.outcomeSource).toBe("stated");
+    expect(data.body).toBe("## How we'll know\nFinance stops exporting to a spreadsheet.\n\nAsked for by finance.");
     expect(result.outcomeStated).toBe(true);
+    expect(result.derivedOutcome).toBeNull();
   });
 
-  it("files an item with no outcome and reports it unstated rather than refusing", async () => {
+  it("files an item with no outcome with a derived draft, marked derived, rather than refusing (BI-8DE5429B)", async () => {
     const { fake, create } = store();
     const result = await ingestBacklogItem({ title: "Something", workType: "bug", source: "user-request", body: "Broken." }, deps(fake));
     expect(create).toHaveBeenCalledTimes(1);
+    const data = (create.mock.calls[0]![0] as unknown as { data: { body: string; outcome: string; outcomeSource: string } }).data;
+    expect(data.outcomeSource).toBe("derived");
+    expect(data.outcome).toBe('The reported problem no longer happens: "Something".');
+    expect(data.body).toBe("Broken.");
     expect(result.outcomeStated).toBe(false);
+    expect(result.derivedOutcome).toBe(data.outcome);
+  });
+
+  it("lifts an Outcome section the filer wrote in the body as stated", async () => {
+    const { fake, create } = store();
+    await ingestBacklogItem({ title: "T", workType: "feature", source: "user-request", body: "## Outcome\nPeers can export." }, deps(fake));
+    const data = (create.mock.calls[0]![0] as unknown as { data: { outcome: string; outcomeSource: string } }).data;
+    expect(data).toMatchObject({ outcome: "Peers can export.", outcomeSource: "stated" });
   });
 });

@@ -38,8 +38,9 @@ module.exports = {
   ...(Number.parseInt(process.env.DPF_JEST_MAX_WORKERS ?? "", 10) > 0 ? { maxWorkers: Number.parseInt(process.env.DPF_JEST_MAX_WORKERS, 10) } : {}),
   preset: "jest-expo",
   setupFilesAfterEnv: ["./jest.setup.ts"],
+  // BI-FCDCAE98: transform the shared package's emitted ESM inside Jest.
   transformIgnorePatterns: [
-    "node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|native-base|react-native-svg|react-native-sse|nativewind|zustand|@dpf[/+].*))"
+    "node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|native-base|react-native-svg|react-native-sse|nativewind|zustand|@opendigitalproductfactory[/+]dpf-workroom(?=[/@])|@dpf[/+].*))"
   ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",

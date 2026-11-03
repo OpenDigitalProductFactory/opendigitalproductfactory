@@ -25,7 +25,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules/liveness";
 
 import { deliveryShapeSize, isDeliveryShapeKey } from "./delivery-shapes";
-import type { WorkroomDriveHold } from "./workroom-drive-hold";
+import type { WorkroomDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 
 export const WORKROOM_OVERSEER_ACTIVITY_KIND = "workroom-overseer";
 
@@ -74,6 +74,8 @@ export type OverseerState = {
 export const EMPTY_OVERSEER_STATE: OverseerState = { version: 1, attention: null, needsResume: null, holdConclusion: null };
 
 export type OverseerRoom = {
+  /** Original close precondition; legacy plans without it cannot mutate scope. */
+  scopeSnapshot?: { scopeClaims: unknown; updatedAt: Date };
   id: string;
   capsuleId: string;
   status: string;
@@ -241,11 +243,11 @@ function clearRule(room: OverseerRoom, now: Date): OverseerAction | null {
     facts: { clearedKey: raised.key } };
 }
 
-/** Count live, non-standing rooms per item, over every loaded room (siblings included). */
+/** Count eligible delivery rooms per item, over every loaded room (siblings included). */
 function liveRoomsPerItem(rooms: readonly OverseerRoom[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const room of rooms) {
-    if (!room.itemKey || TERMINAL_ROOM_STATUSES.has(room.status) || isStandingRoom(room)) continue;
+    if (!room.itemKey || !overseenRoom(room)) continue;
     counts.set(room.itemKey, (counts.get(room.itemKey) ?? 0) + 1);
   }
   return counts;

@@ -11,7 +11,7 @@
  */
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
+import { resolveProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-resolver";
 import type { BallotCandidate } from "./ballot";
 import type { InstallRelevanceProfile } from "./ballot-applicability";
 import {

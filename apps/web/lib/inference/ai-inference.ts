@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { createResponseProducer, type ResponseProducer } from "../routing/response-producer";
 // apps/web/lib/ai-inference.ts
 // Shared inference module — plain server-only module (NOT "use server").
 // Server actions in actions/*.ts can import from here freely.
@@ -5,6 +7,7 @@
 import { prisma } from "@dpf/db";
 import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
 import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import { getOllamaBaseUrl } from "./ollama-url";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
@@ -24,7 +27,7 @@ import {
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import type { ChatMessage, ToolCallEntry } from "../routing/chat-message-types";
-import { resolveRuntimeConnectionStatus } from "../routing/provider-suitability/onboarding-recommendation";
+import { readEnabledRoutingProvider } from "./provider-routing-admission";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
@@ -72,6 +75,7 @@ import { reassessmentNativeMessagesFetch } from "./reassessment-native-runtime";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type InferenceResult = {
+  responseProducer?: ResponseProducer;
   content: string;
   inputTokens: number;
   outputTokens: number;
@@ -164,6 +168,7 @@ async function resolveExecutionBaseUrl(
   providerId: string,
   provider: { authMethod: string | null; baseUrl: string | null; endpoint: string | null },
 ): Promise<string | null> {
+  if (providerId === "local") return getOllamaBaseUrl({ ...provider, providerId });
   // Route codex through the ChatGPT backend (flat-rate subscription billing).
   // The Responses API SSE parser now handles function call events.
   if (providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
@@ -174,39 +179,6 @@ async function resolveExecutionBaseUrl(
     return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
   }
   return provider.baseUrl ?? provider.endpoint;
-}
-
-async function readEnabledRoutingProvider(providerId: string) {
-  if (!isLocalProviderId(providerId)) {
-    const [connection, lifecycle] = await Promise.all([
-      prisma.aiProviderConnection.findUnique({
-        where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
-      }),
-      prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
-    ]);
-    // Legacy direct callers can predate the default account. An existing account
-    // and provider lifecycle both remain authoritative after admission. Resuming
-    // an operator pause must not clear an independent automatic provider hold.
-    const effectiveStatus = lifecycle
-      ? connection ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : lifecycle.status
-      : connection?.status;
-    if ((connection || lifecycle) && !["active", "degraded"].includes(effectiveStatus ?? "")) {
-      throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
-    }
-    return null;
-  }
-  const [provider, connection] = await Promise.all([
-    prisma.modelProvider.findUnique({ where: { providerId } }),
-    prisma.aiProviderConnection.findUnique({
-      where: { connectionId: `provider-default-${providerId}` },
-      select: { status: true },
-    }),
-  ]);
-  if (!provider || !["active", "degraded"].includes(provider.status)
-    || !connection || !["active", "degraded"].includes(connection.status)) {
-    throw new InferenceError("Local provider is not enabled for routing", "provider_error", providerId);
-  }
-  return provider;
 }
 
 // ─── Tool Call Extraction & Message Formatting ──────────────────────────────
@@ -454,6 +426,7 @@ export async function callProvider(
       : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
   const telemetryStartedAt = new Date();
+  const telemetryAttemptId = randomUUID();
   // Phase A7: telemetry kind derived from the structured selector when
   // present; legacy-string paths land as "legacy:<adapter>" so analytics can
   // distinguish unrouted traffic from structured-selector traffic.
@@ -535,6 +508,7 @@ export async function callProvider(
     // swallows its own errors so we never mask the original throw.
     const finishedAt = new Date();
     void writeAdapterTelemetry({
+      id: telemetryAttemptId,
       investment,
       traceId: attribution?.traceId ?? undefined,
       adapterKind: telemetryAdapterKind,
@@ -591,6 +565,7 @@ export async function callProvider(
   // can't break the user's reply.
   const telemetryFinishedAt = new Date();
   void writeAdapterTelemetry({
+    id: telemetryAttemptId,
     investment,
     traceId: attribution?.traceId ?? undefined,
     adapterKind: telemetryAdapterKind,
@@ -617,6 +592,7 @@ export async function callProvider(
   // 5. Map AdapterResult → InferenceResult
   return transferLocalNativeContinuation<InferenceResult>(result, {
     content: result.text,
+    responseProducer: result.asyncOperation ? undefined : createResponseProducer({ attemptId: telemetryAttemptId, providerId, modelId, content: result.text }),
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,

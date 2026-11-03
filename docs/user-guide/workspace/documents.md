@@ -79,6 +79,8 @@ The managed document record is authoritative for lifecycle state, owner, current
 
 The AI coworker can summarize a document, identify stale references, draft lifecycle notes, and suggest where a document should be linked. It must not treat a draft as published or replace owner approval for publication.
 
+You can ask it to read the current version, list saved versions, or read a specific version by number. A document read returns the selected version's complete text. Earlier versions stay available in the history and can be read separately.
+
 ## What To Watch
 
 - similar documents with different owners or states

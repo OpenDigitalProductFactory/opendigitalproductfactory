@@ -51,6 +51,7 @@ export default async function WorkspacePage() {
   const twinPresentation = await loadWorkspaceTwinPresentation(
     archetypeRef?.archetypeId ?? null,
     archetypeRef?.name ?? null,
+    { viewer: session.user },
   );
   const restaurantShift = Boolean(twinPresentation?.restaurantFloor);
 

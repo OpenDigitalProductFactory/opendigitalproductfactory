@@ -99,3 +99,9 @@ letters the same way, and the EA Architect can draw a process diagram.
 - [Accounts payable](accounts-payable.md)
 - [Accounts receivable](accounts-receivable.md)
 - [Controls and automation](controls-and-automation.md)
+
+## Recorded General Ledger And Software Results
+
+General Ledger now reads one explicitly scoped organization and either a valid UTC month or the existing all-recorded selection. Both use the same bounded source validation. Invalid periods never silently select all records. Missing chart or eligible records, incompatible currency or precision, incomplete reversals and oversized or failed reads stay unavailable.
+
+The software-platform Performance view saves the same validated ledger income, expenses and net result through the existing metric refresh. This is a recorded management-ledger view, distinct from the cash-basis summaries described above. A selected month shows movements; prior capital does not become current-month income. All recorded includes the complete available supported ledger history. Neither selection proves complete books, bank cash or an as-of position. Existing Finance read permission and current-organization context apply before any source read.

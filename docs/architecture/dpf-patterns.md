@@ -131,6 +131,16 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 
 **Completion contract.** Host supervision stops renewal before draining an in-flight heartbeat; late responses and stale timer callbacks cannot restart supervision. One exact persisted reservation read reports settled, pending or unknown without requesting generic immediate release. Reservation expiry never proves command success or process termination. Shared local-CI callers retain their existing release contract.
 
+**Qualification contract.** A host-resource lease is coordination evidence,
+not execution attestation. The current runner reports through the caller's MCP
+credential, so a server-signed binding plus a matching lease still cannot prove
+that its child ran. Qualification issuance and evidence ingestion therefore
+remain fail-closed. The signed native Edge channel does provide a distinct
+machine identity, but its closed action allow-list does not include arbitrary
+tests and must not be widened implicitly. A future qualification action must
+be explicit, bounded and independently reviewed before it can produce research
+evidence.
+
 **When NOT to use.** Do not add a second resource queue or scheduler. Do not hold a thread or shell open while waiting for admission. Do not kill a process merely because its command resembles a known tool. Do not promote a queued claim using stale memory evidence after another lease releases.
 
 **Why this exists.** Process-count limits alone cannot protect a 64 GiB developer host when inference is already resident. Durable, memory-aware admission turns invisible RAM contention into explicit capacity state and prevents dozens of idle waiters from consuming memory and tokens around one bottleneck.
