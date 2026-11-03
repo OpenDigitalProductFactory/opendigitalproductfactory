@@ -11,6 +11,7 @@ vi.mock("@/lib/actions/external-evidence", () => ({
 }));
 
 import { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } from "./local-integration";
+import { executorRefForms } from "./local-ci-evidence-workroom";
 
 describe("recordLocalIntegrationResult", () => {
   const platformConfig = {
@@ -627,7 +628,7 @@ describe("local-CI evidence attribution to an adopted Workroom (BI-C9912C22)", (
     const workroom = { findMany: vi.fn().mockResolvedValue([{ id: "room-adopted", headSha: null }]) };
     await record(workroom);
     expect(workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { headBranch: "fix/external-agents-decision-record-grant", executorRef: "cab18f6e-session", archivedAt: null },
+      where: { headBranch: "fix/external-agents-decision-record-grant", executorRef: { in: executorRefForms("cab18f6e-session") }, archivedAt: null },
     }));
     expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({ workCapsuleId: "room-adopted" }));
   });

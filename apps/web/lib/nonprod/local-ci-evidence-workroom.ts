@@ -1,5 +1,6 @@
 import type { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
+import { WORK_CAPSULE_EXECUTOR_KINDS } from "@/lib/work-capsules";
 
 type EvidenceTx = Pick<typeof prisma, "workroom" | "externalEvidenceRecord">;
 type WorkroomReader = { findMany(args: unknown): Promise<Array<{ id: string; headSha: string | null }>> };
@@ -16,12 +17,24 @@ type WorkroomReader = { findMany(args: unknown): Promise<Array<{ id: string; hea
  * room is linked; several inexact rooms are left unlinked rather than guessed.
  * Several exact rooms are "ambiguous".
  */
+/**
+ * The forms one client thread's id takes as a Workroom `executorRef`: the bare
+ * id the gate records (CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, ...), or that id
+ * behind its own executor-kind prefix ("claude-desktop-<id>"), which claims have
+ * recorded too. BI-82D15653: an exact match on the bare id alone left those
+ * rooms' gate evidence unlinked, so their failure review could never resolve it.
+ * Only known executor kinds are accepted as a prefix, never an arbitrary one.
+ */
+export function executorRefForms(sessionId: string): string[] {
+  return [sessionId, ...WORK_CAPSULE_EXECUTOR_KINDS.map((kind) => `${kind}-${sessionId}`)];
+}
+
 export async function findLocalCiEvidenceWorkroom(
   workroom: WorkroomReader,
   run: { branch: string; sha: string; sessionId: string },
 ): Promise<{ id: string } | "ambiguous" | null> {
   const rooms = await workroom.findMany({
-    where: { headBranch: run.branch, executorRef: run.sessionId, archivedAt: null },
+    where: { headBranch: run.branch, executorRef: { in: executorRefForms(run.sessionId) }, archivedAt: null },
     select: { id: true, headSha: true }, take: 3,
   });
   const exact = rooms.filter((room) => room.headSha === run.sha);
