@@ -1,4 +1,4 @@
-import { semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
+import { semanticNodeProviderSettled, semanticNodeNeedsSettlement } from "./semantic-review-provider-settlement";
 import { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
@@ -91,7 +91,7 @@ export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: s
   const proof = verification && verification.workCapsule?.capsuleId === capsuleId && observation.requestDigest
     ? readSemanticReviewRemediation(verification, { capsuleId: verification.workCapsuleId!,
       taskRunId: row.taskRunId, requestDigest: observation.requestDigest, updatedAt: row.updatedAt }, now) : null;
-  const unresolvedNodeIds = visible.filter(node => node.status !== "completed" && (node.status !== "superseded" || isRecord(node.outputSnapshot) && node.outputSnapshot.providerOutcome === "unknown"))
+  const unresolvedNodeIds = visible.filter(node => semanticNodeNeedsSettlement(node))
     .map(node => node.taskNodeId);
   const coverageComplete = !!proof && !truncated && (observation.classification !== "execution-uncertain" || visible.length > 0) && unresolvedNodeIds.every(id => visible.some(node => node.taskNodeId === id && semanticNodeProviderSettled(node, observation.requestDigest ?? "")));
   const remediationReady = coverageComplete && (!observation.eligibilityBlocked || proof!.eligibilityVerified);

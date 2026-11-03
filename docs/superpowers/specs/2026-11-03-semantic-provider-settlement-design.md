@@ -196,3 +196,9 @@ original evidence. Adapter identity (provider/model/account mode/account/trace)
 is registered before waiting for compute admission. If admission ends before
 adapter execution, the same original writer records adapter-not-dispatched;
 that proof is rejected if any HTTP dispatch was observed for that adapter.
+
+Completed inconclusive checkpoints owe the same original-provider settlement as
+failed or interrupted nodes before retry, successor admission or worker checkpoint
+replacement. A final pass or fail checkpoint is reused without redispatch. Existing
+typed, generation-bound server capacity or eligibility refusals can establish that
+routing ended before dispatch; a status label or diagnostic fragment alone cannot.

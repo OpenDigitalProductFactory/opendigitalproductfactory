@@ -50,8 +50,11 @@ describe("durable semantic review eligibility", () => {
   });
   it("requires remediation from durable branch evidence after a lost task summary", async () => {
     state.row.status = "input-required";
-    mocks.db.taskNode.findMany.mockResolvedValue([{ status: "completed", outputSnapshot: {
-      requestDigest: state.packet.digest, routingEligibility: [eligibility] } }]);
+    mocks.db.taskNode.findMany.mockResolvedValue([{ taskNodeId: "eligibility-refusal", status: "completed",
+      requestContract: { requestDigest: state.packet.digest, generation: "original", agentId: "change-reviewer" },
+      outputSnapshot: { requestDigest: state.packet.digest, providerOutcome: "not-dispatched",
+        result: { decision: "inconclusive", issues: [], inconclusiveReason: "review-endpoint-ineligible" },
+        routingEligibility: [eligibility] } }]);
     await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("eligibility-remediation-required");
     expect(mocks.send).not.toHaveBeenCalled();
   });

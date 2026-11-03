@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
+import { semanticNodeNeedsSettlement, semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
 const digest = "a".repeat(64);
 const node = { taskNodeId:"TN-original", requestContract:{requestDigest:digest,generation:"g-original"},
  outputSnapshot:{requestDigest:digest,providerSettlement:{schemaVersion:1,taskNodeId:"TN-original",requestDigest:digest,generation:"g-original",sealed:true,events:[
@@ -25,4 +25,24 @@ it('rejects cross-model and cross-account terminal proof', () => {
   Object.assign(mixed.outputSnapshot.providerSettlement.events[2],changed);
   expect(semanticNodeProviderSettled(mixed,digest)).toBe(false);
  }
+});
+
+it("requires settlement for completed inconclusive results while retaining definitive verdicts", () => {
+ for (const decision of ["pass", "fail", "inconclusive"]) {
+  const candidate = { ...node, status: "completed", outputSnapshot: { result: { decision, issues: [], summary: "Review" } } };
+  expect(semanticNodeNeedsSettlement(candidate)).toBe(decision === "inconclusive");
+ }
+ expect(semanticNodeNeedsSettlement({ ...node, status: "completed", outputSnapshot: {} })).toBe(true);
+});
+it("accepts only bound typed server eligibility refusal without a provider ledger", () => {
+ const refusal = { taskNodeId: node.taskNodeId, status: "completed", requestContract: node.requestContract,
+  outputSnapshot: { requestDigest: digest, providerOutcome: "not-dispatched",
+   result: { decision: "inconclusive", issues: [], inconclusiveReason: "review-endpoint-ineligible" },
+   routingEligibility: [{ sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 1,
+    exclusions: [{ bucket: "output-capacity", count: 1 }] }] } };
+ expect(semanticNodeProviderSettled(refusal, digest)).toBe(true);
+ expect(semanticNodeProviderSettled({ ...refusal, requestContract: {} }, digest)).toBe(false);
+ expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, providerOutcome: "unknown" } }, digest)).toBe(false);
+ expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, routingEligibility: [{}] } }, digest)).toBe(false);
+ expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, result: {} } }, digest)).toBe(false);
 });

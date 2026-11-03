@@ -368,7 +368,18 @@ describe("durable semantic review worker", () => {
       parseDiagnostics: [{ agentId: "change-reviewer", stage: "invalid-json" }] };
     mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
       where.taskNodeId.endsWith(":recovery-1") ? null : { taskNodeId: where.taskNodeId, status: "completed",
-        outputSnapshot: { requestDigest: state.packet.digest, result: failed } });
+        requestContract: { requestDigest: state.packet.digest, generation: "original", agentId: "change-reviewer" },
+        outputSnapshot: { requestDigest: state.packet.digest, result: failed,
+          providerSettlement: { schemaVersion: 1, taskNodeId: where.taskNodeId, requestDigest: state.packet.digest,
+            generation: "original", sealed: true, events: [
+              { attemptId: "adapter", state: "adapter-registered", providerId: "ollama", modelId: "model",
+                traceId: "trace", accountMode: "local" },
+              { attemptId: "http", adapterAttemptId: "adapter", state: "dispatching", providerId: "ollama",
+                modelId: "model", traceId: "trace", accountMode: "local" },
+              { attemptId: "http", adapterAttemptId: "adapter", state: "response-completed", providerId: "ollama",
+                modelId: "model", traceId: "trace", accountMode: "local", providerRequestId: "request",
+                responseDigest: "a".repeat(64) },
+            ] } } });
     await executePersistedSemanticReview("TR-1");
     expect(state.providerCalls).toBe(1);
     expect(state.row.status).toBe("completed");
@@ -697,4 +708,23 @@ it('refuses an unexpired retry with a fresh health assertion but no original pro
   mocks.db.taskNode.findMany.mockResolvedValue([{taskNodeId:'lost',status:'failed',outputSnapshot:{requestDigest:state.packet.digest,providerOutcome:'unknown'}}]);
   await expect(retryPersistedSemanticReview('TR-1','user-1',true)).rejects.toThrow('semantic-review-execution-unresolved');
   expect(mocks.send).not.toHaveBeenCalled();
+});
+
+it.each([false,true])('refuses completed inconclusive replay with an unsettled prior fallback (expired=%s)', async expiredWindow => {
+ if(expiredWindow) state.packet=createSemanticReviewRequest(state.packet.input,state.packet.actor,new Date(Date.now()-31*60_000));
+ state.row.status='input-required'; state.row.updatedAt=new Date(Date.now()-60_000);
+ state.row.a2aMetadata={gateKind:'semantic-review',gateKey:state.packet.gateKey,capsuleId:'WC-1',attempt:1};
+ state.row.progressPayload={semanticReview:{schemaVersion:1,requestDigest:state.packet.digest,deadlineAt:state.packet.deadlineAt,recoveryAttempt:0,reason:'review-branch-inconclusive'}};
+ mocks.db.taskArtifact.findUnique.mockResolvedValue({taskRunId:'run-row-1',parts:[{kind:'data',data:state.packet}]});
+ const identity={providerId:'local',modelId:'model',traceId:'trace',accountMode:'local'};
+ mocks.db.taskNode.findMany.mockResolvedValue([{taskNodeId:'inconclusive',status:'completed',requestContract:{requestDigest:state.packet.digest,generation:'original'},
+ outputSnapshot:{requestDigest:state.packet.digest,result:{decision:'inconclusive',issues:[],summary:'The final response was truncated.',inconclusiveReason:'review-response-truncated'},
+ providerSettlement:{schemaVersion:1,taskNodeId:'inconclusive',requestDigest:state.packet.digest,generation:'original',sealed:true,events:[
+ {...identity,attemptId:'first',state:'adapter-registered'},{...identity,attemptId:'second',state:'adapter-registered'},
+ {...identity,attemptId:'first-http',adapterAttemptId:'first',state:'dispatching'},
+ {...identity,attemptId:'second-http',adapterAttemptId:'second',state:'dispatching'},
+ {...identity,attemptId:'second-http',adapterAttemptId:'second',state:'response-completed',providerRequestId:'id',responseDigest:'b'.repeat(64)}]}}}]);
+ mocks.db.runtimeVerification.findUnique.mockResolvedValue({kind:'health',status:'passed',workCapsuleId:'room-1',runtimeTargetId:'runtime-1',command:'fresh health',completedAt:new Date(),result:{semanticReviewRecovery:{taskRunId:'TR-1',requestDigest:state.packet.digest,executionSettled:true,settledNodeIds:['inconclusive'],observation:'Caller asserts the provider ended.'}}});
+ await expect(retryPersistedSemanticReview('TR-1','user-1',true,expiredWindow?{expectedRequestDigest:state.packet.digest,remediationVerificationId:'RV-1'}:undefined)).rejects.toThrow('semantic-review-execution-unresolved');
+ expect(mocks.send).not.toHaveBeenCalled();
 });

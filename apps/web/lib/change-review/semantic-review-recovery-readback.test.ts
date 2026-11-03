@@ -34,8 +34,11 @@ describe("owned semantic review recovery readback", () => {
   it.each([false, true])("recovers durable eligibility diagnostics beside uncertain=%s task state", async uncertain => {
     const eligibility = { sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
       exclusions: [{ bucket: "output-capacity", count: 2 }] };
-    db.taskNode.findMany.mockResolvedValue([{ ...node, status: "completed", outputSnapshot: {
-      requestDigest: digest, providerOutcome: "not-dispatched", routingEligibility: [eligibility], rawPrompt: "private prompt" } }]);
+    db.taskNode.findMany.mockResolvedValue([{ ...node, status: "completed",
+      requestContract: { requestDigest: digest, generation: "original", agentId: "change-reviewer" },
+      outputSnapshot: { requestDigest: digest, providerOutcome: "not-dispatched",
+        result: { decision: "inconclusive", issues: [], inconclusiveReason: "review-endpoint-ineligible" },
+        routingEligibility: [eligibility], rawPrompt: "private prompt" } }]);
     db.runtimeVerification.findFirst.mockResolvedValue(verification());
     const result = await readSemanticReviewRecovery({ ...task, progressPayload: { semanticReview: {
       ...task.progressPayload.semanticReview, executionOutcome: uncertain ? "unknown" : undefined,

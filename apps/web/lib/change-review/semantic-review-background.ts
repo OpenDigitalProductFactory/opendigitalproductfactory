@@ -1,4 +1,4 @@
-import { semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
+import { semanticNodeProviderSettled, semanticNodeNeedsSettlement } from "./semantic-review-provider-settlement";
 import { withProviderSettlementWriter, appendProviderSettlement, sealProviderSettlement, type ProviderSettlementEvent } from "../inference/provider-settlement";
 import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
 import { executionUncertaintyFromError } from "../shared/execution-uncertainty";
@@ -118,6 +118,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
         // A new admitted generation may replace an inconclusive response, but
         // retries within this generation and valid prior verdicts reuse it.
         if (attempt === recoveryAttempt || restored.decision !== "inconclusive") return restored;
+        if (!semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
         superseded.push({ taskNodeId: node.taskNodeId, output, providerOutcome: "inconclusive" });
         continue;
       }
@@ -277,8 +278,7 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   const publication = await prisma.$transaction(async (tx) => {
     const originalNodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
     if (originalNodes.length === 0 && (state(row).executionOutcome === "unknown" || String(state(row).reason).startsWith("provider-outcome-uncertain"))) throw new Error("semantic-review-execution-unresolved");
-    if (originalNodes.length > 100 || originalNodes.some(node => node.status !== "completed"
-      && (node.status !== "superseded" || object(node.outputSnapshot).providerOutcome === "unknown")
+    if (originalNodes.length > 100 || originalNodes.some(node => semanticNodeNeedsSettlement(node)
       && !semanticNodeProviderSettled(node, packet.digest))) throw new Error("semantic-review-execution-unresolved");
     if (eligibilityBlocked) {
       if (!successor || successor.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-eligibility-remediation-required");
@@ -360,6 +360,7 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
         if (output.requestDigest !== packet.digest) throw new Error("semantic-review-checkpoint-binding-mismatch");
         const restored = restoreSemanticReviewCheckpoint(output.result, String(object(node.requestContract).agentId ?? "change-reviewer"));
         if (restored.decision === "fail" || object(output.result).decision === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
+        if (restored.decision === "inconclusive" && !semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
       } else if (node.status !== "superseded" || output.providerOutcome === "unknown") {
         if (!semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
         await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: { status: "failed", completedAt: new Date(),
