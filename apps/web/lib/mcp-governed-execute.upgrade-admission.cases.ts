@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { governedExecuteTool, type _setGovernanceForTests } from "./mcp-governed-execute";
-import { coworkerAuthorityInputFixture } from "../test-support/coworker-authority-input-fixture";
+import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
 
 const observation = vi.hoisted(() => vi.fn());
 vi.mock("./self-upgrade/request-approval-preflight", () => ({ preflightUnadmittedUpgrade: observation }));
@@ -10,13 +10,15 @@ export function registerUpgradeAdmissionCases(evidence: {
   auditRows(): Record<string, unknown>[];
   receiptRows(): Record<string, unknown>[];
   executionCalls(): unknown[][];
+  /** Inject the fixture from the excluded test harness, outside the production program. */
+  authorityInput(): CoworkerAuthorityInput;
   applyOverrides(overrides: Parameters<typeof _setGovernanceForTests>[0]): void;
 }): void {
   describe("terminal update observation through the assembled executor", () => {
     beforeEach(() => { observation.mockReset(); observation.mockResolvedValue(null); });
     const run = () => governedExecuteTool({ toolName: "request_self_upgrade", rawParams: { reason: "Check approved repair" }, userId: "user-1", userContext: { platformRole: "HR-000", isSuperuser: true }, context: { agentId: "AGT-100" }, source: "external-jsonrpc" });
     function arrange(allowed = true) {
-      const input = coworkerAuthorityInputFixture();
+      const input = evidence.authorityInput();
       input.authContext.grantedCapabilities = ["manage_provider_connections", "view_operations"];
       input.action = { toolName: "request_self_upgrade", requiredCapability: "manage_provider_connections", agentGrantAllowed: allowed, sideEffect: true, executionMode: "immediate", approvalPolicy: "all", consequence: "irreversible", policyProjectionAllowed: false, routeContext: null };
       input.steering = "scheduled-mandate";

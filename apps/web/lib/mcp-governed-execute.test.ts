@@ -406,7 +406,7 @@ describe("governedExecuteTool — happy path", () => {
   });
 });
 registerRefusalDurationCases({ auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, normalUser: NORMAL_USER, executionCalls: () => executeMock.mock.calls });
-registerUpgradeAdmissionCases({ auditRows: () => auditRows, receiptRows: () => receiptRows, applyOverrides: applyAuthorityOverrides, executionCalls: () => executeMock.mock.calls });
+registerUpgradeAdmissionCases({ auditRows: () => auditRows, receiptRows: () => receiptRows, applyOverrides: applyAuthorityOverrides, executionCalls: () => executeMock.mock.calls, authorityInput });
 describe("governedExecuteTool — rejection paths", () => {
   registerWorkroomAliasCases({
     executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows,
