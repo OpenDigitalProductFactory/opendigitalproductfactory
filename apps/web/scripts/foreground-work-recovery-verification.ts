@@ -77,7 +77,7 @@ export async function verifyForegroundRecovery() {
     fixtureSettlement = "preparation-outcome-unknown";
     fixture = await prepareForegroundFixtures(prisma, transport.baseUrl);
     fixtureSettlement = "active";
-    await page.goto(runtime.origin + "/platform/ai/agent/AGT-900", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(runtime.origin + "/finance", { waitUntil: "domcontentloaded", timeout: 60_000 });
     const scriptPath = await page.locator('script[src^="/_next/static/"]').first().getAttribute("src");
     check(scriptPath, "The served page has no production static asset");
     const asset = new URL(scriptPath, runtime.origin), staticRoot = build.staticRoot;

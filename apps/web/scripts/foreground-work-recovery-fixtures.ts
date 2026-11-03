@@ -22,9 +22,9 @@ export function readForegroundBuildEvidence(root: string, reused: string | undef
     staticRoot: resolve(buildRoot, "static"), layout: reused === "true" ? "standalone" : "root" };
 }
 
-/** The native selected-coworker route resolves the canonical Finance pair. */
+/** The native Finance business page must retain its actual specialist and advice mode. */
 export function assertForegroundFinanceEntry(input: { archetypeId: string; routeContext: string; initiatingAgentId: string | null; submittedMode: unknown; retainedMode: unknown }) {
-  if (input.archetypeId !== "software-platform" || input.routeContext !== "/platform/ai/agent/AGT-900"
+  if (input.archetypeId !== "software-platform" || input.routeContext !== "/finance"
       || input.initiatingAgentId !== "finance-agent" || input.submittedMode !== "advise" || input.retainedMode !== "advise") throw new Error("Finance fixture context or coworker identity mismatch");
 }
 

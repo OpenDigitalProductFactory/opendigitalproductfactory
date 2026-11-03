@@ -326,11 +326,11 @@ describe("disposable CI seed schedules", () => {
 });
 
 describe('native Finance entry identity', () => {
-  const valid = { archetypeId: 'software-platform', routeContext: '/platform/ai/agent/AGT-900', initiatingAgentId: 'finance-agent', submittedMode: 'advise', retainedMode: 'advise' };
+  const valid = { archetypeId: 'software-platform', routeContext: '/finance', initiatingAgentId: 'finance-agent', submittedMode: 'advise', retainedMode: 'advise' };
   it('accepts the selected Finance Specialist in software business context', () => {
     expect(() => fixtureHelpers.assertForegroundFinanceEntry(valid)).not.toThrow();
   });
-  it.each([{ archetypeId: 'pet-rescue' }, { routeContext: '/workspace' }, { initiatingAgentId: 'operations-agent' }, { initiatingAgentId: 'coworker' }, { retainedMode: 'act' }, { submittedMode: 'act' }, { retainedMode: undefined }])(
+  it.each([{ archetypeId: 'pet-rescue' }, { routeContext: '/workspace' }, { routeContext: '/platform/ai/agent/AGT-900' }, { initiatingAgentId: 'operations-agent' }, { initiatingAgentId: 'coworker' }, { retainedMode: 'act' }, { submittedMode: 'act' }, { retainedMode: undefined }])(
     'rejects substituted context or coworker: %j', patch => {
       expect(() => fixtureHelpers.assertForegroundFinanceEntry({ ...valid, ...patch })).toThrow("Finance fixture context or coworker identity mismatch");
     });
