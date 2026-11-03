@@ -172,7 +172,9 @@ describe("runEcosystemInboundTriage", () => {
 
 // BI-F4866228: the first commissioned production run filed ~4,000 copies of the
 // paired installation's backlog, because same-organization links send their
-// whole backlog as demand envelopes and work sync already mirrors it here.
+// whole backlog as demand envelopes and work sync already mirrors it here. The
+// fake applies the same where clause the reader sends, so these cases pin which
+// links the reader asks for, not Prisma's filtering.
 describe("readIntakePeerDemand", () => {
   type Link = { linkId: string; role: string; linkState: string; revokedAt: Date | null; quarantinedAt: Date | null };
   type Mirror = { mirrorId: string; federationLinkId: string; recordType: string; canonicalSide: string; payload: unknown };
