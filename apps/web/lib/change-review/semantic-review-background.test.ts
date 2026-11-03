@@ -9,6 +9,15 @@ import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+function settledOriginalProvider(taskNodeId: string, requestDigest = state.packet.digest) {
+ const identity = { providerId: "local", modelId: "model", traceId: "trace", accountMode: "local" };
+ return { schemaVersion: 1, taskNodeId, requestDigest, generation: "original", sealed: true, events: [
+  { ...identity, attemptId: "adapter", state: "adapter-registered" },
+  { ...identity, attemptId: "http", adapterAttemptId: "adapter", state: "dispatching" },
+  { ...identity, attemptId: "http", adapterAttemptId: "adapter", state: "response-completed",
+   providerRequestId: "request", responseDigest: "a".repeat(64) },
+ ] };
+}
 describe("durable semantic review worker", () => {
   it("does not treat an error-name lookalike as proof no provider started", async () => {
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
@@ -298,7 +307,10 @@ describe("durable semantic review worker", () => {
   it("retains uncertain attempt evidence when a replacement runs", async () => {
     (state.row.progressPayload as any).semanticReview.recoveryAttempt = 1;
     mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) =>
-      where.taskNodeId.endsWith(":recovery-1") ? null : { taskNodeId: where.taskNodeId, status: "running", outputSnapshot: { diagnostic: "connection lost" } });
+      where.taskNodeId.endsWith(":recovery-1") ? null : { taskNodeId: where.taskNodeId, status: "running",
+        requestContract: { requestDigest: state.packet.digest, generation: "original" },
+        outputSnapshot: { requestDigest: state.packet.digest, diagnostic: "connection lost",
+          providerSettlement: settledOriginalProvider(where.taskNodeId) } });
     await executePersistedSemanticReview("TR-1");
     expect(state.providerCalls).toBe(1);
     expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
@@ -710,7 +722,7 @@ it('refuses an unexpired retry with a fresh health assertion but no original pro
   expect(mocks.send).not.toHaveBeenCalled();
 });
 
-it.each([['completed',false],['completed',true],['superseded',false],['superseded',true]] as const)('refuses %s inconclusive replay with an unsettled prior fallback (expired=%s)', async (priorStatus, expiredWindow) => {
+it.each([['completed',false,false],['completed',true,false],['superseded',false,false],['superseded',true,false],['superseded',false,true],['superseded',true,true]] as const)('refuses %s inconclusive replay with an unsettled prior fallback (expired=%s,lost=%s)', async (priorStatus, expiredWindow, lostSnapshot) => {
  if(expiredWindow) state.packet=createSemanticReviewRequest(state.packet.input,state.packet.actor,new Date(Date.now()-31*60_000));
  state.row.status='input-required'; state.row.updatedAt=new Date(Date.now()-60_000);
  state.row.a2aMetadata={gateKind:'semantic-review',gateKey:state.packet.gateKey,capsuleId:'WC-1',attempt:1};
@@ -718,7 +730,7 @@ it.each([['completed',false],['completed',true],['superseded',false],['supersede
  mocks.db.taskArtifact.findUnique.mockResolvedValue({taskRunId:'run-row-1',parts:[{kind:'data',data:state.packet}]});
  const identity={providerId:'local',modelId:'model',traceId:'trace',accountMode:'local'};
  mocks.db.taskNode.findMany.mockResolvedValue([{taskNodeId:'inconclusive',status:priorStatus,requestContract:{requestDigest:state.packet.digest,generation:'original'},
- outputSnapshot:{requestDigest:state.packet.digest,providerOutcome:'inconclusive',result:{decision:'inconclusive',issues:[],summary:'The final response was truncated.',inconclusiveReason:'review-response-truncated'},
+ outputSnapshot:lostSnapshot?{requestDigest:state.packet.digest,providerOutcome:'inconclusive'}:{requestDigest:state.packet.digest,providerOutcome:'inconclusive',result:{decision:'inconclusive',issues:[],summary:'The final response was truncated.',inconclusiveReason:'review-response-truncated'},
  providerSettlement:{schemaVersion:1,taskNodeId:'inconclusive',requestDigest:state.packet.digest,generation:'original',sealed:true,events:[
  {...identity,attemptId:'first',state:'adapter-registered'},{...identity,attemptId:'second',state:'adapter-registered'},
  {...identity,attemptId:'first-http',adapterAttemptId:'first',state:'dispatching'},
@@ -727,4 +739,59 @@ it.each([['completed',false],['completed',true],['superseded',false],['supersede
  mocks.db.runtimeVerification.findUnique.mockResolvedValue({kind:'health',status:'passed',workCapsuleId:'room-1',runtimeTargetId:'runtime-1',command:'fresh health',completedAt:new Date(),result:{semanticReviewRecovery:{taskRunId:'TR-1',requestDigest:state.packet.digest,executionSettled:true,settledNodeIds:['inconclusive'],observation:'Caller asserts the provider ended.'}}});
  await expect(retryPersistedSemanticReview('TR-1','user-1',true,expiredWindow?{expectedRequestDigest:state.packet.digest,remediationVerificationId:'RV-1'}:undefined)).rejects.toThrow('semantic-review-execution-unresolved');
  expect(mocks.send).not.toHaveBeenCalled();
+});
+
+it.each([{}, { providerOutcome: "inconclusive", result: {} }])("refuses worker recovery over a lost superseded checkpoint %j", async output => {
+ (state.row.progressPayload as any).semanticReview.recoveryAttempt = 1;
+ mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) => where.taskNodeId.endsWith(":recovery-1") ? null : {
+  taskNodeId: where.taskNodeId, status: "superseded", requestContract: { requestDigest: state.packet.digest, generation: "original" },
+  outputSnapshot: { requestDigest: state.packet.digest, ...output },
+ });
+ await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("semantic-review-execution-unresolved");
+ expect(state.providerCalls).toBe(0);
+ expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
+it.each(["lost-superseded", "contradictory-pass-ledger"])("holds legacy submitted recovery before cross-branch fanout (%s)", async scenario => {
+ state.packet = createSemanticReviewRequest({ ...state.packet.input, identity: { ...state.packet.input.identity,
+  specialistIds: ["AGT-181"] } }, state.packet.actor);
+ state.row.a2aMetadata = { gateKind: "semantic-review", gateKey: state.packet.gateKey, capsuleId: "WC-1" };
+ mocks.db.taskArtifact.findUnique.mockResolvedValue({ taskRunId: "run-row-1", parts: [{ kind: "data", data: state.packet }] });
+ (state.row.progressPayload as any).semanticReview = { schemaVersion: 1, requestDigest: state.packet.digest,
+  deadlineAt: state.packet.deadlineAt, recoveryAttempt: 1 };
+ const originalId = "semantic-review:TR-1:change-reviewer";
+ const identity = { providerId: "local", modelId: "model", traceId: "trace", accountMode: "local" };
+ const settled = { taskNodeId: originalId, status: "completed",
+  requestContract: { requestDigest: state.packet.digest, generation: "original", agentId: "change-reviewer" },
+  outputSnapshot: { requestDigest: state.packet.digest,
+   result: { decision: "inconclusive", issues: [], inconclusiveReason: "unparseable-review-response" },
+   providerSettlement: { schemaVersion: 1, taskNodeId: originalId, requestDigest: state.packet.digest,
+    generation: "original", sealed: true, events: [
+     { ...identity, attemptId: "adapter", state: "adapter-registered" },
+     { ...identity, attemptId: "http", adapterAttemptId: "adapter", state: "dispatching" },
+     { ...identity, attemptId: "http", adapterAttemptId: "adapter", state: "response-completed", providerRequestId: "id", responseDigest: "a".repeat(64) },
+    ] } } };
+ const unresolved = { taskNodeId: "semantic-review:TR-1:AGT-181", status: "superseded", outputSnapshot: {} };
+ const branchA = scenario === "contradictory-pass-ledger" ? { ...settled,
+  outputSnapshot: { ...settled.outputSnapshot, result, providerSettlement: { ...settled.outputSnapshot.providerSettlement,
+   events: settled.outputSnapshot.providerSettlement.events.filter(event => event.state !== "response-completed") } } } : settled;
+ const branchB = scenario === "contradictory-pass-ledger" ? { ...unresolved, status: "completed",
+  requestContract: { requestDigest: state.packet.digest, generation: "original", agentId: "AGT-181" },
+  outputSnapshot: { requestDigest: state.packet.digest, providerOutcome: "not-dispatched",
+   result: { decision: "inconclusive", issues: [], inconclusiveReason: "review-capacity-deferred" },
+   capacityDeferral: { schemaVersion: 1, requestDigest: state.packet.digest, generation: "original", reason: "local-runner-busy" } } } : unresolved;
+ mocks.db.taskNode.findMany.mockResolvedValue([branchA, branchB]);
+ mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) => where.taskNodeId.endsWith(":recovery-1") ? null
+  : where.taskNodeId === originalId ? branchA : branchB);
+ mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+  await Promise.allSettled(["change-reviewer", "AGT-181"].map(agentId => branch(agentId, async () => {
+   state.providerCalls++; return result;
+  })));
+  return result;
+ });
+ await executePersistedSemanticReview("TR-1");
+ expect(state.providerCalls).toBe(0);
+ expect(mocks.dispatch).not.toHaveBeenCalled();
+ expect(state.row.status).toBe("input-required");
+ expect(mocks.evidence).not.toHaveBeenCalled();
 });

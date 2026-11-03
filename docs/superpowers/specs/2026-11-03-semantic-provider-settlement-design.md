@@ -85,9 +85,13 @@ uses retry_semantic_review with that server-resolved receipt; the existing
 expired-window successor admission decides authority and remaining allowance.
 
 If original request identity or acknowledgement was never retained, this repair
-cannot make D62 retryable. Supported finite disposition is cancellation or
-abandonment by the current authorized original-task owner through the existing
-lifecycle, preserving UNKNOWN provider outcome and no acceptance. Before any
+cannot make D62 retryable. The target finite disposition is authorized cancellation
+or abandonment through the existing task lifecycle, preserving UNKNOWN provider
+outcome and no acceptance. The current source/native audit has not established an
+applicable governed closeout for input-required D1C or already-canceled 946C:
+the general Abandon action requires stalled status, and AgentThread cancellation
+does not authenticate provider closure. OBJ-4 / AC-4 therefore remains open;
+the prospective producer implementation does not deliver this historical route. Before any
 new review is admitted, the canonical writer/effect authority must independently
 prove old-writer revocation and reconcile possibly started effects through its
 existing approved policy. This design grants no such exception. Where that
@@ -205,3 +209,13 @@ routing ended before dispatch; a status label or diagnostic fragment alone canno
 A retained ledger takes precedence over compatibility evidence. A typed legacy
 refusal may establish pre-dispatch settlement only when the ledger is absent;
 malformed, unsealed or incomplete native observations cannot be overridden.
+
+Every noncompleted original node owes settlement, including superseded nodes
+whose output or verdict was lost. Whenever any branch will invoke a provider,
+every present original ledger must be settled, including a definitive sibling's
+ledger; a later semantic verdict cannot override an unresolved earlier fallback.
+The worker validates the whole bounded original inventory before branch fanout,
+including legacy submitted recovery, and each branch checks its predecessors.
+Automatic capacity resume and restart use the same proof predicate before requeue.
+Complete definitive checkpoint sets may still be republished without another
+provider invocation; that does not settle their independent provider obligations.

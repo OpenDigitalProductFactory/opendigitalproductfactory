@@ -123,6 +123,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
         continue;
       }
       if (attempt === recoveryAttempt || node.status === "completed") throw new Error("semantic-review-provider-outcome-uncertain");
+      if (!semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
       if (node.status !== "superseded") superseded.push({ taskNodeId: node.taskNodeId, output, providerOutcome: "unknown" });
     }
     const predecessorId = state(row).predecessorTaskRunId;
@@ -360,7 +361,7 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
         if (output.requestDigest !== packet.digest) throw new Error("semantic-review-checkpoint-binding-mismatch");
         const restored = restoreSemanticReviewCheckpoint(output.result, String(object(node.requestContract).agentId ?? "change-reviewer"));
         if (restored.decision === "fail" || object(output.result).decision === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
-        if (restored.decision === "inconclusive" && !semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
+        if (semanticNodeNeedsSettlement(node) && !semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
       } else if (semanticNodeNeedsSettlement(node)) {
         if (!semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
         await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: { status: "failed", completedAt: new Date(),
@@ -433,6 +434,18 @@ export async function executePersistedSemanticReview(taskRunId: string) {
     return settle(row, "failed", "failure-analysis-evidence-changed", {
       action: "Submit a refreshed immutable review request with current failure evidence.",
     });
+  }
+  // A legacy queued recovery may have been admitted before strict proof checks.
+  // Check the whole original inventory before fanout, not only each branch as it starts.
+  const originalNodes = await prisma.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
+  const finalCheckpoints = hasFinalReviewCheckpointSet({ nodes: originalNodes, taskRunId,
+    requestDigest: packet.digest, recoveryAttempt: state(row).recoveryAttempt ?? 0,
+    specialistIds: packet.input.identity.specialistIds });
+  if (originalNodes.length > 100 || !finalCheckpoints && (originalNodes.some(node => semanticNodeNeedsSettlement(node)
+    && !semanticNodeProviderSettled(node, packet.digest)) || originalNodes.length === 0
+      && (state(row).executionOutcome === "unknown" || String(state(row).reason).startsWith("provider-outcome-uncertain")))) {
+    return settle(row, "input-required", "provider-outcome-uncertain-before-dispatch", {
+      action: "Reconcile every original provider execution before any reviewer branch dispatches.", capacityRecovery: null });
   }
   const generation = randomUUID();
   const owned = await reserveSubmittedTaskRunWorking({ taskRunId, updatedAt: row.updatedAt,

@@ -3,18 +3,18 @@ import { providerLedgerSettled } from "../inference/provider-settlement";
 import { isSemanticReviewCapacityReason } from "./semantic-review-recovery-policy";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
 import { restoreSemanticReviewCheckpoint } from "./semantic-change-review";
-type Node = { taskNodeId: string; status?: string; requestContract?: unknown; outputSnapshot: unknown };
+type Node = { taskNodeId: string; status?: string; requestContract?: unknown; outputSnapshot?: unknown };
 
 /** Completed verdicts are reused. Inconclusive checkpoints may dispatch again and owe settlement. */
 export function semanticNodeNeedsSettlement(node: Node): boolean {
   const output = isRecord(node.outputSnapshot) ? node.outputSnapshot : {};
+  if (output.providerSettlement !== undefined) return true;
   if (node.status === "completed") {
     const contract = isRecord(node.requestContract) ? node.requestContract : {};
     const decision = restoreSemanticReviewCheckpoint(output.result, String(contract.agentId ?? "change-reviewer")).decision;
     return decision !== "pass" && decision !== "fail";
   }
-  return node.status !== "superseded" || output.providerOutcome === "unknown"
-    || output.providerSettlement !== undefined || isRecord(output.result) && output.result.decision === "inconclusive";
+  return true; // Every noncompleted original may have started effects, even with lost output.
 }
 
 /** Native persisted node proof only; client summaries and failed status are not settlement. */

@@ -50,6 +50,15 @@ describe("owned semantic review recovery readback", () => {
     } });
     expect(JSON.stringify(result)).not.toContain("private prompt");
   });
+  it.each([{}, { providerOutcome: "inconclusive" }, { providerOutcome: "inconclusive", result: {} }])(
+    "retains lost superseded checkpoint %j as unresolved", async output => {
+      db.taskNode.findMany.mockResolvedValue([{ ...node, status: "superseded",
+        outputSnapshot: { requestDigest: digest, ...output } }]);
+      db.runtimeVerification.findFirst.mockResolvedValue(verification());
+      const result = await readSemanticReviewRecovery(task, "owner");
+      expect(result.details).toMatchObject({ unresolvedNodeIds: ["TN-OWN"],
+        remediation: { executionSettled: false, retryAuthorized: false, state: "incomplete-node-coverage" } });
+    });
   afterEach(() => vi.restoreAllMocks());
   beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Date, "now").mockReturnValue(now.getTime());
     authority.request.mockResolvedValue(null);

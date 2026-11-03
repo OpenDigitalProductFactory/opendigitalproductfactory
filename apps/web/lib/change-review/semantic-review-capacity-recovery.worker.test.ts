@@ -143,6 +143,23 @@ async function persistedCapacityWait(sibling = false, useRealAggregate = false) 
 }
 
 describe("automatic semantic-review capacity recovery", () => {
+  it.each([false, true])("keeps automatic recovery held over lost superseded history (restart=%s)", async restart => {
+    const nodes = await persistedCapacityWait();
+    const originalId = "semantic-review:TR-1:change-reviewer";
+    const current = nodes.get(originalId)!;
+    nodes.set(`${originalId}:recovery-1`, { ...current, taskNodeId: `${originalId}:recovery-1` });
+    nodes.set(originalId, { ...current, status: "superseded",
+      outputSnapshot: { requestDigest: packet.digest, providerOutcome: "inconclusive" } });
+    const progress = (row.progressPayload as { semanticReview: Record<string, unknown> }).semanticReview;
+    progress.recoveryAttempt = 1;
+    if (restart) { row.status = "working"; row.lastHeartbeatAt = new Date(Date.now() - 4 * 60_000); delete progress.capacityRecovery; }
+    const now = new Date(Date.now() + 4 * 60_000);
+    await reconcileSemanticReviews(now);
+    await reconcileSemanticReviews(new Date(now.getTime() + 31_000));
+    expect(row.status).toBe("input-required");
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(providerCalls).toBe(0);
+  });
   it("recovers both typed deferrals through the real aggregate and existing reconciler", async () => {
     const nodes = await persistedCapacityWait(true, true);
     expect(routeAndCall).toHaveBeenCalledTimes(2);
@@ -321,10 +338,14 @@ describe("automatic semantic-review capacity recovery", () => {
   });
 
   it("republishes final checkpoints after loss without invoking another provider", async () => {
-    await persistedCapacityWait();
+    const nodes = await persistedCapacityWait();
     await reconcileSemanticReviews(new Date(Date.now() + 4 * 60_000));
     await executePersistedSemanticReview("TR-1");
     expect(providerCalls).toBe(1);
+    // Republishing this definitive result creates no provider invocation, even
+    // if retained provider evidence still needs separate reconciliation.
+    const completed = nodes.get("semantic-review:TR-1:change-reviewer:recovery-1")!;
+    completed.outputSnapshot = { ...(completed.outputSnapshot as Record<string, unknown>), providerSettlement: {} };
     mocks.send.mockClear();
     row.status = "working";
     row.lastHeartbeatAt = new Date(Date.now() - 4 * 60_000);

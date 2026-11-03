@@ -51,3 +51,9 @@ it("accepts only bound typed server eligibility refusal without a provider ledge
  expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, routingEligibility: [{}] } }, digest)).toBe(false);
  expect(semanticNodeProviderSettled({ ...refusal, outputSnapshot: { ...refusal.outputSnapshot, result: {} } }, digest)).toBe(false);
 });
+
+it.each(["superseded", "failed", "running", "submitted", "unknown"])("requires original proof for every %s node even with lost output", status => {
+ for (const outputSnapshot of [undefined, null, {}, { providerOutcome: "inconclusive" }, { result: {} }]) {
+  expect(semanticNodeNeedsSettlement({ taskNodeId: "lost", status, outputSnapshot })).toBe(true);
+ }
+});

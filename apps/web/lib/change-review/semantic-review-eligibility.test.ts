@@ -30,7 +30,7 @@ describe("durable semantic review eligibility", () => {
     expect(mocks.evidence).not.toHaveBeenCalled();
   });
   it("preserves refusal and successful checkpoints beside an uncertain sibling", async () => {
-    mocks.db.taskNode.findMany.mockResolvedValue([{ status: "completed", outputSnapshot: {
+    mocks.db.taskNode.findMany.mockResolvedValueOnce([]).mockResolvedValue([{ status: "completed", outputSnapshot: {
       requestDigest: state.packet.digest, routingEligibility: [eligibility] } }]);
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
       await Promise.allSettled([

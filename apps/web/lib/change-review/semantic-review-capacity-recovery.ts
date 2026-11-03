@@ -1,3 +1,4 @@
+import { semanticNodeNeedsSettlement, semanticNodeProviderSettled } from "./semantic-review-provider-settlement";
 import { isRecord } from "@/lib/shared/coerce";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { restoreSemanticReviewCheckpoint } from "./semantic-change-review";
@@ -57,7 +58,8 @@ export function hasFinalReviewCheckpointSet(input: CheckpointInput): boolean {
 /** Positive complete-set proof; an absent or unsupported checkpoint is never a retry permit. */
 export function hasProvenCapacityCheckpointSet(input: CheckpointInput): boolean {
   const selected = completeCheckpointSet(input);
-  if (!selected) return false;
+  if (!selected || input.nodes.some(node => semanticNodeNeedsSettlement(node)
+    && !semanticNodeProviderSettled(node, input.requestDigest))) return false;
   let deferred = false;
   for (const { node, agent } of selected) {
     const output = record(node.outputSnapshot);

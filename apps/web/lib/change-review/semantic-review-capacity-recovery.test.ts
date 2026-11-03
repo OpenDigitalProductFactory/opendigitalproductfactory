@@ -58,6 +58,18 @@ describe("positive pre-dispatch capacity proof", () => {
     expect(prove([old, deferred("change-reviewer", 1)], [], 1)).toBe(true);
   });
 
+  it.each([{}, { providerOutcome: "unknown" }, { providerOutcome: "inconclusive", result: {} }])(
+    "refuses automatic capacity recovery over lost superseded original %j", output => {
+      const old = { ...deferred(), status: "superseded", outputSnapshot: { requestDigest: digest, ...output } };
+      expect(prove([old as ReturnType<typeof deferred>, deferred("change-reviewer", 1)], [], 1)).toBe(false);
+    });
+  it("refuses dispatch over a definitive sibling's contradictory present ledger", () => {
+    const sibling = deferred("AGT-903");
+    const nodes = [deferred(), { ...sibling, outputSnapshot: { ...sibling.outputSnapshot, result: pass,
+      providerSettlement: { schemaVersion: 1, taskNodeId: sibling.taskNodeId, requestDigest: digest,
+        generation: "generation-1", sealed: true, events: [{ attemptId: "lost", state: "dispatching" }] } } }];
+    expect(prove(nodes, ["AGT-903"])).toBe(false);
+  });
   it("permits final-verdict publication but rejects inconclusive checkpoints as provider-free recovery", () => {
     const input = { nodes: [deferred()], taskRunId: "TR-1", requestDigest: digest, recoveryAttempt: 0, specialistIds: [] };
     expect(hasFinalReviewCheckpointSet(input)).toBe(false);
