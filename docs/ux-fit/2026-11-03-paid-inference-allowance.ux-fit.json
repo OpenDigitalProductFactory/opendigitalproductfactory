@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "scope": { "files": [
+    "apps/web/components/admin/PaidInferenceAllowanceSettings.tsx",
+    "apps/web/components/admin/GovernedBacklogSettings.tsx",
+    "apps/web/app/(shell)/admin/platform-development/page.tsx"
+  ] },
+  "decidedOption": "inside-existing-limits-disclosure",
+  "decisionInteractionId": "DI-8D9685CBCEF9",
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["inside-existing-limits-disclosure", "new-visible-card", "new-settings-route"] },
+  "authority": "Operator direction (Mark, 2026-11-03) to hold budget allocations at a higher level, adjustable in the portal without a code release; BI-F3B6713F implementation admission IRD-B2234E85B564; budget design DI-666409F895C5. The advisory score records the placement choice under that scope, not new approval.",
+  "limitations": "DI-8D9685CBCEF9 ranked the existing-disclosure placement first (high confidence, autonomy eligible). The arrival view is unchanged: the section renders inside the closed 'Daily limits and the autopilot switches' disclosure (summary word count unchanged) and only for people with manage_platform and manage_finance; pinned in GovernedBacklogSettings.test.tsx. Author measurement only: no served sweep or independent UX review was run for this change."
+}

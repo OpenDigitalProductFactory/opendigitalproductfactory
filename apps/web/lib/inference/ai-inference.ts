@@ -331,18 +331,19 @@ export async function callProvider(
   const capacityAccount = selectedAccount ? capacityAccountIdentity(selectedAccount) : undefined;
   const localProvider = needsModelConnection && (!selectedAccount || isLocalProviderId(providerId)) ? await readEnabledRoutingProvider(providerId) : null;
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
-  // Check the agent's daily token budget before dispatching. If the agent has
-  // consumed ≥100% of its registry limit today, throw a billing error so the
-  // caller can surface a clear "budget exceeded" message rather than burning
-  // more tokens. At 80–95% log a warning; at ≥95% also write a budget event.
-  // The check is non-blocking: any DB error is swallowed so a budget-gate DB
-  // failure never breaks inference.
+  // Only paid, per-token calls are governed: a local engine or a flat-rate
+  // subscription costs nothing extra, so it is never refused here
+  // (BI-F3B6713F). The owner-set installation allowance decides when recorded;
+  // the registry per-agent cap is the fallback. A used allowance throws
+  // AgentAllowanceExhaustedError, which routing skips without penalising the
+  // endpoint. Any other gate failure is swallowed: the gate never breaks inference.
   if (attribution?.agentId && !reassessment) {
+    const { AgentAllowanceExhaustedError } = await import("@/lib/inference/budget-gate");
     try {
-      const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
-      const budget = await checkAgentBudgetFromRegistry(attribution.agentId);
+      const { checkAgentBudgetFromRegistry, isPaidPerTokenProvider, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+      const budget = await isPaidPerTokenProvider(providerId) ? await checkAgentBudgetFromRegistry(attribution.agentId) : null;
 
-      if (budget.status === "rejected") {
+      if (budget?.status === "rejected") {
         void writeBudgetEvent({
           agentId: attribution.agentId,
           eventKind: "rejected",
@@ -351,18 +352,13 @@ export async function callProvider(
           modelId,
           providerId,
         });
-        throw new InferenceError(
-          `Daily token budget exceeded for agent "${attribution.agentId}" ` +
-          `(${budget.actualTokens.toLocaleString()} / ${budget.limitTokens.toLocaleString()} tokens used today)`,
-          "billing",
-          providerId,
-        );
+        throw new AgentAllowanceExhaustedError({ agentId: attribution.agentId, budget });
       }
 
-      if (budget.status === "warning_95" || budget.status === "warning_80") {
+      if (budget && (budget.status === "warning_95" || budget.status === "warning_80")) {
         console.warn(
-          "[budget-gate] Agent approaching daily token limit:",
-          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status },
+          "[budget-gate] Agent approaching daily paid allowance:",
+          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status, governedBy: budget.governedBy },
         );
         if (budget.status === "warning_95") {
           void writeBudgetEvent({
@@ -376,8 +372,7 @@ export async function callProvider(
         }
       }
     } catch (err) {
-      // Re-throw billing errors; swallow everything else (budget gate is advisory)
-      if (err instanceof InferenceError && err.code === "billing") throw err;
+      if (err instanceof AgentAllowanceExhaustedError) throw err;
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
