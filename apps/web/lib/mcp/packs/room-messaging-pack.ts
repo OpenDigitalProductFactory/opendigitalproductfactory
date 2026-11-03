@@ -25,6 +25,7 @@ import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-manage
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
 import { loadRoomMembersForWorkItem } from "@/lib/work-management/room-policy-members.server";
 import {
+  applyInviteeClearanceRaise,
   preflightRoomParticipantInvitation,
   resolveRoomMessagingWorkItem,
   ROOM_MESSAGING_WORK_ITEM_SELECT,
@@ -266,28 +267,10 @@ async function inviteRoomParticipantHandler(
   const inviteeAgentId = str(params, "agentId");
   const inviteeUserId = str(params, "userId");
 
-  // BI-6AE64074: the approved invite also raises the invitee's data access to
-  // the room's level, through the same audited control the owner uses by hand.
-  // That control refuses a person without manage_agents or beyond their own
-  // access; then nobody is admitted.
+  // BI-6AE64074: an approved raise happens before admission; a refused one admits nobody.
   if (clearanceRaise) {
-    const { setCoworkerDataAccess, CoworkerDataAccessError } = await import("@/lib/identity/coworker-data-access");
-    try {
-      await setCoworkerDataAccess(userId, {
-        agentId: clearanceRaise.agentId,
-        expected: clearanceRaise.from,
-        levels: clearanceRaise.to,
-        reason: `Admitted to Work Room ${caseKey}, which holds ${clearanceRaise.level} information, by an approved invitation.`,
-      });
-    } catch (error) {
-      if (!(error instanceof CoworkerDataAccessError)) throw error;
-      return {
-        success: false,
-        error: "clearance_raise_refused",
-        message: `${error.message} The coworker was not admitted to ${caseKey}.`,
-        data: { caseKey, membershipRecorded: false, effectiveAdmission: false },
-      };
-    }
+    const refused = await applyInviteeClearanceRaise(userId, caseKey, clearanceRaise);
+    if (refused) return refused;
   }
 
   let inviteePrincipalId: string | null = null;

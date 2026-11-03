@@ -155,3 +155,34 @@ export async function preflightRoomParticipantInvitation(
     data: { recovery: { control: "room-participants", caseKey } },
   } };
 }
+
+/**
+ * Apply an approved raise before admission (BI-6AE64074), through the same
+ * audited control the owner uses by hand. That control refuses a person
+ * without manage_agents or beyond their own access; then nobody is admitted.
+ * Returns the refusal, or null once the raise is recorded.
+ */
+export async function applyInviteeClearanceRaise(
+  userId: string,
+  caseKey: string,
+  raise: InviteeClearanceRaise,
+): Promise<ToolResult | null> {
+  const { setCoworkerDataAccess, CoworkerDataAccessError } = await import("@/lib/identity/coworker-data-access");
+  try {
+    await setCoworkerDataAccess(userId, {
+      agentId: raise.agentId,
+      expected: raise.from,
+      levels: raise.to,
+      reason: `Admitted to Work Room ${caseKey}, which holds ${raise.level} information, by an approved invitation.`,
+    });
+    return null;
+  } catch (error) {
+    if (!(error instanceof CoworkerDataAccessError)) throw error;
+    return {
+      success: false,
+      error: "clearance_raise_refused",
+      message: `${error.message} The coworker was not admitted to ${caseKey}.`,
+      data: { caseKey, membershipRecorded: false, effectiveAdmission: false },
+    };
+  }
+}
