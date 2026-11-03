@@ -4,7 +4,7 @@
 // AC-CMAP-PROVIDER-1/2): choose a provider (None by default) and find missing
 // locations, with counts from the last run.
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
@@ -18,7 +18,7 @@ import {
 import type { GeocodingConfig } from "@/lib/geocoding/providers";
 import type { GeocodingBackfillStatus } from "@/lib/geocoding/backfill.server";
 import type { RegionRecommendation } from "@/lib/twin/map-region-recommendation";
-import type { MapPackInstallStatus } from "@/lib/twin/map-pack-install/status.server";
+import { IN_FLIGHT_STATES, type MapPackInstallStatus } from "@/lib/twin/map-pack-install/status";
 import { useT } from "@/lib/i18n/use-t";
 
 export function GeocodingAdminPanel({
@@ -27,6 +27,7 @@ export function GeocodingAdminPanel({
   status,
   regions = null,
   install = null,
+  installRunning = false,
 }: {
   config: GeocodingConfig;
   opencageKeyConfigured: boolean;
@@ -35,6 +36,8 @@ export function GeocodingAdminPanel({
   regions?: RegionRecommendation | null;
   /** Progress of a street-map pack install (BI-43BBCC26). */
   install?: MapPackInstallStatus | null;
+  /** The server's view of whether that install is still making progress (stalled runs are not). */
+  installRunning?: boolean;
 }) {
   const t = useT("customerMap");
   const router = useRouter();
@@ -64,7 +67,14 @@ export function GeocodingAdminPanel({
     });
   }
 
-  const installing = install ? ["planning", "downloading", "finalizing"].includes(install.state) : false;
+  const stalled = install ? IN_FLIGHT_STATES.includes(install.state) && !installRunning : false;
+
+  // The install runs in the background; refresh while it does so each step shows without a reload.
+  useEffect(() => {
+    if (!installRunning) return;
+    const id = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(id);
+  }, [installRunning, router]);
 
   function start() {
     startTransition(async () => {
@@ -144,9 +154,9 @@ export function GeocodingAdminPanel({
                       <Button
                         variant="secondary"
                         onClick={() => installPack(group.suggestedPackId!)}
-                        disabled={pending || installing}
+                        disabled={pending || installRunning}
                       >
-                        {t("admin.streetMapsInstall")}
+                        {t("admin.streetMapsInstall", { region: group.label })}
                       </Button>
                     </div>
                   ) : null}
@@ -154,21 +164,35 @@ export function GeocodingAdminPanel({
               ))}
             </ul>
           )}
-          {install && install.state !== "idle" && install.region ? (
-            <p role="status" className={install.state === "done" ? "text-[var(--dpf-muted)]" : undefined}>
-              {install.state === "planning"
-                ? t("admin.streetMapsInstallPlanning", { region: install.region })
-                : install.state === "downloading"
-                  ? t("admin.streetMapsInstallDownloading", { region: install.region, done: install.chunksDone, count: install.chunkCount })
-                  : install.state === "finalizing"
-                    ? t("admin.streetMapsInstallFinalizing", { region: install.region })
-                    : install.state === "done"
-                      ? t("admin.streetMapsInstallDone", { region: install.region })
-                      : t("admin.streetMapsInstallFailed", { region: install.region })}
-            </p>
-          ) : null}
+          <p role="status" className={install?.state === "done" ? "text-[var(--dpf-muted)]" : undefined}>
+            {installLine(install, stalled, t)}
+          </p>
         </div>
       ) : null}
     </Surface>
   );
+}
+
+function installLine(
+  install: MapPackInstallStatus | null,
+  stalled: boolean,
+  t: ReturnType<typeof useT<"customerMap">>,
+): string | null {
+  if (!install || install.state === "idle" || !install.region) return null;
+  const region = install.region;
+  if (stalled) return t("admin.streetMapsInstallStalled", { region });
+  switch (install.state) {
+    case "planning":
+      return t("admin.streetMapsInstallPlanning", { region });
+    case "downloading":
+      return t("admin.streetMapsInstallDownloading", { region, done: install.chunksDone, count: install.chunkCount });
+    case "finalizing":
+      return t("admin.streetMapsInstallFinalizing", { region });
+    case "done":
+      return t("admin.streetMapsInstallDone", { region });
+    default:
+      return install.error
+        ? t("admin.streetMapsInstallFailedReason", { region, reason: install.error })
+        : t("admin.streetMapsInstallFailed", { region });
+  }
 }

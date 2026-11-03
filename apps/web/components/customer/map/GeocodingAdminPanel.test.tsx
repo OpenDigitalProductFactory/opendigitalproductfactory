@@ -6,7 +6,7 @@ import { namespaceMessages } from "@dpf/i18n";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import type { RegionRecommendation } from "@/lib/twin/map-region-recommendation";
-import type { MapPackInstallStatus } from "@/lib/twin/map-pack-install/status.server";
+import type { MapPackInstallStatus } from "@/lib/twin/map-pack-install/status";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 const installAction = vi.hoisted(() => vi.fn());
@@ -20,7 +20,7 @@ import { GeocodingAdminPanel } from "./GeocodingAdminPanel";
 
 const bounds = { west: -98, south: 37, east: -96, north: 38 };
 
-function renderPanel(regions: RegionRecommendation | null, install: MapPackInstallStatus | null = null) {
+function renderPanel(regions: RegionRecommendation | null, install: MapPackInstallStatus | null = null, installRunning = false) {
   return render(
     <MessagesProvider locale="en-US" messages={{ customerMap: namespaceMessages("en-US", "customerMap") }}>
       <GeocodingAdminPanel
@@ -29,6 +29,7 @@ function renderPanel(regions: RegionRecommendation | null, install: MapPackInsta
         status={{ state: "idle", placed: 0, notFound: 0, remaining: null, updatedAt: null }}
         regions={regions}
         install={install}
+        installRunning={installRunning}
       />
     </MessagesProvider>,
   );
@@ -74,17 +75,29 @@ describe("GeocodingAdminPanel street-map install (BI-43BBCC26)", () => {
   it("offers Install only for an uncovered region and installs the recommended pack id", async () => {
     installAction.mockResolvedValue({ ok: true });
     renderPanel(kansas);
-    const buttons = screen.getAllByRole("button", { name: "Install this street map" });
+    const buttons = screen.getAllByRole("button", { name: /^Install the .* street map$/ });
     expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.textContent).toBe("Install the Kansas, United States street map");
     fireEvent.click(buttons[0]!);
     await waitFor(() => expect(installAction).toHaveBeenCalledWith("us-kansas"));
     expect(await screen.findByText("Installing the street map. You can leave this page.")).toBeTruthy();
   });
 
   it("shows progress and disables Install while a pack is installing", () => {
-    renderPanel(kansas, status({ state: "downloading", packId: "us-kansas", region: "Kansas, United States", chunksDone: 3, chunkCount: 12 }));
+    renderPanel(kansas, status({ state: "downloading", packId: "us-kansas", region: "Kansas, United States", chunksDone: 3, chunkCount: 12 }), true);
     expect(screen.getByText("Downloading the Kansas, United States street map: part 3 of 12.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Install this street map" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Install the Kansas, United States street map" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("offers Install again when a run stopped making progress", () => {
+    renderPanel(kansas, status({ state: "downloading", packId: "us-kansas", region: "Kansas, United States", chunksDone: 3, chunkCount: 12 }), false);
+    expect(screen.getByText("The Kansas, United States street map stopped making progress. You can start it again.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Install the Kansas, United States street map" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("keeps one status region mounted so later progress is announced", () => {
+    renderPanel(kansas);
+    expect(screen.getAllByRole("status").length).toBeGreaterThan(0);
   });
 
   it("says when the install finished or failed", () => {
@@ -92,6 +105,9 @@ describe("GeocodingAdminPanel street-map install (BI-43BBCC26)", () => {
     expect(screen.getByText("The Kansas, United States street map is installed.")).toBeTruthy();
     cleanup();
     renderPanel(kansas, status({ state: "failed", region: "Kansas, United States", error: "range read failed (503)" }));
+    expect(screen.getByText("The Kansas, United States street map didn't install (range read failed (503)). Try again, or check the map storage has room.")).toBeTruthy();
+    cleanup();
+    renderPanel(kansas, status({ state: "failed", region: "Kansas, United States" }));
     expect(screen.getByText("The Kansas, United States street map didn't install. Try again.")).toBeTruthy();
   });
 });

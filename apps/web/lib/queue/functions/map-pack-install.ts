@@ -11,9 +11,15 @@ export const mapPackInstall = jobs.createFunction(
     retries: 3,
     concurrency: [{ limit: 1 }],
     triggers: [{ event: "map-pack/install.requested" }],
-    onFailure: async ({ error }) => {
+    onFailure: async ({ event, error }) => {
       const { writeInstallStatus } = await import("@/lib/twin/map-pack-install/status.server");
       await writeInstallStatus({ state: "failed", error: error instanceof Error ? error.message : "The install stopped." }).catch(() => {});
+      // A failed run's pre-allocated staging file would otherwise stay on the map volume.
+      const packId = (event.data as { event?: { data?: { packId?: string } } }).event?.data?.packId;
+      if (packId) {
+        const { discardStaging } = await import("@/lib/twin/map-pack-install/install.server");
+        await discardStaging(packId).catch(() => {});
+      }
     },
   },
   async ({ event, step }) => {

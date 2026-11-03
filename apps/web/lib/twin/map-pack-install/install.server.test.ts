@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,7 +18,7 @@ import {
   headerToBytes,
   type DirEntry,
 } from "./pmtiles-v3";
-import { downloadChunk, finalizeInstall, planInstall } from "./install.server";
+import { discardStaging, downloadChunk, finalizeInstall, planInstall, stagingDir } from "./install.server";
 
 // A synthetic clustered "planet": every tile at z0-4, plus a dense block over
 // central Texas at z5-13, each tile's bytes naming its tile id. Ocean-like
@@ -161,5 +161,42 @@ describe("map pack install, end to end against a synthetic archive (BI-43BBCC26)
     );
     const changed = rangeFetch({ ...source, etag: '"synthetic-2"' });
     await expect(downloadChunk("changed-src", 0, { fetchImpl: changed, root })).rejects.toThrow(/412/);
+  });
+
+  it("finishes an install interrupted between moving the pack and its manifest", async () => {
+    const fetchImpl = rangeFetch(source);
+    const request = { packId: "interrupted", region: "Central Texas, United States", bounds: BOUNDS, locale: "en-US" };
+    const plan = await planInstall(request, { fetchImpl, root, sourceUrl: "https://build.protomaps.com/20261007.pmtiles", archiveVersion: "20261007" });
+    for (let i = 0; i < plan.chunkCount; i++) await downloadChunk("interrupted", i, { fetchImpl, root });
+    const dir = stagingDir("interrupted", root);
+    const saved = join(root, "saved-plan");
+    await mkdir(saved);
+    await copyFile(join(dir, "plan.json"), join(saved, "plan.json"));
+    await copyFile(join(dir, "contents.bin"), join(saved, "contents.bin"));
+    const first = await finalizeInstall("interrupted", { root, now: new Date("2026-10-07T23:00:00Z") });
+
+    // Put the room back as an attempt that died after the pack rename: staging
+    // holds the plan and manifest, the pack is already in place, no manifest is listed.
+    await mkdir(dir, { recursive: true });
+    await copyFile(join(saved, "plan.json"), join(dir, "plan.json"));
+    await copyFile(join(saved, "contents.bin"), join(dir, "contents.bin"));
+    await rename(join(root, "interrupted.manifest.json"), join(dir, "manifest.json"));
+
+    const retried = await finalizeInstall("interrupted", { root });
+    expect(retried).toEqual(first);
+    expect(await readFile(join(root, "interrupted.manifest.json"), "utf8")).toContain('"packId": "interrupted"');
+    await expect(stat(dir)).rejects.toThrow();
+    // Repeating finalize after it completed returns the installed manifest.
+    expect(await finalizeInstall("interrupted", { root })).toEqual(first);
+  });
+
+  it("discards a failed install's staging folder", async () => {
+    const fetchImpl = rangeFetch(source);
+    await planInstall(
+      { packId: "abandoned", region: "Central Texas, United States", bounds: BOUNDS, locale: "en-US" },
+      { fetchImpl, root, sourceUrl: "https://build.protomaps.com/20261007.pmtiles", archiveVersion: "20261007" },
+    );
+    await discardStaging("abandoned", { root });
+    await expect(stat(stagingDir("abandoned", root))).rejects.toThrow();
   });
 });

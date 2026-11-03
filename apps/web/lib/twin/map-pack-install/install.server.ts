@@ -246,14 +246,58 @@ async function sha256File(path: string): Promise<string> {
 }
 
 /** Stage 3. Writes the manifest and moves the pack into place. */
+async function exists(path: string): Promise<boolean> {
+  return stat(path).then(() => true, () => false);
+}
+
+/**
+ * Stage 3. Validates the staged pack, writes its manifest into staging, then
+ * renames the pack and the manifest into place. Safe to repeat: a retry after
+ * an interruption between the two renames finishes the move instead of
+ * failing on the already-moved pack.
+ */
 export async function finalizeInstall(
   packId: string,
   deps: { root?: string; now?: Date } = {},
 ): Promise<MapPackManifest> {
   const root = deps.root ?? resolveMapDataDir();
   const dir = stagingDir(packId, root);
+  const finalPack = join(root, `${packId}.pmtiles`);
+  const finalManifest = join(root, `${packId}.manifest.json`);
+  const stagedManifest = join(dir, "manifest.json");
+
+  // An earlier attempt finished the move and only lost its cleanup or status write.
+  if (!(await exists(dir)) && (await exists(finalManifest))) {
+    const done = validateMapPackManifest(JSON.parse(await readFile(finalManifest, "utf8")));
+    if (!done.ok) throw new Error(`installed manifest rejected: ${done.error}`);
+    return done.value;
+  }
+
   const { plan } = await readPlan(dir);
+  if (plan.request.packId !== packId) throw new Error("staged plan is for a different pack");
   const staged = join(dir, "pack.pmtiles");
+
+  let manifest: MapPackManifest;
+  if (await exists(staged)) {
+    manifest = await stagedManifestFor(staged, plan, packId, deps.now ?? new Date());
+    await writeFile(stagedManifest, `${JSON.stringify(manifest, null, 2)}\n`);
+    // Pack first, manifest last: a pack without a manifest is never listed.
+    await rename(staged, finalPack);
+  } else {
+    // The pack was moved by an interrupted attempt; its manifest is still staged.
+    if (!(await exists(stagedManifest)) || (await stat(finalPack).then((s) => s.size, () => -1)) !== plan.totalBytes) {
+      throw new Error("staged pack is missing; start the install again");
+    }
+    const checked = validateMapPackManifest(JSON.parse(await readFile(stagedManifest, "utf8")));
+    if (!checked.ok) throw new Error(`manifest rejected: ${checked.error}`);
+    manifest = checked.value;
+  }
+  await rename(stagedManifest, finalManifest);
+  await rm(dir, { recursive: true, force: true });
+  return manifest;
+}
+
+async function stagedManifestFor(staged: string, plan: PlanFile, packId: string, now: Date): Promise<MapPackManifest> {
   const size = (await stat(staged)).size;
   if (size !== plan.totalBytes) throw new Error(`staged pack is ${size} bytes, expected ${plan.totalBytes}`);
 
@@ -270,9 +314,9 @@ export async function finalizeInstall(
   }
 
   const { request } = plan;
-  const manifest = {
+  const checked = validateMapPackManifest({
     schemaVersion: 1,
-    packId: request.packId,
+    packId,
     locale: request.locale,
     region: request.region,
     bounds: request.bounds,
@@ -285,16 +329,13 @@ export async function finalizeInstall(
     pmtilesSpecVersion: 3,
     minZoom: plan.minZoom,
     maxZoom: plan.maxZoom,
-    createdAt: (deps.now ?? new Date()).toISOString().replace(/\.\d{3}Z$/, "Z"),
-  };
-  const checked = validateMapPackManifest(manifest);
+    createdAt: now.toISOString().replace(/\.\d{3}Z$/, "Z"),
+  });
   if (!checked.ok) throw new Error(`manifest rejected: ${checked.error}`);
-
-  // Pack first, manifest last: a pack without a manifest is never listed.
-  await rename(staged, join(root, `${request.packId}.pmtiles`));
-  const manifestTmp = join(dir, "manifest.json");
-  await writeFile(manifestTmp, `${JSON.stringify(checked.value, null, 2)}\n`);
-  await rename(manifestTmp, join(root, `${request.packId}.manifest.json`));
-  await rm(dir, { recursive: true, force: true });
   return checked.value;
+}
+
+/** Remove a failed install's staging folder so it does not hold space on the map volume. */
+export async function discardStaging(packId: string, deps: { root?: string } = {}): Promise<void> {
+  await rm(stagingDir(packId, deps.root ?? resolveMapDataDir()), { recursive: true, force: true });
 }

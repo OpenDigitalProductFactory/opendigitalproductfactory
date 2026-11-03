@@ -31,7 +31,7 @@ import { auth } from "@/lib/auth";
 import { loadCustomerMap } from "@/lib/crm/customer-map.server";
 import { readGeocodingSettings } from "@/lib/geocoding/backfill.server";
 import { loadMapRegionRecommendation } from "@/lib/twin/map-region-recommendation.server";
-import { readInstallStatus } from "@/lib/twin/map-pack-install/status.server";
+import { isInstallRunning, readInstallStatus } from "@/lib/twin/map-pack-install/status.server";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
 import { can, getAccessibleSectionNavEntries } from "@/lib/permissions";
@@ -308,6 +308,7 @@ export default async function CustomerPage({
                 status={geocoding.status}
                 regions={mapRegions}
                 install={mapPackInstall}
+                installRunning={mapPackInstall ? isInstallRunning(mapPackInstall) : false}
               />
             ) : null}
           </div>
