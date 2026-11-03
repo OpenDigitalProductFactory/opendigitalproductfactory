@@ -361,7 +361,7 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
         const restored = restoreSemanticReviewCheckpoint(output.result, String(object(node.requestContract).agentId ?? "change-reviewer"));
         if (restored.decision === "fail" || object(output.result).decision === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
         if (restored.decision === "inconclusive" && !semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
-      } else if (node.status !== "superseded" || output.providerOutcome === "unknown") {
+      } else if (semanticNodeNeedsSettlement(node)) {
         if (!semanticNodeProviderSettled(node, packet.digest)) throw new Error("semantic-review-execution-unresolved");
         await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: { status: "failed", completedAt: new Date(),
           outputSnapshot: json({ ...output, requestDigest: packet.digest, providerOutcome: "unknown",
@@ -497,11 +497,11 @@ export async function executePersistedSemanticReview(taskRunId: string) {
         return null;
       }
       // BI-FF63D266. An inconclusive review determined nothing, so it is not a
-      // verdict on the diff: AGENTS.md §4 requires it be recorded as inconclusive
+      // verdict on the diff: AGENTS.md Â§4 requires it be recorded as inconclusive
       // and re-run on the same SHA, "never a FAIL against the diff" (fail closed
       // on safety, fail open on infrastructure). "input-required" is the A2A
-      // status this file already parks unresolved runs in — five lines above for
-      // a late result, and at settle()'s call sites — and it is the status
+      // status this file already parks unresolved runs in â€” five lines above for
+      // a late result, and at settle()'s call sites â€” and it is the status
       // retryPersistedSemanticReview admits, so the operator recovery route is
       // the existing one rather than a new one. completedAt is stamped only for a
       // terminal outcome, matching settle(); the previous write marked an
