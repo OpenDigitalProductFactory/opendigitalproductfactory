@@ -7314,6 +7314,19 @@
         "see-also"
       ]
     },
+    "docs/professions/devops-platform/wiki/pin-ci-toolchain-to-qualified-version.md": {
+      "publicHref": "/professions/devops-platform/wiki/pin-ci-toolchain-to-qualified-version/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "observed-failure-dpf-2026-11-03",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/devops-platform/wiki/sbom-in-the-pipeline.md": {
       "publicHref": "/professions/devops-platform/wiki/sbom-in-the-pipeline/",
       "portalHref": null,
@@ -8471,6 +8484,19 @@
         "sources"
       ]
     },
+    "docs/professions/operations/wiki/size-shared-limits-to-measured-demand.md": {
+      "publicHref": "/professions/operations/wiki/size-shared-limits-to-measured-demand/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "observed-failure-dpf-2026-11-03",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/operations/wiki/sli-slo-error-budget.md": {
       "publicHref": "/professions/operations/wiki/sli-slo-error-budget/",
       "portalHref": null,
@@ -9191,6 +9217,19 @@
       "anchors": [
         "rule",
         "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/software-engineer/wiki/mandatory-gate-readiness.md": {
+      "publicHref": "/professions/software-engineer/wiki/mandatory-gate-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "observed-failure-dpf-2026-11-03",
         "how-to-apply",
         "see-also"
       ]
