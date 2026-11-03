@@ -45,6 +45,7 @@
 
 import { createHash } from "crypto";
 
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
@@ -156,15 +157,6 @@ function withNextAction(result: GovernedExecuteResult, next: RefusalNextAction):
   };
 }
 
-// Same shape on every install and every run: keys sorted, arrays in order.
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (isRecord(value)) {
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
-  }
-  return value;
-}
-
 export type RefusalBreakerKeyInput = {
   userId: string;
   agentId?: string | null;
@@ -175,10 +167,11 @@ export type RefusalBreakerKeyInput = {
 };
 
 export function refusalBreakerKey(input: RefusalBreakerKeyInput): string {
-  const material = JSON.stringify(canonical({
+  // Same bytes on every install and every run: keys sorted, arrays in order.
+  const material = canonicalJson({
     userId: input.userId, agentId: input.agentId ?? null, toolName: input.toolName,
     params: input.params, facts: input.facts,
-  }));
+  });
   return createHash("sha256").update(material).digest("hex");
 }
 

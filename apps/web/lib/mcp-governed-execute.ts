@@ -127,8 +127,7 @@ export function _setGovernanceForTests(overrides: {
   alignmentGate?: AlignmentGate | null;
   preconditionGate?: PreconditionGate | null;
   gaidActorResolver?: GaidActorResolver | null;
-  gppPermitStore?: GppPermitStore | null;
-  refusalBreaker?: Partial<RefusalBreakerDeps> | null;
+  gppPermitStore?: GppPermitStore | null; refusalBreaker?: Partial<RefusalBreakerDeps> | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
@@ -145,8 +144,7 @@ export function _setGovernanceForTests(overrides: {
   setAlignmentGateOverrideForTests(overrides.alignmentGate ?? null);
   setPreconditionGateOverrideForTests(overrides.preconditionGate ?? null);
   setGaidActorResolverOverrideForTests(overrides.gaidActorResolver ?? null);
-  setGppPermitStoreOverrideForTests(overrides.gppPermitStore ?? null);
-  resetRefusalBreakerForTests(overrides.refusalBreaker ?? null);
+  setGppPermitStoreOverrideForTests(overrides.gppPermitStore ?? null); resetRefusalBreakerForTests(overrides.refusalBreaker ?? null);
 }
 
 let _executeToolOverride:
@@ -293,9 +291,7 @@ export async function governedExecuteTool(args: GovernedExecuteArgs): Promise<Go
     executionFence: args.context?.taskExecutionFence }) };
   const run = newApprovalRun();
   try {
-    return await runReassessmentEffect({ kind: "tool", name: args.toolName, input: args.rawParams },
-      // BI-E458A9CB: an identical refused call is answered from its park, not re-evaluated.
-      () => withRefusalBreaker(args, { resolveGrants, sideEffectOf: (name) => findTool(name)?.sideEffect !== false, approvalHeld: () => run.reservation !== null }, () => governedExecuteToolRun(args, run)));
+    return await runReassessmentEffect({ kind: "tool", name: args.toolName, input: args.rawParams }, () => withRefusalBreaker(args, { resolveGrants, sideEffectOf: (name) => findTool(name)?.sideEffect !== false, approvalHeld: () => run.reservation !== null }, () => governedExecuteToolRun(args, run)));
   } catch (err) {
     await releaseUnsettledApproval(run, args.toolName);
     throw err;
