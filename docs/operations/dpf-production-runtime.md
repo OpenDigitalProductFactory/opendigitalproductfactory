@@ -38,3 +38,9 @@ These names appear in the operator-facing UI, docs, and skills. The compose-serv
 | Contributor preview | `dev-portal` | `dev-portal` | 3001 |
 
 See [Runtime glossary](runtime-glossary.md) for the canonical definitions.
+
+## Preview authority diagnostics
+
+The preview controller retains validated UTC event time and acknowledged expiry on successful renewal events. Uncertainty events retain the last known expiry and a bounded consecutive-uncertainty attempt count, not a total request count. Event time is the controller's observation time, not server commit or request-start time. An absent acknowledgement cannot be reconstructed from a server heartbeat row or later reservation expiry.
+
+Known owned-container cleanup failure is categorized as `owned-cleanup`; arbitrary error messages, aggregate children, paths and child output are excluded. A late renewal received after fencing starts cannot rearm the deadline or emit renewed authority. These diagnostics do not prove writer exit, READY or UX success. Preserve those outcomes separately. Historical attempts that did not retain these facts remain unknown.

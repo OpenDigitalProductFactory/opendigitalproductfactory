@@ -149,6 +149,19 @@ export function commandRunner({ docker = 'docker', env = process.env } = {}) {
   };
 }
 
+// Only canonical UTC instants and bounded uncertainty streaks cross this boundary.
+function previewEventFacts(event) {
+  const facts = {};
+  for (const key of ['at', 'expiresAt']) {
+    const value = event[key];
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) continue;
+    const millis = Date.parse(value);
+    if (Number.isFinite(millis) && new Date(millis).toISOString() === value) facts[key] = value;
+  }
+  if (Number.isInteger(event.attempt) && event.attempt > 0 && event.attempt <= 1_000_000) facts.attempt = event.attempt;
+  return facts;
+}
+
 /** Low-cardinality diagnostics: transport messages may contain secrets. */
 export function previewLeaseEventSummary(event) {
   if (event.type === 'reservation-observed' || event.type === 'reservation-observation-unavailable') {
@@ -159,16 +172,21 @@ export function previewLeaseEventSummary(event) {
       ? observation.leaseStatus : undefined;
     return { type: event.type, reservationState, ...(leaseStatus ? { leaseStatus } : {}), processCleanupVerified: false };
   }
+  const facts = previewEventFacts(event);
+  if (event.type === 'heartbeat-renewed') {
+    return facts.at && facts.expiresAt ? { type: event.type, at: facts.at, expiresAt: facts.expiresAt } : null;
+  }
   if (!['authority-deadline', 'heartbeat-lost', 'heartbeat-uncertain', 'fence-termination-failed', 'release-failed'].includes(event.type)) return null;
   const reason = typeof event.reason === 'string' ? event.reason : '';
   let category = 'unclassified';
   if (reason === 'lease-authority-deadline') category = 'authority-deadline';
+  else if (event.type === 'fence-termination-failed' && reason === 'preview_owned_cleanup_failed') category = 'owned-cleanup';
   else if (reason === 'preview_binding_changed') category = 'source-binding';
   else if (reason === 'preview_startup_exceeded_budget' || reason === 'preview_init_not_running') category = 'startup-liveness';
   else if (/timed out|ETIMEDOUT/i.test(reason)) category = 'transport-timeout';
   else if (/ECONNRESET|ECONNREFUSED/i.test(reason)) category = 'transport-connection';
   else if (/invalid JSON/i.test(reason)) category = 'transport-response';
-  return { type: event.type, category };
+  return { type: event.type, category, ...facts };
 }
 
 export function protectedServiceIdentity(containers) {

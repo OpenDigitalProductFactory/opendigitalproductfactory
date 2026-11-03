@@ -6294,7 +6294,8 @@
         "dpf-production-runtime",
         "rules",
         "why-this-matters",
-        "terminology-mapping"
+        "terminology-mapping",
+        "preview-authority-diagnostics"
       ]
     },
     "docs/operations/federated-demand-channels.md": {

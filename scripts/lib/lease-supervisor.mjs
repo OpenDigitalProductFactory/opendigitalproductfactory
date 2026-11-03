@@ -209,6 +209,8 @@ export async function superviseLeaseRun({
         }
         return;
       }
+      // A response received while termination is pending cannot revive fenced authority.
+      if (fencedReason) return;
       if (response?.success === true) {
         uncertainStreak = 0;
         cancelRetryTimer();
