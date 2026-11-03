@@ -226,3 +226,44 @@ private database race fixtures create with the same transaction clock, configure
 the real producer fixture's pool, and rerun real producer/revival/legacy/race
 cases plus ordinary independent review and canonical integration. No new stored
 fact, model, tool, grant or authority exception is introduced.
+
+
+## Manifest-independent lifecycle settlement (BI-E77B50E0)
+
+The 2026-11-03 DEV read-only audit found eight proposed release requests bound
+ to expired, process-free reservations with database-owned history version 1,
+no first admission, a terminal timestamp and no runner manifest. The 08:17
+concierge receipt scanned 18 requests, skipped 12 and left six inconclusive;
+it cancelled none. The fresh producer writes slotManifestVersion only from
+its optional local-CI argument. A missing runner manifest therefore does not
+contradict positive never-admitted history. This is an observed exclusion,
+not proof that every other predicate or stored request qualifies.
+
+Objective OBJ-OBS-MANIFEST: retire an obsolete person request when authoritative
+history proves the exact reservation never started, independently of whether
+its claimant supplied runner-manifest metadata. Reuse CT-OBS and FLOW-OBS;
+this is lifecycle settlement and invokes no release/approval handler.
+
+Ordered deliverables:
+1. Capture a failing no-manifest positive-history regression against base
+   00676bc4aa8dcc1c419082f66793fa7d82106797 and extend the existing real producer
+   test across supplied/absent manifest inputs.
+2. Remove only the runner-manifest requirement from endedWithoutResources.
+   Keep positive database-owned birth/first-admission history, exact parked-call
+   and input fingerprints, every resource marker, transaction lock/re-read and
+   envelope compare-and-set. Unknown history stays inconclusive.
+3. Retain active/queued, previously admitted/revived, task-bound, malformed,
+   reserved-execution and racing-human negative tests. Run related tests,
+   both web typechecks, canonical integration, independent/native review and
+   protected delivery. No migration, backfill, grant, policy or scheduler change.
+4. After release, verify an actual existing sweep retires exact eligible
+   requests without any handler execution; report stored request and actionable
+   owner-inbox counts separately. Current source tests are not live acceptance.
+
+Acceptance AC-OBS-MANIFEST maps atomically to BI-E77B50E0: a null manifest with
+positive never-admitted history no longer blocks otherwise valid settlement;
+unknown/used/active/uncertain work remains unchanged. V-OBS-MANIFEST comprises
+the unit positive/negative/race suite, real private PostgreSQL producer cases,
+qualified integration and the served sweep observation. This successor does
+not reopen or mutate completed peer-owned BI-3C0F7A92. Existing schema and
+forward-only history remain compatible on source rollback.

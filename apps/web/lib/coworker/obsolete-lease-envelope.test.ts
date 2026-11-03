@@ -78,6 +78,14 @@ describe("obsolete reservation approval settlement", () => {
     expect((await settleObsoleteLeaseReleaseEnvelopes(f.db, now)).cancelled).toBe(0);
     expect(row).toEqual(before); expect(f.updateMany).not.toHaveBeenCalled();
   });
+  it("settles a never-admitted reservation without a runner manifest", async () => {
+    const row = obsoleteEnvelope(), before = structuredClone(row);
+    const f = fixture([row], { ...obsoleteTarget(), slotManifestVersion: null });
+    expect(await settleObsoleteLeaseReleaseEnvelopes(f.db, now))
+      .toMatchObject({ cancelled: 1, skipped: 0, inconclusive: 0 });
+    expect(row).toEqual({ ...before, status: "cancelled", resolvedAt: now });
+  });
+
   it("leaves a missing target unchanged", async () => {
     const f = fixture([obsoleteEnvelope()], null);
     expect((await settleObsoleteLeaseReleaseEnvelopes(f.db, now)).skipped).toBe(1);
