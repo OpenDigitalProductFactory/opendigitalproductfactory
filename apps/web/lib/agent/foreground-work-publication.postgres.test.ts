@@ -1,0 +1,229 @@
+import { randomUUID } from "node:crypto";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createReviewPostgresFixture } from "../../test-support/review-postgres-fixture";
+
+const ports = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown>, wake: vi.fn() }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/agent-event-bus", () => ({ agentEventBus: { requestCancel: vi.fn() } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: ports.wake } }));
+vi.mock("@dpf/db", async () => ({
+  ...await import("../../../../packages/db/generated/client/client"),
+  prisma: new Proxy({}, { get(_target, key) {
+    if (!ports.db) throw new Error("Foreground PostgreSQL fixture is not ready.");
+    const value = ports.db[key as string];
+    return typeof value === "function" ? value.bind(ports.db) : value;
+  } }),
+}));
+// Authority is a controlled observation; all locks, messages, task settlement
+// and rollback use actual PostgreSQL in an isolated synthetic schema.
+vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => ({ userId: "fixture-owner", platformRole: "employee", isSuperuser: false }) }));
+import { withForegroundWork } from "./foreground-work-context";
+import { publishForegroundMessage } from "./foreground-work-publication";
+import { executeForegroundWork, reconcileForegroundWork } from "./foreground-work-worker";
+import { createResourceWaitProjection } from "../mcp-task-capacity-contract";
+import { Prisma } from "@dpf/db";
+import { stopThreadTurn } from "@/lib/tak/thread-cancellation";
+import { TERMINAL_TASK_STATE_LIST } from "@/lib/tak/task-states";
+
+// No DATABASE_URL fallback and no install, real user, provider or business data.
+const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL;
+const schema = `review_foreground_${randomUUID().replaceAll("-", "")}`;
+const tables = ["TaskRun", "AgentThread", "AgentMessage"];
+
+describe.skipIf(!url)("foreground publication on PostgreSQL", () => {
+  let fixture: Awaited<ReturnType<typeof createReviewPostgresFixture>>;
+  let deadlineAt: string;
+  beforeAll(async () => {
+    fixture = await createReviewPostgresFixture({ url: url!, schema, tables });
+    ports.db = fixture.db as unknown as Record<string, unknown>;
+  });
+  afterAll(async () => { await fixture?.close(); });
+  afterEach(() => vi.useRealTimers());
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await fixture.pool.query('TRUNCATE "TaskRun", "AgentThread", "AgentMessage"');
+    deadlineAt = new Date(Date.now() + 60_000).toISOString();
+    await fixture.db.agentThread.create({ data: { id: "fixture-thread", userId: "fixture-owner" } });
+    await fixture.db.taskRun.create({ data: {
+      taskRunId: "TR-FG-SQL", userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo",
+      routeContext: "/workspace", source: "coworker", title: "Synthetic foreground publication", objective: "Verify row-lock ordering only", status: "working",
+      progressPayload: { dispatch: { claimedAt: "fixture-generation" }, foregroundAttempt: 1 },
+      a2aMetadata: { trigger: "interactive", requestDigest: "a".repeat(64), foregroundRequest: { schemaVersion: 1, userMessageId: "fixture-request", deadlineAt } },
+    } });
+    await fixture.db.agentMessage.create({ data: { id: "fixture-request", threadId: "fixture-thread", taskRunId: "TR-FG-SQL", role: "user", content: "Synthetic fixture" } });
+  });
+
+  const publish = () => withForegroundWork("TR-FG-SQL", () => publishForegroundMessage(db => db.agentMessage.create({ data: {
+    id: "fixture-response", threadId: "fixture-thread", taskRunId: "TR-FG-SQL", role: "assistant", content: "Synthetic accepted response",
+  } }), { kind: "responded" }));
+  const waitForLock = () => vi.waitFor(async () => {
+    const result = await fixture.pool.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = $2', [schema, "Lock"]);
+    expect(result.rows[0].n).toBeGreaterThan(0);
+  }, { timeout: 1500, interval: 10 });
+
+  it("rejects publication when cancellation holds the row first", async () => {
+    const cancel = await fixture.pool.connect();
+    await cancel.query("BEGIN");
+    try {
+      await cancel.query(`UPDATE "TaskRun" SET status = $1 WHERE "taskRunId" = $2 AND "userId" = $3 AND "threadId" = $4
+        AND source = 'coworker' AND NOT (status = ANY($5::text[])) AND "a2aMetadata" #>> '{foregroundRequest,schemaVersion}' = '1'`,
+      ["canceled", "TR-FG-SQL", "fixture-owner", "fixture-thread", [...TERMINAL_TASK_STATE_LIST]]);
+      const pending = publish();
+      const rejected = expect(pending).rejects.toThrow("no longer admissible");
+      await waitForLock();
+      await cancel.query("COMMIT");
+      await rejected;
+      expect(await fixture.db.agentMessage.count({ where: { role: "assistant" } })).toBe(0);
+      expect((await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: "TR-FG-SQL" } })).status).toBe("canceled");
+    } finally { await cancel.query("ROLLBACK"); cancel.release(); }
+  });
+
+  it("preserves a response accepted before cancellation acquires the row", async () => {
+    let entered!: () => void, release!: () => void;
+    const writing = new Promise<void>(resolve => { entered = resolve; });
+    const proceed = new Promise<void>(resolve => { release = resolve; });
+    const pending = withForegroundWork("TR-FG-SQL", () => publishForegroundMessage(async db => {
+      const message = await db.agentMessage.create({ data: { id: "fixture-response", threadId: "fixture-thread", taskRunId: "TR-FG-SQL", role: "assistant", content: "Accepted before cancellation" } });
+      entered();
+      await proceed;
+      return message;
+    }, { kind: "responded" }));
+    await writing;
+    const cancel = stopThreadTurn("fixture-thread", "fixture-owner");
+    try { await waitForLock(); }
+    finally { release(); }
+    await pending;
+    await cancel;
+    const run = await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: "TR-FG-SQL" } });
+    expect(run.status).toBe("completed"); // Production Stop never overwrites a terminal task.
+    expect(run.progressPayload).toMatchObject({ resultMessageId: "fixture-response", foregroundPublication: { messageId: "fixture-response" } });
+    expect(await fixture.db.agentMessage.count({ where: { role: "assistant" } })).toBe(1);
+  });
+
+  it("checks deadline expiry after an actual PostgreSQL lock wait", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const lock = await fixture.pool.connect();
+    await lock.query("BEGIN");
+    try {
+      await lock.query('SELECT id FROM "TaskRun" WHERE "taskRunId" = $1 FOR UPDATE', ["TR-FG-SQL"]);
+      const pending = publish();
+      const rejected = expect(pending).rejects.toThrow("no longer admissible");
+      await waitForLock();
+      vi.setSystemTime(Date.parse(deadlineAt) + 1);
+      await lock.query("COMMIT");
+      await rejected;
+      expect(await fixture.db.agentMessage.count({ where: { role: "assistant" } })).toBe(0);
+    } finally { await lock.query("ROLLBACK"); lock.release(); }
+  });
+
+  it("rolls back the message if publication fails before settlement", async () => {
+    await expect(withForegroundWork("TR-FG-SQL", () => publishForegroundMessage(async db => {
+      await db.agentMessage.create({ data: { id: "fixture-response", threadId: "fixture-thread", taskRunId: "TR-FG-SQL", role: "assistant", content: "Never accepted" } });
+      throw new Error("Controlled write failure before settlement");
+    }, { kind: "responded" }))).rejects.toThrow("Controlled write failure");
+    expect(await fixture.db.agentMessage.count({ where: { role: "assistant" } })).toBe(0);
+    expect((await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: "TR-FG-SQL" } })).status).toBe("working");
+  });
+
+  it("keeps a platform wait out of owner review until its original window expires", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await withForegroundWork("TR-FG-SQL", () => publishForegroundMessage(db => db.agentMessage.create({ data: {
+      id: "fixture-response", threadId: "fixture-thread", taskRunId: "TR-FG-SQL", role: "system", content: "Synthetic capacity wait",
+    } }), { kind: "capacity-wait", resourceWait: "busy" }));
+    // Same status predicate used by Workspace's owner-attention count.
+    const needsReview = () => fixture.db.taskRun.count({ where: { taskRunId: "TR-FG-SQL", status: { in: ["input-required", "auth-required"] } } });
+    expect(await needsReview()).toBe(0);
+    const saved = await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: "TR-FG-SQL" } });
+    const progress = saved.progressPayload as Record<string, any>;
+    progress.resourceWait.nextAttemptAt = new Date(Date.parse(deadlineAt) + 60_000).toISOString();
+    await fixture.db.taskRun.update({ where: { taskRunId: "TR-FG-SQL" }, data: { progressPayload: progress } });
+    vi.setSystemTime(Date.parse(deadlineAt) + 1);
+    expect(await executeForegroundWork("TR-FG-SQL")).toEqual({ kind: "blocked" });
+    expect(await needsReview()).toBe(1);
+  });
+
+  it("selects fresh, due, legacy and expired work before the limit, past fifty future waits", async () => {
+    const now = new Date(), future = new Date(+now + 600_000).toISOString();
+    const row = (id: string, status: string, due: string | null, expired = false) => ({
+      taskRunId: id, userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo", routeContext: "/workspace", source: "coworker",
+      title: "Synthetic wake selection", objective: "Verify bounded eligible selection", status,
+      createdAt: new Date(+now - (id.startsWith("future") ? 60_000 : 0)),
+      lastHeartbeatAt: due ? now : null,
+      progressPayload: due ? { foregroundOutcome: "capacity-wait", resourceWait: { ...createResourceWaitProjection("busy", 1, now), nextAttemptAt: due } } : Prisma.DbNull,
+      a2aMetadata: { trigger: "interactive", foregroundRequest: { schemaVersion: 1, deadlineAt: expired ? new Date(+now - 1).toISOString() : new Date(+now + 3_600_000).toISOString() } },
+    });
+    await fixture.db.taskRun.createMany({ data: [
+      ...Array.from({ length: 52 }, (_, i) => row(`future-${i}`, "submitted", future)),
+      row("eligible-new", "submitted", null), row("eligible-due", "submitted", new Date(+now - 1).toISOString()),
+      row("eligible-legacy", "input-required", new Date(+now - 1).toISOString()), row("eligible-expired", "submitted", future, true),
+    ] });
+    const exhausted = row("eligible-exhausted", "submitted", future);
+    await fixture.db.taskRun.create({ data: { ...exhausted,
+      progressPayload: { foregroundOutcome: "capacity-wait", resourceWait: { ...createResourceWaitProjection("busy", 5, now), nextAttemptAt: future } },
+    } });
+    const { nextAttemptAt: _due, ...legacyWait } = createResourceWaitProjection("busy", 1, now);
+    await fixture.db.taskRun.createMany({ data: [
+      { ...row("eligible-no-time", "input-required", future), progressPayload: { foregroundOutcome: "capacity-wait", resourceWait: legacyWait } },
+      row("eligible-invalid-time", "submitted", "not-a-time"),
+    ] });
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId).sort()).toEqual([
+      "eligible-due", "eligible-exhausted", "eligible-expired", "eligible-invalid-time", "eligible-legacy", "eligible-new", "eligible-no-time",
+    ]);
+  });
+
+  it("converges fifty legacy future timestamps without starving fresh work or changing request fences", async () => {
+    const now = new Date();
+    const originalTime = "November 20, 2099 12:00:00 GMT";
+    const wait = { ...createResourceWaitProjection("busy", 2, now), nextAttemptAt: originalTime };
+    const metadata = { trigger: "interactive", requestDigest: "f".repeat(64), foregroundRequest: {
+      schemaVersion: 1, deadlineAt: new Date(+now + 3_600_000).toISOString(), userMessageId: "original-message",
+    } };
+    const row = (id: string) => ({ taskRunId: id, userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo",
+      routeContext: "/workspace", source: "coworker", title: "Synthetic legacy retry", objective: "Preserve original retry meaning", status: "input-required",
+      createdAt: new Date(+now - 60_000), progressPayload: { foregroundAttempt: 2, dispatch: { claimedAt: "original-generation" }, resourceWait: wait }, a2aMetadata: metadata,
+    });
+    await fixture.db.taskRun.createMany({ data: [
+      ...Array.from({ length: 52 }, (_, i) => row(`legacy-future-${i}`)),
+      { ...row("fresh-after-legacy"), createdAt: now, status: "submitted", progressPayload: Prisma.DbNull },
+    ] });
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId)).toEqual(["fresh-after-legacy"]);
+    const first = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "legacy-future-" } } });
+    expect(first.filter(row => (row.progressPayload as any).resourceWait.nextAttemptAt === new Date(Date.parse(originalTime)).toISOString())).toHaveLength(50);
+    for (const retained of first) {
+      expect(retained.status).toBe("input-required");
+      expect(retained.a2aMetadata).toEqual(metadata);
+      expect(retained.progressPayload).toMatchObject({ foregroundAttempt: 2, dispatch: { claimedAt: "original-generation" }, resourceWait: { attempt: 2 } });
+    }
+    ports.wake.mockClear();
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId)).toEqual(["fresh-after-legacy"]);
+    const remaining = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "legacy-future-" } } });
+    expect(remaining.every(row => (row.progressPayload as any).resourceWait.nextAttemptAt === new Date(Date.parse(originalTime)).toISOString())).toBe(true);
+  });
+
+  it("disposes fifty malformed legacy waits so they cannot permanently crowd out fresh work", async () => {
+    const now = new Date();
+    const row = (id: string) => ({ taskRunId: id, userId: "fixture-owner", threadId: "fixture-thread", initiatingAgentId: "coo",
+      routeContext: "/workspace", source: "coworker", title: "Synthetic malformed wait", objective: "Dispose without inference", status: "input-required",
+      createdAt: new Date(+now - 60_000), progressPayload: { resourceWait: { kind: "provider-capacity", attempt: 1 } },
+      a2aMetadata: { trigger: "interactive", foregroundRequest: { schemaVersion: 1, deadlineAt: new Date(+now + 60_000).toISOString() } },
+    });
+    await fixture.db.taskRun.createMany({ data: [
+      ...Array.from({ length: 50 }, (_, i) => row(`malformed-${i}`)),
+      { ...row("fresh-after-malformed"), createdAt: now, status: "submitted", progressPayload: Prisma.DbNull },
+    ] });
+    await reconcileForegroundWork();
+    expect(ports.wake).not.toHaveBeenCalled();
+    const disposed = await fixture.db.taskRun.findMany({ where: { taskRunId: { startsWith: "malformed-" } } });
+    expect(disposed).toHaveLength(50);
+    for (const retained of disposed) {
+      expect(retained.status).toBe("input-required");
+      expect(retained.progressPayload).toMatchObject({ foregroundOutcome: "blocked", nextActor: "owner" });
+      expect((retained.progressPayload as any).resourceWait).toBeUndefined();
+    }
+    await reconcileForegroundWork();
+    expect(ports.wake.mock.calls.map(([event]) => event.data.taskRunId)).toEqual(["fresh-after-malformed"]);
+  });
+});
