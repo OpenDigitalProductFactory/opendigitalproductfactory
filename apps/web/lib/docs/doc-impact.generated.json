@@ -297,6 +297,9 @@
       "docs/security/secrets-scan.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    ".github/workflows/failure-readiness.yml": [
+      "docs/architecture/failure-analysis-and-recovery.md"
+    ],
     ".github/workflows/migration-safety-guard.yml": [
       "docs/architecture/orientation.md"
     ],
@@ -3497,6 +3500,7 @@
       "scripts/setup.sh"
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
+      ".github/workflows/failure-readiness.yml",
       "apps/web/lib/change-review/failure-analysis.ts",
       "apps/web/lib/work-capsules/authored-head.ts",
       "scripts/pregate-preflight.mjs"

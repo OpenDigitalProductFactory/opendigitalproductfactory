@@ -44,6 +44,35 @@ describe("GitHub failure readiness publication", () => {
   });
 });
 
+describe("re-running the Failure Readiness check after publication", () => {
+  const runsUrl = `https://api.github.com/repos/owner/repo/actions/runs?head_sha=${sha}&status=failure&per_page=100`;
+  const run = (id: number, path: string, event = "pull_request") => ({ id, path, event });
+  function respond(runs: unknown[], rerunOk = true) {
+    mocks.fetch.mockImplementation(async (url: string) => {
+      if (url === runsUrl) return { ok: true, json: async () => ({ workflow_runs: runs }), body: { cancel: vi.fn() } };
+      if (url.endsWith("/rerun-failed-jobs")) return { ok: rerunOk, status: rerunOk ? 201 : 403, body: { cancel: vi.fn() } };
+      return { ok: true, body: { cancel: vi.fn() } };
+    });
+  }
+  it("re-runs only the failed pull-request Failure Readiness runs for the published commit", async () => {
+    respond([run(1, ".github/workflows/failure-readiness.yml"), run(2, ".github/workflows/ci.yml"), run(3, ".github/workflows/failure-readiness.yml", "merge_group")]);
+    expect(await publishFailureReadinessStatus("room")).toEqual({ rerunRunIds: [1] });
+    const reruns = mocks.fetch.mock.calls.filter(([url]) => String(url).endsWith("/rerun-failed-jobs"));
+    expect(reruns.map(([url]) => url)).toEqual(["https://api.github.com/repos/owner/repo/actions/runs/1/rerun-failed-jobs"]);
+    expect(reruns[0][1]).toMatchObject({ method: "POST" });
+  });
+  it("does not re-run after publishing a failure verdict", async () => {
+    mocks.verdict.mockResolvedValue({ mayPublish: false, reason: "Internal review recovery required" });
+    respond([run(1, ".github/workflows/failure-readiness.yml")]);
+    expect(await publishFailureReadinessStatus("room")).toEqual({ rerunRunIds: [] });
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("keeps the published status when the re-run is refused, and says so", async () => {
+    respond([run(1, ".github/workflows/failure-readiness.yml")], false);
+    expect(await publishFailureReadinessStatus("room")).toMatchObject({ rerunRunIds: [], rerunError: expect.stringContaining("403") });
+  });
+});
+
 describe("isWorkroomStatusPublishable", () => {
   it("is publishable only with an immutable commit and a repository", async () => {
     expect(await isWorkroomStatusPublishable("room")).toEqual({ publishable: true });
