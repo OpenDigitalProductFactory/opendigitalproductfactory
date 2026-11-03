@@ -460,7 +460,12 @@ async function routeAndCallAttempt(
     }
   }
 
-  if (!decision.selectedEndpoint && decision.excludedReasons.some(reason => reason.includes(UNCONFIRMED_QUOTA_EXCLUSION))) {
+  // Optional-tool relaxation reruns the full router, which retains quota exclusions.
+  // A held provider must not prevent an otherwise usable peer from being considered.
+  const canRelaxOptionalTools = contract.requiresTools && !options?.requireTools && contract.toolChoice !== "required"
+    && decision.candidates.some(candidate => candidate.excludedReason?.includes("toolUse"));
+  if (!decision.selectedEndpoint && !canRelaxOptionalTools
+      && decision.excludedReasons.some(reason => reason.includes(UNCONFIRMED_QUOTA_EXCLUSION))) {
     await persistFailedDecision();
     throw noEligible("Quota reset is unconfirmed; verified availability is required before ordinary work can resume.");
   }

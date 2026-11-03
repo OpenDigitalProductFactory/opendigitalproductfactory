@@ -701,6 +701,25 @@ describe("routeAndCall activity harness overrides", () => {
     });
   });
 
+  it("can relax optional tools for a healthy peer while another provider has an unconfirmed quota hold", async () => {
+    const reason = "provider capacity rate_limited; quota reset unconfirmed; availability check required";
+    mocks.routeEndpointV2.mockResolvedValueOnce({ selectedEndpoint: null, selectedModelId: null,
+      reason: "No eligible endpoints.", fitnessScore: 0, fallbackChain: [],
+      candidates: [
+        { endpointId: "quota-endpoint", providerId: "anthropic-sub", modelId: "quota-model", excluded: true, excludedReason: reason },
+        { endpointId: "openai:gpt-4o-mini", providerId: "openai", modelId: "gpt-4o-mini", excluded: true, excludedReason: "Missing capability: toolUse" },
+      ], excludedCount: 2, excludedReasons: [`quota-endpoint: ${reason}`, "openai:gpt-4o-mini: Missing capability: toolUse"],
+      policyRulesApplied: [], taskType: "conversation", sensitivity: "internal", timestamp: new Date(), executionPlan: null });
+    const result = await routeAndCall([{ role: "user", content: "hi" }], "system", "internal", {
+      taskType: "conversation",
+      tools: [{ type: "function", function: { name: "read_fixture", description: "Read fixture", parameters: { type: "object", properties: {} } } }],
+    });
+    expect(result.content).toBe("ok");
+    expect(mocks.routeEndpointV2).toHaveBeenCalledTimes(2);
+    expect(mocks.routeEndpointV2.mock.calls[1][1]).toMatchObject({ requiresTools: false });
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(1);
+  });
+
   it("reports a quota capacity hold before provider start rather than a tool-capability failure", async () => {
     const reason = "provider capacity rate_limited; quota reset unconfirmed; availability check required";
     mocks.routeEndpointV2.mockResolvedValue({ selectedEndpoint: null, selectedModelId: null,
