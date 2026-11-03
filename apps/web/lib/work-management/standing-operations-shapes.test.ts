@@ -277,3 +277,27 @@ describe("issue-triage-watch names its issue source", () => {
     expect(dedupe.tools).toEqual(["query_backlog", "find_duplicate_candidates"]);
   });
 });
+
+describe("backlog-steward-watch composes the existing backlog and Workroom substrate", () => {
+  it("covers the full review, proposal, and human decision flow without a parallel queue", () => {
+    const shape = getWorkShape("backlog-steward-watch");
+    expect(shape).toBeDefined();
+    expect(shape?.triggers).toContain("cadence");
+    expect(shape?.stages.map((stage) => stage.key)).toEqual(["observe", "reconcile", "decide"]);
+    expect(shape?.stages[0]?.tools).toEqual([
+      "sweep_duplicate_demand",
+      "list_backlog_items",
+      "list_epics",
+      "query_backlog",
+    ]);
+    expect(shape?.stages[1]?.tools).toEqual([
+      "find_duplicate_candidates",
+      "link_backlog_item_to_epic",
+      "merge_backlog_items",
+      "record_workroom_evidence",
+    ]);
+    expect(shape?.stages[2]?.accountablePrincipalRef).toBe("role:backlog-owner");
+    expect(shape?.stages[2]?.advance.kind).toBe("governed-decision");
+    expect(shape?.description).toMatch(/same-organization work sync/i);
+  });
+});
