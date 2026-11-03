@@ -9,7 +9,7 @@ import type {
   GovernedExecuteRejection,
 } from "@/lib/mcp-governed-execute-types";
 import type { ScopeReleasePreflightResult } from "@/lib/work-capsules/scope-release-preflight";
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import {
   buildCoworkerApprovalBinding,
@@ -105,6 +105,7 @@ export type AuthorityExecutedOutcome = (
 
 export type CoworkerToolAuthorityGateResult =
   | Exclude<ScopeReleasePreflightResult, { outcome: "reject" }>
+  | { outcome: "not-admitted"; result: ToolResult }
   | {
       /** The identical call already ran once on a person's approval. */
       outcome: "settled";
@@ -479,6 +480,14 @@ export async function enforceCoworkerToolAuthority(
   }
 
   let decision = evaluateCoworkerAuthority(input);
+  if (decision.outcome === "require-approval" && !input.approval
+    && execution.context?.approvalCompletion !== "platform"
+    && execution.context?.allowApprovalRequest !== false
+    && execution.toolName === "request_self_upgrade") {
+    const { preflightUnadmittedUpgrade } = await import("@/lib/self-upgrade/request-approval-preflight");
+    const result = await preflightUnadmittedUpgrade(execution, decision.approvalBinding);
+    if (result) return { outcome: "not-admitted", result };
+  }
   if (decision.outcome !== "deny" && ["release_workroom_scope", "release_capsule_scope"].includes(execution.toolName)) {
     const { preflightOriginalScopeRelease } = await import("@/lib/work-capsules/scope-release-preflight");
     const precondition = await preflightOriginalScopeRelease(execution,
