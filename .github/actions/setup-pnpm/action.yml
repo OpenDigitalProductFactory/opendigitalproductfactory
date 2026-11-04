@@ -1,4 +1,4 @@
-# Shared CI setup: Node 24 + pnpm (corepack) + a restored pnpm store cache +
+# Shared CI setup: the exact .node-version Node (BI-2FAE2E5C) + pnpm (corepack) + a restored pnpm store cache +
 # a frozen-lockfile install. Before this existed, every CI job re-ran a cold
 # `pnpm install` from an empty store, paying the full download cost 5+ times
 # per PR. The pnpm store is content-addressed and keyed on the lockfile hash,
@@ -6,7 +6,7 @@
 # pnpm version is pinned by the root package.json `packageManager` field, so
 # `corepack enable` alone activates the correct pnpm — no version to drift here.
 name: Setup pnpm with cache
-description: Set up Node 24 and pnpm via corepack, restore the pnpm store cache, and install dependencies with a frozen lockfile.
+description: Set up the exact .node-version Node and pnpm via corepack, restore the pnpm store cache, and install dependencies with a frozen lockfile.
 
 runs:
   using: composite
@@ -14,7 +14,7 @@ runs:
     - name: Set up Node.js
       uses: actions/setup-node@v7
       with:
-        node-version: 24
+        node-version-file: .node-version
 
     - name: Enable pnpm (corepack)
       shell: bash
