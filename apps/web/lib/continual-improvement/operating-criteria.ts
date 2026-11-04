@@ -20,6 +20,8 @@
 //
 // Pure: no reads, no writes, no clock.
 
+import { isRecord } from "@/lib/shared/coerce";
+
 export type LadderRung = "human" | "ai" | "code";
 
 /** The model class a room's executor ran on; weak and local models gain most. */
@@ -103,10 +105,6 @@ export type SkipReason =
   | "outside-pareto-cut";
 
 export type Screening = { eligible: true; k: number } | { eligible: false; reason: SkipReason };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function applyOverrides(target: ImprovementCriteria, raw: Record<string, unknown>): ImprovementCriteria {
   const next = { ...target, ladderWeights: { ...target.ladderWeights } };
