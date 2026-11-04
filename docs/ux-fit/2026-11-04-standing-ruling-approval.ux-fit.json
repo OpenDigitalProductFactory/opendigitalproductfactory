@@ -1,13 +1,20 @@
 {
   "version": "1",
-  "scope": { "files": [
-    "apps/web/components/attention/CoworkerEnvelopeApproval.tsx",
-    "apps/web/lib/attention/sources/coworker-envelope.ts",
-    "apps/web/lib/attention/types.ts"
-  ] },
+  "scope": {
+    "files": [
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
+    ]
+  },
   "decidedOption": "inline-checkbox-with-undo",
   "decisionInteractionId": "DI-D348EFB2F65D",
-  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["inline-checkbox-with-undo", "third-button", "post-approval-prompt"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-checkbox-with-undo",
+      "third-button",
+      "post-approval-prompt"
+    ]
+  },
   "authority": "Owner direction 2026-11-04 on BI-88D51B8F (written approvals should become standing doctrine), delivered as BI-E5631708 under implementation admission IRD-8DA10E1475D3 and WWMD DI-023E0412A43C. This records the bounded implementation choice, not new human approval.",
   "limitations": "DI-D348EFB2F65D ranked inline-checkbox-with-undo first (proceed, high confidence, margin 1.04, autonomyEligible=true). The checkbox is optional and appears only when the server would record the ruling, so the default card keeps Authorize/Decline as its only primary choices and adds no field to any card that cannot use it. jsdom card tests cover the offer, the request body and the undo. Not measured on the served inbox route; no served sweep, keyboard/narrow-layout or axe run was made for this change."
 }
