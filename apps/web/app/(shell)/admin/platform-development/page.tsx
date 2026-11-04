@@ -102,7 +102,7 @@ export default async function AdminPlatformDevelopmentPage(props: {
   // BI-F3B6713F: the paid AI allowance is a spending decision, shown only to people who may make it.
   const userContext = session?.user ? { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser } : null;
   const mayManagePaidAllowance = userContext !== null && can(userContext, "manage_platform") && can(userContext, "manage_finance");
-  const paidSpendTodayUsd = mayManagePaidAllowance ? await readPaidSpendTodayUsd().catch(() => 0) : 0;
+  const paidSpendTodayUsd = mayManagePaidAllowance ? await readPaidSpendTodayUsd().catch(() => null) : null;
   const paidAllowance = config?.paidInferenceDailyUsdAllowance;
 
   return (

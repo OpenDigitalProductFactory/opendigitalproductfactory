@@ -18,7 +18,8 @@ import { formatMoney } from "@/lib/org-locale/org-locale";
 
 interface PaidInferenceAllowanceSettingsProps {
   dailyUsd: number | null;
-  spentTodayUsd: number;
+  /** Null when today's spend could not be read; never shown as a false zero. */
+  spentTodayUsd: number | null;
   setAt: string | null;
   setByEmail: string | null;
   reason: string | null;
@@ -28,14 +29,22 @@ export function PaidInferenceAllowanceSettings(props: PaidInferenceAllowanceSett
   const t = useT("admin");
   const { locale } = useMessagesContext();
   const money = (value: number) => formatMoney(value, "USD", locale);
-  const [amount, setAmount] = useState(props.dailyUsd === null ? "" : String(props.dailyUsd));
+  const stored = props.dailyUsd === null ? "" : String(props.dailyUsd);
+  const [amount, setAmount] = useState(stored);
+  // A save revalidates the page with the new stored amount; follow it so the
+  // input never disagrees with the saved allowance shown above it.
+  const [syncedStored, setSyncedStored] = useState(stored);
+  if (syncedStored !== stored) {
+    setSyncedStored(stored);
+    setAmount(stored);
+  }
   const [reason, setReason] = useState("");
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const stored = props.dailyUsd === null ? "" : String(props.dailyUsd);
-  const dirty = amount.trim() !== stored;
+  // A recorded allowance can be re-explained without changing the amount.
+  const dirty = amount.trim() !== stored || props.dailyUsd !== null;
 
   const handleSave = () => {
     setSaved(false);
@@ -69,7 +78,9 @@ export function PaidInferenceAllowanceSettings(props: PaidInferenceAllowanceSett
         <p className="text-[var(--dpf-muted)]">
           {props.dailyUsd === null
             ? t("paidAiAllowance.notSet")
-            : t("paidAiAllowance.current", { allowance: money(props.dailyUsd), spent: money(props.spentTodayUsd) })}
+            : props.spentTodayUsd === null
+              ? t("paidAiAllowance.currentSpendUnavailable", { allowance: money(props.dailyUsd) })
+              : t("paidAiAllowance.current", { allowance: money(props.dailyUsd), spent: money(props.spentTodayUsd) })}
           {" "}{t("paidAiAllowance.scope")}
         </p>
       </div>
