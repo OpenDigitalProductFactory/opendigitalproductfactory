@@ -147,7 +147,6 @@ A live probe on Grok 1.0.52 found a second, older gap. Grok names its tools `wri
 **Hook output is proven per client (BI-5DD46FDA, pack 0.2.21).** Plane membership says a hook runs; it does not say the client honours what the hook prints. Between 2026-10-07 and 10-14, Claude rejected the workroom-claim guard's top-level `"decision":"deny"` 477 times and ran the tool each time.
 - `hooks/lib/hook-output-contract.mjs` holds each client's output rules per event: Claude's and Codex's from their published hook references, Grok's from the probed envelope.
 - `hooks/hook-output-contract.test.mjs` runs every `hooks.json` entry each client runs, on fixture calls shaped as that client sends them, and fails naming the hook and the client.
-- The SessionStart self-test runs the same check on the installed copy.
 - The walk found three defects, all now fixed:
   - `worktree-session-hygiene` emitted a SessionEnd `hookSpecificOutput`, which Claude rejects.
   - `uncommitted-work-guard` emitted a Stop `hookSpecificOutput` on Codex.
