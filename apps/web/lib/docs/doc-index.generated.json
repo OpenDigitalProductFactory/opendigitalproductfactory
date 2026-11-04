@@ -2832,6 +2832,7 @@
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "offered-or-not-dispatched-offered-then-corrected-once-bi-62db6c03",
+        "required-means-required-forced-at-the-last-step-busy-is-a-requeue-bi-a8679d84",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
