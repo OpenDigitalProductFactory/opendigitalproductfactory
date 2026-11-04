@@ -138,7 +138,11 @@ is still the requesting owner. A lapsed lease held by anyone else still
 refuses. The snapshot still binds the exact expiry, so a renewal or
 reacquisition between the phases still refuses. The refiner now records the
 refusing boundary's code on the authority decision
-(`handoff-boundary-unproven:<code>`).
+(`handoff-boundary-unproven:<code>`). In the same amendment, the lease-dependency
+check covers only leases for the room's own branch, plus leases that name no
+branch. A session's live lease for other work, such as the receiving session's
+local-CI run on another branch, no longer refuses the handover. Reproduced live
+on 2026-11-04 as envelope cmw2326ve3qxj01ppj2q06vre.
 
 Same-holder reacquisition cannot revive the old request, even if principal
 and executor are equal. This contract does not promise acceptance across renewal;
