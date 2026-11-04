@@ -31,8 +31,8 @@ the platform is not".
 
 ## Inventory
 
-- Distinct agent identities measured: **87**
-  - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
+- Distinct agent identities measured: **88**
+  - canonical agent registry: 88 · workforce roster: 49 · profession roles: 100
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **36**
 - Median attainable: **88%** · median absolute: **81%**
@@ -55,7 +55,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
-| `active-roster` | 41 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
+| `active-roster` | 42 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
 | `defined-roster` | 7 | 96% | Declared in the canonical registry (not active) and seeded onto the roster. |
@@ -67,13 +67,13 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
-| Identity | 1 | 3 | 0 | 39 | 7 | 41 | 41/87 |
-| Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
-| Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
-| Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
-| Cadence | 1 | 3 | 46 | 0 | 0 | 41 | 41/87 |
-| Tools + Skills | 2 | 3 | 0 | 38 | 0 | 49 | 49/87 |
-| Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
+| Identity | 1 | 3 | 0 | 39 | 7 | 42 | 42/88 |
+| Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 88 | 88/88 |
+| Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 88 | 88/88 |
+| Shape | 1 | 2 | 40 | 0 | 48 | 0 | 48/88 |
+| Cadence | 1 | 3 | 47 | 0 | 0 | 41 | 41/88 |
+| Tools + Skills | 2 | 3 | 0 | 39 | 0 | 49 | 49/88 |
+| Evidence | 1 | 2 | 39 | 2 | 47 | 0 | 47/88 |
 
 ### Planes the substrate currently caps
 
@@ -187,6 +187,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-R2D-PB` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-PFB` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-POL` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-908` | active-roster | 60% | 56% | 3 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-904` | superseded | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |

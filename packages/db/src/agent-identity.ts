@@ -136,6 +136,7 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   "external-codex": "AGT-EXT-CODEX",
   "external-grok": "AGT-EXT-GROK",
   bookkeeper: "AGT-907",
+  "continual-improvement-manager": "AGT-908",
 };
 
 /** Reverse map: canonical AGT-* → preferred slug handle. */
