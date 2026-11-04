@@ -12,16 +12,6 @@ relatedCode:
   - packages/dpf-skill-pack/hooks/lib/hook-io.mjs
   - packages/dpf-skill-pack/scripts/toolchain_convergence.py
   - packages/dpf-skill-pack/scripts/grok_credential.py
-  # BI-9B17E889: what each client loads (packs, MCP descriptor, plugin manifest).
-  - packages/dpf-skill-pack/capability-packs.json
-  - packages/dpf-skill-pack/claude.mcp.json
-  - packages/dpf-skill-pack/codex.mcp.json
-  - packages/dpf-skill-pack/grok.mcp.json
-  - packages/dpf-skill-pack/antigravity.mcp.json
-  - packages/dpf-skill-pack/.claude-plugin/plugin.json
-  - packages/dpf-skill-pack/.codex-plugin/plugin.json
-  - packages/dpf-skill-pack/.grok-plugin/plugin.json
-  - packages/dpf-skill-pack/.antigravity-plugin/plugin.json
 ---
 
 # Agent-Client Capability Parity Tracker

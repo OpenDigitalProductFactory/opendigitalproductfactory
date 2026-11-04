@@ -40,8 +40,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseRouteMap, docFileForDocsPath, isDependencyOnlyChange } from "./check-docs-impact.mjs";
-import { DERIVED_ARTIFACTS, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
+import { parseRouteMap, docFileForDocsPath } from "./check-docs-impact.mjs";
 import { publishedDocFiles } from "./lib/published-doc-roots.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -108,22 +107,8 @@ const CODE_EXT_RE = /\.(ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1|json|toml)
 /** EDGE SOURCE 4 — a repo path cited in backticks, e.g. `apps/web/lib/foo.ts`.
  *  Same premise as source 3 (the author already wrote the reference) applied to
  *  the form DPF docs actually use most: prose citing a path inline rather than
- *  linking it. Measured on this corpus, it is what the link-only walk was missing.
- *
- *  `.json`, `.py` and `.toml` joined the set in BI-9B17E889: the agent toolchain
- *  is configured by JSON registries (`hooks.json`, `capability-packs.json`, the
- *  per-client `*.mcp.json`) and converged by Python, so a page citing them got
- *  no edge and a hook change never flagged it (the BI-742D707B gap). Widening
- *  added 49 cited files and 7 pages with the combined fan-out still at 4. */
-const TICK_PATH_RE = /`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1|json|py|toml))`/g;
-
-/** Files a tick citation never turns into an edge. A derived artifact changes
- *  whenever its sources do, so an edge to it re-flags the page on every
- *  regeneration (the page's real dependency is the generator, which it can cite).
- *  Dependency manifests are landmarks the Docs Impact Gate already exempts. */
-export function isTickEdgeExcluded(rel, registry = DERIVED_ARTIFACTS) {
-  return isDependencyOnlyChange([rel]) || registry.some((entry) => matchesAnyGlob(rel, entry.artifactPaths ?? []));
-}
+ *  linking it. Measured on this corpus, it is what the link-only walk was missing. */
+const TICK_PATH_RE = /`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1))`/g;
 
 /**
  * Fan-out ceiling for DERIVED tick edges.
@@ -192,7 +177,6 @@ export function tickedCodePaths(markdown, repoRoot) {
   for (const m of body.matchAll(TICK_PATH_RE)) {
     const rel = m[1];
     if (rel.startsWith("./") || rel.startsWith("../") || rel.startsWith("/")) continue;
-    if (isTickEdgeExcluded(rel)) continue;
     const abs = path.join(repoRoot, rel);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
     out.add(rel);

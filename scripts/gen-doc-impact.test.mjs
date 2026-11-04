@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import {
   applyFanoutCap,
   frontmatterList,
-  isTickEdgeExcluded,
   linkedCodePaths,
   tickedCodePaths,
 } from "./gen-doc-impact.mjs";
@@ -112,26 +111,6 @@ test("tickedCodePaths ignores citations inside fenced blocks", () => {
 
 test("tickedCodePaths skips relative forms — those belong to the link source", () => {
   assert.deepEqual(tickedCodePaths("`./gen-doc-impact.mjs` `../x.ts`", REPO_ROOT), []);
-});
-
-test("tickedCodePaths derives edges to agent-toolchain JSON and Python (BI-9B17E889)", () => {
-  // The hook-parity pages cite hooks.json and update_agent_toolchain.py in
-  // backticks; before the widening neither produced an edge, so a hook change
-  // never flagged the page that describes it (BI-742D707B).
-  const md = "`packages/dpf-skill-pack/hooks/hooks.json` and `packages/dpf-skill-pack/scripts/update_agent_toolchain.py`";
-  assert.deepEqual(tickedCodePaths(md, REPO_ROOT), [
-    "packages/dpf-skill-pack/hooks/hooks.json",
-    "packages/dpf-skill-pack/scripts/update_agent_toolchain.py",
-  ]);
-});
-
-test("tickedCodePaths skips derived artifacts and dependency manifests", () => {
-  // A generated file changes whenever its sources do, and manifests are landmarks
-  // the Docs Impact Gate already exempts: edges to either are noise, not coverage.
-  const md = "`apps/web/lib/docs/doc-impact.generated.json` `apps/web/package.json` `pnpm-lock.yaml`";
-  assert.deepEqual(tickedCodePaths(md, REPO_ROOT), []);
-  assert.equal(isTickEdgeExcluded("apps/web/lib/docs/doc-index.generated.json"), true);
-  assert.equal(isTickEdgeExcluded("packages/dpf-skill-pack/capability-packs.json"), false);
 });
 
 test("tickedCodePaths de-duplicates repeat citations of one file", () => {
