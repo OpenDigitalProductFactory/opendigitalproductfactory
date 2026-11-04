@@ -5999,7 +5999,8 @@
       "anchors": [
         "documentation-maintenance",
         "staleness-reportmdstaleness-reportmd",
-        "how-this-fits-the-anti-drift-system"
+        "how-this-fits-the-anti-drift-system",
+        "gate-cost-inventory-2026-11mdgate-cost-inventory-2026-11md"
       ]
     },
     "docs/maintenance/capability-completeness.md": {
@@ -6048,6 +6049,28 @@
         "progress",
         "checklist",
         "areas-in-scope-and-what-automates-them"
+      ]
+    },
+    "docs/maintenance/gate-cost-inventory-2026-11.md": {
+      "publicHref": "/maintenance/gate-cost-inventory-2026-11/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gate-cost-inventory-november-2026",
+        "summary-for-mark",
+        "1-what-can-block-a-change-and-what-it-costs",
+        "11-required-github-checks-branch-protection-on-main",
+        "12-jobs-inside-merge-readiness",
+        "13-local-gates-before-push",
+        "14-mandatory-manifests-and-trailers-policy-guards-pr-so-they-block-via-merge-readiness",
+        "15-backlog-claim-readiness-initiative-readiness-enforced-at-claimbacklogitemforwork",
+        "16-token-caps-appsweblibinferencebudget-gatets-packagesdbdataagentregistryjson",
+        "2-ranked-recommendations",
+        "3-not-measured",
+        "appendix-a-every-policy-guard",
+        "a1-policy-guard-registry-scriptslibci-policy-guardsmjs-90-entries",
+        "a2-repo-guard-loop-members-scriptscheck-guardsmjs-58-check-no-guards-all-fail-closed"
       ]
     },
     "docs/maintenance/obligation-cadence-coverage.md": {

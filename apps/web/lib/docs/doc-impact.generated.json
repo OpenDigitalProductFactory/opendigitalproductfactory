@@ -1023,6 +1023,9 @@
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md",
       "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md"
     ],
+    "apps/web/lib/inference/budget-gate.ts": [
+      "docs/maintenance/gate-cost-inventory-2026-11.md"
+    ],
     "apps/web/lib/inference/data-screening/evaluate-inference-policy.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
@@ -2309,6 +2312,7 @@
     ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
+      "docs/maintenance/gate-cost-inventory-2026-11.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-host-port-range.test.mjs": [
@@ -2590,8 +2594,6 @@
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
-      "docs/architecture/context-engineering-standards.md",
-      "docs/maintenance/staleness-report.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/compose-safety.mjs": [
@@ -3346,8 +3348,7 @@
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
       "scripts/check-instruction-plane-size.mjs",
-      "scripts/gate-worktree.mjs",
-      "scripts/lib/ci-policy-guards.mjs"
+      "scripts/gate-worktree.mjs"
     ],
     "docs/architecture/contributor-procedure-runbook.md": [
       "apps/web/lib/actions/coworker-tool-filter.ts",
@@ -3931,6 +3932,10 @@
       ".github/workflows/refresh-docs-staleness.yml",
       "scripts/build-docs-staleness.mjs"
     ],
+    "docs/maintenance/gate-cost-inventory-2026-11.md": [
+      "apps/web/lib/inference/budget-gate.ts",
+      "scripts/check-guards.mjs"
+    ],
     "docs/maintenance/staleness-coverage.md": [
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
@@ -3952,7 +3957,6 @@
       "scripts/build-docs-staleness.mjs",
       "scripts/check-no-private-identity.mjs",
       "scripts/check-style-drift.mjs",
-      "scripts/lib/ci-policy-guards.mjs",
       "services/edge-node/src/collectors/unifi.ts"
     ],
     "docs/marketing/archetype-owner-quick-guide.md": [
