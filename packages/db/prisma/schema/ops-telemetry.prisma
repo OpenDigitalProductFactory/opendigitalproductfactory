@@ -489,7 +489,7 @@ model PlatformDevConfig {
   paidInferenceAllowanceReason        String?
   paidInferenceAllowanceSetAt         DateTime?
   paidInferenceAllowanceSetById       String?
-  paidInferenceAllowanceSetBy         User?     @relation("PlatformDevPaidInferenceAllowanceSetBy", fields: [paidInferenceAllowanceSetById], references: [id])
+  paidInferenceAllowanceSetBy         User?     @relation("PlatformDevPaidInferenceAllowanceSetBy", fields: [paidInferenceAllowanceSetById], references: [id], onDelete: SetNull, onUpdate: Cascade)
   // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
   // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
   // (redactFingerprintEvidence, fail-closed). The master pause halts ALL
