@@ -1708,6 +1708,7 @@
         "failure-analysis-and-recovery-evidence",
         "deployment-and-protection",
         "the-review-packet-fits-its-reviewer-bi-fd7de19d",
+        "a-reviewers-token-budget-covers-per-token-spend-only-bi-f3b6713f",
         "unconfigured-verification-is-not-a-successful-check"
       ]
     },
@@ -13511,6 +13512,7 @@
       "publishedPortal": true,
       "anchors": [
         "workroom-reports-and-approval-waits",
+        "a-review-waiting-on-the-reviewers-daily-budget",
         "qualification-research-when-implementation-is-not-yet-admitted",
         "ordinary-coworker-requests"
       ]

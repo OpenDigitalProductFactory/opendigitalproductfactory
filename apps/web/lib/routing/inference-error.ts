@@ -67,6 +67,25 @@ export class InferenceError extends Error {
   }
 }
 
+/**
+ * The calling agent's own daily token budget refused the call before dispatch.
+ * Nothing reached the provider, and it says nothing about the provider account,
+ * so it must never disable, degrade or cool down an endpoint (BI-F3B6713F).
+ */
+export class AgentBudgetExhaustedError extends InferenceError {
+  constructor(
+    public readonly agentId: string,
+    public readonly actualTokens: number,
+    public readonly limitTokens: number,
+    public readonly resetAt: string,
+    providerId: string,
+  ) {
+    super(`Daily token budget exceeded for agent "${agentId}" (${actualTokens.toLocaleString()} / ` +
+      `${limitTokens.toLocaleString()} tokens used today; resets ${resetAt})`, "billing", providerId);
+    this.name = "AgentBudgetExhaustedError";
+  }
+}
+
 export function classifyHttpError(
   status: number,
   providerId: string,

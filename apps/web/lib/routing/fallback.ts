@@ -13,6 +13,7 @@ import type { AsyncOperationStartResult } from "./adapter-types";
 import { prisma } from "@dpf/db";
 import { accountRuntimeKey, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "./provider-account-candidates";
 import { NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { AgentBudgetExhaustedError } from "./inference-error";
 import { conservativeQuotaScope } from "./provider-capacity/scopes";
 import { accountAffinityKey, rememberAccountAffinity, reserveProviderAccount } from "./provider-account-allocation";
 import type { RouteDecision } from "./types";
@@ -247,6 +248,7 @@ export async function callWithFallbackChain(
   const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
+  const budgetRefusals: AgentBudgetExhaustedError[] = [];
   const changedAccounts: ProviderAccountSelectionChangedError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -449,6 +451,12 @@ export async function callWithFallbackChain(
       if (e instanceof LocalProviderCapacityDeferredError) {
         capacityDeferrals.push(e);
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
+        continue;
+      }
+      // The caller's own budget, not the provider: no disable, degrade or cooldown.
+      if (e instanceof AgentBudgetExhaustedError) {
+        budgetRefusals.push(e);
+        attempts.push({ endpointId: entry.providerId, error: e.message, code: "agent-budget" });
         continue;
       }
       const errMsg = getErrorMessage(e);
@@ -774,7 +782,8 @@ export async function callWithFallbackChain(
     // Keep both the remote failure history and a typed local capacity reason.
     // A mixed chain is not a local-only outage, but its deferred candidate must
     // remain distinguishable from a provider failure to recovery callers.
-    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) } : undefined,
+    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) }
+      : budgetRefusals.length > 0 ? { cause: budgetRefusals.at(-1) } : undefined,
   );
 }
 

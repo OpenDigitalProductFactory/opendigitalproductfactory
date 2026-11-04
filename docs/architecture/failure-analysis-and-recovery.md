@@ -53,6 +53,19 @@ Measured on DEV on 2026-11-03, before this fix:
 - An 80,694-character prompt needed 42,051 tokens against the 40,960-token local reviewer, so every review was inconclusive.
 - 12,000 of those characters were the embedded gate log.
 
+### A reviewer's token budget covers per-token spend only (BI-F3B6713F)
+
+An agent's daily token budget, `token_budget.daily_limit` in the agent registry, guards money. A provider priced by compute, `ModelProvider.costModel = "compute"` such as the local runner, charges no per-token cash. So:
+- A call dispatched to a compute-priced provider is never refused by the budget.
+- Its usage does not count toward the limit.
+- If the cost classes cannot be read, every provider counts, so a lookup failure never lifts a limit.
+
+When a budget does refuse a call, `AgentBudgetExhaustedError` records that nothing was dispatched and names the reset, the next UTC midnight.
+- The fallback chain records the refusal and moves on. It never disables, degrades or cools down the provider, because the refusal is a fact about the caller.
+- A semantic review refused this way ends `reviewer-budget-exhausted` with its branch `not-dispatched`, and never `provider-outcome-uncertain`. Its action names the reset time and the next step: record remediation evidence after the reset and confirm `retry_semantic_review`.
+
+Measured on DEV on 2026-11-03 and 2026-11-04: `change-reviewer`'s 200,000-token limit ran out by mid-morning UTC, mostly on local reviews (122,876 of 214,206 tokens). Every later required review was reported as an uncertain provider outcome until midnight. Decision: DI-2D015B91507A.
+
 The design reference uses `path@<40-character Git object hash>`, so the reviewer can inspect the recorded early analysis rather than a moving document. The gate checks the reference format; the independent reviewer checks its content and whether it predates implementation.
 
 Server Workroom readiness transitions and Build Studio assembled-change review enforce the contract without a client hook. The platform publishes `dpf/failure-readiness` on the exact source commit after resolving the recorded verdict. The `Failure Readiness` workflow verifies that status against the configured `DPF_REVIEW_STATUS_PUBLISHER` repository variable and rejects statuses older than one hour.

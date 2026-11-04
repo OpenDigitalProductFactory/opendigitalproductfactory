@@ -64,7 +64,7 @@ import { nativeCliTelemetryErrorClass } from "@/lib/routing/cli-owned-runner";
 import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
-import { InferenceError } from "../routing/inference-error";
+import { AgentBudgetExhaustedError, InferenceError } from "../routing/inference-error";
 import { accountAuthMethod, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 import { assertReassessmentActive, assertReassessmentPlan, currentFiniteReassessmentExecution, refuseReassessmentExecution,
   runReassessmentEffect, validateReassessmentToolCalls } from "../routing/reassessment-execution-scope";
@@ -341,7 +341,7 @@ export async function callProvider(
   if (attribution?.agentId && !reassessment) {
     try {
       const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
-      const budget = await checkAgentBudgetFromRegistry(attribution.agentId);
+      const budget = await checkAgentBudgetFromRegistry(attribution.agentId, { providerId });
 
       if (budget.status === "rejected") {
         void writeBudgetEvent({
@@ -352,12 +352,10 @@ export async function callProvider(
           modelId,
           providerId,
         });
-        throw new InferenceError(
-          `Daily token budget exceeded for agent "${attribution.agentId}" ` +
-          `(${budget.actualTokens.toLocaleString()} / ${budget.limitTokens.toLocaleString()} tokens used today)`,
-          "billing",
-          providerId,
-        );
+        // The window is the UTC day, so the limit lifts at the next UTC midnight.
+        const resetAt = new Date(); resetAt.setUTCHours(24, 0, 0, 0);
+        throw new AgentBudgetExhaustedError(attribution.agentId, budget.actualTokens, budget.limitTokens,
+          resetAt.toISOString(), providerId);
       }
 
       if (budget.status === "warning_95" || budget.status === "warning_80") {

@@ -5,7 +5,7 @@ vi.mock("@dpf/db", () => ({
     tokenUsage: { aggregate: vi.fn() },
     agentBudgetEvent: { create: vi.fn() },
     modelProfile: { findUnique: vi.fn() },
-    modelProvider: { findUnique: vi.fn() },
+    modelProvider: { findUnique: vi.fn(), findMany: vi.fn() },
     aiProviderFinanceProfile: { findUnique: vi.fn() },
   },
 }));
@@ -71,6 +71,41 @@ describe("checkAgentBudget", () => {
     const result = await checkAgentBudget("build-architect", 100_000);
     expect(result.status).toBe("ok");
     expect(result.actualTokens).toBe(0);
+  });
+});
+
+describe("token budgets cover per-token spend, not compute-priced engines (BI-F3B6713F)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue(
+      [{ providerId: "local" }] as unknown as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>);
+  });
+
+  it("never refuses a call dispatched to a compute-priced provider, however much was used today", async () => {
+    mockTokenUsage(214_206, 0);
+    expect(await checkAgentBudgetFromRegistry("change-reviewer", { providerId: "local" }))
+      .toMatchObject({ status: "ok", actualTokens: 0, exemptReason: "compute-cost-provider" });
+    expect(prisma.tokenUsage.aggregate).not.toHaveBeenCalled();
+  });
+
+  it("counts only usage on per-token providers toward the limit", async () => {
+    mockTokenUsage(91_330, 0);
+    expect(await checkAgentBudgetFromRegistry("change-reviewer", { providerId: "anthropic-sub" }))
+      .toMatchObject({ status: "ok", actualTokens: 91_330, limitTokens: 200_000 });
+    expect(vi.mocked(prisma.tokenUsage.aggregate).mock.calls[0]![0]!.where)
+      .toMatchObject({ agentId: "change-reviewer", providerId: { notIn: ["local"] } });
+  });
+
+  it("treats every provider as per-token when the cost classes cannot be read", async () => {
+    vi.mocked(prisma.modelProvider.findMany).mockRejectedValue(new Error("db down"));
+    mockTokenUsage(200_001, 0);
+    expect(await checkAgentBudgetFromRegistry("change-reviewer", { providerId: "local" }))
+      .toMatchObject({ status: "rejected", actualTokens: 200_001 });
+  });
+
+  it("still enforces the limit when no dispatching provider is named", async () => {
+    mockTokenUsage(200_001, 0);
+    expect(await checkAgentBudgetFromRegistry("change-reviewer")).toMatchObject({ status: "rejected" });
   });
 });
 

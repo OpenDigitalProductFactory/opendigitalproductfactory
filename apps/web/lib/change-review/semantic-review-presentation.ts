@@ -39,6 +39,7 @@ const REASONS: Record<string, string> = {
   "review-capacity-observation-unavailable": "Host capacity could not be checked. The review remains paused.",
   "review-endpoint-ineligible": "No endpoint met the review requirements. The affected branches stopped before provider dispatch; no verdict was produced.",
   "provider-outcome-uncertain-after-restart": "Execution restarted before a provider outcome was recorded.",
+  "reviewer-budget-exhausted": "The reviewer used its daily token budget before this review. Nothing was dispatched; it resumes after the budget resets.",
   "submitting-authority-no-longer-valid": "The original request no longer has valid authority.",
   "failure-analysis-evidence-changed": "The request's verification evidence is no longer current.",
   "review-deadline-exhausted": "The review deadline has passed.",

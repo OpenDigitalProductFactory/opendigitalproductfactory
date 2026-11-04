@@ -29,6 +29,7 @@ import { inspectLocalGpuAdmission } from "@/lib/inference/host-gpu-admission";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
 import { endpointIneligibleSummary } from "./semantic-review-evidence-budget";
+import { semanticReviewBudgetRefusal, semanticReviewBudgetRefusalAction } from "./semantic-review-budget-refusal";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -86,10 +87,12 @@ type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";
 function safeBranchFailure(error: unknown, agentId: string, phase: BranchPhase) {
   const record = object(error);
   const name = error instanceof Error ? error.name : null;
-  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError", "NoEligibleEndpointsError"];
+  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError", "NoEligibleEndpointsError", "AgentBudgetExhaustedError"];
   const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET", "INFERENCE_PARENT_STOPPED"];
+  const budgetRefusal = semanticReviewBudgetRefusal(error);
   return { agentId, phase, errorKind: name && knownKinds.includes(name) ? name : "unclassified",
     errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null,
+    ...(budgetRefusal ? { budgetRefusal } : {}),
     ...(error instanceof NoEligibleEndpointsError && readRoutingEligibility(error.eligibility)
       ? { routingEligibility: readRoutingEligibility(error.eligibility)! } : {}),
     ...(classifyDispatchFailure(error).code === "execution-uncertain"
@@ -433,18 +436,23 @@ export async function executePersistedSemanticReview(taskRunId: string) {
             if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
             const routingEligibility = [...semanticReviewNodeEligibility(nodes, packet.digest),
               ...(branchFailure?.routingEligibility ? [branchFailure.routingEligibility] : [])].slice(0, 5);
+            // A budget refusal is certain: nothing was dispatched, so it is not an uncertain outcome.
+            const budgetRefusal = authorityValid === true ? branchFailure?.budgetRefusal : undefined;
             const changed = await tx.taskRun.updateMany({ where: fence(taskRunId, generation),
               data: { status: authorityValid === false ? "auth-required" : "input-required",
                 progressPayload: progress(row, { state: authorityValid === false ? "auth-required" : "input-required", generation,
-                reason: authorityValid === null ? "review-authority-unavailable"
+                reason: authorityValid === null ? "review-authority-unavailable" : budgetRefusal ? "reviewer-budget-exhausted"
                   : authorityValid ? "provider-outcome-uncertain" : "submitting-authority-no-longer-valid", branchFailure,
+                ...(budgetRefusal ? { budgetRefusal } : {}),
                 ...(routingEligibility.length ? { routingEligibility } : {}),
-                action: authorityValid !== false ? "Reconcile recorded execution and authority availability before recovery."
+                action: budgetRefusal ? semanticReviewBudgetRefusalAction(budgetRefusal)
+                  : authorityValid !== false ? "Reconcile recorded execution and authority availability before recovery."
                   : "Restore the submitting authority and reconcile recorded execution before recovery." }) } });
             if (changed.count !== 1) return;
             for (const node of nodes.filter(node => node.status === "running")) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
               status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),
-                requestDigest: packet.digest, providerOutcome: "unknown", failure: branchFailure }),
+                requestDigest: packet.digest, failure: branchFailure,
+                providerOutcome: budgetRefusal && node.taskNodeId.includes(`:${branchFailure!.agentId}`) ? "not-dispatched" : "unknown" }),
             } });
           });
         }

@@ -114,7 +114,24 @@ export type BudgetCheckResult = {
   actualTokens: number;
   limitTokens: number;
   ratioPercent: number;
+  /** Set when the dispatching provider is outside per-token budgets entirely. */
+  exemptReason?: "compute-cost-provider";
 };
+
+/**
+ * Providers priced by compute (`ModelProvider.costModel === "compute"`, the
+ * local runners) charge no per-token cash, so a token budget neither guards
+ * nor counts them (BI-F3B6713F). If the cost classes cannot be read, every
+ * provider is treated as per-token, so a lookup failure never lifts a limit.
+ */
+async function computeCostProviderIds(): Promise<string[]> {
+  try {
+    const rows = await prisma.modelProvider.findMany({ where: { costModel: "compute" }, select: { providerId: true } });
+    return Array.isArray(rows) ? rows.map(row => row.providerId) : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Checks an agent's daily token budget against today's actual usage.
@@ -126,17 +143,24 @@ export type BudgetCheckResult = {
 export async function checkAgentBudget(
   agentId: string,
   dailyLimit: number,
+  dispatch: { providerId?: string } = {},
 ): Promise<BudgetCheckResult> {
   if (dailyLimit <= 0) {
     // No limit configured — always ok
     return { status: "ok", actualTokens: 0, limitTokens: dailyLimit, ratioPercent: 0 };
   }
 
+  const computeProviders = await computeCostProviderIds();
+  if (dispatch.providerId && computeProviders.includes(dispatch.providerId)) {
+    return { status: "ok", actualTokens: 0, limitTokens: dailyLimit, ratioPercent: 0, exemptReason: "compute-cost-provider" };
+  }
+
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
 
   const agg = await prisma.tokenUsage.aggregate({
-    where: { agentId, createdAt: { gte: todayStart } },
+    where: { agentId, createdAt: { gte: todayStart },
+      ...(computeProviders.length ? { providerId: { notIn: computeProviders } } : {}) },
     _sum: { inputTokens: true, outputTokens: true },
   });
 
@@ -302,10 +326,11 @@ function getAgentDailyLimitFromRegistry(agentId: string): number {
  */
 export async function checkAgentBudgetFromRegistry(
   agentId: string,
+  dispatch: { providerId?: string } = {},
 ): Promise<BudgetCheckResult> {
   const dailyLimit = getAgentDailyLimitFromRegistry(agentId);
   if (dailyLimit <= 0) {
     return { status: "ok", actualTokens: 0, limitTokens: 0, ratioPercent: 0 };
   }
-  return checkAgentBudget(agentId, dailyLimit);
+  return checkAgentBudget(agentId, dailyLimit, dispatch);
 }

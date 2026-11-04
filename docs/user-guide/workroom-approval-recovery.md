@@ -47,6 +47,10 @@ A declined, expired, failed, cancelled, or unreadable outcome stays paused for r
 
 Recording a blocker does not hide another action in the same run that still needs approval. If you choose **Ask again** for an expired request, work follows that exact replacement while preserving the old request in history. Executing the replacement releases that request's wait; a separate unanswered request still holds the work.
 
+## A review waiting on the reviewer's daily budget
+
+If a review shows **reviewer-budget-exhausted**, the reviewer used its daily token budget before your review ran. Nothing was sent to a provider, so there is no outcome to reconcile. The status names the reset time, which is the next midnight UTC. After it, record remediation evidence and confirm `retry_semantic_review`. Reviews on the local model never count against this budget.
+
 ## Qualification research when implementation is not yet admitted
 
 When initiative readiness refuses implementation because research is missing, the recovery packet can offer a signed qualification admission for the named Workroom. This is not implementation authority and does not satisfy research by itself.

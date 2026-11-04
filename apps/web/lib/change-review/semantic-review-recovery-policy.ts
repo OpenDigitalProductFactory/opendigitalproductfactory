@@ -1,6 +1,12 @@
 import { isRecord } from "@/lib/shared/coerce";
 import { readRoutingEligibility, type RoutingEligibility } from "../inference/routing-exclusion-buckets";
 
+/** A budget refusal is certain and dated: name the reset and the one next step (BI-F3B6713F). */
+export function semanticReviewBudgetRefusalAction(refusal: { agentId: string; resetAt: string }): string {
+  return `Reviewer ${refusal.agentId} has used its daily token budget; nothing was dispatched. ` +
+    `It resets at ${refusal.resetAt}. After that, record remediation evidence and confirm retry_semantic_review.`;
+}
+
 /** Immutable request limits shared by recovery and its readback; this grants no authority. */
 export const SEMANTIC_REVIEW_MAX_ATTEMPTS = 3;
 const capacityReasons = new Set(["local-ci-active-capacity-reservation", "local-ci-queued-capacity-reservation",
@@ -94,6 +100,8 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
       : executionUncertain ? "The original execution outcome is unknown. Use the owned recovery details to establish complete execution settlement before requesting any retry or successor."
       : snapshot.eligibilityBlocked ? "Verify scoped endpoint eligibility remediation and record fresh runtime evidence before requesting recovery. An unchanged retry cannot resolve this refusal; the original budget still applies."
       : capacityRecovery ? `The server will recheck capacity after ${capacityRecovery.nextCheckAt} within the original window; do not submit duplicate inference.`
+      : reason === "reviewer-budget-exhausted" && isRecord(recorded.budgetRefusal)
+        ? semanticReviewBudgetRefusalAction({ agentId: String(recorded.budgetRefusal.agentId), resetAt: String(recorded.budgetRefusal.resetAt) })
       : budget === "available" ? "Reconcile the execution, then confirm retry_semantic_review if replacement is required."
       : budget === "expired" && recorded.successorAttempt !== undefined ? "The successor window is exhausted. Inspect the recorded failure; this lineage cannot renew again."
       : budget === "expired" ? "The original window cannot resume. Record remediation evidence before requesting a bounded successor."
