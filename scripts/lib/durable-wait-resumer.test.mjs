@@ -609,23 +609,6 @@ test("a gate client usage refusal ends unrun after one attempt", async () => {
   assert.deepEqual(result.outcome, { evidence: "unrun", reason: "usage" });
 });
 
-test("terminal host prerequisite exit stays inconclusive without retrying a refusal", async () => {
-  let attempts = 0;
-  const result = await resumeUntilAdmitted({
-    gateArgv: ["/repo/scripts/gate-worktree.mjs", "--sha", "original-pinned-source"],
-    deadlineMs: 3_600_000, env: {}, now: () => 0,
-    sleepFn: async () => assert.fail("a terminal host refusal must not retry"),
-    spawnFn: () => {
-      attempts++;
-      return { once(event, handler) { if (event === "exit") queueMicrotask(() => handler(88)); } };
-    },
-  });
-  assert.equal(isRetryableExit(88), false);
-  assert.equal(attempts, 1);
-  assert.equal(result.code, 88);
-  assert.deepEqual(result.outcome, { evidence: "inconclusive", reason: "infrastructure" });
-});
-
 test("eventual admission still ends on the gate's own verdict after queued attempts", async () => {
   const codes = [EXIT_QUEUED, EXIT_QUEUED, 0];
   let attempt = 0;

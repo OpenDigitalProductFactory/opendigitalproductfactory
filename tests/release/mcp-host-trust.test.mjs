@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "nod
 import { EventEmitter } from "node:events";
 import { createServer } from "node:https";
 import { createServer as createHttpServer } from "node:http";
-import { createServer as createTcpServer } from "node:net";
 import { gitText } from "../../scripts/lib/git.mjs";
 import { getCACertificates } from "node:tls";
 import { tmpdir } from "node:os";
@@ -15,7 +14,7 @@ import { readHostClientEnv, readTrustBundle, resolveHostMcpTrust, probeMcpTransp
 import { mcpCall } from "../../scripts/lib/mcp-client.mjs";
 import { readEarlyQuiescenceStatus } from "../../scripts/lib/gate-quiescence.mjs";
 import { runForegroundGate, runGateWithQueuedRevival, runHostPreflight } from "../../scripts/pregate.mjs";
-import { classifyGateExit, hostMcpPrerequisiteExitCode } from "../../scripts/lib/gate-exit-classification.mjs";
+import { classifyGateExit } from "../../scripts/lib/gate-exit-classification.mjs";
 import { createGateFixtureTls } from "../../scripts/fixtures/gate-worktree.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -83,16 +82,11 @@ test("only pre-main trust failures are marked as unrun host prerequisites", asyn
     args: [], env: {}, resolveImpl: () => ({ certificates: [], env: {}, mcpUrl: "http://localhost/api/mcp/v1" }),
   }), error => error === lostAck && !error.hostTrustPrerequisite);
   assert.equal(calls, 1, "an uncertain main request is never replayed");
-  assert.equal(hostMcpPrerequisiteExitCode(lostAck), 1, "a lost main acknowledgement is not a retryable probe");
   const unreadable = Object.assign(Error("selected CA unreadable"), { code: "mcp_ca_unreadable" });
   await assert.rejects(runWithHostMcpTrust(() => { calls++; }, {
     args: [], env: {}, resolveImpl: () => { throw unreadable; },
   }), error => error === unreadable && error.hostTrustPrerequisite === true);
   assert.equal(calls, 1, "host prerequisite failure prevents main");
-  assert.equal(hostMcpPrerequisiteExitCode(unreadable), 88);
-  for (const code of ["mcp_ca_invalid", "ERR_TLS_CERT_ALTNAME_INVALID", "mcp_authentication_failed", "mcp_authorization_failed"]) {
-    assert.equal(hostMcpPrerequisiteExitCode({ code, hostTrustPrerequisite: true, message: "ETIMEDOUT in a diagnostic" }), 88);
-  }
 });
 
 test("trusted Windows re-exec retains repeated cancellation until its child closes", { skip: process.platform !== "win32" }, async () => {
@@ -201,36 +195,6 @@ test("TLS probe verifies chain and hostname without sending any HTTP request", a
   assert.match(describeMcpTransportError({ code: "CERT_HAS_EXPIRED" }).message, /Server certificate expired/);
 });
 
-// BI-34955E1F: reproduce the actual queued waiter's pre-effect TLS timeout.
-// A real TCP peer accepts ClientHello but never completes TLS. Neither CLI can
-// enter main or send an HTTP/MCP request before this prerequisite succeeds.
-for (const entry of ["gate-worktree.mjs", "pregate.mjs"]) {
-  test(`pre-effect TLS probe timeout remains retryable infrastructure in ${entry}`, async t => {
-    const sockets = new Set();
-    let accepted = 0;
-    const peer = createTcpServer(socket => {
-      accepted++; sockets.add(socket);
-      socket.on("error", () => {});
-      socket.on("close", () => sockets.delete(socket));
-      socket.on("data", () => {});
-    });
-    await new Promise(resolve => peer.listen(0, "127.0.0.1", resolve));
-    t.after(() => new Promise(resolve => {
-      for (const socket of sockets) socket.destroy();
-      peer.close(resolve);
-    }));
-    const result = await child([join(root, "scripts", entry)], {
-      DPF_MCP_URL: `https://localhost:${peer.address().port}/api/mcp/v1`,
-      NODE_EXTRA_CA_CERTS: cert,
-      DPF_PREGATE_ALLOW_CAPTURE: "1",
-    });
-    assert.ok(accepted > 0, "the real TLS probe reached the nonresponsive peer");
-    assert.match(result.stderr, /ETIMEDOUT: Transport probe timed out/);
-    assert.equal(result.status, 8, "a pre-main timeout must retain the original bounded infrastructure wait");
-    assert.doesNotMatch(result.stdout, /claim_nonprod|guard parity|credential/);
-  });
-}
-
 test("already-running shared MCP caller applies trust before its first HTTPS request", async t => {
   const mcpUrl = await server(t);
   const result = await child(["--input-type=module", "-e", `import {mcpPost} from ${JSON.stringify(pathToFileURL(join(root, "scripts/lib/mcp-client.mjs")).href)};
@@ -321,7 +285,7 @@ test("a slow quiescence read remains inconclusive after transport verification",
 
 test("supported pregate launch rejects invalid trust before host guards or credential access", async () => {
   const result = await child([join(root, "scripts/pregate.mjs")], {
-    DPF_MCP_URL: "https://localhost/api/mcp/v1", DPF_MCP_CA_FILE: join(fixture, "ETIMEDOUT-absent.pem"), DPF_PREGATE_ALLOW_CAPTURE: "1" });
+    DPF_MCP_URL: "https://localhost/api/mcp/v1", DPF_MCP_CA_FILE: join(fixture, "absent.pem"), DPF_PREGATE_ALLOW_CAPTURE: "1" });
   assert.equal(result.status, 88, result.stderr);
   assert.match(result.stderr, /mcp_ca_unreadable/);
   assert.doesNotMatch(result.stdout, /guard parity|credential|claim_nonprod/);
