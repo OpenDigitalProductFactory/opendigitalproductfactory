@@ -37,6 +37,15 @@ provider-wide outage or an upstream quota shared by several accounts can restric
 all affected accounts. Separate sign-ins do not prove separate quota allowances.
 DPF treats uncertain shared quota conservatively.
 
+When an account fails with a sign-in or billing error, routing switches that
+account off and schedules its own recovery. After a wait (15 minutes at first,
+doubling up to 6 hours), DPF renews a subscription sign-in and turns the account
+back on for a trial. If the next request fails too, it switches the account off
+again and waits longer. You only need to act if recovery keeps failing; in that
+case, sign in again or fix the billing on the provider's page. When the portal
+starts, an account that was switched off this way with no recovery pending is
+put back on that schedule.
+
 On **Providers & Routing**, open an account's **Limits and recovery** to see
 when its limit was observed, the expected reset and the next recorded check.
 A long-term reset is a forecast: the provider may make capacity available sooner.
