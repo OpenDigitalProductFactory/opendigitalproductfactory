@@ -543,13 +543,17 @@ It also adds one standing-shape row to existing conformance suites.
 
 ### Delivery
 
-AC-20 through AC-24 ship as four stacked PRs. Each is under the reviewer
+AC-20 through AC-24 ship as three stacked PRs. Each is under the reviewer
 size limit:
 
 1. the operating criteria (AC-22, AC-24), with this amendment;
 2. the improve activity (AC-20);
-3. the CI Manager seed (AC-21);
-4. the register shape that carries its coordination binding (AC-21).
+3. the CI Manager seed (AC-21).
+
+The register shape that carries the AGT-908 coordination binding is the
+rest of AC-21, tracked as BI-F47DD4CF. It ships once BI-90F0863B makes
+review summarise frozen-generator outputs, because its regenerated drive
+golden is 56 KB. BI-CE564FBB stays open until that binding lands.
 
 Slice 2 wires the cycle ledger into the TaskRun (AC-23). AC-25 closes on the DEV install once slice 2
 (BI-B8DAEB71) merges and the install upgrades. The evidence is recorded on

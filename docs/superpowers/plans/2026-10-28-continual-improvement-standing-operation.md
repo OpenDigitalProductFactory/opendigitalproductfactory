@@ -12,14 +12,15 @@ status: draft
   - WWMD DI-D7C2BBE33693: the registry resolves the improve activity by shape family, so it is not written into each literal.
 - **Coordination:** slice 2 (BI-B8DAEB71) owns `apps/web/lib/harness-evolution/`. This plan touches nothing there. Slice 2 swaps its local stub `improvement-criteria.ts` for this plan's module and records the cycle ledger on the TaskRun.
 
-## Phase 1: four stacked PRs
+## Phase 1: three stacked PRs
 
 The phase is split so that no PR exceeds the reviewer size limit:
 
 1. operating criteria, with the spec and this plan;
 2. improve activity;
-3. CI Manager seed, stacked on 2;
-4. register shape and its regenerated goldens, stacked on 3.
+3. CI Manager seed, stacked on 2.
+
+The register-shape step in the table below is deferred to BI-F47DD4CF. It waits on BI-90F0863B.
 
 | Step | File | Test |
 | --- | --- | --- |
