@@ -28,6 +28,7 @@ import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capac
 import { inspectLocalGpuAdmission } from "@/lib/inference/host-gpu-admission";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
+import { endpointIneligibleSummary } from "./semantic-review-evidence-budget";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -190,7 +191,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     const eligibility = error instanceof NoEligibleEndpointsError && error.providerDispatch === "not-started"
       ? readRoutingEligibility(error.eligibility) : null;
     if (eligibility) {
-      result = { decision: "inconclusive", issues: [], summary: "No endpoint meets the review's routing requirements. No provider dispatch began for this branch.",
+      result = { decision: "inconclusive", issues: [], summary: endpointIneligibleSummary([eligibility]),
         inconclusiveReason: "review-endpoint-ineligible", routingEligibility: [eligibility] };
     } else if (capacityDeferral) {
       result = { decision: "inconclusive", issues: [], summary: "Review deferred before provider dispatch because capacity was unavailable.",
