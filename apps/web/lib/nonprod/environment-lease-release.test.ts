@@ -163,7 +163,7 @@ describe("terminal release authority", () => {
 
 
 describe("authenticated preview execution fence", () => {
-  it.each(["active", "queued", "released"])("refuses a %s preview when trusted owner proof is absent under the lock", async (status) => {
+  it.each(["active", "queued"])("refuses a live %s preview when trusted owner proof is absent under the lock", async (status) => {
     const mockDb = db();
     const current = lease({ environmentKey: "active-candidate", status, claimKey: "preview:session-1" });
     mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(current);
@@ -172,6 +172,30 @@ describe("authenticated preview execution fence", () => {
       authenticatedAgentId: "AGT-EXT-CODEX", now: NOW } as never)).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
     expect(mockDb.$executeRaw).toHaveBeenCalled();
     expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  // BI-88D51B8F: an ended or lapsed reservation frees nothing anyone is using.
+  it("returns an ended preview unchanged without owner proof", async () => {
+    const mockDb = db();
+    const current = lease({ environmentKey: "active-candidate", status: "released", claimKey: "preview:session-1" });
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(current);
+    await expect(releaseNonprodEnvironmentLease({ db: mockDb as never,
+      leaseId: current.leaseId, ownerSessionId: "session-1", authenticatedUserId: "user-1",
+      authenticatedAgentId: "AGT-EXT-CODEX", now: NOW } as never)).resolves.toMatchObject({ status: "released" });
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("frees a lapsed preview another session stopped renewing", async () => {
+    const mockDb = db();
+    const current = lease({ environmentKey: "active-candidate", status: "active", claimKey: "preview:session-1",
+      slotKey: "slot-0", activeKey: "active-candidate:slot-0", expiresAt: new Date(NOW.getTime() - 1) });
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(current);
+    mockDb.nonProductionEnvironmentLease.update.mockImplementation(async ({ data }: any) => ({ ...current, ...data }));
+    await releaseNonprodEnvironmentLease({ db: mockDb as never,
+      leaseId: current.leaseId, ownerSessionId: "session-1", authenticatedUserId: "foreign-user",
+      authenticatedAgentId: "AGT-EXT-CLAUDE", now: NOW } as never);
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "released", activeKey: null }) }));
   });
 });
 
@@ -197,13 +221,11 @@ async function ownedPreview(status: "active" | "queued" = "active", environmentK
     waitDeadlineAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS), queuePosition: 1 });
   mockDb.nonProductionEnvironmentLease.findUnique.mockImplementation(async () => current);
   mockDb.nonProductionEnvironmentLease.update.mockImplementation(async ({ data }: any) => (current = { ...current, ...data }));
-  const stance = { environmentClass: "development", primaryPurpose: "evolve-dpf" };
-  const loadStance = async () => stance;
-  const call = { toolName: "release_nonprod_environment_lease", userId: "user-1",
+  const call = { toolName: "release_nonprod_environment_lease", userId: "user-1", now: NOW,
     context: { agentId: "AGT-EXT-CODEX" }, params: { leaseId: current.leaseId, ownerSessionId: "session-1" } };
   const input = { db: mockDb as never, leaseId: current.leaseId, ownerSessionId: "session-1",
-    authenticatedUserId: "user-1", authenticatedAgentId: "AGT-EXT-CODEX", loadStance, now: NOW };
-  return { mockDb, taskRun, stance, call, input, loadStance, task: () => task,
+    authenticatedUserId: "user-1", authenticatedAgentId: "AGT-EXT-CODEX", now: NOW };
+  return { mockDb, taskRun, call, input, task: () => task,
     changeLease: (delta: Record<string, unknown>) => { current = { ...current, ...delta }; },
     changeTask: (delta: Record<string, unknown>) => { task = { ...task, ...delta }; } };
 }
@@ -211,7 +233,7 @@ async function ownedPreview(status: "active" | "queued" = "active", environmentK
 describe("shared preview consent and locked release proof", () => {
   it.each(["active", "queued"] as const)("closes its real freshly bound %s reservation idempotently", async (status) => {
     const f = await ownedPreview(status);
-    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never }))
       .toMatchObject({ consequence: null });
     const result = await releaseNonprodEnvironmentLease(f.input);
     expect(result.status).toBe(status === "active" ? "released" : "cancelled");
@@ -244,13 +266,10 @@ describe("shared preview consent and locked release proof", () => {
     ["original user changed", f => f.changeTask({ userId: "other-user" })],
     ["original assistant changed", f => f.changeTask({ initiatingAgentId: "AGT-EXT-CLAUDE" })],
     ["metadata erased", f => f.changeTask({ progressPayload: {} })],
-    ["production stance", f => { f.stance.environmentClass = "production"; }],
-    ["unknown stance", f => { f.stance.environmentClass = "unknown"; }],
-    ["different purpose", f => { f.stance.primaryPurpose = "operate-business"; }],
   ];
   it.each(races)("refuses after ordinary classification when %s under the lock", async (_, mutate) => {
     const f = await ownedPreview();
-    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never }))
       .toMatchObject({ consequence: null });
     f.mockDb.$executeRaw.mockImplementation(async () => { mutate(f); return 1; });
     await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
@@ -259,9 +278,9 @@ describe("shared preview consent and locked release proof", () => {
 
   it("refuses a preview retargeted before execution's initial read", async () => {
     const f = await ownedPreview();
-    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never }))
       .toMatchObject({ consequence: null });
-    f.changeLease({ environmentKey: "local-integration-ci", status: "released", activeKey: null });
+    f.changeLease({ environmentKey: "local-integration-ci" });
     await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/ownership/i);
     expect(f.mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
@@ -269,13 +288,13 @@ describe("shared preview consent and locked release proof", () => {
   it("retains ordinary local-CI release using its existing authenticated user/wait proof", async () => {
     const f = await ownedPreview("active", "local-integration-ci");
     f.changeLease({ cleanupCommand: "existing-bound-ci-cleanup" });
-    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never }))
       .toMatchObject({ consequence: null, reason: "owned-development-lease-cleanup" });
     expect((await releaseNonprodEnvironmentLease(f.input)).status).toBe("released");
   });
   it("also refuses ordinary local-CI execution after its shared wait proof disappears", async () => {
     const f = await ownedPreview("active", "local-integration-ci");
-    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never, loadStance: f.loadStance }))
+    expect(await leaseCleanupConsequenceForCall(f.call, { db: f.mockDb as never }))
       .toMatchObject({ consequence: null });
     f.changeTask({ progressPayload: {} });
     await expect(releaseNonprodEnvironmentLease(f.input)).rejects.toThrow(/ownership/i);

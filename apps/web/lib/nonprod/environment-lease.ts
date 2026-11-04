@@ -548,7 +548,7 @@ export async function releaseNonprodEnvironmentLease(input: {
     });
     if (!current) throw new Error("nonprod_lease_not_found");
     if (current.environmentKey !== beforeLock.environmentKey) throw new Error("nonprod_preview_ownership_changed");
-    await assertOwnedLeaseRelease({ ...input, db: tx as never, lease: current });
+    await assertOwnedLeaseRelease({ ...input, db: tx as never, lease: current, now });
     if (
       isImmutableGateClaimKey(current.claimKey)
       && current.ownerSessionId !== input.ownerSessionId
