@@ -92,7 +92,7 @@ import {
 } from "./cli-adapter";
 
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
-import { NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { NativeCliExecutionUncertainError, nativeCliTelemetryErrorClass } from "./cli-owned-runner";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";
@@ -272,5 +272,42 @@ describe("native error observations cannot establish effect settlement", () => {
     mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), 1));
     await expect(cliAdapter.execute(request())).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
     expect(mockLedgerCount).not.toHaveBeenCalled();
+  });
+});
+
+describe("dated weekly limit on the native path (BI-783EBEE6)", () => {
+  // 10-29..11-02: every anthropic-sub call refused in ~2s with this verdict, was
+  // recorded as a 60s "reset unknown" backoff and as telemetry errorClass 'unknown'.
+  const weekly = { type: "result", subtype: "success", is_error: true,
+    result: "You've hit your weekly limit · resets Nov 3 at 10am (America/Chicago)" };
+  const request = (mcp: boolean) => makeRequest({
+    plan: makePlan({ providerConnectionId: "provider-default-anthropic-sub" }),
+    ...(mcp ? {
+      mcpSession: { userId: "user-1", agentId: "build-specialist", threadId: "thread-1" },
+      tools: [{ type: "function", function: { name: "query_backlog", description: "Query", parameters: {} } }],
+    } : {}),
+  });
+  beforeEach(() => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "fake-oauth-token" });
+    mockCreateMcpSessionToken.mockResolvedValue("test-native-session");
+  });
+
+  it.each([true, false])("records the stated reset, keeps the hold and classes it rate_limit (native-mcp %s)", async (mcp) => {
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(weekly), 1));
+    const error = await cliAdapter.execute(request(mcp)).catch(e => e);
+    expect(error).toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(error.diagnostics.terminalResult).toMatchObject({ hint: "quota", resetAt: expect.stringMatching(/^\d{4}-11-03T16:00:00\.000Z$/) });
+    const [adapter, providerId, text, identity, resetAt] = vi.mocked(recordCliRateLimit).mock.calls[0]!;
+    expect([adapter, providerId, identity]).toEqual(["claude-cli", "anthropic-sub",
+      { providerId: "anthropic-sub", providerConnectionId: "provider-default-anthropic-sub" }]);
+    expect((resetAt as Date).toISOString()).toBe(error.diagnostics.terminalResult.resetAt);
+    expect(text).not.toContain("weekly limit");
+    expect(nativeCliTelemetryErrorClass(error)).toBe("rate_limit");
+    expect(clearCliRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("leaves a non-quota held execution unclassified", () => {
+    expect(nativeCliTelemetryErrorClass(new NativeCliExecutionUncertainError("anthropic-sub"))).toBeNull();
+    expect(nativeCliTelemetryErrorClass(new Error("x"))).toBeNull();
   });
 });
