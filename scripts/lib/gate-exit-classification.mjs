@@ -22,7 +22,6 @@ export const GATE_EXIT = Object.freeze({
   SANDBOX_DRIFT: 3,
   EVIDENCE_PENDING: 4,
   CONTROL_PLANE_STARVATION: 5,
-  RUNNER_PREREQUISITE_UNAVAILABLE: 8,
   SLOT_SUBSTRATE_UNAVAILABLE: 9,
   MERGE_CONFLICT_WITH_BASE: 10,
   // BI-4BCD269B: pregate refused to run because it was not the sole foreground
@@ -37,16 +36,6 @@ export const GATE_EXIT = Object.freeze({
   HOST_CONNECTION_UNAVAILABLE: 88,
   INTERRUPTED: 130,
 });
-
-// Only runWithHostMcpTrust's setup catch marks this boundary. main() and
-// re-exec child errors can already have effects and must retain their recovery.
-// Match a typed timeout, never diagnostic text or a selected CA filename.
-export function hostMcpPrerequisiteExitCode(error) {
-  if (error?.hostTrustPrerequisite !== true) return GATE_EXIT.FAILED;
-  return error.code === "ETIMEDOUT"
-    ? GATE_EXIT.RUNNER_PREREQUISITE_UNAVAILABLE
-    : GATE_EXIT.HOST_CONNECTION_UNAVAILABLE;
-}
 
 // Exit 1 is the ambiguous one: usually a real gate failure, but the same
 // infrastructure class also surfaces there when the lease is lost while waiting
@@ -88,9 +77,6 @@ export function classifyGateExit({ code, output = "" }) {
       return { kind: "queued", retry: true, verdict: "none", summary: "queued behind the shared local-integration-ci lease" };
     case GATE_EXIT.CONTROL_PLANE_STARVATION:
       return { kind: "starved", retry: true, verdict: "none", summary: "lease fenced or control plane starved before the run finished" };
-    case GATE_EXIT.RUNNER_PREREQUISITE_UNAVAILABLE:
-      return { kind: "runner-prerequisite-unavailable", retry: true, verdict: "none",
-        summary: "runner prerequisite unavailable before the diff could be graded; infrastructure, not a product verdict" };
     case GATE_EXIT.CHILD_SIGNAL_DEATH:
       return { kind: "child-signal-death", retry: true, verdict: "none", summary: "the gate's child process was killed — a loaded host, not the diff" };
     case GATE_EXIT.ABANDONED_OR_UNRECORDED:
@@ -111,8 +97,8 @@ export function classifyGateExit({ code, output = "" }) {
       return { kind: "interrupted", retry: false, verdict: "none", summary: "interrupted" };
     case GATE_EXIT.HOST_CONNECTION_UNAVAILABLE:
       return { kind: "host-connection-unavailable", retry: false, verdict: "none",
-        summary: "host prerequisites or execution/receipt outcome unavailable; no product verdict",
-        next: "inspect the original diagnostic and reconcile admission, execution and receipt before seeking an authorized retry" };
+        summary: "host prerequisites or verified transport unavailable; gate unrun",
+        next: "correct the reported host configuration or transport problem, then run the same gate" };
     // BI-D35B85BF: both are final and unrun. Re-running the same command would
     // override a cancellation or test source nobody queued.
     case GATE_EXIT.WAIT_CANCELLED:

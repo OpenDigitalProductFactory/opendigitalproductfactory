@@ -120,7 +120,6 @@ import {
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
-import { hostMcpPrerequisiteExitCode } from "./lib/gate-exit-classification.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 import { decideTerminalClaim, isResumedGateRun, resumeClaimFields, verifyPinnedSource } from "./lib/gate-resume-pin.mjs";
 
@@ -3079,7 +3078,7 @@ if (isEntryModule(import.meta.url)) {
   runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
     if (error?.hostTrustPrerequisite) {
       process.stderr.write(`gate-worktree: ${error.message}\n`);
-      process.exit(hostMcpPrerequisiteExitCode(error));
+      process.exit(88);
     }
     die(error?.stack || String(error));
   });

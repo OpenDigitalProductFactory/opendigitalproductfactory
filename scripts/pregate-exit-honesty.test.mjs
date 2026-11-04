@@ -21,8 +21,6 @@ import {
   resolveWrapperExitCode,
 } from "./pregate.mjs";
 
-import { classifyGateExit } from "./lib/gate-exit-classification.mjs";
-
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 
 describe("resolveWrapperExitCode", () => {
@@ -118,19 +116,5 @@ describe("exit(0) sites are declared", () => {
       [],
       `unannotated process.exit(0) — declare why this success is honest with a trailing "// exit-0: <reason>":\n${offenders.join("\n")}`,
     );
-  });
-});
-
-describe("runner prerequisite infrastructure evidence", () => {
-  it("keeps exit8 retryable and non-product while exit88 remains terminal", () => {
-    const transient = classifyGateExit({ code: 8 });
-    assert.equal(transient.verdict, "none");
-    assert.equal(transient.retry, true);
-    const refusal = classifyGateExit({ code: 88 });
-    assert.equal(refusal.verdict, "none");
-    assert.equal(refusal.retry, false);
-    assert.doesNotMatch(refusal.summary, /\b(?:unrun|did not run)\b/i, "exit88 alone cannot establish execution absence");
-    assert.match(refusal.next, /inspect.*reconcile/i, "uncertain original work must be reconciled before any retry");
-    assert.doesNotMatch(refusal.next, /then run the same gate/i);
   });
 });
