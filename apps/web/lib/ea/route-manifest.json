@@ -666,7 +666,8 @@
       "dynamicParams": [
         "envelopeId"
       ],
-      "file": "apps/web/app/api/agent/envelope/[envelopeId]/standing-ruling/route.ts"
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/standing-ruling/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent/health",

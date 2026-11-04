@@ -196,8 +196,8 @@ describe("an approval made standing (BI-E5631708)", () => {
 
   it("stops steering once the owner asks to be asked again", async () => {
     await approveEnvelope("env-1", OWNER, undefined, { makeStanding: true });
-    expect(await revokeStandingRuling("env-1", "someone-else")).toMatchObject({ ok: false, httpStatus: 403 });
-    expect(await revokeStandingRuling("env-1", OWNER)).toEqual({ ok: true, revoked: 1 });
+    expect(await revokeStandingRuling("env-1", "someone-else")).toMatchObject({ outcome: "refused", httpStatus: 403 });
+    expect(await revokeStandingRuling("env-1", OWNER)).toEqual({ outcome: "revoked", revoked: 1 });
     expect(readStandingRuling(store.envelopes[0].argsJson)).toMatchObject({ state: "revoked", revokedBy: OWNER });
     expect(await nextCall()).toMatchObject({ verdict: "human", reasonCode: "unsteered-side-effect" });
   });

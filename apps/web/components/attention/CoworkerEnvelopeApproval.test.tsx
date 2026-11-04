@@ -231,7 +231,7 @@ describe("CoworkerEnvelopeApproval", () => {
   it("makes the approval standing when the owner ticks it, then lets them undo it", async () => {
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: true } }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, revoked: 1 }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ revoked: 1 }), { status: 200 }));
     render(<CoworkerEnvelopeApproval approval={approval({ standingRulingOffered: true })} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Don't ask me again when this coworker does this/ }));

@@ -1,3 +1,4 @@
+// @exposure authenticated
 // DELETE /api/agent/envelope/:envelopeId/standing-ruling
 //
 // BI-E5631708: withdraw the standing ruling an approval carries ("ask me
@@ -6,6 +7,7 @@
 
 import { NextResponse } from "next/server";
 
+import { apiErrorResponse } from "@/lib/api/error";
 import { auth } from "@/lib/auth";
 import { revokeStandingRuling } from "@/lib/coworker/standing-ruling";
 
@@ -16,15 +18,15 @@ export const dynamic = "force-dynamic";
 export async function DELETE(_request: Request, context: RouteContext): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
   const { envelopeId } = await context.params;
   if (!envelopeId || typeof envelopeId !== "string") {
-    return NextResponse.json({ error: "envelopeId required" }, { status: 400 });
+    return apiErrorResponse("BAD_REQUEST", "envelopeId required", 400);
   }
   const result = await revokeStandingRuling(envelopeId, session.user.id);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
+  if (result.outcome === "refused") {
+    return apiErrorResponse(result.httpStatus === 403 ? "FORBIDDEN" : "NOT_FOUND", result.reason, result.httpStatus);
   }
-  return NextResponse.json({ ok: true, revoked: result.revoked });
+  return NextResponse.json({ revoked: result.revoked });
 }

@@ -23,8 +23,6 @@
 // because nothing recorded could steer it (`unsteered-side-effect`). An admin
 // deciding on the owner's behalf cannot make one: a standing ruling lends the
 // owner's authority to future calls, which is the owner's to give.
-import "server-only";
-
 import { prisma, type Prisma } from "@dpf/db";
 
 import {
@@ -108,8 +106,8 @@ export async function findStandingRuling(
 }
 
 export type RevokeStandingRulingResult =
-  | { ok: true; revoked: number }
-  | { ok: false; reason: string; httpStatus: number };
+  | { outcome: "revoked"; revoked: number }
+  | { outcome: "refused"; reason: string; httpStatus: number };
 
 /**
  * Withdraw the standing ruling an envelope carries, and any other active ruling
@@ -129,10 +127,10 @@ export async function revokeStandingRuling(
   });
   const ruling = source ? readStandingRuling(source.argsJson) : null;
   if (!source || !ruling) {
-    return { ok: false, reason: "This request carries no standing ruling.", httpStatus: 404 };
+    return { outcome: "refused", reason: "This request carries no standing ruling.", httpStatus: 404 };
   }
   if (ruling.actionClass.delegatingUserId !== callerUserId) {
-    return { ok: false, reason: "Only the person whose approval this is can withdraw it.", httpStatus: 403 };
+    return { outcome: "refused", reason: "Only the person whose approval this is can withdraw it.", httpStatus: 403 };
   }
   const rows = await db.coworkerActionEnvelope.findMany({
     where: activeRulingWhere({ ...ruling.actionClass, coworkerAgentIds: [ruling.actionClass.coworkerAgentId] }),
@@ -151,5 +149,5 @@ export async function revokeStandingRuling(
     });
     revoked += result.count;
   }
-  return { ok: true, revoked };
+  return { outcome: "revoked", revoked };
 }
