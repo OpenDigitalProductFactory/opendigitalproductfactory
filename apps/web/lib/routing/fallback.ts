@@ -20,19 +20,11 @@ import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 export { buildFallbackPlan } from "./execution-plan";
 import { buildFallbackPlan } from "./execution-plan";
-import {
-  recordRequest,
-  learnFromRateLimitResponse,
-  extractRetryAfterMs,
-  markEndpointUnavailable,
-  clearEndpointUnavailable,
-  type EndpointUnavailableReason,
-} from "./rate-tracker";
+import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs, markEndpointUnavailable,
+  clearEndpointUnavailable, type EndpointUnavailableReason } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { isLocalProviderId } from "./provider-locality";
-import {
-  LocalProviderCapacityDeferredError,
-} from "./local-provider-capacity";
+import { LocalProviderCapacityDeferredError } from "./local-provider-capacity";
 import { invalidateRoutingLoaderCache } from "./loader";
 import { isModelRefusalError, recordAuthEligibility } from "./model-auth-eligibility";
 import { recordRouteOutcome } from "./route-outcome";
@@ -248,7 +240,7 @@ export async function callWithFallbackChain(
   const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
-  const budgetRefusals: AgentBudgetExhaustedError[] = [];
+  let budgetRefusal: AgentBudgetExhaustedError | undefined;
   const changedAccounts: ProviderAccountSelectionChangedError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -453,12 +445,8 @@ export async function callWithFallbackChain(
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
         continue;
       }
-      // The caller's own budget, not the provider: no disable, degrade or cooldown.
-      if (e instanceof AgentBudgetExhaustedError) {
-        budgetRefusals.push(e);
-        attempts.push({ endpointId: entry.providerId, error: e.message, code: "agent-budget" });
-        continue;
-      }
+      if (e instanceof AgentBudgetExhaustedError) { // the caller's budget, not the provider: no disable, degrade or cooldown
+        budgetRefusal = e; attempts.push({ endpointId: entry.providerId, error: e.message, code: "agent-budget" }); continue; }
       const errMsg = getErrorMessage(e);
       const errCode = e && typeof e === "object" && typeof (e as { code?: unknown }).code === "string"
         ? (e as { code: string }).code : undefined;
@@ -782,8 +770,7 @@ export async function callWithFallbackChain(
     // Keep both the remote failure history and a typed local capacity reason.
     // A mixed chain is not a local-only outage, but its deferred candidate must
     // remain distinguishable from a provider failure to recovery callers.
-    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) }
-      : budgetRefusals.length > 0 ? { cause: budgetRefusals.at(-1) } : undefined,
+    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) } : budgetRefusal ? { cause: budgetRefusal } : undefined,
   );
 }
 
