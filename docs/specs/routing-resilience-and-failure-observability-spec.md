@@ -186,6 +186,7 @@ Implementation shape:
 5. Recovery:
    - For rate limit/overload/transient: use retry headers where present; otherwise capped cooldown with jitter.
    - For auth/billing: open until manual remediation or a successful explicit provider test clears the condition.
+   - An account-bound auth/billing switch-off (`AiProviderConnection.status = "unconfigured"`, set from `callWithFallbackChain`) is recorded as automatic. It goes through `routing/provider-account-auto-disable.ts`, which writes a per-connection recovery job and sends `ops/provider.recover` with the `connectionId`. Recovery renews the OAuth sign-in through the guarded account path, then reopens the account half-open, with backoff from 15 minutes up to 6 hours. Before this, the account path wrote the status and nothing else: it never recovered, renewal skipped it, and the capacity watch never saw it (BI-0ADD46C3). At boot, default accounts already stranded this way are adopted into recovery.
    - Recovery probe clears runtime cooldown only after a successful provider/model call or provider-specific health check.
 
 Acceptance:
