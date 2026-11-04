@@ -1,5 +1,6 @@
 import { InferenceError } from "./inference-error";
 import { CLI_RESULT_SUBTYPES, type CliTerminalResultMetadata } from "../shared/execution-uncertainty";
+import { parseAbsoluteResetAt } from "./cli-limit-reset";
 export type { CliTerminalResultMetadata } from "../shared/execution-uncertainty";
 
 // CLI-owned banner, including the organization spend cap observed in BI-EDF1BD54.
@@ -47,8 +48,12 @@ export function parseCliTerminalResultMetadata(output: string): CliTerminalResul
   metadata.status = metadata.isError || subtype !== "success" ? "error" : "success";
   if (metadata.status === "success") return metadata;
   const text = record.result;
-  if (isCliQuotaBanner(text)) metadata.hint = "quota";
-  else if (isCliAuthError(text)) metadata.hint = "auth";
+  if (isCliQuotaBanner(text)) {
+    metadata.hint = "quota";
+    // Keep only the instant a dated phrase states (BI-783EBEE6), never the text.
+    const resetAt = parseAbsoluteResetAt(text);
+    if (resetAt) metadata.resetAt = resetAt.toISOString();
+  } else if (isCliAuthError(text)) metadata.hint = "auth";
   else if (isCliOverloadError(text)) metadata.hint = "overloaded";
   else if (text.length < 300
     && /^(?:the )?model\s+\S+\s+does not exist or you do not have access to it\.?$/i.test(text.trim())) metadata.hint = "model";
