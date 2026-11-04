@@ -201,6 +201,34 @@ resident-versus-remaining attribution; the safe error is queueing, not
 over-admission. A later optimization may subtract attested resident usage, but
 it is outside this fix.
 
+### Transport failure during a queued wait
+
+The exact corrected source was never admitted in two later waits: the original
+durable resumers stopped after 48 and 2 attempts when the pre-main TLS probe
+timed out. Both launchers mapped that typed `ETIMEDOUT` to exit 88, which ended
+the waiter and incorrectly labelled its outcome as a product failure.
+
+Both launchers now share one prerequisite-to-exit classifier. Only the typed
+timeout marked by `runWithHostMcpTrust` before `main()` maps to the existing
+retryable infrastructure exit 8. The existing resumer keeps its original
+invocation, source pin, deadline and backoff; no retry loop or allowance is
+added. Certificate, hostname, configuration and authentication refusals remain
+terminal. Exceptions after `main()` or a re-exec child starts retain their
+existing effect/acknowledgement recovery and are never relabelled as an unrun
+probe.
+
+Exit 88 remains non-retryable and now ends the resumer as inconclusive
+infrastructure, since other host wrappers can emit it after an uncertain
+execution or receipt write. A code alone proves neither product failure nor
+safe replay. In particular, the later host-resource `claim-transport-unavailable`
+typecheck and the UI's untyped `execution-exception` are separate unresolved
+histories. This correction does not settle their reservations, original
+children or effects, and does not authorize restarting either unchanged wait.
+
+Real TCP peers that withhold the TLS handshake reproduce both launcher exits;
+negative tests preserve typed CA refusals, lost main acknowledgements, terminal
+88 handling and the existing bounded resumer contract.
+
 ## Ordered implementation
 
 1. **Red test — delegated recurrence.** Add the three exact delegated

@@ -1,8 +1,11 @@
 # Pre-PR test gate
 
 `pnpm run pregate` applies existing saved host trust even when its desktop parent
-predates the environment setting. A verified TLS probe runs before host guards;
-an unavailable transport exits 88 without a test verdict. See
+predates the environment setting. A verified TLS probe runs before host guards.
+A typed `ETIMEDOUT` from that pre-main probe uses infrastructure exit 8 and the
+existing bounded durable wait. Certificate, hostname and configuration refusals
+remain terminal exit 88. A timeout after execution starts retains its original
+uncertain-outcome recovery; it is not treated as an unexecuted probe. See
 [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
 for explicit overrides and certificate diagnostics.
 
@@ -466,12 +469,15 @@ successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
 **Prerequisite failures remain retryable.** A runner prerequisite failure
-(exit 8, including a required base fetch that cannot reach the network) is
-infrastructure evidence. The durable resumer retries the same pinned request,
+(exit 8, including a required base fetch that cannot reach the network or a
+typed TLS probe timeout before `main()`) is infrastructure evidence. The durable resumer retries the same pinned request,
 with exponential backoff and equal jitter capped at 90 seconds. It stops starting
 attempts at the wait deadline; an already-running attempt remains governed by its
 own execution and lease-authority bounds. A product failure or cancellation stops
-resumption. This does not establish host-worker single execution or outage fairness.
+resumption. Exit 88 also stops resumption: its code alone can represent a
+trust refusal or an uncertain host execution/receipt outcome. The resumer records
+it as inconclusive infrastructure, never a product failure or permission to
+replay. This does not establish host-worker single execution or outage fairness.
 
 **Cleanup and legacy process identity.** Concurrent release callers share one
 request. Only confirmed success completes cleanup; a failed call stays retryable.
