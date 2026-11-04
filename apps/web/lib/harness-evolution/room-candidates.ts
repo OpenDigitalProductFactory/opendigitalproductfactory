@@ -137,71 +137,20 @@ export function readDeclaredWorkShapeRef(scopeClaims: unknown): string | null {
 
 export type TrajectoryRef = { kind: "tool-execution" | "room-activity"; id: string };
 
-/**
- * Who made the turn. The executor is a layer on the same core loop, not a
- * separate loop: Claude, Codex, Grok, Build Studio, in-platform coworkers and
- * people all produce a room's trajectories (founder, 2026-10-28).
- */
-export type Executor = "claude" | "codex" | "grok" | "build-studio" | "coworker" | "human" | "unknown";
-
-const EXTERNAL_EXECUTORS: Readonly<Record<string, Executor>> = {
-  "AGT-EXT-CLAUDE": "claude",
-  "AGT-EXT-CODEX": "codex",
-  "AGT-EXT-GROK": "grok",
-};
-const BUILD_STUDIO_AGENTS = new Set(["build-specialist", "AGT-WS-BUILD"]);
-
-export function executorOf(input: { agentId?: string | null; executionMode?: string | null }): Executor {
-  const agentId = input.agentId ?? "";
-  const external = EXTERNAL_EXECUTORS[agentId];
-  if (external) return external;
-  if (BUILD_STUDIO_AGENTS.has(agentId)) return "build-studio";
-  if (!agentId || agentId === "unknown") return "unknown";
-  return "coworker";
-}
-
-/** A miss two or more executors share belongs to the core; one executor's miss is that executor's layer. */
-export function executorLayerOf(executors: Readonly<Record<string, number>>): string {
-  const names = Object.keys(executors).filter((name) => (executors[name] ?? 0) > 0);
-  return names.length === 1 ? `executor:${names[0]}` : "core";
-}
-
-function sortedCounts(counts: Record<string, number>): Record<string, number> {
-  return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
-}
-
-function countExecutors(misses: readonly { executor: Executor }[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const miss of misses) counts[miss.executor] = (counts[miss.executor] ?? 0) + 1;
-  return sortedCounts(counts);
-}
-
 export type RoomMiss = {
   missKey: string;
   actor: MissActor;
-  executor: Executor;
-  /** The run or session it happened in: a thread for a tool call, the event itself for a room activity. */
-  runId: string;
   componentHint: ComponentHint;
   at: Date;
   ref: TrajectoryRef;
 };
 
-/**
- * An agent turn the room's own tools refused, keyed by tool and refusal code.
- * `tool:<toolName>:<code>` is the one shared miss key: the same failure seen by
- * different detectors or executors converges here instead of filing twice.
- */
-export function roomMissFromToolFailure(row: {
-  id: string; toolName: string; error: string | null; createdAt: Date;
-  agentId?: string | null; executionMode?: string | null; threadId?: string | null;
-}): RoomMiss {
+/** A coworker turn the room's own tools refused, keyed by tool and refusal code. */
+export function roomMissFromToolFailure(row: { id: string; toolName: string; error: string | null; createdAt: Date }): RoomMiss {
   const code = (row.error ?? "").split(":")[0]!.trim().slice(0, MAX_CODE_CHARS) || "unknown";
   return {
     missKey: `tool:${row.toolName}:${code}`,
     actor: "coworker",
-    executor: executorOf(row),
-    runId: row.threadId || row.id,
     componentHint: PERMIT_GAP_CODES.has(code) ? "gpp-permit" : "skill-tool",
     at: row.createdAt,
     ref: { kind: "tool-execution", id: row.id },
@@ -209,17 +158,12 @@ export function roomMissFromToolFailure(row: {
 }
 
 /** A room activity the layer counts as a miss, or null when it is ordinary work. */
-export function roomMissFromActivity(
-  row: { id: string; kind: string; recordedAt: Date; recordedByAgentId?: string | null },
-  layer: HarnessLayer,
-): RoomMiss | null {
+export function roomMissFromActivity(row: { id: string; kind: string; recordedAt: Date }, layer: HarnessLayer): RoomMiss | null {
   const entry = layer.missKinds[row.kind];
   if (!entry) return null;
   return {
     missKey: `activity:${row.kind}`,
     actor: entry.actor,
-    executor: entry.actor === "human" ? "human" : executorOf({ agentId: row.recordedByAgentId ?? null }),
-    runId: row.id,
     componentHint: entry.componentHint,
     at: row.recordedAt,
     ref: { kind: "room-activity", id: row.id },
@@ -239,11 +183,6 @@ export type RoomCandidate = {
   actor: MissActor;
   componentHint: ComponentHint;
   recurrence: number;
-  /** Misses per executor; the edit lands in that executor's layer unless two or more share it. */
-  executors: Record<string, number>;
-  executorLayer: string;
-  /** Distinct runs or sessions the miss recurred in (BI-CE564FBB: at least two to be worth a probe). */
-  distinctRuns: number;
   lastSeenAt: string;
   trajectory: TrajectoryRef[];
 };
@@ -291,9 +230,6 @@ export function deriveRoomCandidates(input: {
       actor: head.actor,
       componentHint: head.componentHint,
       recurrence: group.length,
-      executors: countExecutors(group),
-      executorLayer: executorLayerOf(countExecutors(group)),
-      distinctRuns: new Set(group.map((miss) => miss.runId)).size,
       lastSeenAt: head.at.toISOString(),
       trajectory: newestFirst.slice(0, MAX_TRAJECTORY_REFS).map((miss) => miss.ref),
     });
@@ -318,8 +254,6 @@ export type CrossRoomRecurrence = {
   rooms: string[];
   shapeRefs: string[];
   totalRecurrence: number;
-  executors: Record<string, number>;
-  executorLayer: string;
 };
 
 /**
@@ -334,11 +268,7 @@ export function findCrossRoomRecurrences(candidates: readonly RoomCandidate[]): 
     const key = `${candidate.layer}|${shapeKey}|${candidate.missKey}`;
     const group = groups.get(key) ?? {
       layer: candidate.layer, shapeKey, missKey: candidate.missKey, rooms: [], shapeRefs: [], totalRecurrence: 0,
-      executors: {}, executorLayer: "core",
     };
-    for (const [name, count] of Object.entries(candidate.executors ?? {})) {
-      group.executors[name] = (group.executors[name] ?? 0) + count;
-    }
     if (!group.rooms.includes(candidate.capsuleId)) group.rooms.push(candidate.capsuleId);
     if (!group.shapeRefs.includes(candidate.shapeRef)) group.shapeRefs.push(candidate.shapeRef);
     group.totalRecurrence += candidate.recurrence;
@@ -346,10 +276,7 @@ export function findCrossRoomRecurrences(candidates: readonly RoomCandidate[]): 
   }
   return [...groups.values()]
     .filter((group) => group.rooms.length >= 2)
-    .map((group) => {
-      const executors = sortedCounts(group.executors);
-      return { ...group, rooms: [...group.rooms].sort(), shapeRefs: [...group.shapeRefs].sort(), executors, executorLayer: executorLayerOf(executors) };
-    })
+    .map((group) => ({ ...group, rooms: [...group.rooms].sort(), shapeRefs: [...group.shapeRefs].sort() }))
     .sort(
       (a, b) =>
         b.rooms.length - a.rooms.length

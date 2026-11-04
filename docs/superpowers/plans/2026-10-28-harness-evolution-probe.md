@@ -9,21 +9,24 @@ status: draft
 - **Design:** [Workroom-owned harness evolution](../specs/2026-10-28-harness-evolution-loop-design.md), section "Slice 2 — probe and scope verdict, per room". It covers AC-6, AC-11 and AC-14 – AC-19.
 - **Builds on:** slice 1, merged in PR #6718 (3a7706f4454f).
 
-## Delivery: three pull requests
+## Delivery: five pull requests
 
-The reviewer cleared for this work reads about 65 KB of diff, so slice 2 ships
-as three PRs, each under 60 KB:
+Slice 2 ships as five PRs. The change reviewer's measured passing ceiling is
+about 48 KB of diff, so each PR stays under 45 KB. Each PR compiles and passes
+its tests on its own base.
 
-1. **Spec amendment** (docs only): the new slice-2 section, the sharpened
-   AC-11, AC-14 – AC-19 and the executor-layer section.
-2. **Core** (this plan, `probe.ts`, `improvement-criteria.ts`, and the executor
-   layer and run identity in `room-candidates.ts`). These are pure modules with
-   no caller yet. The new inputs to `roomMissFromToolFailure` and
-   `roomMissFromActivity` are optional, so main's existing callers keep
-   compiling.
-3. **Wiring:** `scope-verdict.ts`, `scope-decider.ts`, `probe-stage.ts`, the
-   store and task changes, and the `harness-evolution-verdict` activity kind.
-   It opens after the core PR merges, so its diff is measured against main.
+1. **Spec amendment** (docs only, #6893). Adds the slice-2 section, sharpens
+   AC-11, adds AC-14 – AC-19, and adds the executor-layer and operating-criteria
+   sections.
+2. **Probe**: this plan, plus `probe.ts` and its tests. A pure module with no
+   caller yet.
+3. **Executor layer and criteria**: the executor layer and run identity in
+   `room-candidates.ts`, plus the `improvement-criteria.ts` stub. The new
+   inputs are optional, so main's existing callers keep compiling.
+4. **Scope verdict**: `scope-verdict.ts` and `scope-decider.ts`, with tests.
+   Opens after PRs 2 and 3 merge.
+5. **Wiring**: `probe-stage.ts`, the store and task changes, and the
+   `harness-evolution-verdict` activity kind. Opens after PR 4 merges.
 
 ## Steps
 
