@@ -6399,7 +6399,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
-        "owned-development-lease-cleanup",
+        "routine-lease-release",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
