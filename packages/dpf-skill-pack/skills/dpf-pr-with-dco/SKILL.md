@@ -142,19 +142,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
      ```
      Expected: `isDraft` is `false`. If it is `true` and the branch gates are green, run `gh pr ready <number>` immediately; if the gates are not green, close the PR and keep the branch.
 
-9. **Read merge readiness by exit code, not prose.** `pnpm pr:health <number>` prints the verdict word first and exits with it:
-
-   | Exit | Verdict | What to do |
-   |---|---|---|
-   | 0 | `READY` / `MERGED` | Nothing; the queue merges a READY PR. |
-   | 75 | `WAITING` | Checks are still running (ETA when known). **Not a failure and not a blocker** — wait. |
-   | 1 | `FAILED` | Fix the check the line names. |
-   | 2 | `BLOCKED-ACTION` | The named actor must act (conflict, review thread, draft, local-CI evidence, closed PR). |
-   | 3 | `UNREADABLE` | Usage error or GitHub unreadable; retry. |
-
-   To wait for a verdict in ONE call, run `pnpm pr:health <number> --wait [--timeout <minutes>]`; it polls internally and exits with the terminal verdict (75 again only if the timeout passes with checks still running).
-
-10. **Report the PR URL.** With the BI id (if applicable) and the build-gate evidence summary so the operator can ratify without re-running checks. A `WAITING` PR is "open, CI running" — never report it as blocked.
+9. **Report the PR URL.** With the BI id (if applicable) and the build-gate evidence summary so the operator can ratify without re-running checks.
 
 ## Output template
 
