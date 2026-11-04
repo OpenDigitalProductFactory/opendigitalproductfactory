@@ -60,6 +60,7 @@ import {
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { nativeCliTelemetryErrorClass } from "@/lib/routing/cli-owned-runner";
 import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
@@ -497,7 +498,8 @@ export async function callProvider(
   } catch (err) {
     endTimer();
     const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
-    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code : "unknown";
+    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code
+      : nativeCliTelemetryErrorClass(err) ?? "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
     // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
     // swallows its own errors so we never mask the original throw.
