@@ -649,6 +649,38 @@ approval timeout has changed, and runtime acceptance remains outstanding.
 - Negative: no opt-in → nothing leaves. Budget exhausted → the vote is refused, not silently dropped. Untrusted link → no transport.
 - Runtime: exercised on the canonical runtime per §4 of the rulebook; a gate that cannot run is recorded inconclusive, never passed.
 
+### 6.2 Remediating copies of same-organization demand (BI-39247CB8)
+
+The first commissioned production run, and the run of 2026-11-03, filed 4,138
+local copies from same-organization peer demand. These included envelopes from
+revoked links and envelopes the peer had withdrawn. BI-C7D95F7E and BI-F4866228
+fix the intake.
+
+WWMD DI-F7294B768E8D (high stakes) decides the remediation. It chooses one
+governed, reversible bulk retire over a SQL retire at upgrade, scoring 12.53
+against 7.47.
+
+The tool `retire_peer_demand_intake_copies` (apps/web/lib/backlog/peer-demand-intake-copies.ts
+and peer-demand-intake-copy-retirement.ts) implements it:
+
+- **Selector.** It takes every item that carries the `[origin:ecosystem-peer-demand:fdm_…]`
+  marker and whose mirror is on a same-org-peer link, a revoked link, or withdrawn.
+  Live cross-organization demand is out of scope.
+- **Kept for individual review.** Items not in triaging or open status; items
+  that are claimed, have a build, are in a Workroom, or have demand evidence;
+  items with any activity a person recorded, or with work activity beyond
+  filing, twinning, scoring and automated triage; items that absorbed a local
+  intake origin; items with a mutating tool call after filing; and items whose
+  body carries a work-sync marker.
+- **Governance.** The dry run is read-only and returns a selection digest. The
+  retire call is irreversible, so it opens one approval envelope. When the
+  envelope runs, the call re-derives the selection and refuses if the digest
+  has changed.
+- **Effect.** Each item goes through `retireBacklogItemTool`, with outcome
+  `duplicate` of the earliest same-title work-sync mirror, otherwise `discard`.
+  This writes a status_change activity. The item can be restored with
+  update_backlog_item_status, and repeating the call has no further effect.
+
 ## 7. Open decisions for WWMD / the operator
 
 1. **Vote budget size and cycle.** Proposed: weekly, aligned to the capacity reset. Needs a number.
