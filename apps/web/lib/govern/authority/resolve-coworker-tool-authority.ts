@@ -16,6 +16,7 @@ import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-con
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 import { getGrantedCapabilities } from "@/lib/permissions";
 import type { EscalationSteering } from "./escalation-gate";
+import { findStandingRuling, type StandingRulingDb } from "@/lib/coworker/standing-ruling";
 import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import { loadScheduledRoomMandate, type RoomMandateDb } from "@/lib/work-management/room-stage-mandate";
 import {
@@ -328,6 +329,12 @@ export function resolveSteering(input: {
    * Steers only when it names the coworker actually acting.
    */
   connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
+  /**
+   * BI-E5631708: the approved envelope whose standing ruling covers this exact
+   * action class (this coworker, this tool, this owner), found server-side by
+   * findStandingRuling. Never read from the call's arguments.
+   */
+  standingRulingEnvelopeId?: string | null;
 }): EscalationSteering {
   // A saved operator always policy cannot be displaced by automatic steering.
   // The evaluator still validates an exact human approval through its normal lane.
@@ -352,6 +359,7 @@ export function resolveSteering(input: {
   ) {
     return "connection-delegation";
   }
+  if (input.standingRulingEnvelopeId?.trim()) return "standing-ruling";
   return "none";
 }
 
@@ -536,6 +544,29 @@ export const resolveCoworkerToolAuthorityInput =
       userId: execution.userId,
       context: { agentId: execution.context?.agentId, authSource: execution.context?.authSource },
     });
+    // BI-E5631708: an owner's standing ruling for this exact class. Looked up
+    // only where it could matter (a side effect, no operator "always"), and
+    // keyed on the resolved coworker, tool and human alone.
+    const hitlAlways = agent.governanceProfile?.hitlPolicy?.trim().toLowerCase() === "always";
+    const rulingHumanId = effectiveAuth.actingHumanUserId ?? execution.userId;
+    const standingRuling = tool.sideEffect === true && !hitlAlways && rulingHumanId
+      ? await findStandingRuling(
+          {
+            coworkerAgentIds: [effectiveAuth.actingAgentId ?? agent.agentId, agent.agentId, agent.id, ...(agent.slugId ? [agent.slugId] : [])],
+            toolName: execution.toolName,
+            delegatingUserId: rulingHumanId,
+          },
+          db as unknown as StandingRulingDb,
+        ).catch((error: unknown) => {
+          // Fail closed to the behaviour before rulings existed: ask a person.
+          console.error(
+            "[governed-execute] standing ruling lookup failed tool=%s: %s",
+            JSON.stringify(execution.toolName),
+            JSON.stringify(error instanceof Error ? error.message : String(error)),
+          );
+          return null;
+        })
+      : null;
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
       ...(authorResearchBinding ? { authorResearchBinding } : {}),
@@ -571,6 +602,7 @@ export const resolveCoworkerToolAuthorityInput =
         initiativeReviewBinding,
         roomAuthority: execution.context?.roomAuthority ?? null,
         connectionDelegation: execution.context?.connectionDelegation ?? null,
+        standingRulingEnvelopeId: standingRuling?.envelopeId ?? null,
         roomMandatedTools: task
           ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
               taskRunId: task.taskRunId,
@@ -582,6 +614,7 @@ export const resolveCoworkerToolAuthorityInput =
             })
           : null,
       }),
+      ...(standingRuling ? { standingRulingEnvelopeId: standingRuling.envelopeId } : {}),
       subject: initiativeAuthority.subject,
       room: roomAuthority
         ? {

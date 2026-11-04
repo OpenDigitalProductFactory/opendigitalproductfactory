@@ -1,0 +1,155 @@
+// An owner's written approval, made standing (BI-E5631708, child of BI-88D51B8F).
+//
+// Owner direction 2026-11-04: approvals that are always granted, for requests
+// the owner cannot interpret, add delay with no decision value; a written
+// approval should become a ruling that lets coworkers just work. The WWWD
+// decision path already does this for business decisions
+// (lib/wiki/org-decision-capture.ts, `makeStanding`). This is the equivalent
+// for a coworker tool-authority approval envelope.
+//
+// WHERE IT LIVES (WWMD DI-023E0412A43C). On the approved envelope itself, as
+// `argsJson.standingRuling`. The envelope already names the coworker, the tool
+// and the person whose authority was lent, and its AuthorizationDecisionLog row
+// records whether the call was damaging. No new table, no migration.
+//
+// WHAT IT STEERS. Exactly one action class: this coworker, this tool, on this
+// owner's authority. The authority resolver looks it up per call and hands the
+// escalation gate `standing-ruling` steering. The gate orders damage before
+// steering, so a damaging call of the same tool still reaches a person, and an
+// operator HITL policy of "always" resolves no steering at all.
+//
+// WHO MAY MAKE ONE. Only the delegating owner, only while approving, and only
+// when the envelope's own decision was non-damaging and asked a person solely
+// because nothing recorded could steer it (`unsteered-side-effect`). An admin
+// deciding on the owner's behalf cannot make one: a standing ruling lends the
+// owner's authority to future calls, which is the owner's to give.
+import "server-only";
+
+import { prisma, type Prisma } from "@dpf/db";
+
+import {
+  readStandingRuling,
+  rulingCovers,
+  type StandingRuling,
+} from "./standing-ruling-policy";
+
+export * from "./standing-ruling-policy";
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+type RulingRow = {
+  id: string;
+  coworkerAgentId: string;
+  delegatingUserId: string;
+  manifestActionId: string;
+  argsJson: unknown;
+};
+
+export type StandingRulingDb = {
+  coworkerActionEnvelope: {
+    findMany(args: unknown): Promise<RulingRow[]>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+};
+
+const RULING_SELECT = {
+  id: true,
+  coworkerAgentId: true,
+  delegatingUserId: true,
+  manifestActionId: true,
+  argsJson: true,
+} as const;
+
+function activeRulingWhere(call: { coworkerAgentIds: readonly string[]; toolName: string; delegatingUserId: string }) {
+  return {
+    coworkerAgentId: { in: [...new Set(call.coworkerAgentIds)] },
+    delegatingUserId: call.delegatingUserId,
+    manifestActionId: call.toolName,
+    argsJson: { path: ["standingRuling", "state"], equals: "active" },
+  };
+}
+
+/**
+ * The envelope whose standing ruling covers this call, or null. Server-side
+ * only: every term comes from the resolved coworker, tool and human, never
+ * from the caller's arguments. The stored ruling is re-checked in full, so a
+ * row the JSON filter matched loosely still has to name this exact class.
+ */
+export async function findStandingRuling(
+  call: { coworkerAgentIds: readonly string[]; toolName: string; delegatingUserId: string },
+  db: StandingRulingDb = prisma as unknown as StandingRulingDb,
+): Promise<{ envelopeId: string; ruling: StandingRuling } | null> {
+  const ids = call.coworkerAgentIds.filter((id) => Boolean(id?.trim()));
+  if (ids.length === 0 || !call.toolName || !call.delegatingUserId) return null;
+  // A narrow store without the query has no rulings to offer: ask, as before.
+  if (typeof db.coworkerActionEnvelope?.findMany !== "function") return null;
+  const rows = await db.coworkerActionEnvelope.findMany({
+    where: activeRulingWhere({ ...call, coworkerAgentIds: ids }),
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: RULING_SELECT,
+  });
+  for (const row of rows) {
+    const ruling = readStandingRuling(row.argsJson);
+    if (
+      rulingCovers(ruling, { ...call, coworkerAgentIds: ids })
+      && row.coworkerAgentId === ruling!.actionClass.coworkerAgentId
+      && row.manifestActionId === ruling!.actionClass.toolName
+      && row.delegatingUserId === ruling!.actionClass.delegatingUserId
+    ) {
+      return { envelopeId: row.id, ruling: ruling! };
+    }
+  }
+  return null;
+}
+
+export type RevokeStandingRulingResult =
+  | { ok: true; revoked: number }
+  | { ok: false; reason: string; httpStatus: number };
+
+/**
+ * Withdraw the standing ruling an envelope carries, and any other active ruling
+ * for the same class, so "ask me again" means exactly that. Only the owner the
+ * ruling lends authority from may revoke it.
+ */
+export async function revokeStandingRuling(
+  envelopeId: string,
+  callerUserId: string,
+  now: Date = new Date(),
+  db: StandingRulingDb = prisma as unknown as StandingRulingDb,
+): Promise<RevokeStandingRulingResult> {
+  const [source] = await db.coworkerActionEnvelope.findMany({
+    where: { id: envelopeId },
+    take: 1,
+    select: RULING_SELECT,
+  });
+  const ruling = source ? readStandingRuling(source.argsJson) : null;
+  if (!source || !ruling) {
+    return { ok: false, reason: "This request carries no standing ruling.", httpStatus: 404 };
+  }
+  if (ruling.actionClass.delegatingUserId !== callerUserId) {
+    return { ok: false, reason: "Only the person whose approval this is can withdraw it.", httpStatus: 403 };
+  }
+  const rows = await db.coworkerActionEnvelope.findMany({
+    where: activeRulingWhere({ ...ruling.actionClass, coworkerAgentIds: [ruling.actionClass.coworkerAgentId] }),
+    select: RULING_SELECT,
+  });
+  let revoked = 0;
+  for (const row of rows) {
+    const args = record(row.argsJson);
+    const current = readStandingRuling(row.argsJson);
+    if (!args || !current || current.state !== "active") continue;
+    const next: StandingRuling = { ...current, state: "revoked", revokedBy: callerUserId, revokedAt: now.toISOString() };
+    // Compare-and-set on the state, so a concurrent revoke is counted once.
+    const result = await db.coworkerActionEnvelope.updateMany({
+      where: { id: row.id, argsJson: { path: ["standingRuling", "state"], equals: "active" } },
+      data: { argsJson: { ...args, standingRuling: next } as Prisma.InputJsonObject },
+    });
+    revoked += result.count;
+  }
+  return { ok: true, revoked };
+}
