@@ -7550,6 +7550,18 @@
         "see-also"
       ]
     },
+    "docs/professions/enterprise-architecture/wiki/place-controls-at-the-owning-scope.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/place-controls-at-the-owning-scope/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/enterprise-architecture/wiki/record-decisions-as-adrs.md": {
       "publicHref": "/professions/enterprise-architecture/wiki/record-decisions-as-adrs/",
       "portalHref": null,
@@ -8619,6 +8631,18 @@
         "see-also"
       ]
     },
+    "docs/professions/portfolio-management/wiki/hold-ai-spend-at-portfolio-level.md": {
+      "publicHref": "/professions/portfolio-management/wiki/hold-ai-spend-at-portfolio-level/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/portfolio-management/wiki/portfolio-alignment-to-strategy.md": {
       "publicHref": "/professions/portfolio-management/wiki/portfolio-alignment-to-strategy/",
       "portalHref": null,
@@ -8930,6 +8954,18 @@
         "heuristic",
         "why",
         "how-dpf-coworkers-use-it",
+        "see-also"
+      ]
+    },
+    "docs/professions/scrum-master/wiki/same-scope-handover-is-propose-and-acknowledge.md": {
+      "publicHref": "/professions/scrum-master/wiki/same-scope-handover-is-propose-and-acknowledge/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
         "see-also"
       ]
     },
