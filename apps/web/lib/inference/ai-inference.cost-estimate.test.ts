@@ -41,4 +41,13 @@ describe("logTokenUsage cost for a provider with no recorded price", () => {
     expect(recordedCost()).toBeCloseTo(1.8 + 6, 6);
     expect(db.modelProfile.findUnique).not.toHaveBeenCalled();
   });
+
+  // A cost model other than "compute" is classified as paid by the budget
+  // gate, so it must never record $0 either (TR-GATE-73918D25 review).
+  it("estimates a provider whose cost model is neither token nor compute", async () => {
+    db.modelProvider.findUnique.mockResolvedValue({ costModel: "subscription", inputPricePerMToken: null, outputPricePerMToken: null });
+    db.modelProfile.findUnique.mockResolvedValue(null);
+    await logTokenUsage(usage);
+    expect(recordedCost()).toBeCloseTo(3, 6);
+  });
 });

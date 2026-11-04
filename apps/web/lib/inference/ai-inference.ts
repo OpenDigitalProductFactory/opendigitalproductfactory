@@ -650,7 +650,9 @@ export async function logTokenUsage(input: {
         provider.computeWatts ?? 150,
         provider.electricityRateKwh ?? 0.12,
       );
-    } else if (provider.costModel === "token") {
+    } else if (provider.costModel !== "compute") {
+      // Any cost model other than compute is paid to the budget gate, so it is
+      // priced or estimated here, never recorded as $0.
       const rates = provider.inputPricePerMToken != null && provider.outputPricePerMToken != null
         ? { input: provider.inputPricePerMToken, output: provider.outputPricePerMToken }
         : await estimatedTokenRates(input.providerId, modelId);
