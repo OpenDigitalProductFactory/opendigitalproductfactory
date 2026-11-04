@@ -93,6 +93,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/tsc-compiler.test.mjs"),
       // BI-D2FE6931: the weekly TS7 pin currency audit classifies correctly.
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
+      // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
+      node("--test", "scripts/check-ci-node-qualified.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
