@@ -170,6 +170,16 @@ ecosystem/inbound-issue-triage          ← NEW scheduled job on evolve-dpf inst
                                                                        EXISTS, unused for this
 ```
 
+**Peer demand comes from other organizations only (BI-F4866228, 2026-11-03).**
+The intake reads demand envelopes only from a live link (`trusted`, not
+revoked or quarantined) to another organization. A `same-org-peer` link sends
+its whole backlog as demand envelopes, and work sync already mirrors that
+backlog here. Before this rule, the first commissioned production run filed
+each envelope as a new item, about 4,000 duplicates. The untouched copies were
+retired, and recorded as duplicates where an original existed, by migration
+`20261103180000_retire_same_org_peer_demand_intake_copies`. An organization's
+own installations share work through work sync, never through intake.
+
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
 
 ### 4.4 Ballot composition — every participant votes, but not on everything
