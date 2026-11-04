@@ -21,11 +21,14 @@
 // Never blocks session start: exit 0 always.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { claudeDenyProblem } from "./lib/claude-hook-contract.mjs";
 import { inDpfWorkspace } from "./lib/hook-io.mjs";
+import { makeFixtureWorkspace, walkHookOutputs, formatWalkProblems } from "./lib/hook-output-walk.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROBE_TIMEOUT_MS = 5_000;
@@ -123,14 +126,97 @@ export function declaredCommandProblems(config, vars, source) {
   return problems;
 }
 
-/** @param {string[]} problems */
-export function formatNotice(problems) {
-  if (!problems.length) return "";
-  return [
-    "PreToolUse guards inactive in this session: a guard that cannot run or answer fails OPEN, so the tool call runs unguarded.",
-    ...problems.map((p) => `  - ${p}`),
-    "The server-side controls still apply. Repair: run python3 packages/dpf-skill-pack/scripts/update_agent_toolchain.py, then restart the client. Cause and probes: docs/install/platform-support-watchlist.md (BI-E5C45F61).",
-  ].join("\n");
+/**
+ * 3. Output contract (BI-5DD46FDA): every tool hook in the INSTALLED hooks.json,
+ * run on fixture calls shaped as Claude and as Codex send them, must emit
+ * output that client honours. A rejected output is a block the client skips.
+ * Same walk as hook-output-contract.test.mjs, narrowed to tool events and one
+ * trigger per guard so it fits in session start.
+ * @param {{ pluginRoot: string, hooksDir: string }} opts
+ * @returns {Promise<string[]>}
+ */
+export async function installedOutputProblems({ pluginRoot, hooksDir, cacheFile }) {
+  const hooksJson = readJson(join(pluginRoot, "hooks", "hooks.json"));
+  const planes = readJson(join(hooksDir, "client-hook-planes.json"));
+  if (!hooksJson || !planes) return [`hooks.json or client-hook-planes.json is unreadable under ${pluginRoot}, so no hook output could be checked`];
+  // The installed copy changes only on update, so the walk's verdict is kept per
+  // content hash of the hook files; a session start re-walks only after a change.
+  const key = cacheFile ? hookFilesHash(pluginRoot, hooksDir) : null;
+  const cached = key ? readJson(cacheFile) : null;
+  if (cached?.key === key && Array.isArray(cached.problems)) return cached.problems;
+  const problems = await walkInstalled({ hooksJson, planes, pluginRoot, hooksDir });
+  if (key) {
+    try {
+      mkdirSync(dirname(cacheFile), { recursive: true });
+      writeFileSync(cacheFile, JSON.stringify({ key, checkedAt: new Date().toISOString(), problems }));
+    } catch {
+      // an unwritable cache only costs the next session another walk
+    }
+  }
+  return problems;
+}
+
+/** sha256 over every hook script and config the walk reads. */
+export function hookFilesHash(pluginRoot, hooksDir) {
+  const hash = createHash("sha256");
+  const files = [join(pluginRoot, "hooks", "hooks.json")];
+  for (const dir of [hooksDir, join(hooksDir, "lib")]) {
+    try {
+      for (const name of readdirSync(dir).sort()) if (/\.(mjs|json)$/.test(name)) files.push(join(dir, name));
+    } catch {
+      // a missing lib dir hashes as absent
+    }
+  }
+  for (const file of files) {
+    hash.update(file.slice(pluginRoot.length));
+    try {
+      hash.update(readFileSync(file));
+    } catch {
+      hash.update("\u0000missing");
+    }
+  }
+  return hash.digest("hex");
+}
+
+async function walkInstalled({ hooksJson, planes, pluginRoot, hooksDir }) {
+  const fixture = makeFixtureWorkspace();
+  try {
+    const results = await walkHookOutputs({
+      hooksJson,
+      planes,
+      hooksDir,
+      pluginRoot,
+      clients: ["claude-code", "codex"],
+      ws: fixture.ws,
+      root: fixture.root,
+      home: fixture.home,
+      events: ["PreToolUse", "PostToolUse"],
+      small: true,
+      timeoutMs: PROBE_TIMEOUT_MS * 2,
+      concurrency: 12,
+    });
+    return formatWalkProblems(results);
+  } finally {
+    fixture.cleanup();
+  }
+}
+
+/**
+ * @param {string[]} problems guards that cannot run or deny
+ * @param {string[]} [outputProblems] hook outputs a client would reject
+ */
+export function formatNotice(problems, outputProblems = []) {
+  if (!problems.length && !outputProblems.length) return "";
+  const repair =
+    "The server-side controls still apply. Repair: run python3 packages/dpf-skill-pack/scripts/update_agent_toolchain.py, then restart the client. Cause and probes: docs/install/platform-support-watchlist.md (BI-E5C45F61, BI-5DD46FDA).";
+  const lines = [];
+  if (problems.length) {
+    lines.push("PreToolUse guards inactive in this session: a guard that cannot run or answer fails OPEN, so the tool call runs unguarded.", ...problems.map((p) => `  - ${p}`));
+  }
+  if (outputProblems.length) {
+    lines.push("Installed hooks emit output the client would ignore: a rejected output is a block that never happens.", ...outputProblems.map((p) => `  - ${p}`));
+  }
+  return [...lines, repair].join("\n");
 }
 
 function readJson(path) {
@@ -141,7 +227,8 @@ function readJson(path) {
   }
 }
 
-function main() {
+async function main() {
+  if (process.env.DPF_HOOK_OUTPUT_WALK === "1") return; // run by a walk: do not walk again
   const projectDir = process.env.CLAUDE_PROJECT_DIR;
   const cwd = projectDir || process.cwd();
   if (!inDpfWorkspace(cwd)) return;
@@ -153,15 +240,21 @@ function main() {
     const file = join(cwd, ".claude", name);
     if (existsSync(file)) problems.push(...declaredCommandProblems(readJson(file), vars, `.claude/${name}`));
   }
-  const notice = formatNotice(problems);
+  let outputProblems = [];
+  try {
+    const cacheFile = join(homedir(), ".dpf", "hook-output-contract-selftest.json");
+    outputProblems = await installedOutputProblems({ pluginRoot, hooksDir: HERE, cacheFile });
+  } catch (err) {
+    outputProblems = [`the output-contract walk could not run (${String(err?.message ?? err).split("\n")[0]}), so no hook output was checked`];
+  }
+  const notice = formatNotice(problems, outputProblems);
   if (notice) process.stdout.write(`${notice}\n`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch {
-    // never block session start
-  }
-  process.exit(0);
+  main()
+    .catch(() => {
+      // never block session start
+    })
+    .finally(() => process.exit(0));
 }
