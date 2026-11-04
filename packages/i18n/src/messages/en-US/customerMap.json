@@ -37,6 +37,8 @@
     "streetMapsInstall": "Install the {$region} street map",
     "streetMapsInstallStarted": "Installing the street map. You can leave this page.",
     "streetMapsInstallRunning": "Another street map is installing. Try again when it finishes.",
+    "streetMapsInstallNotRecommended": "That street map is no longer needed here. Refresh the page to see the current list.",
+    "streetMapsInstallRefused": "The street map install didn't start. Refresh the page and try again.",
     "streetMapsInstallPlanning": "Preparing the {$region} street map…",
     "streetMapsInstallDownloading": "Downloading the {$region} street map: part {$done} of {$count}.",
     "streetMapsInstallFinalizing": "Checking the {$region} street map…",

@@ -62,7 +62,7 @@ export function GeocodingAdminPanel({
       setMessage(
         result?.ok
           ? { kind: "success", text: t("admin.streetMapsInstallStarted") }
-          : { kind: "error", text: t(result && !result.ok && result.error === "already-running" ? "admin.streetMapsInstallRunning" : "placeFailed") },
+          : { kind: "error", text: t(installRefusalKey(result && !result.ok ? result.error : null)) },
       );
       void installObserver.refresh();
     });
@@ -176,6 +176,13 @@ export function GeocodingAdminPanel({
       ) : null}
     </Surface>
   );
+}
+
+/** The refused-install message: the server names why, so the panel says it. */
+function installRefusalKey(error: string | null) {
+  if (error === "already-running") return "admin.streetMapsInstallRunning" as const;
+  if (error === "not-recommended") return "admin.streetMapsInstallNotRecommended" as const;
+  return "admin.streetMapsInstallRefused" as const;
 }
 
 function installLine(

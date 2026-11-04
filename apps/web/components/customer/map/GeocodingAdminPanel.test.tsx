@@ -92,6 +92,17 @@ describe("GeocodingAdminPanel street-map install (BI-43BBCC26)", () => {
     expect(await screen.findByText("Installing the street map. You can leave this page.")).toBeTruthy();
   });
 
+  it.each([
+    ["already-running", "Another street map is installing. Try again when it finishes."],
+    ["not-recommended", "That street map is no longer needed here. Refresh the page to see the current list."],
+    ["forbidden", "The street map install didn't start. Refresh the page and try again."],
+  ])("says why an install was refused (%s)", async (error, text) => {
+    installAction.mockResolvedValue({ ok: false, error });
+    renderPanel(kansas);
+    fireEvent.click(screen.getByRole("button", { name: "Install the Kansas, United States street map" }));
+    expect(await screen.findByText(text)).toBeTruthy();
+  });
+
   it("shows progress and disables Install while a pack is installing", () => {
     renderPanel(kansas, status({ state: "downloading", packId: "us-kansas", region: "Kansas, United States", chunksDone: 3, chunkCount: 12 }), true);
     expect(screen.getByText("Downloading the Kansas, United States street map: part 3 of 12.")).toBeTruthy();
