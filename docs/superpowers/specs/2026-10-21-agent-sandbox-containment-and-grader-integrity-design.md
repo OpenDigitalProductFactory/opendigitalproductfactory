@@ -1,5 +1,8 @@
 ---
-status: draft
+status: active
+approvedBy: Mark Bodman (operator)
+approvedAt: 2026-11-03
+backlogItem: BI-ACF83A15
 ---
 
 # Agent sandbox containment and grader integrity — design
@@ -300,14 +303,19 @@ the live backlog).
 
 The four merged changes shipped before this design was approved, outside a
 Workroom (`DPF_ALLOW_UNCLAIMED_WORK=1`), from a session with no DPF access.
-WWMD rejected both of those choices on review (DI-EBB7F91AA817,
+WWMD rejected both of those choices on review (BI-49FC54E4: DI-EBB7F91AA817,
 DI-F8DE54E35B46), and endorsed the observe-only default, deferring AC-4,
 keeping durable execution off, and the held branch's read-only root with
 engines under `/opt/dpf-engines` (DI-65C34E6E9A4F). The held branch does not
 become a PR until this design is approved and `config/sandbox/seccomp.json`
 is shown to reach existing installs on both the install and
-`request_self_upgrade` paths. This design stays `draft` until an independent
-reviewer passes its spec-approval gate (BI-49FC54E4).
+`request_self_upgrade` paths. The operator approved this design on
+2026-11-03 (BI-ACF83A15). The platform's spec-approval receipt is written only
+by an independent reviewer, so that receipt is still owed; the operator's
+approval is recorded on Workroom WC-12CC7312. PR #6736 and the
+outcome rationales on DI-F8DE54E35B46 and DI-442B30F49FEB cite BI-49FC54E4 for
+spec approval; that id is the WWMD retrospective, and BI-ACF83A15 is the
+approval.
 
 ## Design grounding
 

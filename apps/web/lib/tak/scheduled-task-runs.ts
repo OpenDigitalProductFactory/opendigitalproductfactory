@@ -11,6 +11,7 @@ import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivit
 import type { ResolvedDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
 import {
   classifyInferenceFailure,
+  isTransientInferenceFailure,
   type InferenceFailureKind,
 } from "@/lib/build/inference-failure";
 
@@ -169,23 +170,49 @@ export function scheduledToolsNeedingPin(input: {
   return required.some((name) => deferredNames.has(name)) ? required : [];
 }
 
+/**
+ * The writers a run's verdict is judged on: the authorized governed writers the
+ * prompt names, then the mandatory writers, which stand whether or not the run
+ * was authorized for them or its prompt names them (BI-A8679D84).
+ *
+ * ⟦Live, DEV 2026-10-15→10-22: 804 build-specialist Workroom stage runs were
+ * recorded `completed` with executedToolCount=0 — the regression of
+ * BI-4A394B21. Every brief named record_workroom_evidence, but "required" was
+ * read off the AUTHORIZED set, and the writer was not authorized for those
+ * runs, so nothing was required and a run that did nothing passed. #6534 then
+ * refused such runs before dispatch (the same population reappears from
+ * 2026-10-23 as "not authorized … not dispatched"), but the verdict kept the
+ * hole: a stage run whose brief does not name the writer still passed with zero
+ * calls. A mandatory writer is now required by the verdict itself.⟧
+ */
+function scheduledVerdictToolNames(input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+  taskConfig?: unknown;
+}): string[] {
+  const prompt = input.prompt.toLowerCase();
+  const named = input.authorizedTools.filter((tool) => tool.sideEffect && promptNamesTool(prompt, tool.name)).map((tool) => tool.name);
+  return [...new Set([...named, ...scheduledMandatoryToolNames({ prompt: input.prompt, taskConfig: input.taskConfig })])];
+}
+
 export function classifyScheduledRequiredTools(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
   executedTools: ScheduledRunToolExecution[];
   /** Workroom runs must retain every pending required call, even beside a successful report or another missing write. */
   preservePendingApprovals?: boolean;
+  /** The task's taskConfig; a Workroom stage's mandatory writer is required from it (BI-A8679D84). */
+  taskConfig?: unknown;
 }): ScheduledRequiredToolOutcome {
-  const prompt = input.prompt.toLowerCase();
+  const required = scheduledVerdictToolNames(input);
   let proposed: ScheduledRequiredToolOutcome | null = null;
   if (input.preservePendingApprovals) {
-    const pending = input.authorizedTools.find((tool) => tool.sideEffect && promptNamesTool(prompt, tool.name)
-      && input.executedTools.some((call) => call.name === tool.name && scheduledCallAwaitsDecision(call)));
-    if (pending) return { kind: "proposed", toolName: pending.name };
+    const pending = required.find((name) => input.executedTools.some((call) => call.name === name && scheduledCallAwaitsDecision(call)));
+    if (pending) return { kind: "proposed", toolName: pending };
   }
 
-  for (const tool of input.authorizedTools) {
-    if (!tool.sideEffect || !promptNamesTool(prompt, tool.name)) continue;
+  for (const toolName of required) {
+    const tool = { name: toolName };
     const calls = input.executedTools.filter((execution) => execution.name === tool.name);
     if (
       calls.some(
@@ -259,6 +286,7 @@ export function detectScheduledRequiredToolFailure(input: {
    *  verdict says so, so the failure is not read as an availability fault
    *  (BI-62DB6C03). */
   attachedToolNames?: readonly string[];
+  taskConfig?: unknown;
 }): string | null {
   const outcome = classifyScheduledRequiredTools(input);
   if (outcome.kind !== "absent") return null;
@@ -320,6 +348,7 @@ export function scheduledRequiredToolCorrection(input: {
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
   attachedToolNames: readonly string[];
   executedTools: ScheduledRunToolExecution[];
+  taskConfig?: unknown;
 }): { toolName: string; message: string } | null {
   const outcome = classifyScheduledRequiredTools(input);
   if (outcome.kind !== "absent" || !input.attachedToolNames.includes(outcome.toolName)) return null;
@@ -340,6 +369,7 @@ export function detectScheduledRunFailure(input: {
   }>;
   content: string | null | undefined;
   attachedToolNames?: readonly string[];
+  taskConfig?: unknown;
 }): string | null {
   return detectScheduledRequiredToolFailure(input) ??
     detectScheduledRunInferenceFailure({ executedToolCount: input.executedTools.length, content: input.content });
@@ -400,4 +430,86 @@ export function scheduledRunLastStatus(
   if (requiredTools.kind === "proposed") return "proposed";
   if (isPlaybookRun && playbookRunStatus === "partial") return "partial";
   return "ok";
+}
+
+/**
+ * How a scheduled run ended when it did not complete (BI-A8679D84). Carried on
+ * the TaskRun as progressPayload.terminalOutcome so the three are counted
+ * apart instead of reading as one "failed":
+ *   - no-governed-work: the model ran and its required governed writer did not;
+ *   - provider-busy-requeue: no provider could answer; the run is requeued and
+ *     spends no retry attempt;
+ *   - not-dispatched: refused before the model ran (the writer is withheld or
+ *     not authorized), which a short retry cannot change.
+ */
+export type ScheduledRunTerminalOutcome = "no-governed-work" | "provider-busy-requeue" | "not-dispatched";
+
+export class ScheduledRunTerminalError extends Error {
+  constructor(message: string, readonly outcome: ScheduledRunTerminalOutcome) {
+    super(message);
+    this.name = "ScheduledRunTerminalError";
+  }
+}
+
+export function scheduledRunTerminalOutcome(error: unknown): ScheduledRunTerminalOutcome | null {
+  return error instanceof ScheduledRunTerminalError ? error.outcome : null;
+}
+
+
+/** A requeued run waits this long; the same base a Workroom queue hold releases after. */
+export const SCHEDULED_PROVIDER_REQUEUE_MINUTES = 30;
+
+/**
+ * Who acts next on a run that ended this way, and what they do. A typed terminal
+ * state that names no next action only moves the load to whoever reads it, so
+ * each one names its owner. None is a person: the scheduler requeues, the
+ * drive re-dispatches, and a grant gap goes to the platform-engineer coworker that maintains the grant registry
+ * (never the founder).
+ */
+export const SCHEDULED_RUN_NEXT_ACTION: Readonly<Record<ScheduledRunTerminalOutcome, { owner: string; nextAction: string }>> = {
+  "no-governed-work": {
+    owner: "workroom-drive",
+    nextAction: "Re-dispatch on the retry cadence; the stage advances only on recorded evidence. A recurring miss surfaces as a harness-evolution candidate.",
+  },
+  "provider-busy-requeue": {
+    owner: "agent-task-scheduler",
+    nextAction: `Requeued automatically in ${SCHEDULED_PROVIDER_REQUEUE_MINUTES} minutes; no retry attempt spent. A Workroom's queue hold releases itself.`,
+  },
+  "not-dispatched": {
+    owner: "platform-engineer",
+    nextAction: "Grant the coworker the writer's grant, or rebind the room to a coworker that holds it; a retry cannot change this.",
+  },
+};
+
+/** The loop's typed dead ends that waiting fixes, as the queue hold names them. */
+const PROVIDER_DEFERRAL_KINDS: Readonly<Record<string, InferenceFailureKind>> = {
+  busy: "rate-limit",
+  capacity: "provider-unavailable",
+};
+
+/**
+ * The provider failure a run that did no governed work ended on, when waiting
+ * fixes it; null when the run did its work or failed for another reason.
+ *
+ * ⟦Live, DEV 2026-10-07→10-28: 129 of 545 "executed zero times" failures were
+ * the loop's own provider-busy reply ("Every AI provider is busy right now…",
+ * "The only AI model allowed … is tied up with a background job…"). The verdict
+ * named the absent writer, so the failure read as a model that would not call
+ * its tool, a correction turn was spent against the outage, and the reply went
+ * to nobody. The loop already types these (AgenticResult.failure); read it
+ * first, and the reply text only as a fallback.⟧
+ */
+export function scheduledRunProviderDeferral(input: {
+  failure?: { kind: string } | null;
+  content: string | null | undefined;
+  requiredTools: ScheduledRequiredToolOutcome;
+  executedToolCount: number;
+}): InferenceFailureKind | null {
+  if (input.requiredTools.kind === "proposed") return null;
+  if (input.requiredTools.kind === "executed" && input.executedToolCount > 0) return null;
+  const typed = input.failure ? PROVIDER_DEFERRAL_KINDS[input.failure.kind] : undefined;
+  if (typed) return typed;
+  if (input.failure) return null;
+  const fromText = classifyInferenceFailure(input.content);
+  return isTransientInferenceFailure(fromText) ? fromText : null;
 }

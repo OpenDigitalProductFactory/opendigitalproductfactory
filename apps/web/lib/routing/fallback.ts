@@ -576,7 +576,7 @@ export async function callWithFallbackChain(
             await markModelDegraded(entry.providerId, entry.modelId, `local_${failure.code}_misclassification`);
             scheduleRecovery(entry.providerId, entry.modelId);
           } else if (entry.providerConnectionId && account) {
-            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+            await (await import("./provider-account-auto-disable")).autoDisableProviderAccount({ providerId: entry.providerId, connectionId: entry.providerConnectionId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, cause: "billing", source: "fallback-chain", detail: failure.message?.slice(0, 160) }).catch((err) => console.error(`[callWithFallbackChain] failed to switch off ${entry.providerConnectionId} after billing error:`, err)); // BI-0ADD46C3: recorded and recovered, like the provider path
           } else {
           // BI-D28A4F55: recorded as automatic and recovered on its own.
           const { autoDisableProvider } = await import("./provider-auto-disable");
@@ -689,7 +689,7 @@ export async function callWithFallbackChain(
           if (accountRenewalUnavailable || (isOAuth && !signInRefused)) {
             console.info("[callWithFallbackChain] Account renewal is temporarily unavailable; trying another eligible account.");
           } else if (entry.providerConnectionId && account) {
-            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+            await (await import("./provider-account-auto-disable")).autoDisableProviderAccount({ providerId: entry.providerId, connectionId: entry.providerConnectionId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, cause: "auth", source: "fallback-chain", detail: failure.message?.slice(0, 160) }).catch((err) => console.error(`[callWithFallbackChain] failed to switch off ${entry.providerConnectionId} after auth error:`, err)); // BI-0ADD46C3: recorded and recovered, like the provider path
           } else {
             const { autoDisableProvider } = await import("./provider-auto-disable");
             await autoDisableProvider({ providerId: entry.providerId, cause: "auth", source: "fallback-chain", detail: failure.message?.slice(0, 160) })

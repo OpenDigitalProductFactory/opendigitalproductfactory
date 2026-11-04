@@ -81,6 +81,7 @@ const EXPECTED_TOOLS = [
   "create_backlog_item",
   "triage_backlog_item",
   "retire_backlog_item",
+  "retire_peer_demand_intake_copies",
   "size_backlog_item",
   "process_backlog_for_build_studio",
   "update_backlog_item",
@@ -123,7 +124,7 @@ beforeEach(() => {
 });
 
 describe("backlog pack — registration", () => {
-  it("exposes exactly the fifteen backlog/epic tools with a handler each", () => {
+  it("exposes exactly the sixteen backlog/epic tools with a handler each", () => {
     expect(backlogPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(backlogPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(backlogPack.grants).sort()).toEqual([...EXPECTED_TOOLS].sort());
@@ -143,11 +144,22 @@ describe("backlog pack — registration", () => {
     }
   });
 
+  it("retire_peer_demand_intake_copies asks for approval only when it retires", async () => {
+    const def = backlogPack.definitions.find((d) => d.name === "retire_peer_demand_intake_copies")!;
+    expect(def.consequence).toBe("irreversible");
+    const call = { toolName: def.name, userId: "u" };
+    await expect(def.consequenceForCall!({ ...call, params: {} })).resolves.toMatchObject({ consequence: null });
+    await expect(def.consequenceForCall!({ ...call, params: { mode: "dry-run" } })).resolves.toMatchObject({ consequence: null });
+    await expect(def.consequenceForCall!({ ...call, params: { mode: "retire", selectionDigest: "x" } }))
+      .resolves.toMatchObject({ consequence: "irreversible" });
+  });
+
   it("grants mirror agent-grants: read tools need read grants, mutating tools need write/triage grants", () => {
     expect(backlogPack.grants.create_backlog_item).toEqual(["backlog_write"]);
     expect(backlogPack.grants.triage_backlog_item).toEqual(["backlog_triage"]);
     expect(backlogPack.grants.size_backlog_item).toEqual(["backlog_triage"]);
     expect(backlogPack.grants.retire_backlog_item).toEqual(["backlog_write"]);
+    expect(backlogPack.grants.retire_peer_demand_intake_copies).toEqual(["backlog_write"]);
     expect(backlogPack.grants.process_backlog_for_build_studio).toEqual(["build_lifecycle"]);
     expect(backlogPack.grants.query_backlog).toEqual(["backlog_read"]);
     expect(backlogPack.grants.list_epics).toEqual(["backlog_read"]);
