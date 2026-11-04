@@ -49,3 +49,17 @@ Phase 2 waits for two things: slice 2 (BI-B8DAEB71) merges, and the install upgr
 | Cycle ledger (eligible, skipped with reason, worked) | OBJ-8 | AC-23 |
 | Control limits and control-check schedule | OBJ-8 | AC-24 |
 | One DMAIC cycle on DEV with no human step | OBJ-7 | AC-25 |
+
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: BI-CE564FBB
+- Receipt: blocked-by: record_plan_backlog_coverage needs the spec-approval baseline for BI-CE564FBB, which has no independent spec-approval receipt yet (readiness SPEC_APPROVAL_REQUIRED / OBJECTIVE_BASELINE_REQUIRED)
+- Dependencies: BI-B8DAEB71 (slice 2 consumes the criteria and records the ledger); BI-90F0863B (unblocks BI-F47DD4CF)
+- Mappings:
+  - Operating criteria, spec amendment and plan (AC-22, AC-24) -> BI-CE564FBB
+  - Improve activity on every shape (AC-20) -> BI-CE564FBB
+  - CI Manager seed and job ownership (AC-21) -> BI-CE564FBB
+  - Register shape and coordination binding (AC-21) -> BI-F47DD4CF
+  - Cycle ledger on the TaskRun (AC-23) -> BI-B8DAEB71
+  - One DMAIC cycle on DEV (AC-25) -> BI-CE564FBB
