@@ -687,9 +687,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "portfolio-management",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -1100,9 +1100,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "portfolio-management",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -1239,9 +1239,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "portfolio-management",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -1511,9 +1511,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -1787,9 +1787,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "scrum-master",
-          "corpusPages": 6,
+          "corpusPages": 7,
           "missingGrants": [],
-          "detail": "6 corpus pages, reachable",
+          "detail": "7 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -2207,9 +2207,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "devops-platform",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -2344,9 +2344,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "devops-platform",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -2480,9 +2480,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "devops-platform",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -3298,9 +3298,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -3435,9 +3435,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -3571,9 +3571,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -3708,9 +3708,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -3845,9 +3845,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -3981,9 +3981,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -4120,9 +4120,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -4400,9 +4400,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -5090,9 +5090,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "software-engineer",
-          "corpusPages": 12,
+          "corpusPages": 13,
           "missingGrants": [],
-          "detail": "12 corpus pages, reachable",
+          "detail": "13 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -5363,9 +5363,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "portfolio-management",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -6375,9 +6375,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "portfolio-management",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7510,9 +7510,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "software-engineer",
-          "corpusPages": 12,
+          "corpusPages": 13,
           "missingGrants": [],
-          "detail": "12 corpus pages, reachable",
+          "detail": "13 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7630,9 +7630,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "software-engineer",
-          "corpusPages": 12,
+          "corpusPages": 13,
           "missingGrants": [],
-          "detail": "12 corpus pages, reachable",
+          "detail": "13 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7750,9 +7750,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "software-engineer",
-          "corpusPages": 12,
+          "corpusPages": 13,
           "missingGrants": [],
-          "detail": "12 corpus pages, reachable",
+          "detail": "13 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7870,9 +7870,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "portfolio-management",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8199,9 +8199,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "devops-platform",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8519,9 +8519,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8626,9 +8626,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -9582,9 +9582,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -9795,9 +9795,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "enterprise-architecture",
-          "corpusPages": 13,
+          "corpusPages": 14,
           "missingGrants": [],
-          "detail": "13 corpus pages, reachable",
+          "detail": "14 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -10323,9 +10323,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "operations",
-          "corpusPages": 18,
+          "corpusPages": 19,
           "missingGrants": [],
-          "detail": "18 corpus pages, reachable",
+          "detail": "19 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -10531,9 +10531,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "scrum-master",
-          "corpusPages": 6,
+          "corpusPages": 7,
           "missingGrants": [],
-          "detail": "6 corpus pages, reachable",
+          "detail": "7 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -10636,9 +10636,9 @@
         "corpus": {
           "level": 3,
           "professionKey": "devops-platform",
-          "corpusPages": 7,
+          "corpusPages": 8,
           "missingGrants": [],
-          "detail": "7 corpus pages, reachable",
+          "detail": "8 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
