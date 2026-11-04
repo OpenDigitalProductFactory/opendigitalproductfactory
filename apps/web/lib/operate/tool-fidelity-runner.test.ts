@@ -402,7 +402,7 @@ describe("bounded local fidelity diagnostic", () => {
     mocks.call.mockImplementation(real.callProvider);
     const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
     expect(result.data).toMatchObject({ qualified: false });
-    expect(mocks.budget).toHaveBeenCalledWith("agent");
+    expect(mocks.budget).toHaveBeenCalledWith("agent", { providerId: "local" });
     expect(mocks.executeAdapter).not.toHaveBeenCalled(); expect(mocks.admit).not.toHaveBeenCalled();
     expect(reads).not.toHaveBeenCalled(); expect(mocks.call).toHaveBeenCalledTimes(1);
   });
