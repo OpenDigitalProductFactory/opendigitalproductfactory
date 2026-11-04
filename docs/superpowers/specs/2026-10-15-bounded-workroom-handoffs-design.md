@@ -124,9 +124,23 @@ acknowledgement. This retries the two agent phases, not human approval. Automati
 unbounded re-requesting is prohibited. The usability cost is explicit: a renewal
 between the phases can require another exchange even with the same owner.
 
-Validate that the captured lease was live at request and is still live at
-acknowledgement using database wall time. Null, elapsed or changed expiry refuses.
-Same-holder lapse/reacquisition cannot revive the old request, even if principal
+Validate the captured lease at request and again at acknowledgement using
+database wall time. A null or changed expiry refuses. An elapsed expiry refuses
+unless the lapsed lease is still held by the requesting owner principal.
+
+**Amendment 2026-11-04 (BI-F1FC0B62, owner direction).** The lease holder is
+the owning human, not a session, so two sessions of the same owner share one
+holder. On production, WC-CAD2A7C8's source session stood down, its lease
+lapsed, and the request phase refused with `handoff-lease-expired`. That
+refusal became an owner approval twice, for a handover entirely inside the
+owner's own scope. A lapse alone therefore no longer refuses when the holder
+is still the requesting owner. A lapsed lease held by anyone else still
+refuses. The snapshot still binds the exact expiry, so a renewal or
+reacquisition between the phases still refuses. The refiner now records the
+refusing boundary's code on the authority decision
+(`handoff-boundary-unproven:<code>`).
+
+Same-holder reacquisition cannot revive the old request, even if principal
 and executor are equal. This contract does not promise acceptance across renewal;
 a future continuity optimization needs a proven acquisition identity and coverage
 of every lease writer, not a heuristic using executor equality. Tests must cover
