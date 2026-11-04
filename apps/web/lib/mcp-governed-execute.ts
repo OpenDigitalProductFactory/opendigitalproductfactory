@@ -18,6 +18,7 @@ import {
   type PolicyAuthorityEnvelopeReserve,
   type AuthorityExecutedOutcome,
 } from "./govern/authority/coworker-tool-authority-gate";
+import { resetRefusalBreakerForTests, withRefusalBreaker, type RefusalBreakerDeps } from "./govern/authority/refusal-breaker";
 import { type ApprovalRun, handApprovalToToolRun, newApprovalRun, releaseUnsettledApproval, settleApprovalRefusal, settleApprovalRun } from "./govern/authority/approval-reservation";
 export type {
   AuthorityApprovalEnvelopeCreate,
@@ -126,7 +127,7 @@ export function _setGovernanceForTests(overrides: {
   alignmentGate?: AlignmentGate | null;
   preconditionGate?: PreconditionGate | null;
   gaidActorResolver?: GaidActorResolver | null;
-  gppPermitStore?: GppPermitStore | null;
+  gppPermitStore?: GppPermitStore | null; refusalBreaker?: Partial<RefusalBreakerDeps> | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
@@ -143,7 +144,7 @@ export function _setGovernanceForTests(overrides: {
   setAlignmentGateOverrideForTests(overrides.alignmentGate ?? null);
   setPreconditionGateOverrideForTests(overrides.preconditionGate ?? null);
   setGaidActorResolverOverrideForTests(overrides.gaidActorResolver ?? null);
-  setGppPermitStoreOverrideForTests(overrides.gppPermitStore ?? null);
+  setGppPermitStoreOverrideForTests(overrides.gppPermitStore ?? null); resetRefusalBreakerForTests(overrides.refusalBreaker ?? null);
 }
 
 let _executeToolOverride:
@@ -290,8 +291,7 @@ export async function governedExecuteTool(args: GovernedExecuteArgs): Promise<Go
     executionFence: args.context?.taskExecutionFence }) };
   const run = newApprovalRun();
   try {
-    return await runReassessmentEffect({ kind: "tool", name: args.toolName, input: args.rawParams },
-      () => governedExecuteToolRun(args, run));
+    return await runReassessmentEffect({ kind: "tool", name: args.toolName, input: args.rawParams }, () => withRefusalBreaker(args, { resolveGrants, sideEffectOf: (name) => findTool(name)?.sideEffect !== false, approvalHeld: () => run.reservation !== null }, () => governedExecuteToolRun(args, run)));
   } catch (err) {
     await releaseUnsettledApproval(run, args.toolName);
     throw err;

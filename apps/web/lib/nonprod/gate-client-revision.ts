@@ -4,12 +4,12 @@
  * The gate client (`scripts/gate-worktree.mjs` and the durable-wait resumer it
  * spawns) runs from the branch being gated, not from the install. A client-side
  * defect fixed on main therefore keeps running in every branch cut before the
- * fix, on every developer host, until each branch rebases - and no rollout of
- * the install can reach it. The only party every gate client talks to, and the
+ * fix, on every developer host, until each branch integrates current main. No
+ * rollout of the install can reach it. The only party every gate client talks to, and the
  * only one that upgrades with the platform, is this admission endpoint. So a
  * client defect that harms the host is retired HERE: the server refuses claims
  * from clients below the floor with a non-retryable answer that tells the
- * author to rebase. That answer also stops a stale resumer, because a refusal
+ * author to refresh from main. That answer also stops a stale resumer: a refusal
  * is neither "queued" nor a transient block.
  *
  * `platform-function-never-depends-on-a-client`: the guarantee lives server
@@ -18,7 +18,7 @@
  * Raising the floor: bump GATE_CLIENT_REVISION in scripts/lib/gate-client-revision.mjs
  * in the same change as the client fix, then add a floor entry below naming
  * the defect. Scope a floor to the platforms the defect actually harms, so an
- * unaffected host is never forced to rebase for nothing.
+ * unaffected host is never forced to refresh for an unrelated defect.
  */
 
 export type GateClientPlatform = "win32" | "posix";
@@ -32,6 +32,11 @@ export interface GateClientFloor {
 }
 
 export const GATE_CLIENT_FLOORS: readonly GateClientFloor[] = Object.freeze([
+  {
+    minimumRevision: 4,
+    platforms: ["win32", "posix"],
+    reason: "gate clients before revision 4 omit the physical memory total required by host-backed reservation admission",
+  },
   {
     minimumRevision: 3,
     platforms: ["win32", "posix"],
@@ -54,8 +59,8 @@ export const GATE_CLIENT_FLOORS: readonly GateClientFloor[] = Object.freeze([
 /**
  * Infer the host platform from the claim's worktree path. A drive-letter or
  * UNC path is Windows; anything else is POSIX. No path means we cannot tell,
- * and an unknown platform is admitted: this floor protects the host from a
- * known client defect, it is not a reason to refuse a claim we cannot place.
+ * an unknown platform stays unknown. A floor covering both supported platforms
+ * still applies; a platform-specific floor never guesses the missing host.
  */
 export function inferGateClientPlatform(worktreePath: string | undefined): GateClientPlatform | null {
   if (!worktreePath) return null;
@@ -87,7 +92,7 @@ export function isGateClientClaim(input: { clientRevision: unknown; purpose: str
 export interface GateClientRefusal {
   minimumRevision: number;
   clientRevision: number;
-  platform: GateClientPlatform;
+  platform: GateClientPlatform | null;
   reason: string;
 }
 
@@ -99,11 +104,12 @@ export function evaluateGateClientRevision(input: {
 }): GateClientRefusal | null {
   if (!isGateClientClaim(input)) return null;
   const platform = inferGateClientPlatform(input.worktreePath);
-  if (!platform) return null;
   const clientRevision = normalizeGateClientRevision(input.clientRevision);
   let refusal: GateClientRefusal | null = null;
   for (const floor of input.floors ?? GATE_CLIENT_FLOORS) {
-    if (!floor.platforms.includes(platform)) continue;
+    const applies = platform ? floor.platforms.includes(platform)
+      : floor.platforms.includes("win32") && floor.platforms.includes("posix");
+    if (!applies) continue;
     if (clientRevision >= floor.minimumRevision) continue;
     if (!refusal || floor.minimumRevision > refusal.minimumRevision) {
       refusal = { minimumRevision: floor.minimumRevision, clientRevision, platform, reason: floor.reason };

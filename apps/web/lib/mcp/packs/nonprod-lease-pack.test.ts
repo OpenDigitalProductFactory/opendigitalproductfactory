@@ -215,8 +215,9 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
         url: "http://localhost:3010",
         ports: [3010],
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        gateClientRevision: 3,
+        gateClientRevision: 4,
         worktreePath: "D:\\DPF-source-root-worktrees\\lease-terminal-retry-stop",
+        hostPressure: { totalMemoryBytes: 64 * 1024 ** 3 },
       },
       "u1",
     );
@@ -286,6 +287,53 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     );
   });
 
+  it.each(["D:/DPF-worktrees/retired", "/home/dev/dpf-worktrees/retired", undefined, "relative/path"])(
+    "refuses a retired sampler without creating a lease or durable wait on %s", async (worktreePath) => {
+      lease.claimNonprodEnvironmentLease.mockResolvedValue({
+        status: "queued", queuePosition: 1, waitAgeMs: 0,
+        lease: { id: "retired-row", leaseId: "NPEL-RETIRED", claimKey: "retired-claim", taskRunId: null,
+          environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "retired", worktreePath, branchName: "fix/retired" },
+      });
+      // This is the actual revision-3 wire shape: a recent observation with no physical total.
+      const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+        environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "retired",
+        purpose: "Pre-PR local-CI gate for fix/retired @ abc", claimKey: "retired-claim",
+        gateClientRevision: 3, worktreePath, slotManifestVersion: 1,
+        url: "http://localhost:3010", ports: [3010],
+        hostPressure: { observedAt: new Date().toISOString(), availableMemoryBytes: 48 * 1024 ** 3,
+          sustainedCpuPercent: 0, diskFreeBytes: 100 * 1024 ** 3, dockerHealthy: true,
+          evidenceIsolationHealthy: true, fencesHealthy: true, convergenceActive: false },
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }, "u1");
+      expect(result).toMatchObject({ success: false, error: "gate_client_upgrade_required",
+        data: { admission: { status: "refused" }, minimumRevision: 4, clientRevision: 3, retryable: false } });
+      expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
+      expect(durableWait.checkpointNonprodLeaseWait).not.toHaveBeenCalled();
+      expect(durableWait.settleNonprodLeaseWait).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, true, "68719476736"])(
+    "refuses malformed current-client physical total %s before creating any wait", async (totalMemoryBytes) => {
+      lease.claimNonprodEnvironmentLease.mockResolvedValue({
+        status: "queued", lease: { leaseId: "NPEL-MALFORMED", taskRunId: null }, queuePosition: 1, waitAgeMs: 0,
+      });
+      const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+        environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "malformed",
+        purpose: "Pre-PR local-CI gate for fix/malformed @ abc", gateClientRevision: 4,
+        worktreePath: "/home/dev/dpf-worktrees/malformed", url: "http://localhost:3010", ports: [3010],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        hostPressure: { totalMemoryBytes, observedAt: new Date().toISOString(), availableMemoryBytes: 32 * 1024 ** 3,
+          sustainedCpuPercent: 0, diskFreeBytes: 100 * 1024 ** 3, dockerHealthy: true,
+          evidenceIsolationHealthy: true, fencesHealthy: true, convergenceActive: false },
+      }, "u1");
+      expect(result).toMatchObject({ success: false, error: "invalid_host_pressure",
+        data: { admission: { status: "refused" }, retryable: false } });
+      expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
+      expect(durableWait.checkpointNonprodLeaseWait).not.toHaveBeenCalled();
+    },
+  );
+
   // BI-69178E02: a gate client runs from the branch, so the server is the only
   // place a client defect fixed on main can be retired from un-rebased branches.
   it.each([
@@ -304,31 +352,34 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     expect(res).toMatchObject({
       success: false,
       error: "gate_client_upgrade_required",
-      data: { admission: { status: "refused" }, minimumRevision: 3, clientRevision: gateClientRevision ?? 0 },
+      data: { admission: { status: "refused" }, minimumRevision: 4, clientRevision: gateClientRevision ?? 0 },
     });
-    expect(res.message).toMatch(/Rebase the branch onto main/);
+    expect(res.message).toMatch(/Merge current origin\/main/);
     expect(res.message).toMatch(/not a verdict on the diff/);
     expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
   });
 
-  it("admits revision 3 Windows and POSIX gate clients", async () => {
+  it("admits revision 4 Windows and POSIX gate clients with measurable telemetry", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "admitted", lease: { leaseId: "NPEL-A1" }, slotKey: "slot-0", waitAgeMs: 0, poolPolicy: {},
     });
     const base = {
       environmentKey: "local-integration-ci", ownerProvider: "claude", ownerSessionId: "s1",
+      hostPressure: { observedAt: new Date().toISOString(), totalMemoryBytes: 64 * 1024 ** 3,
+        availableMemoryBytes: 48 * 1024 ** 3, sustainedCpuPercent: 0, diskFreeBytes: 100 * 1024 ** 3,
+        dockerHealthy: true, evidenceIsolationHealthy: true, fencesHealthy: true, convergenceActive: false },
       claimKey: "local-ci:s1:abc", purpose: "Pre-PR local-CI gate for fix/x @ abc",
       url: "http://localhost:3010", ports: [3010],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
     const current = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 3,
+      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 4,
     }, "u1");
     const posix = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 3,
+      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 4,
     }, "u1");
-    expect(current.error).not.toBe("gate_client_upgrade_required");
-    expect(posix.error).not.toBe("gate_client_upgrade_required");
+    expect(current).toMatchObject({ success: true, data: { admission: { status: "admitted" } } });
+    expect(posix).toMatchObject({ success: true, data: { admission: { status: "admitted" } } });
     expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledTimes(2);
   });
 

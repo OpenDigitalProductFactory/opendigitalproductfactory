@@ -39,7 +39,7 @@ function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
   }
 }
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
-import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
+import { GATE_EXIT, hostMcpPrerequisiteExitCode } from "./lib/gate-exit-classification.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -1094,6 +1094,6 @@ export function readReconciledVerdictAtHead({
 if (isEntryModule(import.meta.url)) {
   runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
     process.stderr.write(`pregate: ${error?.code ? error.message : error?.stack || String(error)}\n`);
-    process.exit(error?.hostTrustPrerequisite ? GATE_EXIT.HOST_CONNECTION_UNAVAILABLE : 1);
+    process.exit(hostMcpPrerequisiteExitCode(error));
   });
 }

@@ -14,4 +14,6 @@
 //     exact pending-result replay (BI-BFDB98B6).
 // 3 - carry the latest canonical reservation across repeated queued retries
 //     rather than replaying an obsolete lease pin (BI-EB864226).
-export const GATE_CLIENT_REVISION = 3;
+// 4 - report physical total memory so host-backed admission can measure the
+//     reservation instead of leaving an older sampler in an unsatisfiable wait.
+export const GATE_CLIENT_REVISION = 4;

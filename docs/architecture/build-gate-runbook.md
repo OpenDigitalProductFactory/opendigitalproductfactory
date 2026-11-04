@@ -57,9 +57,17 @@ wrapper exit code. A missing executable, wrapper startup failure, missing or
 invalid packet, or unreadable cleanup identity produces an infrastructure
 inconclusive result. An unknown process is never killed to obtain a clean result.
 
-The server admits gate client revision 2 or newer. After the canonical release
-deploys this floor, refresh the governed source checkout before starting a new
-gate; a revision refusal names that refresh, not a permission override. Preserve
+The server admits gate client revision 4 or newer on Windows and POSIX hosts.
+Revision 4 supplies the physical host memory total needed by host-backed
+reservation admission. After the canonical release deploys this floor, merge
+current `origin/main` into the governed branch before starting a new gate. An
+older client receives non-retryable `gate_client_upgrade_required` before any
+lease or durable wait is created, including when its host path is unknown. A
+current client with a missing, non-finite or non-positive physical total receives
+non-retryable `invalid_host_pressure` at the same boundary. Refresh its host
+observation; repeatedly queueing the same invalid observation cannot recover.
+Infrastructure probes without gate identity retain their existing behavior. A
+revision refusal names a source refresh, not a permission override. Preserve
 older completed material and pending requests. Refreshing a client does not
 extend an expired lease or convert old unqualified material into a pass.
 

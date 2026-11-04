@@ -28,6 +28,7 @@ import {
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
+import { isParkedRefusal } from "@/lib/govern/authority/refusal-breaker";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { evidenceRecoveryFailure } from "./evidence-recovery-artifact";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
@@ -2309,7 +2310,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         sandboxUnavailableCount++;
       }
 
-      if (isGovernedToolRefusal(toolResult)) {
+      // A parked repeat (BI-E458A9CB) counts too, whatever it waits on: it was already answered.
+      if (isGovernedToolRefusal(toolResult) || isParkedRefusal(toolResult)) {
         refusalStreak++;
         refusedTools.add(tc.name);
         refusalReasons.add(toolResult.error ?? "refused");

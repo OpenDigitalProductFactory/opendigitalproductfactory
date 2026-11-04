@@ -10,6 +10,7 @@ import {
   RESUME_MARKER_ENV,
 } from "./lib/durable-wait-resumer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import { advanceGateReservationPin } from "./lib/gate-reservation-handoff.mjs";
 import {
   EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
@@ -17,6 +18,7 @@ import {
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_SOURCE_DRIFT,
   EXIT_WAIT_CANCELLED,
+  EXIT_USAGE,
 } from "./lib/sandbox-freshness.mjs";
 import {
   createGateObserverIdentity,
@@ -84,8 +86,12 @@ export function classifyResumeOutcome(code) {
   if (code === 0) return { evidence: "passed", reason: "passed" };
   if (code === EXIT_WAIT_CANCELLED) return { evidence: "unrun", reason: "cancelled" };
   if (code === EXIT_SOURCE_DRIFT) return { evidence: "unrun", reason: "source-drift" };
+  if (code === EXIT_USAGE) return { evidence: "unrun", reason: "usage" };
   if (code === EXIT_QUEUED) return { evidence: "unrun", reason: "still-queued" };
-  if (isRetryableExit(code) || code === 3 || code === 4 || code === 6) {
+  // 88 can also represent an unknown host execution/receipt outcome.
+  // Keep it terminal: the code alone never authorizes replay or a product FAIL.
+  if (isRetryableExit(code) || code === 3 || code === 4 || code === 6
+    || code === GATE_EXIT.HOST_CONNECTION_UNAVAILABLE) {
     return { evidence: "inconclusive", reason: "infrastructure" };
   }
   return { evidence: "failed", reason: "failed" };

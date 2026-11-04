@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -30,8 +30,55 @@ import {
   EXIT_SANDBOX_DRIFT,
   EXIT_SOURCE_DRIFT,
   EXIT_WAIT_CANCELLED,
+  EXIT_USAGE,
   classifyGateOutcome,
 } from "./sandbox-freshness.mjs";
+
+import { gitText } from "./git.mjs";
+import { makeTempWorktree, startGateFixtureMcp, isolatedGateFixtureEnvironment } from "../fixtures/gate-worktree.mjs";
+
+for (const refusal of ["gate_client_upgrade_required", "invalid_host_pressure"]) {
+  test(`real gate and resumer stop unrun on ${refusal}`, async t => {
+    const worktree = makeTempWorktree({ pregateScript: fileURLToPath(new URL("../pregate.mjs", import.meta.url)) });
+    gitText(["remote", "add", "origin", "https://github.com/dpf-fixture/refusal.git"], { cwd: worktree });
+    const scratch = mkdtempSync(join(tmpdir(), "dpf-client-refusal-"));
+    const sha = gitText(["rev-parse", "HEAD"], { cwd: worktree }).trim();
+    const branch = gitText(["branch", "--show-current"], { cwd: worktree }).trim();
+    const server = await startGateFixtureMcp(call => call.name === "claim_nonprod_environment_lease"
+      ? { success: false, error: refusal, message: "Refresh the governed branch and host observation.",
+          data: { admission: { status: "refused" }, retryable: false } }
+      : { success: true });
+    t.after(async () => {
+      await server.close();
+      for (const directory of [worktree, scratch]) {
+        assert.ok(realpathSync(directory).toLowerCase().startsWith(realpathSync(tmpdir()).toLowerCase() + "/")
+          || realpathSync(directory).toLowerCase().startsWith(realpathSync(tmpdir()).toLowerCase() + "\\"));
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+    const events = [];
+    const result = await resumeUntilAdmitted({
+      gateArgv: [join(worktree, "scripts/gate-worktree.mjs"),
+        "--worktree", worktree, "--sha", sha, "--branch", branch, "--mcp-url", server.url,
+        "--owner-provider", "codex", "--owner-session-id", "fixture-client-refusal", "--no-push"],
+      cwd: worktree, intervalMs: 1, deadlineMs: 60_000,
+      env: isolatedGateFixtureEnvironment(scratch, {
+        DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify({ totalMemoryBytes: 64 * 1024 ** 3,
+          observedAt: new Date().toISOString(), availableMemoryBytes: 48 * 1024 ** 3,
+          sustainedCpuPercent: 0, diskFreeBytes: 100 * 1024 ** 3, dockerHealthy: true,
+          convergenceActive: false, fencesHealthy: true, evidenceIsolationHealthy: true }),
+      }),
+      sleepFn: async () => assert.fail("an actionable admission refusal must not retry"),
+      log: (event, detail) => events.push({ event, ...detail }),
+    });
+    assert.equal(result.code, EXIT_USAGE, JSON.stringify(events));
+    assert.equal(result.attempts, 1);
+    assert.deepEqual(result.outcome, { evidence: "unrun", reason: "usage" });
+    assert.equal(server.calls.filter(call => call.name === "claim_nonprod_environment_lease").length, 1);
+    for (const forbidden of ["renew_nonprod_environment_lease", "record_local_integration_result", "run_sandbox_command"])
+      assert.equal(server.calls.some(call => call.name === forbidden), false, forbidden);
+  });
+}
 
 const GATE_ARGV = ["/usr/bin/node", "/repo/scripts/gate-worktree.mjs", "--branch", "fix/x"];
 
@@ -545,6 +592,38 @@ test("the resume outcome distinguishes unrun, inconclusive, failed and passed", 
   assert.equal(classifyResumeOutcome(EXIT_CONTROL_PLANE_STARVATION).evidence, "inconclusive");
   assert.equal(classifyResumeOutcome(EXIT_SANDBOX_DRIFT).evidence, "inconclusive");
   assert.deepEqual(classifyResumeOutcome(1), { evidence: "failed", reason: "failed" });
+});
+
+test("a gate client usage refusal ends unrun after one attempt", async () => {
+  let launches = 0;
+  const result = await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs"], deadlineMs: 60_000, env: {}, now: () => 0,
+    sleepFn: async () => assert.fail("an obsolete client must not retry"),
+    spawnFn: () => {
+      launches++;
+      return { once(event, handler) { if (event === "exit") queueMicrotask(() => handler(EXIT_USAGE)); } };
+    },
+  });
+  assert.equal(launches, 1);
+  assert.equal(result.code, EXIT_USAGE);
+  assert.deepEqual(result.outcome, { evidence: "unrun", reason: "usage" });
+});
+
+test("terminal host prerequisite exit stays inconclusive without retrying a refusal", async () => {
+  let attempts = 0;
+  const result = await resumeUntilAdmitted({
+    gateArgv: ["/repo/scripts/gate-worktree.mjs", "--sha", "original-pinned-source"],
+    deadlineMs: 3_600_000, env: {}, now: () => 0,
+    sleepFn: async () => assert.fail("a terminal host refusal must not retry"),
+    spawnFn: () => {
+      attempts++;
+      return { once(event, handler) { if (event === "exit") queueMicrotask(() => handler(88)); } };
+    },
+  });
+  assert.equal(isRetryableExit(88), false);
+  assert.equal(attempts, 1);
+  assert.equal(result.code, 88);
+  assert.deepEqual(result.outcome, { evidence: "inconclusive", reason: "infrastructure" });
 });
 
 test("eventual admission still ends on the gate's own verdict after queued attempts", async () => {
