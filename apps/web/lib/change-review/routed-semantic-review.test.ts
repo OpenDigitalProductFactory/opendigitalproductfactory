@@ -7,7 +7,7 @@ vi.mock("@/lib/routing/local-provider-capacity", () => ({
   inspectLocalProviderCapacity: vi.fn(),
 }));
 vi.mock("./semantic-review-source-sensitivity", () => ({
-  resolveSemanticReviewSourceSensitivity: vi.fn(async () => "internal"),
+  resolveSemanticReviewRoomSensitivity: vi.fn(async () => "internal"),
 }));
 
 import { routeAndCall } from "@/lib/inference/routed-inference";
@@ -45,7 +45,7 @@ describe("routed semantic review", () => {
     },
   );
 
-  it.each(["external", "build-studio"] as const)("keeps the internal floor when the source is not proven public on %s", async (surface) => {
+  it.each(["external", "build-studio"] as const)("keeps the internal floor when the reviewed room is unknown on %s", async (surface) => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
     } as never);
@@ -66,13 +66,18 @@ describe("routed semantic review", () => {
     }
   });
 
-  it("routes a public managed repository's diff as development source, not confidential (BI-B76DC66C)", async () => {
+  const platformRoom = vi.fn(async (_capsuleId: string | undefined) => "development" as const);
+  const review = (artifact: string, room: (capsuleId: string | undefined) => Promise<"development" | "internal" | "confidential" | "restricted">) =>
+    dispatchRoutedSemanticReview(artifact, {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external", capsuleId: "WC-PLATFORM",
+    }, undefined, undefined, room);
+
+  it("routes a platform room's source diff as development, so every cleared provider is eligible (BI-9F620FE1)", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
     } as never);
-    await dispatchRoutedSemanticReview("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", {
-      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
-    }, undefined, undefined, async () => "development");
+    await review("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", platformRoom);
+    expect(platformRoom).toHaveBeenCalledWith("WC-PLATFORM");
     expect(routeAndCall).toHaveBeenCalledTimes(2);
     for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
       expect(sensitivity).toBe("development");
@@ -82,16 +87,30 @@ describe("routed semantic review", () => {
     }
   });
 
-  it("keeps a secret inside a public diff local-only", async () => {
+  it.each([
+    'const apiKey = "sk-ant-api03-REDACTEDLOOKINGSECRETVALUE";',
+    'export const employeeRecord = { salary: 92000, ssn: "123-45-6789" };',
+    'export const taxPayment = { routingNumber: "021000021", accountNumber: "5512338891" };',
+  ])("still keeps protected data in a platform room's diff local-only: %s", async (artifact) => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Screening fixture." }),
     } as never);
-    await dispatchRoutedSemanticReview('const apiKey = "sk-ant-api03-REDACTEDLOOKINGSECRETVALUE";', {
-      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: [], surface: "external",
-    }, undefined, undefined, async () => "development");
+    await review(artifact, platformRoom);
     const [messages, systemPrompt, sensitivity] = vi.mocked(routeAndCall).mock.calls[0]!;
     const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
-    expect(screened.routeContext).toMatchObject({ sensitivity: "restricted", residencyPolicy: "local_only" });
+    expect(screened.routeContext.residencyPolicy).toBe("local_only");
+  });
+
+  it("keeps a confidential room's review confidential", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
+    } as never);
+    await review("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", async () => "confidential");
+    for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
+      expect(sensitivity).toBe("confidential");
+      const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+      expect(screened.routeContext.sensitivity).toBe("confidential");
+    }
   });
 
   it.each([

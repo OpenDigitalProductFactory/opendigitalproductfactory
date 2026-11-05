@@ -1,68 +1,46 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  resetSemanticReviewSourceSensitivityCache,
-  resolveSemanticReviewSourceSensitivity,
-  SOURCE_VISIBILITY_TTL_MS,
-  type SemanticReviewSourceDb,
-} from "./semantic-review-source-sensitivity";
+import { describe, expect, it, vi } from "vitest";
+import { effectiveBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
+import { resolveSemanticReviewRoomSensitivity, semanticReviewRouteSensitivity, type SemanticReviewRoomDeps } from "./semantic-review-source-sensitivity";
 
-const UPSTREAM = "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
-const db = (config: { upstreamRemoteUrl: string | null; contributionMode: string | null } | null): SemanticReviewSourceDb => ({
-  platformDevConfig: { findUnique: vi.fn(async () => config) },
-});
-
-beforeEach(() => resetSemanticReviewSourceSensitivityCache());
-
-describe("semantic review source sensitivity (BI-B76DC66C)", () => {
-  it("treats a public managed repository that the install contributes to as development source", async () => {
-    const readVisibility = vi.fn(async () => "public" as const);
-    await expect(resolveSemanticReviewSourceSensitivity({ db: db({ upstreamRemoteUrl: UPSTREAM, contributionMode: "selective" }), readVisibility }))
-      .resolves.toBe("development");
-    expect(readVisibility).toHaveBeenCalledWith(expect.objectContaining({ owner: "OpenDigitalProductFactory", repo: "opendigitalproductfactory" }));
-  });
-
+describe("semantic review routing follows the reviewed Workroom (BI-9F620FE1)", () => {
   it.each([
-    ["no config row", null, "public"],
-    ["no repository named", { upstreamRemoteUrl: null, contributionMode: "contribute_all" }, "public"],
-    ["a private repository", { upstreamRemoteUrl: UPSTREAM, contributionMode: "contribute_all" }, "private"],
-    ["an unreadable repository", { upstreamRemoteUrl: UPSTREAM, contributionMode: "contribute_all" }, "unknown"],
-    ["an install that keeps changes private", { upstreamRemoteUrl: UPSTREAM, contributionMode: "private" }, "public"],
-    ["a fork-only install", { upstreamRemoteUrl: UPSTREAM, contributionMode: "fork_only" }, "public"],
-  ] as const)("keeps the internal floor for %s", async (_label, config, visibility) => {
-    await expect(resolveSemanticReviewSourceSensitivity({ db: db(config), readVisibility: async () => visibility }))
-      .resolves.toBe("internal");
+    ["public", "development"],
+    ["internal", "internal"],
+    ["confidential", "confidential"],
+    ["restricted", "restricted"],
+    [null, "internal"],
+    ["unexpected", "internal"],
+  ] as const)("maps room ceiling %s to %s", (ceiling, expected) => {
+    expect(semanticReviewRouteSensitivity(ceiling)).toBe(expected);
   });
 
-  it("keeps the internal floor when the configuration cannot be read", async () => {
-    const failing: SemanticReviewSourceDb = { platformDevConfig: { findUnique: vi.fn(async () => { throw new Error("db down"); }) } };
-    await expect(resolveSemanticReviewSourceSensitivity({ db: failing, readVisibility: async () => "public" })).resolves.toBe("internal");
+  it("treats platform work as public source and an explicitly confidential platform item as confidential", () => {
+    // The room ceiling for a backlog-item room is this rule (room-sensitivity-ceiling.server.ts).
+    const platform = effectiveBacklogSensitivity({ sensitivity: "internal", scopeKind: "platform", digitalProductId: null });
+    expect(semanticReviewRouteSensitivity(platform)).toBe("development");
+    const confidential = effectiveBacklogSensitivity({ sensitivity: "confidential", scopeKind: "platform", digitalProductId: null });
+    expect(semanticReviewRouteSensitivity(confidential)).toBe("confidential");
   });
 
-  it("reuses a public answer within the TTL and asks again after it", async () => {
-    const readVisibility = vi.fn(async () => "public" as const);
-    const config = db({ upstreamRemoteUrl: UPSTREAM, contributionMode: "selective" });
-    let now = 1_000;
-    await resolveSemanticReviewSourceSensitivity({ db: config, readVisibility, now: () => now });
-    now += SOURCE_VISIBILITY_TTL_MS - 1;
-    await resolveSemanticReviewSourceSensitivity({ db: config, readVisibility, now: () => now });
-    expect(readVisibility).toHaveBeenCalledTimes(1);
-    now += 2;
-    await resolveSemanticReviewSourceSensitivity({ db: config, readVisibility, now: () => now });
-    expect(readVisibility).toHaveBeenCalledTimes(2);
+  it("resolves the reviewed room's own ceiling", async () => {
+    const room = { scopeClaims: [], backlogItemId: "BI-9F620FE1" };
+    const readRoom = vi.fn(async () => room);
+    const ceiling = vi.fn(async () => "public");
+    await expect(resolveSemanticReviewRoomSensitivity("WC-5EA616F6", { readRoom, ceiling })).resolves.toBe("development");
+    expect(readRoom).toHaveBeenCalledWith("WC-5EA616F6");
+    expect(ceiling).toHaveBeenCalledWith(room);
   });
 
-  it("never caches a failed read", async () => {
-    const readVisibility = vi.fn().mockResolvedValueOnce("unknown").mockResolvedValueOnce("public");
-    const config = db({ upstreamRemoteUrl: UPSTREAM, contributionMode: "selective" });
-    await expect(resolveSemanticReviewSourceSensitivity({ db: config, readVisibility })).resolves.toBe("internal");
-    await expect(resolveSemanticReviewSourceSensitivity({ db: config, readVisibility })).resolves.toBe("development");
-  });
-
-  it("stops trusting a cached answer when the operator saves a different repository", async () => {
-    const readVisibility = vi.fn().mockResolvedValueOnce("public").mockResolvedValueOnce("private");
-    await resolveSemanticReviewSourceSensitivity({ db: db({ upstreamRemoteUrl: UPSTREAM, contributionMode: "selective" }), readVisibility });
-    await expect(resolveSemanticReviewSourceSensitivity({
-      db: db({ upstreamRemoteUrl: "https://github.com/acme/private-fork.git", contributionMode: "selective" }), readVisibility,
-    })).resolves.toBe("internal");
+  type ReadRoom = NonNullable<SemanticReviewRoomDeps["readRoom"]>;
+  type Ceiling = NonNullable<SemanticReviewRoomDeps["ceiling"]>;
+  const fail = async (): Promise<never> => { throw new Error("db down"); };
+  const cases: Array<[string, string | undefined, ReadRoom, Ceiling]> = [
+    ["no room id", undefined, async () => ({ scopeClaims: [], backlogItemId: null }), async () => "public"],
+    ["a missing room", "WC-GONE", async () => null, async () => "public"],
+    ["an unreadable room", "WC-X", fail, async () => "public"],
+    ["an unreadable ceiling", "WC-X", async () => ({ scopeClaims: [], backlogItemId: "BI-1" }), fail],
+  ];
+  it.each(cases)("keeps the internal floor for %s", async (_label, capsuleId, readRoom, ceiling) => {
+    await expect(resolveSemanticReviewRoomSensitivity(capsuleId, { readRoom, ceiling })).resolves.toBe("internal");
   });
 });
