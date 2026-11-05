@@ -58,23 +58,30 @@ describe("extractPrismaFacts", () => {
     expect(hasField?.fromKey).toContain("prisma-model:Post");
   });
 
-  it("emits RELATES_TO edges carrying derived cardinality and FK index status", () => {
+  it("emits one HAS_FOREIGN_KEY_TO edge per foreign key, from the model that holds it (BI-28C22BE3)", () => {
     const result = extractPrismaFacts({
       graphKey: "source-code",
       filePath: "packages/db/prisma/schema.prisma",
       sourceText: SCHEMA,
     });
 
-    const relatesTo = result.edges.filter((e) => e.kind === "RELATES_TO");
-    const postToUser = relatesTo.find(
+    expect(result.edges.some((e) => (e.kind as string) === "RELATES_TO")).toBe(false);
+    const fkEdges = result.edges.filter((e) => e.kind === "HAS_FOREIGN_KEY_TO");
+    const postToUser = fkEdges.find(
       (e) => e.fromKey.endsWith("prisma-model:Post") && e.toKey.endsWith("prisma-model:User"),
     );
-    expect(postToUser?.attributes).toMatchObject({ cardinality: "many-to-one", isFkIndexed: true });
+    expect(postToUser?.attributes).toMatchObject({
+      cardinality: "many-to-one",
+      isFkIndexed: true,
+      fkFields: "authorId",
+      fieldName: "author",
+    });
 
-    const userToPost = relatesTo.find(
+    // The back-relation (User.posts) holds no key and adds no edge.
+    const userToPost = fkEdges.find(
       (e) => e.fromKey.endsWith("prisma-model:User") && e.toKey.endsWith("prisma-model:Post"),
     );
-    expect(userToPost?.attributes).toMatchObject({ cardinality: "one-to-many" });
+    expect(userToPost).toBeUndefined();
   });
 
   it("keeps the DEFINES edge for backward compatibility", () => {

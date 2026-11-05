@@ -7,7 +7,7 @@
 // /ea/data-model view renders from; the graph sync is an optimization and never
 // fails the run.
 
-import { prisma as defaultPrisma, readCanonicalPrismaSchema, syncEaElement, syncEaRelationship } from "@dpf/db";
+import { prisma as defaultPrisma, pruneStaleEaRelationshipEdges, readCanonicalPrismaSchema, syncEaElement, syncEaRelationship } from "@dpf/db";
 
 import { parsePrismaSchema } from "../build/code-graph/extractors/prisma-schema-adapter";
 import { reconcileDataModelMirror, type MirrorPrismaClient, type MirrorResult } from "./data-model-mirror-apply";
@@ -137,6 +137,8 @@ async function projectMirrorToGraph(prisma: unknown): Promise<number> {
       relationshipTypeSlug: rel.relationshipType.slug,
     });
   }
+  // Retyped or dropped mirror rows (BI-28C22BE3) leave their old-typed edge behind otherwise.
+  await pruneStaleEaRelationshipEdges();
 
   return count;
 }

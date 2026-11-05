@@ -25,6 +25,7 @@ import {
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { assertWorkroomPublishable } from "./publication-refusal";
+import { assertDocsImpactDisposed } from "./docs-impact-disposition";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import {
@@ -610,6 +611,12 @@ export async function updateWorkCapsuleStatus(args: {
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
   await assertWorkroomPublishable({ ...capsule, capsuleId: args.capsuleId, status: args.status, backlogItem: args.db.backlogItem });
+  await assertDocsImpactDisposed({
+    status: args.status,
+    capsuleRowId: capsule.id,
+    verificationState: capsule.verificationState,
+    workroomActivity: args.db.workroomActivity,
+  });
   if (args.status === "complete" && hasGovernedLink) {
     const completed = await completeGovernedWorkCapsuleStatus({
       db: args.db,

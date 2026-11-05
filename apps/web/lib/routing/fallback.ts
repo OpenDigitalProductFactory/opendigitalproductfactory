@@ -247,6 +247,7 @@ export async function callWithFallbackChain(
   const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
+  const allowanceRefusals: Error[] = []; // BI-F3B6713F: the platform's own paid allowance refused; no endpoint is at fault
   const changedAccounts: ProviderAccountSelectionChangedError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -451,6 +452,7 @@ export async function callWithFallbackChain(
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
         continue;
       }
+      if (e instanceof Error && e.name === "AgentAllowanceExhaustedError") { allowanceRefusals.push(e); attempts.push({ endpointId: entry.providerId, error: e.message, code: "daily-allowance-used" }); continue; }
       const errMsg = getErrorMessage(e);
       const errCode = e && typeof e === "object" && typeof (e as { code?: unknown }).code === "string"
         ? (e as { code: string }).code : undefined;
@@ -761,9 +763,8 @@ export async function callWithFallbackChain(
 
   if (changedAccounts.length > 0) throw changedAccounts.at(-1)!;
 
-  if (capacityDeferrals.length === chain.length) {
-    throw capacityDeferrals.at(-1)!;
-  }
+  if (capacityDeferrals.length === chain.length) throw capacityDeferrals.at(-1)!;
+  if (allowanceRefusals.length === chain.length) throw allowanceRefusals.at(-1)!;
 
   if (reconciledProviders.size > 0) {
     throw new ProviderReconciliationRequiredError(reconciledProviders, attempts);
@@ -774,7 +775,7 @@ export async function callWithFallbackChain(
     // Keep both the remote failure history and a typed local capacity reason.
     // A mixed chain is not a local-only outage, but its deferred candidate must
     // remain distinguishable from a provider failure to recovery callers.
-    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) } : undefined,
+    capacityDeferrals.length || allowanceRefusals.length ? { cause: capacityDeferrals.at(-1) ?? allowanceRefusals.at(-1) } : undefined,
   );
 }
 
