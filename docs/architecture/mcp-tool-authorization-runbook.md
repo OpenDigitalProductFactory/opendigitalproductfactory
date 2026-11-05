@@ -1,3 +1,14 @@
+---
+# Doc-impact edges (BI-9B17E889): the per-client dpf connector descriptors this
+# runbook describes. Changing one flags this page in the Docs Impact Gate and in
+# a Workroom's change-impact contract.
+relatedCode:
+  - packages/dpf-skill-pack/claude.mcp.json
+  - packages/dpf-skill-pack/codex.mcp.json
+  - packages/dpf-skill-pack/grok.mcp.json
+  - packages/dpf-skill-pack/antigravity.mcp.json
+---
+
 # MCP tool authorization runbook
 
 Source host tooling applies existing authorized CA trust to native MCP and OAuth
@@ -311,6 +322,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 2. HTTP `401` means the bearer credential is absent, invalid or expired. **For an OAuth client this is self-healing and not a defect** — the challenge carries `resource_metadata`, so the client rediscovers, refreshes or re-authorizes on its own; if it does not, the client is not performing RFC 9728 discovery. For a legacy `dpfmcp_` PAT there is no refresh grant: rotate or reseed the local client configuration, and prefer migrating that client to OAuth. Never print the token.
 2b. HTTP `403` with `error="insufficient_scope"` is **not** an auth failure — it is a step-up prompt. See the scope-escalation rule above.
 3. Structured `insufficient_token_scope` / `insufficient_tool_grant` means the server is connected but authorization refused the operation. Stop; do not work around the grant intersection.
+3b. **Every refusal says whether to call again (BI-E458A9CB).** A governed refusal's `data` carries `retry` and `nextAction`: `retry: "never"` with `wakeBy` naming what changes the answer (an approval decision on `envelopeId`, an authority change, or a person), `retry: "after-input"` once the named input exists, or `retry: "after"` with `retryAfterMs` for a check that could not run. An approval wait also names the exact readback call, `get_my_approval_status` with its `envelopeId`. An identical repeat (same principal, tool, arguments and authority facts) inside the window is **parked**: it returns the recorded answer with `governance.parked`, writes no new authority row and raises no new approval card, and the first parked repeat records a `refusal_breaker` ImprovementSignal. A grant, room or argument change is a different call and is evaluated at once; a decided or expired approval releases its park. Code: `apps/web/lib/govern/authority/refusal-breaker.ts`.
 4. Structured `unknown_tool` means the called name is not in the server grant map. Follow its `recovery` payload: try exact-name `load_tools` when spelling is known, otherwise intent query or `search_tool_marketplace`, then re-list or use the host's programmatic catalog fallback.
 5. MCP resources and MCP tools are different discovery surfaces. Listing resources cannot prove that a DPF tool is absent, and installing another plugin is not recovery for an already-connected DPF server.
 6. A fresh Codex task with a healthy connector but only the core catalog usually means its configured URL lacks `?tier=full`; this is bootstrap drift, not missing authority. Re-run bootstrap and reconnect. Preserve `?tier=core` for generic-client diagnosis rather than widening every client.

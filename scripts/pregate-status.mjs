@@ -12,7 +12,9 @@
 //
 // Exit code: 0 only when the verdict is PASS for the current HEAD. That makes
 // `pnpm run pregate:status && git push` a correct composition — which the raw
-// pregate exit code never was.
+// pregate exit code never was. 75 means a gate for HEAD is still working
+// (PREFLIGHT / QUEUED / ADMITTED / RUNNING): wait and read again (BI-F039AA83).
+// 1 is everything else, including a recorded FAIL.
 
 import { readFileSync } from "node:fs";
 import { gitTextOrNull } from "./lib/git.mjs";
@@ -24,12 +26,14 @@ import {
   resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import {
+  applyLiveGate,
   classifySlotRecord,
   exitCodeForVerdict,
   formatStatusReport,
   reconcileSlots,
 } from "./lib/pregate-status.mjs";
 import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
+import { PREGATE_LIVE_MARKER_NAME, readLivePregate } from "./lib/pregate-live.mjs";
 import { findQueueWaiter } from "./lib/local-queue-observer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { guardReceiptDirectory, observeGuardReceipt, reconcileGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
@@ -79,21 +83,33 @@ export function resolveWorktreeContext(cwd = process.cwd()) {
   });
 }
 
-/** Read and classify every slot's records for this worktree. */
-export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter } = {}) {
-  // BI-27A37D27: whether any waiter is alive for this claim, read from the same
-  // observer registry the gate and its resumer register in.
-  let queuedWaiter = null;
+/**
+ * BI-27A37D27: whether any waiter is alive for this claim, read from the same
+ * observer registry the gate and its resumer register in. Null when unreadable.
+ */
+export function readQueueWaiter(context, findWaiterImpl = findQueueWaiter) {
   try {
-    queuedWaiter = findWaiterImpl({
+    return findWaiterImpl({
       directory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
         || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
       branch: context.headBranch,
       sha: context.headSha,
     });
   } catch {
-    queuedWaiter = null;
+    return null;
   }
+}
+
+/** The pregate live marker for this worktree (BI-F039AA83) — in the worktree's OWN git dir. */
+export function livePregateMarkerPath(context) {
+  return resolvePath(context.candidateGitDir, PREGATE_LIVE_MARKER_NAME);
+}
+
+/** Read and classify every slot's records for this worktree. */
+export function collectSlotVerdicts(context, {
+  now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter,
+  queuedWaiter = readQueueWaiter(context, findWaiterImpl),
+} = {}) {
   const manifests = new Map(LOCAL_CI_SLOT_KEYS.map((slotKey) => [slotKey, createLocalCiSlotManifest({
     slotKey,
     rootClone: context.rootClone,
@@ -137,6 +153,39 @@ export function collectHostPreflightStatus(context, { reconcile = false, directo
     lastProgress: receipt?.observations?.at(-1) ?? null };
 }
 
+/**
+ * The whole answer for this worktree: the reconciled record verdict, with a
+ * gate that is provably still working overlaid as PREFLIGHT / QUEUED /
+ * ADMITTED / RUNNING (BI-F039AA83).
+ */
+export function collectGateStatus(context, {
+  now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter,
+  readLiveImpl = readLivePregate,
+} = {}) {
+  const queuedWaiter = readQueueWaiter(context, findWaiterImpl);
+  const slots = collectSlotVerdicts(context, { now, readJsonImpl, findWaiterImpl, queuedWaiter });
+  const recorded = slots.length > 0
+    ? reconcileSlots(slots)
+    : {
+      verdict: "NO-RECORD",
+      reason: "no gate record for this worktree and no pregate running here",
+      slot: null,
+    };
+  let live = null;
+  try {
+    live = readLiveImpl({ path: livePregateMarkerPath(context) });
+  } catch {
+    live = null;
+  }
+  return applyLiveGate(recorded, {
+    live,
+    queuedWaiter,
+    slots,
+    headSha: context.headSha,
+    headBranch: context.headBranch,
+  });
+}
+
 export function projectGateStatus(result, context, hostPreflight) {
   return {
       verdict: result.verdict,
@@ -155,6 +204,8 @@ export function projectGateStatus(result, context, hostPreflight) {
       logFile: result.logFile ?? "",
       worktreePath: context.worktreePath,
       ...(hostPreflight ? { hostPreflight } : {}),
+      live: result.live ?? null,
+      priorVerdict: result.priorVerdict ?? "",
   };
 }
 
@@ -168,15 +219,8 @@ function main() {
     process.exit(1);
   }
 
-  const slots = collectSlotVerdicts(context);
   const hostPreflight = collectHostPreflightStatus(context, { reconcile: process.argv.includes("--reconcile-host-receipt") });
-  const result = slots.length > 0
-    ? reconcileSlots(slots)
-    : {
-      verdict: "NO-RECORD",
-      reason: "no gate record for this worktree — pregate has not run here",
-      slot: null,
-    };
+  const result = collectGateStatus(context);
 
   if (asJson) {
     process.stdout.write(`${JSON.stringify(projectGateStatus(result, context, hostPreflight), null, 2)}\n`);

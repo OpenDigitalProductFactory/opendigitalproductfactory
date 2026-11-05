@@ -67,7 +67,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         permissions.apply_permissions(self.plan(), dry_run=False)
         new=json.loads((self.root / '.claude/settings.local.json').read_text(encoding='utf-8'))
         self.assertEqual(claude['permissions']['deny'],new['permissions']['deny'])
-        self.assertEqual(claude['permissions']['ask'],new['permissions']['ask'])
+        self.assertEqual(claude['permissions']['ask'],new['permissions']['ask'][:1])
         self.assertEqual('plan',new['permissions']['defaultMode'])
         self.assertEqual('chosen',new['model'])
         self.assertEqual(claude['hooks'],new['hooks'])
@@ -312,5 +312,55 @@ class RoutinePermissionsTest(unittest.TestCase):
         permissions.apply_permissions(self.plan(), dry_run=False)
         updater.ensure_codex_config(self.home, None, False)
         self.assertEqual(first, path.read_bytes())
+
+    # BI-1B0D1416: Codex loads project rules only for the trusted project that is
+    # the session's own; sessions in the install folder or a sibling worktree
+    # never saw them, so every escalation reached the guardian reviewer.
+    @NEEDS_ANY_TOML
+    def test_codex_user_layer_rules_come_from_the_shared_baseline(self):
+        policy=json.loads((PACK/'contracts/client-permission-baseline.json').read_text(encoding='utf-8'))
+        default=self.home/'.codex/rules/default.rules'
+        default.parent.mkdir(parents=True)
+        default.write_text('prefix_rule(pattern=["Get-Location"], decision="allow")\n',encoding='utf-8')
+        rows=permissions.apply_permissions(self.plan(),dry_run=False)
+        path=self.home/'.codex/rules/dpf-routine.rules'
+        text=path.read_text(encoding='utf-8')
+        self.assertTrue(text.startswith(permissions.MARKER))
+        for prefix in policy['commandPrefixes']:
+            if prefix!=['node','scripts/']:
+                self.assertIn('prefix_rule(pattern='+json.dumps(prefix)+', decision="allow")',text)
+        self.assertNotIn('"scripts/"',text)
+        self.assertEqual('prefix_rule(pattern=["Get-Location"], decision="allow")\n',default.read_text(encoding='utf-8'))
+        self.assertIn(str(path),next(r for r in rows if r['client']=='codex')['paths'])
+        self.assertFalse(any(x.changed for x in self.plan().files))
+
+    def test_reviewed_prefixes_narrow_an_allowed_prefix_and_are_never_allowed(self):
+        policy=json.loads((PACK/'contracts/client-permission-baseline.json').read_text(encoding='utf-8'))
+        allowed=policy['commandPrefixes']
+        reviewed=policy['reviewedPrefixes']
+        self.assertIn(['git','push','--force'],reviewed)
+        self.assertIn(['git','worktree','remove'],reviewed)
+        for prefix in reviewed:
+            self.assertNotIn(prefix,allowed)
+            self.assertTrue(any(prefix[:len(a)]==a and len(prefix)>len(a) for a in allowed),prefix)
+
+    @NEEDS_ANY_TOML
+    def test_destructive_and_outbound_forms_stay_reviewed_in_codex_and_claude(self):
+        policy=json.loads((PACK/'contracts/client-permission-baseline.json').read_text(encoding='utf-8'))
+        permissions.apply_permissions(self.plan(),dry_run=False)
+        for path in (self.home/'.codex/rules/dpf-routine.rules',self.root/'.codex/rules/dpf-routine.rules'):
+            text=path.read_text(encoding='utf-8')
+            for prefix in policy['reviewedPrefixes']:
+                self.assertIn('prefix_rule(pattern='+json.dumps(prefix)+', decision="prompt")',text)
+        ask=json.loads((self.root/'.claude/settings.local.json').read_text(encoding='utf-8'))['permissions']['ask']
+        self.assertIn('Bash(git push --force *)',ask)
+
+    @NEEDS_ANY_TOML
+    def test_unowned_user_layer_rule_file_is_refused_before_any_write(self):
+        path=self.home/'.codex/rules/dpf-routine.rules'
+        path.parent.mkdir(parents=True)
+        path.write_text('prefix_rule(pattern=["git"],decision="forbidden")\n',encoding='utf-8')
+        with self.assertRaises(permissions.PermissionPlanError): self.plan()
+        self.assertFalse((self.root/'.codex').exists())
 
 if __name__=='__main__': unittest.main()
