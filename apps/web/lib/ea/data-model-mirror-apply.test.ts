@@ -18,7 +18,14 @@ model Post {
 }
 `;
 
-type Row = { id: string; properties: Record<string, unknown> };
+type Row = { id: string; properties: Record<string, unknown>; relationshipTypeId?: string };
+
+const TYPE_ID_BY_SLUG: Record<string, string> = {
+  has_foreign_key_to: "rt-fk",
+  composed_of: "rt-comp",
+  associated_with: "rt-assoc",
+};
+const SLUG_BY_TYPE_ID = Object.fromEntries(Object.entries(TYPE_ID_BY_SLUG).map(([slug, id]) => [id, slug]));
 
 function matchesWhere(row: Row, where: Record<string, unknown> | undefined): boolean {
   if (!where) return true;
@@ -44,19 +51,31 @@ function makeClient(seed?: { elements?: Row[]; relationships?: Row[] }) {
     findMany: async (args: Record<string, unknown>) =>
       [...map.values()]
         .filter((r) => matchesWhere(r, args.where as Record<string, unknown>))
-        .map((r) => ({ id: r.id, properties: r.properties })),
+        .map((r) => ({
+          id: r.id,
+          properties: r.properties,
+          relationshipType: r.relationshipTypeId ? { slug: SLUG_BY_TYPE_ID[r.relationshipTypeId] } : null,
+        })),
     create: async (args: Record<string, unknown>) => {
       const data = args.data as Record<string, unknown>;
       const id = nextId(prefix);
       map.set(id, { id, properties: (data.properties ?? {}) as Record<string, unknown> });
       return { id };
     },
+    delete: async (args: Record<string, unknown>) => {
+      map.delete((args.where as { id: string }).id);
+      return {};
+    },
     upsert: async (args: Record<string, unknown>) => {
       // The apply step only upserts genuinely-new (from,to,type) edges (plan create ops),
       // so create-semantics is faithful here; the DB unique key enforces real idempotency.
       const data = (args.create ?? args.data) as Record<string, unknown>;
       const id = nextId(prefix);
-      map.set(id, { id, properties: (data.properties ?? {}) as Record<string, unknown> });
+      map.set(id, {
+        id,
+        properties: (data.properties ?? {}) as Record<string, unknown>,
+        relationshipTypeId: data.relationshipTypeId as string | undefined,
+      });
       return { id };
     },
     update: async (args: Record<string, unknown>) => {
@@ -64,6 +83,7 @@ function makeClient(seed?: { elements?: Row[]; relationships?: Row[] }) {
       const data = args.data as Record<string, unknown>;
       const row = map.get(id);
       if (row && data.properties) row.properties = data.properties as Record<string, unknown>;
+      if (row && typeof data.relationshipTypeId === "string") row.relationshipTypeId = data.relationshipTypeId;
       return { id };
     },
   });
@@ -71,7 +91,12 @@ function makeClient(seed?: { elements?: Row[]; relationships?: Row[] }) {
   const client: MirrorPrismaClient = {
     eaNotation: { findUnique: async () => ({ id: "not-1", slug: "archimate4" }) },
     eaElementType: { findUnique: async () => ({ id: "et-do", neoLabel: "ArchiMate__DataObject", slug: "data_object" }) },
-    eaRelationshipType: { findUnique: async () => ({ id: "rt-assoc", neoType: "ASSOCIATED_WITH", slug: "associated_with" }) },
+    eaRelationshipType: {
+      findUnique: async (args: Record<string, unknown>) => {
+        const slug = (args.where as { notationId_slug: { slug: string } }).notationId_slug.slug;
+        return TYPE_ID_BY_SLUG[slug] ? { id: TYPE_ID_BY_SLUG[slug], neoType: slug.toUpperCase(), slug } : null;
+      },
+    },
     viewpointDefinition: { upsert: async () => ({ id: "vp-1" }) },
     eaView: {
       findFirst: async () => null,
@@ -124,7 +149,8 @@ describe("reconcileDataModelMirror", () => {
     // One element per model, keyed by stable source key.
     const sourceKeys = [...m.elements.values()].map((r) => r.properties.sourceKey);
     expect(sourceKeys).toEqual(expect.arrayContaining([modelSourceKey("User"), modelSourceKey("Post")]));
-    expect(m.relationships.size).toBeGreaterThanOrEqual(2);
+    // One typed relationship per foreign key (BI-28C22BE3).
+    expect([...m.relationships.values()].map((r) => r.relationshipTypeId)).toEqual(["rt-fk"]);
     expect(m.viewElements.length).toBe(2);
     expect(m.snapshots).toHaveLength(1);
   });
@@ -172,5 +198,28 @@ describe("reconcileDataModelMirror", () => {
     // No new elements created while blocked (only the two seeded duplicates remain).
     expect(m.elements.size).toBe(2);
     expect(m.snapshots).toHaveLength(0);
+  });
+
+  it("retypes the legacy associated_with mirror and deletes its back-relation duplicates (BI-28C22BE3)", async () => {
+    const m = makeClient();
+    await reconcileDataModelMirror({ prisma: m.client, facts });
+    // Re-seed the relationships as the pre-BI-28C22BE3 mirror wrote them.
+    const [fkRow] = [...m.relationships.values()];
+    m.relationships.clear();
+    m.relationships.set("legacy-fk", { id: "legacy-fk", properties: { ...fkRow.properties, descriptor: "old" }, relationshipTypeId: "rt-assoc" });
+    m.relationships.set("legacy-inverse", {
+      id: "legacy-inverse",
+      properties: { sourceKey: "prisma:relation:User:posts:Post", fkFields: [], descriptor: "old" },
+      relationshipTypeId: "rt-assoc",
+    });
+
+    const result = await reconcileDataModelMirror({ prisma: m.client, facts });
+    expect(result.status).toBe("applied");
+    const rows = [...m.relationships.values()];
+    expect(rows.map((r) => r.relationshipTypeId)).toEqual(["rt-fk"]);
+    expect(rows.some((r) => r.id === "legacy-inverse")).toBe(false);
+
+    const again = await reconcileDataModelMirror({ prisma: m.client, facts });
+    expect(again.status).toBe("noop");
   });
 });

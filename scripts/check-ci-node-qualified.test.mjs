@@ -1,60 +1,81 @@
-// scripts/check-ci-node-qualified.test.mjs (BI-2FAE2E5C)
+// scripts/check-ci-node-qualified.test.mjs (BI-2FAE2E5C, BI-827FA1C9)
 // Node built-in test runner: node --test scripts/check-ci-node-qualified.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkCiNodeQualified, findFloatingNodeVersions, parseNodeVersionPin } from "./check-ci-node-qualified.mjs";
+import {
+  checkCiNodeQualified, findDockerfileNodeMajors, findFloatingNodeVersions,
+  parseEnginesRange, parseNodeVersionPin, rangeAdmitsPin,
+} from "./check-ci-node-qualified.mjs";
 
-const qualification = { component: "@opendigitalproductfactory/dpf-workroom", supportedNodeVersions: ["24.16.0", "24.22.0", "24.22.1"] };
+const line = [{ path: "workroom.tgz", engines: ">=24.16.0 <25" }];
+const exactList = [{ path: "workroom.tgz", engines: "24.16.0 || 24.22.0 || 24.22.1" }];
+const reads = [{ path: ".github/workflows/x.yml", text: "          node-version-file: .node-version\n" }];
 
-test("only an exact X.Y.Z release is a pin", () => {
-  assert.equal(parseNodeVersionPin("24.22.1\n"), "24.22.1");
-  assert.equal(parseNodeVersionPin("v24.22.1"), "24.22.1");
-  assert.equal(parseNodeVersionPin("24"), null);
-  assert.equal(parseNodeVersionPin("24.x"), null);
-  assert.equal(parseNodeVersionPin("lts/*"), null);
-  assert.equal(parseNodeVersionPin(""), null);
+test("a pin is a major line or one exact release", () => {
+  assert.deepEqual(parseNodeVersionPin("24\n"), { kind: "major", major: 24, text: "24" });
+  assert.equal(parseNodeVersionPin("v24.22.1").text, "24.22.1");
+  for (const text of ["24.x", "24.22", "lts/*", "", null]) assert.equal(parseNodeVersionPin(text), null, String(text));
 });
 
-test("a setup-node major-only pin on the pinned major floats with the runner image", () => {
-  const yml = "      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n";
-  assert.deepEqual(findFloatingNodeVersions(yml, "24"), [{ line: 3, value: "24" }]);
-  assert.deepEqual(findFloatingNodeVersions("          node-version: '24.x'\n", "24").map(f => f.value), ["24.x"]);
-  assert.deepEqual(findFloatingNodeVersions("          node-version-file: .node-version\n", "24"), []);
-  // Another major is a deliberate, separate toolchain choice, not drift from this pin.
-  assert.deepEqual(findFloatingNodeVersions("          node-version: 22\n", "24"), []);
+test("the Node 24 line admits the newest patch and the major pin; an exact list admits neither", () => {
+  const range = parseEnginesRange(line[0].engines);
+  assert(rangeAdmitsPin(range, parseNodeVersionPin("24.22.2")));
+  assert(rangeAdmitsPin(range, parseNodeVersionPin("24")));
+  assert(!rangeAdmitsPin(range, parseNodeVersionPin("24.15.0")));
+  assert(!rangeAdmitsPin(range, parseNodeVersionPin("26")));
+  const list = parseEnginesRange(exactList[0].engines);
+  assert(rangeAdmitsPin(list, parseNodeVersionPin("24.22.1")));
+  assert(!rangeAdmitsPin(list, parseNodeVersionPin("24.22.2")), "the 24.22.2 break");
+  assert(!rangeAdmitsPin(list, parseNodeVersionPin("24")));
+  assert.equal(parseEnginesRange("^24.16.0"), null, "unsupported syntax is reported, never guessed");
 });
 
-test("refuses a runner Node outside the vendored qualification (the 24.22.2 break)", () => {
-  const result = checkCiNodeQualified({ pinText: "24.22.2", qualifications: [{ path: "q.json", json: qualification }], workflows: [] });
+test("refuses a major pin when an artifact still lists exact patches", () => {
+  const result = checkCiNodeQualified({ pinText: "24", artifacts: exactList, workflows: reads });
   assert.equal(result.ok, false);
-  assert.match(result.errors.join("\n"), /24\.22\.2.*not in.*supportedNodeVersions/);
+  assert.match(result.errors.join("\n"), /\.node-version 24 is outside workroom\.tgz/);
 });
 
-test("refuses a missing or non-exact pin", () => {
-  for (const pinText of [null, "24"]) {
-    const result = checkCiNodeQualified({ pinText, qualifications: [{ path: "q.json", json: qualification }], workflows: [] });
+test("refuses an engines value the check cannot evaluate", () => {
+  const result = checkCiNodeQualified({ pinText: "24", artifacts: [{ path: "a.tgz", engines: "^24" }], workflows: [] });
+  assert.match(result.errors.join("\n"), /cannot evaluate/);
+});
+
+test("refuses a missing or malformed pin", () => {
+  for (const pinText of [null, "24.x"]) {
+    const result = checkCiNodeQualified({ pinText, artifacts: line, workflows: [] });
     assert.equal(result.ok, false);
     assert.match(result.errors.join("\n"), /\.node-version/);
   }
 });
 
-test("refuses a workflow that floats past the pin", () => {
-  const result = checkCiNodeQualified({ pinText: "24.22.1", qualifications: [{ path: "q.json", json: qualification }],
+test("a literal setup-node version on the pinned major bypasses the single pin", () => {
+  assert.deepEqual(findFloatingNodeVersions("          node-version: 24\n", 24), [{ line: 1, value: "24" }]);
+  assert.deepEqual(findFloatingNodeVersions("          node-version: '24.22.1'\n", 24).map(f => f.value), ["24.22.1"]);
+  assert.deepEqual(findFloatingNodeVersions("          node-version: 22\n", 24), [], "another major is a separate toolchain choice");
+  const result = checkCiNodeQualified({ pinText: "24", artifacts: line,
     workflows: [{ path: ".github/workflows/x.yml", text: "          node-version: 24\n" }] });
-  assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /x\.yml:1.*node-version-file: \.node-version/);
 });
 
-test("accepts a qualified exact pin that every workflow reads", () => {
-  const result = checkCiNodeQualified({ pinText: "24.22.1\n", qualifications: [{ path: "q.json", json: qualification }],
-    workflows: [{ path: ".github/workflows/x.yml", text: "          node-version-file: .node-version\n" }] });
-  assert.deepEqual(result, { ok: true, pin: "24.22.1", errors: [] });
+test("Dockerfiles stay on the pinned major", () => {
+  assert.deepEqual(findDockerfileNodeMajors("FROM node:24-alpine AS base\nFROM node:26-alpine\n", 24), [{ line: 2, value: "26" }]);
+  assert.deepEqual(findDockerfileNodeMajors("FROM --platform=linux/amd64 node:24-bookworm-slim@sha256:ab\n", 24), []);
+  const result = checkCiNodeQualified({ pinText: "24", artifacts: line, workflows: reads,
+    dockerfiles: [{ path: "Dockerfile", text: "FROM node:22-alpine\n" }] });
+  assert.match(result.errors.join("\n"), /Dockerfile:1 uses node:22/);
 });
 
-test("the repository itself pins a qualified Node that every workflow reads", async () => {
+test("accepts the major line when every artifact admits it", () => {
+  const result = checkCiNodeQualified({ pinText: "24\n", artifacts: line, workflows: reads,
+    dockerfiles: [{ path: "Dockerfile", text: "FROM node:24-alpine\n" }] });
+  assert.deepEqual(result, { ok: true, pin: "24", errors: [] });
+});
+
+test("the repository pin is admitted by the engines inside every vendored tarball", async () => {
   const { loadRepositoryInputs } = await import("./check-ci-node-qualified.mjs");
   const inputs = await loadRepositoryInputs(new URL("..", import.meta.url));
-  assert(inputs.qualifications.length > 0, "a vendored qualification declares supportedNodeVersions");
-  const result = checkCiNodeQualified(inputs);
-  assert.deepEqual(result.errors, []);
+  assert(inputs.artifacts.length > 0, "a vendored tarball declares engines.node");
+  assert(inputs.dockerfiles.length > 0, "Dockerfiles are inspected");
+  assert.deepEqual(checkCiNodeQualified(inputs).errors, []);
 });
