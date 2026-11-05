@@ -1,0 +1,14 @@
+{
+  "environmentClass": {
+    "label": "What that installation is",
+    "placeholder": "Choose…",
+    "hint": "The organization certifies this in the installation's membership. Other installations use it to decide what it may be asked to do, and it must match what that installation says it is.",
+    "production": "Production",
+    "development": "Development",
+    "test": "Test"
+  },
+  "preview": {
+    "certifiedAs": "Certified as",
+    "notStated": "Not stated. Ask for a new file."
+  }
+}

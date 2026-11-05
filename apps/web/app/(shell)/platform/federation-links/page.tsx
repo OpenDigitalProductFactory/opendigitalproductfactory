@@ -232,7 +232,12 @@ export default async function FederationLinksPage() {
           <Link href="/platform/service-desk" className="text-[var(--dpf-accent)] hover:underline">{t("federation.serviceDesk")}</Link>
         </p>
       </div>
-      <OrganizationJoinPanel candidates={joinCandidates} />
+      <MessagesProvider
+        locale={locale.language}
+        messages={{ organizationJoin: namespaceMessages(locale.language, "organizationJoin") }}
+      >
+        <OrganizationJoinPanel candidates={joinCandidates} />
+      </MessagesProvider>
       <MessagesProvider
         locale={locale.language}
         messages={{ deploymentSharing: namespaceMessages(locale.language, "deploymentSharing") }}

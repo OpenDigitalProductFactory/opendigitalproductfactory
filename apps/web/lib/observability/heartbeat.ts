@@ -88,8 +88,8 @@ export async function reserveTaskRunGenerationWorking(input: {
   expectedStatus: string;
   updatedAt: Date;
   progressPayload: Prisma.InputJsonValue;
-}): Promise<boolean> {
-  const result = await prisma.taskRun.updateMany({
+}, db: Pick<Prisma.TransactionClient, "taskRun"> = prisma): Promise<boolean> {
+  const result = await db.taskRun.updateMany({
     where: {
       taskRunId: input.taskRunId,
       status: input.expectedStatus,

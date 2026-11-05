@@ -116,6 +116,9 @@ const REL_TYPES: RelTypeDef[] = [
   { slug: "depends_on",       name: "Depends On",       neoType: "DEPENDS_ON",      description: "Runtime or structural dependency" },
   { slug: "assigned_to",      name: "Assigned To",      neoType: "ASSIGNED_TO",     description: "Active structure element assigned to a behaviour or resource" },
   { slug: "composed_of",      name: "Composed Of",      neoType: "COMPOSED_OF",     description: "Whole-part structural composition" },
+  // BI-28C22BE3: a Prisma foreign key between mirrored data objects. Exchanged as a named
+  // ArchiMate association (name = the FK field); stored typed so analysis can tell it apart.
+  { slug: "has_foreign_key_to", name: "Has Foreign Key To", neoType: "HAS_FOREIGN_KEY_TO", description: "Rows of the source data object hold a foreign key to rows of the target" },
   { slug: "associated_with",  name: "Associated With",  neoType: "ASSOCIATED_WITH", description: "Generic unspecified relationship" },
   { slug: "influences",       name: "Influences",       neoType: "INFLUENCES",      description: "Motivation element influences another element" },
   { slug: "triggers",         name: "Triggers",         neoType: "TRIGGERS",        description: "Temporal or causal trigger between behaviours" },
@@ -146,8 +149,9 @@ const RULES: RuleDef[] = [
   ["application_component", "application_component", "composed_of"],
   ["application_component", "application_service",   "serves"],
   ["application_component", "data_object",           "accesses"],
-  // Data model mirror (EP-DATA-ARCH): Prisma relations between logical data objects.
-  ["data_object",           "data_object",           "associated_with"],
+  // Data model mirror (EP-DATA-ARCH): one typed relationship per Prisma foreign key (BI-28C22BE3).
+  ["data_object",           "data_object",           "has_foreign_key_to"],
+  ["data_object",           "data_object",           "composed_of"],
   // Business internal
   ["business_actor",        "business_role",         "assigned_to"],
   ["business_capability",   "business_capability",   "associated_with"],

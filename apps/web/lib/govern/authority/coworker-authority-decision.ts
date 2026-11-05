@@ -117,7 +117,7 @@ export type CoworkerAuthorityInput = {
     policyProjectionAllowed?: boolean;
     consequence?: ToolConsequence | null;
     /** How this call's consequence was narrowed from the tool's declaration (BI-2D65BD1B). */
-    consequenceRefinement?: { declared: ToolConsequence; reason: string };
+    consequenceRefinement?: { declared: ToolConsequence; reason: string; approverSummary?: string };
     /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
     workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;

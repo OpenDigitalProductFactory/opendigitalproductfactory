@@ -684,11 +684,16 @@ export const cliAdapter: ExecutionAdapterHandler = {
       };
     } catch (error) {
       // Quota is an account observation, not proof that native tool effects settled.
-      // Use only the validated terminal envelope, never raw output or a reset guess.
+      // Use only the validated terminal envelope, never raw output. A dated
+      // phrase in that envelope yields its reset instant (BI-783EBEE6); without
+      // one the reset stays unknown rather than guessed.
       const terminal = error instanceof NativeCliExecutionUncertainError ? error.diagnostics?.terminalResult : undefined;
       if (terminal?.type === "result" && terminal.status === "error" && terminal.isError === true && terminal.hint === "quota") {
+        const resetAt = terminal.resetAt ? new Date(terminal.resetAt) : null;
         try {
-          await recordCliRateLimit("claude-cli", providerId,
+          if (resetAt) await recordCliRateLimit("claude-cli", providerId,
+            `The native CLI reported a usage limit that resets at ${resetAt.toISOString()}.`, poolIdentity, resetAt);
+          else await recordCliRateLimit("claude-cli", providerId,
             "The native CLI reported a usage limit; its reset time is unknown.", poolIdentity);
         } catch { /* Persistence must never replace the original execution hold. */ }
       }

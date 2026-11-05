@@ -701,3 +701,36 @@ describe("CoworkerEnvelopeApproval — expired unanswered", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 });
+
+// BI-6AE64074 — admitting a coworker and raising its data access reads as one plain choice.
+describe("CoworkerEnvelopeApproval — room admission with a data access raise", () => {
+  const admission = () => approval({
+    coworkerAgentId: "AGT-EXT-CLAUDE",
+    manifestActionId: "invite_room_participant",
+    taskRunId: null,
+    reviewBinding: undefined,
+    decision: summarizeCoworkerEnvelopeDecision({
+      toolName: "invite_room_participant",
+      proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer", raiseClearanceTo: "internal" },
+      recommenderAgentId: "AGT-EXT-CLAUDE",
+      authorizerUserId: "owner",
+      consequence: "authority",
+      targetLabel: "Quarterly supplier review",
+    }),
+  });
+
+  it("says who joins, what it can read, and how to undo it", () => {
+    render(<CoworkerEnvelopeApproval approval={admission()} />);
+    expect(screen.getByText("Let change-reviewer into Quarterly supplier review and let it read internal information?")).toBeTruthy();
+    expect(screen.getByText(/joins Quarterly supplier review/)).toBeTruthy();
+    expect(screen.getByText(/lower it again under Coworker data access/)).toBeTruthy();
+    expect(screen.getByText("If you authorize")).toBeTruthy();
+  });
+
+  it("keeps the tool name and parameters in collapsed technical details", () => {
+    render(<CoworkerEnvelopeApproval approval={admission()} />);
+    const details = screen.getByText("Technical details").closest("details")!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("invite_room_participant");
+  });
+});
