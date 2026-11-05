@@ -3,6 +3,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rollbackSelfUpgrade, repairPromoterImage } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { MissedWindowNotice, type MissedWindow } from "@/components/ops/MissedWindowNotice";
 import { CoworkerActivityInspectionLink } from "./CoworkerActivityInspectionLink";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
@@ -47,11 +48,8 @@ type Props = {
   windowTimezone?: string;
   nextWindowStart?: string | null;
   nextScheduledCheckAt?: string | null;
-  /**
-   * BI-EF1AC111 (AC-3): the last maintenance window that went without an
-   * upgrade check, and the scheduler's reason. Null once a check has run.
-   */
-  missedWindow?: { reason: string; at: string } | null;
+  /** BI-EF1AC111: last window that went without an upgrade check, and why. */
+  missedWindow?: MissedWindow | null;
   deployedSha: string | null;
   deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
@@ -207,24 +205,6 @@ function recoveryMemberLabel(member: { target: string; status: string }): string
     default:
       return `${member.target}: backed up`;
   }
-}
-
-function missedWindowCode(reason: string): string {
-  return reason.split(":")[0]?.trim() || reason;
-}
-
-// Plain words for why the scheduler held a window back (BI-EF1AC111). The
-// operator reads this, so no internal codes unless the reason is unknown.
-const MISSED_WINDOW_REASONS: Record<string, string> = {
-  "active-run": "another upgrade was still running",
-  cooldown: "a recent upgrade attempt was still in its wait period",
-  "interval-not-elapsed": "the configured check interval had not passed yet",
-  "promoter-unavailable": "the upgrade helper was not available",
-  "unsupported-install-mode": "this install cannot upgrade itself",
-};
-
-function describeMissedWindowReason(reason: string): string {
-  return MISSED_WINDOW_REASONS[missedWindowCode(reason)] ?? `the scheduler declined (${reason})`;
 }
 
 const DEFAULT_STATUS_STYLE =
@@ -780,13 +760,7 @@ export default function SelfUpgradeClient({
               Maintenance window configured.
             </span>
           )}
-          {missedWindow && (
-            <div className="mt-1 text-[var(--dpf-warning)]" data-missed-window={missedWindowCode(missedWindow.reason)}>
-              The maintenance window at{" "}
-              <LocalTime className="font-mono" value={missedWindow.at} /> passed without an upgrade
-              check: {describeMissedWindowReason(missedWindow.reason)}.
-            </div>
-          )}
+          <MissedWindowNotice missedWindow={missedWindow} />
           {windowSource === "auto-overnight" && autoWindowSummary && (
             <div className="mt-1 text-[var(--dpf-muted)]" data-window-source="auto-overnight">
               Your business runs 24/7, so upgrades run overnight (around{" "}
