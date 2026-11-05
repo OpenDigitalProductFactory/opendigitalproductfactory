@@ -199,6 +199,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_backlog_item: ["backlog_read"],
   update_backlog_item_status: ["backlog_write"],
   retire_backlog_item: ["backlog_write"],
+  retire_peer_demand_intake_copies: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
   // Build-scoped evidence uses build_evidence; backlog_write implies it for compatibility (BI-B2F7ABF5).

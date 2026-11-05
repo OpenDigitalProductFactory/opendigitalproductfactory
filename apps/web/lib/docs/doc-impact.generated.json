@@ -953,6 +953,9 @@
     "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts": [
       "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
     ],
+    "apps/web/lib/govern/authority/refusal-breaker.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
@@ -3591,6 +3594,7 @@
       "apps/web/lib/auth/oauth-policy.ts",
       "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
+      "apps/web/lib/govern/authority/refusal-breaker.ts",
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
