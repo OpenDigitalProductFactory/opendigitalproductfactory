@@ -28,6 +28,7 @@ import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft
 import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
 import { DELIVERY_SHAPES } from "./delivery-shapes";
 import { GENERATED_WORK_SHAPES } from "./generated/index.generated";
+import { improveActivityFor, type ImproveLayer, type WorkShapeImproveActivity } from "./improve-activity";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { PLATFORM_REVIEW_SHAPES } from "./platform-review-shape";
 import { SOURCE_INQUIRY_SHAPES } from "./source-inquiry-shape";
@@ -153,23 +154,32 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
 
 
 /**
- * The full registry: the anchor compliance shape, the standing operations, the
- * five delivery shapes, one orchestration cycle per IT4IT value stream, the
- * acceptance-verification steward, platform post-implementation review and
- * read-only source inquiry activities.
+ * The full registry, family by family: the anchor compliance shape, the
+ * standing operations, the coworker standing shapes, the five delivery shapes,
+ * one orchestration cycle per IT4IT value stream, the acceptance-verification
+ * steward, platform post-implementation review and read-only source inquiry
+ * activities. Each family names the improve layer its shapes inherit
+ * (BI-CE564FBB).
  */
-const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
-  ...SHAPES,
-  ...STANDING_SHAPES,
-  ...COWORKER_STANDING_SHAPES,
-  ...COWORKER_STANDING_SHAPES_OPERATE,
-  ...COWORKER_STANDING_SHAPES_CRAFT,
-  ...DELIVERY_SHAPES,
-  ...ORCHESTRATION_SHAPES,
-  ...ACCEPTANCE_VERIFICATION_SHAPES,
-  ...PLATFORM_REVIEW_SHAPES,
-  ...SOURCE_INQUIRY_SHAPES,
-};
+const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShapeDefinition>])[] = [
+  ["assurance", SHAPES],
+  ["platform-operations", STANDING_SHAPES],
+  ["business-operations", COWORKER_STANDING_SHAPES],
+  ["business-operations", COWORKER_STANDING_SHAPES_OPERATE],
+  ["craft", COWORKER_STANDING_SHAPES_CRAFT],
+  ["ring-0", DELIVERY_SHAPES],
+  ["orchestration", ORCHESTRATION_SHAPES],
+  ["assurance", ACCEPTANCE_VERIFICATION_SHAPES],
+  ["assurance", PLATFORM_REVIEW_SHAPES],
+  ["ring-0", SOURCE_INQUIRY_SHAPES],
+];
+
+const ALL_SHAPES: Record<string, WorkShapeDefinition> = Object.assign({}, ...SHAPE_FAMILIES.map(([, family]) => family));
+
+/** The improve activity each shape inherits, from the family that registers it (last registration wins, as in ALL_SHAPES). */
+const IMPROVE_ACTIVITIES = new Map<string, WorkShapeImproveActivity>(
+  SHAPE_FAMILIES.flatMap(([layer, family]) => Object.keys(family).map((key) => [key, improveActivityFor(layer)] as const)),
+);
 
 // A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its
 // original position in its family file, so listWorkShapes() keeps its order.
@@ -191,6 +201,17 @@ export function listWorkShapes(): WorkShapeDefinition[] {
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
   return ALL_SHAPES[key] ?? null;
+}
+
+/** The standard improve activity a shape carries; null only for a key the registry does not hold. */
+export function getWorkShapeImproveActivity(key: string): WorkShapeImproveActivity | null {
+  return IMPROVE_ACTIVITIES.get(key) ?? null;
+}
+
+/** What a room inherits from its declared shape: no per-room setup, no opt-in. */
+export function resolveRoomImproveActivity(scopeClaims: unknown): WorkShapeImproveActivity | null {
+  const key = readDeclaredWorkShapeKey(scopeClaims);
+  return key ? getWorkShapeImproveActivity(key) : null;
 }
 
 /** An exact `key@version`: the current definition, or a superseded one a live
