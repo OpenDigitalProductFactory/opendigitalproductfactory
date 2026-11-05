@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Scheduled authority holds — BI-412A2F72
 
 **Status:** implementation plan; current controlled characterization and complete wake-input binding remain prerequisites. No feature delivery or runtime acceptance is claimed.
