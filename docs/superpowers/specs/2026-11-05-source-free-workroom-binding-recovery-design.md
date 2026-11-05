@@ -132,7 +132,7 @@ the real task, rather than fabricated source identity or repeated approval.
    do not manufacture a proof, infer settlement from inactivity, or broaden the
    known-refusal allowlist to make this occurrence eligible.
    Keep reads bounded by the existing exact-envelope selector and its LIMIT+1
-   overflow detection in pproval-action-evidence.ts, and the two-candidate
+   overflow detection in approval-action-evidence.ts, and the two-candidate
    ambiguity check and PACKET_MAX_BYTES in the failed-handoff recovery reader.
    Reuse their constants; do not raise or copy them into another policy. Overflow
    or unknown attempt coverage remains unavailable. No inventory-wide scan is
