@@ -195,6 +195,9 @@ COPY scripts/check-data-impact.mjs ./scripts/
 # names the same surfaces CI will gate.
 COPY scripts/check-convergence-impact.mjs ./scripts/
 COPY scripts/convergence-surfaces.json ./scripts/
+# gate-context lists the docs a planned change affects (BI-9B17E889) through the
+# Docs Impact Gate's own computeImpact, so a Workroom sees them at claim time.
+COPY scripts/check-docs-impact.mjs ./scripts/
 COPY scripts/lib/gate-context.mjs ./scripts/lib/
 COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
@@ -435,6 +438,8 @@ COPY --from=init /app/.github ./.github
 COPY --from=init /app/config/ci-evidence-policy.json ./config/
 COPY --from=init /app/config/seed-content-paths.json ./config/
 COPY --from=init /app/apps/web/lib/ux-budget/route-budget-baseline.json ./apps/web/lib/ux-budget/
+COPY --from=init /app/apps/web/lib/docs/doc-impact.generated.json ./apps/web/lib/docs/
+COPY --from=init /app/apps/web/lib/docs-route-map.ts ./apps/web/lib/
 COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,
