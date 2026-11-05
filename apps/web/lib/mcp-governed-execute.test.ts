@@ -18,6 +18,7 @@ import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
 import { registerUpgradeAdmissionCases } from "./mcp-governed-execute.upgrade-admission.cases";
 import { coworkerAuthorityInputFixture as authorityInput } from "../test-support/coworker-authority-input-fixture";
+import { registerRefusalBreakerCases } from "./mcp-governed-execute-refusal-breaker.cases";
 
 const preflightMocks = vi.hoisted(() => {
   const roomItem = {
@@ -138,6 +139,8 @@ describe("governedExecuteTool — happy path", () => {
     approvalEnvelopeCreate: () => approvalEnvelopeCreate, approvalTaskResume: () => approvalTaskResume,
     approvalEnvelopeFinalize: () => approvalEnvelopeFinalize,
   });
+  registerRefusalBreakerCases({ applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER, executeMock: () => executeMock,
+    authorityRows: () => authorityRows, auditRows: () => auditRows, approvalEnvelopeCreate: () => approvalEnvelopeCreate });
   it("supports registering and unregistering lifecycle hooks", async () => {
     const calls: string[] = [];
     const unregister = registerToolLifecycleHook({

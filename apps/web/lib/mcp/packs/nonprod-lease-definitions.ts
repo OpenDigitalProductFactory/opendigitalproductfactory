@@ -6,6 +6,7 @@ const hostPressureSchema = {
   type: "object",
   properties: {
     observedAt: { type: "string" },
+    totalMemoryBytes: { type: "number" },
     availableMemoryBytes: { type: "number" },
     sustainedCpuPercent: { type: "number" },
     diskFreeBytes: { type: "number" },
@@ -16,6 +17,7 @@ const hostPressureSchema = {
   },
   required: [
     "observedAt",
+    "totalMemoryBytes",
     "availableMemoryBytes",
     "sustainedCpuPercent",
     "diskFreeBytes",

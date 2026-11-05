@@ -314,6 +314,10 @@ an update. Existing pending or approved requests and recent completed outcomes
 keep their original handling. When an update could proceed, or the check is
 uncertain, the normal approval rules remain.
 
+### A "no" is answered once
+
+When the gate refuses a call, the answer says what happens next. Sometimes there is an exact call to make instead, such as checking an approval's status. Sometimes the answer is "do not retry", together with what would change it: your decision on a request, a change to the coworker's access, or a missing input. A coworker or connected assistant that sends the identical call again gets the same answer back. That repeat is not checked again, and it never puts a second card in front of you. Changing the coworker's access or the call's details makes it a new call, which is checked at once. Once you approve or decline a request, the approved call can run. Repeated identical refusals are recorded as an improvement signal, so a coworker that keeps hitting the same wall shows up as one item of work rather than thousands of attempts.
+
 ### The floors nothing crosses
 
 Two hold at every posture, every autonomy level, and every proactivity setting:
