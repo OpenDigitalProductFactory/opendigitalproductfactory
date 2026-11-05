@@ -24,6 +24,7 @@ import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
   detectScheduledRunFailure, withPersistedExecutions, scheduledMandatoryToolGap, scheduledRequiredToolCorrection,
+  ScheduledRunTerminalError, scheduledRunTerminalOutcome, scheduledRunProviderDeferral, SCHEDULED_PROVIDER_REQUEUE_MINUTES, SCHEDULED_RUN_NEXT_ACTION,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -211,7 +212,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   }
 
   // Deterministic kinds (books cadence, decision review, acceptance sweep) run off the LLM path.
-  if (await runDeterministicScheduledTaskKind(task)) return;
+  if (await runDeterministicScheduledTaskKind(claimedTask)) return;
 
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
   // directly instead of through the LLM agentic loop.
@@ -495,7 +496,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     });
     // BI-62DB6C03: a Workroom stage is never dispatched without its evidence writer.
     const writerGap = scheduledMandatoryToolGap({ prompt: task.prompt, taskConfig: task.taskConfig, mode: toolArgs.mode, attached: tools, deferred: deferredTools });
-    if (writerGap) throw new Error(`Scheduled run not dispatched (${writerGap}).`);
+    if (writerGap) throw new ScheduledRunTerminalError(`Scheduled run not dispatched (${writerGap}).`, "not-dispatched");
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
     // coworker's configured model requirements into the scheduled run. Without
@@ -544,9 +545,12 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     }
     // BI-62DB6C03: one correction turn when the writer was handed over and not called.
     const attachedToolNames = tools.map((tool) => tool.name);
-    const correction = scheduledRequiredToolCorrection({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], attachedToolNames, executedTools: result.executedTools ?? [] });
-    if (correction && !(await prisma.toolExecution.findFirst({ where: { taskRunId: taskRunRef.taskRunId, toolName: correction.toolName, success: true }, select: { id: true } }))) {
-      const retry = await executeAutonomousAgenticLoop({ ...loopInput, chatHistory: [...chatHistory, { role: "assistant" as const, content: result.content ?? "" }, { role: "user" as const, content: correction.message }] });
+    const correction = scheduledRequiredToolCorrection({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], attachedToolNames, executedTools: result.executedTools ?? [], taskConfig: task.taskConfig });
+    // BI-A8679D84: no correction against an outage; the final step forces the writer at the provider, unforced only where no adapter can enforce it.
+    if (correction && !scheduledRunProviderDeferral({ failure: result.failure, content: result.content, requiredTools: { kind: "absent", toolName: correction.toolName }, executedToolCount: 0 }) && !(await prisma.toolExecution.findFirst({ where: { taskRunId: taskRunRef.taskRunId, toolName: correction.toolName, success: true }, select: { id: true } }))) {
+      const correctionInput = { ...loopInput, chatHistory: [...chatHistory, { role: "assistant" as const, content: result.content ?? "" }, { role: "user" as const, content: correction.message }] };
+      let retry = await executeAutonomousAgenticLoop({ ...correctionInput, forcedToolName: correction.toolName });
+      if (retry.failure?.kind === "required-terminal-writer-not-enforceable") retry = await executeAutonomousAgenticLoop(correctionInput);
       result = { ...retry, executedTools: [...(result.executedTools ?? []), ...(retry.executedTools ?? [])] };
     }
     const executedTools = [...(result.executedTools ?? [])];
@@ -602,9 +606,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
     const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
-    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, preservePendingApprovals: Boolean(readWorkroomStageTaskConfig(task.taskConfig)) });
-    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content, attachedToolNames });
-    if (runFailure && requiredTools.kind !== "proposed") throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, preservePendingApprovals: Boolean(readWorkroomStageTaskConfig(task.taskConfig)), taskConfig: task.taskConfig });
+    const deferral = scheduledRunProviderDeferral({ failure: result.failure, content: result.content, requiredTools, executedToolCount: verdictTools.length });
+    if (deferral) throw new ScheduledRunTerminalError(`Scheduled run produced no governed work (${deferral}). ${result.content ?? ""}`.trim(), "provider-busy-requeue");
+    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content, attachedToolNames, taskConfig: task.taskConfig });
+    if (runFailure && requiredTools.kind !== "proposed") throw new ScheduledRunTerminalError(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim(), "no-governed-work");
 
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
@@ -737,6 +743,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       }).catch(() => undefined);
       return;
     }
+    const terminalOutcome = scheduledRunTerminalOutcome(err);
     // CodeQL #39 (js/tainted-format-string): taskId via format-arg.
     console.error("[agent-task-scheduler] Task %s failed: %s",
       JSON.stringify(taskId),
@@ -750,9 +757,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         data: {
           status: "failed",
           completedAt: new Date(),
-          progressPayload: {
-            error: errMsg,
-          },
+          progressPayload: { error: errMsg, ...(terminalOutcome ? { terminalOutcome, ...SCHEDULED_RUN_NEXT_ACTION[terminalOutcome] } : {}) },
         },
       }).catch((updateErr) => {
         console.error(
@@ -773,10 +778,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     const maxAttempts = resolvedPlan?.maxAttempts ?? 0;
     const retryDelayMinutes =
       failedAttempts < maxAttempts ? cadence[failedAttempts - 1] : undefined;
-    const willRetry = typeof retryDelayMinutes === "number" && retryDelayMinutes > 0;
-    const nextRunAt = willRetry
-      ? new Date(now.getTime() + retryDelayMinutes * 60_000)
-      : computeNextCronRun(task.schedule, now);
+    // BI-A8679D84: a refusal before dispatch is structural (no short retry); a provider-busy run is requeued and spends no attempt.
+    const requeue = terminalOutcome === "provider-busy-requeue";
+    const willRetry = !requeue && terminalOutcome !== "not-dispatched" && typeof retryDelayMinutes === "number" && retryDelayMinutes > 0;
+    const nextRunAt = requeue ? new Date(now.getTime() + SCHEDULED_PROVIDER_REQUEUE_MINUTES * 60_000)
+      : willRetry ? new Date(now.getTime() + retryDelayMinutes * 60_000) : computeNextCronRun(task.schedule, now);
     if (willRetry) {
       console.info(
         "[agent-task-scheduler] Task %s failed attempt %d/%d — retrying in %d min per proactivity plan",
@@ -790,17 +796,17 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { taskId },
       data: {
         lastRunAt: now,
-        lastStatus: "error",
+        lastStatus: requeue ? "retrying" : "error",
         lastError: errMsg,
         taskRunId: taskRunRef?.taskRunId ?? null,
         nextRunAt,
-        attempts: willRetry ? failedAttempts : 0,
+        attempts: requeue ? task.attempts ?? 0 : willRetry ? failedAttempts : 0,
       },
     });
 
     await prisma.scheduledJob.updateMany({
       where: { jobId: taskId },
-      data: { lastRunAt: now, lastStatus: "error", lastError: errMsg, nextRunAt },
+      data: { lastRunAt: now, lastStatus: requeue ? "retrying" : "error", lastError: errMsg, nextRunAt },
     });
     return true;
     }, Boolean(ref));

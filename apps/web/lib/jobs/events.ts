@@ -161,6 +161,12 @@ export interface GeocodeOrganizationRequestedEvent {
   data: { organizationId: string };
 }
 
+/** An administrator asked to install the recommended street-map pack (BI-43BBCC26). */
+export interface MapPackInstallRequestedEvent {
+  name: "map-pack/install.requested";
+  data: { packId: string; region: string; bounds: { west: number; south: number; east: number; north: number }; locale: string };
+}
+
 export interface BrandExtractRunEvent {
   name: "brand/extract.run";
   data: {

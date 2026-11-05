@@ -10,7 +10,16 @@ export type CliTerminalResultMetadata = {
   subtype: typeof CLI_RESULT_SUBTYPES[number] | "unknown";
   isError: boolean | null;
   hint: typeof CLI_RESULT_HINTS[number];
+  /** Reset instant (ISO) derived from a quota verdict's dated phrase; the text itself is never kept. */
+  resetAt?: string;
 };
+
+/** Accept only a real instant, re-serialized, so no CLI text can ride in this field. */
+export function sanitizeResetAt(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > 40) return undefined;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+}
 
 export type ExecutionUncertainty = {
   schemaVersion: 1;
@@ -46,6 +55,7 @@ export function sanitizeNativeCliDiagnostics(value: unknown): NativeCliDiagnosti
     subtype: CLI_RESULT_SUBTYPES.find(value => value === terminal.subtype) ?? "unknown",
     isError: typeof terminal.isError === "boolean" ? terminal.isError : null,
     hint: CLI_RESULT_HINTS.find(value => value === terminal.hint) ?? "unclassified",
+    ...(terminal.hint === "quota" && sanitizeResetAt(terminal.resetAt) ? { resetAt: sanitizeResetAt(terminal.resetAt) } : {}),
   } : undefined;
   return {
     exitCode: typeof row.exitCode === "number" && Number.isSafeInteger(row.exitCode) && Math.abs(row.exitCode) <= 65535 ? row.exitCode : null,

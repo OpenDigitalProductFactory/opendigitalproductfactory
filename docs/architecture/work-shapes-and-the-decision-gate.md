@@ -1121,6 +1121,52 @@ missing. Three rules now hold, in `scheduled-task-runs.ts` and the scheduler:
   "executed zero times; it was attached to the run and not called". That is
   not an availability fault, and the record should not be read as one.
 
+### Required means required; forced at the last step; busy is a requeue (BI-A8679D84)
+
+The dispatch gate closed one door, and the verdict left another one open. On
+DEV, 804 build-specialist stage runs between 2026-10-15 and 10-22 were recorded
+`completed` with `executedToolCount=0`, which is the regression of BI-4A394B21.
+Every brief named the writer. The writer was not authorized for those runs, so
+the verdict, which reads "required" off the authorized set, required nothing.
+From 2026-10-23 the same population shows up as "not authorized … not
+dispatched". A stage run whose brief does not name the writer still passed with
+zero calls. Over the 21 days to 2026-10-28, 545 runs failed with "executed zero
+times". 129 of those were the loop's own provider-busy reply, filed as a writer
+the model would not call.
+
+- **The verdict requires a stage's mandatory writer.**
+  `classifyScheduledRequiredTools` judges the authorized writers the prompt
+  names plus `scheduledMandatoryToolNames`. A stage run therefore cannot pass on
+  zero calls, whatever its grants or brief say.
+- **Every non-completed scheduled run is typed.** The TaskRun's
+  `progressPayload.terminalOutcome` is one of three values:
+  - `no-governed-work`: the model ran and the writer did not;
+  - `provider-busy-requeue`;
+  - `not-dispatched`: refused before inference, so no short-cadence retry.
+
+  Each outcome also records the owner who acts next and the exact next action
+  (`SCHEDULED_RUN_NEXT_ACTION`). None of them is a person:
+  - the drive re-dispatches a run with no governed work;
+  - the scheduler requeues a provider-busy run;
+  - a grant gap goes to the platform-engineer coworker.
+- **The correction turn forces the writer.** It runs with `forcedToolName`
+  (`forced-tool-choice.ts`). The writer is the only tool on the surface, under
+  `tool_choice: "required"`, the contract the reviewer's writer-only phase
+  already uses. Once the writer has been attempted the run's surface comes back.
+  An adapter that cannot enforce the forced choice ends the turn with
+  `required-terminal-writer-not-enforceable`, and the scheduler then reruns the
+  correction unforced.
+- **Provider-busy is a requeue.** The loop's typed `busy` and `capacity` dead
+  ends are read first (`AgenticResult.failure`). Transient reply text is the
+  fallback. Such a run gets no correction turn and spends no retry attempt. It
+  records `lastStatus: "retrying"` and runs again after 30 minutes. A Workroom's
+  queue hold reads the kind from `no governed work (<kind>)`.
+- **An acceptance owner must be able to write the stage's evidence.** The
+  execution-evidence lane names an owner only if that owner also holds a grant
+  for `record_workroom_evidence`. AGT-102 holds only `backlog_write`. It was
+  bound to 16 acceptance rooms, and all 93 of its stage runs were refused
+  before dispatch.
+
 ## A stage names the tools it needs
 
 Pinning the writer the prompt names was not enough. Live standing rooms kept
