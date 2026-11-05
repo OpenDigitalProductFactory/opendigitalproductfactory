@@ -9,6 +9,7 @@ backlog:
   - BI-E94AE869  # Phase 2 — remark-gfm + img + mermaid in portal; image/screenshot convention
   - BI-3F6BB8CC  # Phase 3 — enforce the documentation step surface-agnostically + activate docs coworker
   - BI-74BED65D  # Phase 4 — doc-impact graph
+  - BI-08FB9C25  # Reproducible inferred source edges
 relates:
   - docs/superpowers/plans/2026-05-14-docs-public-site-current-state-refresh.md
   - docs/superpowers/specs/2026-05-30-development-process-spine-design.md
@@ -258,3 +259,29 @@ Phases 1–2 are engine-light and unblock everything. Phase 3 is where the *syst
 - Folding the user guide into the managed-Document CMS — the user guide stays filesystem-authored, git-owned markdown.
 - Prose/style linting (Vale) — deferred to a later slice.
 - Enabling arbitrary raw HTML in markdown — rich content means supported markdown, generated diagrams, and governed assets, not unreviewed HTML passthrough.
+
+
+### Reproducible inferred source edges - BI-08FB9C25 (2026-11-05)
+
+The documentation graph is a committed source artifact. Its inferred Markdown-link
+and backtick edges must depend on the Git-index source inventory, including newly
+staged files, rather than on private or untracked files present on one machine.
+The existing generator reads that inventory once through `scripts/lib/git.mjs`
+and passes it to both extraction paths. Existing containment, file-existence,
+source-extension, derived-artifact exclusion and fanout rules remain in force.
+Explicit frontmatter declarations retain their existing validation contract.
+An unreadable Git inventory fails explicitly; no filesystem-only fallback applies.
+
+This is a Small prerequisite repair in PR #6847 / WC-F57A4E37. Sequence: establish
+an isolated-fixture RED for ignored and untracked files and missing Git inventory;
+apply the shared inventory filter; prove GREEN and regenerate the graph; run all
+derived checks and the canonical gate; obtain independent exact-source review;
+publish through protected checks and the merge queue. Acceptance requires identical
+inferred edge bytes before and after creating/removing local configuration, retained
+tracked JSON/TOML and staged-source coverage, and visible inventory-read failures.
+
+This changes no credentials, authority, runtime schema or operator UI. Private
+configuration remains local and is never read or committed. No migration is needed.
+The scope excludes changing graph storage, explicit-declaration policy or gate
+requirements. Evidence: the initial regression run passed 24 existing tests and
+failed both new controls, reproducing the defect before implementation.

@@ -92,7 +92,9 @@ test("tests, fixtures, docs and ordinary source never classify", () => {
     "docs/architecture/enforced-ci-gates.md",
     "apps/web/app/(shell)/finance/page.tsx",
     "packages/db/prisma/schema/finance.prisma",
-    "scripts/check-docs-impact.mjs",
+    // check-docs-impact.mjs left this list when gate-context's packaged closure
+    // began COPYing it by name (BI-9B17E889); gen-doc-impact.mjs is not copied.
+    "scripts/gen-doc-impact.mjs",
     "README.md",
   ]), []);
 });

@@ -94,6 +94,12 @@ export function isRecordExemptInvocation(args) {
   );
 }
 
+// BI-D0C3F242: the host-disk floor guards builds. A routing probe, help or an
+// evidence replay builds nothing, so the runner's free disk must not decide it.
+export function shouldCheckHostDisk(args) {
+  return !isRecordExemptInvocation(args);
+}
+
 /** The flag that forces a re-gate of a HEAD that already passed (BI-1669E08A). */
 export const FORCE_RERUN_FLAG = "--force-rerun";
 
@@ -891,7 +897,7 @@ async function main() {
     process.exit(GATE_EXIT.WRAPPED_INVOCATION);
   }
 
-  const diskCheck = checkHostDiskSpace();
+  const diskCheck = shouldCheckHostDisk(args) ? checkHostDiskSpace() : { ok: true };
   if (!diskCheck.ok) {
     process.stderr.write(`pregate: ${diskCheck.message}\n`);
     process.exit(1);

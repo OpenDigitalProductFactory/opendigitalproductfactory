@@ -88,7 +88,7 @@ export const NO_ROUTING_FACTS: RoutingFacts = {
  * auto-filing backlog items from a weekly measure would put a duplicate in the
  * pool every week the defect stayed open.
  */
-type FindingPlan =
+export type FindingPlan =
   | { kind: "proposal"; actionKind: ProposalActionKind; payload: Record<string, unknown> }
   | { kind: "nominate"; professionKey: string; domainClass: string }
   | { kind: "report"; reason: string };
@@ -217,6 +217,7 @@ export async function routeReviewFindings(input: {
   lines: readonly ReviewLine[];
   periodKey: string;
   facts?: RoutingFacts;
+  preparedFinding?: { lineKey: string; profileId: string | null; plan: FindingPlan };
 }): Promise<RoutingSummary> {
   const facts = input.facts ?? NO_ROUTING_FACTS;
   const summary = emptyRoutingSummary();
@@ -237,7 +238,8 @@ export async function routeReviewFindings(input: {
       continue;
     }
 
-    const profileId = ownerProfileIdForLine(line);
+    if (input.preparedFinding && input.preparedFinding.lineKey !== line.lineKey) throw new Error("Prepared review destination mismatch");
+    const profileId = input.preparedFinding ? input.preparedFinding.profileId : ownerProfileIdForLine(line);
     if (!profileId) {
       summary.unroutable += 1;
       summary.routed.push({
@@ -252,7 +254,7 @@ export async function routeReviewFindings(input: {
     }
 
     const domainClass = reviewDomainClass(line);
-    const plan = planFinding(line, profileId, facts);
+    const plan = input.preparedFinding?.plan ?? planFinding(line, profileId, facts);
 
     if (plan.kind === "nominate") {
       const nomination = facts.nominateCorpusGap
