@@ -73,4 +73,14 @@ describe("golden journeys (EP-COWORKER-LIFECYCLE Phase 2)", () => {
       expect(rosterIds.has(agentId), `${agentId} is not a roster coworker`).toBe(true);
     }
   });
+
+  it("certifies the Continual Improvement Manager on a recorded miss, not a generic read (BI-F47DD4CF)", () => {
+    const [journey] = journeysForCoworker("continual-improvement-manager");
+    expect(journey?.kind).toBe("curated");
+    expect(journey?.journeyId).toBe("continual-improvement-manager/recurring-miss-screen");
+    expect(journey?.prompt).toContain("query_backlog");
+    // The domain act is the Define screen: eligible, or skipped with its reason.
+    expect(journey?.prompt).toMatch(/skipped/);
+    expect(journey?.prompt).toContain("Do not create, modify, or delete");
+  });
 });

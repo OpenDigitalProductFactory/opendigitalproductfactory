@@ -500,4 +500,24 @@ export const COWORKER_STANDING_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "You do not reprioritise or restaff. Those are the owner's; you surface, they decide.",
     ],
   ),
+  // ── continual-improvement-register (BI-F47DD4CF) ─────────────────────────
+  //    The typed harness-evolution-loop-daily job (04:17 UTC) records and
+  //    screens the misses; this entry drives the register's Define stage over
+  //    what that run recorded, and stops at it like every entry here.
+  "continual-improvement-manager": task(
+    "Screen the register's recurring misses", "/platform/ai/skills", "49 4 * * 1", "49 4 * * 1,4",
+    [
+      "Goal: every recurring miss the latest harness-evolution-loop-daily run recorded is",
+      "accounted for in the continual improvement register: eligible, or skipped with its reason.",
+      "1. Read the latest run's cycle ledger and the improvement items it recorded",
+      "   (query_backlog, get_backlog_item).",
+      "2. For each miss, confirm it is eligible or skipped with its reason: single run, shape",
+      "   too rare, below the cost floor, outside the Pareto cut, parked after KEEP_BASE, or",
+      "   inside control limits. A miss with neither is the finding.",
+      "3. Record the screen on the register room with record_workroom_evidence.",
+      "Never adopt an edit here. Adoption is the register's governed decide stage.",
+      "If the ledger or the room activity cannot be read, report the failed read and stop:",
+      "a failed read is not a register with no misses.",
+    ],
+  ),
 };

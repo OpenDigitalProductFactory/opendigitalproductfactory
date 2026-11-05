@@ -738,17 +738,32 @@ It also adds one standing-shape row to existing conformance suites.
 
 ### Delivery
 
-AC-20 through AC-24 ship as three stacked PRs. Each is under the reviewer
-size limit:
+AC-22 and AC-24 (the operating criteria, with this amendment) and AC-20
+(the improve activity) shipped as #6895 and #6897.
 
-1. the operating criteria (AC-22, AC-24), with this amendment;
-2. the improve activity (AC-20);
-3. the CI Manager seed (AC-21).
+AC-21 ships whole under BI-F47DD4CF. The CI Manager seed (#6899) was closed
+unmerged, because Agent Capability Integrity refuses a new identity below
+any plane floor. AGT-908 sat below four of them. One change now carries:
 
-The register shape that carries the AGT-908 coordination binding is the
-rest of AC-21, tracked as BI-F47DD4CF. It ships once BI-90F0863B makes
-review summarise frozen-generator outputs, because its regenerated drive
-golden is 56 KB. BI-CE564FBB stays open until that binding lands.
+- the `continual-improvement-register` shape, the coordination binding it
+  derives, and the proposed WWMD ratification entry for its
+  `harness-edit-adoption` decision;
+- the seed: registry, roster, grants, identity, model floor, persona,
+  profession family, and ownership of `harness-evolution-loop-daily`;
+- a weekly self-task that drives the register's Define stage after the
+  daily job, with the same cadence declared on the skill
+  `continual-improvement-register-screen`;
+- a curated golden journey that exercises the Define screen.
+
+It cannot be split. The shape's agent stages need AGT-908's evidence grant,
+and AGT-908 needs the shape to meet its floor. The regenerated drive golden
+is 56 KB of that change. Adding a current shape reseeds every frozen prior
+version, and the golden's generator is frozen. BI-90F0863B, which would have
+summarised frozen-generator outputs for the reviewer, is retired. Since #6908
+(BI-9F620FE1), a semantic review of this public repository routes as
+development source, so external endpoints with a larger context window can
+review it. The local reviewer's window no longer blocks the change.
+BI-CE564FBB stays open until it lands.
 
 Slice 2 wires the cycle ledger into the TaskRun (AC-23). AC-25 closes on the DEV install once slice 2
 (BI-B8DAEB71) merges and the install upgrades. The evidence is recorded on

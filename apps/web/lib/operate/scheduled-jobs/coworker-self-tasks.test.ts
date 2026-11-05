@@ -761,3 +761,24 @@ describe("reconcileAllCoworkerSelfTasks — rooms drive coworkers with NO legacy
     expect(r.deactivated).toBe(0);
   });
 });
+
+describe("Continual Improvement Manager self-task (BI-F47DD4CF)", () => {
+  const CIM = "continual-improvement-manager";
+
+  it("drives the register's Define stage after the daily typed job, weekly at Balanced", () => {
+    const entry = COWORKER_SELF_TASKS[CIM];
+    expect(entry).toBeDefined();
+    // 04:49 UTC follows the 04:17 harness-evolution-loop-daily run it reads.
+    expect(entry!.cadence.balanced).toBe("49 4 * * 1");
+    expect(entry!.cadence.assertive.split(" ")[4]).not.toBe("*");
+    expect(entry!.prompt).toContain("harness-evolution-loop-daily");
+  });
+
+  it("stops on a failed read instead of reporting an empty register", () => {
+    const prompt = COWORKER_SELF_TASKS[CIM]!.prompt;
+    expect(prompt).toMatch(/cannot be read/);
+    expect(prompt).toMatch(/not .*no misses|no misses.*not/i);
+    // It prepares; adoption is the governed decide stage.
+    expect(prompt).toMatch(/never adopt/i);
+  });
+});

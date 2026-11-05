@@ -148,4 +148,15 @@ describe("capability completeness (derived artifact accessor)", () => {
     expect(r.orphans.strandedSkills.length).toBe(r.summary.skills.stranded);
     for (const sk of r.orphans.strandedSkills) expect(sk.assignTo.length).toBeGreaterThan(0);
   });
+
+  it("admits the Continual Improvement Manager at every plane's ceiling (BI-F47DD4CF)", () => {
+    // #6899 was closed because AGT-908 sat below four plane floors: a hollow
+    // agent must not land. The register shape, the self-task with a cadence on
+    // its own skill, the authored skill and the curated journey close all four.
+    const agent = capabilityCompletenessFor("continual-improvement-manager");
+    expect(agent?.key).toBe("AGT-908");
+    for (const plane of CAPABILITY_PLANES) {
+      expect(agent!.planes[plane].atCeiling, plane).toBe(true);
+    }
+  });
 });
