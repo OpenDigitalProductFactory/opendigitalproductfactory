@@ -326,6 +326,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
       // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
       conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
+      // BI-4F89896B: the sandbox image carries every binary a guard command
+      // execs, because the Build Studio gauntlet runs the guards there.
+      conformanceTest("scripts/installer/sandbox-guard-toolchain-contract.test.mjs"),
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
@@ -1096,6 +1099,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // checked-in routine named, instead of costing an OOM and a retry.
       // BI-F17F2188: where the package resolves, Claude gets the rewritten command instead.
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs", "packages/dpf-skill-pack/hooks/raw-tool-guard-rewrite.test.mjs"),
+      // BI-5DD46FDA: every hooks.json hook, per client, emits output that client honours.
+      node("--test", "packages/dpf-skill-pack/hooks/hook-output-contract.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       conformanceTest("packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-77BE1389: install-folder sessions get the source contract at start.

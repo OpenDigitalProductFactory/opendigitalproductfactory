@@ -63,6 +63,9 @@ export function CoworkerEnvelopeApproval({
   const [standingNote, setStandingNote] = useState<string | null>(null);
   const [standingRecorded, setStandingRecorded] = useState(false);
   const decision = approval.decision;
+  // Handover and admission (BI-6AE64074) both read as "what changes / what stays".
+  const plainChange = decision.kind === "handover" ? decision.handover
+    : decision.kind === "admission" ? decision.admission : undefined;
   const { locale } = useMessagesContext();
   const primary = envelopePrimaryDecision(decision, locale);
 
@@ -301,8 +304,8 @@ export function CoworkerEnvelopeApproval({
       <details>
         <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.technicalEvidence}</summary>
       <Surface padding="sm" rounded="md">
-        {decision.kind === "handover" && decision.handover ? (
-          <HandoverDecision approval={approval} decision={decision} handover={decision.handover} />
+        {plainChange ? (
+          <HandoverDecision approval={approval} decision={decision} handover={plainChange} />
         ) : (
         <section>
         <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
@@ -349,7 +352,7 @@ export function CoworkerEnvelopeApproval({
         <Effects decision={decision} />
         </section>
         )}
-        {decision.kind === "handover" ? null : (
+        {plainChange ? null : (
           <details className="mt-3">
             <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">
               {COPY.technical}

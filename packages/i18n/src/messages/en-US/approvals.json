@@ -65,6 +65,10 @@
     "standingUndoFailed": "That could not be changed. Please try again.",
     "primary": {
       "handoverTitle": "Let {$assistant} continue this work?",
+      "admissionTitle": "Let {$coworker} into this room with {$level} data access?",
+      "admissionDescription": "{$coworker} joins this room and can then read {$level} information in any room it is admitted to.",
+      "admissionConsequence": "Its tools and permissions stay the same; you can lower its data access again under Coworker data access.",
+      "admissionRecommendation": "Bring {$coworker} into this room.",
       "recordTitle": "Save this work result?",
       "reviewTitle": "Record the research review?",
       "unresolvedTitle": "Review this coworker request?",

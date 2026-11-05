@@ -349,3 +349,26 @@ describe("loadInstanceStance", () => {
     expect(stance.credentials).toBe("operator-only");
   });
 });
+
+describe("loadInstanceStance — attested peer (BI-0716C8A8)", () => {
+  const prodIntent = { ...CONFIRMED_DEV_INTENT, primaryPurpose: "operate-organization", pairedProductionInstallationRef: "operator-organization" };
+  const linked = (peerEnvironmentClass: "development" | null) => store({
+    readConfig: async (key) => (key === OPERATING_INTENT_CONFIG_KEY ? prodIntent : null),
+    listFederationLinks: async () => [{
+      linkId: "link_1", linkState: "trusted", relationshipPreset: "same-organization", peerLabel: "operator-organization",
+      peerEnvironmentClass, peerInstallationLabel: "Windows DEV (did_ab12…9f0c)",
+    }],
+  });
+
+  it("holds an attested development peer read-only from production and names it", async () => {
+    const stance = await loadInstanceStance(linked("development"), { readText: stateText("production"), readHostProfile: consumerHost });
+    expect(stance.peerWrite).toBe("read-only");
+    expect(stance.pairedInstallationLabel).toBe("Windows DEV (did_ab12…9f0c)");
+    expect(stance.pairedEnvironmentClass).toBe("development");
+  });
+
+  it("neither writes to nor tasks a linked peer the CA never attested", async () => {
+    const stance = await loadInstanceStance(linked(null), { readText: stateText("production"), readHostProfile: consumerHost });
+    expect(stance.peerWrite).toBe("none");
+  });
+});
