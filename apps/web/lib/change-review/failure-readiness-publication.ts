@@ -3,6 +3,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { CHANGE_REVIEW_POLICY_VERSION, CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "./semantic-change-review";
+import { blockingSemanticFailure } from "./semantic-review-supersession";
 import { findCurrentSemanticFailure, resolveWorkroomReviewExemption } from "./semantic-review-policy-exemption";
 import { describeReviewIneligibility, loadProviderAvailability, readReceiptEligibility, unavailableProviders } from "./review-provider-ineligibility";
 
@@ -38,10 +39,9 @@ export async function checkWorkroomFailureReadiness(capsuleId: string): Promise<
   }
   const rows = await prisma.externalEvidenceRecord.findMany({
     where: { workCapsuleId: room.id, operationType: "semantic-change-review.receipt", details: { path: ["sourceHeadSha"], equals: room.headSha } },
-    orderBy: { createdAt: "desc" }, take: 20, select: { id: true, details: true },
+    orderBy: { createdAt: "desc" }, take: 20, select: { id: true, createdAt: true, details: true },
   });
-  if (rows.some(row => isRecord(row.details) && row.details.sourceHeadSha === room.headSha
-    && isRecord(row.details.result) && row.details.result.decision === "fail")) {
+  if (blockingSemanticFailure(rows.filter(row => isRecord(row.details) && row.details.sourceHeadSha === room.headSha))) {
     return { mayPublish: false, code: "failure_review_required", reason: "A failed current review requires repair; a publication exception cannot override it." };
   }
   let ineligible: ReturnType<typeof readReceiptEligibility> = [];

@@ -33,6 +33,8 @@ Reviewer responses must include a recognized decision, an issue array with recog
 
 Technical review failures require internal repair or review recovery. They do not authorize a business owner approval prompt. Accepted, deferred and blocked residual risks currently fail closed: this implementation does not manufacture an authority receipt from an owner name. Resolve the risk through the established authority process; until its evidence adapter supports that acceptance, the automated gate cannot claim the risk is cleared.
 
+**Repairing only the analysis does not need a new commit (BI-38C51AF2).** A review that fails only because the failure-analysis challenge judged the analysis inadequate leaves the change itself unfaulted. The author repairs the analysis and resubmits it on the same head with the next `repairRound`. When that later receipt for the same head, tree and diff passes with an adequate failure-analysis review, the earlier fail stops blocking Failure Readiness and the publication exception check. Any other critical finding, alone or alongside the analysis challenge, still blocks until the change is repaired and reviewed on its new head. Before this, every fail on a head was permanent, so an analysis-only repair forced a new commit and a fresh full gate on an unchanged tree.
+
 ## Deployment and protection
 
 When a local run cannot resolve its source identity, its diagnostic report remains available with null verification bindings and an explicit binding error. Such a report cannot satisfy failure readiness. A checkout that moves before binding also requires fresh verification; the producer never substitutes the caller's checkout or invents a diff digest.

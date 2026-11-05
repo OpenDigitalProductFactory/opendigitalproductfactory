@@ -70,7 +70,9 @@ Z.ai GLM Coding is also listed separately so you can manage its coding endpoint 
 
 Each provider's **Routing right now** panel shows its operator pause alongside current usage limits, retry times, account or health restrictions, the platform's local-only policy, and local capacity reserved for platform verification. Times display in your browser's timezone. Open **More routing details** for recent health and subscription allocation observations. Workload and model requirements are checked separately for each request.
 
-Choose **Pause now** to stop new model requests immediately. The pause lasts until you resume it. Choose **Set resume time** to add a duration in hours or days. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.
+Choose **Pause now**, enter a **Reason for pausing**, then choose **Until I resume it** or **Pause for this long** with a duration in hours or days. New model requests stop immediately. The reason, your browser, address and session are recorded with the pause and with every resume, so anyone reviewing the provider later can see who paused it and why. Choose **Set resume time** to add a duration to an existing pause. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.
+
+If someone resumed the provider in the last 15 minutes, a new pause is refused at first. The message names who resumed it and when. Tick **Pause anyway, overriding that resume** to pause it regardless; the override is recorded too. This stops two people, or a person and an automated browser, from silently undoing each other.
 
 Resuming removes the operator pause. It does not reset a provider's usage limit or override an authentication, billing, health, account, or local-only restriction. The panel keeps those restrictions visible. Read-only viewers can inspect the status; provider managers can change it.
 
