@@ -212,7 +212,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   }
 
   // Deterministic kinds (books cadence, decision review, acceptance sweep) run off the LLM path.
-  if (await runDeterministicScheduledTaskKind(task)) return;
+  if (await runDeterministicScheduledTaskKind(claimedTask)) return;
 
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
   // directly instead of through the LLM agentic loop.
