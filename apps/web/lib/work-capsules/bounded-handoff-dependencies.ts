@@ -25,8 +25,13 @@ export async function assertBoundedHandoffDependencies(db: DependencyDb, input: 
   try {
     // TTL never proves absence: queued, expired-but-active and unknown states
     // all refuse. A single match is sufficient; no relevant history is dropped.
+    // BI-F1FC0B62: only a reservation for this room's own work can be stranded
+    // by changing its executor. A session's lease on another branch belongs to
+    // other work; refusing on it turned a same-owner handover into an owner
+    // approval. A lease that names no branch still counts.
     const lease = await db.nonProductionEnvironmentLease.findFirst({
-      where: { ownerSessionId: { in: refs }, status: { notIn: [...NONPROD_TERMINAL_LEASE_STATUSES] } },
+      where: { ownerSessionId: { in: refs }, status: { notIn: [...NONPROD_TERMINAL_LEASE_STATUSES] },
+        ...(capsule.headBranch ? { OR: [{ branchName: capsule.headBranch }, { branchName: null }] } : {}) },
       select: { leaseId: true, ownerSessionId: true, status: true, environmentKey: true },
     });
     if (lease) throw new BoundedHandoffRefusal("handoff-lease-dependency",

@@ -5,19 +5,34 @@ a versioned slot manifest. The lease decides who may run; the manifest decides
 which physical resources that admitted owner may mutate. These are separate
 safety layers.
 
-## Owned development lease cleanup
+## Routine lease release
 
-On an installation proven to be `development` / `evolve-dpf`, a local-CI
-cleanup with the exact original session and a server-recorded durable wait
-belonging to the authenticated user does not need another generic authority
-approval. The classifier checks the complete lease/wait identity and version-one
-slot binding. It does not release the lease or alter its history by itself.
+Releasing a nonproduction lease frees a reservation on a shared test machine or
+preview portal. On every installation, including production, a release is
+routine and does not ask a person when it frees nothing another session is
+using (BI-88D51B8F, owner direction 2026-11-04):
 
-Missing or legacy provenance, another user/session, unsupported environments,
-unknown state and live host-process reservations keep the authority gate.
-Non-development installations and explicit operator approval policies retain
-their gates. Token scope, coworker grants, user capabilities, immutable ownership,
-execution fencing and the release transaction remain enforced.
+- **Ended reservation.** The lease is already released, cancelled or expired.
+  The release changes nothing.
+- **Lapsed reservation.** The lease is active or queued, but its `expiresAt`
+  has passed. A lapsed lease cannot be renewed, and the expiry janitor would
+  free it with no person involved.
+- **Owned reservation.** The caller's own process-free local-CI or preview
+  reservation, proven by the exact original session and a server-recorded
+  durable wait that belongs to the authenticated user. The classifier checks
+  the complete lease/wait identity and version-one slot binding.
+
+The approval decision and the locked release run the same check on the current
+row (`routineLeaseRelease`). A lease that changes between the two is checked
+again before anything is written.
+
+A **live** reservation that another session still holds and renews keeps the
+authority gate. Freeing it can let the next queued test start on top of a run
+that is still going. That request reaches a person with a plain-language
+statement of what will happen and why it matters. Missing or legacy provenance,
+unknown state and explicit operator approval policies also keep their gates.
+Token scope, coworker grants, user capabilities, immutable ownership, execution
+fencing and the release transaction remain enforced.
 
 Release the admitted lease after its owned work finishes. An expired or cancelled
 wait stays terminal; cleanup never implies admission, command success or completed

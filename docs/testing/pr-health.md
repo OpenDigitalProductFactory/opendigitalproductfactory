@@ -5,9 +5,20 @@
 ```
 pnpm pr:health           # the PR for the current branch
 pnpm pr:health 2427      # a specific PR
+pnpm pr:health 2427 --wait --timeout 30   # poll until terminal (default 30 min, --interval 30 s)
 ```
 
-Exit `0` = **READY**, `1` = **NOT READY** (blockers enumerated), `2` = usage/IO error.
+The first line is the verdict word and the exit code says the same thing (BI-F197C997):
+
+| Exit | Verdict | Meaning |
+|---|---|---|
+| `0` | **READY** / **MERGED** | Every check terminal and green, mergeable, zero unresolved threads — or already merged. |
+| `75` | **WAITING** | Only pending checks stand between the PR and READY. Carries an ETA from the pending workflows' recent successful runs on `main` when one is known. Not a failure. |
+| `1` | **FAILED** | A check failed; the line names it. Wins over every other state. |
+| `2` | **BLOCKED-ACTION** | Someone must act — conflict, unresolved thread, draft, base not `main`, missing or rejected local-CI evidence (the PR author), or a closed PR (its owner). The line names the actor. |
+| `3` | **UNREADABLE** | Usage error, or GitHub could not be read. |
+
+Before BI-F197C997, pending checks exited `1` like a failure, and agents read "still running" as "failed" 154 times in 15 threads. `--wait` replaces their polling with one bounded call: it returns the first terminal verdict, or `75` with a timeout note if checks are still running when the timeout passes.
 
 ## Why it exists
 

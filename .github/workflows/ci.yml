@@ -443,7 +443,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
       - name: Install guard AST dependency
         run: |
           corepack enable && corepack prepare pnpm@10.33.2 --activate
@@ -501,7 +501,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
       - name: Resolve a trustworthy base SHA
         # github.event.pull_request.base.sha can go stale relative to the
         # actual main tip and NOT self-refresh on a later push, an
@@ -959,6 +959,14 @@ jobs:
             done < "$file"
           done < <(find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) -not -path './node_modules/*' -not -path './.git/*' -print0)
           exit $fail
+
+      # BI-2FAE2E5C: setup-node `node-version: 24` floated to 24.22.2 on a new
+      # runner image, outside the vendored dpf-workroom qualification, and the
+      # engine-strict artifact install failed for every PR. CI Node is the exact
+      # .node-version, which must be a qualified version; workflows read it via
+      # node-version-file. Requalify the artifact before bumping the pin.
+      - name: Assert CI Node is exact and qualified
+        run: node scripts/check-ci-node-qualified.mjs
 
   compose-image-pins:
     name: Compose Image Pins
