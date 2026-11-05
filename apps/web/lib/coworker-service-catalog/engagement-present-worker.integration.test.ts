@@ -19,7 +19,7 @@ type Row = Record<string, any>;
 const m = vi.hoisted(() => ({ db: {} as Row, rows: {} as Record<string, Row[]>, budget: {} as Row,
   allowed: true, scenario: "valid", fetch: vi.fn(), reads: [] as string[], bodies: [] as string[],
   authorityInputs: [] as Row[], room: null as Row | null,
-  sends: [] as string[], failSettlement: false, sequence: 0, visual: {} as Row }));
+  sends: [] as string[], runners: [] as unknown, failSettlement: false, sequence: 0, visual: {} as Row }));
 vi.mock("@dpf/db", () => ({ prisma: new Proxy({}, { get: (_target, key) => m.db[String(key)] }) }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => ({ userId: "fixture-owner", platformRole: "ceo", isSuperuser: true }) }));
 vi.mock("@/lib/permissions", () => ({ can: () => true }));
@@ -101,7 +101,7 @@ function memoryDatabase() {
   m.db.$transaction = async (execute: (tx: Row) => Promise<unknown>) => { const prior = structuredClone(m.rows); try { return await execute(m.db); } catch (error) { m.rows = prior; throw error; } };
 }
 beforeEach(() => {
-  vi.clearAllMocks(); memoryDatabase(); m.authorityInputs = []; m.room = null; m.allowed = true; m.scenario = "valid"; m.failSettlement = false; m.sequence = 0; m.reads = []; m.bodies = []; m.sends = [];
+  vi.clearAllMocks(); memoryDatabase(); m.authorityInputs = []; m.room = null; m.allowed = true; m.scenario = "valid"; m.runners = []; m.failSettlement = false; m.sequence = 0; m.reads = []; m.bodies = []; m.sends = [];
   m.budget = reassessmentBudgetFixture({ agentId: binding.providerAgentId, registryAgentId: "AGT-906", configuredPerTaskLimit: 20000, configuredDailyLimit: 200000,
     configuredTimeoutMs: 180000, configuredMaxOutputTokens: 8192 });
   m.rows.taskRun.push({ id: "original-row", taskRunId: "TR-MCP-original", userId: binding.userId, status: "input-required",
@@ -127,7 +127,7 @@ beforeEach(() => {
     else if (url.endsWith("/engines/status")) value = { "llama.cpp": `Running: llama.cpp ${catalog.engineBuild} (sha256:${catalog.engineArchiveDigest}) ${catalog.engineSourceCommit.slice(0, 7)}` };
     else if (url.includes("/engines/_configure?")) value = [{ Backend: "llama.cpp", Mode: "completion", Model: catalog.logicalModelRef, ModelID: catalog.modelDigest, Config: { "context-size": 40960, "runtime-flags": ["--spec-type", "ngram-mod"], keep_alive: "-1" } }];
     else if (url.includes("/models/")) value = { ...structuredClone(metadata), id: catalog.modelDigest };
-    else if (url.endsWith("/engines/ps")) value = [];
+    else if (url.endsWith("/engines/ps")) value = m.runners;
     else if (url.endsWith("/count_tokens")) { value = { input_tokens: 100 }; if (m.scenario === "deny-after-count") m.allowed = false;
       const envelope = m.rows.coworkerActionEnvelope[0];
       if (m.scenario === "envelope-resolved") envelope.resolvedAt = new Date(envelope.resolvedAt.getTime() + 1);
@@ -263,6 +263,29 @@ describe("current native Critic authority context", () => {
 });
 
 describe("actual admitted finite Critic worker with synthetic external boundaries", () => {
+  it("accepts captured DMR idle runners whose optional busy flags are omitted", async () => {
+    // Actual release178 response shape, captured before any generation on task81A6.
+    m.runners = [
+      { backend_name: "llama.cpp", model_name: "ai/nomic-embed-text-v1.5", mode: "embedding", last_used: "2026-11-05T15:54:56.6221694-06:00", keep_alive: "-1" },
+      { backend_name: "llama.cpp", model_name: catalog.logicalModelRef, mode: "completion", last_used: "2026-11-05T15:42:25.9354774-06:00", keep_alive: "-1" },
+    ];
+    await expect(runAssessment()).resolves.toMatchObject({ result: { status: "completed", isError: false } });
+    expect(generations()).toHaveLength(1);
+    expect(m.rows.workroomActivity).toHaveLength(1);
+    expect(m.rows.tokenUsage).toHaveLength(1);
+  });
+  it.each([
+    null, {}, [null], [{ model_name: "", mode: "completion" }],
+    [{ model_name: catalog.logicalModelRef, mode: "completion", in_use: "false" }],
+    [{ model_name: catalog.logicalModelRef, mode: "completion", loading: 0 }],
+  ])("holds malformed capacity evidence without generating: %j", async runners => {
+    m.runners = runners;
+    await expect(runAssessment()).resolves.toMatchObject({ result: { isError: true, resumable: false } });
+    expect(engagement().metadata.presentAssessment).toMatchObject({ state: "held", reason: "engagement-present-capacity-response-invalid" });
+    expect(generations()).toHaveLength(0);
+    expect(m.rows.workroomActivity).toHaveLength(0);
+    expect(m.rows.tokenUsage).toHaveLength(0);
+  });
   it("counts the exact image body once and atomically returns the attributable advisory result and usage", async () => {
     const original = structuredClone(m.rows.taskRun[0]);
     await expect(runAssessment()).resolves.toMatchObject({ result: { status: "completed", isError: false, structuredContent: {

@@ -174,8 +174,11 @@ async function executeEngagementPresentAttemptBody(input: Attempt, ports: Engage
       const capacity = async () => {
         const { readPublishedHostGpuObservation, parseEngineRunners, decideLocalGpuAdmission, requiredLocalModelMiB } = await import("../inference/host-gpu-admission");
         const raw = parseCapturedJson(await http("configuration", `${scope.configuration.apiRoot}/engines/ps`));
-        if (!Array.isArray(raw) || raw.some(v => { const r = object(v); return typeof r.model_name !== "string" || typeof r.mode !== "string"
-          || typeof r.in_use !== "boolean" || typeof r.loading !== "boolean"; })) fail("capacity-response-invalid");
+        // DMR omits busy flags on idle runners. Preserve its native response
+        // contract while rejecting malformed flags before the shared parser.
+        if (!Array.isArray(raw) || raw.some(v => { const r = object(v); return typeof r.model_name !== "string" || !r.model_name.trim()
+          || typeof r.mode !== "string" || !r.mode.trim()
+          || [r.in_use, r.inUse, r.loading].some(flag => flag !== undefined && typeof flag !== "boolean"); })) fail("capacity-response-invalid");
         const published = await readPublishedHostGpuObservation();
         const decision = decideLocalGpuAdmission({ runners: parseEngineRunners(raw), snapshot: published.snapshot,
           nowMs: published.observedAtMs, requiredMiB: requiredLocalModelMiB(scope.configuration.modelId) });

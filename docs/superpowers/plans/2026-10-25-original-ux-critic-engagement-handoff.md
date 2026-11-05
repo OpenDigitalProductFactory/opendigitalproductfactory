@@ -392,3 +392,27 @@ size failure (802/831 lines) on superseded source. Its 84 passing guards are
 historical executions, not qualified exact-candidate evidence. Re-run the normal
 canonical gate on the final clean candidate after the module extraction and
 protected-framework integration; no skip or receipt identity rewrite.
+
+
+### November 5 live capacity-contract correction
+
+Reuse BI-BCBCA8D1 / WC-6CCF8DAB and this thread's governed worktree. The deployed
+authority-context repair admitted the sole present assessment, which then held
+on an invalid requirement for idle flags in DMR's successful capacity response.
+Configuration cannot repair that code-level schema mismatch.
+
+1. Reproduce the exact retained idle-row shape through the real finite worker
+   with synthetic transport; observe failure before editing validation.
+2. Accept omitted flags and reject supplied nonboolean flags or malformed
+   identity/mode, then pass the existing parsed rows to shared admission.
+3. Run affected worker and shared capacity suites, both web TypeScript programs,
+   impact guards, current-source canonical qualification and protected delivery.
+4. Keep the original held assessment unchanged. Coordinate the distinct missing
+   same-candidate recovery contract with its existing framework owner; do not
+   reinvoke fulfillment, reset an allowance or claim a real result from tests.
+5. Verify the deployed contract and actual Critic contribution only through the
+   supported path after qualification. Retain author disposition as outstanding.
+
+First new regression observed RED on unchanged worker. The first corrected
+source run passed 71 tests in 3 files. This is source-local evidence only;
+canonical qualification, publication and live recovery remain unrun.

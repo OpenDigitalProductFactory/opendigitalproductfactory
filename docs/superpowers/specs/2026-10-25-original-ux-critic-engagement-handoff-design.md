@@ -506,3 +506,31 @@ No setting is dropped, rewritten or activated by this adapter. Speculation can
 change numerical decoding behavior; this is not a bit-stable output claim.
 Model, engine archive/source, template, actual image/body count, native authority
 and budget checks remain separate and unchanged. This adds no execution grant.
+
+### Observed DMR capacity response, November 5
+
+The one authorized present assessment of CE-1FE20783 reached native admission
+on release 178 (source 765a432c, containing repair merge 12b1). Its task ending
+81A6B03E0377 retained successful configuration GET `/engines/ps`: HTTP 200,
+334 bytes, SHA256
+`097ff7881c4b6e4f146f835f99d38a576b68b48a44dbee79796a72f144c73b17`.
+The two idle native rows contain `model_name`, `mode`, `backend_name`,
+`last_used` and `keep_alive`, with `in_use` and `loading` omitted. Requiring
+those optional flags made valid native evidence fail before model qualification
+or generation. Preserve this first failure and captured response.
+
+The compatibility correction requires an array of rows with nonempty model
+name and mode. Optional busy flags must be boolean when supplied; malformed
+rows still refuse. The existing shared `parseEngineRunners` and admission
+policy retain busy/loading, host-memory and singleton checks. No provider,
+model, grants, runtime configuration or authority policy changes are needed.
+A regression uses the actual response shape through the admitted worker and
+its settlement path, alongside malformed-field refusals and shared admission
+coverage. A passing synthetic result is never the original Critic contribution.
+
+This parser repair does not resume the consumed assessment. Its present policy
+is finite and nonresumable, and the original D170 history remains UNKNOWN.
+Any same-task recovery must first have an independently reviewed, supported
+native contract that proves the generation/effect ledger and current authority,
+preserves original scope/history and cumulative limits, and does not create a
+replacement candidate. No task/engagement metadata reset is a recovery path.
