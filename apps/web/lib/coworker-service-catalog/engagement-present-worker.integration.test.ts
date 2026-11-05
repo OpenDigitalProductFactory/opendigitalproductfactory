@@ -7,6 +7,7 @@ import { parseEngagementTaskBinding } from "./engagement-task-binding";
 import { withEngagementPresentRequest, currentEngagementPresentAssessment, prepareEngagementPresentAdmission,
   activateEngagementPresentAdmission, assertEngagementPresentAssociation, reconcileEngagementPresentObservation, readOutstandingEngagementReservations, readEngagementPresentConfiguration } from "./engagement-present-assessment";
 import { executeEngagementPresentAttempt, type EngagementPresentPorts } from "./engagement-present-worker";
+import { fulfillCoworkerEngagement } from "../mcp/external-coworker-task-adapter";
 import { persistEngagementRead } from "./engagement-read-provenance";
 import type { RemoteTaskAttemptInput } from "../mcp-task-submit-types";
 
@@ -17,12 +18,13 @@ import type { RemoteTaskAttemptInput } from "../mcp-task-submit-types";
 type Row = Record<string, any>;
 const m = vi.hoisted(() => ({ db: {} as Row, rows: {} as Record<string, Row[]>, budget: {} as Row,
   allowed: true, scenario: "valid", fetch: vi.fn(), reads: [] as string[], bodies: [] as string[],
+  authorityInputs: [] as Row[], room: null as Row | null,
   sends: [] as string[], failSettlement: false, sequence: 0, visual: {} as Row }));
 vi.mock("@dpf/db", () => ({ prisma: new Proxy({}, { get: (_target, key) => m.db[String(key)] }) }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => ({ userId: "fixture-owner", platformRole: "ceo", isSuperuser: true }) }));
 vi.mock("@/lib/permissions", () => ({ can: () => true }));
-vi.mock("@/lib/govern/authority/resolve-coworker-tool-authority", () => ({ resolveCoworkerToolAuthorityInput: async (input: Row) => ({ ...input, ...(input.execution.context.approvedAuthorityEnvelopeId ? { approval: { envelopeId: input.execution.context.approvedAuthorityEnvelopeId } } : {}) }) }));
-vi.mock("@/lib/govern/authority/coworker-authority-decision", () => ({ evaluateCoworkerAuthority: (input: Row) => ({ outcome: m.allowed && input.agentGrantAllowed ? "allow" : "deny" }) }));
+vi.mock("@/lib/govern/authority/resolve-coworker-tool-authority", () => ({ resolveCoworkerToolAuthorityInput: async (input: Row) => { m.authorityInputs.push(input); return { ...input, ...(input.execution.context.approvedAuthorityEnvelopeId ? { approval: { envelopeId: input.execution.context.approvedAuthorityEnvelopeId } } : {}) }; } }));
+vi.mock("@/lib/govern/authority/coworker-authority-decision", () => ({ evaluateCoworkerAuthority: (input: Row) => ({ outcome: m.allowed && input.agentGrantAllowed ? "allow" : "deny", reasonCode: "agent-grant-denied", explanation: "The current actor lacks the required grant.", nextAction: "request-authority" }) }));
 vi.mock("@/lib/mcp/packs/coworker-service-catalog-pack", () => ({ coworkerServiceCatalogPack: { definitions: [{ name: "request_coworker_engagement" }] } }));
 vi.mock("@/lib/tak/agent-grants", () => ({ expandGrants: () => ["fixture"], persistedAgentToolGrants: () => ["fixture"], isToolAllowedByGrants: (name: string) => name === "request_coworker_engagement" }));
 vi.mock("@/lib/inference/local-model-management", () => ({ canonicalLocalModelKey: (value: string) => value }));
@@ -52,7 +54,13 @@ const binding = parseEngagementTaskBinding({ version: 1, engagementId: "CE-1FE20
   visualEvidenceRef: { kind: "document-version", repositoryFullName: base.repositoryFullName, versionId: "fixture-images", valueDigest: "d".repeat(64) } })!;
 const token = { tokenId: "fixture-token", userId: binding.userId, source: "oauth" as const, capability: "write" as const };
 const request = { engagementId: binding.engagementId, userId: binding.userId, token, rawParams: { engagementId: binding.engagementId, fulfillment: { presentAssessment: true } },
-  context: { agentId: binding.actorAgentId, authorityDecisionId: "fixture-native-decision", userContext: { userId: binding.userId, platformRole: "ceo", isSuperuser: true } } };
+  context: { agentId: binding.actorAgentId, authorityDecisionId: "fixture-native-decision",
+    connectionDelegation: { authorityBindingId: "fixture-delegation", agentId: binding.actorAgentId },
+    governedReadToolCatalog: async () => [], // A read-only catalog excludes this mutating artifact action.
+    governedAuthorityTool: () => ({ name: "request_coworker_engagement", description: "Canonical governed fixture",
+      requiredCapability: "view_platform", sideEffect: true, inputSchema: {} }),
+    governedRoomAuthority: () => m.room,
+    userContext: { userId: binding.userId, platformRole: "ceo", isSuperuser: true } } };
 const answer = () => ({ summary: "Synthetic advisory critique", criteria: ["Information hierarchy"], corpusRefs: ["professions/ux-design/heuristic"],
   findings: [{ severity: "medium", criterion: "Information hierarchy", observation: "Reason is hidden.", evidence: "Synthetic default capture.", proposedCorrection: "Expose the selected decision reason.", captureState: "default" }],
   limitations: ["Synthetic immutable source and one image only."], reviewedArtifacts: ["prototype.html@" + base.commitSha], calibrationLimitations: ["Empty calibrated corpus; advisory."] });
@@ -93,7 +101,7 @@ function memoryDatabase() {
   m.db.$transaction = async (execute: (tx: Row) => Promise<unknown>) => { const prior = structuredClone(m.rows); try { return await execute(m.db); } catch (error) { m.rows = prior; throw error; } };
 }
 beforeEach(() => {
-  vi.clearAllMocks(); memoryDatabase(); m.allowed = true; m.scenario = "valid"; m.failSettlement = false; m.sequence = 0; m.reads = []; m.bodies = []; m.sends = [];
+  vi.clearAllMocks(); memoryDatabase(); m.authorityInputs = []; m.room = null; m.allowed = true; m.scenario = "valid"; m.failSettlement = false; m.sequence = 0; m.reads = []; m.bodies = []; m.sends = [];
   m.budget = reassessmentBudgetFixture({ agentId: binding.providerAgentId, registryAgentId: "AGT-906", configuredPerTaskLimit: 20000, configuredDailyLimit: 200000,
     configuredTimeoutMs: 180000, configuredMaxOutputTokens: 8192 });
   m.rows.taskRun.push({ id: "original-row", taskRunId: "TR-MCP-original", userId: binding.userId, status: "input-required",
@@ -206,6 +214,51 @@ describe("canonical local account configuration", () => {
     await expect(readEngagementPresentConfiguration(binding.providerAgentId)).rejects.toThrow("local-provider-inactive: Enable the existing local provider using supported account controls");
     expect(m.rows.modelProvider[0].status).toBe("inactive"); expect(m.sends).toHaveLength(0);
     expect(m.rows.taskRun).toHaveLength(1); expect(engagement().metadata.presentAssessment).toBeUndefined();
+  });
+});
+
+describe("current native Critic authority context", () => {
+  it("rechecks the canonical governed definition and the trusted original room", async () => {
+    m.room = { workroomId: "WC-CALLER", authorizedGrants: ["coworker_engagement_write"], memberOfRoom: true };
+    await expect(runAssessment()).resolves.toMatchObject({ result: { status: "completed", isError: false } });
+    expect(m.authorityInputs.length).toBeGreaterThan(1);
+    for (const input of m.authorityInputs) {
+      expect(input.tool).toMatchObject({ name: "request_coworker_engagement",
+        description: "Canonical governed fixture", requiredCapability: "view_platform" });
+      expect(input.execution.context.roomAuthority).toEqual(m.room);
+      expect(input.execution.context.connectionDelegation).toEqual(request.context.connectionDelegation);
+    }
+  });
+  it.each(["governedAuthorityTool", "governedRoomAuthority"])("refuses missing trusted %s before allocation", async key => {
+    const changed = { ...request, context: { ...request.context, [key]: undefined } };
+    await expect(withEngagementPresentRequest(changed as never, async () => {})).rejects.toThrow("current-native-context-unavailable");
+    expect(m.sends).toHaveLength(0); expect(m.rows.taskRun).toHaveLength(1);
+    expect(engagement().metadata.presentAssessment).toBeUndefined();
+  });
+  it("does not use a different definition than the exact original governed tool", async () => {
+    const changed = { ...request, context: { ...request.context, governedAuthorityTool: () => ({ name: "another-tool" }) } };
+    await expect(withEngagementPresentRequest(changed as never, async () => {})).rejects.toThrow("current-native-tool-unavailable");
+    expect(m.sends).toHaveLength(0); expect(m.rows.taskRun).toHaveLength(1);
+  });
+  it("returns the actual native refusal in structured tool data without allocating or sending", async () => {
+    m.allowed = false;
+    m.db.coworkerEngagement.findFirst = async () => m.rows.coworkerEngagement[0];
+    const context = { ...request.context, apiTokenId: token.tokenId, authSource: "oauth", tokenScope: "write" };
+    const result = await fulfillCoworkerEngagement(binding.engagementId, { presentAssessment: true }, binding.userId,
+      context as never, m.db as never, request.rawParams);
+    expect(result).toMatchObject({ success: false, error: "engagement_present_refused", data: {
+      engagementId: binding.engagementId, executionRequested: false,
+      reason: expect.stringContaining("current-native-authority-refused:deny:agent-grant-denied"),
+    } });
+    expect(m.sends).toHaveLength(0); expect(m.rows.taskRun).toHaveLength(1);
+    expect(engagement().metadata.presentAssessment).toBeUndefined();
+  });
+  it("retains the current denial reason and remedy before allocation", async () => {
+    m.allowed = false;
+    await expect(withEngagementPresentRequest(request as never, async () => {}))
+      .rejects.toThrow("current-native-authority-refused:deny:agent-grant-denied");
+    expect(m.sends).toHaveLength(0); expect(m.rows.taskRun).toHaveLength(1);
+    expect(engagement().metadata.presentAssessment).toBeUndefined();
   });
 });
 
