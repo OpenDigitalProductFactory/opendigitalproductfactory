@@ -82,14 +82,16 @@ to local-only inference (#6907, #6892).
 An address is now exempt only when all of these hold:
 
 - its domain is reserved under RFC 2606/6761 (`.invalid`, `.test`, `.example`,
-  `.localhost`, `.local`, `example.com`, `example.net`, `example.org`), so it
-  cannot be delivered to;
+  `.localhost`, `example.com`, `example.net`, `example.org`, including their
+  subdomains), so it cannot be delivered to, or it is the platform's own
+  fixture domain `dpf.local`. Other `.local` domains are not exempt, because
+  organisations run real internal mail on them (`admin@corp.local`);
 - its local part is a role or placeholder token (`admin`, `test`, `user`,
   `walk`, `noreply`, `ci`, `bot` and the others listed in
   `source-contact-evidence.ts`), optionally followed by up to three digits,
   so it names no person;
 - nothing follows the domain, and no customer, client, contact or similar
-  label precedes it.
+  label precedes it, including a two-word label such as `contact email:`.
 
 Exempting every reserved-domain address stays rejected. A person-shaped local
 part (`jane@example.invalid`, `first.last@example.com`), a placeholder in a

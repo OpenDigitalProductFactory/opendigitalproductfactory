@@ -123,6 +123,8 @@ describe("placeholder accounts on reserved domains are not customer contacts (BI
     'from: "noreply@example.org"',
     'actor: "automation@dpf.local"',
     'owner: "test@example.com"',
+    // RFC 2606 reserves example.com and every subdomain of it.
+    'from: "noreply@mail.example.com"',
   ])("does not classify %s", (line) => {
     expect(contacts(line)).toEqual([]);
   });
@@ -137,6 +139,12 @@ describe("placeholder accounts on reserved domains are not customer contacts (BI
     'email: "admin@dpf.local.example.org.evil.io"',
     'email: "admin@dpf.local+tag"',
     'email: "admin@dpf.local" // customer jane@company.com',
+    // .local carries real internal mail; only the platform's fixture domain is exempt.
+    'email: "admin@corp.local"',
+    'email: "admin@company.local"',
+    // Two-word customer labels keep their context.
+    "contact email: walk@dpf.local",
+    "customer contact = admin@dpf.local",
   ])("still classifies a person, customer context, real domain or adjacent contact: %s", (line) => {
     expect(contacts(line)).toHaveLength(1);
   });
