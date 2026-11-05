@@ -58,6 +58,32 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+const NODE_DOCKER_ADAPTER = "docker-node-adapter.mjs";
+
+/** Windows Git Bash rewrites brace-bearing argv (for example `{{.Id}}`).
+ * Keep production on execFile, but let fixtures reconstruct one fully quoted
+ * Bash command after native Node has received the original Docker argv. */
+export function writeNodeDockerAdapter(fakeBin: string, bashCommand = BASH_COMMAND, bashDockerPath = toBashPath(join(fakeBin, "docker"))): void {
+  if (process.platform !== "win32") return;
+  writeFileSync(join(fakeBin, NODE_DOCKER_ADAPTER), `import { spawnSync } from "node:child_process";
+const bash = ${JSON.stringify(bashCommand)};
+const script = ${JSON.stringify(bashDockerPath)};
+const quote = (value) => "'" + value.replaceAll("'", "'\\\\''") + "'";
+const command = "exec " + [script, ...process.argv.slice(2)].map(quote).join(" ");
+const result = spawnSync(bash, ["-lc", command], { stdio: "inherit" });
+process.exit(result.status ?? 1);
+`);
+}
+
+export function nodeDockerAdapterExports(fakeBin: string): string[] {
+  if (process.platform !== "win32") return [];
+  const adapterPath = join(fakeBin, NODE_DOCKER_ADAPTER).replaceAll("\\", "/");
+  return [
+    "export DPF_DOCKER_BIN=node",
+    `export DPF_DOCKER_PREFIX_ARGS=${shellQuote(JSON.stringify([adapterPath]))}`,
+  ];
+}
+
 /** Park a `docker images` fixture on disk so the shim can `cat` it. */
 function writeTagFixture(backupDir: string, tags: string[]): string {
   const path = join(backupDir, "portal-version-tags.txt");
@@ -287,6 +313,7 @@ exit 0
   // Bind timed commands to this companion shim even if the caller changes PATH.
   writeFileSync(join(bin, "timeout"), '#!/bin/sh\n[ "$1" = "-k" ] || exit 64\nshift 3\n[ "$1" = "docker" ] || exit 64\nshift\nexec "$(dirname "$0")/docker" "$@"\n');
   chmodSync(join(bin, "timeout"), 0o755);
+  writeNodeDockerAdapter(bin);
   return bin;
 }
 
@@ -374,6 +401,7 @@ export function runPromote(opts: {
     // a test run never rewrites the developer's real ~/.gitconfig (BI-249EEA02).
     `export GIT_CONFIG_GLOBAL=${shellQuote(toBashPath(join(opts.backup, "gitconfig")))}`,
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
+    ...nodeDockerAdapterExports(opts.fakeBin),
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
@@ -417,10 +445,8 @@ export function runPromote(opts: {
       ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
       : []),
     ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
-    // Through a file, not the environment: a backlog-sized list is thousands of
-    // characters and the `bash -lc` payload truncates mid-quote well before the
-    // sweep runs (BI-A5FFE7A7). A file also matches how the real `docker images`
-    // output reaches the loop — a stream of lines.
+    // Keep a backlog-sized list out of the generated runner and environment.
+    // A file also matches how real `docker images` output reaches the loop.
     ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS_FILE=${shellQuote(toBashPath(writeTagFixture(opts.backup, opts.portalVersionTags)))}`] : []),
     ...(opts.imagesInUse ? [`export DPF_TEST_IMAGES_IN_USE=${shellQuote(opts.imagesInUse.join("\n"))}`] : []),
     ...(opts.imageKeep !== undefined ? [`export PROMOTE_IMAGE_KEEP=${opts.imageKeep}`] : []),
@@ -448,7 +474,12 @@ export function runPromote(opts: {
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
     ] : []),
   ];
-  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade${opts.dryRun ? " --dry-run" : ""}`], {
+  // Windows truncates a long `bash -lc <payload>` command before Bash sees it,
+  // often in the middle of a quoted release variable. Put the exact script on
+  // disk and pass only its path across the native process boundary.
+  const runner = join(opts.backup, "promote-functional-runner.sh");
+  writeFileSync(runner, `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade${opts.dryRun ? " --dry-run" : ""}\n`);
+  const r = spawnSync(BASH_COMMAND, [toBashPath(runner)], {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
