@@ -960,12 +960,13 @@ jobs:
           done < <(find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) -not -path './node_modules/*' -not -path './.git/*' -print0)
           exit $fail
 
-      # BI-2FAE2E5C: setup-node `node-version: 24` floated to 24.22.2 on a new
-      # runner image, outside the vendored dpf-workroom qualification, and the
-      # engine-strict artifact install failed for every PR. CI Node is the exact
-      # .node-version, which must be a qualified version; workflows read it via
-      # node-version-file. Requalify the artifact before bumping the pin.
-      - name: Assert CI Node is exact and qualified
+      # BI-2FAE2E5C, BI-827FA1C9: 24.22.2 fell outside dpf-workroom
+      # candidate.4's exact engines list and its engine-strict install failed
+      # for every PR. Candidate.5 admits the Node 24 line and tests the newest
+      # patch upstream weekly. Every job reads .node-version via
+      # node-version-file; this asserts the engines range inside each vendored
+      # tarball admits it and that Dockerfiles stay on the same major.
+      - name: Assert CI Node is admitted by vendored artifacts
         run: node scripts/check-ci-node-qualified.mjs
 
   compose-image-pins:
