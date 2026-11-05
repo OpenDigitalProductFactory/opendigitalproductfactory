@@ -377,53 +377,58 @@ model ChangeEvent {
 // derived via resolveLinkTrust (trust-link-lifecycle.ts) from the approval
 // timestamps; authorization resolves on Principal + AuthorityBinding (soft ref).
 model FederationLink {
-  id                    String    @id @default(cuid())
-  linkId                String    @unique
-  principalId           String    @unique
+  id                        String    @id @default(cuid())
+  linkId                    String    @unique
+  principalId               String    @unique
   // This deployment's perspective: "manages" (we are the MSP) or "managed-by"
   // (we are the sovereign customer being managed).
-  role                  String
+  role                      String
   // Outbound-only base URL of the peer Authority Core. No inbound listener is
   // required on a sovereign customer.
-  peerAuthorityUrl      String
+  peerAuthorityUrl          String
   // The peer's org identifier + our own org, for the B5 CustomerAccount↔Org crosswalk.
-  peerOrganizationRef   String?
+  peerOrganizationRef       String?
   // Stable pseudonymous installation identity learned from an authenticated
   // digest exchange. Used for route-loop checks; never derived from hostname.
-  peerInstallationId    String?
-  peerDeviceId          String?
-  localOrganizationId   String?
+  peerInstallationId        String?
+  peerDeviceId              String?
+  // The peer's environment class as the organization CA certified it in the
+  // peer's member certificate (BI-0716C8A8, A2A design §19.2). Null means
+  // unattested — never production. Replaces the admin-typed metadata label.
+  peerEnvironmentClass      String?
+  peerEnvironmentAttestedAt DateTime?
+  localOrganizationId       String?
   // Trust state — derived from the approval/revoke/quarantine timestamps below.
-  linkState             String    @default("pending")
+  linkState                 String    @default("pending")
   // Dual approval: trusted only when BOTH approvedAt* are set.
-  approvedAtLocal       DateTime?
-  approvedAtPeer        DateTime?
-  approvedByPrincipalId String?
-  quarantinedAt         DateTime?
-  quarantineReason      String?
-  revokedAt             DateTime?
-  revocationReason      String?
+  approvedAtLocal           DateTime?
+  approvedAtPeer            DateTime?
+  approvedByPrincipalId     String?
+  quarantinedAt             DateTime?
+  quarantineReason          String?
+  revokedAt                 DateTime?
+  revocationReason          String?
   // Auth: dpflink_* link token, hashed at rest, rotating (mirrors EdgeNode).
   // tokenHash is the INBOUND token (the one we issued for the peer to call us).
-  tokenHash             String?   @unique
-  tokenPrefix           String?
-  tokenRotatedAt        DateTime?
+  tokenHash                 String?   @unique
+  tokenPrefix               String?
+  tokenRotatedAt            DateTime?
   // The OUTBOUND token: the peer-issued link token WE use to call the peer.
   // Encrypted at rest (AES-256-GCM, credential-crypto) because we must replay it,
   // not hash it. Set when this deployment enrolled outbound with the peer.
-  peerTokenEnc          String?
+  peerTokenEnc              String?
   // Negotiated scope + authority (soft refs to ProjectionContract (B2) and
   // AuthorityBinding (the band) to keep cross-model blast radius low).
-  projectionContractId  String?
-  authorityBindingId    String?
-  metadata              Json?
-  enrolledAt            DateTime?
+  projectionContractId      String?
+  authorityBindingId        String?
+  metadata                  Json?
+  enrolledAt                DateTime?
   // Introductions exchange candidate coordinates only over an already-trusted
   // link. Each direction is explicit; neither flag transfers trust.
-  offersIntroductions   Boolean   @default(false)
-  acceptsIntroductions  Boolean   @default(false)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  offersIntroductions       Boolean   @default(false)
+  acceptsIntroductions      Boolean   @default(false)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   principal              Principal                         @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
   bootstrapTokens        FederationBootstrapToken[]        @relation("FederationBootstrapConsumer")

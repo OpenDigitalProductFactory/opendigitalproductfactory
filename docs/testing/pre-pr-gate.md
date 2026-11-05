@@ -634,6 +634,17 @@ the accountable executor before seeking new admission. Live, legacy, reused-PID,
 unreadable or changed ownership stays unknown and untouched; a foreign mutation
 lock is also retained. Normal status reads never reconcile automatically.
 
+**A gate that is still working says so (BI-F039AA83).** pregate writes
+`dpf-pregate-live.json` into the worktree's own git dir when it starts, moves its
+stage as it goes, and removes it on exit. While that marker's process is
+provably alive — the same pid + start-time proof the queue observers use — or
+the gate's queue observer is alive for HEAD, the status is `PREFLIGHT`,
+`QUEUED`, `ADMITTED` or `RUNNING` with the pid, stage and queue position, and
+the exit code is **75**: wait and read again. It is never `FAIL` or
+`NO-RECORD` for such a gate, and a second pregate in the same worktree is
+refused (exit 75) with a pointer at the live one. `FAIL` means a recorded
+failing verdict, nothing else.
+
 **Queued and broken read differently (BI-277ECBDB).** A queued claim reads
 `queued behind N other claims`: it is waiting on other work, and its waiter runs
 it. Before claiming, the gate probes every slot's PostgreSQL container
