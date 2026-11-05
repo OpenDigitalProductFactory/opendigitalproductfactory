@@ -4,6 +4,61 @@ status: active
 
 # Local-CI Control-Plane Starvation Prevention
 
+## Exited-member fixture determinism: BI-D62F4BE4 (2026-11-03)
+
+Workroom `WC-F57A4E37` owns this Small/low atomic regression repair. The
+completed BI-1A4CC847 diagnostics and BI-BFDB98B6 containment remain intact.
+On protected source `4cebc26d759a4b07e7978360735ecfa555b61cd9`, repeated
+Windows readiness runs captured an exited member successfully opening in one
+snapshot, then failing `probe-member-in-snapshot` in the next. Waiting for
+process exit does not prove the process object has disappeared. The failing
+fixtures retain real native provenance; they must not be rewritten as passes.
+
+### Ordered fix and verification
+
+1. Add an `exited-member-retained` control to the existing native fixture and
+   JavaScript suite. Hold an additional query/synchronize handle for the owned
+   member across actual exit and the first real observation. Require the
+   intended OpenProcess/native87 diagnostic, original PID/birth, and successful
+   independent cleanup. Observe the unchanged immediate-disappearance path fail.
+2. Within the same captured membership snapshot, observe the exited member with
+   bounded read-only OpenProcess attempts until a genuine native failure occurs.
+   Compare every successful handle's creation time with the captured identity,
+   close it on every path, and reject PID reuse or unreadable identity. Release
+   the control handle only after two successful, creation-verified observations,
+   closing each observation handle first. On the decisive failing snapshot,
+   require ordered evidence of original probe-handle release, both observations
+   while the extra control is held, observation-handle closes, control release,
+   then the actual null OpenProcess/native87. Never signal a reopened PID,
+   fabricate error87, or change the production observer.
+3. Use only the remaining existing ten-second Job-drain budget, including the
+   exit wait. Exhaustion remains non-success with explicit operation/provenance;
+   retain primary and cleanup errors separately. No timeout increase or blind
+   sleep is a remedy. Extract a shared fixture observation helper where useful.
+4. Run all original15 Windows cancellation/Job cases plus the retained-handle
+   control, with owned cleanup and the existing unrelated cancellation sentinel.
+   Record RED and GREEN separately, check documentation/index and applicable
+   source guards, obtain independent exact-source assessment, then qualify and
+   publish through the canonical gate and protected DCO PR/merge queue. The final
+   review packet must include the exact-head native Windows test command,
+   complete case outcomes and decisive retained-object snapshot, separately
+   from the canonical gate's web tests. Native review receipt
+   `cmw0dcarn0lr601lnbc1y5sri` remains FAIL; these changes address its ordering
+   and missing-primary-evidence findings and require independent reassessment.
+
+Acceptance is the live item's four recorded criteria: a deterministic retained
+handle regression; fail-closed identity/query/cleanup controls; all16 native
+Windows cases passing with containment; and protected exact-source publication.
+The fixture control, bounded observation and assertions are one deliverable:
+none independently repairs readiness. This ordered design is the atomic plan
+artifact for BI-D62F4BE4; it creates no runtime feature, table or runner.
+
+Microsoft's [process handle and identifier contract](https://learn.microsoft.com/en-us/windows/win32/procthread/process-handles-and-identifiers)
+and [OpenProcess contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess)
+define the retained-object lifetime and real failure/handle-release semantics.
+They justify observational retry within the existing fixture budget, without
+turning exit or PID absence into authoritative cleanup evidence.
+
 ## Owned-job observation diagnostics: BI-1A4CC847 (2026-10-30)
 
 This Medium/low successor extends the existing Windows cancellation fixture;
