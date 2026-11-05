@@ -326,6 +326,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
       // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
       conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
+      // BI-4F89896B: the sandbox image carries every binary a guard command
+      // execs, because the Build Studio gauntlet runs the guards there.
+      conformanceTest("scripts/installer/sandbox-guard-toolchain-contract.test.mjs"),
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
