@@ -143,6 +143,27 @@ describe("transactional initial external acceptance assignment", () => {
       .toMatchObject({ success: false, data: { reason: "sensitive-verification-target-requires-controlled-assignment" } });
     expect(f.state().room).toBeNull();
   });
+  it.each(["restricted", "missing"])("rechecks the persisted target on omitted-field replay after it becomes %s", async change => {
+    const f = fixture(), outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET" };
+    expect((await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } })).success).toBe(true);
+    if (change === "restricted") f.controls.targetSensitivity = "restricted"; else f.controls.targetExists = false;
+    const before = structuredClone(f.state());
+    expect((await f.run()).success).toBe(false); expect(f.state()).toEqual(before);
+  });
+  it("reuses a valid persisted target when optional target fields are omitted", async () => {
+    const f = fixture(), outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET" };
+    expect((await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } })).success).toBe(true);
+    const before = structuredClone(f.state());
+    expect(await f.run()).toMatchObject({ success: true, data: { executorAssignment: { reused: true } } });
+    expect(f.state()).toEqual(before);
+  });
+  it("refuses an explicitly changed verification target without rewriting the accepted assignment", async () => {
+    const f = fixture(), outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET" };
+    await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } });
+    const before = structuredClone(f.state()), changed = { ...outcomeAnchor, id: "BI-OTHER" };
+    expect((await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor: changed } }, params: { sessionRef: "endorsed", outcomeAnchor: changed } })).success).toBe(false);
+    expect(f.state()).toEqual(before);
+  });
   it("refuses an authored backlog subject on a source-free acceptance assignment", async () => {
     const f = fixture();
     expect(await f.run({ params: { sessionRef: "endorsed", backlogItemId: "BI-TARGET" } })).toMatchObject({ success: false,

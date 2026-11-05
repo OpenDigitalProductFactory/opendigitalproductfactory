@@ -56,6 +56,21 @@ async function currentConnection(tx: Prisma.TransactionClient, { actor, context 
     isToolAllowedByGrants(tool, held) && isToolAllowedByGrants(tool, context.tokenGrantScopes ?? []))) refuse("current-creation-authority-required");
 }
 
+async function currentVerificationTarget(tx: Prisma.TransactionClient, outcomeAnchor: unknown) {
+  const target = await resolveAdoptionBacklogBinding(tx, { outcomeAnchor: outcomeAnchor });
+  if (!target.bound) refuse("verification-target-unavailable");
+  if (target.backlogItemId) {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${target.backlogItemId} FOR SHARE`;
+    if (rows.length !== 1) refuse("verification-target-unavailable");
+    const policy = await tx.backlogItem.findUnique({ where: { itemId: target.backlogItemId },
+      select: { sensitivity: true, scopeKind: true, digitalProduct: { select: { productId: true } } } });
+    if (!policy) refuse("verification-target-unavailable");
+    const sensitivity = effectiveBacklogSensitivity({ sensitivity: policy.sensitivity, scopeKind: policy.scopeKind,
+      digitalProductId: policy.digitalProduct?.productId ?? null });
+    if (sensitivity !== "public" && sensitivity !== "internal") refuse("sensitive-verification-target-requires-controlled-assignment");
+  }
+}
+
 async function currentRoom(tx: Prisma.TransactionClient, capsule: HandoffRoom, args: Input, ref: string) {
   const { actor } = args;
   if (!actor.agentId || !actor.principalId || !actor.agentPrincipalId) refuse("current-external-assistant-required");
@@ -96,20 +111,6 @@ export async function createInitiallyAssignedWorkroom(args: Input): Promise<Tool
       const key = `workroom-initial-assignment:${args.input.idempotencyKey}`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
       await currentConnection(tx, args);
-      // Like the existing acceptance sweep, the item being verified is an
-      // outcome target, never the source-authorship subject of this room.
-      const target = await resolveAdoptionBacklogBinding(tx, { outcomeAnchor: scope.outcomeAnchor });
-      if (!target.bound) refuse("verification-target-unavailable");
-      if (target.backlogItemId) {
-        const rows = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${target.backlogItemId} FOR SHARE`;
-        if (rows.length !== 1) refuse("verification-target-unavailable");
-        const policy = await tx.backlogItem.findUnique({ where: { itemId: target.backlogItemId },
-          select: { sensitivity: true, scopeKind: true, digitalProduct: { select: { productId: true } } } });
-        if (!policy) refuse("verification-target-unavailable");
-        const sensitivity = effectiveBacklogSensitivity({ sensitivity: policy.sensitivity, scopeKind: policy.scopeKind,
-          digitalProductId: policy.digitalProduct?.productId ?? null });
-        if (sensitivity !== "public" && sensitivity !== "internal") refuse("sensitive-verification-target-requires-controlled-assignment");
-      }
       const existing = await tx.workroom.findUnique({ where: { idempotencyKey: args.input.idempotencyKey } });
       if (existing) {
         await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${existing.id} FOR UPDATE`;
@@ -117,6 +118,7 @@ export async function createInitiallyAssignedWorkroom(args: Input): Promise<Tool
         if (room.executorRef !== ref || room.executorKind !== args.input.executorKind
           || room.createdByPrincipalId !== args.actor.agentPrincipalId || room.requestedByPrincipalId !== args.actor.principalId) refuse("existing-assignment-does-not-match");
         assertScopeReadback(room, args.input.scope);
+        await currentVerificationTarget(tx, room.outcomeAnchor);
         const records = await tx.workroomActivity.findMany({ where: { workCapsuleId: room.id, kind: "action", payload: { path: ["kind"], equals: ASSIGNMENT_KIND } }, take: 2 });
         const payload = records.length === 1 ? records[0]?.payload : null;
         if (!payload || typeof payload !== "object" || Array.isArray(payload)
@@ -127,6 +129,8 @@ export async function createInitiallyAssignedWorkroom(args: Input): Promise<Tool
         return { capsule: room, reused: true, activityId: records[0]!.id };
       }
       if (!allowCreate) refuse("concurrent-assignment-winner-unavailable");
+      // Verification targets never become the source-authorship subject.
+      await currentVerificationTarget(tx, scope.outcomeAnchor);
       const created = await createWorkCapsule({ db: tx as unknown as CapsuleDb,
         actor: args.actor, deferPublication: true, input: { ...args.input, backlogItemId: null, executorRef: ref } });
       await ensureCapsuleWorkItemAnchor({ ports: prismaAnchorPorts(tx), capsuleId: created.capsuleId,

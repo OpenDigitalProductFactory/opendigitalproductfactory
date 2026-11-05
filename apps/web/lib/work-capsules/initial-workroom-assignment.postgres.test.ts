@@ -135,6 +135,21 @@ describe.skipIf(!DATABASE_URL)("initial assignment atomicity and competing produ
     expect(created.backlogItemId).toBeNull(); expect(created.outcomeAnchor).toEqual(outcomeAnchor);
     expect((await resolveBodyBaselineAuthorRoom(prisma as never, target))?.id).toBe(source.id);
   });
+  it("rechecks the stored target on replay when the caller omits optional target fields", async () => {
+    const target = await prisma.backlogItem.create({ data: { itemId: "BI-TARGET", title: "Delivered target", status: "awaiting-acceptance", type: "feature" } });
+    const outcomeAnchor = { kind: "backlog-item" as const, id: target.itemId };
+    expect((await createInitiallyAssignedWorkroom({ db: db(), actor, context,
+      input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } })).success).toBe(true);
+    const before = await counts();
+    await prisma.backlogItem.update({ where: { id: target.id }, data: { sensitivity: "restricted" } });
+    expect(await run()).toMatchObject({ success: false, data: { reason: "sensitive-verification-target-requires-controlled-assignment" } });
+    expect(await counts()).toEqual(before);
+    await prisma.backlogItem.update({ where: { id: target.id }, data: { sensitivity: "internal" } });
+    expect(await run()).toMatchObject({ success: true, data: { executorAssignment: { reused: true } } });
+    await prisma.backlogItem.delete({ where: { id: target.id } });
+    expect(await run()).toMatchObject({ success: false, data: { reason: "verification-target-unavailable" } });
+    expect(await counts()).toEqual(before);
+  });
   it("rolls back room, ownership, anchor and assignment when final admission refuses", async () => {
     fixture.denyAfterOwnership = true; expect((await run()).success).toBe(false);
     expect(await counts()).toEqual({ rooms: 0, participants: 0, activities: 0, cases: 0 });

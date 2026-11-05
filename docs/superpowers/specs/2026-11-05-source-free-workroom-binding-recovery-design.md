@@ -271,10 +271,11 @@ creating again. The store must not query a winner on an aborted caller-owned
 transaction.
 
 Source-local adapter/dispatch and existing boundary suites pass; these qualified
-identity fixtures do not attest live identity or acceptance. The six PostgreSQL
+identity fixtures do not attest live identity or acceptance. The seven PostgreSQL
 cases cover concurrent duplicates, complete rollback, both observed lock orders
 against the actual lease allocator, an actual legacy uniqueness winner, and
-verification-target separation from the actual source-author relation.
+verification-target separation from the actual source-author relation, and
+persisted-target revalidation on omitted-field replay.
 They require an admitted disposable database and remain UNRUN until executed
 there. Final exact-tree qualification, independent review, protected publication
 and containing-runtime acceptance remain required.
@@ -311,3 +312,21 @@ the shared environment. Its owner normally cancelled the exact queued lease
 NPEL-388557494B before admission; there is no integration or PostgreSQL verdict
 for it. Changed-source qualification and a fresh exact-source independent
 assessment are owed after this correction.
+
+## Persisted target checks on matching replay
+
+Scope readback intentionally permits omitted optional fields. A duplicate must
+therefore validate the existing row's persisted outcomeAnchor after locking the
+room and checking any explicit caller scope, rather than relying on an optional
+caller target. Two first-failing regressions reproduced reuse after the stored
+target became restricted or disappeared while the duplicate omitted that field.
+The existing target validator now receives stored data on replay, under the real
+target lock. Ordinary omitted-field reuse remains valid, an explicitly different
+target stays held, and existing room/history/role data is never rewritten.
+
+The 0da host preflight was interrupted for this finding before any runtime
+admission. Its controller-absent receipt remains inconclusive with original
+child outcome and descendant ownership unknown; reconciliation preserves that
+evidence and lock. It is not a guard failure or verification pass. Fresh final
+qualification must retain that uncertainty and use the documented recovery
+contract without changing old evidence or skipping canonical integration.
