@@ -358,3 +358,39 @@ describe("envelopeIdFromExecutionResult", () => {
     })).toBe("cmti2racd18zq01lht28321dp");
   });
 });
+
+// BI-6AE64074: admitting a coworker and raising its data access is one plain choice.
+describe("room admission with a data access raise", () => {
+  const admission = (params: Record<string, unknown> = {}) => summarizeCoworkerEnvelopeDecision({
+    toolName: "invite_room_participant",
+    proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer", raiseClearanceTo: "internal", ...params },
+    recommenderAgentId: "AGT-EXT-CLAUDE",
+    authorizerUserId: "owner",
+    consequence: "authority",
+    targetLabel: "Quarterly supplier review",
+  });
+
+  it("says who joins which room and what data it can then read", () => {
+    const decision = admission();
+    expect(decision.kind).toBe("admission");
+    expect(decision.headline).toBe("Let change-reviewer into Quarterly supplier review and let it read internal information?");
+    expect(decision.admission?.changes.join(" ")).toMatch(/joins Quarterly supplier review/);
+    expect(decision.admission?.changes.join(" ")).toMatch(/internal information in any room it is admitted to/);
+    expect(decision.admission?.keeps.join(" ")).toMatch(/Coworker data access/);
+  });
+
+  it("gives the primary decision a plain title instead of an unresolved one", () => {
+    const primary = envelopePrimaryDecision(admission());
+    expect(primary.unresolved).toBe(false);
+    expect(primary.title).toBe("Let change-reviewer into this room with internal data access?");
+  });
+
+  it("keeps an ordinary invite on the exact-content card", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "invite_room_participant",
+      proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer" },
+      recommenderAgentId: "AGT-EXT-CLAUDE", authorizerUserId: "owner", consequence: "authority",
+    });
+    expect(decision.kind).not.toBe("admission");
+  });
+});
