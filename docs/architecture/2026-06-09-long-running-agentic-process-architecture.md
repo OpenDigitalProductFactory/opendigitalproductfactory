@@ -1,5 +1,13 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Retained foreground requests:** interactive turns use the existing TaskRun and
+queue with an immutable message binding and bounded pre-inference capacity wait.
+The existing dispatcher repairs lost wakes. Unknown effects and expired interrupted
+executors are held for reconciliation, not replayed. Approval proposals remain
+pending; a response is not business-result acceptance. See the
+[implementation record](../superpowers/specs/2026-10-29-foreground-recovery-implementation.md)
+for source and unrun served-verification boundaries.
+
 **Repository intake:** the commissioned controller reads issues, Dependabot
 alerts and peer demand through the existing backlog origin reconciler. It
 records source snapshots without inflating unchanged demand or overwriting

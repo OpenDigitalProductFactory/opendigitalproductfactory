@@ -337,3 +337,24 @@ test("pending evidence is not a reason to rerun the gate", async () => {
   assert.equal(calls, 0);
   assert.equal(result.outcome, "inconclusive");
 });
+
+// BI-F039AA83: a live verdict from pregate:status is a gate already working —
+// gate:wait watches it instead of launching a second run on top of it.
+test("a live PREFLIGHT/RUNNING status is watched, never re-launched", async () => {
+  let gateCalls = 0;
+  const statuses = ["PREFLIGHT", "RUNNING", "PASS"];
+  let i = 0;
+  const result = await waitForGate({
+    readStatus: async () => ({ verdict: statuses[Math.min(i++, statuses.length - 1)] }),
+    runGate: async () => { gateCalls++; return { code: 0 }; },
+    sleep: noSleep,
+  });
+  assert.equal(result.outcome, "passed");
+  assert.equal(gateCalls, 0);
+});
+
+test("parseGateStatus accepts the live verdict words", () => {
+  for (const verdict of ["PREFLIGHT", "QUEUED", "ADMITTED", "RUNNING"]) {
+    assert.equal(parseGateStatus(JSON.stringify({ verdict }))?.verdict, verdict);
+  }
+});

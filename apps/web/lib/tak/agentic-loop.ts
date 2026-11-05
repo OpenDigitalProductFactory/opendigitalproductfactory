@@ -28,6 +28,7 @@ import {
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
+import { isParkedRefusal } from "@/lib/govern/authority/refusal-breaker";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { evidenceRecoveryFailure } from "./evidence-recovery-artifact";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
@@ -123,6 +124,7 @@ export const HARD_COMPLETION_CLAIM_PATTERN =
 
 // The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
 import { describeBankedReaderDeferral, describeToolRouteFailure, describeToolRouteFailureOutcome } from "./inference-dead-ends";
+import { forcedToolRoute } from "./forced-tool-choice";
 import { usesGovernedReviewTools } from "./governed-review-tools";
 export { describeToolRouteFailure };
 
@@ -908,6 +910,8 @@ export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFenc
   enableExecutionPlan?: boolean;
   /** Bounded evidence-reader surface with a reserved governed writer step. */
   terminalToolPolicy?: TerminalToolPolicy;
+  /** BI-A8679D84: the final step of a run owing this writer, forced at the provider until attempted. */
+  forcedToolName?: string;
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
@@ -1221,6 +1225,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   }
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
     assertRestrictedReassessmentTurn(restricted, terminalProviderTools);
+    const forced = params.forcedToolName && !restricted ? forcedToolRoute(params.forcedToolName, executedTools, terminalProviderTools) : null;
+    if (forced) Object.assign(routeOptions, forced);
     if (params.terminalToolPolicy) {
       routeOptions.tools = restricted ? [...terminalProviderTools] : terminalToolSurfaceOverride
         ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
@@ -2304,7 +2310,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         sandboxUnavailableCount++;
       }
 
-      if (isGovernedToolRefusal(toolResult)) {
+      // A parked repeat (BI-E458A9CB) counts too, whatever it waits on: it was already answered.
+      if (isGovernedToolRefusal(toolResult) || isParkedRefusal(toolResult)) {
         refusalStreak++;
         refusedTools.add(tc.name);
         refusalReasons.add(toolResult.error ?? "refused");

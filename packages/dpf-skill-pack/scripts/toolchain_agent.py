@@ -193,10 +193,14 @@ def select_target(home: Path, config: Mapping[str, Any]) -> tuple[Optional[str],
         return (chosen, pins[chosen], None) if chosen in pins else (None, None, "not-paired")
     if not pins:
         return None, None, "not-paired"
-    if len(pins) > 1:
+    # BI-C20AD3F0: several origins pinned to one device id are one installation
+    # reached by more than one address (https://localhost and the plain-http
+    # loopback on a dev host). Prefer https, then the lowest origin, so the
+    # choice is stable. Different device ids are a real choice for the operator.
+    if len(set(pins.values())) > 1:
         return None, None, "ambiguous-origin"
-    origin, device_id = next(iter(pins.items()))
-    return origin, device_id, None
+    origin = min(pins, key=lambda candidate: (not candidate.startswith("https://"), candidate))
+    return origin, pins[origin], None
 
 
 def decide(state: Mapping[str, Any], digest: str, versions: Mapping[str, Any], now: float) -> Optional[str]:

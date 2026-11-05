@@ -83,6 +83,28 @@ describe("scheduledRequiredToolCorrection — one correction for a writer offere
     expect(correction?.message).toMatch(/outcome "blocked"/);
   });
 
+  // BI-83B1EE05 — TR-SCHED-268DA047, 2026-11-04: the marketing run read its
+  // summary, hit the wall clock, and the correction turn was handed only the
+  // timeout text. It recorded "Blocked: I could not retrieve the saved
+  // marketing context" over a summary that had succeeded.
+  it("carries what the run already read, so the correction turn cannot claim it was never retrieved", () => {
+    const correction = scheduledRequiredToolCorrection({
+      prompt: BRIEF, authorizedTools: [READER, EVIDENCE], attachedToolNames: ["list_customer_accounts", "record_workroom_evidence"],
+      executedTools: [{ name: "list_customer_accounts", result: { success: true, message: "3 accounts", data: { accounts: ["Acme"] } } }],
+    });
+    expect(correction?.message).toMatch(/already read this run/);
+    expect(correction?.message).toMatch(/list_customer_accounts/);
+    expect(correction?.message).toMatch(/Acme/);
+  });
+
+  it("a failed read is reported as failed, not as data", () => {
+    const correction = scheduledRequiredToolCorrection({
+      prompt: BRIEF, authorizedTools: [READER, EVIDENCE], attachedToolNames: ["list_customer_accounts", "record_workroom_evidence"],
+      executedTools: [{ name: "list_customer_accounts", result: { success: false, error: "timeout" } }],
+    });
+    expect(correction?.message).not.toMatch(/already read this run/);
+  });
+
   it("no correction once the writer ran", () => {
     expect(scheduledRequiredToolCorrection({
       prompt: BRIEF, authorizedTools: [EVIDENCE], attachedToolNames: ["record_workroom_evidence"],

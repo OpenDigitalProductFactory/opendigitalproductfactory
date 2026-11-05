@@ -8,7 +8,7 @@ import type { ActionResult } from "@/lib/shared/action-result";
 
 import { loadItemDeliveryActorIds, type DeliveryActorDb } from "./delivery-actors";
 import { excludedAgentSet, projectOwedAcceptance, type OwedAcceptanceOwnerRecovery, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
-import { executionEvidenceGrants, isExecutionEvidenceLane, resolveExecutionEvidenceOwner } from "./execution-evidence-owner";
+import { executionEvidenceGrants, isExecutionEvidenceLane, resolveExecutionEvidenceOwner, stageEvidenceWriterGrants } from "./execution-evidence-owner";
 import { createOwedAcceptanceOwnerResolver } from "./owed-acceptance-owner";
 import { inPlatformGrants, withNoInPlatformCoworker, type InPlatformOwnerDb } from "./in-platform-owners";
 import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
@@ -54,6 +54,8 @@ export function createSweepOwnerResolver(context: {
   ports?: Partial<TerminalRecoveryPorts>;
   /** The grants that authorize record_execution_evidence; the grant registry by default. */
   executionEvidenceGrants?: () => Promise<readonly string[]>;
+  /** The grants that authorize the verify stage's record_workroom_evidence (BI-A8679D84); the grant registry by default. */
+  stageEvidenceWriterGrants?: () => Promise<readonly string[]>;
 }): OwedAcceptanceOwnerResolver {
   const grants = inPlatformGrants(context.db);
   const loadLaneGrants = context.executionEvidenceGrants ?? executionEvidenceGrants;
@@ -94,6 +96,7 @@ export function createSweepOwnerResolver(context: {
       excludedAgentIds: excludedAgentSet(authorAgentId, excludedAgentIds),
       grants,
       satisfyingGrants: await loadLaneGrants(),
+      stageWriterGrants: await (context.stageEvidenceWriterGrants ?? stageEvidenceWriterGrants)(),
     });
     return {
       reviewerRoutes: [...chained.reviewerRoutes, ...owned.reviewerRoutes],

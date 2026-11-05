@@ -49,6 +49,13 @@ const ALLOWLIST = new Set([
   // exists to enforce; this file just inlines it because it also needs to
   // set other dispatcher-only fields in the same atomic write.
   "apps/web/lib/tak/child-thread-runtime.ts",
+  // Retained foreground work compares the exact status/updatedAt generation
+  // and writes startedAt, lastHeartbeatAt and its dispatch fence in the SAME
+  // conditional claim. The general helper cannot preserve this full claim.
+  "apps/web/lib/agent/foreground-work-worker.ts",
+  // Publication only FILTERS on working before atomically settling the run
+  // out of that state under its row lock/fence; it never enters working.
+  "apps/web/lib/agent/foreground-work-publication.ts",
   // Creates a server-authorized Workroom TaskRun in the "working" state at
   // birth and sets lastHeartbeatAt in that same atomic create before the
   // provider operation can be admitted or dispatched.
