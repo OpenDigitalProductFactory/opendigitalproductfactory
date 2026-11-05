@@ -556,3 +556,38 @@ a database or scale selector skipped all 19 PostgreSQL cases; none passed or
 executed in that check. The new scale case remains UNRUN. Independent review,
 actual resource admission, PostgreSQL execution, qualification of the changed
 source, protected publication and served acceptance remain outstanding.
+
+### November 5 qualification runner continuation
+
+Plan admission `IRD-5AEB35C12599` retains BI-B47BB1D7 as one atomic repair.
+The existing CI Calibration workflow supplies an ephemeral PostgreSQL 16
+service and applies the current migrations. Extend
+`.github/workflows/ci-calibration.yml` with a default-false boolean manual
+input `clone_scale_qualification`. Only a manual dispatch with that input true
+runs the exact synthetic scale test after migrations, with a 20-minute step
+limit and the selector environment variable scoped to that step. Scheduled
+and ordinary dispatch behavior remain unchanged. Reuse the existing artifact
+upload and 30-day retention for scalar logs and the Vitest JSON report; retain
+the real exit status and reject a report with zero executed target tests.
+The runner service lifetime provides isolation; ordinary fixture cleanup and
+runner termination are distinct evidence obligations.
+
+Extend `scripts/ci-coverage-config.test.mjs` to protect the dispatch-only
+selection, disabled default, bounded timeout, step-local selector, exact test
+selection and evidence retention. Run its failing case before implementation,
+then the full observation contract tests after the change. Preserve all six
+original acceptance criteria, the existing PostgreSQL behavioral controls,
+both DB typechecks, document-index validation and exact-head integration.
+The resolved claim impact still names the existing related clone tests;
+the application implementation is unchanged by this runner continuation.
+
+Both runner paths are now normally claimed after verified canonical upgrade
+SUR-482991BD. Prior coverage cannot bind the changed declared scope; renew it
+against this published immutable plan and the real Workroom head before
+workflow implementation. No source binding may be moved backward to make a
+receipt valid. The workflow is internal qualification sequencing, not a
+separate deliverable or a new provider. Actual cloud execution still requires
+resource admission and independent review of its final delta. A failure or
+missing artifact is not a pass; report selected/copied counts, timing,
+retained-heap samples, cleanup and runner termination from the actual run.
+Rollback is a normal revert of the opt-in workflow and contract-test changes.
