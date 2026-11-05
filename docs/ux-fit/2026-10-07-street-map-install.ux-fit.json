@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "decidedOption": "inline-on-street-maps-line",
+  "decisionInteractionId": "DI-CA0AAAD984D2",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/map/GeocodingAdminPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-on-street-maps-line",
+      "platform-map-packs-page",
+      "coworker-tool-only"
+    ],
+    "recordedVia": "principle_decide (callingPopulation: external_coding_agent, decisionDomain: platform-development, consumerContexts: [ui], stakes: elevated)",
+    "composite": 5.946,
+    "margin": 1.918,
+    "confidence": "high",
+    "autonomyEligible": true,
+    "topContributors": [
+      "Single Source of Truth",
+      "No Hardcoded Colors"
+    ],
+    "whyNotSweepMeasurement": "The Install control renders only for a region with placed locations that no installed pack covers, and only for manage_platform. No sweep fixture places customer locations, and the live install has none placed, so a sweep of /customer?view=map would measure the panel without the control. The placement was decided among three options instead.",
+    "notes": "Adds one secondary 'Install this street map' button per uncovered region on the existing Street maps list (BI-8C76920D) in the administrator-only geocoding panel, and one status line while an install runs. No new route, tab, panel or navigation. The default customer view is unchanged for non-administrators and when every region is covered."
+  }
+}

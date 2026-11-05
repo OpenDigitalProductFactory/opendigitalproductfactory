@@ -335,6 +335,7 @@ describe("recordLocalIntegrationResult", () => {
         status: "passed",
         capacityCircuitBreaker: "not-applicable",
         builderMemoryCalibration: "not-leased",
+        hostRemainingGrowthCalibration: "not-leased",
         evidence: { commands: ["pnpm --filter web typecheck"] },
       },
     });

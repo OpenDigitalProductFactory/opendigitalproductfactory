@@ -36,6 +36,8 @@ export interface HostResourceAdmissionInput {
   inferenceResident: boolean;
   hostReserveBytes?: number;
   inferenceGrowthReserveBytes?: number;
+  /** Only the lease service may mark an envelope derived from server policy. */
+  expectedMemoryAuthority?: "caller" | "server-derived";
 }
 
 export type HostResourceAdmission =
@@ -61,6 +63,7 @@ export type HostResourceAdmission =
       reason:
         | "unknown-resource-class"
         | "host-memory-unmeasurable"
+        | "host-memory-inconsistent"
         | "expected-memory-unmeasurable"
         | "expected-memory-below-governed-floor";
     };
@@ -91,13 +94,18 @@ export function resolveHostResourceAdmission(
   if (!isFinitePositive(input.totalMemoryBytes) || !Number.isFinite(input.availableMemoryBytes)) {
     return { status: "blocked", resourceClass: input.resourceClass, reason: "host-memory-unmeasurable" };
   }
+  if (input.availableMemoryBytes < 0
+    || input.availableMemoryBytes > input.totalMemoryBytes) {
+    return { status: "blocked", resourceClass: input.resourceClass, reason: "host-memory-inconsistent" };
+  }
 
   const floor = DEFAULT_HEAVY_RESOURCE_PROFILES[input.resourceClass].expectedMemoryBytes;
   const expectedMemoryBytes = input.expectedMemoryBytes ?? floor;
   if (!isFinitePositive(expectedMemoryBytes)) {
     return { status: "blocked", resourceClass: input.resourceClass, reason: "expected-memory-unmeasurable" };
   }
-  if (expectedMemoryBytes < floor) {
+  if (expectedMemoryBytes < floor
+    && input.expectedMemoryAuthority !== "server-derived") {
     return {
       status: "blocked",
       resourceClass: input.resourceClass,
@@ -120,7 +128,21 @@ export function resolveHostResourceAdmission(
         / expectedMemoryBytes,
       ));
 
-  if (input.availableMemoryBytes < expectedMemoryBytes + hostReserveBytes + inferenceGrowthReserveBytes) {
+  const activeReservationBytes = input.activeHeavyReservations.reduce(
+    (sum, reservation) => sum + (
+      isHeavyResourceClass(reservation.resourceClass)
+      && isFinitePositive(reservation.expectedMemoryBytes)
+        ? reservation.expectedMemoryBytes
+        : 0
+    ),
+    0,
+  );
+  const requiredMemoryBytes = hostReserveBytes
+    + inferenceGrowthReserveBytes
+    + activeReservationBytes
+    + expectedMemoryBytes;
+
+  if (input.availableMemoryBytes < requiredMemoryBytes) {
     return {
       status: "queued",
       resourceClass: input.resourceClass,

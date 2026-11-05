@@ -13,7 +13,8 @@ import { captureTaskExecutionFence } from "../shared/task-execution-fence";
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL
   ?? (process.env.CI === "true" ? process.env.DATABASE_URL : undefined);
 const schema = `review_engagement_${randomUUID().replaceAll("-", "")}`;
-const tables = ["TaskRun", "TaskMessage", "TaskArtifact", "CoworkerEngagement", "ToolExecution", "Agent", "TokenUsage"];
+// ModelProvider: the daily budget excludes zero-marginal providers by recorded price (BI-F3B6713F).
+const tables = ["TaskRun", "TaskMessage", "TaskArtifact", "CoworkerEngagement", "ToolExecution", "Agent", "TokenUsage", "ModelProvider"];
 const json = (v: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(v));
 const binding: EngagementTaskBinding = { version: 1, engagementId: "CE-1FE20783", offerId: "fixture-offer",
   serviceId: "svc-ux-design-critique", providerAgentId: "ux-design-critic", actorAgentId: "fixture-actor", userId: "fixture-owner",

@@ -19,6 +19,7 @@ import {
   type StrategyProfile,
 } from "@/lib/deliberation/external-review-activation";
 import { validateFailureAnalysis, type FailureVerificationEvidence } from "./failure-analysis";
+import { boundReviewEvidence } from "./semantic-review-evidence-budget";
 
 export const SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS = 2;
 
@@ -250,7 +251,7 @@ async function performReview(args: {
     requireFailureAnalysis: true,
     title: args.input.title,
     artifact: args.input.artifact,
-    verificationEvidence: `${args.input.verificationEvidence}\n\nFAILURE ANALYSIS:\n${JSON.stringify(args.input.failureAnalysis)}\n\nRESOLVED EVIDENCE:\n${JSON.stringify(args.input.resolvedFailureEvidence)}\n\nChallenge omitted failure modes and real business/user effects, claimed eliminations, prevention, containment, detection, recovery, final-change evidence and accountable residual risk. Scale depth to consequences. Missing credible analysis is blocking. Do not accept empty checkboxes or exhaustive zero-risk claims. Routine technical review recovery belongs to internal engineering; do not ask the business owner to select reviewers or approve technical details.`,
+    verificationEvidence: `${args.input.verificationEvidence}\n\nFAILURE ANALYSIS:\n${JSON.stringify(args.input.failureAnalysis)}\n\nRESOLVED EVIDENCE:\n${JSON.stringify(boundReviewEvidence(args.input.resolvedFailureEvidence))}\n\nChallenge omitted failure modes and real business/user effects, claimed eliminations, prevention, containment, detection, recovery, final-change evidence and accountable residual risk. Scale depth to consequences. Missing credible analysis is blocking. Do not accept empty checkboxes or exhaustive zero-risk claims. Routine technical review recovery belongs to internal engineering; do not ask the business owner to select reviewers or approve technical details.`,
   });
   const result = await args.deps.dispatch(prompt, {
     strategyProfile: args.activation.strategyProfile,

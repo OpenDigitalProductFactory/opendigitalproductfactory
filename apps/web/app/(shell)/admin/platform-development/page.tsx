@@ -11,6 +11,9 @@ import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBan
 import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { GovernedBacklogSettings } from "@/components/admin/GovernedBacklogSettings";
+import { PaidInferenceAllowanceSettings } from "@/components/admin/PaidInferenceAllowanceSettings";
+import { readPaidSpendTodayUsd } from "@/lib/inference/budget-gate";
+import { can } from "@/lib/permissions";
 import { ManagedRepositorySection } from "@/components/admin/ManagedRepositorySection";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
@@ -96,6 +99,12 @@ export default async function AdminPlatformDevelopmentPage(props: {
     ? await loadAuthorStagePreauthorisationView(prisma as unknown as AuthorStagePreauthorisationViewDb)
     : null;
 
+  // BI-F3B6713F: the paid AI allowance is a spending decision, shown only to people who may make it.
+  const userContext = session?.user ? { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser } : null;
+  const mayManagePaidAllowance = userContext !== null && can(userContext, "manage_platform") && can(userContext, "manage_finance");
+  const paidSpendTodayUsd = mayManagePaidAllowance ? await readPaidSpendTodayUsd().catch(() => null) : null;
+  const paidAllowance = config?.paidInferenceDailyUsdAllowance;
+
   return (
     <div>
       <div className="mb-6">
@@ -127,7 +136,19 @@ export default async function AdminPlatformDevelopmentPage(props: {
           dailyCap={config?.backlogTeeUpDailyCap ?? 3}
           capacityDrainEnabled={config?.capacityDrainEnabled === true}
           playbookMode={getAutonomousPlaybookMode()}
-        />
+        >
+          {mayManagePaidAllowance && (
+            <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+              <PaidInferenceAllowanceSettings
+                dailyUsd={paidAllowance == null ? null : Number(paidAllowance)}
+                spentTodayUsd={paidSpendTodayUsd}
+                setAt={config?.paidInferenceAllowanceSetAt?.toISOString() ?? null}
+                setByEmail={config?.paidInferenceAllowanceSetBy?.email ?? null}
+                reason={config?.paidInferenceAllowanceReason ?? null}
+              />
+            </MessagesProvider>
+          )}
+        </GovernedBacklogSettings>
       </div>
       {closeAuthorisationView && (
         <div className="mb-6">
