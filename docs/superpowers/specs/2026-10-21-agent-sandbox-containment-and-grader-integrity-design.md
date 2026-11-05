@@ -222,6 +222,11 @@ judges it**:
   reading the build tree as data.
 - Run typecheck and tests with configuration taken from the base commit. The
   agent's new tests still run; the harness that collects them is fixed.
+- A base that predates a guard-script fix keeps that defect. When the gauntlet
+  cannot run on a review build, the build is rebased onto upstream main (the
+  ship-time remedy of WWMD DI-A9D0CC59F049) and reviewed again, at most once an
+  hour (`apps/web/lib/build/review-source-refresh.ts`, BI-4F89896B). The grader
+  still never takes guard scripts from the agent-writable tree.
 - Classify grader-touching paths: test files deleted or `.skip`ped,
   `scripts/check-*`, `scripts/pregate-*`, `vitest.config.*`, `jest.config.*`,
   `.github/workflows/*`, coverage thresholds. Surface them as their own review

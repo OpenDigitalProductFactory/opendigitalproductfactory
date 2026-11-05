@@ -854,6 +854,12 @@ against that set: a shape cannot declare evidence it has no way to record. A
 generic `note` still does not advance a stage that declared `assurance-run`;
 the requirement is unchanged, only made satisfiable.
 
+One more room-level kind sits beside the six media kinds:
+`docs-impact-disposition` (BI-9B17E889). No stage declares it, so it never
+completes a stage. It settles the published docs the room's change-impact
+contract lists as affected, and `update_workroom_status` reads it before a
+room may hand off for review (`apps/web/lib/work-capsules/docs-impact-disposition.ts`).
+
 **A recorded blocker is not the work.** The brief asks a coworker that cannot
 do a stage to record why, through the same write. So stage evidence carries an
 explicit `outcome` — `completed` or `blocked` — and the tool refuses stage

@@ -20,6 +20,7 @@ import {
 } from "@/lib/deliberation/external-review-activation";
 import { validateFailureAnalysis, type FailureVerificationEvidence } from "./failure-analysis";
 import { boundReviewEvidence } from "./semantic-review-evidence-budget";
+import { FAILURE_ANALYSIS_CHALLENGE_ISSUE } from "./semantic-review-supersession";
 
 export const SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS = 2;
 
@@ -264,7 +265,7 @@ async function performReview(args: {
   });
   if (result.decision === "pass" && (!result.failureAnalysisReview?.adequate || result.failureAnalysisReview.rationale.trim().length < 20)) {
     result.decision = "fail";
-    result.issues = [...result.issues, { severity: "critical", description: "Independent failure-analysis challenge is missing or inadequate." }];
+    result.issues = [...result.issues, { severity: "critical", description: FAILURE_ANALYSIS_CHALLENGE_ISSUE }];
   }
   return { ...createSemanticReviewReceipt({
     identity: args.identity,
