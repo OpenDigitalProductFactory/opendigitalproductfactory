@@ -1638,6 +1638,9 @@
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
+    "apps/web/lib/work-capsules/docs-impact-disposition.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/work-capsules/governed-work-claim.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -2754,6 +2757,7 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/testing/pr-health.md"
     ],
     "scripts/lib/gate-exit-classification.mjs": [
@@ -3685,6 +3689,7 @@
       "scripts/convergence-surfaces.json",
       "scripts/fresh-install.ps1",
       "scripts/gen-doc-impact.mjs",
+      "scripts/lib/gate-context.mjs",
       "scripts/lib/git-changed-files.mjs",
       "scripts/lib/mermaid-renderer.mjs",
       "scripts/lib/published-doc-roots.mjs",
@@ -3948,6 +3953,7 @@
       "apps/web/lib/queue/functions/workroom-drive.ts",
       "apps/web/lib/tak/decision-routing-governance-hook.ts",
       "apps/web/lib/work-capsules.ts",
+      "apps/web/lib/work-capsules/docs-impact-disposition.ts",
       "apps/web/lib/work-management/autonomy-envelope.ts",
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
