@@ -104,12 +104,7 @@ export function _setGovernanceForTests(overrides: {
   resolveAgentGrants?: GrantResolver | null;
   isAllowedByGrants?: GrantPredicate | null;
   toolPreflight?: GovernedToolPreflight | null;
-  executeTool?: ((
-    toolName: string,
-    params: Record<string, unknown>,
-    userId: string,
-    ctx?: { agentId?: string; threadId?: string; routeContext?: string; taskRunId?: string },
-  ) => Promise<ToolResult>) | null;
+  executeTool?: typeof executeTool | null;
   toolExecutionCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
   toolExecutionUpdate?: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null;
   toolExecutionReceiptCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
@@ -147,19 +142,7 @@ export function _setGovernanceForTests(overrides: {
   setGppPermitStoreOverrideForTests(overrides.gppPermitStore ?? null); resetRefusalBreakerForTests(overrides.refusalBreaker ?? null);
 }
 
-let _executeToolOverride:
-  | ((
-      toolName: string,
-      params: Record<string, unknown>,
-      userId: string,
-      ctx?: {
-        agentId?: string;
-        threadId?: string;
-        routeContext?: string;
-        taskRunId?: string;
-      },
-    ) => Promise<ToolResult>)
-  | null = null;
+let _executeToolOverride: typeof executeTool | null = null;
 
 async function resolveGrants(agentId: string): Promise<string[]> {
   if (_resolveAgentGrants) return _resolveAgentGrants(agentId);
@@ -670,7 +653,10 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       tokenGrantScopes: args.context?.tokenGrantScopes,
       governedReadToolCatalog: () => getAvailableTools(args.userContext, { mode: "advise",
         agentId: args.context?.agentId, roomAuthorizedGrants: args.context?.roomAuthority?.authorizedGrants }),
+      governedAuthorityTool: () => tool,
       governedRoomAuthority: () => args.context?.roomAuthority ?? null,
+      connectionDelegation: args.context?.connectionDelegation
+        ? { ...args.context.connectionDelegation } : undefined,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,
