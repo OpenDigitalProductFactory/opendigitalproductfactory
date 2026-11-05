@@ -196,6 +196,23 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("May 24, 2026");
   });
 
+  // BI-EF1AC111 (AC-3) — a window that passed without a check says why, in
+  // plain words, and nothing is shown once a check has run.
+  it("explains a maintenance window that passed without an upgrade check", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        missedWindow={{ reason: "cooldown: 2026-11-05T01:00:00.000Z", at: "2026-11-04T23:00:00.000Z" }}
+      />,
+    );
+    expect(html).toContain('data-missed-window="cooldown"');
+    expect(html).toContain("passed without an upgrade");
+    expect(html).toContain("a recent upgrade attempt was still in its wait period");
+
+    const clear = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} missedWindow={null} />);
+    expect(clear).not.toContain("data-missed-window");
+  });
+
   // BI-A6382FB9 — a 24/7 store auto-runs overnight; the panel explains the
   // schedule in plain language instead of asking the operator to configure cron.
   it("shows the 24/7 overnight note when windowSource is auto-overnight", () => {
