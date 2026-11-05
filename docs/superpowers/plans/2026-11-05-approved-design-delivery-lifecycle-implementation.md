@@ -28,14 +28,14 @@ are separate BIs created by this feature, not child deliverables of this build.
 
 ## Requirement and evidence map
 
-| Requirement | Contract refs | Flow refs | Verification refs |
-| --- | --- | --- | --- |
-| R-ADL-001 provider-verified document delivery | AC-ADL-001, AC-ADL-002 | F-ADL-001 | V-ADL-001, V-ADL-002 |
-| R-ADL-002 successor lifecycle projection | AC-ADL-003, AC-ADL-004 | F-ADL-002 | V-ADL-003, V-ADL-004 |
-| R-ADL-003 cleanup protection | AC-ADL-005 | F-ADL-003 | V-ADL-005, V-ADL-006 |
-| R-ADL-004 recovery after origin deletion | AC-ADL-006 | F-ADL-004 | V-ADL-007 |
-| R-ADL-005 cross-surface governed process | AC-ADL-007 | F-ADL-005 | V-ADL-008 |
-| R-ADL-006 touched-seam consolidation | AC-ADL-008 | F-ADL-001, F-ADL-002, F-ADL-003, F-ADL-004, F-ADL-005 | V-ADL-009 |
+| Requirement | Objective refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| R-ADL-001 provider-verified document delivery | OBJ-ADL-001, OBJ-ADL-002 | AC-ADL-001, AC-ADL-002 | F-ADL-001 | V-ADL-001, V-ADL-002 |
+| R-ADL-002 successor lifecycle projection | OBJ-ADL-003, OBJ-ADL-006 | AC-ADL-003, AC-ADL-004 | F-ADL-002 | V-ADL-003, V-ADL-004 |
+| R-ADL-003 cleanup protection | OBJ-ADL-004 | AC-ADL-005 | F-ADL-003 | V-ADL-005, V-ADL-006 |
+| R-ADL-004 recovery after origin deletion | OBJ-ADL-002, OBJ-ADL-005 | AC-ADL-006 | F-ADL-004 | V-ADL-007 |
+| R-ADL-005 cross-surface governed process | OBJ-ADL-006 | AC-ADL-007 | F-ADL-005 | V-ADL-008 |
+| R-ADL-006 touched-seam consolidation | OBJ-ADL-007 | AC-ADL-008 | F-ADL-001, F-ADL-002, F-ADL-003, F-ADL-004, F-ADL-005 | V-ADL-009 |
 
 ## Flow definitions
 
