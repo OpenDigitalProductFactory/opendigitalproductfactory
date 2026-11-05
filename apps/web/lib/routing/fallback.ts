@@ -247,6 +247,7 @@ export async function callWithFallbackChain(
   const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
+  const allowanceRefusals: Error[] = []; // BI-F3B6713F: the platform's own paid allowance refused; no endpoint is at fault
   const changedAccounts: ProviderAccountSelectionChangedError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -451,6 +452,7 @@ export async function callWithFallbackChain(
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
         continue;
       }
+      if (e instanceof Error && e.name === "AgentAllowanceExhaustedError") { allowanceRefusals.push(e); attempts.push({ endpointId: entry.providerId, error: e.message, code: "daily-allowance-used" }); continue; }
       const errMsg = getErrorMessage(e);
       const errCode = e && typeof e === "object" && typeof (e as { code?: unknown }).code === "string"
         ? (e as { code: string }).code : undefined;
@@ -576,7 +578,7 @@ export async function callWithFallbackChain(
             await markModelDegraded(entry.providerId, entry.modelId, `local_${failure.code}_misclassification`);
             scheduleRecovery(entry.providerId, entry.modelId);
           } else if (entry.providerConnectionId && account) {
-            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+            await (await import("./provider-account-auto-disable")).autoDisableProviderAccount({ providerId: entry.providerId, connectionId: entry.providerConnectionId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, cause: "billing", source: "fallback-chain", detail: failure.message?.slice(0, 160) }).catch((err) => console.error(`[callWithFallbackChain] failed to switch off ${entry.providerConnectionId} after billing error:`, err)); // BI-0ADD46C3: recorded and recovered, like the provider path
           } else {
           // BI-D28A4F55: recorded as automatic and recovered on its own.
           const { autoDisableProvider } = await import("./provider-auto-disable");
@@ -689,7 +691,7 @@ export async function callWithFallbackChain(
           if (accountRenewalUnavailable || (isOAuth && !signInRefused)) {
             console.info("[callWithFallbackChain] Account renewal is temporarily unavailable; trying another eligible account.");
           } else if (entry.providerConnectionId && account) {
-            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+            await (await import("./provider-account-auto-disable")).autoDisableProviderAccount({ providerId: entry.providerId, connectionId: entry.providerConnectionId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, cause: "auth", source: "fallback-chain", detail: failure.message?.slice(0, 160) }).catch((err) => console.error(`[callWithFallbackChain] failed to switch off ${entry.providerConnectionId} after auth error:`, err)); // BI-0ADD46C3: recorded and recovered, like the provider path
           } else {
             const { autoDisableProvider } = await import("./provider-auto-disable");
             await autoDisableProvider({ providerId: entry.providerId, cause: "auth", source: "fallback-chain", detail: failure.message?.slice(0, 160) })
@@ -761,9 +763,8 @@ export async function callWithFallbackChain(
 
   if (changedAccounts.length > 0) throw changedAccounts.at(-1)!;
 
-  if (capacityDeferrals.length === chain.length) {
-    throw capacityDeferrals.at(-1)!;
-  }
+  if (capacityDeferrals.length === chain.length) throw capacityDeferrals.at(-1)!;
+  if (allowanceRefusals.length === chain.length) throw allowanceRefusals.at(-1)!;
 
   if (reconciledProviders.size > 0) {
     throw new ProviderReconciliationRequiredError(reconciledProviders, attempts);
@@ -774,7 +775,7 @@ export async function callWithFallbackChain(
     // Keep both the remote failure history and a typed local capacity reason.
     // A mixed chain is not a local-only outage, but its deferred candidate must
     // remain distinguishable from a provider failure to recovery callers.
-    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) } : undefined,
+    capacityDeferrals.length || allowanceRefusals.length ? { cause: capacityDeferrals.at(-1) ?? allowanceRefusals.at(-1) } : undefined,
   );
 }
 
