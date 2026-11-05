@@ -106,6 +106,9 @@ describe("nonprod-lease pack — registration", () => {
     const renew = nonprodLeasePack.definitions.find((d) => d.name === "renew_nonprod_environment_lease");
     expect(claim?.inputSchema.properties).toHaveProperty("slotManifestVersion");
     expect(claim?.inputSchema.properties).toHaveProperty("hostPressure");
+    expect(claim?.inputSchema.properties).toHaveProperty(
+      "hostPressure.properties.totalMemoryBytes",
+    );
     expect(claim?.inputSchema.properties).toHaveProperty("resourceClass");
     expect(claim?.inputSchema.properties).toHaveProperty("hostResource");
     expect(claim?.inputSchema.properties).toHaveProperty("ownerProcessIdentity");

@@ -280,6 +280,32 @@ export function unexplainedDeadEndHandoff(): string {
   });
 }
 
+/**
+ * The platform's own daily allowance for paid AI was used (BI-F3B6713F). This
+ * is a spending limit, not an outage: say so, say when it resets and who can
+ * raise it. Matched by name or message, for the bundle reason below.
+ */
+export function isDailyAllowanceUsed(error: unknown, message: string): boolean {
+  const name = typeof error === "object" && error !== null && "name" in error
+    ? (error as { name?: unknown }).name
+    : undefined;
+  return name === "AgentAllowanceExhaustedError" || /^Daily allowance used:/.test(message);
+}
+
+export function dailyAllowanceUsedHandoff(resetAt: string | null): string {
+  const reset = resetAt ? new Date(resetAt) : null;
+  const when = reset && !Number.isNaN(reset.getTime())
+    ? `at ${reset.toISOString().slice(11, 16)} UTC` : "at 00:00 UTC";
+  return buildHumanHandoff({
+    blocker: `Today's allowance for paid AI is used up. It resets ${when}. Local and subscription models are not affected.`,
+    steps: [
+      "Wait for the reset.",
+      "Or ask an owner to raise it in Admin > Platform Development > Paid AI allowance.",
+    ],
+    verify: "check the allowance",
+  });
+}
+
 /** True when `error` is a local host-capacity deferral, however it reached us.
  *
  * Matched by NAME rather than by importing `LocalProviderCapacityDeferredError`,
@@ -378,6 +404,12 @@ function describeToolRouteFailureMessage(
   }
 
   if (isLocalAdmissionWait(msg)) return localAdmissionWaitHandoff();
+
+  if (isDailyAllowanceUsed(error, msg)) {
+    const resetAt = typeof error === "object" && error !== null && "resetAt" in error
+      && typeof (error as { resetAt?: unknown }).resetAt === "string" ? (error as { resetAt: string }).resetAt : null;
+    return dailyAllowanceUsedHandoff(resetAt);
+  }
 
   // Checked early, and before the credential and threshold branches: a deferral
   // is a host-capacity state, not a configuration one, and every branch below

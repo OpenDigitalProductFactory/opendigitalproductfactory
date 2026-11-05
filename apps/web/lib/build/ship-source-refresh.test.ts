@@ -40,6 +40,14 @@ describe("isRefreshableDivergence", () => {
     expect(isRefreshableDivergence({ ...diverged, status: "ahead", recommendedAction: "allow" } as never)).toBe(false);
     expect(isRefreshableDivergence(null)).toBe(false);
   });
+
+  // The snapshot FB-2F2D46D5 was left with after its failed 2026-10-13 refresh.
+  it("also clears a clean behind/auto-refresh snapshot, which the same rebase fixes", () => {
+    const behind = { ...diverged, status: "behind", recommendedAction: "auto-refresh", aheadBy: 0, behindBy: 133 };
+    expect(isRefreshableDivergence(behind as never)).toBe(true);
+    expect(isRefreshableDivergence({ ...behind, dirty: true } as never)).toBe(false);
+    expect(isRefreshableDivergence({ ...diverged, status: "unknown", recommendedAction: "inspect" } as never)).toBe(false);
+  });
 });
 
 describe("refreshDivergedShipBuild", () => {
@@ -87,6 +95,9 @@ describe("refreshDivergedShipBuild", () => {
     const thrown = deps({ refresh: vi.fn(async () => { throw new Error("sandbox git lock busy"); }) });
     await expect(refreshDivergedShipBuild("FB-1", thrown)).resolves.toBe("not-refreshed");
     expect(vi.mocked(thrown.record).mock.calls[0]?.[1]).toContain("sandbox git lock busy");
+    const long = deps({ refresh: vi.fn(async () => { throw new Error(`${"docker exec … ".repeat(80)}fatal: the real reason`); }) });
+    await refreshDivergedShipBuild("FB-1", long);
+    expect(vi.mocked(long.record).mock.calls[0]?.[1]).toContain("fatal: the real reason");
     expect(blocked.returnToReview).not.toHaveBeenCalled();
   });
 

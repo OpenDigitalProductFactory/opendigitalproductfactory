@@ -203,6 +203,8 @@ function installStorage() {
   m["workroom.findMany"] = () => [{ capsuleId: "WC-FIXTURE", headBranch: "codex/fixture", headSha: commitSha,
     createdByPrincipalId: "PRN-AUTHOR", activities: [] }];
   m["modelProvider.findUnique"] = () => provider;
+  // BI-F3B6713F: the daily budget excludes zero-marginal providers; this fixture has none.
+  m["modelProvider.findMany"] = () => [];
   m["modelProfile.findMany"] = () => [profile]; m["modelProfile.findUnique"] = () => profile;
   m["aiProviderConnection.findMany"] = () => [account]; m["aiProviderConnection.findUnique"] = () => account;
   m["agent.findUnique"] = m["agent.findFirst"] = () => agent;
