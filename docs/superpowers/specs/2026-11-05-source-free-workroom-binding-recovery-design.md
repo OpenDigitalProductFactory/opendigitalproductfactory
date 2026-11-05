@@ -89,7 +89,7 @@ the real task, rather than fabricated source identity or repeated approval.
 
 | Acceptance ID | Objective IDs | Statement |
 | --- | --- | --- |
-| AC-BIND-1 | OBJ-BIND | A source-free room created through an admitted ordinary assignment binds its actual canonical executor session, or returns an accountable pre-effect hold; another room or foreign non-null executor cannot be overwritten. |
+| AC-BIND-1 | OBJ-BIND | A source-free room created through an admitted ordinary assignment binds its assigned external locator through the authenticated canonical assistant endorsement contract, or returns an accountable pre-effect hold; no physical-chat authentication or review independence is inferred; another room or foreign non-null executor cannot be overwritten. |
 | AC-BIND-2 | OBJ-EVIDENCE | Exact original approval evidence validates envelope, tool, actor, input, attempt membership and result; missing, ambiguous, contradictory and private evidence stays bounded and never proves no effects. |
 | AC-BIND-3 | OBJ-EVIDENCE, OBJ-RECOVERY | Only authentic proven recoverable original failure can produce an existing current-authority request/real-receiver-ACK action; unproven operation history remains held without replay or a replacement approval. |
 | AC-BIND-4 | OBJ-RECOVERY | Full and bounded Workroom reads, caller approval status and operator UI agree; a genuinely source-free task never receives adopt_worktree or invented source hashes as its binding remedy. |
@@ -105,26 +105,28 @@ the real task, rather than fabricated source identity or repeated approval.
    the wrong stage/shape rather than inventing another Workroom kind or schema.
    If existing typed requirements cannot express the task, return that precise
    design gap for governed sizing; do not silently exempt all blocked rooms.
-2. **Initial binding differs from transfer.** Locate the existing room-birth and
-   authenticated session-binding writers. A null executor may be filled only
-   from an actually admitted assignment with matching current owner, agent,
-   session and mandate. Use their existing serialized compare-and-set and
-   command receipt boundary. The existing canonical actor seam is
-   work-capsules/handler-actor.ts:workCapsuleActor, with current OAuth token
-   binding and workroom-agent-access.server.ts:resolveAgentWorkroomAccess.
-   Those authenticate a human/assistant, not an external chat. Before design
-   finalization, named-ref research must identify the server-owned assignment
-   or authenticated origin that binds the CURRENT executor session. A matching
-   principal, caller-supplied executorRef or endorsed destination is insufficient.
-   The existing handoff explicitly says no external chat is authenticated; keep
-   that distinction. Historical direct calls may have an unrecorded thread;
-   preserve the absence rather than filling it. Without the required current
-   session provenance, return a pre-effect hold and its actual owner.
-   Recheck the current assignment, authority, lease
-   incarnation and task execution fence inside the final write transaction;
-   a late or revoked writer cannot commit from an earlier admission snapshot.
-   A non-null or changed executor follows the
-   existing source-request/receiving-ACK contract instead of an initial bind.
+2. **Initial binding differs from transfer.** Reuse the delivered canonical
+   room-authority contract in bounded-handoff-authority.ts and the selected
+   authority contract in the bounded-handoffs design. The authenticated human
+   and already admitted canonical assistant may endorse an external executor
+   locator; that endorsement does not authenticate a physical chat, grant a
+   permission or establish independent-review identity. Do not require a new
+   external-session registry or turn a supplied locator into an actor credential.
+   An initial binding requires an actually admitted current assignment, matching
+   owner and canonical assistant/surface, a current authorized connection and
+   room action access. A missing assignment is an accountable pre-effect hold;
+   null fields and matching principal alone do not establish the assignment.
+   Reuse current command receipts and serialized compare-and-set. Recheck
+   assignment, canonical actor access, delegation, room lease incarnation and
+   any actual task execution fence inside the final write transaction. Keep
+   the canonical environment/room/authority lock order and existing bounded
+   lease, Build Studio and policy-evidence dependency fences. An endorsement
+   cannot transfer an existing lease, invalidate an exemption or assume unknown
+   original effects are settled. Missing/ambiguous dependency evidence holds.
+   A concurrent non-null executor refuses the initial write. A genuinely changed
+   non-null assignment follows the existing source-request/real-receiver-ACK
+   contract. No initial binding rewrites the original failed approval or its
+   evidence. Historical absent thread attribution remains absent.
 3. **Historical evidence is read, never re-executed.** Consolidate bounded
    original evidence selection in its existing module. Preserve raw arguments
    and results server-side. If authentic stored evidence cannot establish the
@@ -152,8 +154,8 @@ the real task, rather than fabricated source identity or repeated approval.
 2. Add first-failing tests at real producer/consumer seams: source-free creation
    and fixture eligibility, recovery projection, and exact original evidence
    selection. Include missing/ambiguous result, foreign or stale identity,
-   duplicate and concurrent initial binds, same-assistant foreign-session and
-   missing-session-provenance negatives, source-bearing task controls, and
+   duplicate and concurrent initial binds, same-assistant foreign non-null assignment and
+   missing-assignment or unauthenticated-endorsement negatives, source-bearing task controls, and
    revoked authority. Do not run the real failed approval to obtain a test.
 3. Record fix research through the existing initiative writer, with named source
    and actual executed reproduction/candidate-cause controls. Bind this ordered
@@ -188,10 +190,41 @@ This design authorizes no production/peer mutation and no provider change.
 
 Current native reads and exact source inspection are author diagnosis inputs,
 not the required failing-then-passing reproduction or an independent approval.
-No new product/dependency is proposed; the existing canonical design alternatives
-and shared substrates above are reused. Finalization remains contingent on the
-named-ref reproduction, current requirement-model inspection and scoped owner
-review. The native admitted design owner is this chat in WC-DA6C2123; there is
-no admitted implementation owner yet. Native implementation readiness currently
-requires RESEARCH_REQUIRED and PLAN_REQUIRED. No classification, funding or
+No new product/dependency is proposed; existing canonical design alternatives
+and shared substrates above are reused. The actual named-ref reproduction and
+current contract inspection are recorded below. This chat owns the admitted
+implementation in WC-DA6C2123 under IRD-722AB2E49222. The earlier observation
+of RESEARCH_REQUIRED and PLAN_REQUIRED is superseded by the current proportional
+medium fix decision: author research was accepted and implementation allowed.
+Independent code review, repaired regression proof, protected delivery and served
+acceptance remain owed. Funding ownership remains unresolved; no funding or
 policy decision is inferred from the environment label.
+
+## Current source reconciliation — 2026-11-05
+
+At integrated source 6ef73aff4fe1d4075d3e902d2ac14befbf02d59e, protected base
+421302ce4ef975f9b92be5a5985cf79461c809ce, the Workroom branches of
+inference/async-operation-authority.ts and portal-context/authority-resolver.ts
+already consume canonical room action admission. The delivered bounded handoff
+explicitly authenticates the assistant endorsement, not the external locator.
+The earlier draft's demand for authenticated CURRENT external-chat origin was
+stricter than that delivered contract and is superseded by section2 above.
+Token thread/task fences remain server-owned context when actually present;
+absence does not justify inventing them or a new physical-chat authentication gate.
+
+Managed dependencies are compile-ready. Actual recovery reproduction on both873
+and6ef returned source-identity-missing/adopt_worktree for a browser-only
+null-source case; a valid-source control had no identity prerequisite. Existing
+recovery/session-binding/failed-handoff suites passed96 tests in3 files on both
+heads. These demonstrate the current defect and existing controls, not a fixed
+regression or served acceptance. Native author research receipt
+initiative-f663ad65-4fef-406f-9fd1-cb58449f3e67 was accepted, and implementation
+admission IRD-722AB2E49222 allowed the existing medium repair. Its current gate
+does not require a separate large-design approval or PLAN_REQUIRED receipt.
+
+New implementation path claims were refused while governed upgrade
+SUR-AC2B7A12 was active. No implementation code or original QA history was
+changed. This correction is prepared as an external review artifact during the
+drain; it is not committed source, native approval, renewed claim or permission
+to ignore the transition fence. A fresh ordinary claim follows actual terminal
+upgrade, NORMAL writes and canonical cohort proof.

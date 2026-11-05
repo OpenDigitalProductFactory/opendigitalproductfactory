@@ -372,3 +372,55 @@ it.each(["identity","unknown-review"])("withholds a typed handoff action behind 
 
 it("withholds private handoff history before exact-room authorization",async()=>{const load=vi.fn();const result=await loadContentAuthorizedWorkroomRecovery({id:"selected",status:"verifying"},new Date(),async()=>false,load);expect(result).toEqual({recordedBlocker:null,failedHandoffRecovery:null});expect(load).not.toHaveBeenCalled();});
 it("reports an unavailable history read without turning it into fresh eligibility",async()=>{const result=await loadContentAuthorizedWorkroomRecovery({id:"selected",status:"verifying"},new Date(),async()=>true,async()=>{throw new Error("PRIVATE DETAILS")});expect(result.failedHandoffRecovery).toMatchObject({state:"unavailable",action:null});expect(JSON.stringify(result)).not.toContain("PRIVATE");});
+
+
+describe("source-free acceptance and initial executor recovery", () => {
+  const acceptance = { ...identity, capsuleId: "WC-QA", baseSha: null, headSha: null,
+    headBranch: null, worktreePath: null, status: "ready", executorKind: "codex-desktop" as const,
+    executorRef: "endorsed-assignment", leaseHolderPrincipalId: "human-owner",
+    scopeClaims: [{ workShape: "acceptance-verification@1.1.0" }] };
+
+  it.each(["1.0.0", "1.1.0"])("does not invent repository work for registered acceptance version %s", version => {
+    const result = projectWorkroomRecovery({ ...acceptance,
+      scopeClaims: [{ workShape: `acceptance-verification@${version}` }] });
+    expect(result.prerequisite).toBeNull();
+    expect(result.blocker).toBeNull();
+    expect(result.state).toBe("actionable");
+  });
+
+  it.each(["delivery-medium@1.0.0", "acceptance-verification@99.0.0", "caller-source-free@1.0.0"])(
+    "keeps source requirements for an unproven exemption %s", workShape => {
+      const result = projectWorkroomRecovery({ ...acceptance, scopeClaims: [{ workShape }] });
+      expect(result.prerequisite?.missingFields).toEqual(["baseSha", "headSha"]);
+      expect(result.blocker?.reason).toBe("source-identity-missing");
+    });
+
+  it.each(["codex-desktop", "claude-desktop", "grok-desktop"] as const)(
+    "names the initial assignment hold for unbound %s without issuing adoption or transfer", executorKind => {
+      const result = projectWorkroomRecovery({ ...acceptance, executorKind, executorRef: null });
+      expect(result.state).toBe("blocked");
+      expect(result.prerequisite).toBeNull();
+      expect(result.blocker).toMatchObject({ reason: "executor-assignment-unbound", action: null,
+        accountableOwner: { principalId: "human-owner", role: "delivery-coordinator" } });
+      expect(JSON.stringify(result.blocker)).not.toMatch(/adopt_worktree|reassign_workroom_executor/);
+    });
+
+  it("does not use repository adoption as the initial assignment remedy for a delivery room", () => {
+    const result = projectWorkroomRecovery({ ...acceptance, executorRef: null,
+      scopeClaims: [{ workShape: "delivery-medium@1.0.0" }] });
+    expect(result.blocker).toMatchObject({ reason: "executor-assignment-unbound", action: null });
+    expect(result.prerequisite).toBeNull();
+    // Once an assignment exists, the delivery source requirement still applies.
+    expect(projectWorkroomRecovery({ ...acceptance, scopeClaims: [{ workShape: "delivery-medium@1.0.0" }] })
+      .blocker?.reason).toBe("source-identity-missing");
+  });
+
+  it("keeps an original unproven outcome unavailable and suppresses any transfer action behind missing assignment", () => {
+    const history = { kind: "failed-bounded-handoff" as const, state: "unavailable" as const,
+      reason: "result-unproven", checkedAt: new Date().toISOString(), owner: null, original: null, action: null };
+    const result = projectWorkroomRecovery({ ...acceptance, executorRef: null }, undefined, null, new Date(), history);
+    expect(result.failedHandoffRecovery).toEqual(history);
+    expect(result.blocker?.action).toBeNull();
+    expect(result.blocker?.reason).toBe("executor-assignment-unbound");
+  });
+});
