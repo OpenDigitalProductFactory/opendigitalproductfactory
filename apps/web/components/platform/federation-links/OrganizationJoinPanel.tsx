@@ -23,6 +23,7 @@ import {
   importOrganizationJoinFileAction,
   issueOrganizationJoinFileAction,
 } from "@/lib/actions/organization-join";
+import { useT } from "@/lib/i18n/use-t";
 
 type PanelMode = "overview" | "issue" | "import";
 type Notice = { kind: "success" | "error"; text: string } | null;
@@ -48,6 +49,7 @@ function downloadText(fileName: string, content: string) {
 }
 
 export function OrganizationJoinPanel({ candidates = [] }: { candidates?: OrganizationJoinCandidate[] }) {
+  const t = useT("organizationJoin");
   const [mode, setMode] = useState<PanelMode>("overview");
   const [candidateChoice, setCandidateChoice] = useState<string>(candidates[0]?.hostname ?? OTHER_INSTALLATION);
   const [intendedPeer, setIntendedPeer] = useState("");
@@ -189,19 +191,19 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
           ) : null}
           <SelectField
             name="joining-environment-class"
-            label="What that installation is"
+            label={t("environmentClass.label")}
             required
-            placeholder="Choose…"
+            placeholder={t("environmentClass.placeholder")}
             value={environmentClass}
             onValueChange={(value) => {
               setEnvironmentClass(value);
               setIssueConfirmed(false);
             }}
-            hint="The organization certifies this in the installation's membership. Other installations use it to decide what it may be asked to do, and it must match what that installation says it is."
+            hint={t("environmentClass.hint")}
             options={[
-              { value: "production", label: "Production" },
-              { value: "development", label: "Development" },
-              { value: "test", label: "Test" },
+              { value: "production", label: t("environmentClass.production") },
+              { value: "development", label: t("environmentClass.development") },
+              { value: "test", label: t("environmentClass.test") },
             ]}
           />
           {chosenPeer ? (
@@ -249,7 +251,7 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all text-[var(--dpf-muted)]">
                 <dt>Organization host</dt><dd>{new URL(packagePreview.caUrl).host}</dd>
                 <dt>For installation</dt><dd>{packagePreview.intendedPeer}</dd>
-                <dt>Certified as</dt><dd>{packagePreview.environmentClass ?? "Not stated — ask for a new file"}</dd>
+                <dt>{t("preview.certifiedAs")}</dt><dd>{packagePreview.environmentClass ? t(`environmentClass.${packagePreview.environmentClass}`) : t("preview.notStated")}</dd>
                 <dt>Expires</dt><dd>{packagePreview.expiresAt.toLocaleString()}</dd>
                 <dt>Trust fingerprint</dt><dd>{packagePreview.rootFingerprint.slice(0, 12)}…</dd>
               </dl>
