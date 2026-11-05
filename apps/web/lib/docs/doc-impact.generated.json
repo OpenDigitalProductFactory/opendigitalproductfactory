@@ -273,6 +273,13 @@
     ".claude-plugin/marketplace.json": [
       "docs/user-guide/contributing/agent-dev-environments.md"
     ],
+    ".claude/settings.local.json": [
+      "docs/operations/disaster-recovery.md",
+      "docs/operations/runtime-kernel-commandments.md"
+    ],
+    ".codex/config.toml": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     ".githooks/lib/pre-push-chained.sh": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -4094,6 +4101,7 @@
       "scripts/tts/setup-chatterbox-tts-macos.sh"
     ],
     "docs/install/platform-support-watchlist.md": [
+      ".codex/config.toml",
       "apps/web/components/monitoring/health-summary.ts",
       "apps/web/components/monitoring/prometheus-config.test.ts",
       "apps/web/lib/documents/document-engine-boot.test.ts",
@@ -4185,6 +4193,7 @@
       "apps/web/lib/build/build-studio-config.ts"
     ],
     "docs/operations/disaster-recovery.md": [
+      ".claude/settings.local.json",
       "docker-compose.dev-against-live-db.yml",
       "docker-compose.yml",
       "dpf-reinstall.ps1",
@@ -4244,6 +4253,7 @@
       "scripts/lib/local-ci-slot-manifest.mjs"
     ],
     "docs/operations/runtime-kernel-commandments.md": [
+      ".claude/settings.local.json",
       "apps/web/lib/wiki/principle-lint-detectors.ts"
     ],
     "docs/operations/session-transcript-recovery.md": [
