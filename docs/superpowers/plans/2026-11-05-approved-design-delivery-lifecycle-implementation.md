@@ -59,10 +59,13 @@ adapter; verify definitions and grants for every supported executor.
 ## Phase 1 — durable model and pure projector
 
 1. RED: schema/contract tests for the retained `ApprovedDesignDelivery`
-   relation, distinct BIs, unique successor, delivered field set, restricted
-   evidence deletion, and fleet-safe migration.
+   relation, distinct BIs, unique successor, delivered field set, copied
+   immutable approval facts, restricted baseline deletion, and fleet-safe
+   expand/migrate/contract behavior.
 2. Add the Prisma model and expand-only migration with explicit data-safety
-   attestation; no backfill exists because no live record exists yet.
+   attestation. Record that no legacy row source exists, so migrate has no
+   backfill; contract changes only the recovery writer default after fleet
+   compatibility, never deletes relation data.
 3. RED: pure projector tests for prepared, delivered, implemented, malformed,
    and conflict states.
 4. Implement one dependency-free projector and public result type.
@@ -76,8 +79,9 @@ Verification: V-ADL-002, V-ADL-003 and affected schema guards.
 
 ## Phase 2 — governed writer and MCP contract
 
-1. RED: repository tests for prepare/finalize success, restored finalization
-   without a Workroom row, idempotency, atomicity, and every F-ADL-001 denial.
+1. RED: repository tests for prepare/finalize success, copied immutable approval
+   facts, restored finalization without a Workroom row, idempotency, atomicity,
+   exact provider-blob-plus-SHA-256 equality, and every F-ADL-001 denial.
 2. Refactor repository artifact/provider compare logic behind a narrow injectable
    adapter instead of reimplementing GitHub reads.
 3. Implement the transactional writer using baseline, receipt, pin, Workroom,

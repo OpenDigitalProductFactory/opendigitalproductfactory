@@ -128,6 +128,11 @@ type ApprovedDesignDeliveryRecord = {
   originatingWorkroomId: `WC-${string}`;
   baselineActivityId: string;
   approvalReceiptActivityId: string;
+  approvalDecision: "pass";
+  approvalArtifactDigest: `sha256:${string}`;
+  approvalReviewerAgentId: string;
+  approvalReviewerPrincipalId: string;
+  approvalRecordedAt: Date;
   repositoryFullName: string;
   artifactPath: string;
   approvedCommitSha: string;
@@ -148,9 +153,13 @@ type ApprovedDesignDeliveryRecord = {
 
 Constraints enforce distinct design/successor items, the delivered field set,
 immutable prepared identity, and one current delivery per successor. Deleting
-either BI, baseline, or receipt is restricted. The Workroom link is semantic,
-not an FK, so recovery remains valid after the room is removed. The provider
-blob remains retained by the existing baseline pin and archived document blob.
+either BI or the retained baseline is restricted. The approval receipt id stays
+as its durable semantic link, while the relation copies the decision, reviewed
+artifact digest, independent reviewer identities, and review time because the
+source activity may age out of the 365-day activity window. The Workroom link is
+also semantic, not an FK, so recovery remains valid after the room is removed.
+The provider blob remains retained by the existing baseline pin and archived
+document blob.
 
 Audit activity kinds are `approved_design_delivery_prepared`,
 `approved_design_delivered`, `approved_design_successor_prepared`, and
@@ -171,7 +180,10 @@ references, but authoritative reads resolve the retained relation.
    docs-only gate is green; it is not a parking PR.
 5. After merge, `finalize` locates the provider PR from prepared source identity,
    verifies a non-draft merge to `main`, confirms a document-only change set,
-   re-reads the artifact at merge SHA, and atomically fills delivery fields.
+   and re-reads the artifact path at the provider merge SHA. Its Git provider
+   blob id and SHA-256 byte digest must both equal the approved provider blob id
+   and digest recorded at prepare time; either mismatch refuses finalization.
+   The writer then atomically fills delivery fields.
 6. The design BI may complete using that receipt. The successor keeps its normal
    status and projects **Approved — awaiting implementation**.
 7. The successor uses a separate branch, Workroom, plan, and PR. At governed
@@ -179,6 +191,22 @@ references, but authoritative reads resolve the retained relation.
 
 Plan coverage precedes successor implementation, not independent delivery of
 its approved design input.
+
+### 6.1 Fleet-safe rollout
+
+**Expand:** add the optional relation, indexes, foreign keys, and delivered-field
+consistency checks. Existing binaries do not query the table and continue to
+operate. Recovery readers continue to accept bundle v1.
+
+**Migrate:** deploy the governed writer, projector, batched readers, cleanup
+inventory, and bundle v2 adapters. There is no legacy row source to backfill;
+the table starts empty and only provider-verified writes populate it. Bundle v2
+readers accept v1 and v2 during this phase.
+
+**Contract:** after the fleet minimum version can read bundle v2 and the new
+projection, make v2 capture the default and remove the temporary v1-only write
+path. No column or historical row is deleted, and rollback disables new writes
+while retained relation rows remain readable.
 
 ## 7. Projection and UI
 
