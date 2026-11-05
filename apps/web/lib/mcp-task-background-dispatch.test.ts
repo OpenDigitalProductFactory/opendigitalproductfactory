@@ -95,7 +95,7 @@ describe("external TaskRun durable dispatch", () => {
     });
     expect(result).toMatchObject({ enqueued: 1, exhausted: 0 });
     expect(queue.send).toHaveBeenCalledWith("TR-REVIEW", "mcp-task-run:TR-REVIEW:execute:1");
-    expect(db.findMany.mock.calls[0]![0].where.OR).toEqual(expect.arrayContaining([
+    expect(db.findMany.mock.calls.flatMap((call) => call[0].where.OR)).toEqual(expect.arrayContaining([
       expect.objectContaining({ status: { in: ["input-required", "failed"] } }),
     ]));
     expect(db.updateMany.mock.calls[0]![0].data.progressPayload.terminalWriterWait).toEqual(wait);
@@ -345,17 +345,14 @@ describe("external TaskRun durable dispatch", () => {
       includeOrdinary: false,
     });
 
-    expect(db.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        OR: expect.arrayContaining([
-          expect.objectContaining({ status: "submitted" }),
-          expect.objectContaining({
-            status: { in: ["working", "quiescing"] },
-            progressPayload: { path: ["durableInference", "state"], equals: "admitting" },
-          }),
-        ]),
+    // BI-AF428359: each category is read with its own bounded query.
+    expect(db.findMany.mock.calls.flatMap((call) => call[0].where.OR)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: "submitted" }),
+      expect.objectContaining({
+        status: { in: ["working", "quiescing"] },
+        progressPayload: { path: ["durableInference", "state"], equals: "admitting" },
       }),
-    }));
+    ]));
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ taskRunId: "TR-DURABLE", status: "working" }),
     }));

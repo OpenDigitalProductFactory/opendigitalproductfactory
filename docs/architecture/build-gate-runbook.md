@@ -116,6 +116,17 @@ not from the receipt. A receipt for one role cannot authorize another role.
    that room and exact change before resubmitting. Existing completed gate
    records are retained; a refusal does not authorize changing their identity.
    Execution revalidates evidence again because it can change after admission.
+
+   The gate links its evidence record to the room whose `executorRef` is the
+   gating thread, so claim and adopt rooms with `sessionRef` set to the client's
+   own thread id: `CLAUDE_CODE_SESSION_ID` for Claude, `CODEX_THREAD_ID` for
+   Codex. The gate also accepts that id behind its executor-kind prefix
+   (`claude-desktop-<id>`), and nothing else (BI-82D15653). Cite the gate's
+   `evidenceRecordId` from `dpf-local-ci-gate.json`. For the `headTreeHash` and
+   `diffDigest`, use `git rev-parse HEAD^{tree}` and the SHA-256 of
+   `git diff --binary $(git merge-base HEAD origin/main) HEAD`. The PR's
+   **Failure Readiness** check passes once the platform publishes the
+   `dpf/failure-readiness` status for the reviewed head.
 2. Repair blocking code findings. Re-review a changed tree; stop after two failed
    repair rounds. A changed diff, policy, reviewer or specialist set invalidates
    a receipt. An infrastructure refusal or uncertain execution is not a finding.
