@@ -591,3 +591,15 @@ resource admission and independent review of its final delta. A failure or
 missing artifact is not a pass; report selected/copied counts, timing,
 retained-heap samples, cleanup and runner termination from the actual run.
 Rollback is a normal revert of the opt-in workflow and contract-test changes.
+
+
+The module-size guard found that the combined PostgreSQL suite reached 940
+lines. Native repair admission `IRD-4D67D344FBDC` covers a cohesive split:
+`packages/db/src/sanitized-clone-scale.postgres.test.ts` owns the opt-in scale
+case, isolated schema and connections; the original suite retains its 18
+behavioral cases. The scale body and its assertions are unchanged. Default
+discovery does not connect the scale suite even when DATABASE_URL is present.
+The calibration runner must select the new scale module. Verify both modules
+with DB typechecks and safe skipped discovery, and rerun the module-size guard.
+The independent Windows job-drain failure remains separately unresolved; no
+unchanged full-gate retry or passing integration claim follows this refactor.
