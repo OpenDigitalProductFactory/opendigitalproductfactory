@@ -2,12 +2,15 @@ import { expect, it, vi } from "vitest";
 
 import {
   buildCoworkerApprovalBinding,
+  evaluateCoworkerAuthority,
   type CoworkerAuthorityInput,
 } from "./govern/authority/coworker-authority-decision";
 import {
   governedExecuteTool,
   type _setGovernanceForTests,
 } from "./mcp-governed-execute";
+
+import { resolveSteering } from "./govern/authority/resolve-coworker-tool-authority";
 
 type AuditRow = Record<string, unknown>;
 type GovernanceOverrides = Parameters<typeof _setGovernanceForTests>[0];
@@ -282,6 +285,18 @@ export function registerCoworkerAuthorityCases(
         escalationSteering: "connection-delegation",
         damaging: false,
       }),
+    });
+    // A current-authority check inside the handler must see the same verified
+    // delegation. Losing it changes an already-authorized call to approval-required.
+    const forwarded = (harness.executeMock() as { mock: { calls: unknown[][] } }).mock.calls[0][3] as {
+      agentId?: string; connectionDelegation?: { authorityBindingId: string; agentId: string };
+      governedAuthorityTool?: () => { name: string; sideEffect?: boolean };
+    };
+    expect(forwarded.governedAuthorityTool?.()).toMatchObject({ name: "create_backlog_item", sideEffect: true });
+    const currentSteering = resolveSteering({ initiativeReviewBinding: null, roomAuthority: null,
+      agentId: forwarded.agentId, connectionDelegation: forwarded.connectionDelegation });
+    expect(evaluateCoworkerAuthority({ ...steered, steering: currentSteering })).toMatchObject({
+      outcome: "allow", escalation: { steering: "connection-delegation" },
     });
   });
 
