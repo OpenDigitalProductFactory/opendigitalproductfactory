@@ -86,15 +86,26 @@ type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";
 function safeBranchFailure(error: unknown, agentId: string, phase: BranchPhase) {
   const record = object(error);
   const name = error instanceof Error ? error.name : null;
-  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError", "NoEligibleEndpointsError"];
+  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError", "NoEligibleEndpointsError", "AgentAllowanceExhaustedError"];
   const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET", "INFERENCE_PARENT_STOPPED"];
   return { agentId, phase, errorKind: name && knownKinds.includes(name) ? name : "unclassified",
     errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null,
     ...(error instanceof NoEligibleEndpointsError && readRoutingEligibility(error.eligibility)
       ? { routingEligibility: readRoutingEligibility(error.eligibility)! } : {}),
     ...(classifyDispatchFailure(error).code === "execution-uncertain"
-      ? { executionUncertainty: executionUncertaintyFromError(error) } : {}) };
+      ? { executionUncertainty: executionUncertaintyFromError(error) } : {}),
+    // BI-F3B6713F: refused by the platform's own allowance before dispatch.
+    ...(name === "AgentAllowanceExhaustedError" && typeof record.resetAt === "string"
+      ? { allowanceResetAt: record.resetAt } : {}) };
 }
+
+/** A branch the paid allowance refused before any provider was asked: no outcome is uncertain. */
+function allowanceRefusal(failure: ReturnType<typeof safeBranchFailure> | undefined) {
+  return failure?.errorKind === "AgentAllowanceExhaustedError" && typeof failure.allowanceResetAt === "string"
+    ? { resetAt: failure.allowanceResetAt } : null;
+}
+
+export const DAILY_ALLOWANCE_USED_ACTION = "Today's allowance for paid AI is used. Submit a fresh review after it resets, or after an owner raises it in Admin > Platform Development > Paid AI allowance.";
 
 async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generation: string,
   agentId: string, execute: () => Promise<SemanticReviewResult>,
@@ -188,9 +199,11 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     } else {
       await prisma.$transaction(async (tx) => {
         await assertFence(tx, row.taskRunId, generation);
+        // The allowance error reaches here only when every endpoint refused before dispatch.
+        const failure = safeBranchFailure(error, agentId, "provider-call");
         await tx.taskNode.update({ where: { taskNodeId }, data: { status: "failed", completedAt: new Date(),
-          outputSnapshot: json({ requestDigest: packet.digest, providerOutcome: "unknown",
-            failure: safeBranchFailure(error, agentId, "provider-call") }) } });
+          outputSnapshot: json({ requestDigest: packet.digest, providerOutcome: allowanceRefusal(failure) ? "not-dispatched" : "unknown",
+            failure }) } });
       });
       throw error;
     }
@@ -238,6 +251,10 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   }
   const expiredBeforeDispatch = row.status === "failed" && state(row).reason === "review-deadline-exhausted";
   if (!isSemanticReviewRecoveryWait(row.status) && !(successor && expiredBeforeDispatch)) throw new Error("semantic-review-not-awaiting-recovery");
+  // BI-F3B6713F: a retry while the allowance is still used is certain to be
+  // refused again, so it must not spend a recovery attempt.
+  const stillUsed = await reviewerAllowanceStillUsed(row);
+  if (stillUsed) throw new Error(`semantic-review-daily-allowance-used: ${DAILY_ALLOWANCE_USED_ACTION} It resets at ${stillUsed.resetAt}.`);
   const packet = await requestFor(row);
   if (!packet) throw new Error("semantic-review-request-unavailable");
   const previousAttempt = state(row).recoveryAttempt ?? 0;
@@ -284,6 +301,16 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   await enqueueSemanticReview(taskRunId);
   revalidatePortalContext();
   return { newTaskRunId: taskRunId, strategy: "resume-review-checkpoints" };
+}
+
+/** Live recheck: the owner may have raised the allowance since the refusal. An unreadable check never blocks recovery. */
+async function reviewerAllowanceStillUsed(row: Run): Promise<{ resetAt: string } | null> {
+  const recorded = state(row);
+  const agentId = object(recorded.branchFailure).agentId;
+  if (recorded.reason !== "reviewer-daily-allowance-used" || typeof agentId !== "string") return null;
+  const { checkAgentBudgetFromRegistry, nextAllowanceReset } = await import("@/lib/inference/budget-gate");
+  const budget = await checkAgentBudgetFromRegistry(agentId).catch(() => null);
+  return budget?.status === "rejected" ? { resetAt: nextAllowanceReset().toISOString() } : null;
 }
 
 /** One successor per lineage, admitted by fresh scoped runtime evidence, never by a replay. */
@@ -428,6 +455,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
         // would revoke siblings' write fences and lose already-paid-for results.
         if (branchFailure) {
           const authorityValid = await verifySemanticReviewAuthority(packet, taskRunId).catch(() => null);
+          const allowance = allowanceRefusal(branchFailure);
           await prisma.$transaction(async tx => {
             const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
             if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
@@ -437,10 +465,13 @@ export async function executePersistedSemanticReview(taskRunId: string) {
               data: { status: authorityValid === false ? "auth-required" : "input-required",
                 progressPayload: progress(row, { state: authorityValid === false ? "auth-required" : "input-required", generation,
                 reason: authorityValid === null ? "review-authority-unavailable"
-                  : authorityValid ? "provider-outcome-uncertain" : "submitting-authority-no-longer-valid", branchFailure,
+                  : !authorityValid ? "submitting-authority-no-longer-valid"
+                  : allowance ? "reviewer-daily-allowance-used" : "provider-outcome-uncertain", branchFailure,
                 ...(routingEligibility.length ? { routingEligibility } : {}),
-                action: authorityValid !== false ? "Reconcile recorded execution and authority availability before recovery."
-                  : "Restore the submitting authority and reconcile recorded execution before recovery." }) } });
+                ...(allowance && authorityValid ? { allowanceResetAt: allowance.resetAt } : {}),
+                action: authorityValid === false ? "Restore the submitting authority and reconcile recorded execution before recovery."
+                  : allowance && authorityValid ? `${DAILY_ALLOWANCE_USED_ACTION} It resets at ${allowance.resetAt}.`
+                  : "Reconcile recorded execution and authority availability before recovery." }) } });
             if (changed.count !== 1) return;
             for (const node of nodes.filter(node => node.status === "running")) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
               status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),

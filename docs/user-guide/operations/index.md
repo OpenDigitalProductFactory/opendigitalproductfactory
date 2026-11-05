@@ -183,7 +183,7 @@ stops when the allowance is nearly spent or a provider reports a rate limit,
 and it only acts while the governed backlog lane is on.
 
 To turn it on or off, open **Admin > Platform Development**, find **Let Build
-Studio pick up work on its own**, open **Daily limit and the autopilot
+Studio pick up work on its own**, open **Daily limits and the autopilot
 switches**, tick or clear **Use spare weekly AI allowance**, and select
 **Save**. Changing it needs the platform management permission. An agent can
 make the same change with the `set_backlog_delivery_budget` tool
