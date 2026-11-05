@@ -71,8 +71,17 @@ export async function readHandoffAuthority(input: {
   };
   return { boundary, sourcePrincipalId: from.agentPrincipal.id, targetPrincipalId: to.agentPrincipal.id };
 }
-export function snapshotHandoff(room: HandoffRoom, boundary: Record<string, unknown>, now: Date): HandoffSnapshot {
-  if (!room.leaseHolderPrincipalId || !room.leaseExpiresAt || room.leaseExpiresAt.getTime() <= now.getTime() || !room.executorKind || !room.executorRef) return fail("handoff-lease-expired", "The room needs a live source lease before requesting or acknowledging a handoff.");
+/**
+ * The lease names the owning human, not a session. A lapse therefore matters
+ * only when the lapsed lease is someone else's: two sessions of the same owner
+ * share one holder, and the source standing down must not turn their handover
+ * into an owner approval (BI-F1FC0B62). The snapshot still binds the exact
+ * expiry, so a renewal or reacquire between the two steps refuses.
+ */
+export function snapshotHandoff(room: HandoffRoom, boundary: Record<string, unknown>, now: Date, ownerPrincipalId: string | null): HandoffSnapshot {
+  const lapsed = !room.leaseExpiresAt || room.leaseExpiresAt.getTime() <= now.getTime();
+  if (!room.leaseHolderPrincipalId || !room.leaseExpiresAt || !room.executorKind || !room.executorRef
+    || (lapsed && room.leaseHolderPrincipalId !== ownerPrincipalId)) return fail("handoff-lease-expired", "The room needs a live source lease, or a lapsed one still held by the same owner, before requesting or acknowledging a handoff.");
   const snapshot = { leaseHolderPrincipalId: room.leaseHolderPrincipalId, leaseExpiresAt: room.leaseExpiresAt.toISOString(), executorKind: room.executorKind, executorRef: room.executorRef, boundary };
   return { ...snapshot, digest: handoffDigest(snapshot) };
 }

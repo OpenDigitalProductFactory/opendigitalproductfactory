@@ -157,6 +157,13 @@ export function checkStaleRootClone({
     return { ok: true, behind: 0, rootClonePath };
   }
 
+  // BI-4F89896B: a root on the worktree's own commit cannot produce phantom
+  // errors: the junctioned packages are the source being checked. Its distance
+  // from origin/main is base drift. The Build Studio grader is this shape.
+  if (gitText(worktreeRoot, ["rev-parse", "HEAD"], { spawnSyncImpl }) === measure.rootSha) {
+    return { ok: true, skipped: "root-at-worktree-head", behind: measure.behind, rootClonePath };
+  }
+
   const message = [
     `Stale root clone detected (BI-A900EA3F).`,
     `Root clone at ${rootClonePath} is ${measure.behind} commit(s) behind origin/main.`,

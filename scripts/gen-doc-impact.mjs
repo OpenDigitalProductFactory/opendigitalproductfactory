@@ -38,9 +38,11 @@
 //   node scripts/gen-doc-impact.mjs --check    # fail if stale, or edges are invalid
 
 import fs from "node:fs";
+import { gitText } from "./lib/git.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseRouteMap, docFileForDocsPath } from "./check-docs-impact.mjs";
+import { parseRouteMap, docFileForDocsPath, isDependencyOnlyChange } from "./check-docs-impact.mjs";
+import { DERIVED_ARTIFACTS, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
 import { publishedDocFiles } from "./lib/published-doc-roots.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -107,8 +109,22 @@ const CODE_EXT_RE = /\.(ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1|json|toml)
 /** EDGE SOURCE 4 — a repo path cited in backticks, e.g. `apps/web/lib/foo.ts`.
  *  Same premise as source 3 (the author already wrote the reference) applied to
  *  the form DPF docs actually use most: prose citing a path inline rather than
- *  linking it. Measured on this corpus, it is what the link-only walk was missing. */
-const TICK_PATH_RE = /`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1))`/g;
+ *  linking it. Measured on this corpus, it is what the link-only walk was missing.
+ *
+ *  `.json`, `.py` and `.toml` joined the set in BI-9B17E889: the agent toolchain
+ *  is configured by JSON registries (`hooks.json`, `capability-packs.json`, the
+ *  per-client `*.mcp.json`) and converged by Python, so a page citing them got
+ *  no edge and a hook change never flagged it (the BI-742D707B gap). Widening
+ *  added 49 cited files and 7 pages with the combined fan-out still at 4. */
+const TICK_PATH_RE = /`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1|json|py|toml))`/g;
+
+/** Files a tick citation never turns into an edge. A derived artifact changes
+ *  whenever its sources do, so an edge to it re-flags the page on every
+ *  regeneration (the page's real dependency is the generator, which it can cite).
+ *  Dependency manifests are landmarks the Docs Impact Gate already exempts. */
+export function isTickEdgeExcluded(rel, registry = DERIVED_ARTIFACTS) {
+  return isDependencyOnlyChange([rel]) || registry.some((entry) => matchesAnyGlob(rel, entry.artifactPaths ?? []));
+}
 
 /**
  * Fan-out ceiling for DERIVED tick edges.
@@ -136,6 +152,11 @@ const TICK_PATH_RE = /`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|y
  */
 const TICK_FANOUT_CAP = 3;
 
+// Read once per manifest; newly staged source counts, private local files do not.
+function trackedSourcePaths(repoRoot) {
+  return new Set(gitText(["ls-files", "--cached", "-z"], { cwd: repoRoot, trim: false }).split("\0").filter(Boolean));
+}
+
 /**
  * Repo-relative source files that `markdown` links to, resolved relative to the
  * doc's own directory.
@@ -146,7 +167,7 @@ const TICK_FANOUT_CAP = 3;
  *
  * @returns {string[]} sorted, de-duplicated repo-relative POSIX paths
  */
-export function linkedCodePaths(markdown, docPath, repoRoot) {
+export function linkedCodePaths(markdown, docPath, repoRoot, trackedPaths = trackedSourcePaths(repoRoot)) {
   const body = markdown.replace(FENCE_RE, "");
   const out = new Set();
   for (const m of body.matchAll(LINK_RE)) {
@@ -155,6 +176,7 @@ export function linkedCodePaths(markdown, docPath, repoRoot) {
     const abs = path.resolve(path.dirname(path.join(repoRoot, docPath)), href);
     const rel = path.relative(repoRoot, abs).split(path.sep).join("/");
     if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    if (!trackedPaths.has(rel)) continue;
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
     out.add(rel);
   }
@@ -171,12 +193,13 @@ export function linkedCodePaths(markdown, docPath, repoRoot) {
  *
  * @returns {string[]} sorted, de-duplicated repo-relative POSIX paths
  */
-export function tickedCodePaths(markdown, repoRoot) {
+export function tickedCodePaths(markdown, repoRoot, trackedPaths = trackedSourcePaths(repoRoot)) {
   const body = markdown.replace(FENCE_RE, "");
   const out = new Set();
   for (const m of body.matchAll(TICK_PATH_RE)) {
     const rel = m[1];
     if (rel.startsWith("./") || rel.startsWith("../") || rel.startsWith("/")) continue;
+    if (isTickEdgeExcluded(rel) || !trackedPaths.has(rel)) continue;
     const abs = path.join(repoRoot, rel);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
     out.add(rel);
@@ -199,6 +222,8 @@ export function applyFanoutCap(candidates, cap = TICK_FANOUT_CAP) {
 }
 
 export function buildManifest() {
+  // Private and untracked files must not change a committed derived artifact.
+  const trackedPaths = trackedSourcePaths(REPO_ROOT);
   const entries = parseRouteMap(fs.readFileSync(ROUTE_MAP_TS, "utf-8"));
   const routeToDocs = {};
   const codeToDocs = {};
@@ -238,7 +263,7 @@ export function buildManifest() {
     //    graph exists to remove. A markdown link from a doc INTO a source file
     //    is an edge the author already wrote; deriving it needs no annotation
     //    and no second place to keep in sync.
-    for (const code of linkedCodePaths(raw, sourcePath, REPO_ROOT)) {
+    for (const code of linkedCodePaths(raw, sourcePath, REPO_ROOT, trackedPaths)) {
       addEdge(codeToDocs, code, sourcePath);
       addEdge(docToCode, sourcePath, code);
     }
@@ -246,7 +271,7 @@ export function buildManifest() {
     // 4. DERIVED edges from BACKTICK citations. Collected rather than added, so
     //    the fan-out ceiling can be applied across the whole corpus below — a
     //    per-page decision cannot see that a path is cited by fifteen pages.
-    for (const code of tickedCodePaths(raw, REPO_ROOT)) {
+    for (const code of tickedCodePaths(raw, REPO_ROOT, trackedPaths)) {
       tickCandidates.push({ code, doc: sourcePath });
     }
   }

@@ -34,12 +34,26 @@ describe("local provider pause control", () => {
     expect(screen.queryByText("Paused")).toBeNull();
     expect(screen.getByRole("button", { name: "Resume now" })).toBeTruthy();
   });
-  it("pauses immediately before asking for an optional duration", async () => {
+  it("asks for a reason before pausing until resumed (BI-1C36C88A)", async () => {
     render(<ProviderStatusToggle providerId="local" initialStatus="active" />);
     fireEvent.click(screen.getByRole("button", { name: "Pause now" }));
-    await waitFor(() => expect(actions.pauseProvider).toHaveBeenCalledWith("local"));
+    fireEvent.click(screen.getByRole("button", { name: "Until I resume it" }));
+    expect(await screen.findByText("Enter a reason for pausing.")).toBeTruthy();
+    expect(actions.pauseProvider).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Reason for pausing"), { target: { value: "GPU needed for a model swap" } });
+    fireEvent.click(screen.getByRole("button", { name: "Until I resume it" }));
+    await waitFor(() => expect(actions.pauseProvider).toHaveBeenCalledWith("local", "GPU needed for a model swap", undefined, false));
     expect(await screen.findByRole("button", { name: "Resume now" })).toBeTruthy();
-    expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+  it("offers an explicit override when the provider was just resumed by an operator", async () => {
+    actions.pauseProvider.mockResolvedValueOnce({ resumeAt: null, warning: "This provider was resumed by op at 2026-11-05T00:39:20.000Z.", recentResume: { resumedBy: "op", resumedAt: "2026-11-05T00:39:20.000Z" } });
+    render(<ProviderStatusToggle providerId="local" initialStatus="active" />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause now" }));
+    fireEvent.change(screen.getByLabelText("Reason for pausing"), { target: { value: "GPU needed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Until I resume it" }));
+    fireEvent.click(await screen.findByLabelText("Pause anyway, overriding that resume"));
+    fireEvent.click(screen.getByRole("button", { name: "Until I resume it" }));
+    await waitFor(() => expect(actions.pauseProvider).toHaveBeenLastCalledWith("local", "GPU needed", undefined, true));
   });
   it("uses the same timed control for a cloud provider without reactivating automatic disable", async () => {
     actions.resumeProvider.mockResolvedValue({ outcome: "resumed", status: "disabled", connectionStatus: "active" });
@@ -55,8 +69,9 @@ describe("local provider pause control", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Set resume time" }));
     fireEvent.change(screen.getByLabelText("Pause duration"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("Duration unit"), { target: { value: "days" } });
+    fireEvent.change(screen.getByLabelText("Reason for pausing"), { target: { value: "Weekend maintenance" } });
     fireEvent.click(screen.getByRole("button", { name: "Save resume time" }));
-    await waitFor(() => expect(actions.pauseProvider).toHaveBeenCalledWith("local", { value: 2, unit: "days" }));
+    await waitFor(() => expect(actions.pauseProvider).toHaveBeenCalledWith("local", "Weekend maintenance", { value: 2, unit: "days" }, false));
   });
   it("shows a persisted resume time and supports early resume", async () => {
     actions.getProviderPause.mockResolvedValue({ resumeAt: "2026-10-14T02:00:00.000Z" });

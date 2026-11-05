@@ -58,6 +58,9 @@ export function mergeLocalCiHostPressure(input: {
       input.client.observedAt,
       input.server.observedAt,
     ),
+    totalMemoryBytes: finite(input.client.totalMemoryBytes)
+      ? input.client.totalMemoryBytes
+      : undefined,
     // The client samples Windows physical memory. The server runs inside the
     // bounded Docker/WSL VM, whose MemAvailable is a separate reservation
     // domain and naturally falls while an approved builder consumes memory.

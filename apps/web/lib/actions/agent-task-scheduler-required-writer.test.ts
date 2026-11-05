@@ -192,7 +192,19 @@ describe("a Workroom stage run and its evidence writer (BI-62DB6C03)", () => {
     const retryHistory = mocks.runAgenticLoop.mock.calls[1]![0].chatHistory as Array<{ role: string; content: string }>;
     expect(retryHistory.at(-2)).toEqual({ role: "assistant", content: UNAVAILABLE });
     expect(retryHistory.at(-1)?.content).toMatch(/record_workroom_evidence is attached to this run/);
+    // BI-83B1EE05: the correction turn keeps what the first pass read.
+    expect(retryHistory.at(-1)?.content).toMatch(/You already read this run[\s\S]*5 accounts/);
     expect(recordedTask().lastStatus).toBe("ok");
+  });
+
+  it("runs unattended work on an unattended clock, not the 120s chat limit (BI-83B1EE05)", async () => {
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Recorded.", executedTools: [{ name: "record_workroom_evidence", args: {}, result: { success: true, message: "ok" } }] });
+
+    await executeScheduledAgentTask(TASK_ID);
+
+    const warrant = mocks.runAgenticLoop.mock.calls[0]![0].effortWarrant as { level: string; maxDurationMs: number };
+    expect(warrant.level).toBe("medium");
+    expect(warrant.maxDurationMs).toBeGreaterThan(120_000);
   });
 
   it("fails honestly after the one correction: the writer was offered and not called", async () => {

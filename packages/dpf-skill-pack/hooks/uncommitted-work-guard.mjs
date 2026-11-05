@@ -206,15 +206,18 @@ function claimFirstWarning(dir, hits) {
 // Stop accepts `hookSpecificOutput.additionalContext`; SessionEnd does not —
 // Claude Code rejects it ("Hook JSON output validation failed"). SessionEnd
 // cannot reach the model anyway, so it tells the operator via `systemMessage`.
-function claudeHookOutput(warning, hookEventName) {
-  if (hookEventName === "Stop") {
+// Codex's Stop lists no hookSpecificOutput (learn.chatgpt.com/docs/hooks), so a
+// Codex payload (Claude never sends turn_id) gets systemMessage too (BI-5DD46FDA).
+function claudeHookOutput(warning, hookEventName, payload = {}) {
+  const codex = payload?.turn_id !== undefined;
+  if (hookEventName === "Stop" && !codex) {
     return { hookSpecificOutput: { hookEventName, additionalContext: warning } };
   }
   return { systemMessage: warning };
 }
 
-function emitClaudeWarning(warning, hookEventName) {
-  process.stdout.write(JSON.stringify(claudeHookOutput(warning, hookEventName)));
+function emitClaudeWarning(warning, hookEventName, payload) {
+  process.stdout.write(JSON.stringify(claudeHookOutput(warning, hookEventName, payload)));
 }
 
 function main() {
@@ -293,7 +296,7 @@ function main() {
   // path, or a path whose status changes, is a new set and is reported.
   if (!claimFirstWarning(dir, losable)) process.exit(0);
 
-  emitClaudeWarning(warning, hookEventName);
+  emitClaudeWarning(warning, hookEventName, payload);
   process.exit(0);
 }
 

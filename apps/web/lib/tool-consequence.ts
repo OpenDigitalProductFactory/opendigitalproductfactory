@@ -37,6 +37,11 @@ export type ToolCallConsequenceInput = {
 export type ToolCallConsequence = {
   consequence: ToolConsequence | null;
   reason: string;
+  /**
+   * BI-88D51B8F: when this call still needs a person, what will happen and why
+   * it matters, in the approver's words. Shown on the approval request.
+   */
+  approverSummary?: string;
 };
 
 /**
@@ -50,7 +55,7 @@ export type ToolCallConsequenceRefiner = (call: ToolCallConsequenceInput) => Pro
 
 export type ResolvedCallConsequence = {
   consequence: ToolConsequence | null;
-  refinement: { declared: ToolConsequence; reason: string } | null;
+  refinement: { declared: ToolConsequence; reason: string; approverSummary?: string } | null;
 };
 
 /** Apply a tool's refiner under the narrow-only rule. Fails closed. */
@@ -62,9 +67,11 @@ export async function resolveCallConsequence(
   if (!declared || !tool.consequenceForCall) return { consequence: declared, refinement: null };
   try {
     const refined = await tool.consequenceForCall(call);
+    const ordinary = refined.consequence === null;
     return {
-      consequence: refined.consequence === null ? null : declared,
-      refinement: { declared, reason: refined.reason },
+      consequence: ordinary ? null : declared,
+      refinement: { declared, reason: refined.reason,
+        ...(!ordinary && refined.approverSummary ? { approverSummary: refined.approverSummary } : {}) },
     };
   } catch {
     return { consequence: declared, refinement: { declared, reason: "refinement-unavailable" } };
