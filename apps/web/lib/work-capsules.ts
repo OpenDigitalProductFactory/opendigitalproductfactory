@@ -280,6 +280,9 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "verification",
   "lint",
   "note",
+  // Room-level, not a stage kind: it settles the affected docs before handoff
+  // (BI-9B17E889, work-capsules/docs-impact-disposition.ts) and never completes a stage.
+  "docs-impact-disposition",
   ...WORK_SHAPE_EVIDENCE_KINDS,
 ] as const;
 
