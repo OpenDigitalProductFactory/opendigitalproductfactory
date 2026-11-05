@@ -12491,6 +12491,18 @@
         "troubleshooting"
       ]
     },
+    "docs/user-guide/codex-plugin-recovery.md": {
+      "publicHref": "/user-guide/codex-plugin-recovery/",
+      "portalHref": "/docs/codex-plugin-recovery",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "recover-codex-plugins-and-hook-trust",
+        "repeated-windows-notify-errors",
+        "hooks-marked-modified-after-an-update",
+        "verify-recovery"
+      ]
+    },
     "docs/user-guide/compliance/audits-and-corrective-actions.md": {
       "publicHref": "/user-guide/compliance/audits-and-corrective-actions/",
       "portalHref": "/docs/compliance/audits-and-corrective-actions",
