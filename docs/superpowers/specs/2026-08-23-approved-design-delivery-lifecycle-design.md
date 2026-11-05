@@ -114,6 +114,21 @@ DPF applies that pattern to the approved design and separately controlled
 implementation. Sources: [NIST SP 800-171r3](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-171r3.html)
 and [NIST SP 500-161](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication500-161.pdf).
 
+Three established design-before-implementation processes confirm the useful
+shape while also showing what DPF must add:
+
+| Process | Durable approved state | Later implementation identity | DPF disposition |
+| --- | --- | --- | --- |
+| [Kubernetes KEP](https://github.com/kubernetes/enhancements/blob/master/keps/sig-architecture/0000-kep-process/README.md) | A KEP is checked into the enhancements repository and can become `implementable`; approvers are distinct from authors. | The KEP number prefixes its enhancement tracking issue, which remains the current-status breadcrumb. | Adopt the separately approved, repository-resident design and successor work identity. Do not copy a special backlog status because DPF already separates scheduling from evidence. |
+| [Rust RFC](https://rust-lang.github.io/rfcs/) | An accepted RFC is merged as Markdown and becomes active before implementation is assigned or prioritized. | Every accepted RFC has an implementation tracking issue. | Adopt a normal merged design PR plus separately schedulable implementation item. Add immutable provider, receipt, and baseline facts that the lighter RFC convention does not model. |
+| [Python PEP](https://peps.python.org/pep-0001/) | A PEP can be Accepted before its reference implementation is complete and is retained as a historical decision document. | Final status waits for the reference implementation; the resolution link records the decision. | Adopt acceptance-before-implementation and historical retention. Reject a document-status-only solution because DPF must protect cleanup and recover cross-entity intent after installation loss. |
+
+DPF therefore follows the common industry boundary—merge the independently
+approved design, then implement through linked work—but adds a typed relation
+because its approval receipts, cleanup agents, recovery bundles, and multiple
+execution surfaces need machine-verifiable linkage that document metadata alone
+cannot provide.
+
 ## 5. Durable contract
 
 `ApprovedDesignDelivery` is an operational, retained record:
