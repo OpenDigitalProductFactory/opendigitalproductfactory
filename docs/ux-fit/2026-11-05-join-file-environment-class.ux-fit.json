@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx"
+    ]
+  },
+  "decidedOption": "required-select-no-default",
+  "decisionInteractionId": "DI-9721FE9FB743",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "required-select-no-default",
+      "select-defaulting-development",
+      "infer-from-candidate"
+    ]
+  },
+  "authority": "BI-0716C8A8 implementation admission IRD-10738CB07DC0 under A2A design §19.2 decision DI-13CEFD0A8156 (CA-attested class, A1; self-declared class A3 rejected). DI-9721FE9FB743 records the form placement under that scope, not new approval.",
+  "limitations": "DI-9721FE9FB743 ranked the required select with no default first (composite 8.51, margin 4.49, high confidence, autonomy eligible); inferring the class from the candidate was ranked last because it would certify the peer's own claim. The change adds one required field to the existing Create join file form on Platform > Connections and one 'Certified as' row to the existing import preview; no route, tab, card or navigation changes. Behaviour is pinned in OrganizationJoinPanel.test.tsx (the Create button stays disabled until a class is chosen; the chosen class reaches the server action). Author measurement only: no served route sweep or independent UX review was run for this change."
+}
