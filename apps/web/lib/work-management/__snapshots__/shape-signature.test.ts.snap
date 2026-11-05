@@ -9,6 +9,7 @@ exports[`shapeSignature > gives every current and frozen prior shape a signature
   "bookkeeping-period-cycle@1.0.0": "⏱ cadence ✋ claim · AI gather → AI import → AI categorize → AI reconcile → ◇ Person owner-close [role:finance-owner] → ● success | ⊗ failure | ⧖ budget",
   "catalog-scout-sweep@1.0.0": "⏱ cadence 〰 estate-drift · AI scan → ◇ Person adopt [role:platform-owner] → ● success | ⊗ failure | ⧖ budget",
   "consume-stream-orchestration@1.0.0": "⏱ cadence ⬆ escalation · AI survey → AI delegate → ◇ Person direct [role:consume-stream-owner] → ● success | ⊗ failure | ⧖ budget",
+  "continual-improvement-register@1.0.0": "⏱ cadence ⌛ evidence-decay · AI define → AI measure → AI improve → AI control → ◇ Person decide [role:platform-owner] → ● success | ⊗ failure | ⧖ budget",
   "contributor-intake-watch@1.0.0": "⏱ cadence · AI sync → AI flag → ◇ Person admit [role:contributor-owner] → ● success | ⊗ failure | ⧖ budget",
   "contributor-intake-watch@1.1.0": "⏱ cadence · AI sync → AI flag → ◇ Person admit [role:contributor-owner] → ● success | ⊗ failure | ⧖ budget",
   "coworker-fitness-watch@1.0.0": "⏱ cadence ⌛ evidence-decay · AI measure → AI report → ◇ Person grant [role:workforce-owner] → ● success | ⊗ failure | ⧖ budget",

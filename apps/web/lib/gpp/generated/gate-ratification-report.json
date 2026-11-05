@@ -44,6 +44,12 @@
       "status": "proposed"
     },
     {
+      "shape": "continual-improvement-register@1.0.0",
+      "stage": "decide",
+      "decisionScope": "harness-edit-adoption",
+      "status": "proposed"
+    },
+    {
       "shape": "contributor-intake-watch@1.0.0",
       "stage": "admit",
       "decisionScope": "contributor-admission",
@@ -397,6 +403,12 @@
       "shape": "consume-stream-orchestration@1.0.0",
       "stage": "direct",
       "decisionScope": "demand-prioritization",
+      "status": "proposed"
+    },
+    {
+      "shape": "continual-improvement-register@1.0.0",
+      "stage": "decide",
+      "decisionScope": "harness-edit-adoption",
       "status": "proposed"
     },
     {

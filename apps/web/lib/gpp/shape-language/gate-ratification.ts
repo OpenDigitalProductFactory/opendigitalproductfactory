@@ -124,6 +124,10 @@ export const GATE_RATIFICATION: Readonly<Record<string, GateRatificationEntry>> 
     "wwmd",
     "Adopting an external tool falls under the platform's absorb-don't-adopt commandment.",
   ),
+  "harness-edit-adoption": proposed(
+    "wwmd",
+    "Adopting a probed harness edit changes how the platform's rooms are run; it lands as governed change.",
+  ),
   "initiative-decomposition": proposed(
     "wwmd",
     `Approving an initiative's decomposition is part of the platform delivery process. ${DELIVERY_RECEIPT_NOTE}`,

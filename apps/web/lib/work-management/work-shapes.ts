@@ -23,6 +23,7 @@
 
 import { validateStopExits } from "@dpf/validators/gpp/stop-exits";
 import { ACCEPTANCE_VERIFICATION_SHAPES } from "./acceptance-verification-shape";
+import { CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY } from "./continual-improvement-register-shape";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
 import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
 import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
@@ -161,9 +162,14 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
  * activities. Each family names the improve layer its shapes inherit
  * (BI-CE564FBB).
  */
+// The continual improvement register is a standing shape, but it registers
+// last: listWorkShapes() order seeds the drive golden, so a new shape appends
+// rather than reshuffling every later shape's sequences.
+const { [CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY]: continualImprovementRegister, ...standingOperations } = STANDING_SHAPES;
+
 const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShapeDefinition>])[] = [
   ["assurance", SHAPES],
-  ["platform-operations", STANDING_SHAPES],
+  ["platform-operations", standingOperations],
   ["business-operations", COWORKER_STANDING_SHAPES],
   ["business-operations", COWORKER_STANDING_SHAPES_OPERATE],
   ["craft", COWORKER_STANDING_SHAPES_CRAFT],
@@ -172,6 +178,7 @@ const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShape
   ["assurance", ACCEPTANCE_VERIFICATION_SHAPES],
   ["assurance", PLATFORM_REVIEW_SHAPES],
   ["ring-0", SOURCE_INQUIRY_SHAPES],
+  ["platform-operations", { [CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY]: continualImprovementRegister! }],
 ];
 
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = Object.assign({}, ...SHAPE_FAMILIES.map(([, family]) => family));

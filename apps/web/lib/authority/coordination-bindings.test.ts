@@ -62,4 +62,13 @@ describe("planCoordinationBindings", () => {
     expect(plans.length).toBeGreaterThanOrEqual(12);
     expect(new Set(plans.map((p) => p.resourceRef)).size).toBe(plans.length);
   });
+
+  it("gives the Continual Improvement Manager coordination of the CI register (BI-CE564FBB)", () => {
+    // Without a binding, an AI Process Overseer is refused autonomous execution
+    // (BI-E0728215); the register shape proposes AGT-908 and the binding grants it.
+    const plan = planCoordinationBindings().find((p) => p.resourceRef === "continual-improvement-register");
+    expect(plan?.agentId).toBe("continual-improvement-manager");
+    expect(plan?.bindingId).toBe("AB-WORKROOM-CONTINUAL-IMPROVEMENT-REGISTER-CONTINUAL-IMPROVEMENT-MANAGER");
+    expect(plan?.status).toBe("active");
+  });
 });

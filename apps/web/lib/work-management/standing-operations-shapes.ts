@@ -12,6 +12,10 @@
 // too, so referencing it here adds no cycle either.
 
 import type { WorkShapeDefinition } from "./work-shapes";
+import {
+  CONTINUAL_IMPROVEMENT_REGISTER_SHAPE,
+  CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY,
+} from "./continual-improvement-register-shape";
 import { INQUIRY_RESPONSE_WATCH_1_0_0 } from "./generated/inquiry-response-watch.shape.generated";
 
 // ── standing business-operations shapes (BI-7E7B93DF) ────────────────────────
@@ -54,6 +58,7 @@ export const STANDING_OPERATIONS_SHAPE_KEYS = [
   VENDOR_RENEWAL_WATCH_SHAPE_KEY,
   CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY,
   COWORKER_FITNESS_WATCH_SHAPE_KEY,
+  CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY,
 ] as const;
 
 const MONTHLY_REVIEW = {
@@ -717,5 +722,8 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
     reviewPoint: MONTHLY_REVIEW,
     collaborationShape: "approval-sign-off",
   },
+
+  // ── cross-cutting · Continual Improvement (BI-CE564FBB) ─────────────────────
+  [CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY]: CONTINUAL_IMPROVEMENT_REGISTER_SHAPE,
 };
 
