@@ -37,6 +37,22 @@ Technical review failures require internal repair or review recovery. They do no
 
 When a local run cannot resolve its source identity, its diagnostic report remains available with null verification bindings and an explicit binding error. Such a report cannot satisfy failure readiness. A checkout that moves before binding also requires fresh verification; the producer never substitutes the caller's checkout or invents a diff digest.
 
+### The review packet fits its reviewer (BI-FD7DE19D)
+
+The native review packet must fit the reviewers its data boundary allows. On a confidential review that can be one local model.
+
+Long evidence prose is bounded deterministically before the packet is sent:
+- A resolved evidence `observed` output longer than 1,500 characters, typically the gate log, becomes a pointer.
+- The pointer carries `observedChars` and `observedSha256`, both of the full text, and `observedExcerpt`, the last 1,500 characters, where a gate prints its verdict.
+
+The failure-analysis digest still binds the full evidence. The diff is never trimmed: the server rejects an artifact that does not match its digest.
+
+A change too large to fit on its own fails closed as `review-endpoint-ineligible`. Its summary names the next action and the owner: the author splits the change into smaller pull requests.
+
+Measured on DEV on 2026-11-03, before this fix:
+- An 80,694-character prompt needed 42,051 tokens against the 40,960-token local reviewer, so every review was inconclusive.
+- 12,000 of those characters were the embedded gate log.
+
 The design reference uses `path@<40-character Git object hash>`, so the reviewer can inspect the recorded early analysis rather than a moving document. The gate checks the reference format; the independent reviewer checks its content and whether it predates implementation.
 
 Server Workroom readiness transitions and Build Studio assembled-change review enforce the contract without a client hook. The platform publishes `dpf/failure-readiness` on the exact source commit after resolving the recorded verdict. The `Failure Readiness` workflow verifies that status against the configured `DPF_REVIEW_STATUS_PUBLISHER` repository variable and rejects statuses older than one hour.

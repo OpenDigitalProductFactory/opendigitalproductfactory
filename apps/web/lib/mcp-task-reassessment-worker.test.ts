@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   captureFailure: false,
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
-  modelProvider: { findUnique: mocks.provider }, aiProviderConnection: { findUnique: mocks.account },
+  modelProvider: { findUnique: mocks.provider, findMany: async () => [] }, aiProviderConnection: { findUnique: mocks.account },
   modelProfile: { findUnique: mocks.model }, agent: { findUnique: mocks.agent },
   mcpApiToken: { findUnique: mocks.token }, tokenUsage: { aggregate: mocks.aggregate },
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ fixtureTransaction: true }),

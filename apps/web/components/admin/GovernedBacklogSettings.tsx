@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { saveGovernedBacklogSettings } from "@/lib/actions/governed-backlog-settings";
@@ -17,6 +17,8 @@ interface GovernedBacklogSettingsProps {
   dailyCap: number;
   capacityDrainEnabled: boolean;
   playbookMode: "off" | "shadow" | "enforce";
+  /** BI-F3B6713F: further daily limits (the paid AI allowance), shown in the same closed disclosure. */
+  children?: ReactNode;
 }
 
 export function GovernedBacklogSettings(props: GovernedBacklogSettingsProps) {
@@ -83,7 +85,7 @@ export function GovernedBacklogSettings(props: GovernedBacklogSettingsProps) {
       </label>
 
       <details className="text-xs">
-        <summary className="cursor-pointer text-[var(--dpf-accent)]">Daily limit and the autopilot switches</summary>
+        <summary className="cursor-pointer text-[var(--dpf-accent)]">Daily limits and the autopilot switches</summary>
         <div className="mt-3 space-y-3">
           <div>
             <label className="block text-xs font-medium text-[var(--dpf-text)] mb-1" htmlFor="governed-backlog-daily-cap">
@@ -131,6 +133,7 @@ export function GovernedBacklogSettings(props: GovernedBacklogSettingsProps) {
             {props.playbookMode === "enforce" && " Enforce: an evidence-cleared build advances itself."}
             {" "}That is the host setting DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE. It applies on the next self-upgrade.
           </p>
+          {props.children}
         </div>
       </details>
 

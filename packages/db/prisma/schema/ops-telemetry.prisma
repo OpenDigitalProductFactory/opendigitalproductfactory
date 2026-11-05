@@ -479,6 +479,17 @@ model PlatformDevConfig {
   capacityDrainWindowHours  Int       @default(12)
   /// Max builds to dispatch per drain evaluation (still bounded by the WIP cap).
   capacityDrainMaxDispatch  Int       @default(3)
+  // BI-F3B6713F / DI-666409F895C5: the owner-set daily allowance for PAID
+  // inference (USD), held for the whole installation instead of 87 hard-coded
+  // per-agent token caps. Only usage on providers priced per token counts;
+  // local and flat-rate subscription usage costs nothing extra and is exempt.
+  // null = not set: the registry per-agent caps apply to paid usage as the
+  // fallback. Changed only through the audited Platform Development control.
+  paidInferenceDailyUsdAllowance      Decimal?  @db.Decimal(12, 2)
+  paidInferenceAllowanceReason        String?
+  paidInferenceAllowanceSetAt         DateTime?
+  paidInferenceAllowanceSetById       String?
+  paidInferenceAllowanceSetBy         User?     @relation("PlatformDevPaidInferenceAllowanceSetBy", fields: [paidInferenceAllowanceSetById], references: [id], onDelete: SetNull, onUpdate: Cascade)
   // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
   // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
   // (redactFingerprintEvidence, fail-closed). The master pause halts ALL
@@ -497,6 +508,8 @@ model PlatformDevConfig {
   // redacted reports here (install-authenticated) instead of calling GitHub
   // directly — the no-token consumer path and the reseller seam.
   upstreamRelayUrl          String?
+
+  @@index([paidInferenceAllowanceSetById])
 }
 
 enum BusinessMetricAvailability {

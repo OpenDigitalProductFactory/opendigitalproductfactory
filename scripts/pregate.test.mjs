@@ -783,3 +783,43 @@ test("BI-25CB699C: only a main refresh of a passed published head takes the redu
   }
   assert.equal(shouldTakeReducedTier({ args: ["--force-rerun"], classification: "main-refresh" }), false);
 });
+
+// BI-F039AA83: pregate marks the worktree live before its first slow stage, and
+// never races a pregate that is already live there.
+test("startPregateLiveMarker writes a preflight marker, restages it, and releases it", () => {
+  const writes = [];
+  const context = { candidateGitDir: "/repo/.git/worktrees/topic", headBranch: "fix/topic", headSha: "a".repeat(40) };
+  const marker = pregate.startPregateLiveMarker({
+    resolveContextImpl: () => context,
+    readLiveImpl: () => null,
+    writeImpl: (input) => writes.push(["write", input.stage, input.sha]),
+    updateImpl: (input) => writes.push(["stage", input.stage]),
+    removeImpl: () => writes.push(["remove"]),
+    pid: 4144,
+  });
+  assert.equal(marker.refuse, false);
+  assert.match(marker.path, /dpf-pregate-live\.json$/);
+  marker.stage("gate");
+  marker.release();
+  assert.deepEqual(writes, [["write", "preflight", "a".repeat(40)], ["stage", "gate"], ["remove"]]);
+});
+
+test("startPregateLiveMarker refuses a second pregate while another is live in the worktree", () => {
+  const context = { candidateGitDir: "/repo/.git/worktrees/topic", headBranch: "fix/topic", headSha: "a".repeat(40) };
+  const marker = pregate.startPregateLiveMarker({
+    resolveContextImpl: () => context,
+    readLiveImpl: () => ({ pid: 15776, stage: "preflight", branch: "fix/topic", sha: "a".repeat(40) }),
+    writeImpl: () => assert.fail("must not overwrite a live marker"),
+    pid: 4144,
+  });
+  assert.equal(marker.refuse, true);
+  assert.match(marker.reason, /already running.*pid 15776/s);
+});
+
+test("startPregateLiveMarker outside a worktree is a no-op, never a refusal", () => {
+  const marker = pregate.startPregateLiveMarker({ resolveContextImpl: () => null });
+  assert.equal(marker.refuse, false);
+  assert.equal(marker.path, null);
+  marker.stage("gate");
+  marker.release();
+});

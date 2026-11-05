@@ -38,7 +38,7 @@ describe("resolveHostResourceAdmission", () => {
     }))).toMatchObject({
       status: "queued",
       capacity: 1,
-      reason: "inference-resident-singleton",
+      reason: "host-memory-reserve",
       retryAfterSeconds: 30,
     });
   });
@@ -81,6 +81,38 @@ describe("resolveHostResourceAdmission", () => {
       availableMemoryBytes: 15 * GiB,
       resourceClass: "next-build",
       expectedMemoryBytes: 16 * GiB,
+    }))).toMatchObject({
+      status: "queued",
+      reason: "host-memory-reserve",
+    });
+  });
+
+  it("accounts for reserved bytes, not reservation count, across mixed workloads", () => {
+    expect(resolveHostResourceAdmission(request({
+      resourceClass: "typescript",
+      expectedMemoryBytes: 6 * GiB,
+      availableMemoryBytes: 24 * GiB,
+      inferenceResident: false,
+      activeHeavyReservations: [{
+        resourceClass: "docker-build",
+        expectedMemoryBytes: 16 * GiB,
+      }],
+    }))).toMatchObject({
+      status: "queued",
+      reason: "host-memory-reserve",
+    });
+  });
+
+  it("applies the same shared byte budget when the larger workload arrives second", () => {
+    expect(resolveHostResourceAdmission(request({
+      resourceClass: "docker-build",
+      expectedMemoryBytes: 16 * GiB,
+      availableMemoryBytes: 24 * GiB,
+      inferenceResident: false,
+      activeHeavyReservations: [{
+        resourceClass: "typescript",
+        expectedMemoryBytes: 6 * GiB,
+      }],
     }))).toMatchObject({
       status: "queued",
       reason: "host-memory-reserve",

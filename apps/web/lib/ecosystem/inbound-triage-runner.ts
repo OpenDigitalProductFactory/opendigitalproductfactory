@@ -41,6 +41,45 @@ export interface InboundTriageRunnerDeps {
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
 }
 
+export interface IntakePeerDemandDb {
+  federationLink: {
+    findMany(args: unknown): Promise<Array<{ linkId: string }>>;
+  };
+  federatedRecordMirror: {
+    findMany(args: unknown): Promise<Array<{ mirrorId: string; payload: unknown }>>;
+  };
+}
+
+/** Peer demand the intake may file (BI-F4866228). A same-organization peer
+ *  sends its whole backlog as demand envelopes, and work sync already mirrors
+ *  that backlog here, so filing those envelopes copies every item a second
+ *  time: the first commissioned production run filed about 4,000 duplicates.
+ *  A revoked or quarantined link's envelopes are no longer live demand. Only a
+ *  live link to another organization carries demand the intake files. */
+export async function readIntakePeerDemand(
+  db: IntakePeerDemandDb,
+): Promise<Array<{ mirrorId: string; payload: unknown }>> {
+  const links = await db.federationLink.findMany({
+    where: {
+      linkState: "trusted",
+      revokedAt: null,
+      quarantinedAt: null,
+      role: { not: "same-org-peer" },
+    },
+    select: { linkId: true },
+  });
+  if (links.length === 0) return [];
+  return db.federatedRecordMirror.findMany({
+    where: {
+      recordType: "demand-envelope",
+      canonicalSide: "peer",
+      federationLinkId: { in: links.map((link) => link.linkId) },
+    },
+    orderBy: { lastSyncedAt: "desc" },
+    select: { mirrorId: true, payload: true },
+  });
+}
+
 /** Only the commissioned repository-controller installation may sweep: on any
  *  other install this would fill a backlog with other installs' defects, and a
  *  development peer must not become a competing controller (spec §6.1). The
@@ -101,14 +140,11 @@ export async function runEcosystemInboundTriage(
     sourceErrors.push({ source: "dependabot", error: getErrorMessage(error) });
   }
 
-  // Transport 2 — peer-side federated demand envelopes.
+  // Transport 2 — peer-side federated demand envelopes from live
+  // cross-organization links only (BI-F4866228).
   const readPeerDemand = deps.readPeerDemand ?? (async () => {
     const { prisma } = await import("@dpf/db");
-    return prisma.federatedRecordMirror.findMany({
-      where: { recordType: "demand-envelope", canonicalSide: "peer" },
-      orderBy: { lastSyncedAt: "desc" },
-      select: { mirrorId: true, payload: true },
-    });
+    return readIntakePeerDemand(prisma as unknown as IntakePeerDemandDb);
   });
   try {
     const { decodeDemandMirrorPayload } = await import("@/lib/federation/demand-exchange");

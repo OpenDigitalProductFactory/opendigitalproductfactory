@@ -449,6 +449,11 @@ kernel sandbox profile in this baseline, so an absent profile is explicitly off;
 other supported hosts default an absent profile to workspace. An explicit existing
 profile is retained. No client allowlist supplies platform authority.
 
+Codex rules are written twice: once to the project, and once to the user layer
+(`~/.codex/rules/dpf-routine.rules`). Codex sessions in the install folder or in
+worktrees load only the user-layer file. The baseline's `reviewedPrefixes` keep
+destructive and outbound forms reviewed: Codex `prompt`, Claude `ask`.
+
 The scoped writer plans all files first, rejects malformed or linked targets,
 backs up changed existing files beside their originals and writes atomically.
 A dry-run writes no client configuration or trust decision; an explicitly requested

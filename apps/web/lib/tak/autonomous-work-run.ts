@@ -416,6 +416,8 @@ export async function executeAutonomousAgenticLoop(input: {
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
   /** Evidence-first bounded workflow for an immutable initiative review. */
   terminalToolPolicy?: import("@/lib/tak/terminal-tool-policy").TerminalToolPolicy;
+  /** BI-A8679D84: force this one tool (provider tool_choice "required") until it is attempted. */
+  forcedToolName?: string;
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
@@ -595,6 +597,7 @@ export async function executeAutonomousAgenticLoop(input: {
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,
+        ...(input.forcedToolName ? { forcedToolName: input.forcedToolName } : {}),
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,

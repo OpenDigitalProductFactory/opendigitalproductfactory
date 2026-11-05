@@ -251,8 +251,13 @@ Cross-domain / archetype profiles add specialist review gates (data / ux / secur
 
 You do **not** choose the reviewer or hand-build the review call. The server issues a **recovery packet** naming, per unmet gate, the exact coworker and a ready-to-send handoff. The flow:
 
-**Native source identity.** Supplied `baseSha` and `headSha` must be full
-40-character commit IDs; malformed values are refused before claim or adoption
+**Native source identity.** Supplied `baseSha` and `headSha` may be full
+40-character commit IDs or a prefix of at least 7 hex characters. The server
+expands a prefix that the repository provider resolves to exactly one commit
+(BI-DF34D948). It refuses an ambiguous or unknown prefix, names the commits this
+installation already recorded with that prefix, and returns the caller's own
+call corrected. An unpushed head cannot be expanded server-side, so pass the full
+`git rev-parse HEAD`. Malformed values are refused before claim or adoption
 writes. Source-less design and planning remain valid. Implementation requires
 both usable persisted values even when the optional claim inputs are omitted.
 Exact claim readback returns `baseSha`, `headSha` and `sourceIdentityComplete`.

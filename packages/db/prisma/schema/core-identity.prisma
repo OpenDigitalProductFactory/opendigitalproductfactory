@@ -106,6 +106,7 @@ model User {
   platformDevDcoAcceptances        PlatformDevConfig[]                 @relation("PlatformDevDcoAcceptedBy")
   privatePathRules                 PrivatePathRule[]                   @relation("PrivatePathRuleCreatedBy")
   platformDevFeedbackOptIns        PlatformDevConfig[]                 @relation("PlatformDevUpstreamFeedbackOptInBy")
+  platformDevPaidAllowanceSets     PlatformDevConfig[]                 @relation("PlatformDevPaidInferenceAllowanceSetBy")
   agentModelConfigs                AgentModelConfig[]                  @relation("AgentModelConfiguredBy")
   knowledgeArticles                KnowledgeArticle[]                  @relation("KnowledgeArticleAuthor")
   knowledgeRevisions               KnowledgeArticleRevision[]          @relation("KnowledgeRevisionCreator")

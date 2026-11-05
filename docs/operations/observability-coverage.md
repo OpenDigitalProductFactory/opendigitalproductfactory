@@ -153,8 +153,9 @@ total. A provider with 5 or more counted calls and none served, or a platform to
 of 10 or more calls under 50% served, opens one `ai_capacity_loss` monitor row with
 the plain-language cause and the provider page. New rows push a bell notification;
 the platform-health attention source projects them into Needs-you. The watch that
-raises a row resolves it. A provider with no calls in the window keeps its row,
-because routing may have stopped sending to it. Window and thresholds come from
+raises a row resolves it, and only after the provider serves a call. A provider
+that served nothing in the window keeps its row, whether it had no calls or only
+a few failures (BI-783EBEE6), because routing may have stopped sending to it. Window and thresholds come from
 WWMD decision DI-E5208C7D1666; the host and surface from DI-BA01CDC705DB. The step
 runs even when both alert evaluators are unreachable.
 
