@@ -188,7 +188,7 @@ describe("durable nonproduction admission", () => {
 
     expect(result.status).toBe("admitted");
     expect(result).toMatchObject({ slotKey: "slot-0" });
-    expect(mockDb.$executeRaw).toHaveBeenCalledOnce();
+    expect(mockDb.$executeRaw).toHaveBeenCalledTimes(2);
     expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         claimKey: "gate:session-1:sha",
@@ -395,13 +395,13 @@ describe("durable nonproduction admission", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(slot1Owner);
     mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(waiting);
-    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([
-      slot0Owner,
-      waiting,
-    ]);
+    mockDb.nonProductionEnvironmentLease.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([slot0Owner, waiting]);
 
     const hostPressure = {
       observedAt: NOW.toISOString(),
+      totalMemoryBytes: 64 * 1024 ** 3,
       availableMemoryBytes: 8 * 1024 ** 3
         + 2 * localCiSlotResources.builderPolicy.memoryBytes,
       sustainedCpuPercent: 20,
@@ -427,7 +427,11 @@ describe("durable nonproduction admission", () => {
       poolPolicy: { effectiveCapacity: 2, rollbackReason: null },
     });
     expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ slotManifestVersion: 1 }),
+      data: expect.objectContaining({
+        slotManifestVersion: 1,
+        resourceClass: "docker-build",
+        expectedMemoryBytes: localCiSlotResources.builderPolicy.admissionReserveBytes,
+      }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
       where: { id: "row-1" },
@@ -506,8 +510,8 @@ describe("durable nonproduction admission", () => {
     expect(result).toMatchObject({
       status: "queued",
       poolPolicy: {
-        effectiveCapacity: 1,
-        rollbackReason: "config-absent",
+        effectiveCapacity: 0,
+        rollbackReason: "host-memory-unmeasurable",
       },
     });
   });
@@ -596,7 +600,7 @@ describe("durable nonproduction admission", () => {
       queuePosition: 1,
       poolPolicy: {
         effectiveCapacity: 0,
-        rollbackReason: "host-stage-headroom-low",
+        rollbackReason: "host-remaining-growth-headroom-low",
       },
     });
   });

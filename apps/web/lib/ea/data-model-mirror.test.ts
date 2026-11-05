@@ -52,8 +52,40 @@ describe("planMirror", () => {
     expect(plan.material).toBe(true);
     expect(plan.elementOps.every((op) => op.kind === "create")).toBe(true);
     expect(plan.elementOps).toHaveLength(2); // User, Post
-    expect(plan.relationshipOps.length).toBeGreaterThanOrEqual(2); // User->Post, Post->User
-    expect(plan.relationshipOps.every((op) => op.kind === "create")).toBe(true);
+    // One relationship per foreign key, from the model that holds it (BI-28C22BE3):
+    // Post.author -> User. The back-relation User.posts holds no key.
+    expect(plan.relationshipOps).toHaveLength(1);
+    const [op] = plan.relationshipOps;
+    expect(op.kind).toBe("create");
+    if (op.kind === "create") {
+      expect(op.desired.sourceKey).toContain(":Post:author:User");
+      expect(op.desired.relationshipTypeSlug).toBe("has_foreign_key_to");
+    }
+  });
+
+  it("mirrors a required cascading foreign key as composition (BI-28C22BE3)", () => {
+    const cascade = parsePrismaSchema(SCHEMA.replace("references: [id])", "references: [id], onDelete: Cascade)"));
+    const desired = buildDesiredState(cascade);
+    expect(desired.relationships.map((r) => r.relationshipTypeSlug)).toEqual(["composed_of"]);
+  });
+
+  it("drops a legacy back-relation row and retypes a legacy foreign-key row (BI-28C22BE3)", () => {
+    const desired = buildDesiredState(facts).relationships[0];
+    const plan = planMirror(facts, {
+      elements: existingMatching().elements,
+      relationships: [
+        // The pre-BI-28C22BE3 mirror wrote both ends as associated_with.
+        { id: "legacy-fk", sourceKey: desired.sourceKey, descriptor: "old", removed: false, typeSlug: "associated_with", ownsForeignKey: true },
+        { id: "legacy-inverse", sourceKey: "prisma:relation:User:posts:Post", descriptor: "old", removed: false, typeSlug: "associated_with", ownsForeignKey: false },
+        { id: "legacy-removed", sourceKey: "prisma:relation:Post:gone:User", descriptor: "old", removed: true, typeSlug: "associated_with", ownsForeignKey: true },
+      ],
+    });
+    expect(plan.relationshipOps).toEqual([
+      expect.objectContaining({ kind: "update", id: "legacy-fk" }),
+      { kind: "drop", id: "legacy-inverse", sourceKey: "prisma:relation:User:posts:Post" },
+      { kind: "remove", id: "legacy-removed", sourceKey: "prisma:relation:Post:gone:User", retypeLegacy: true },
+    ]);
+    expect(summarizePlan(plan).removed).toBe(2);
   });
 
   it("is idempotent — re-running against a matching mirror yields no ops and is not material", () => {

@@ -683,6 +683,10 @@ const handlers: Record<string, ToolPackHandler> = {
   triage_backlog_item: (params) => triageBacklogItem(params),
   retire_backlog_item: (params, userId, context) =>
     settleReservationsAfter(params, retireBacklogItem(params, userId, context)),
+  retire_peer_demand_intake_copies: async (params, userId, context) => {
+    const { retirePeerDemandIntakeCopiesTool } = await import("@/lib/backlog/peer-demand-intake-copy-retirement");
+    return retirePeerDemandIntakeCopiesTool(params, userId, context);
+  },
   size_backlog_item: (params) => sizeBacklogItem(params),
   process_backlog_for_build_studio: (params, userId, context) => processBacklogForBuildStudio(params, userId, context),
   update_backlog_item: (params, userId, context) =>
@@ -727,6 +731,7 @@ export const backlogPack: ToolPack = {
     create_backlog_item: ["backlog_write"],
     triage_backlog_item: ["backlog_triage"],
     retire_backlog_item: ["backlog_write"],
+    retire_peer_demand_intake_copies: ["backlog_write"],
     size_backlog_item: ["backlog_triage"],
     process_backlog_for_build_studio: ["build_lifecycle"],
     update_backlog_item: ["backlog_write"],

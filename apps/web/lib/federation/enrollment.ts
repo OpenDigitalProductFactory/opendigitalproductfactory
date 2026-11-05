@@ -186,6 +186,11 @@ export interface FederationLinkRowInput {
   peerOrganizationRef: string | null;
   peerDeviceId: string | null;
   peerInstallationId?: string | null;
+  /**
+   * The peer's environment class as the organization CA certified it in the
+   * peer's member certificate (BI-0716C8A8). Absent or null: unattested.
+   */
+  peerEnvironmentClass?: string | null;
   localOrganizationId: string | null;
   /** Our inbound token (the peer authenticates to us with it); we keep the hash. */
   inboundToken: { hash: string; prefix: string };
@@ -290,6 +295,8 @@ export async function createFederationLinkRow(tx: FederationLinkTx, input: Feder
       peerOrganizationRef: input.peerOrganizationRef,
       peerDeviceId: input.peerDeviceId,
       peerInstallationId: input.peerInstallationId ?? null,
+      peerEnvironmentClass: input.peerEnvironmentClass ?? null,
+      peerEnvironmentAttestedAt: input.peerEnvironmentClass ? input.now : null,
       localOrganizationId: input.localOrganizationId,
       linkState,
       tokenHash: input.inboundToken.hash,
