@@ -1,6 +1,7 @@
 "use server";
 
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
+import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
@@ -212,7 +213,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   }
 
   // Deterministic kinds (books cadence, decision review, acceptance sweep) run off the LLM path.
-  if (await runDeterministicScheduledTaskKind(task)) return;
+  if (await runDeterministicScheduledTaskKind(claimedTask)) return;
 
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
   // directly instead of through the LLM agentic loop.
@@ -534,6 +535,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       proposeSideEffects: boundary === "propose" || Boolean(roomTurn) || Boolean(roomStage?.withheldBecause),
       ...(roomTurn ? { roomTurn } : {}),
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
+      // BI-83B1EE05: unattended, so not the 120s chat clock (a local engine took 4 min on turn one).
+      effortWarrant: deriveEffortWarrant({ reasoningDepth: "medium", availableToolNames: tools.map((tool) => tool.name), messageChars: scheduledPrompt.length }),
     };
     let result = reportingRun
       ? await runScheduledReportingLoop([...tools, ...deferredTools], () => executeAutonomousAgenticLoop(loopInput))
