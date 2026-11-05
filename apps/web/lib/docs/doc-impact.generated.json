@@ -707,6 +707,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
+    "apps/web/lib/build/failure-readiness-delivery-refresh.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/finalize-repair-routing.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -3472,6 +3475,7 @@
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/build/failure-readiness-delivery-refresh.ts",
       "apps/web/lib/build/finalize-repair-routing.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",

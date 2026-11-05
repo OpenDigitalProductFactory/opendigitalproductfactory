@@ -247,6 +247,11 @@ you to approve its attempt to invite itself. The call stops without creating an 
 request and names the recovery control instead: the room's current human owner opens the
 room and uses **Participants** to add the approved assistant. Retrying the unchanged call
 returns the same guidance rather than filling the inbox with approvals that can only fail.
+Similarly, an invited coworker whose data access is below the room's level is stopped
+before any approval. The refusal names both levels. The inviting coworker can then ask
+again for the one approval that admits the invitee and raises its data access to the
+room's level. A restricted room is the exception: its access is granted under
+**Coworker data access** first.
 An owner change takes effect immediately; a historical creator or lease holder does not
 override a current accountable owner or coordinator.
 
