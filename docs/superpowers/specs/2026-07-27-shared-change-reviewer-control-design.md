@@ -664,6 +664,9 @@ consumed attempt counters, current authority/source/failure-evidence checks,
 quiescence, and one CAS-admitted generation. Capacity remains advisory; actual
 dispatch still enforces its admission policy. A concurrent refusal can become
 another bounded wait, never a reason to clear counters or renew the window.
+Time spent in a proven wait is credited to the window, up to a bound; see
+"Credited capacity wait — BI-73D878A5" below, which supersedes "original
+deadline" here for that wait only.
 
 CT-OBSERVED-RECOVERY and FLOW-READBACK project that persisted wait and final
 native receipt through existing task/Workroom readers. Preserve explicit retry,
@@ -705,6 +708,39 @@ one generation and retains the deadline/attempts; run mixed/unknown/failure and
 passing-sibling controls, both typechecks and exact gate before protected DCO
 delivery. Served recovery remains unrun until canonical deployment and a new
 permitted request demonstrate it. No new timer, ledger, provider or authority.
+
+### Credited capacity wait — BI-73D878A5
+
+The fixed window made the wait itself the failure. On 2026-11-04 the live
+install held 31 PRs red on Failure Readiness. In the previous 48 hours, 18 of
+the 38 reviews that did not complete expired while parked in a proven
+no-dispatch wait (`local-ci-active-capacity-reservation`,
+`local-ci-queued-capacity-reservation`, `local-runner-busy`). Local CI holds
+the shared runner for longer than 30 minutes, so these reviews never got a
+turn, and each one stopped for a person.
+
+Decision DI-CAFE0E5D9567 (platform, elevated) chose to credit the proven wait
+over keeping the fixed window or lengthening every window. The packet,
+its `deadlineAt` and the `issuedAt + 30 minutes` parse check stay unchanged.
+
+- The capacity marker records `waitStartedAt`. A recheck carries the start
+  forward, so one wait is credited once.
+- At admission, the open wait closes into `capacityWaitCreditMs`.
+- Every deadline check reads `semanticReviewEffectiveDeadline`: the packet
+  deadline plus credited and open wait, capped at four hours
+  (`SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS`). The checks are reconciliation,
+  admission, worker start, checkpoint writes, the governed inference deadline,
+  late results, operator retry and readback.
+- Legacy markers without a start earn no credit.
+
+The credit is safe because no provider started. Source, failure evidence,
+authority, quiescence and attempt counters are still rechecked at admission.
+Counters are never reset. A run whose own window has passed but whose credited
+window is open is not re-enqueued by the sweep while it is fresh, because that
+would spend a dispatch attempt.
+
+Reviews that expired before this change keep their recorded outcome; they are
+not revived. Recovering an already-expired review is BI-49AA6BE8.
 
 ## Non-goals
 
