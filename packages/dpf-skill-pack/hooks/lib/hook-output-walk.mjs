@@ -48,7 +48,7 @@ export function makeFixtureWorkspace({ git = true } = {}) {
     try {
       run(root, "init", "-q", "-b", "main");
       run(root, "add", "-A");
-      run(root, "-c", "user.email=walk@dpf.local", "-c", "user.name=walk", "commit", "-q", "-m", "walk");
+      run(root, "-c", "user.email=test@example.invalid", "-c", "user.name=walk", "commit", "-q", "-m", "walk");
       run(root, "update-ref", "refs/remotes/origin/main", "HEAD");
       run(root, "worktree", "add", "-q", "-b", "fix/walk", `${base}/dpf-worktrees/walk`);
       ws = `${base}/dpf-worktrees/walk`;
