@@ -1099,7 +1099,7 @@ export async function register() {
         // split (BI-04E4F111): routing filters on AiProviderConnection.status
         // while the UI renders ModelProvider.status — see the module header.
         const { reconcileProviderConnectionState } = await import("@/lib/inference/provider-connection-reconcile");
-        await reconcileProviderConnectionState().catch(() => {});
+        await reconcileProviderConnectionState().catch(() => {}); await import("@/lib/routing/provider-account-auto-disable").then((m) => m.adoptStrandedProviderAccounts()).catch((error) => console.error("[provider-account-auto-disable] adoption failed", error)); // BI-0ADD46C3: adopt accounts switched off with no recovery pending
         setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
       void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/documents/document-engine-boot").then((m) => m.startDocumentEngineOnBoot()).catch((error) => console.error("[doctools-image] document engine boot failed", error)); // BI-9A2EC54A/BI-903D22D0/BI-153EC72C: doctools pin at boot + 20 min, rendition backfill at start + on pin change

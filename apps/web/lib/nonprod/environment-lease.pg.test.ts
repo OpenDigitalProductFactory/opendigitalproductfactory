@@ -135,7 +135,6 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
     // This Prisma client is schema-confined by createHandoffDependencyPostgresFixture.
     await prisma.nonProductionEnvironmentLease.deleteMany({});
     const { leaseCleanupConsequenceForCall } = await import("./lease-cleanup-consequence");
-    const loadStance = async () => ({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
     const claim = (session: string) => claimNonprodEnvironmentLease({ db: prisma, environmentKey,
       ownerProvider: "codex", ownerSessionId: session, claimKey: `${claimPrefix}:${session}`,
       purpose: "Authenticated preview transaction contract", url: "http://localhost:3010", ports: [3010],
@@ -156,14 +155,14 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
       const call = { toolName: "release_nonprod_environment_lease", userId: "preview-user",
         context: { agentId: "AGT-EXT-CODEX" },
         params: { leaseId: result.lease.leaseId, ownerSessionId: result.lease.ownerSessionId } };
-      expect(await leaseCleanupConsequenceForCall(call, { db: prisma as never, loadStance }))
+      expect(await leaseCleanupConsequenceForCall(call, { db: prisma as never }))
         .toMatchObject({ consequence: null });
       await expect(releaseNonprodEnvironmentLease({ db: prisma, ...call.params, authenticatedUserId: "foreign",
-        authenticatedAgentId: "AGT-EXT-CODEX", loadStance })).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
+        authenticatedAgentId: "AGT-EXT-CODEX" })).rejects.toThrow(/(?:preview|cleanup).*ownership/i);
     }
     const release = (result: typeof first) => releaseNonprodEnvironmentLease({ db: prisma,
       leaseId: result.lease.leaseId, ownerSessionId: result.lease.ownerSessionId,
-      authenticatedUserId: "preview-user", authenticatedAgentId: "AGT-EXT-CODEX", loadStance });
+      authenticatedUserId: "preview-user", authenticatedAgentId: "AGT-EXT-CODEX" });
     await release(first);
     const promoted = await prisma.nonProductionEnvironmentLease.findUniqueOrThrow({ where: { leaseId: second.lease.leaseId } });
     expect(promoted.status).toBe("active");

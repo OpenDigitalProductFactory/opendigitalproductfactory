@@ -5,6 +5,7 @@ import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 export const PLATFORM_DEV_CONFIG_INCLUDE = {
   configuredBy: { select: { email: true } },
   dcoAcceptedBy: { select: { email: true } },
+  paidInferenceAllowanceSetBy: { select: { email: true } },
 } satisfies Prisma.PlatformDevConfigInclude;
 
 /**

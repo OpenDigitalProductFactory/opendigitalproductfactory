@@ -58,15 +58,32 @@ describe("runSubscriptionOAuthRenewal", () => {
     jobs = new Map();
   });
 
-  it("only considers active authorization-code sign-ins that hold a refresh token", async () => {
+  it("considers every authorization-code sign-in with a refresh token unless an operator turned it off", async () => {
     await run(async () => ({ kind: "renewed" }));
     expect(db.aiProviderConnection.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         authMethod: { in: ["oauth", "oauth2_authorization_code"] },
-        status: { in: ["active", "degraded"] },
+        status: { notIn: ["disabled", "disconnected"] },
         credentialEntry: { is: { refreshToken: { not: null } } },
       }),
     }));
+  });
+
+  it("keeps renewing an account routing marked unconfigured (BI-783EBEE6)", async () => {
+    // 2026-11-03: anthropic-sub sat 'unconfigured' with its refresh token; the
+    // token lapsed at 11:10Z and renewed only when a person opened the page.
+    connections = [connection({ status: "unconfigured" })];
+    const renew = vi.fn(async () => ({ kind: "renewed" }) as RenewalAttempt);
+    const result = await runSubscriptionOAuthRenewal({ db: db as never, renew, now: NOW });
+    expect(renew).toHaveBeenCalledWith("anthropic-sub", "provider-default-anthropic-sub");
+    expect(result.outcomes[0]!.outcome).toBe("renewed");
+  });
+
+  it.each(["disabled", "disconnected"])("does not renew an account an operator %s", async (status) => {
+    connections = [connection({ status })];
+    const renew = vi.fn(async () => ({ kind: "renewed" }) as RenewalAttempt);
+    await runSubscriptionOAuthRenewal({ db: db as never, renew, now: NOW });
+    expect(renew).not.toHaveBeenCalled();
   });
 
   it("renews a sign-in ahead of its expiry with no page view", async () => {

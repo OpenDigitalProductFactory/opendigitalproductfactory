@@ -17,6 +17,14 @@ A coworker assigned to a scheduled Workroom stage can report that its own stage 
 
 An author stage admitted under the existing standing authorization and funding can also record its declared completion evidence without another approval. This applies to the current assigned run and its own room and stage, while its membership and tool permissions remain valid. Explicit advice, proposal, and always-review policies retain their restrictions.
 
+A scheduled stage run counts as done only when it records its stage evidence. A run that ends without recording it is never shown as completed. Each such run shows one of three outcomes, the next step, and who takes it:
+
+- **No governed work.** The coworker answered without recording. The room runs the stage again.
+- **Provider busy.** No AI model could answer. The run tries again in 30 minutes without using a retry.
+- **Not dispatched.** The coworker does not hold the permission to record the stage. Granting it, or reassigning the room, fixes this; waiting does not.
+
+None of these outcomes asks you to act. If a coworker answers without recording, it gets one more turn in which it must record, either the completed work or what blocked it.
+
 If that completion authority expires, is revoked, or is replaced by a later dispatch, the run can still report a blocker. It can reuse an exact approval that is already valid, and a retry returns an existing recorded outcome. It does not create another approval request for the withheld dispatch.
 
 If the repository or source revision changes, the coworker cannot use its old

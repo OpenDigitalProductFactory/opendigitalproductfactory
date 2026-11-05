@@ -620,9 +620,9 @@ test("findQueueWaiter reports a live waiter for this branch and sha", () => {
   const identity = createGateObserverIdentity({ pid: 4101, token: "a1b2c3d4-0000-4000-8000-000000000001" });
   registerLocalQueueObserver({ directory, identity, branch: "fix/x", sha: "abc", startedAt: undefined });
   const live = findQueueWaiter({ directory, branch: "fix/x", sha: "abc", observerAlive: () => ({ alive: true }) });
-  assert.deepEqual(live, { checked: true, alive: true, pids: [4101] });
+  assert.deepEqual(live, { checked: true, alive: true, pids: [4101], alivePids: [4101] });
   const dead = findQueueWaiter({ directory, branch: "fix/x", sha: "abc", observerAlive: () => ({ alive: false }) });
-  assert.deepEqual(dead, { checked: true, alive: false, pids: [4101] });
+  assert.deepEqual(dead, { checked: true, alive: false, pids: [4101], alivePids: [] });
 });
 
 test("findQueueWaiter ignores waiters for other claims and reports none", () => {
@@ -631,7 +631,7 @@ test("findQueueWaiter ignores waiters for other claims and reports none", () => 
   registerLocalQueueObserver({ directory, identity, branch: "fix/other", sha: "zzz", startedAt: undefined });
   assert.deepEqual(
     findQueueWaiter({ directory, branch: "fix/x", sha: "abc", observerAlive: () => ({ alive: true }) }),
-    { checked: true, alive: false, pids: [] },
+    { checked: true, alive: false, pids: [], alivePids: [] },
   );
 });
 
@@ -647,7 +647,7 @@ test("findQueueWaiter excludePids ignores the caller and still sees another live
     observerAlive: () => ({ alive: true }),
     excludePids: [4242],
   });
-  assert.deepEqual(onlySelf, { checked: true, alive: false, pids: [] });
+  assert.deepEqual(onlySelf, { checked: true, alive: false, pids: [], alivePids: [] });
   registerLocalQueueObserver({ directory, identity: other, branch: "fix/x", sha: "abc", startedAt: undefined });
   const otherAlive = findQueueWaiter({
     directory, branch: "fix/x", sha: "abc",
