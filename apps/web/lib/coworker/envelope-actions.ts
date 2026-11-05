@@ -328,7 +328,6 @@ export async function denyEnvelope(
   envelopeId: string,
   callerUserId: string,
   onBehalf?: OnBehalfDecisionRequest,
-  options?: { makeStanding?: boolean },
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
@@ -336,11 +335,6 @@ export async function denyEnvelope(
   if (authz.refusal) return authz.refusal;
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
-  // BI-E5631708: an owner's "don't ask again" rides on the same write as the
-  // approval, so a ruling never exists without the approval it came from.
-  const standing = options?.makeStanding === true
-    ? await standingRulingFor(load.envelope, callerUserId, authz.reason !== null)
-    : undefined;
 
   const transition = transitionOnDeny(load.envelope.status);
   if (!transition.ok) {
