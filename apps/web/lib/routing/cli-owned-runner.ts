@@ -18,6 +18,17 @@ export class NativeCliExecutionUncertainError extends Error {
   }
 }
 
+/**
+ * Telemetry class for a held native execution (BI-783EBEE6). A validated quota
+ * verdict is a usage limit, not an "unknown" failure; the execution itself stays
+ * held as uncertain either way.
+ */
+export function nativeCliTelemetryErrorClass(error: unknown): "rate_limit" | null {
+  if (!(error instanceof NativeCliExecutionUncertainError)) return null;
+  const terminal = error.diagnostics?.terminalResult;
+  return terminal?.status === "error" && terminal.isError === true && terminal.hint === "quota" ? "rate_limit" : null;
+}
+
 /** Runs inside the container: the supervisor owns the child, timeout and cleanup. */
 export function renderOwnedCliRunner(input: OwnedCliRunnerInput): string {
   if (!isAbsolute(input.home) || !/^dpf-(?:codex|claude|cli)-auth-[a-zA-Z0-9-]+$/.test(basename(input.home))

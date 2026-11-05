@@ -76,12 +76,14 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
   const successorTaskRunId = typeof recorded.successorTaskRunId === "string" ? recorded.successorTaskRunId : null;
   const reason = typeof recorded.reason === "string" ? recorded.reason : null;
   const executionUncertain = recorded.executionOutcome === "unknown" || reason?.startsWith("provider-outcome-uncertain");
+  const allowanceResetAt = reason === "reviewer-daily-allowance-used" && typeof recorded.allowanceResetAt === "string" ? recorded.allowanceResetAt : null;
   const capacityRecovery = status === "input-required" && budget === "available" ? readCapacityRecoveryWait(recorded) : null;
   const classification = successorTaskRunId ? "superseded" : status === "completed" ? "completed"
     : status === "canceled" ? "canceled" : status === "auth-required" ? "authorization-required" : executing ? "active-execution"
     : executionUncertain ? "execution-uncertain"
+    : allowanceResetAt ? "daily-allowance-used"
     : snapshot.eligibilityBlocked ? "routing-blocked" : capacityRecovery ? "capacity-wait" : "infrastructure-inconclusive";
-  return { ...snapshot, eligibility: snapshot.routingEligibility ?? [], budget, executing, classification, reason, successorTaskRunId, capacityRecovery,
+  return { ...snapshot, eligibility: snapshot.routingEligibility ?? [], budget, executing, classification, reason, successorTaskRunId, capacityRecovery, allowanceResetAt,
     manualRecoveryWait: isSemanticReviewRecoveryWait(status) && !capacityRecovery,
     requestDigest: typeof recorded.requestDigest === "string" && /^[a-f0-9]{64}$/.test(recorded.requestDigest) ? recorded.requestDigest : null,
     remainingAttempts: snapshot.recoveryAttempt === null || !Number.isSafeInteger(snapshot.recoveryAttempt) || snapshot.recoveryAttempt < 0 ? null : Math.max(0, SEMANTIC_REVIEW_MAX_ATTEMPTS - snapshot.recoveryAttempt),
@@ -91,6 +93,7 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
       : status === "canceled" ? "This review was canceled. Inspect its history before any new review."
       : status === "auth-required" ? "Restore the original requester's authority before requesting recovery."
       : executing ? "Observe this task; do not submit duplicate inference."
+      : allowanceResetAt ? `The reviewer's daily allowance for paid AI is used; no provider was asked. It resets at ${allowanceResetAt}. Submit a fresh review after the reset, or after an owner raises it in Admin > Platform Development > Paid AI allowance.`
       : executionUncertain ? "The original execution outcome is unknown. Use the owned recovery details to establish complete execution settlement before requesting any retry or successor."
       : snapshot.eligibilityBlocked ? "Verify scoped endpoint eligibility remediation and record fresh runtime evidence before requesting recovery. An unchanged retry cannot resolve this refusal; the original budget still applies."
       : capacityRecovery ? `The server will recheck capacity after ${capacityRecovery.nextCheckAt} within the original window; do not submit duplicate inference.`

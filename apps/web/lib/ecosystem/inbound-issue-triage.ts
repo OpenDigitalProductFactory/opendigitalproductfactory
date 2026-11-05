@@ -86,12 +86,23 @@ function isWorkType(value: unknown): value is BacklogWorkType {
 }
 
 /**
+ * A foreign summary (a peer item's body, an issue body) can carry the origin's
+ * own `[origin:kind:id]` markers. Left live, they give the filed item the same
+ * intake identity as unrelated local items and peer mirrors, so twin notes fan
+ * out across every copy (BI-C7D95F7E). Keep the text readable, make it inert:
+ * the item's only live marker is the one the front door appends.
+ */
+export function neutralizeOriginMarkers(text: string): string {
+  return text.replace(/\[origin:([^\]\r\n]*)\]/g, "(origin:$1)");
+}
+
+/**
  * Compose the body an operator reads, keeping the submitter and the link to the
  * origin visible. Provenance is the point of this slice: an item with no
  * attributable submitter cannot be weighted by submitter later.
  */
 export function composeInboundBody(item: InboundEcosystemItem): string {
-  const lines = [item.summary.trim()];
+  const lines = [neutralizeOriginMarkers(item.summary.trim())];
   const facts: string[] = [];
   if (item.submitter) facts.push(`Submitted by install \`${item.submitter}\``);
   if (typeof item.affectedOrganizations === "number") {
@@ -240,6 +251,8 @@ export function mapPeerDemandMirrors(
   return rows.flatMap((row) => {
     const decoded = decode(row.payload);
     if (!decoded) return [];
+    // Withdrawn at the origin: the peer closed it, so it is not open work here (BI-C7D95F7E).
+    if (isWithdrawnDemandPayload(row.payload)) return [];
     const envelope = decoded.envelope;
     return [{
       sourceKind: "peer-demand" as const,
@@ -254,6 +267,12 @@ export function mapPeerDemandMirrors(
       affectedOrganizations: envelope.signal?.affectedOrganizations ?? null,
     }];
   });
+}
+
+function isWithdrawnDemandPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const { activity, disposition } = payload as { activity?: unknown; disposition?: unknown };
+  return disposition === "withdrawn" || activity === "dpf.demand.withdrawn";
 }
 
 /** The envelope fields this mapper reads. Structural on purpose, so the mapper

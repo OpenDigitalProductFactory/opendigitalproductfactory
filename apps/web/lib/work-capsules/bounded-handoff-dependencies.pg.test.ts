@@ -76,6 +76,20 @@ describe.skipIf(!DATABASE_URL)("handoff dependency history and exact query plan 
     },
   );
 
+  // BI-F1FC0B62: a session's live lease for other work does not block this room.
+  it.each([["other/branch", undefined], ["feat/work", "handoff-lease-dependency"]] as const)(
+    "with the room on feat/work, a live receiver lease on %s refuses with %s", async (branch, code) => {
+      await pool.query(`INSERT INTO "NonProductionEnvironmentLease" (id,"leaseId","environmentKey",status,"ownerProvider","ownerSessionId","branchName",purpose,url,"expiresAt","updatedAt")
+        VALUES ('branched','NPEL-branched','local-integration-ci','active','claude','receiver',$1,'fixture','http://fixture.invalid',clock_timestamp()+interval '1 hour',clock_timestamp())`, [branch]);
+      const branched = () => assertBoundedHandoffDependencies(fixture.prisma, {
+        capsule: { ...room, headBranch: "feat/work" }, sourceExecutorRef: "source", destinationExecutorRef: "receiver" });
+      try {
+        if (code) await expect(branched()).rejects.toMatchObject({ code });
+        else await expect(branched()).resolves.toBeUndefined();
+      } finally { await pool.query('DELETE FROM "NonProductionEnvironmentLease" WHERE id = $1', ["branched"]); }
+    },
+  );
+
   it("qualifies the actual Prisma session/status query before adopting an index", async () => {
     fixture.queries.length = 0;
     await check();

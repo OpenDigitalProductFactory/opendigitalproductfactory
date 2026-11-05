@@ -301,3 +301,29 @@ approval/uncertainty and expired-future controls retain the original authority.
 Two added actual-PostgreSQL cases cover owner-attention absence/presence and52
 older future waits alongside fresh/due/legacy/expired/exhausted jobs. Those new
 database cases require their canonical run before they can be claimed passed.
+
+## Finance acceptance repair: assignment provenance
+
+The actual Finance acceptance run 41599345527 reached the correct specialist in
+software business context, retained its original request through provider
+capacity waiting, duplicate delivery and reload, then blocked a general guidance
+answer for missing live-data evidence. Artifact 13213834111 retains that failed
+result and completed cleanup; this is not a successful business result.
+
+A source regression using the actual Finance route metadata reproduced the
+cause: the platform's appended `Current assignment [messageId]` label added a
+live-state cue to an otherwise general request. The plain request did not need
+live-state evidence; the marked request did. Keep the existing request/history
+separation and evidence guard. Change only the platform label and its matching
+system instruction to `Active assignment [messageId]`, so metadata does not
+change the business meaning. Update the existing full-turn characterization.
+Current expense counts, outstanding claims and spending today continue to
+require live evidence. Do not strip user wording, disable enforcement, count
+load_tools as evidence or accept unverified operational claims.
+
+The new five-case regression ran first: two failures and three passes. After the
+label repair, those cases plus existing turn characterization, evidence guard
+and taxonomy tests passed 61 cases across four files. Typechecks, independent
+review, canonical gate, protected publication and a new served Finance recovery
+run are still required. The original eight valid cases remain narrow evidence;
+the expected fifteen-case outcome remains unverified until all cases execute.
