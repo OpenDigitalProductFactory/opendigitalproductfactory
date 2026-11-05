@@ -1,7 +1,7 @@
 // Local guard acceleration only: never canonical integration evidence.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, openSync, fstatSync, closeSync, constants } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, openSync, fstatSync, closeSync, renameSync, constants } from "node:fs";
+import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { gitText } from "./git.mjs";
 import { atomicWriteJson, createStageReceiptWriter, readStageReceipt, reusablePassedStage, stageIdentityMatches } from "./local-ci-stage-receipt.mjs";
@@ -120,6 +120,27 @@ function mutateGuardReceipt(paths, lockOptions, mutate) {
   } finally { releaseLocalConvergenceLock({ path: paths.mutationLock, token: claim.owner.token }); }
 }
 
+// BI-93EECD80: receipts written before the format carried `owner` can never
+// match their lock by token, so they used to stay `unknown` forever and fence
+// the worktree (exit 88). The lock still records the original controller's pid
+// and birth identity. When the lock owner is that receipt's host pid and the
+// probe proves the process gone (not found, or the pid now belongs to a
+// different process), the receipt is abandoned and may be quarantined.
+const LEGACY_CONTROLLER_GONE = controller => controller?.status === "absent"
+  || (controller?.status === "unknown" && controller?.reason === "pid-reused");
+
+function observeLegacyReceipt({ receipt, stage, owner, probe }) {
+  if (receipt.schemaVersion !== 1 || receipt.stage !== stage || receipt.owner !== undefined
+    || !validLocalConvergenceOwner(owner) || receipt.hostPid !== owner.pid) return null;
+  let controller;
+  try { controller = probe(owner); } catch { return null; }
+  return LEGACY_CONTROLLER_GONE(controller) ? controller : null;
+}
+
+export function guardReceiptQuarantineRoot(directory) {
+  return `${directory}-quarantine`;
+}
+
 export function observeGuardReceipt({ directory, stage, probe = inspectProcessIdentity }) {
   const paths = guardPaths(directory, stage);
   const receipt = readStageReceipt(paths.path);
@@ -133,6 +154,10 @@ export function observeGuardReceipt({ directory, stage, probe = inspectProcessId
     nextAction: receipt.recovery ? "Resolve original child outcome and descendant ownership through the accountable executor before seeking new admission."
       : "Use normal preflight admission; a terminal receipt is not a new execution grant." };
   const owner = readLocalConvergenceOwner(paths.lock);
+  const legacyController = observeLegacyReceipt({ receipt, stage, owner, probe });
+  if (legacyController) return { ...common, status: "abandoned-legacy", controller: legacyController, lockOwner: owner,
+    missingProof: ["original-child-outcome-and-descendant-ownership"],
+    nextAction: "Run pregate:status -- --reconcile-host-receipt to quarantine this pre-owner receipt and its lock (bytes preserved); the original child outcome stays unknown." };
   if (receipt.schemaVersion !== 1 || receipt.stage !== stage || receipt.hostPid !== receipt.owner?.pid
     || !sameOwner(receipt.owner, owner)) return { ...common, status: "unknown", missingProof: ["matching-original-receipt-and-lock-owner"], nextAction: "Ask the accountable executor to establish original receipt and lock ownership; preserve both records." };
   let controller;
@@ -144,8 +169,40 @@ export function observeGuardReceipt({ directory, stage, probe = inspectProcessId
         : "Ask the accountable executor to establish controller identity or absence; preserve the original receipt." };
 }
 
+function quarantineLegacyReceipt({ directory, stage, probe, now, lockOptions, before }) {
+  const paths = guardPaths(directory, stage);
+  try {
+    return mutateGuardReceipt(paths, lockOptions, (ownsMutation, observer) => {
+      const current = observeGuardReceipt({ directory, stage, probe });
+      const owner = readLocalConvergenceOwner(paths.lock);
+      // Revalidate after probing: a replaced receipt or lock owner is never moved.
+      if (current.status !== "abandoned-legacy" || !stageIdentityMatches(before.receipt, current.receipt)
+        || owner?.token !== before.lockOwner.token || !ownsMutation()) {
+        return { ...current, status: current.status === "abandoned-legacy" ? "unknown" : current.status,
+          nextAction: current.status === "abandoned-legacy" ? "Observe the replacement receipt or changed owner; reconciliation made no move." : current.nextAction };
+      }
+      const at = now();
+      const target = join(guardReceiptQuarantineRoot(directory),
+        `${at.toISOString().replace(/[:.]/g, "-")}-${basename(paths.path, ".json").slice(0, 16)}-pid${owner.pid}`);
+      mkdirSync(target, { recursive: true });
+      atomicWriteJson(join(target, "quarantine.json"), { schemaVersion: 1, reason: "legacy-receipt-controller-gone",
+        quarantinedAt: at.toISOString(), stage, receiptPath: paths.path, lockPath: paths.lock,
+        lockOwner: owner, controller: current.controller, observer });
+      // Rename, never delete: the original bytes stay inspectable.
+      renameSync(paths.path, join(target, basename(paths.path)));
+      renameSync(paths.lock, join(target, basename(paths.lock)));
+      return { ...observeGuardReceipt({ directory, stage, probe }), status: "quarantined", quarantinePath: target,
+        receipt: current.receipt, accountableOwner: { pid: owner.pid }, missingProof: [], newAttemptAllowed: true,
+        nextAction: `Legacy receipt and lock moved to ${target} with bytes preserved; normal preflight admission may proceed.` };
+    });
+  } catch (error) {
+    return { ...before, status: "unknown", missingProof: ["exclusive-receipt-mutation-ownership"], nextAction: "Observe the original receipt writer; no lock was reclaimed and no receipt was moved.", error: String(error.message ?? error) };
+  }
+}
+
 export function reconcileGuardReceipt({ directory, stage, probe = inspectProcessIdentity, now = () => new Date(), lockOptions = {} }) {
   const before = observeGuardReceipt({ directory, stage, probe });
+  if (before.status === "abandoned-legacy") return quarantineLegacyReceipt({ directory, stage, probe, now, lockOptions, before });
   if (before.status !== "abandoned") return before;
   const paths = guardPaths(directory, stage);
   try {
@@ -169,13 +226,23 @@ export function reconcileGuardReceipt({ directory, stage, probe = inspectProcess
   }
 }
 
-export async function runWithGuardReceipt({ directory, stage, identify, execute, passed, now = Date.now, lockOptions = {} }) {
+// A retained receipt is a named cause, not host pressure: the entrypoint reports
+// this code with the receipt path instead of a generic execution exception.
+export const HOST_RECEIPT_RETAINED = "HOST_RECEIPT_RETAINED";
+const retainedReceiptError = (message, receiptPath, nextAction) =>
+  Object.assign(new Error(message), { code: HOST_RECEIPT_RETAINED, receiptPath, nextAction });
+
+export async function runWithGuardReceipt({ directory, stage, identify, execute, passed, now = Date.now, lockOptions = {}, probe = inspectProcessIdentity }) {
   const priorPath = guardPaths(directory, stage).path;
   const prior = readStageReceipt(priorPath);
-  if (!prior && existsSync(priorPath)) throw new Error(`Original host receipt unreadable; preserve ${priorPath} and establish ownership before execution.`);
+  if (!prior && existsSync(priorPath)) throw retainedReceiptError(`Original host receipt unreadable; preserve ${priorPath} and establish ownership before execution.`,
+    priorPath, "Preserve the unreadable receipt and establish its ownership through the accountable executor.");
   if (prior?.status === "running" || prior?.recovery) {
-    const observed = reconcileGuardReceipt({ directory, stage, now: () => new Date(now()), lockOptions });
-    throw new Error(`Equivalent host guard execution already running or original outcome unknown; receipt ${observed.receiptPath}; owner ${observed.attemptId ?? "unknown"}; ${observed.nextAction}`);
+    const observed = reconcileGuardReceipt({ directory, stage, probe, now: () => new Date(now()), lockOptions });
+    if (observed.status !== "quarantined") {
+      throw retainedReceiptError(`Equivalent host guard execution already running or original outcome unknown; receipt ${observed.receiptPath}; owner ${observed.attemptId ?? "unknown"}; ${observed.nextAction}`,
+        observed.receiptPath, observed.nextAction);
+    }
   }
   const identity = identify();
   if (!identity) return { result: await execute({ progress: () => {} }), reused: false, executedAt: null, identityVerified: false };

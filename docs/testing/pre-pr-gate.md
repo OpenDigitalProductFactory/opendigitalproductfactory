@@ -630,9 +630,23 @@ For an abandoned controller with matching strong receipt/lock ownership, use
 output). This records an inconclusive disposition and preserves the original
 heartbeat and observations. It does not invent a child result or remove the
 original execution lock. Resolve child outcome and descendant ownership through
-the accountable executor before seeking new admission. Live, legacy, reused-PID,
+the accountable executor before seeking new admission. Live, reused-PID,
 unreadable or changed ownership stays unknown and untouched; a foreign mutation
 lock is also retained. Normal status reads never reconcile automatically.
+
+A receipt written before receipts carried an `owner` field cannot match its lock
+by token (BI-93EECD80). When its lock names the receipt's own host pid and that
+process is provably gone (not found, or the pid now belongs to another process),
+status reports `abandoned-legacy`. Reconciling it moves the receipt and its lock,
+unchanged, into a timestamped folder under `dpf-host-guard-receipts-quarantine`
+beside the receipts, with a `quarantine.json` that records the lock owner and the
+process probe. The next preflight does the same before it runs, so a dead
+pre-owner receipt no longer fences the worktree. A legacy receipt whose owner is
+alive, unmeasurable or does not match stays unknown and untouched.
+
+When a retained receipt does block a run, preflight still exits 88, but it names
+the receipt (`HOST_RECEIPT_RETAINED` and its path) and `pregate` says it is not
+host pressure.
 
 **A gate that is still working says so (BI-F039AA83).** pregate writes
 `dpf-pregate-live.json` into the worktree's own git dir when it starts, moves its

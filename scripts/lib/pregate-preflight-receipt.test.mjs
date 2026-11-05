@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, symlinkSync, existsSync, readdirSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { identifyGuardExecution, readGuardInputStamp, runWithGuardReceipt } from "./pregate-preflight-receipt.mjs";
 import { runPreflight } from "./pregate-preflight.mjs";
 import { resolveGuardBash } from "./guard-bash.mjs";
@@ -80,10 +80,12 @@ for (const status of ["live", "unknown"]) test(`reconciliation preserves ${statu
   assert.equal(result.newAttemptAllowed, false);
 });
 
-for (const change of ["legacy", "foreign-token", "foreign-birth", "probe-throws", "mutation-lock"])
+for (const change of ["legacy-without-lock-owner", "legacy-foreign-lock-pid", "foreign-token", "foreign-birth", "probe-throws", "mutation-lock"])
   test(`reconciliation cannot mutate ${change} ownership`, t => {
     const f = abandonedFixture(t);
-    if (change === "legacy") f.writeReceipt({ ...f.receipt, owner: undefined });
+    if (change.startsWith("legacy")) f.writeReceipt({ ...f.receipt, owner: undefined });
+    if (change === "legacy-without-lock-owner") rmSync(join(f.lock, "owner.json"));
+    if (change === "legacy-foreign-lock-pid") f.writeOwner({ ...f.owner, pid: f.owner.pid + 1 });
     if (change === "foreign-token") f.writeOwner({ ...f.owner, token: "replacement" });
     if (change === "foreign-birth") f.writeOwner({ ...f.owner, processIdentity: "replacement" });
     if (change === "probe-throws") f.input.probe = () => { throw new Error("unreadable"); };
@@ -114,6 +116,76 @@ for (const replacement of ["terminal", "receipt", "owner", "mutation-owner"])
     assert.notEqual(result.status, "inconclusive");
     assert.equal(after.status, replacement === "terminal" ? "passed" : "running");
   });
+
+// BI-93EECD80: a receipt written before the receipt format carried `owner`
+// cannot prove ownership by token, but its lock still names the original
+// controller's pid and birth identity. When that controller is provably gone,
+// the records are quarantined with their bytes intact and the slot reopens.
+function legacyFixture(t) {
+  const f = abandonedFixture(t);
+  const { owner: _owner, ...legacy } = f.receipt;
+  f.writeReceipt(legacy);
+  t.after(() => rmSync(`${f.options.directory}-quarantine`, { recursive: true, force: true }));
+  return { ...f, receipt: legacy, receiptBytes: readFileSync(f.path, "utf8"), ownerBytes: readFileSync(join(f.lock, "owner.json"), "utf8") };
+}
+
+function quarantined(f) {
+  const root = `${f.options.directory}-quarantine`;
+  const entries = readdirSync(root);
+  assert.equal(entries.length, 1);
+  return join(root, entries[0]);
+}
+
+for (const probe of [{ status: "absent", reason: "process-not-found" }, { status: "unknown", reason: "pid-reused" }])
+  test(`a legacy receipt whose lock owner is ${probe.reason} is quarantined with its bytes preserved`, t => {
+    const f = legacyFixture(t);
+    const observed = guardReceipts.observeGuardReceipt({ ...f.input, probe: () => probe });
+    assert.equal(observed.status, "abandoned-legacy");
+    assert.equal(observed.newAttemptAllowed, false);
+    assert.equal(readFileSync(f.path, "utf8"), f.receiptBytes, "observation is read-only");
+    const result = guardReceipts.reconcileGuardReceipt({ ...f.input, probe: () => probe });
+    assert.equal(result.status, "quarantined");
+    assert.equal(result.newAttemptAllowed, true);
+    assert.equal(existsSync(f.path), false);
+    assert.equal(existsSync(f.lock), false);
+    const kept = quarantined(f);
+    assert.equal(result.quarantinePath, kept);
+    assert.equal(readFileSync(join(kept, basename(f.path)), "utf8"), f.receiptBytes);
+    assert.equal(readFileSync(join(kept, basename(f.lock), "owner.json"), "utf8"), f.ownerBytes);
+    const record = JSON.parse(readFileSync(join(kept, "quarantine.json"), "utf8"));
+    assert.equal(record.reason, "legacy-receipt-controller-gone");
+    assert.equal(record.controller.reason, probe.reason);
+    assert.equal(record.lockOwner.pid, f.owner.pid);
+    assert.equal(guardReceipts.observeGuardReceipt(f.input).status, "absent");
+  });
+
+test("a legacy receipt with a live lock owner stays refused and unchanged", async t => {
+  const f = legacyFixture(t);
+  const live = () => ({ status: "live", reason: "same-process" });
+  const result = guardReceipts.reconcileGuardReceipt({ ...f.input, probe: live });
+  assert.equal(result.status, "unknown");
+  assert.equal(result.newAttemptAllowed, false);
+  assert.equal(readFileSync(f.path, "utf8"), f.receiptBytes);
+  assert.equal(readFileSync(join(f.lock, "owner.json"), "utf8"), f.ownerBytes);
+  await assert.rejects(runWithGuardReceipt({ ...f.options, probe: live }),
+    error => error.code === "HOST_RECEIPT_RETAINED" && error.receiptPath === f.path);
+  assert.equal(f.calls(), 0);
+  assert.equal(existsSync(`${f.options.directory}-quarantine`), false);
+});
+
+test("preflight admission quarantines a dead legacy receipt and then executes", async t => {
+  const f = legacyFixture(t);
+  const run = await runWithGuardReceipt({ ...f.options, probe: () => ({ status: "absent", reason: "process-not-found" }) });
+  assert.equal(run.reused, false);
+  assert.equal(f.calls(), 1);
+  assert.equal(readdirSync(quarantined(f)).includes("quarantine.json"), true);
+});
+
+test("a retained receipt names itself as the cause when admission refuses", async t => {
+  const f = abandonedFixture(t);
+  await assert.rejects(runWithGuardReceipt({ ...f.options, probe: () => ({ status: "live" }) }),
+    error => error.code === "HOST_RECEIPT_RETAINED" && error.receiptPath === f.path && /executor/.test(error.nextAction));
+});
 
 test("an unchanged abandoned attempt settles once while preserving its foreign execution lock", t => {
   const f = abandonedFixture(t);
