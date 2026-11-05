@@ -654,8 +654,9 @@ You can also inspect a reviewer under the room's **Observed execution**. Expand
 its request to see the recorded state, reason, next action, requester and history.
 Checkpoint rows identify the reviewing agents; completed checkpoints alone do not
 prove a successful verdict. The read time and heartbeat show how fresh the view is.
-For a waiting request, the shared recovery controls show its original deadline
-and attempts. Only the original requester can submit recovery, and the server
+For a waiting request, the shared recovery controls show its deadline and
+attempts. Time a review spends waiting for reviewer capacity, such as while
+local CI is using the shared runner, extends its deadline, by at most four hours. Only the original requester can submit recovery, and the server
 rechecks saved authority. An expired window or exhausted limit cannot be reset
 from the room. Intended steps remain separate from these execution observations.
 
