@@ -22,6 +22,7 @@ import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { geocodeOnSave } from "./geocode-on-save";
+import { mapPackInstall } from "./map-pack-install";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { budgetReservationSettle } from "./budget-reservation-settle";
@@ -284,6 +285,7 @@ export const eventFunctions = [
   probeBackground,
   brandExtract,
   geocodeOnSave,
+  mapPackInstall,
   researchExecute,
   buildReviewVerification,
   buildExecute,

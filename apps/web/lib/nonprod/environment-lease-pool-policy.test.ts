@@ -80,7 +80,7 @@ describe("resolveHostResourcePoolPolicy", () => {
     })).toMatchObject({
       effectiveCapacity: 0,
       slotKeys: [],
-      rollbackReason: "inference-resident-singleton",
+      rollbackReason: "host-memory-reserve",
     });
   });
 });

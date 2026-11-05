@@ -72,6 +72,27 @@ guess the canonical delivery item or retire it to improve metrics.
 
 **OBJ-2:** Address the verified vulnerabilities through the platform delivery process.
 
+## Dependency treatment delivery
+
+BI-1D8EC7F7 is the independently shippable dependency repair under OBJ-2 / AC-4.
+It is a manually requested delivery batch, not evidence of automatic detection.
+Link the controller's per-alert records after live intake; retain their provenance.
+Floor glob to 14.0.2 and minimatch to 11.0.1 in both workspace override files,
+with advisory comments for Dependabot #254–257. Preserve the existing patched
+brace-expansion floor. Regenerate both locks with fresh metadata and reject
+unrelated version drift. No new schema, credentials, service or UI is required.
+
+These floors cross majors. Verify the actual rimraf, Expo configuration and
+fingerprint, Jest and coverage consumers. The current root minimatch9/brace5
+pair throws on brace patterns; the patched pair must resolve that reproduction.
+Minimatch11 removes makeRe, so inspect consumers rather than assuming complete
+API compatibility. Isolated probes passed the APIs inspected so far, but do not
+replace actual-workspace tests, typechecks or the canonical integration gate.
+The ordered plan is ../plans/2026-11-02-repository-security-remediation.md.
+Publish only after live automatic intake has been demonstrated. Zod/deepmerge
+advisory disposition remains a separate operational treatment under the parent;
+neither is silently suppressed by this dependency patch.
+
 ## Boundaries
 
 Release prerequisite discovered during verification: the existing application

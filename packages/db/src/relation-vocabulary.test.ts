@@ -46,6 +46,7 @@ describe("relation vocabulary registry (AC-TRV-1)", () => {
   });
 
   it("keeps the generic legacy types out of active use", () => {
+    expect(getRelationType("RELATES_TO")?.status).toBe("retired");
     for (const key of ["ASSOCIATED_WITH", "RELATES_TO", "DOC_REFERENCES", "REFERENCES"]) {
       expect(getRelationType(key)?.status, key).not.toBe("active");
     }
@@ -91,8 +92,8 @@ describe("assertRelationWrite (AC-TRV-2)", () => {
   });
 
   it("refuses a missing required prop", () => {
-    expect(() => assertRelationWrite("HAS_FOREIGN_KEY_TO", { fieldName: "owner" })).toThrow(/requires prop "fkFields"/);
-    expect(assertRelationWrite("HAS_FOREIGN_KEY_TO", { fieldName: "owner", fkFields: "ownerId" }).key).toBe("HAS_FOREIGN_KEY_TO");
+    expect(() => assertRelationWrite("DOC_REFERENCES", { anchor: "x" })).toThrow(/requires prop "refType"/);
+    expect(assertRelationWrite("DOC_REFERENCES", { refType: "canonical-source" }).key).toBe("DOC_REFERENCES");
   });
 
   it("refuses a quarantined type without its qualifier", () => {
@@ -132,7 +133,7 @@ describe("relation-vocabulary guard (AC-TRV-3)", () => {
     );
     expect(files.length).toBeGreaterThan(100);
     expect(findRelationVocabularyViolations(files)).toEqual([]);
-  });
+  }, 30_000); // walks the source tree; the 5 s default timed out under parallel gate load
 });
 
 describe("graph_relation_type migrations (AC-TRV-4)", () => {

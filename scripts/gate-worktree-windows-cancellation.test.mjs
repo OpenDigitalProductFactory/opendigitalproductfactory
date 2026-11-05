@@ -329,8 +329,15 @@ for (const probe of ["empty", "short-lived", "persistent", "query-failure", "ide
             assert.equal(snapshot.probeExitedIdentity, json(join(evidence, "probe-identity.json")).identity);
             assert.equal(snapshot.cleanupFailure, null);
             if (probe === "exited-member-retained") {
-              assert.equal(drain.snapshots.some(value => value.probeRetainedHandleObserved), true, "control must observe the genuinely retained exited object");
-              assert.equal(drain.snapshots.some(value => value.probeRetainedHandleReleased), true, "fixture-owned control handle must close");
+              assert.equal(snapshot.probeRetainedHandleObserved, true, "decisive snapshot must observe the retained exited object");
+              assert.equal(snapshot.probeRetainedHandleReleased, true, "decisive snapshot must close the fixture-owned control");
+              assert.deepEqual(snapshot.probeObservationEvents, [
+                "original-probe-released",
+                "retained-object-observed", "observation-handle-released",
+                "retained-object-observed", "observation-handle-released",
+                "retained-control-released", "native-open-failed",
+              ], "real native failure must follow original release, two verified observations with the control held, and control release");
+              t.diagnostic("Retained-object native sequence: " + JSON.stringify(snapshot));
             }
           }
           if (["query-failure", "identity-failure", "identity-cleanup-failure"].includes(probe)) {
