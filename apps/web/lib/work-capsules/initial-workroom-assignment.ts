@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@dpf/db";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { effectiveBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/govern/permissions";
 import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
@@ -17,7 +18,7 @@ import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { BoundedHandoffRefusal } from "./bounded-handoff-command";
 import { createWorkCapsule, type CapsuleCreateInput } from "./work-capsule-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
-import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
+import { resolveAdoptionBacklogBinding } from "./adopt-backlog-binding";
 import { establishRoomOwnership } from "./room-ownership";
 import { ensureCapsuleWorkItemAnchor } from "./capsule-workitem-anchor";
 import { prismaAnchorPorts } from "./capsule-workitem-anchor.server";
@@ -67,7 +68,7 @@ async function currentRoom(tx: Prisma.TransactionClient, capsule: HandoffRoom, a
     || !ownsRoom(authority.humanPrincipal, authority.room.participants,
       [authority.room.createdByPrincipalId, authority.room.requestedByPrincipalId, authority.room.leaseHolderPrincipalId])) refuse("current-room-owner-required");
   if (authority.sensitivityCeiling === "restricted" || readWorkspaceRoomPolicy(authority.room.workItem?.evidence).sensitivityCeiling === "restricted") refuse("restricted-assignment-boundary");
-  if (capsule.featureBuildId || capsule.taskRunId || capsule.archivedAt || capsule.headSha || capsule.headBranch || capsule.worktreePath
+  if (capsule.backlogItemId != null || capsule.featureBuildId || capsule.taskRunId || capsule.archivedAt || capsule.headSha || capsule.headBranch || capsule.worktreePath
     || capsule.executorRef !== ref || capsule.executorKind !== args.input.executorKind
     || resolveCurrentWorkShapeClaim(capsule.scopeClaims)?.key !== ACCEPTANCE_VERIFICATION_SHAPE_KEY) refuse("source-free-assignment-boundary-changed");
   if (readWorkShapeRoleBindings(capsule.scopeClaims)[ACCEPTANCE_VERIFIER_ROLE] !== `agent:${actor.agentId}`) refuse("current-verifier-role-required");
@@ -83,6 +84,7 @@ export async function createInitiallyAssignedWorkroom(args: Input): Promise<Tool
     const raw = args.params.sessionRef;
     if (typeof raw !== "string" || !raw.trim() || raw !== raw.trim() || raw.length > 500) refuse("invalid-executor-reference");
     const ref = raw as string;
+    if (Object.hasOwn(args.params, "backlogItemId") || args.input.backlogItemId != null) refuse("verification-target-must-use-outcome-anchor");
     assertExternalSurface(args.actor.agentId, args.input.executorKind ?? null);
     const scope = normalizePersistedScope(args.input.scope);
     if (resolveCurrentWorkShapeClaim([{ workShape: scope.workShape }])?.key !== ACCEPTANCE_VERIFICATION_SHAPE_KEY) refuse("source-free-acceptance-assignment-required");
@@ -94,6 +96,20 @@ export async function createInitiallyAssignedWorkroom(args: Input): Promise<Tool
       const key = `workroom-initial-assignment:${args.input.idempotencyKey}`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
       await currentConnection(tx, args);
+      // Like the existing acceptance sweep, the item being verified is an
+      // outcome target, never the source-authorship subject of this room.
+      const target = await resolveAdoptionBacklogBinding(tx, { outcomeAnchor: scope.outcomeAnchor });
+      if (!target.bound) refuse("verification-target-unavailable");
+      if (target.backlogItemId) {
+        const rows = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${target.backlogItemId} FOR SHARE`;
+        if (rows.length !== 1) refuse("verification-target-unavailable");
+        const policy = await tx.backlogItem.findUnique({ where: { itemId: target.backlogItemId },
+          select: { sensitivity: true, scopeKind: true, digitalProduct: { select: { productId: true } } } });
+        if (!policy) refuse("verification-target-unavailable");
+        const sensitivity = effectiveBacklogSensitivity({ sensitivity: policy.sensitivity, scopeKind: policy.scopeKind,
+          digitalProductId: policy.digitalProduct?.productId ?? null });
+        if (sensitivity !== "public" && sensitivity !== "internal") refuse("sensitive-verification-target-requires-controlled-assignment");
+      }
       const existing = await tx.workroom.findUnique({ where: { idempotencyKey: args.input.idempotencyKey } });
       if (existing) {
         await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${existing.id} FOR UPDATE`;
@@ -111,11 +127,8 @@ export async function createInitiallyAssignedWorkroom(args: Input): Promise<Tool
         return { capsule: room, reused: true, activityId: records[0]!.id };
       }
       if (!allowCreate) refuse("concurrent-assignment-winner-unavailable");
-      const bound = await createWorkroomBoundToBacklogItem({ db: tx, params: args.params, title: args.input.title,
-        create: backlogItemId => createWorkCapsule({ db: tx as unknown as CapsuleDb,
-          actor: args.actor, deferPublication: true, input: { ...args.input, backlogItemId, executorRef: ref } }) });
-      if (!bound.created) refuse("backlog-binding-unavailable");
-      const created = bound.capsule;
+      const created = await createWorkCapsule({ db: tx as unknown as CapsuleDb,
+        actor: args.actor, deferPublication: true, input: { ...args.input, backlogItemId: null, executorRef: ref } });
       await ensureCapsuleWorkItemAnchor({ ports: prismaAnchorPorts(tx), capsuleId: created.capsuleId,
         backlogItemId: created.backlogItemId, title: created.title });
       const ownership = await establishRoomOwnership(tx, { workroomId: created.id,

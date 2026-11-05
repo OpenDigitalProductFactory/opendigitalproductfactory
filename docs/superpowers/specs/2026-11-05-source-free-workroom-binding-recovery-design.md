@@ -271,9 +271,10 @@ creating again. The store must not query a winner on an aborted caller-owned
 transaction.
 
 Source-local adapter/dispatch and existing boundary suites pass; these qualified
-identity fixtures do not attest live identity or acceptance. The five PostgreSQL
+identity fixtures do not attest live identity or acceptance. The six PostgreSQL
 cases cover concurrent duplicates, complete rollback, both observed lock orders
-against the actual lease allocator, and an actual legacy uniqueness winner.
+against the actual lease allocator, an actual legacy uniqueness winner, and
+verification-target separation from the actual source-author relation.
 They require an admitted disposable database and remain UNRUN until executed
 there. Final exact-tree qualification, independent review, protected publication
 and containing-runtime acceptance remain required.
@@ -284,3 +285,29 @@ execution path. This adds no pack, tool, grant, authority scope or parallel
 executor. The field, strict transaction and compatibility limits belong here
 and in the existing tool definition; record that precise not-affected
 architecture-page disposition through the current documentation-impact writer.
+
+## Verification target is separate from source authorship
+
+Like the existing acceptance-sweep producer, a source-free acceptance assignment
+keeps the delivered item in outcomeAnchor and leaves backlogItemId null. The
+latter is the source-author subject used by baseline and reviewer recovery.
+Promoting the target into that column made a second active author room and
+prevented resolution of the real source author. A pure actual-helper
+counterexample and three first-failing adapter regressions reproduced this
+before publication.
+
+The strict adapter rejects an explicit authored backlogItemId, validates the
+normalized target with the existing resolver, and locks that real target row
+for the transaction. Its effective sensitivity uses the existing canonical
+backlog policy; only public or internal targets use this narrow adapter.
+Confidential and restricted targets retain their controlled assignment boundary
+instead of inheriting a weaker room policy. Unknown or concurrently removed
+targets stay held. Replay
+retains current scope and target checks and never rewrites an old misbound room.
+The legacy source creator and its authored-backlog binding remain unchanged.
+
+The obsolete 4064 candidate passed 85 host preflight guards but never entered
+the shared environment. Its owner normally cancelled the exact queued lease
+NPEL-388557494B before admission; there is no integration or PostgreSQL verdict
+for it. Changed-source qualification and a fresh exact-source independent
+assessment are owed after this correction.

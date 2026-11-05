@@ -24,6 +24,7 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", async original => 
   },
 }));
 import { createInitiallyAssignedWorkroom } from "./initial-workroom-assignment";
+import { resolveBodyBaselineAuthorRoom } from "@/lib/backlog/initiative-readiness/body-baseline-author-room";
 import { createWorkCapsule } from "./work-capsule-store";
 import { claimNonprodEnvironmentLease } from "@/lib/nonprod/environment-lease";
 
@@ -120,6 +121,19 @@ describe.skipIf(!DATABASE_URL)("initial assignment atomicity and competing produ
     expect(results.map(result => (result.data?.executorAssignment as any).reused).sort()).toEqual([false, true]);
     expect((await counts()).rooms).toBe(1); expect((await counts()).participants).toBe(2);
     expect(await prisma.workroomActivity.count({ where: { payload: { path: ["kind"], equals: "initial-executor-assignment" } } })).toBe(1);
+  });
+  it("keeps the delivered target separate from the actual source-author relation", async () => {
+    const target = await prisma.backlogItem.create({ data: { itemId: "BI-TARGET", title: "Delivered target", status: "awaiting-acceptance", type: "feature" } });
+    const source = await prisma.workroom.create({ data: { capsuleId: "WC-SOURCE", title: "Source author", objective: "Fixture delivery", source: "manual",
+      backlogItemId: target.itemId, repositoryFullName: "fixture/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40), headBranch: "fix/target" } });
+    const outcomeAnchor = { kind: "backlog-item" as const, id: target.itemId, label: "Delivered target" };
+    expect((await resolveBodyBaselineAuthorRoom(prisma as never, target))?.id).toBe(source.id);
+    const result = await createInitiallyAssignedWorkroom({ db: db(), actor, context,
+      input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } });
+    expect(result.success).toBe(true);
+    const created = await prisma.workroom.findUniqueOrThrow({ where: { idempotencyKey: input.idempotencyKey } });
+    expect(created.backlogItemId).toBeNull(); expect(created.outcomeAnchor).toEqual(outcomeAnchor);
+    expect((await resolveBodyBaselineAuthorRoom(prisma as never, target))?.id).toBe(source.id);
   });
   it("rolls back room, ownership, anchor and assignment when final admission refuses", async () => {
     fixture.denyAfterOwnership = true; expect((await run()).success).toBe(false);

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { createInitiallyAssignedWorkroom } from "./initial-workroom-assignment";
+import { resolveBodyBaselineAuthorRoom } from "@/lib/backlog/initiative-readiness/body-baseline-author-room";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const policy = vi.hoisted(() => ({ allowed: true, publish: vi.fn(), revalidate: vi.fn() }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => policy.allowed ? { platformRole: "HR-000", isSuperuser: true } : null }));
@@ -29,14 +31,14 @@ function fixture() {
   let state: any = { room: null, participants: [], activities: [], workItem: null };
   let inTransaction = false;
   const clients: object[] = [], calls: string[] = [];
-  const controls = { lease: false, tokenRevoked: false, grantRevoked: false, anchorFailure: false,
+  const controls = { lease: false, tokenRevoked: false, grantRevoked: false, anchorFailure: false, targetExists: true, targetSensitivity: "internal",
     beforeGrantRead: undefined as (() => void) | undefined, winner: null as any, closedRead: false };
   const makeTx = () => {
     let closed = false;
     const check = () => { if (closed) { controls.closedRead = true; throw new Error("aborted transaction read"); } };
     const tx: any = {
       $queryRaw: async (strings: TemplateStringsArray) => { check(); const sql = strings.join(""); calls.push(sql);
-        return sql.includes("clock_timestamp()") ? [{ now: new Date() }] : []; },
+        return sql.includes("clock_timestamp()") ? [{ now: new Date() }] : sql.includes('FROM "BacklogItem"') && controls.targetExists ? [{ id: "target" }] : []; },
       $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => { check(); calls.push(strings.join("") + values.join()); return 1; },
       mcpApiToken: { findUnique: async () => ({ kind: "oauth_access", revokedAt: controls.tokenRevoked ? new Date() : null,
         expiresAt: new Date(Date.now() + 3600000), userId: "user", agentId: actor.agentId, authorityBindingId: null,
@@ -44,6 +46,8 @@ function fixture() {
         oauthClient: { revokedAt: null, registrationKind: "credentials" } }) },
       agent: { findFirst: async () => { controls.beforeGrantRead?.(); return { toolGrants: assignmentGrants.map(grantKey => ({ grantKey })),
         toolGrantRevocations: controls.grantRevoked ? [{ grantKey: "work_capsule_write" }] : [] }; } },
+      backlogItem: { findFirst: async () => controls.targetExists ? { itemId: "BI-TARGET" } : null,
+        findUnique: async () => controls.targetExists ? { sensitivity: controls.targetSensitivity, scopeKind: "organization", digitalProduct: null } : null },
       workroom: {
         findUnique: async () => { check(); return state.room; },
         findUniqueOrThrow: async () => { check(); if (!state.room) throw new Error("missing room"); return state.room; },
@@ -107,6 +111,49 @@ describe("transactional initial external acceptance assignment", () => {
   it("does not create an assignment when its declared verification writes are outside the token scope", async () => {
     const f = fixture();
     expect((await f.run({ context: { ...context, tokenGrantScopes: ["work_capsule_write"] } })).success).toBe(false);
+    expect(f.state().room).toBeNull();
+  });
+  it("retains the verification target without competing with its source author", async () => {
+    const f = fixture(), outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET", label: "Delivered routing" };
+    expect((await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } })).success).toBe(true);
+    expect(f.state().room.backlogItemId).toBeNull(); expect(f.state().room.outcomeAnchor).toEqual(outcomeAnchor);
+    const source = { id: "source", capsuleId: "WC-SOURCE", backlogItemId: "BI-TARGET" };
+    const current = await resolveBodyBaselineAuthorRoom({ workroom: { findMany: async () =>
+      [source, f.state().room].filter(row => row.backlogItemId === "BI-TARGET") } } as never,
+    { id: "item-row", itemId: "BI-TARGET" });
+    expect(current?.capsuleId).toBe("WC-SOURCE");
+  });
+  it("preserves the exact archived delivered author when a verification room is created", async () => {
+    const f = fixture(), outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET" };
+    expect((await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } })).success).toBe(true);
+    const source = { id: "source", capsuleId: "WC-SOURCE", backlogItemId: "BI-TARGET", status: "archived", archivedAt: null,
+      repositoryFullName: "fixture/repo", baseSha: "a".repeat(40), headSha: "b".repeat(40), headBranch: "fix/source", createdByPrincipalId: "source-author", createdAt: new Date(), pullRequestNumber: 1 };
+    const payload = createPullRequestObservation({ repositoryFullName: source.repositoryFullName, number: 1, url: "https://github.com/fixture/repo/pull/1",
+      title: "Delivered fixture", headBranch: source.headBranch, headSha: source.headSha, state: "merged", isDraft: false, mergeStateStatus: null,
+      mergeCommitSha: "c".repeat(40), mergedAt: "2026-11-01T01:00:00Z", providerUpdatedAt: "2026-11-01T01:00:00Z", observedAt: "2026-11-01T01:01:00Z" });
+    const current = await resolveBodyBaselineAuthorRoom({ workroom: { findMany: async ({ where }: any) =>
+      [source, f.state().room].filter(row => row.backlogItemId === "BI-TARGET" && (where.archivedAt !== null || row.status !== "archived")) },
+    contributorInventorySnapshot: { findMany: async () => [{ payload }] } } as never, { id: "item-row", itemId: "BI-TARGET" });
+    expect(current?.id).toBe(source.id); expect(source.status).toBe("archived");
+  });
+  it.each(["confidential", "restricted"])("holds a %s target at its existing controlled boundary", async sensitivity => {
+    const f = fixture(); f.controls.targetSensitivity = sensitivity;
+    const outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET" };
+    expect(await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } }))
+      .toMatchObject({ success: false, data: { reason: "sensitive-verification-target-requires-controlled-assignment" } });
+    expect(f.state().room).toBeNull();
+  });
+  it("refuses an authored backlog subject on a source-free acceptance assignment", async () => {
+    const f = fixture();
+    expect(await f.run({ params: { sessionRef: "endorsed", backlogItemId: "BI-TARGET" } })).toMatchObject({ success: false,
+      data: { reason: "verification-target-must-use-outcome-anchor" } });
+    expect(f.state().room).toBeNull();
+  });
+  it("holds an unavailable verification target before creating any effects", async () => {
+    const f = fixture(); f.controls.targetExists = false;
+    const outcomeAnchor = { kind: "backlog-item" as const, id: "BI-TARGET" };
+    expect(await f.run({ input: { ...input, scope: { ...input.scope, outcomeAnchor } }, params: { sessionRef: "endorsed", outcomeAnchor } }))
+      .toMatchObject({ success: false, data: { reason: "verification-target-unavailable" } });
     expect(f.state().room).toBeNull();
   });
   it("does not accept delivery or unknown shapes as source-free assignments", async () => {
