@@ -534,3 +534,25 @@ Impact contract resolved on existing design and PostgreSQL test paths. It additi
 Open decisions for implementation preparation: existing shared qualification command must support explicit opt-in without modifying unrelated CI selection. If no supported invocation exists, claim the minimal existing runner path and update impact/admission first. No test or environment run was started by this proposal.
 
 
+
+### November 4 scale qualification preparation
+
+Atomic coverage `cmw31t5q00cij01qqf4rntmek` binds this plan at published
+`6a190082ddc2f32e4efc56460d512bcd727f5d78`; implementation admission is
+`IRD-C62274A8DA8A`. The single mapped delivery remains BI-B47BB1D7.
+The opt-in PostgreSQL case uses the actual telemetry table shape and indexes
+through disposable fixture names and the existing cursor/writer/observer.
+`DPF_CLONE_SCALE_QUALIFICATION=14523204` selects the case; it is not resource
+admission. Source generation, copy and aggregate comparison are separately
+identified, and the report explicitly denies full-preview-startup equivalence.
+The source snapshot ends before reading destination commits. Memory probes
+sample after 10,000 processed rows and completion; the existing per-window
+wide-payload controls remain required. The case records ordinary cleanup
+completion, while forced termination still needs the owning runner's fencing
+and cleanup evidence. Its 20-minute timeout does not itself prove that fencing.
+
+Both DB TypeScript programs passed after the test addition. Discovery without
+a database or scale selector skipped all 19 PostgreSQL cases; none passed or
+executed in that check. The new scale case remains UNRUN. Independent review,
+actual resource admission, PostgreSQL execution, qualification of the changed
+source, protected publication and served acceptance remain outstanding.
