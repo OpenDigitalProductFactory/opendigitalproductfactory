@@ -70,6 +70,11 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   // Bookkeeper (S-BK): confidential money-of-record work — a weak local model must
   // not import statements or reconcile, so floor at strong with tool use.
   { agentId: "bookkeeper", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  // Continual Improvement Manager (BI-CE564FBB): its loop is deterministic code; a
+  // model is used only for a miss the operating criteria select, and every such
+  // judgement is bounded by a probe. Adequate and cost-minimised: the criteria
+  // bias spend toward weak and local models, so its own turns must not outspend them.
+  { agentId: "continual-improvement-manager", minimumTier: "adequate", budgetClass: "minimize_cost", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   // Floors added by the EP-COWORKER-LIFECYCLE conformance gate (LIFE-005):
   // these three roster coworkers had no minimum tier at all, so a weak local
   // model could serve confidential merge/dispatch/legal work.

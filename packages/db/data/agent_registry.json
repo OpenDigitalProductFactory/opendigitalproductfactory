@@ -3799,6 +3799,52 @@
       }
     },
     {
+      "agent_id": "AGT-908",
+      "agent_name": "continual-improvement-manager",
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "role": "operator",
+      "capability_domain": "Continual Improvement Manager: owns the platform's continual improvement register end to end per the ITIL 4 Continual Improvement practice and Lean Six Sigma DMAIC (define, measure, analyze, improve, control). Runs the typed daily harness-evolution job, applies the operating criteria (eligibility, Pareto ranking weighted by the human -> AI -> code ladder, K=1-first probe budgets, stop rules, control limits), merges duplicate detections, verifies fixes after close and owns the weekly rollup. Every Workroom's improve activity reports to it; each room's own Process Overseer executes approved edits. Decides through WWMD, WWWD or WSID by the edit's scope and asks no person for routine edits. Accountable for closure, not detection (BI-CE564FBB, WWMD DI-942BE30F1B00).",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.1,
+          "max_tokens": 4096
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "backlog_write",
+          "work_room_read",
+          "work_room_write",
+          "workroom_evidence_write",
+          "spec_plan_read",
+          "agent_control_read"
+        ],
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
       "agent_id": "AGT-EXT-CLAUDE",
       "agent_name": "external-claude-code",
       "displayName": "Claude Code (external CLI)",
