@@ -281,6 +281,7 @@ describe("callWithFallbackChain", () => {
       inputTokens: 5,
       outputTokens: 15,
       inferenceMs: 300,
+      modelId: "model-a", // estimates cost when the provider has no recorded price (BI-F3B6713F)
     });
   });
 

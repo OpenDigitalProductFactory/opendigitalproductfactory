@@ -332,18 +332,19 @@ export async function callProvider(
   const capacityAccount = selectedAccount ? capacityAccountIdentity(selectedAccount) : undefined;
   const localProvider = needsModelConnection && (!selectedAccount || isLocalProviderId(providerId)) ? await readEnabledRoutingProvider(providerId) : null;
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
-  // Check the agent's daily token budget before dispatching. If the agent has
-  // consumed ≥100% of its registry limit today, throw a billing error so the
-  // caller can surface a clear "budget exceeded" message rather than burning
-  // more tokens. At 80–95% log a warning; at ≥95% also write a budget event.
-  // The check is non-blocking: any DB error is swallowed so a budget-gate DB
-  // failure never breaks inference.
+  // Only paid calls are governed: a local engine or a flat-rate subscription
+  // costs nothing extra, so it is never refused here (BI-F3B6713F). The
+  // owner-set installation allowance decides when recorded; the registry
+  // per-agent cap is the fallback. A paid provider with no recorded price is
+  // charged an estimate in logTokenUsage, so the allowance sees it. A used allowance throws
+  // AgentAllowanceExhaustedError, which routing skips without penalising the
+  // endpoint. Any other gate failure is swallowed: the gate never breaks inference.
   if (attribution?.agentId && !reassessment) {
     try {
-      const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
-      const budget = await checkAgentBudgetFromRegistry(attribution.agentId);
+      const { AgentAllowanceExhaustedError, checkAgentBudgetFromRegistry, classifyProviderSpend, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+      const budget = await classifyProviderSpend(providerId) === "free" ? null : await checkAgentBudgetFromRegistry(attribution.agentId);
 
-      if (budget.status === "rejected") {
+      if (budget?.status === "rejected") {
         void writeBudgetEvent({
           agentId: attribution.agentId,
           eventKind: "rejected",
@@ -352,18 +353,13 @@ export async function callProvider(
           modelId,
           providerId,
         });
-        throw new InferenceError(
-          `Daily token budget exceeded for agent "${attribution.agentId}" ` +
-          `(${budget.actualTokens.toLocaleString()} / ${budget.limitTokens.toLocaleString()} tokens used today)`,
-          "billing",
-          providerId,
-        );
+        throw new AgentAllowanceExhaustedError({ agentId: attribution.agentId, budget });
       }
 
-      if (budget.status === "warning_95" || budget.status === "warning_80") {
+      if (budget && (budget.status === "warning_95" || budget.status === "warning_80")) {
         console.warn(
-          "[budget-gate] Agent approaching daily token limit:",
-          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status },
+          "[budget-gate] Agent approaching daily paid allowance:",
+          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status, governedBy: budget.governedBy },
         );
         if (budget.status === "warning_95") {
           void writeBudgetEvent({
@@ -377,8 +373,7 @@ export async function callProvider(
         }
       }
     } catch (err) {
-      // Re-throw billing errors; swallow everything else (budget gate is advisory)
-      if (err instanceof InferenceError && err.code === "billing") throw err;
+      if (err instanceof Error && err.name === "AgentAllowanceExhaustedError") throw err;
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
@@ -611,6 +606,26 @@ export async function callProvider(
 
 // ─── Token Usage Logging ─────────────────────────────────────────────────────
 
+/**
+ * A paid provider with no recorded price is never free (BI-F3B6713F). Estimate
+ * from what the install knows: the model's profiled price, else the platform's
+ * conservative $3/MTok blended rate, so the owner's paid AI allowance sees it.
+ */
+const ESTIMATED_BLENDED_PER_MTOKEN = 3;
+
+async function estimatedTokenRates(providerId: string, modelId: string | undefined): Promise<{ input: number; output: number }> {
+  if (modelId) {
+    const profile = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId, modelId } },
+      select: { inputPricePerMToken: true, outputPricePerMToken: true },
+    }).catch(() => null);
+    if (profile?.inputPricePerMToken != null && profile.outputPricePerMToken != null) {
+      return { input: profile.inputPricePerMToken, output: profile.outputPricePerMToken };
+    }
+  }
+  return { input: ESTIMATED_BLENDED_PER_MTOKEN, output: ESTIMATED_BLENDED_PER_MTOKEN };
+}
+
 export async function logTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
@@ -621,7 +636,10 @@ export async function logTokenUsage(input: {
   inputTokens: number;
   outputTokens: number;
   inferenceMs?: number;
+  /** Used only to estimate a cost when the provider has no recorded price; not stored. */
+  modelId?: string;
 }): Promise<void> {
+  const { modelId, ...row } = input;
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: input.providerId } });
 
   let costUsd = 0;
@@ -632,13 +650,13 @@ export async function logTokenUsage(input: {
         provider.computeWatts ?? 150,
         provider.electricityRateKwh ?? 0.12,
       );
-    } else if (provider.costModel === "token") {
-      costUsd = computeTokenCost(
-        input.inputTokens,
-        input.outputTokens,
-        provider.inputPricePerMToken ?? 0,
-        provider.outputPricePerMToken ?? 0,
-      );
+    } else if (provider.costModel !== "compute") {
+      // Any cost model other than compute is paid to the budget gate, so it is
+      // priced or estimated here, never recorded as $0.
+      const rates = provider.inputPricePerMToken != null && provider.outputPricePerMToken != null
+        ? { input: provider.inputPricePerMToken, output: provider.outputPricePerMToken }
+        : await estimatedTokenRates(input.providerId, modelId);
+      costUsd = computeTokenCost(input.inputTokens, input.outputTokens, rates.input, rates.output);
     }
   }
   // Record cost metric for Prometheus
@@ -648,14 +666,14 @@ export async function logTokenUsage(input: {
 
   await prisma.tokenUsage.create({
     data: {
-      traceId:      input.traceId ?? null,
-      agentId:      input.agentId,
-      providerId:   input.providerId,
-      ...(input.providerConnectionId ? { recordedProviderConnectionRef: input.providerConnectionId, quotaScopeKey: input.quotaScopeKey ?? null } : {}),
-      contextKey:   input.contextKey,
-      inputTokens:  input.inputTokens,
-      outputTokens: input.outputTokens,
-      ...(input.inferenceMs !== undefined && { inferenceMs: input.inferenceMs }),
+      traceId:      row.traceId ?? null,
+      agentId:      row.agentId,
+      providerId:   row.providerId,
+      ...(row.providerConnectionId ? { recordedProviderConnectionRef: row.providerConnectionId, quotaScopeKey: row.quotaScopeKey ?? null } : {}),
+      contextKey:   row.contextKey,
+      inputTokens:  row.inputTokens,
+      outputTokens: row.outputTokens,
+      ...(row.inferenceMs !== undefined && { inferenceMs: row.inferenceMs }),
       costUsd,
     },
   });

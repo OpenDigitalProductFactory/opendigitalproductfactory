@@ -45,12 +45,11 @@ describe("authenticated immediate nonproduction admission", () => {
     const task = taskRun.upsert.mock.calls[0]![0].create;
     const read = { nonProductionEnvironmentLease: { findUnique: async () => result.lease },
       taskRun: { findUnique: async () => task } };
-    const cleanupCall = { toolName: "release_nonprod_environment_lease", userId: "user-1",
+    const cleanupCall = { toolName: "release_nonprod_environment_lease", userId: "user-1", now: NOW,
       params: { leaseId: result.lease.leaseId, ownerSessionId: "session-1" } };
-    const loadStance = async () => ({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
-    expect(await leaseCleanupConsequenceForCall(cleanupCall, { db: read, loadStance }))
+    expect(await leaseCleanupConsequenceForCall(cleanupCall, { db: read }))
       .toMatchObject({ consequence: null, reason: "owned-development-lease-cleanup" });
-    expect(await leaseCleanupConsequenceForCall({ ...cleanupCall, userId: "foreign-user" }, { db: read, loadStance }))
+    expect(await leaseCleanupConsequenceForCall({ ...cleanupCall, userId: "foreign-user" }, { db: read }))
       .toMatchObject({ consequence: "authority" });
   });
 
@@ -113,14 +112,13 @@ describe("fresh authenticated preview ownership", () => {
       progressPayload: { nonprodPreviewOwner: { schemaVersion: 1, userId: "user-1", agentId: "AGT-EXT-CODEX" } } });
     const read = { nonProductionEnvironmentLease: { findUnique: async () => result.lease },
       taskRun: { findUnique: async () => task } };
-    const loadStance = async () => ({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
-    const call = { toolName: "release_nonprod_environment_lease", userId: "user-1",
+    const call = { toolName: "release_nonprod_environment_lease", userId: "user-1", now: NOW,
       context: { agentId: "AGT-EXT-CODEX" },
       params: { leaseId: result.lease.leaseId, ownerSessionId: "session-1" } };
-    expect(await leaseCleanupConsequenceForCall(call, { db: read, loadStance })).toMatchObject({ consequence: null });
+    expect(await leaseCleanupConsequenceForCall(call, { db: read })).toMatchObject({ consequence: null });
     for (const changed of [ { ...call, userId: "foreign-user" },
       { ...call, context: { agentId: "AGT-EXT-CLAUDE" } }, { ...call, context: {} } ]) {
-      expect(await leaseCleanupConsequenceForCall(changed, { db: read, loadStance })).toMatchObject({ consequence: "authority" });
+      expect(await leaseCleanupConsequenceForCall(changed, { db: read })).toMatchObject({ consequence: "authority" });
     }
   });
 });

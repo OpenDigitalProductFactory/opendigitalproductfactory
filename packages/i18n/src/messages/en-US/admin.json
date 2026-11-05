@@ -362,5 +362,19 @@
       "proxies": "Subset proxies and approval load",
       "breakdowns": "Breakdowns"
     }
+  },
+  "paidAiAllowance": {
+    "heading": "Paid AI allowance",
+    "notSet": "Not set. Each coworker's built-in daily cap limits its paid AI use.",
+    "current": "{$allowance} a day for all coworkers. {$spent} used today.",
+    "currentSpendUnavailable": "{$allowance} a day for all coworkers. Today's use could not be read just now.",
+    "scope": "Local and subscription models are never limited. It resets at 00:00 UTC.",
+    "amountLabel": "Dollars per day (leave empty to use the built-in caps)",
+    "reasonLabel": "Reason (recorded)",
+    "lastChanged": "Last changed {$date}",
+    "lastChangedBy": "Last changed {$date} by {$by}",
+    "save": "Save allowance",
+    "saving": "Saving...",
+    "saved": "Saved"
   }
 }

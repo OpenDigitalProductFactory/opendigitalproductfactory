@@ -28,6 +28,7 @@ const REASONS: Record<string, string> = {
   "unparseable-review-response": "The reviewer response could not be validated. No review verdict was accepted.",
   "review-response-truncated": "The provider stopped before the review response was complete.",
   "provider-outcome-uncertain": "The provider outcome is uncertain. Inspect the recorded execution before replacing it.",
+  "reviewer-daily-allowance-used": "The reviewer's daily allowance for paid AI is used. No provider was asked, so nothing is uncertain. It resets at 00:00 UTC; an owner can raise it in Admin > Platform Development > Paid AI allowance.",
   "review-capacity-deferred": "Review could not start because provider capacity was unavailable. No verdict was produced.",
   "local-ci-active-capacity-reservation": "Review is waiting while a verification run uses the host.",
   "local-ci-queued-capacity-reservation": "Review is waiting for a queued verification run to use the host.",

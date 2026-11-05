@@ -25,7 +25,11 @@ export async function boundedHandoffConsequenceForCall(call: ToolCallConsequence
     const actor = await workCapsuleActor(call.userId, call.context);
     await assessBoundedHandoff({ db: prisma as unknown as CapsuleDb, actor, command });
     return { consequence: null, reason: "verified-same-mandate-handoff" };
-  } catch { return authority; }
+  } catch (error) {
+    // Record which boundary refused, so "why did this reach the owner?" is
+    // answerable from the decision log instead of re-derived (BI-F1FC0B62).
+    return error instanceof BoundedHandoffRefusal ? { ...authority, reason: `${authority.reason}:${error.code}` } : authority;
+  }
 }
 
 /** Parse and bind before a prior receipt can be replayed. No client field can
