@@ -41,8 +41,15 @@ describe("selected runtime thinking budget evidence", () => {
     expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe({ config })))
       .toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
   });
+  it.each([["--no-mmap"], ["--no-mmap", "--spec-type", "ngram-mod"]])(
+    "keeps the evidence with platform-managed memory flags %j (BI-37A470F0)", async (...flags) => {
+      const config = { "context-size": 131072, keep_alive: "-1", "runtime-flags": flags };
+      expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe({ config })))
+        .toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
+    });
   it.each([
     { template: "ordinary answer template" }, { config: { "context-size": 131072, "raw-runtime-flags": "--chat-template custom" } },
+    { config: { "context-size": 131072, "runtime-flags": ["--no-mmap", "--chat-template", "custom"] } },
     { config: { "context-size": 131072, keep_alive: -1 } },
     { config: { "context-size": 131072, "runtime-flags": ["--spec-type", "ngram-mod", "--chat-template", "custom"] } },
     { config: { "context-size": 131072, "runtime-flags": ["--chat-template", "custom"] } },

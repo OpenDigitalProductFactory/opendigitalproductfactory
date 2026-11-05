@@ -1,3 +1,14 @@
+---
+# Doc-impact edges (BI-9B17E889): the per-client dpf connector descriptors this
+# runbook describes. Changing one flags this page in the Docs Impact Gate and in
+# a Workroom's change-impact contract.
+relatedCode:
+  - packages/dpf-skill-pack/claude.mcp.json
+  - packages/dpf-skill-pack/codex.mcp.json
+  - packages/dpf-skill-pack/grok.mcp.json
+  - packages/dpf-skill-pack/antigravity.mcp.json
+---
+
 # MCP tool authorization runbook
 
 Source host tooling applies existing authorized CA trust to native MCP and OAuth
