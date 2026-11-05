@@ -51,6 +51,9 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
   const [mode, setMode] = useState<PanelMode>("overview");
   const [candidateChoice, setCandidateChoice] = useState<string>(candidates[0]?.hostname ?? OTHER_INSTALLATION);
   const [intendedPeer, setIntendedPeer] = useState("");
+  // The class this authority attests for the joining installation; no default,
+  // so an operator always says it (BI-0716C8A8).
+  const [environmentClass, setEnvironmentClass] = useState("");
   const [issueConfirmed, setIssueConfirmed] = useState(false);
   const [joinPackage, setJoinPackage] = useState<string | null>(null);
   const [packagePreview, setPackagePreview] = useState<OrganizationJoinPackagePreview | null>(null);
@@ -67,9 +70,9 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
   }
 
   function issueJoinFile() {
-    if (!issueConfirmed || !chosenPeer) return;
+    if (!issueConfirmed || !chosenPeer || !environmentClass) return;
     startTransition(async () => {
-      const result = await issueOrganizationJoinFileAction({ intendedPeer: chosenPeer });
+      const result = await issueOrganizationJoinFileAction({ intendedPeer: chosenPeer, environmentClass });
       setIssueConfirmed(false);
       if (!result.ok) {
         setNotice({ kind: "error", text: result.message });
@@ -184,6 +187,23 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
               placeholder="192.168.0.200"
             />
           ) : null}
+          <SelectField
+            name="joining-environment-class"
+            label="What that installation is"
+            required
+            placeholder="Choose…"
+            value={environmentClass}
+            onValueChange={(value) => {
+              setEnvironmentClass(value);
+              setIssueConfirmed(false);
+            }}
+            hint="The organization certifies this in the installation's membership. Other installations use it to decide what it may be asked to do, and it must match what that installation says it is."
+            options={[
+              { value: "production", label: "Production" },
+              { value: "development", label: "Development" },
+              { value: "test", label: "Test" },
+            ]}
+          />
           {chosenPeer ? (
             <CheckboxField
               name="confirm-intended-installation"
@@ -196,7 +216,7 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
             <SubmitButton
               pending={isPending}
               pendingLabel="Creating…"
-              disabled={!issueConfirmed || !chosenPeer}
+              disabled={!issueConfirmed || !chosenPeer || !environmentClass}
               data-dpf-primary-action
             >
               Create one-time file
@@ -229,6 +249,7 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all text-[var(--dpf-muted)]">
                 <dt>Organization host</dt><dd>{new URL(packagePreview.caUrl).host}</dd>
                 <dt>For installation</dt><dd>{packagePreview.intendedPeer}</dd>
+                <dt>Certified as</dt><dd>{packagePreview.environmentClass ?? "Not stated — ask for a new file"}</dd>
                 <dt>Expires</dt><dd>{packagePreview.expiresAt.toLocaleString()}</dd>
                 <dt>Trust fingerprint</dt><dd>{packagePreview.rootFingerprint.slice(0, 12)}…</dd>
               </dl>

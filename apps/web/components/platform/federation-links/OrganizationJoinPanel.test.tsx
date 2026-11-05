@@ -62,9 +62,13 @@ describe("OrganizationJoinPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
     expect((screen.getByLabelText(/^Installation that will join/) as HTMLSelectElement).value).toBe("windows-dev.local");
     fireEvent.click(screen.getByLabelText(/I confirm this file is for windows-dev.local/));
+    // The class has no default: the file cannot be created until the operator says what the installation is.
+    expect((screen.getByRole("button", { name: "Create one-time file" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/^What that installation is/), { target: { value: "development" } });
+    fireEvent.click(screen.getByLabelText(/I confirm this file is for windows-dev.local/));
     fireEvent.click(screen.getByRole("button", { name: "Create one-time file" }));
 
-    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "windows-dev.local" }));
+    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "windows-dev.local", environmentClass: "development" }));
     await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled());
     expect((await screen.findByRole("status")).textContent).toMatch(/downloaded once/i);
   });
@@ -74,10 +78,11 @@ describe("OrganizationJoinPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
     expect((screen.getByLabelText(/^Installation that will join/) as HTMLSelectElement).value).toBe("__other__");
     fireEvent.change(screen.getByLabelText(/^Installation name/), { target: { value: "192.168.0.200" } });
+    fireEvent.change(screen.getByLabelText(/^What that installation is/), { target: { value: "test" } });
     fireEvent.click(screen.getByLabelText(/I confirm this file is for 192.168.0.200/));
     mockIssue.mockResolvedValueOnce({ ok: false, error: "not_ready", message: "Only the organization installation can create join files" });
     fireEvent.click(screen.getByRole("button", { name: "Create one-time file" }));
-    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200" }));
+    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200", environmentClass: "test" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/Only the organization installation/);
   });
 

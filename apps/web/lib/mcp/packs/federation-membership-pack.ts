@@ -17,13 +17,18 @@ const definitions: ToolDefinition[] = [
   {
     name: "issue_organization_join_file",
     description:
-      "Create a one-time organization join file (.dpfjoin) on THIS installation, which must be the organization authority (it holds the organization's certificate authority). Pass the joining installation's host name or address as intendedPeer — one of the addresses it answers to, such as the address you open it at. The platform mints the file itself: no edge node, no host script. Returns the file text; carry it to the joining installation and pass it to import_organization_join_file there (or choose it on its Connections page) within 30 minutes. The organization CA honours the file once.",
+      "Create a one-time organization join file (.dpfjoin) on THIS installation, which must be the organization authority (it holds the organization's certificate authority). Pass the joining installation's host name or address as intendedPeer — one of the addresses it answers to, such as the address you open it at — and its environmentClass, which the organization CA certifies in its membership certificate; peers read that class to decide what the installation may be asked to do. The platform mints the file itself: no edge node, no host script. Returns the file text; carry it to the joining installation and pass it to import_organization_join_file there (or choose it on its Connections page) within 30 minutes. The organization CA honours the file once.",
     inputSchema: {
       type: "object",
       properties: {
         intendedPeer: {
           type: "string",
           description: "Host name or IP address of the installation that will join, e.g. 192.168.0.200.",
+        },
+        environmentClass: {
+          type: "string",
+          enum: ["production", "development", "test"],
+          description: "The joining installation's environment class. The CA certifies it; it must match the class that installation declared, or its import is refused.",
         },
         extraSans: {
           type: "array",
@@ -35,7 +40,7 @@ const definitions: ToolDefinition[] = [
           description: "Short audit tag for why the file is being issued.",
         },
       },
-      required: ["intendedPeer"],
+      required: ["intendedPeer", "environmentClass"],
     },
     requiredCapability: "manage_platform",
     executionMode: "immediate",
@@ -111,11 +116,15 @@ async function issueOrganizationJoinFileTool(
   const { resolveLocalFederationAuthorityUrl } = await import("@/lib/federation/self-authority");
   const intendedPeer = typeof params["intendedPeer"] === "string" ? params["intendedPeer"].trim() : "";
   if (!intendedPeer) return { success: false, message: "intendedPeer is required.", data: { reason: "invalid-intended-peer" } };
+  const environmentClass = params["environmentClass"];
+  if (environmentClass !== "production" && environmentClass !== "development" && environmentClass !== "test") {
+    return { success: false, message: "environmentClass is required: production, development or test.", data: { reason: "environment-class-required" } };
+  }
   const extraSans = Array.isArray(params["extraSans"]) ? params["extraSans"].filter((v): v is string => typeof v === "string") : [];
   const reason = typeof params["reason"] === "string" ? params["reason"].trim().slice(0, 80) : "";
   console.log(`[federation] join file issue requested by mcp:${context?.agentId?.trim() || "agent"}${reason ? `:${reason}` : ""} for ${intendedPeer}`);
   const requestHost = await resolveLocalFederationAuthorityUrl();
-  const result = await issueOrganizationJoinFile({ intendedPeer, extraSans, requestHost });
+  const result = await issueOrganizationJoinFile({ intendedPeer, environmentClass, extraSans, requestHost });
   if (!result.issued) {
     return {
       success: false,

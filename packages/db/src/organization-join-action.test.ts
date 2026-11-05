@@ -51,6 +51,22 @@ describe("parseOrganizationJoinPackageMaterial", () => {
   });
 });
 
+describe("join package environment class (BI-0716C8A8)", () => {
+  it("carries the class the authority attested for the joining installation", () => {
+    const parsed = parseOrganizationJoinPackageMaterial(joinPackage({ environment_class: "development" }), NOW);
+    expect(parsed.ok && parsed.value.environmentClass).toBe("development");
+  });
+
+  it("reads an older file without a class as unattested, never as production", () => {
+    const parsed = parseOrganizationJoinPackageMaterial(joinPackage(), NOW);
+    expect(parsed.ok && parsed.value.environmentClass).toBeNull();
+  });
+
+  it("refuses a class that is not one of the declared classes", () => {
+    expect(parseOrganizationJoinPackageMaterial(joinPackage({ environment_class: "staging" }), NOW)).toEqual({ ok: false, reason: "invalid-environment-class" });
+  });
+});
+
 describe("organization join action registry", () => {
   it("contains exactly the two founder-approved action types and binds their host roles", () => {
     expect(ORGANIZATION_JOIN_ACTION_TYPES).toEqual([
@@ -88,6 +104,7 @@ describe("organization join action registry", () => {
         rootFingerprint: "A".repeat(64),
         intendedPeer: "windows-dev.local",
         intendedSans: ["windows-dev.local", "192.168.1.42"],
+        environmentClass: null,
         expiresAt: new Date("2026-07-22T10:10:00.000Z"),
       },
     });
