@@ -111,7 +111,7 @@ The routes are classified `public-machine-plane` in the endpoint classification.
 
 **Why sign-in and consent are public.** People connect from wherever they use the vendor app, including a phone. The alternative was split metadata: the authorization endpoint on a private name, the rest public. Claude documents that pattern for its tunnels; other vendors don't, so it is unconfirmed for them. It would also make connecting impossible away from home.
 
-This choice trades a larger attack surface for a connect that works anywhere. The extra surface is the sign-in page, which §7 rate-limits. **Decided by the operator on 2026-11-03 (D2, §9): public sign-in and consent, behind the §7 rate limits.** The split-metadata alternative is not built. The decision is conditional: the human-facing pages are published only once the §7.1 controls for the attacks this opens are live.
+This choice trades a larger attack surface for a connect that works anywhere. The extra surface is the sign-in page, which §7 rate-limits. **Decided by the operator on 2026-11-03 (D2, §9): public sign-in and consent.** The split-metadata alternative is not built. The decision is conditional: the human-facing pages are published only once every §7.1 control for the attacks this opens is live and shown by test.
 
 ## 5. Hosted-client OAuth: recognize the vendor by where the code goes (`BI-34ABEC12`)
 
@@ -162,13 +162,16 @@ This item **must land before** the switch can be turned on in production.
 
 ### 7.1 Threats from public sign-in and consent (D2)
 
-D2 publishes the sign-in, authorize and consent pages. That surface opens three attacks. `BI-EE4E357D` may not publish the human-facing pages until every control below is live, `BI-77367B2C` included. The switch stays off by default.
+D2 publishes the sign-in, authorize and consent pages. That surface opens four attacks. `BI-EE4E357D` may not publish the human-facing pages until every control below is live, `BI-77367B2C` included. The switch stays off by default.
+
+Every control in this table is a publication precondition, including those the authorization server is believed to have today. This spec does not prove them. Before publishing, `BI-EE4E357D` must show each one working against the public plane with a test, and `BI-77367B2C` must do the same for the throttling, audit and attention controls. A control that cannot be shown keeps the switch off.
 
 | Threat | Prevention | Detection | Recovery |
 | --- | --- | --- | --- |
 | **Password guessing and credential stuffing** on the public sign-in page | Per-account and per-source throttling with backoff; a failed sign-in must not reveal whether the account exists (both required by `BI-77367B2C`) | Throttle events are audited, and a burst on one account must raise an attention item for the operator (`BI-77367B2C`) | Turn the switch off, which removes every public route at once; reset the affected person's credentials; revoke that person's consents (per-person revoke exists) |
 | **Consent phishing**: a lookalike client tricks a person into granting it access | The consent page names the vendor only from the verified callback host (§5), labels an unrecognized client as such, and DCR clients start with zero scopes. Consent is one explicit Connect click and is never pre-authorized (2026-08-26 §12.4.8) | Each consent is written to the authorization decision log with client, redirect host and vendor family | Revoke the client for everyone, or one person's consent, in one action; the client's tokens stop at once |
 | **Redirect, code-injection or code-interception abuse** of the authorization flow | S256 PKCE is mandatory; redirect URIs match exactly as registered (loopback port aside); RFC 8707 resource and audience are checked; codes live 120 s and are single-use | A code or token presented with a mismatched redirect, verifier or audience is refused and logged | Revoke the client and its refresh family; turn the switch off if abuse persists |
+| **Resource exhaustion**: floods of sign-in, authorize, register or token requests, or growth in audit and log volume, degrade the install for its own people | Global ceilings on each public path as well as the per-source and per-account limits in §7. Requests over a ceiling are refused at the cheapest point, before password hashing or database writes. Audit records of refused requests are sampled and aggregated, not written once per request (`BI-77367B2C`) | Sustained refusals at a ceiling, or audit volume above a set bound, raise an operator attention item | Turn the switch off; the private plane and people working at home are unaffected because the public paths are separate (§4) |
 
 ## 8. Cloud sessions are first-class callers (`BI-EE3C3EAF`)
 
@@ -201,7 +204,7 @@ The caller surface is resolved per connection: local plugin, hosted connector (v
 
 **Open operator decisions:**
 - **D1. Ratify `DI-072237D5D7BD`:** segmented machine plane, opt-in. **Decided 2026-10-28: ratified by the operator.**
-- **D2. Where consent happens.** **Decided 2026-11-03: public sign-in and consent, behind the §7 rate limits.** The rejected alternative was consent only from home (split metadata), which is unconfirmed for non-Claude vendors and would make connecting impossible away from home.
+- **D2. Where consent happens.** **Decided 2026-11-03: public sign-in and consent, published only once every §7.1 control is live and shown by test.** The rejected alternative was consent only from home (split metadata), which is unconfirmed for non-Claude vendors and would make connecting impossible away from home.
 - **D3. Tunnel provider and account.** The recommendation is the operator's own Cloudflare account. Its credentials are operator-only, never handled by an agent.
 - **D4. Archetype defaults.** Installs with `restricted` data, such as healthcare, ship with cloud access off. Turning it on there shows which data classes cloud assistants could reach.
 
