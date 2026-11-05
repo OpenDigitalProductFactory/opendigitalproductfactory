@@ -25,6 +25,7 @@ import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-manage
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
 import { loadRoomMembersForWorkItem } from "@/lib/work-management/room-policy-members.server";
 import {
+  applyInviteeClearanceRaise,
   preflightRoomParticipantInvitation,
   resolveRoomMessagingWorkItem,
   ROOM_MESSAGING_WORK_ITEM_SELECT,
@@ -262,9 +263,15 @@ async function inviteRoomParticipantHandler(
 ): Promise<ToolResult> {
   const preflight = await preflightRoomParticipantInvitation({ params, userId, agentId: context?.agentId });
   if (preflight.verdict === "deny") return preflight.result;
-  const { agentId, caseKey, item } = preflight;
+  const { agentId, caseKey, item, clearanceRaise } = preflight;
   const inviteeAgentId = str(params, "agentId");
   const inviteeUserId = str(params, "userId");
+
+  // BI-6AE64074: an approved raise happens before admission; a refused one admits nobody.
+  if (clearanceRaise) {
+    const refused = await applyInviteeClearanceRaise(userId, caseKey, clearanceRaise);
+    if (refused) return refused;
+  }
 
   let inviteePrincipalId: string | null = null;
   let inviteeLabel = "A participant";
@@ -686,6 +693,11 @@ const definitions: ToolDefinition[] = [
         agentId: { type: "string", description: "Invite an AI coworker by agent id (provide agentId OR userId)." },
         userId: { type: "string", description: "Invite a person by user id (provide agentId OR userId)." },
         canAct: { type: "boolean", description: "Whether the invitee may post (true, default) or only read (false)." },
+        raiseClearanceTo: {
+          type: "string",
+          enum: ["internal", "confidential"],
+          description: "Only when an earlier invite was refused with invitee_clearance_below_room: the room's level, as that refusal named it. The room's owner is then asked once to admit the coworker AND raise its data access to that level.",
+        },
       },
       required: ["caseKey"],
     },
