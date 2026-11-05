@@ -50,6 +50,8 @@ export interface SemanticChangeReviewDispatchContext {
   reviewerId: "change-reviewer";
   specialistIds: readonly string[];
   surface: SemanticChangeReviewSurface;
+  /** The reviewed Workroom; its own sensitivity sets the review's routing (BI-9F620FE1). */
+  capsuleId?: string;
 }
 
 export interface SemanticChangeReviewOperationDeps {
@@ -258,6 +260,7 @@ async function performReview(args: {
     reviewerId: "change-reviewer",
     specialistIds: args.identity.specialistIds,
     surface: args.input.surface,
+    capsuleId: args.identity.capsuleId,
   });
   if (result.decision === "pass" && (!result.failureAnalysisReview?.adequate || result.failureAnalysisReview.rationale.trim().length < 20)) {
     result.decision = "fail";
