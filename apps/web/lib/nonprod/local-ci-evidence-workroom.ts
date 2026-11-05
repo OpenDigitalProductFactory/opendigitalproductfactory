@@ -6,18 +6,6 @@ type EvidenceTx = Pick<typeof prisma, "workroom" | "externalEvidenceRecord">;
 type WorkroomReader = { findMany(args: unknown): Promise<Array<{ id: string; headSha: string | null }>> };
 
 /**
- * The Workroom a local-CI result belongs to: the gating session's live room on
- * the gated branch. BI-C9912C22: an adopted room may not have recorded its head
- * yet (WC-BFDF763B was adopted before its first sync, so its headSha was null
- * when pregate passed), or may hold an older commit of the same branch. Both
- * still own the run. Attribution confers no review authority: the failure-
- * analysis resolver re-checks evidence.sha against the room's head at review.
- *
- * The room whose head is exactly the gated commit wins. Without one, a single
- * room is linked; several inexact rooms are left unlinked rather than guessed.
- * Several exact rooms are "ambiguous".
- */
-/**
  * The forms one client thread's id takes as a Workroom `executorRef`: the bare
  * id the gate records (CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, ...), or that id
  * behind its own executor-kind prefix ("claude-desktop-<id>"), which claims have
@@ -29,6 +17,18 @@ export function executorRefForms(sessionId: string): string[] {
   return [sessionId, ...WORK_CAPSULE_EXECUTOR_KINDS.map((kind) => `${kind}-${sessionId}`)];
 }
 
+/**
+ * The Workroom a local-CI result belongs to: the gating session's live room on
+ * the gated branch. BI-C9912C22: an adopted room may not have recorded its head
+ * yet (WC-BFDF763B was adopted before its first sync, so its headSha was null
+ * when pregate passed), or may hold an older commit of the same branch. Both
+ * still own the run. Attribution confers no review authority: the failure-
+ * analysis resolver re-checks evidence.sha against the room's head at review.
+ *
+ * The room whose head is exactly the gated commit wins. Without one, a single
+ * room is linked; several inexact rooms are left unlinked rather than guessed.
+ * Several exact rooms are "ambiguous".
+ */
 export async function findLocalCiEvidenceWorkroom(
   workroom: WorkroomReader,
   run: { branch: string; sha: string; sessionId: string },
