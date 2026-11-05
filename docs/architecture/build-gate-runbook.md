@@ -116,6 +116,17 @@ not from the receipt. A receipt for one role cannot authorize another role.
    that room and exact change before resubmitting. Existing completed gate
    records are retained; a refusal does not authorize changing their identity.
    Execution revalidates evidence again because it can change after admission.
+
+   The gate links its evidence record to the room whose `executorRef` is the
+   gating thread, so claim and adopt rooms with `sessionRef` set to the client's
+   own thread id: `CLAUDE_CODE_SESSION_ID` for Claude, `CODEX_THREAD_ID` for
+   Codex. The gate also accepts that id behind its executor-kind prefix
+   (`claude-desktop-<id>`), and nothing else (BI-82D15653). Cite the gate's
+   `evidenceRecordId` from `dpf-local-ci-gate.json`. For the `headTreeHash` and
+   `diffDigest`, use `git rev-parse HEAD^{tree}` and the SHA-256 of
+   `git diff --binary $(git merge-base HEAD origin/main) HEAD`. The PR's
+   **Failure Readiness** check passes once the platform publishes the
+   `dpf/failure-readiness` status for the reviewed head.
 2. Repair blocking code findings. Re-review a changed tree; stop after two failed
    repair rounds. A changed diff, policy, reviewer or specialist set invalidates
    a receipt. An infrastructure refusal or uncertain execution is not a finding.
@@ -302,6 +313,7 @@ The alarm is GitHub-side only. The in-portal Needs-you inbox does not yet carry 
 Getting a PR merged is the Workroom's duty, not the client's: the same thing happens whether Claude Code, Codex, Grok, Antigravity or Build Studio opened it. Design: `docs/superpowers/specs/2026-10-01-pr-follow-through-workroom-duty-design.md`. The five-minute reconciler (`apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts`) now covers every non-terminal room with a bound PR, not only Build Studio rooms, and keeps one record per room at `workspaceState.prDelivery` (`prDelivery.followThrough` holds the CI classification, the hold and the reused `post-push-ci-failure` budget). On each pass it:
 
 - **arms auto-merge through the merge queue** when the PR is green, and updates a branch that is `BEHIND`. It never merges by hand, force-pushes, dismisses a check or touches required-check configuration;
+- **keeps Failure Readiness fresh** (BI-4D0B2AAB, `apps/web/lib/build/failure-readiness-delivery-refresh.ts`). That status is valid for one hour, and the merge queue checks it again. So before queueing, the reconciler republishes it from the server's verdict for the room's current head, or withholds the PR when no publishable review exists. When the only red check is an expired Failure Readiness status, it republishes, re-runs that check run and observes the PR again, instead of staging a repair;
 - **classifies a red check once per head SHA** (`apps/web/lib/build/pr-follow-through.ts`). `CANCELLED` / `TIMED_OUT` / `STARTUP_FAILURE` / `STALE` / `ERROR` are infrastructure: it re-runs that workflow run's failed jobs once and then raises the platform operator. `FAILURE` is a defect: at a `preauthorized` boundary the room may dispatch a bounded repair (2 per PR); below that, or while no repair worker is wired, it stages the repair packet for a person. Anything else (`ACTION_REQUIRED`) goes to a person unclassified;
 - **records each step on the room** as a `workroom-pr-follow-through` activity, and sends a hold that needs a person to the escalation inbox once per head;
 - **makes liveness read CI**: a room whose PR is red and waiting on a person reads `stalled` (held, never reaped), not `live`.

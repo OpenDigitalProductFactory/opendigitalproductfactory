@@ -23,6 +23,7 @@ import {
   importOrganizationJoinFileAction,
   issueOrganizationJoinFileAction,
 } from "@/lib/actions/organization-join";
+import { useT } from "@/lib/i18n/use-t";
 
 type PanelMode = "overview" | "issue" | "import";
 type Notice = { kind: "success" | "error"; text: string } | null;
@@ -48,9 +49,13 @@ function downloadText(fileName: string, content: string) {
 }
 
 export function OrganizationJoinPanel({ candidates = [] }: { candidates?: OrganizationJoinCandidate[] }) {
+  const t = useT("organizationJoin");
   const [mode, setMode] = useState<PanelMode>("overview");
   const [candidateChoice, setCandidateChoice] = useState<string>(candidates[0]?.hostname ?? OTHER_INSTALLATION);
   const [intendedPeer, setIntendedPeer] = useState("");
+  // The class this authority attests for the joining installation; no default,
+  // so an operator always says it (BI-0716C8A8).
+  const [environmentClass, setEnvironmentClass] = useState("");
   const [issueConfirmed, setIssueConfirmed] = useState(false);
   const [joinPackage, setJoinPackage] = useState<string | null>(null);
   const [packagePreview, setPackagePreview] = useState<OrganizationJoinPackagePreview | null>(null);
@@ -67,9 +72,9 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
   }
 
   function issueJoinFile() {
-    if (!issueConfirmed || !chosenPeer) return;
+    if (!issueConfirmed || !chosenPeer || !environmentClass) return;
     startTransition(async () => {
-      const result = await issueOrganizationJoinFileAction({ intendedPeer: chosenPeer });
+      const result = await issueOrganizationJoinFileAction({ intendedPeer: chosenPeer, environmentClass });
       setIssueConfirmed(false);
       if (!result.ok) {
         setNotice({ kind: "error", text: result.message });
@@ -184,6 +189,23 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
               placeholder="192.168.0.200"
             />
           ) : null}
+          <SelectField
+            name="joining-environment-class"
+            label={t("environmentClass.label")}
+            required
+            placeholder={t("environmentClass.placeholder")}
+            value={environmentClass}
+            onValueChange={(value) => {
+              setEnvironmentClass(value);
+              setIssueConfirmed(false);
+            }}
+            hint={t("environmentClass.hint")}
+            options={[
+              { value: "production", label: t("environmentClass.production") },
+              { value: "development", label: t("environmentClass.development") },
+              { value: "test", label: t("environmentClass.test") },
+            ]}
+          />
           {chosenPeer ? (
             <CheckboxField
               name="confirm-intended-installation"
@@ -196,7 +218,7 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
             <SubmitButton
               pending={isPending}
               pendingLabel="Creating…"
-              disabled={!issueConfirmed || !chosenPeer}
+              disabled={!issueConfirmed || !chosenPeer || !environmentClass}
               data-dpf-primary-action
             >
               Create one-time file
@@ -229,6 +251,7 @@ export function OrganizationJoinPanel({ candidates = [] }: { candidates?: Organi
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all text-[var(--dpf-muted)]">
                 <dt>Organization host</dt><dd>{new URL(packagePreview.caUrl).host}</dd>
                 <dt>For installation</dt><dd>{packagePreview.intendedPeer}</dd>
+                <dt>{t("preview.certifiedAs")}</dt><dd>{packagePreview.environmentClass ? t(`environmentClass.${packagePreview.environmentClass}`) : t("preview.notStated")}</dd>
                 <dt>Expires</dt><dd>{packagePreview.expiresAt.toLocaleString()}</dd>
                 <dt>Trust fingerprint</dt><dd>{packagePreview.rootFingerprint.slice(0, 12)}…</dd>
               </dl>
