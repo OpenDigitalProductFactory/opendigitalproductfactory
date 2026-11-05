@@ -1707,6 +1707,7 @@
       "anchors": [
         "failure-analysis-and-recovery-evidence",
         "deployment-and-protection",
+        "the-review-packet-fits-its-reviewer-bi-fd7de19d",
         "unconfigured-verification-is-not-a-successful-check"
       ]
     },
@@ -2831,6 +2832,7 @@
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "offered-or-not-dispatched-offered-then-corrected-once-bi-62db6c03",
+        "required-means-required-forced-at-the-last-step-busy-is-a-requeue-bi-a8679d84",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
@@ -4374,6 +4376,20 @@
         "what-to-do-instead",
         "anti-pattern",
         "penalty",
+        "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/expertise-compounds-in-profession-coworkers.md": {
+      "publicHref": "/founder-kernel/wiki/principles/expertise-compounds-in-profession-coworkers/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "expertise-compounds-in-profession-coworkers",
+        "rule",
+        "why",
+        "observed-gap-production-week-to-2026-11-04",
+        "how-to-apply",
         "related-principles"
       ]
     },
@@ -5999,7 +6015,8 @@
       "anchors": [
         "documentation-maintenance",
         "staleness-reportmdstaleness-reportmd",
-        "how-this-fits-the-anti-drift-system"
+        "how-this-fits-the-anti-drift-system",
+        "gate-cost-inventory-2026-11mdgate-cost-inventory-2026-11md"
       ]
     },
     "docs/maintenance/capability-completeness.md": {
@@ -6048,6 +6065,28 @@
         "progress",
         "checklist",
         "areas-in-scope-and-what-automates-them"
+      ]
+    },
+    "docs/maintenance/gate-cost-inventory-2026-11.md": {
+      "publicHref": "/maintenance/gate-cost-inventory-2026-11/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gate-cost-inventory-november-2026",
+        "summary-for-mark",
+        "1-what-can-block-a-change-and-what-it-costs",
+        "11-required-github-checks-branch-protection-on-main",
+        "12-jobs-inside-merge-readiness",
+        "13-local-gates-before-push",
+        "14-mandatory-manifests-and-trailers-policy-guards-pr-so-they-block-via-merge-readiness",
+        "15-backlog-claim-readiness-initiative-readiness-enforced-at-claimbacklogitemforwork",
+        "16-token-caps-appsweblibinferencebudget-gatets-packagesdbdataagentregistryjson",
+        "2-ranked-recommendations",
+        "3-not-measured",
+        "appendix-a-every-policy-guard",
+        "a1-policy-guard-registry-scriptslibci-policy-guardsmjs-90-entries",
+        "a2-repo-guard-loop-members-scriptscheck-guardsmjs-58-check-no-guards-all-fail-closed"
       ]
     },
     "docs/maintenance/obligation-cadence-coverage.md": {
@@ -6397,7 +6436,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
-        "owned-development-lease-cleanup",
+        "routine-lease-release",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
@@ -7315,6 +7354,19 @@
         "see-also"
       ]
     },
+    "docs/professions/devops-platform/wiki/pin-ci-toolchain-to-qualified-version.md": {
+      "publicHref": "/professions/devops-platform/wiki/pin-ci-toolchain-to-qualified-version/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "observed-failure-dpf-2026-11-03",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/devops-platform/wiki/sbom-in-the-pipeline.md": {
       "publicHref": "/professions/devops-platform/wiki/sbom-in-the-pipeline/",
       "portalHref": null,
@@ -7528,6 +7580,18 @@
     },
     "docs/professions/enterprise-architecture/wiki/name-and-type-the-contract-canonically.md": {
       "publicHref": "/professions/enterprise-architecture/wiki/name-and-type-the-contract-canonically/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/enterprise-architecture/wiki/place-controls-at-the-owning-scope.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/place-controls-at-the-owning-scope/",
       "portalHref": null,
       "publishedPublic": true,
       "publishedPortal": false,
@@ -8472,6 +8536,19 @@
         "sources"
       ]
     },
+    "docs/professions/operations/wiki/size-shared-limits-to-measured-demand.md": {
+      "publicHref": "/professions/operations/wiki/size-shared-limits-to-measured-demand/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "observed-failure-dpf-2026-11-03",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/operations/wiki/sli-slo-error-budget.md": {
       "publicHref": "/professions/operations/wiki/sli-slo-error-budget/",
       "portalHref": null,
@@ -8590,6 +8667,18 @@
       "anchors": [
         "heuristic",
         "why-it-is-expert-work",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/portfolio-management/wiki/hold-ai-spend-at-portfolio-level.md": {
+      "publicHref": "/professions/portfolio-management/wiki/hold-ai-spend-at-portfolio-level/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
         "how-to-apply",
         "see-also"
       ]
@@ -8908,6 +8997,18 @@
         "see-also"
       ]
     },
+    "docs/professions/scrum-master/wiki/same-scope-handover-is-propose-and-acknowledge.md": {
+      "publicHref": "/professions/scrum-master/wiki/same-scope-handover-is-propose-and-acknowledge/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/scrum-master/wiki/scrum-master-accountability.md": {
       "publicHref": "/professions/scrum-master/wiki/scrum-master-accountability/",
       "portalHref": null,
@@ -9192,6 +9293,19 @@
       "anchors": [
         "rule",
         "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/software-engineer/wiki/mandatory-gate-readiness.md": {
+      "publicHref": "/professions/software-engineer/wiki/mandatory-gate-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "observed-failure-dpf-2026-11-03",
         "how-to-apply",
         "see-also"
       ]
@@ -12018,6 +12132,7 @@
         "the-immutable-decision-ledger",
         "un-tampered-with-is-not-the-same-as-true",
         "how-the-three-examples-relate",
+        "what-a-weekly-review-result-proves",
         "related-reading"
       ]
     },
@@ -12066,6 +12181,7 @@
         "the-priority-half",
         "4-the-corpus-decides-the-question",
         "5-the-gate-checks-the-tool",
+        "a-no-is-answered-once",
         "the-floors-nothing-crosses",
         "6-the-receipt-is-what-you-review",
         "known-limits",
@@ -12096,6 +12212,7 @@
         "reading-the-two-percentages",
         "what-to-watch",
         "what-you-must-still-do",
+        "paid-ai-allowance",
         "authority-governance",
         "agent-authority-overview",
         "tool-execution-log",
@@ -13044,6 +13161,7 @@
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",
+        "clearing-copies-of-a-paired-installations-demand",
         "shared-demand",
         "activate-local-demand",
         "what-build-studio-starts-next",
@@ -13270,6 +13388,7 @@
         "what-works-without-a-map-pack",
         "what-a-map-pack-adds",
         "which-map-pack-you-need",
+        "install-a-recommended-map-pack",
         "attribution",
         "privacy"
       ]

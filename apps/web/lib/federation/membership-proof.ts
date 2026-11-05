@@ -17,7 +17,10 @@
 
 import { X509Certificate, createPrivateKey, createSign, createVerify, type KeyObject } from "node:crypto";
 
+import type { InstallationEnvironmentClass } from "@dpf/db/installation-operating-intent";
 import { normalizeFingerprint } from "@dpf/db/peer-certificate-verification";
+
+import { readAttestedEnvironmentClass } from "./environment-class-attestation";
 
 export const MEMBERSHIP_STATEMENT_VERSION = "dpf.membership-statement/1" as const;
 /** A statement older or newer than this is refused (clock skew allowance). */
@@ -50,6 +53,11 @@ export interface ChainVerification {
   presentedRootFingerprint: string | null;
   leafFingerprint: string | null;
   leafSubject: string | null;
+  /**
+   * The environment class the CA certified in the leaf (BI-0716C8A8). Set only
+   * on a verified chain; null otherwise and for a leaf that names none.
+   */
+  attestedEnvironmentClass: InstallationEnvironmentClass | null;
   failure:
     | "empty-chain"
     | "chain-too-long"
@@ -122,7 +130,9 @@ export function verifyMembershipChain(input: {
   pinnedRootPem: string | null;
   now: Date;
 }): ChainVerification {
-  const result: ChainVerification = { verified: false, presentedRootFingerprint: null, leafFingerprint: null, leafSubject: null, failure: null };
+  const result: ChainVerification = {
+    verified: false, presentedRootFingerprint: null, leafFingerprint: null, leafSubject: null, attestedEnvironmentClass: null, failure: null,
+  };
   if (!input.pinnedRootPem) return { ...result, failure: "no-pinned-root" };
   const pinned = parse(input.pinnedRootPem);
   if (!pinned) return { ...result, failure: "no-pinned-root" };
@@ -166,7 +176,7 @@ export function verifyMembershipChain(input: {
   if (!isSelfSigned(root)) return { ...result, failure: "chain-has-no-root" };
   result.presentedRootFingerprint = bareFingerprint(root);
   if (result.presentedRootFingerprint !== pinnedFingerprint) return { ...result, failure: "root-fingerprint-mismatch" };
-  return { ...result, verified: true };
+  return { ...result, verified: true, attestedEnvironmentClass: readAttestedEnvironmentClass(leaf.subjectAltName) };
 }
 
 /** Deterministic serialisation so both sides sign and verify identical bytes. */

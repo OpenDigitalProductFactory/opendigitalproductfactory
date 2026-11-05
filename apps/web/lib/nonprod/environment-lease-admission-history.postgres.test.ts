@@ -30,7 +30,10 @@ function domainDb(f: Fixture) {
 }
 async function realClaim(f: Fixture, queued: boolean) {
   const now = new Date();
-  const pressure = { observedAt: now.toISOString(), availableMemoryBytes: queued ? 0 : 128 * 1024 ** 3,
+  // Keep this fixture's host telemetry internally coherent so the queued case
+  // exercises actual pressure rather than the fail-closed missing-total path.
+  const pressure = { observedAt: now.toISOString(), totalMemoryBytes: 256 * 1024 ** 3,
+    availableMemoryBytes: queued ? 0 : 128 * 1024 ** 3,
     dockerAvailableMemoryBytes: queued ? 0 : 128 * 1024 ** 3, builderMemoryUsageBytes: [0, 0],
     sustainedCpuPercent: 1, diskFreeBytes: 512 * 1024 ** 3, dockerHealthy: true,
     convergenceActive: false, fencesHealthy: true, evidenceIsolationHealthy: true };

@@ -178,7 +178,10 @@ type MirrorRef = { itemId: string; peerStatus: string; body: string | null };
  * backfills the twins that predate it.
  */
 export async function recordFederatedTwins(db: TwinActivityDb, mirrors: readonly MirrorRef[], now: Date): Promise<number> {
+  // A closed peer item is not "the same defect tracked" there: resolveTwins
+  // already ignores terminal candidates, and the note must agree (BI-C7D95F7E).
   const markedMirrors = mirrors
+    .filter((mirror) => !(TWIN_TERMINAL_STATUSES as readonly string[]).includes(mirror.peerStatus))
     .map((mirror) => ({ mirror, markers: intakeOriginMarkers(mirror.body), peer: federatedWorkOrigin(mirror.body) }))
     .filter((entry) => entry.markers.length > 0 && entry.peer !== null);
   if (markedMirrors.length === 0) return 0;

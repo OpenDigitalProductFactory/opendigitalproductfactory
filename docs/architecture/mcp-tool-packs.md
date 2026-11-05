@@ -163,6 +163,12 @@ arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) 
 followed on the same lazy pattern as the third and fourth packs — **every sibling-module
 domain (static + lazy) is now extracted.**
 
+`claim_backlog_item_for_work` and `adopt_worktree` accept `baseSha`/`headSha` as a
+full SHA or a prefix of 7 or more hex characters (BI-DF34D948). The handlers expand a
+prefix through the repository provider, using `work-capsules/source-commit-resolution.ts`.
+They refuse an ambiguous or unknown prefix, name the recorded candidates, and return the
+caller's own call corrected. Both tool descriptions carry one complete worked call.
+
 `rebind_workroom_shape` (BI-CB5C0DCE) lives in this pack, but its handler is
 its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
 `mcp-handlers.ts` does not grow. It is the governed way to move a room's

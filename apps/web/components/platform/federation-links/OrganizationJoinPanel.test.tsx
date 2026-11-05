@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockImport, mockIssue } = vi.hoisted(() => ({
   mockImport: vi.fn(),
   mockIssue: vi.fn(),
 }));
+
+function render(node: ReactNode) {
+  return renderView(node, { wrapper: ({ children }) => <MessagesProvider locale="en-US" messages={{ organizationJoin: namespaceMessages("en-US", "organizationJoin") }}>{children}</MessagesProvider> });
+}
 
 vi.mock("@/lib/actions/organization-join", () => ({
   importOrganizationJoinFileAction: mockImport,
@@ -62,9 +69,13 @@ describe("OrganizationJoinPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
     expect((screen.getByLabelText(/^Installation that will join/) as HTMLSelectElement).value).toBe("windows-dev.local");
     fireEvent.click(screen.getByLabelText(/I confirm this file is for windows-dev.local/));
+    // The class has no default: the file cannot be created until the operator says what the installation is.
+    expect((screen.getByRole("button", { name: "Create one-time file" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/^What that installation is/), { target: { value: "development" } });
+    fireEvent.click(screen.getByLabelText(/I confirm this file is for windows-dev.local/));
     fireEvent.click(screen.getByRole("button", { name: "Create one-time file" }));
 
-    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "windows-dev.local" }));
+    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "windows-dev.local", environmentClass: "development" }));
     await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled());
     expect((await screen.findByRole("status")).textContent).toMatch(/downloaded once/i);
   });
@@ -74,10 +85,11 @@ describe("OrganizationJoinPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
     expect((screen.getByLabelText(/^Installation that will join/) as HTMLSelectElement).value).toBe("__other__");
     fireEvent.change(screen.getByLabelText(/^Installation name/), { target: { value: "192.168.0.200" } });
+    fireEvent.change(screen.getByLabelText(/^What that installation is/), { target: { value: "test" } });
     fireEvent.click(screen.getByLabelText(/I confirm this file is for 192.168.0.200/));
     mockIssue.mockResolvedValueOnce({ ok: false, error: "not_ready", message: "Only the organization installation can create join files" });
     fireEvent.click(screen.getByRole("button", { name: "Create one-time file" }));
-    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200" }));
+    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200", environmentClass: "test" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/Only the organization installation/);
   });
 

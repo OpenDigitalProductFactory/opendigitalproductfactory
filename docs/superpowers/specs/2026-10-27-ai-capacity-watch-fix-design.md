@@ -44,6 +44,10 @@ Reproduced on `027053263fe`:
 5. **Intake dedup**: minted items carry `Signature: <dedupeKey>` and `Source report: <id>`. Before the LLM runs, and again right before minting, a live bug item with the same report or signature is looked up. Earlier reports with the same `dedupeKey` are included, so legacy items are found too. A match goes through `incrementOccurrence`, which bumps the tally and raises priority. The report is claimed atomically (`updateMany` on OPEN) before minting and released if minting fails.
 6. **Docs**: user guide (`docs/user-guide/ai-workforce/connecting-providers.md`) and `docs/operations/observability-coverage.md`.
 
+### Follow-up: BI-783EBEE6 (2026-11-03)
+
+The anthropic-sub row resolved on 2026-11-02 23:25Z while the provider was still dark. The window held 4 failed calls and none served. That was below the 5-call finding threshold, but the provider had traffic, so the row was not held either. Now a previously open provider row is held whenever its provider served nothing in the window. Only a served call resolves it. The same change carries the Claude CLI's dated reset from the native terminal verdict into capacity as `quota_resets_at`, through `apps/web/lib/routing/cli-limit-reset.ts`. It also renews every OAuth account that holds a refresh token unless an operator disabled or disconnected it.
+
 ## Not in this change
 
 - Self-repair actions stay with their owners: background OAuth renewal is #6680, and usage-limit reclassification is #6679. The watch reports what is still failing after those mechanisms have acted.
