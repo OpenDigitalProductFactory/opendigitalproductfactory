@@ -6,6 +6,7 @@ import {
   ensureAuthorityApprovalEnvelope,
   findApprovedAuthorityEnvelope,
   findExecutedAuthorityOutcome,
+  hasCurrentAuthorityApproval,
   resumeAuthorityApprovalTask,
 } from "./authority-approval-envelope";
 
@@ -39,6 +40,21 @@ function db() {
 }
 
 describe("authority approval envelopes", () => {
+  it("checks exact current approval/replay metadata without reading arguments or results", async () => {
+    const mockDb = db();
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValueOnce({ id: "ENV-EXISTING" }).mockResolvedValueOnce(null);
+    const now = new Date("2026-07-27T11:00:00Z");
+    expect(await hasCurrentAuthorityApproval(BINDING, now, mockDb)).toBe(true);
+    expect(await hasCurrentAuthorityApproval(BINDING, now, mockDb)).toBe(false);
+    expect(mockDb.coworkerActionEnvelope.findFirst.mock.calls[0]?.[0]).toMatchObject({
+      where: { approvalBindingFingerprint: expect.any(String), OR: [
+        { status: { in: ["proposed", "approved"] }, expiresAt: { gt: now } },
+        { status: { in: ["executed", "failed"] }, resolvedAt: { gt: expect.any(Date) } },
+      ] }, select: { id: true },
+    });
+    expect(mockDb.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(mockDb.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
+  });
   it("creates one privacy-safe envelope and pauses only the exact task", async () => {
     const mockDb = db();
     mockDb.coworkerActionEnvelope.findFirst.mockResolvedValue(null);

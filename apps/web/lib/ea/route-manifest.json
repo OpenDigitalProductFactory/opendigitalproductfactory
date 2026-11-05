@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 683,
+  "routeCount": 684,
   "routes": [
     {
       "routePath": "/",
@@ -1205,6 +1205,18 @@
         "packId"
       ],
       "file": "apps/web/app/api/map-assets/[packId]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/install-status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "install-status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/install-status/route.ts",
       "exposure": "authenticated"
     },
     {

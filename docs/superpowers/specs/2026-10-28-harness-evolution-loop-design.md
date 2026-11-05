@@ -372,6 +372,193 @@ The rest of the loop is steered, in this order:
 The rollup lists recurrence per miss key, room and shape before and after each
 adoption. The target is a miss that stops recurring.
 
+## Continual improvement as a standing operation (BI-CE564FBB)
+
+Amendment, 2026-10-28. The founder, on the same day:
+
+> "We need to turn this into its own AI coworker and responsibility in the
+> platform to operate continuously. In ITIL and 6-sigma terms, this is
+> continuous improvement. Here, we need to automate this as much as possible
+> as a way of operation, not extraneous activity."
+
+He also wrote that "all rooms need to have this type of activity", and that
+the diminishing returns in the material call for specific operating criteria.
+
+This amendment turns the loop above into a standing operation with three
+parts:
+
+1. **One owner.** WWMD DI-942BE30F1B00 chose a new cross-cutting specialist.
+   It rejected extending the delivery-flow coordinator, and it rejected
+   letting room overseers act with no owner.
+2. **An improve activity on every work shape.** Every room inherits it.
+3. **Operating criteria.** These are typed configuration, set by the
+   Harness² returns curve.
+
+It follows two standards:
+
+- the ITIL 4 Continual Improvement practice, which supplies the continual
+  improvement model and the register;
+- Lean Six Sigma DMAIC, which supplies the control charts that separate
+  common-cause variation from special-cause variation.
+
+**OBJ-7:** Continual improvement is a standing platform operation: one accountable coworker owns the register end to end, and every Workroom, whatever its shape, executor or archetype, inherits an improve activity from its work shape with no opt-in and no per-room setup.
+
+**OBJ-8:** Improvement effort is spent only where its return justifies it, under typed operating criteria (eligibility, Pareto ranking on the human → AI → code ladder, K=1-first budgets, stop rules, control limits), and every cycle records what it worked, what it skipped and why.
+
+| Criterion | Objectives | Statement |
+| --- | --- | --- |
+| AC-20 | OBJ-7 | Every shape in the work-shape registry resolves the standard improve activity: deterministic, model judgement gated by the criteria, owned by the Continual Improvement Manager, executed by the room's own `coordinator`, recording misses from every executor. A test fails if any shape resolves none. A room resolves it from its declared shape alone. |
+| AC-21 | OBJ-7 | The Continual Improvement Manager (AGT-908, `continual-improvement-manager`) is seeded on every install with its registry entry, roster entry, matching grants, model floor and persona. It owns `harness-evolution-loop-daily`, and an install seeded earlier is re-pointed on its next seed. Its coordination binding is derived from the `continual-improvement-register` standing shape. |
+| AC-22 | OBJ-8 | The operating criteria are typed configuration with the defaults below. Every value is clamped, a layer may override them, and a weighting that breaks the human > AI > code order is refused. |
+| AC-23 | OBJ-8 | Each cycle's ledger lists the misses it found eligible, the misses it worked, and every skipped miss with its reason. The TaskRun records that ledger. |
+| AC-24 | OBJ-8 | A miss key's per-period counts are judged on a c-chart. Common cause (inside the limits and under target) gets no edit. Special cause (a point beyond the limit, or a run above the centre line) or a rate above target is acted on. Each verdict schedules control checks at 7 and 14 days. |
+| AC-25 | OBJ-7 | On the DEV install, one full DMAIC cycle runs on a ring-0 room with no human step: a recurring miss, an eligible candidate, a probe, a verdict and a scheduled control check. |
+
+### The owner: Continual Improvement Manager (AGT-908)
+
+- **Owns:**
+  - the register: miss → candidate → probe → verdict → recurrence check;
+  - the operating criteria;
+  - the control charts;
+  - cross-room promotion;
+  - the weekly rollup (BI-61E412F2).
+- **Accountable for closure, not detection.** It merges duplicate detections
+  (BI-049409BF) and reopens a fix that recurs (BI-D33412EA).
+- **Runs on the typed job.** Slice 1's `harness-evolution-loop-daily` moves
+  from the AI Ops Engineer to this coworker. Orchestration stays code.
+- **Grants (8).** `registry_read` (reaches `wiki_query` and
+  `principle_decide`), `backlog_read`, `backlog_write`, `work_room_read`,
+  `work_room_write`, `workroom_evidence_write`, `spec_plan_read` and
+  `agent_control_read`. It has no merge, release or grant authority.
+- **Supervisor.** HR-300.
+- **Model floor.** `adequate`, cost-minimised. Its loop is deterministic, and
+  its own turns must not outspend the weak and local models the criteria
+  favour.
+- **Authority binding.** It comes from the existing derivation
+  (`lib/authority/coordination-bindings.ts`, BI-E0728215). The new standing
+  shape `continual-improvement-register` names AGT-908 as the driver of its
+  agent stages:
+  - define;
+  - measure;
+  - improve;
+  - control.
+
+  The shape proposes the driver, and the binding grants it. Adoption is the
+  `decide` stage, a governed decision (`harness-edit-adoption`). It lands as
+  governed change until GPP permits can steer (BI-6B610D94).
+- **Decisions.** Every edit is decided through WWMD, WWWD or WSID by its
+  scope. A question no scope can answer becomes a kernel gap, not a question
+  to a person.
+
+### The improve activity on every shape
+
+The improve activity is resolved by the registry
+(`work-shapes.ts`: `getWorkShapeImproveActivity`,
+`resolveRoomImproveActivity`). It comes from the family that registers the
+shape, so it is not written into each literal (WWMD DI-D7C2BBE33693, margin
+6.1).
+
+Three reasons for that:
+
+- It is one core in every room.
+- It sits outside the binding contract (`readWorkShapeDefinitionContract`),
+  so no shape version bumps and no live room has to rebind.
+- A new shape carries it the day it is registered.
+
+| Family | Layer | Scope |
+| --- | --- | --- |
+| delivery shapes | `ring-0` | WWMD |
+| standing operations | `platform-operations` | WWMD |
+| anchor compliance, acceptance verification, post-implementation review | `assurance` | WWMD |
+| orchestration cycles | `orchestration` | WWMD |
+| coworker standing (general, operate) | `business-operations` | WWWD |
+| coworker standing (craft) | `craft` | WSID |
+
+The activity is the same everywhere:
+
+- **Mode.** It is `deterministic`. Model judgement is `criteria-gated`.
+- **Owner.** AGT-908.
+- **Executor role.** `coordinator`: the room's Process Overseer
+  (BI-3913EB49). No second overseer is created.
+- **Executors.** Claude, Codex, Grok, Build Studio, in-platform coworkers and
+  people.
+- **Signals.** Tool failure, miss activity and flow bottleneck.
+- **Control metrics.** Misses per run, human touches per run and refusals per
+  success.
+
+`validateImproveActivity` refuses four kinds of declaration:
+
+- one that turns improvement off or makes it model-first;
+- one that hands ownership to a person;
+- one that names a second executor role;
+- one that drops an executor's misses.
+
+### Operating criteria
+
+The criteria live in `apps/web/lib/continual-improvement/operating-criteria.ts`
+(`resolveImprovementCriteria`). Slice 2 consumes this module; its local stub
+`improvement-criteria.ts` re-exports it. These are the defaults:
+
+| Step | Rule | Default |
+| --- | --- | --- |
+| Define | Distinct runs or sessions in the window | ≥ 2 (`single-run`) |
+| Define | Shape repetition | ≥ 3 a week (`shape-too-rare`) |
+| Define | Cost per occurrence, AI-turn equivalent | ≥ 1 (`below-floor`) |
+| Prioritize | Rank by | expected savings × ladder weight × bias |
+| Prioritize | Ladder weights | human 3, AI 2, code 1 (order enforced) |
+| Prioritize | Vital few | top 20% of eligible, at least 1 (`outside-pareto-cut`) |
+| Budget | K | 1; 2 only after KEEP_BASE in the top cost decile; max 2 |
+| Budget | Probe spend | ≤ expected savings, frequency × cost × 4-week horizon (`spend-exceeds-savings`) |
+| Budget | Cycle probe cap | from the task budget (`budget-exhausted`) |
+| Stop | Parking | 2 consecutive KEEP_BASE verdicts (`parked-after-keep-base`) |
+| Stop | Control limits | c-chart, 3σ; run of 8 above the centre line (`inside-control-limits`) |
+| Bias | Weak or local model | × 1.5 |
+| Bias | Sparse harness | × 1.25 |
+| Control | Recurrence checks | 7 and 14 days after the verdict |
+
+Every value is clamped, and `layers[<layer>]` overrides it for one layer.
+`rankAndSelect` returns the cycle ledger: `eligible`, `worked`, and `skipped`
+with a reason for each.
+
+Two of these numbers are calibration, not doctrine: the weekly repetition
+floor and the cost floor. BI-CE564FBB names the rule but not the number. The
+loop starts from these values and tunes them from its own ledger.
+
+### Gate burden and rung
+
+Three rules order the edits the loop prefers:
+
+1. A check inside the tool beats a refusal.
+2. A refusal that names its next call beats a bare deny.
+3. Any of those beats a permit, and a permit beats prose.
+
+An edit that raises human load is never adopted. This amendment adds no new
+gate. It adds three tests:
+
+- one in the registry (every shape carries the activity);
+- one for the criteria;
+- one for the owner seed.
+
+It also adds one standing-shape row to existing conformance suites.
+
+### Delivery
+
+AC-20 through AC-24 ship as three stacked PRs. Each is under the reviewer
+size limit:
+
+1. the operating criteria (AC-22, AC-24), with this amendment;
+2. the improve activity (AC-20);
+3. the CI Manager seed (AC-21).
+
+The register shape that carries the AGT-908 coordination binding is the
+rest of AC-21, tracked as BI-F47DD4CF. It ships once BI-90F0863B makes
+review summarise frozen-generator outputs, because its regenerated drive
+golden is 56 KB. BI-CE564FBB stays open until that binding lands.
+
+Slice 2 wires the cycle ledger into the TaskRun (AC-23). AC-25 closes on the DEV install once slice 2
+(BI-B8DAEB71) merges and the install upgrades. The evidence is recorded on
+BI-CE564FBB.
+
 ## Not taken from Harness²
 
 - **No unbounded search.** Every room and run is capped.

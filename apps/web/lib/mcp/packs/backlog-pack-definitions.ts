@@ -91,6 +91,27 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     consequence: "irreversible",
   },
   {
+    name: "retire_peer_demand_intake_copies",
+    description:
+      "Retire, in one governed step, the backlog copies that inbound issue triage filed from same-organization, revoked-link or withdrawn peer demand. mode \"dry-run\" (the default) is read-only: it returns counts by category, items kept for individual review (claimed, built, in a Workroom, with evidence, or touched after filing) and a selectionDigest. mode \"retire\" with that digest asks the operator for one approval, then retires each copy as retire_backlog_item does (status history, reversible with update_backlog_item_status). A selection that changed since the dry run is refused. Re-running retires nothing twice.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["dry-run", "retire"], description: "dry-run (default) reports only; retire applies the approved selection." },
+        selectionDigest: { type: "string", description: "Required for mode=retire: the selectionDigest from the dry run being approved." },
+        sampleSize: { type: "number", description: "Samples per category in the report (default 5, max 50)." },
+        keptListLimit: { type: "number", description: "Kept-for-review items listed in the report (default 200, max 1000)." },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    consequence: "irreversible",
+    consequenceForCall: async ({ params }) => params["mode"] === "retire"
+      ? { consequence: "irreversible", reason: "peer-demand-copy-bulk-retire" }
+      : { consequence: null, reason: "peer-demand-copy-dry-run" },
+  },
+  {
     name: "size_backlog_item",
     description: "Assign effortSize to a backlog item. Useful when sizing is a follow-up step rather than part of a single triage commit.",
     inputSchema: {

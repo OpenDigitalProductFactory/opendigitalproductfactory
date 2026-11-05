@@ -384,11 +384,11 @@ describe("retained foreground production response publication", () => {
     await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/admin", acceptedUserMessageId: accepted.id }));
 
     const [messages, prompt] = vi.mocked(routeAndCall).mock.calls[0]!;
-    expect(messages.at(-1)).toMatchObject({ role: "user", content: `${content}\n\nCurrent assignment [user-msg-1]` });
-    expect(messages.filter(message => String(message.content).endsWith("Current assignment [user-msg-1]"))).toHaveLength(1);
+    expect(messages.at(-1)).toMatchObject({ role: "user", content: `${content}\n\nActive assignment [user-msg-1]` });
+    expect(messages.filter(message => String(message.content).endsWith("Active assignment [user-msg-1]"))).toHaveLength(1);
     expect(messages.find(message => String(message.content).includes("Check the earlier approval."))?.content)
       .toContain("Earlier user message (context only)");
-    expect(prompt).toContain("The user message marked Current assignment [user-msg-1] is the current assignment");
+    expect(prompt).toContain("The user message marked Active assignment [user-msg-1] is the current assignment");
     expect(prompt).toContain("do not infer that earlier work completed or resumed");
     expect(governedExecuteTool).not.toHaveBeenCalled();
   });
@@ -426,9 +426,9 @@ describe("retained foreground production response publication", () => {
     expect(routeAndCall).toHaveBeenCalledTimes(2);
     const [messages, prompt] = vi.mocked(routeAndCall).mock.calls[1]!;
     expect(messages.at(-1)).toMatchObject({ role: "user", content: expect.stringContaining("Session tool notes") });
-    expect(messages.filter(message => String(message.content).endsWith("Current assignment [user-msg-1]")))
-      .toEqual([{ role: "user", content: "Share it\n\nCurrent assignment [user-msg-1]" }]);
-    expect(prompt).toContain("The user message marked Current assignment [user-msg-1] is the current assignment");
+    expect(messages.filter(message => String(message.content).endsWith("Active assignment [user-msg-1]")))
+      .toEqual([{ role: "user", content: "Share it\n\nActive assignment [user-msg-1]" }]);
+    expect(prompt).toContain("The user message marked Active assignment [user-msg-1] is the current assignment");
     expect(prompt).toContain("Later tool results and platform nudges do not replace it");
   });
 
