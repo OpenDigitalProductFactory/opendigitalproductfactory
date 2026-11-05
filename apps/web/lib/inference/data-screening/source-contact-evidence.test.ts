@@ -114,3 +114,41 @@ describe("source quantities and dependency references are not customer contacts"
     expect(result.routeContext.residencyPolicy).toBe("local_only");
   });
 });
+
+describe("placeholder accounts on reserved domains are not customer contacts (BI-9F620FE1 follow-up)", () => {
+  it.each([
+    'email: "admin@dpf.local",',
+    'const walker = { email: "walk@dpf.local" };',
+    'to: "user1@example.test"',
+    'from: "noreply@example.org"',
+    'actor: "automation@dpf.local"',
+    'owner: "test@example.com"',
+  ])("does not classify %s", (line) => {
+    expect(contacts(line)).toEqual([]);
+  });
+
+  it.each([
+    '"user.email=jane@example.invalid"',
+    "jane.doe@example.com",
+    "Customer: test@example.invalid",
+    '"customer.email=admin@dpf.local"',
+    "contact: walk@dpf.local",
+    'email: "admin@company.com"',
+    'email: "admin@dpf.local.example.org.evil.io"',
+    'email: "admin@dpf.local+tag"',
+    'email: "admin@dpf.local" // customer jane@company.com',
+  ])("still classifies a person, customer context, real domain or adjacent contact: %s", (line) => {
+    expect(contacts(line)).toHaveLength(1);
+  });
+
+  it("keeps a review diff with fixture accounts eligible for external routing", () => {
+    const result = screenInferencePayload({
+      systemPrompt: "Review the committed source change.",
+      messages: [{ role: "user", content: 'const provenance = { email: "admin@dpf.local", userAgent: "Mozilla/5.0" };' }],
+      taskType: "build-review",
+      routeContext: { sensitivity: "internal", allowedProviders: ["anthropic-sub", "local"] },
+    });
+    expect(result.receipt.classifiedDataClasses).not.toContain("customer-records");
+    expect(result.routeContext.residencyPolicy).not.toBe("local_only");
+  });
+});
