@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   createIssue: vi.fn(),
   postureDefault: vi.fn(),
   fetch: vi.fn(),
+  verdict: vi.fn(),
+  publish: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -36,6 +38,8 @@ vi.mock("@/lib/build/build-studio-config", () => ({
 vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: () => ({}) } }));
 vi.mock("@/lib/jobs/triggers", () => ({ cron: () => ({}) }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
+vi.mock("@/lib/change-review/failure-readiness-publication", () => ({ checkWorkroomFailureReadiness: mocks.verdict }));
+vi.mock("@/lib/change-review/failure-readiness-status", () => ({ publishFailureReadinessStatus: mocks.publish }));
 
 import { observesRoomHead, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
@@ -72,6 +76,8 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     mocks.activityCreate.mockResolvedValue({});
     mocks.createIssue.mockResolvedValue({ reportId: "PIR-1" });
     mocks.postureDefault.mockResolvedValue(null);
+    mocks.verdict.mockResolvedValue({ mayPublish: true, reason: "reviewed" });
+    mocks.publish.mockResolvedValue(undefined);
     vi.stubGlobal("fetch", mocks.fetch);
   });
   afterEach(() => {
@@ -161,6 +167,49 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(String(mocks.fetch.mock.calls[0]?.[1]?.body)).toContain("enablePullRequestAutoMerge");
     const quietWrite = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "quiet")?.[0];
     expect(quietWrite.data.workspaceState.prDelivery.lastError).toBe("withheld:queue");
+  });
+
+  // BI-4D0B2AAB: a passed review's status expires after an hour, and the merge queue re-checks it.
+  it("republishes Failure Readiness before arming auto-merge, and withholds a PR with no publishable review", async () => {
+    mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
+    mocks.findMany.mockResolvedValue([room({ id: "reviewed", capsuleId: "WC-OK" }), room({ id: "unreviewed", capsuleId: "WC-NONE" })]);
+    mocks.verdict.mockImplementation(async (capsuleId: string) => capsuleId === "WC-OK"
+      ? { mayPublish: true, reason: "reviewed" } : { mayPublish: false, reason: "No failure-analysis review exists for this final change." });
+    const order: string[] = [];
+    mocks.publish.mockImplementation(async () => { order.push("publish"); });
+    mocks.fetch.mockImplementation(async () => { order.push("arm"); return { ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) }; });
+    mocks.observe.mockResolvedValue(observation([{ name: "Failure Readiness", status: "COMPLETED", conclusion: "SUCCESS" }], "CLEAN"));
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(mocks.publish).toHaveBeenCalledWith("WC-OK");
+    expect(mocks.publish).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["publish", "arm"]);
+    expect(result.actuated).toBe(1);
+    const withheld = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "unreviewed")?.[0];
+    expect(withheld.data.workspaceState.prDelivery.status).not.toBe("queued");
+    expect(withheld.data.workspaceState.prDelivery.lastReadiness).toBe("checking");
+  });
+
+  it("clears a PR whose only red check is an expired Failure Readiness status, without staging a repair", async () => {
+    mocks.findMany.mockResolvedValue([room({ id: "expired", capsuleId: "WC-OK" })]);
+    mocks.fetch.mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+    mocks.observe
+      .mockResolvedValueOnce(observation([
+        { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", workflowRunId: 41 },
+        { name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
+      ], "BLOCKED"))
+      .mockResolvedValueOnce(observation([
+        { name: "Failure Readiness", status: "IN_PROGRESS", conclusion: null, workflowRunId: 41 },
+        { name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
+      ], "BLOCKED"));
+
+    await runBuildPrDeliveryReconcile();
+
+    expect(mocks.publish).toHaveBeenCalledWith("WC-OK");
+    expect(String(mocks.fetch.mock.calls[0]?.[0])).toContain("/actions/runs/41/rerun-failed-jobs");
+    expect(mocks.observe).toHaveBeenCalledTimes(2);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 });
 
