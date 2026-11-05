@@ -9,7 +9,7 @@ import {
   type TraceCall,
 } from "./probe";
 
-// BI-B8DAEB71 (slice 2; spec AC-6, AC-14..AC-16): a candidate is replayed
+// BI-B8DAEB71 (slice 2; spec AC-14..AC-16): a candidate is replayed
 // baseline-versus-variant on the room's recorded trace, on three axes —
 // outcome, load per rung, gate burden — and no variant that raises human load
 // can pass.
