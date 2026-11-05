@@ -64,6 +64,24 @@ describe("server publication boundary", () => {
     expect((await checkWorkroomFailureReadiness("room")).reason).toBe("No failure-analysis review exists for this final change.");
     expect(mocks.providers).not.toHaveBeenCalled();
   });
+  it("publishes a passing repair round that follows a failure-analysis-only fail on the same change (BI-38C51AF2)", async () => {
+    const faFail = { ...receipt, result: { decision: "fail", failureAnalysisReview: { adequate: false, rationale: "Omits two disclosed measurement gaps." },
+      issues: [{ severity: "critical", description: "Independent failure-analysis challenge is missing or inadequate." }] } };
+    mocks.rows.mockResolvedValue([
+      { id: "repair", createdAt: new Date("2026-11-05T05:14:00Z"), details: receipt },
+      { id: "fa-fail", createdAt: new Date("2026-11-05T05:10:00Z"), details: faFail },
+    ]);
+    expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: true, evidenceId: "repair" });
+  });
+  it("still blocks a code-finding fail on the same change after a later pass", async () => {
+    const codeFail = { ...receipt, result: { decision: "fail", failureAnalysisReview: receipt.result.failureAnalysisReview,
+      issues: [{ severity: "critical", description: "The refusal path writes state before checking authority." }] } };
+    mocks.rows.mockResolvedValue([
+      { id: "later-pass", createdAt: new Date("2026-11-05T05:14:00Z"), details: receipt },
+      { id: "code-fail", createdAt: new Date("2026-11-05T05:10:00Z"), details: codeFail },
+    ]);
+    expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: false, code: "failure_review_required" });
+  });
   it("never applies an exception to a failed current review", async () => {
     mocks.rows.mockResolvedValue([{ id: "fail", details: { ...receipt, result: { decision: "fail" } } }]);
     mocks.exemption.mockResolvedValue({ evidenceId: "exception", sourceHeadSha: receipt.sourceHeadSha });

@@ -77,18 +77,21 @@ function ipBytes(address: string): Buffer {
 }
 
 /** step-ca classifies a token SAN as an IP when it parses as one, else a DNS name. */
-export function classifySan(name: string): { kind: "ip"; value: string } | { kind: "dns"; value: string } {
+export function classifySan(name: string): { kind: "ip" | "dns" | "uri"; value: string } {
   const trimmed = name.trim().replace(/^\[|\]$/g, "");
+  // A URN keeps its case: it is the environment-class attestation (BI-0716C8A8),
+  // not a host name.
+  if (/^urn:/i.test(trimmed)) return { kind: "uri", value: trimmed };
   return isIP(trimmed) ? { kind: "ip", value: trimmed } : { kind: "dns", value: trimmed.toLowerCase() };
 }
 
 function generalName(name: string): Buffer {
   const san = classifySan(name);
-  // GeneralName: iPAddress is [7] IMPLICIT OCTET STRING; dNSName is [2] IMPLICIT
-  // IA5String — the context tag replaces the universal tag in both cases.
-  return san.kind === "ip"
-    ? contextPrimitive(7, ipBytes(san.value))
-    : contextPrimitive(2, Buffer.from(san.value, "ascii"));
+  // GeneralName: iPAddress is [7] IMPLICIT OCTET STRING; dNSName is [2] and
+  // uniformResourceIdentifier [6] IMPLICIT IA5String — the context tag
+  // replaces the universal tag in each case.
+  if (san.kind === "ip") return contextPrimitive(7, ipBytes(san.value));
+  return contextPrimitive(san.kind === "uri" ? 6 : 2, Buffer.from(san.value, "ascii"));
 }
 
 /** The SAN set the CA's token names: the subject first, then extra names, deduplicated. */

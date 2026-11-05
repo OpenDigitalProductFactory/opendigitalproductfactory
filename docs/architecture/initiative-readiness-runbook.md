@@ -287,6 +287,13 @@ incomplete source identity. Never invent a base or substitute the running
 install's commit for unpublished work. Other readiness and authority gates
 still apply.
 
+**Repository artifacts from a path.** On an unbound `record_initiative_*` call,
+`artifactRef` may be just `{path, headSha}` for a pushed file. The server fills in
+`kind`, the canonical repository and the full commit. It also derives
+`providerBlobId` from the provider, the equivalent of `git rev-parse <head>:<path>`.
+A supplied `providerBlobId` is still verified. Every `malformed-receipt` refusal
+from these writers ends with `Retry: <tool>({...})`, the caller's own call corrected.
+
 1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
 2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:
    - `reviewerRoutes[]` — per gate: `accountableRole`, `gate`, `targetAgentId`, `independent`, and a ready `requestCoworker` packet with `requiredToolNames` + `initiativeReviewBinding` (the writer tool + the immutable `artifactRef` — repo, commitSha, path, providerBlobId).
