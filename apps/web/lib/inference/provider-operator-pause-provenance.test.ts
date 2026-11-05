@@ -45,7 +45,7 @@ function fixture() {
   return { get state() { return state; }, deps };
 }
 const provenance = (reason = "Freeing the GPU for a model swap"): PauseProvenance => ({
-  reason, userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/142", clientIp: "172.18.0.1", sessionFingerprint: "3f2a9c01d4e5b6a7", email: "admin@dpf.local",
+  reason, userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/142", clientIp: "172.18.0.1", sessionFingerprint: "3f2a9c01d4e5b6a7", email: "operator-account",
 });
 
 describe("operator pause provenance (BI-1C36C88A)", () => {
@@ -62,7 +62,7 @@ describe("operator pause provenance (BI-1C36C88A)", () => {
     expect(f.state.job?.metadata).toMatchObject({ reason: "Freeing the GPU for a model swap" });
     expect(f.state.audit[0].parameters).toMatchObject({
       action: "pause", reason: "Freeing the GPU for a model swap", userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/142",
-      clientIp: "172.18.0.1", sessionFingerprint: "3f2a9c01d4e5b6a7", email: "admin@dpf.local",
+      clientIp: "172.18.0.1", sessionFingerprint: "3f2a9c01d4e5b6a7", email: "operator-account",
     });
     const { reason: _reason, ...client } = provenance();
     await resumeOperatorProvider({ providerId: "local", actorId: "operator", provenance: client }, f.deps("2026-11-05T00:05:00Z"));
