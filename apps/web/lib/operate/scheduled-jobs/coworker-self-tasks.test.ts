@@ -442,7 +442,12 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
     const { prisma } = await import("@dpf/db");
     (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
-      { taskId: coworkerSelfTaskId(MKT, "u1"), agentId: MKT, ownerUserId: "u1", schedule: "7 14 * * *" },
+      {
+        taskId: coworkerSelfTaskId(MKT, "u1"), agentId: MKT, ownerUserId: "u1", schedule: "7 14 * * *",
+        title: COWORKER_SELF_TASKS[MKT]!.title,
+        prompt: COWORKER_SELF_TASKS[MKT]!.prompt,
+        routeContext: COWORKER_SELF_TASKS[MKT]!.routeContext,
+      },
     ]);
 
     const r = await reconcileAllCoworkerSelfTasks();
@@ -452,6 +457,36 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
     // growth must not become silencing the coworker.
     expect(r.deactivated).toBe(0);
     expect(prisma.scheduledAgentTask.updateMany as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  // BI-4B643D89 (second half): the reference install's marketing self-task is
+  // an observed orphan, so #6278's Direction A refresh never reached it and it
+  // kept failing on the pre-#6109 prompt into November.
+  it("Direction B: brings an orphan's stale title and prompt up to date, leaving it running", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        taskId: coworkerSelfTaskId(MKT, "u1"), agentId: "AGT-WS-MARKETING", ownerUserId: "u1", schedule: "7 14 * * *",
+        title: "Refresh the acquisition campaign brief",
+        prompt: "old prompt naming create_marketing_campaign_brief",
+        routeContext: "/customer/marketing",
+      },
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.orphansObserved).toBe(1);
+    expect(r.refreshed).toBe(1);
+    expect(r.deactivated).toBe(0);
+    expect(prisma.scheduledAgentTask.updateMany as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({
+      where: { taskId: coworkerSelfTaskId(MKT, "u1") },
+      data: {
+        title: COWORKER_SELF_TASKS[MKT]!.title,
+        prompt: COWORKER_SELF_TASKS[MKT]!.prompt,
+        routeContext: COWORKER_SELF_TASKS[MKT]!.routeContext,
+      },
+    });
   });
 
   it("Direction B: a task with an active fact is not an orphan", async () => {

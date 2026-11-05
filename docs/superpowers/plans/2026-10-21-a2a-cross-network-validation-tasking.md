@@ -50,6 +50,22 @@ The phases are not one atomic change. P1a–P1d, P2 and P4 can each ship and be 
 
 P1d is a standalone security repair and is not on this path.
 
+## 2a. Traceability
+
+Each deliverable traces to the design's objectives and acceptance checks (2026-08-11 design §24). P1d, P2a and P4a keep their own acceptance and are dependencies, not deliverables of this coverage.
+
+| Key | Backlog item | Objectives | Contracts | Flows | Acceptance |
+| --- | --- | --- | --- | --- | --- |
+| P1a | `BI-0716C8A8` | OBJ-XN3 | contract:attested-environment-class | flow:pairing-attestation | AC-XN-09 |
+| P1b | `BI-3E31B240` | OBJ-XN3 | contract:work-sync-organization-boundary | flow:work-sync-egress-ingress | AC-XN-10 |
+| P1c | `BI-FD00E416` | OBJ-XN3 | contract:delegation-intersection | flow:first-hop-delegation | AC-XN-12 |
+| P2b | `BI-80658CD3` | OBJ-XN3 | contract:overlay-peer-acl | flow:federation-over-overlay | AC-XN-13 |
+| P3 | `BI-B45BBD8A` | OBJ-XN1, OBJ-XN2, OBJ-XN3 | contract:peer-validation-envelope | flow:peer-validation-request | AC-XN-01, AC-XN-03, AC-XN-05, AC-XN-06, AC-XN-07, AC-XN-08, AC-XN-11 |
+| P4b | `BI-7A836207` | OBJ-XN1 | contract:validation-recipe-catalog | flow:edge-recipe-run | AC-XN-04 |
+| P5 | `BI-BCF474E7` | OBJ-XN1 | contract:peer-validation-evidence | flow:first-physical-proof | AC-XN-02 |
+
+Dependencies inside the coverage: P3 on P1a, P1b and P1c; P5 on P2b, P3 and P4b. P2b also needs P2a, and P4b needs P4a; both ship on their own.
+
 ## 3. Phase detail
 
 ### P1 — trust repairs (prerequisites)

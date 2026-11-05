@@ -55,4 +55,18 @@ describe("GovernedBacklogSettings capacity drain switch", () => {
     expect(metrics.visibleFields).toBeLessThanOrEqual(1);
     expect(metrics.disclosureRegions).toBe(1);
   });
+
+  it("keeps further daily limits (the paid AI allowance) inside the same closed disclosure", () => {
+    const { container } = render(
+      <GovernedBacklogSettings enabled dailyCap={3} capacityDrainEnabled playbookMode="off">
+        <div data-testid="paid-inference-allowance">Paid AI allowance</div>
+      </GovernedBacklogSettings>,
+    );
+    const details = container.querySelector("details");
+    expect(details?.open).toBe(false);
+    expect(details?.contains(screen.getByTestId("paid-inference-allowance"))).toBe(true);
+    const metrics = measureUxBudget(container.innerHTML);
+    expect(metrics.defaultVisibleWords).toBeLessThanOrEqual(64);
+    expect(metrics.disclosureRegions).toBe(1);
+  });
 });
