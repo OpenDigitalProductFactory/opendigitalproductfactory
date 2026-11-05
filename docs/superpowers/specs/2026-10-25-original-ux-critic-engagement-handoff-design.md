@@ -6,6 +6,215 @@ status: active
 Backlog: BI-BCBCA8D1. Workroom: WC-6CCF8DAB.
 Status: bounded repair design; implementation and acceptance are not complete.
 
+## November 5 same-candidate continuation amendment
+
+Status: proposed canonical amendment under native DESIGN admission IRD-394EEFB4853C,
+delivery-large@1.0.0, existing BI-BCBCA8D1 / WC-6CCF8DAB. Independent design approval, plan
+coverage, implementation admission, code, exact-source checks and actual execution are still owed.
+This text is not a recovery policy or execution permit.
+
+The room exceeded its prior one-week/three-PR medium appetite: ten merged PRs since October25 did
+not produce the required result. Normal owner withdrawal cancelled the never-admitted parser417
+canonical lease NPEL-5DF23D8861 at 2026-11-05T23:27:08.642Z; wait task
+TR-NONPROD-299FBC961521E58CCF0B8C28 settled terminal. Integration is UNRUN, not passed. Existing 71
+source tests, both web typechecks, 85 host guards and exact CLIENT417 assessment remain attributed
+to that source only. Normal current large DESIGN claim succeeded at23:27:18 under the same room,
+branch and source. Funding organization is unresolved; no founder/organization allocation or budget
+increase is inferred.
+
+Decision DI-6CBDE763DC55 (platform kernel, codex-desktop) selected bounded-captured-adapter over
+generic-recovery-extension, usable/high confidence/autonomy eligible/no commandment conflict; agent
+recorded followed. It selects design direction only. Reuse existing TaskRun, TaskArtifact,
+ToolExecution, native authority, current fence and original room return. No new table, engagement,
+actor, provider or scheduler. Refactor common capture/admission/result ports instead of copying the
+pipeline. The user-requested roughly20% refactoring emphasis remains implementation planning
+guidance, not a fabricated funding allocation.
+
+The October26 sections below describe the deployed v1 contract and history. Their one-candidate,
+expiry and no-resume rules stay unchanged for v1. This separately versioned prospective relation
+becomes available only after independent approval, implementation and fresh exact native
+authorization. It cannot be inferred from v1, this document, a merged commit or an old ALLOW.
+
+### Actual failure and immutable subject
+
+On release178/source765a432c containing authority fix12b1, native
+AUTH-7f15bfc5-3051-458f-bf09-3171f8eabdd1 admitted CE1 present task ending81A6B03E0377. Thirteen
+governed reads and one native configuration GET completed. The worker rejected omitted optional idle
+flags after HTTP200/334bytes, before count or generation. Preserve response
+SHA256097ff7881c4b6e4f146f835f99d38a576b68b48a44dbee79796a72f144c73b17 and first hold
+ta-engagement-present-31554a6e97f15fb291ce0800e9c11dc13e7944a33da0a1b5b2b8cfc5e8cf87de. Its v1
+policy352717889574c9da51683091367f240a3b946ed2e01c53cd13d35ac668fc2f4b and22:02:50.925Z deadline
+remain immutable and expired. Owner-read and independent native counts
+show7artifacts/14executions/1inputmessage/0children/0nodes/0AsyncOps; these snapshots are not yet an
+atomic complete recovery proof.
+
+Retain original CE1 taskD170F2F755AF UNKNOWN. Same present task, input/request/binding, d236
+prototype, five exact guidance blobs and four-image sealed manifest remain unchanged. CE724/f52 has
+no sealed original visual reference and is not a replacement candidate or implicit coverage of later
+code. No result, model-selected criteria/findings or author disposition exists.
+
+### Versioned continuation relation and ceilings
+
+Proposed public operation is request_coworker_engagement with the original engagementId and
+fulfillment.continuation = {schemaVersion:2, taskRunId, expectedPolicyDigest,
+expectedFirstHoldArtifactId, expectedCoverageDigest}. All values are locators or optimistic
+predicates; none is authority. Reject extra keys and caller-supplied policy, deadline, budget,
+identity, configuration or approval fields. The governed server issues a separately versioned
+engagement-present-continuation-v2 artifact only after current native authorization and eligibility.
+This is a proposed contract pending independent design approval, not a currently callable operation.
+
+The immutable v2 relation includes the exact original CE, same present TaskRun, original v1
+artifact/digest, original request/binding digest, first-hold artifact/digest, closed inventory
+digest/version, previous execution fence, server reservation identity, current native
+decision/binding, actor/user/current credential-family identity, configuration/composition digests
+and explicit allowance below. Retain v1 bytes, decoder, maxCandidates=1, expiry and original
+deadline unchanged. Never write a cumulative13 into the v1 max12 field.
+
+Proposed added opportunity: one continuation reservation; no new candidate; one synchronous native
+scope; policy expires exactly fifteen minutes after server issuance; new execution deadline is the
+earlier of that expiry and reservation time plus min(180000ms,current registered timeout). Both
+timestamps are separately labeled prospective and do not supersede the historical v1 deadline. One
+lost or held consumed continuation cannot receive another opportunity under v2. A refusal before the
+reservation commits consumes nothing; after commit, duplicates only observe the same continuation.
+
+Added native HTTP starts <=12, cumulative starts <= prior closed observed/reserved starts +12 (13
+for the observed sole prior configuration GET). At most one cumulative generation reservation/send;
+zero prior generation reservations or uncertain sends is an eligibility condition. Up to12 added
+starts are shared among configuration/count/generation, with exactly one generation maximum. Reader
+calls <=40 cumulative (13 prior plus13 repeated preparation =26); source bytes <=250000 cumulative;
+image bytes <=4000000 and pixels <=40000000 cumulative. Every repeated delivery is charged.
+Preflight actual prior and projected repeated source/image usage; refuse overflow instead of
+replenishing caps. The immutable same four-image manifest is the only permitted image set. No newly
+supplied artifact can change the subject.
+
+Per-task tokens <=min(original v1 perTaskTokens,current registered per-task limit,20000), max output
+<=min(original v1 output,current configured output,2048), daily limit <=current registered limit
+with existing usage/reservations charged. Policy exposes prior known counters and historical D170
+UNKNOWN separately. Unknown original consumption is neither zeroed nor resolved by this policy; the
+native reviewed budget rule must explicitly retain its conservative upper-bound treatment. Any
+unaccountable present-candidate consumption refuses. No new provider, account or model.
+Configuration changes invalidate issuance; budgets only tighten. Current revocation, consent, grant,
+actor, room, configuration, original binding and execution fence checks occur before reservation,
+each actual effect and final settlement.
+
+These exact proposed bounds need native design review. Owner-read model-visible-basis provenance
+contains six source entries totaling113242 bytes (86316+5511+8730+8498+1916+2271), so exactly
+repeating them would total226484 below250000. Four retained JPEGs total288332 bytes and3602720
+pixels; repeating them would total576664 bytes and7205440 pixels, below the proposed unchanged caps.
+These are prepared inputs, not model-reviewed artifacts or a current capacity permit. Revalidate
+actual complete coverage and account every delivery rather than relying on these owner arithmetic
+observations. If source/image or historical-budget accounting cannot admit the operation, return the
+precise unallocated limiting predicate; do not silently widen it.
+
+### Complete inventory and bounded traversal
+
+Eligibility covers exact present task81A6B03E0377, its canonical CE association, linked children and
+effects across recorded actor/credential aliases. It does not require retrospective closure of
+original D170F2F755AF. Preserve that UNKNOWN independently and retain applicable historical bounds.
+Any uncertain present send refuses even if usage is zero.
+
+Proposed inventory version engagement-present-recovery-coverage-v2 uses unique taskRunId lookup and
+the canonical CE association, then indexed parentTaskRunId traversal and task-keyed indexed
+ToolExecution, TaskArtifact, TaskMessage, TaskNode and AsyncInferenceOp reads. TaskArtifact uses the
+internal task record key; ToolExecution uses the semantic taskRunId. Verify other relations' actual
+indexes before implementation. Do not substitute an unbounded global JSON scan for alias coverage.
+Missing indexed reachability or ambiguous association returns inventory-unproven and requires the
+admitted data-design remedy.
+
+Bound traversal to one root candidate, maximum16 descendant task records, page size64, maximum1024
+linked rows total and eight MiB total serialized inventory including fetched artifact bodies; bound
+depth to4. Use stable createdAt,id ordering where supported, otherwise stable indexed primary key,
+with strict cursor advancement. Query one extra row to detect overflow. Every kind must reach an
+explicit end cursor; page failure, cursor loop, cap exceedance, unknown record kind or oversized
+body refuses without reservation. No successful-prefix inventory qualifies. Include exact
+identities, content digests, terminal statuses, authority/fence links, capture
+reservation-observation pairing, charged counters and per-kind completeness markers in a canonical
+digest. Snapshot is owner-read until the governed server validates completeness and atomically
+compares it against the current locked state.
+
+One authoritative current continuation reservation/fence lives in TaskRun.progressPayload, committed
+under existing TaskRun then CE locks. CE and room summaries are projections, immutable TaskArtifacts
+are provenance, and none is an independent authority store. Policy/reservation uniqueness uses
+existing create-only captured artifacts plus compare-and-swap of the authoritative progress field.
+No provider or source network I/O under a database lock. Recheck coverage/fence after external reads
+and before committing reservation; every current effect must read the same authoritative
+reservation. New linked evidence invalidates stale snapshots. Tests must include inserted rows
+between pages, overflow, changed coverage, duplicate observations and racing claims.
+
+### Positive closure and stale worker fence
+
+New owner-read witness: original outer native ToolExecution cmw439nal01ai01mvztnofott records
+request_coworker_engagement completion at21:59:58.509Z with duration7797ms and
+fulfillment.presentAssessment=true. Its success flag proves handler completion, not Critic success.
+Qualify exact actor/user/authority/input association, served source identity and the awaited handler
+path before using it as a closure witness. Read the actual source finally paths that close
+withEngagementPresentRequest and withCapturedProviderTransportOnly, link execution-open/first-hold
+and all captures, and require every pre-generation read-only effect to have its terminal
+observation. This is a candidate proof, not an established complete worker-closure certificate.
+
+Within the reservation transaction compare exact old task status, immutable binding/request, first
+hold, closed inventory and old execution fence; refuse any conflicting active worker or incomplete
+capture. Set a fresh server-owned resumeReservedAt (existing fence field) and the separate v2
+reservation atomically; preserve original dispatch claim and v1 policy/binding. Old callbacks
+carrying the old fence then fail current-fence checks before any effect or publication. New
+callbacks require the fresh fence, current live private scope and native authority. The new fence is
+not itself authority. Recheck cancellation and revocation at every boundary.
+
+The failed read-only81A6 path did not create a physical capacity lease. No invented release receipt
+is required. The missing independent in-process lane-release observer is retained as a limitation
+and must be addressed by the qualified synchronous terminal path plus fresh ordinary capacity
+admission; absence of lease or generationRef alone cannot establish closure. If terminal proof
+remains insufficient, return closure-unproven with a supported diagnostic action, not a reset or
+another request.
+
+
+### Visible state, revocation and result return
+
+Observation alone never allocates work. A guarded read projection may return an attributable
+recovery-eligibility preview and coverage digest; this is an optimistic predicate, never an
+execution permit. Show the plain-language failure and genuinely available next action before
+technical identifiers. Only current native authorized, complete eligible state may expose Continue
+assessment. Missing proof, revocation, overflow or unsupported authority returns a concrete
+diagnostic/refusal; consumed continuation exposes observation/evidence, not another executable
+retry. Do not add a human approval solely for the phase or DEV label.
+
+The one freshly admitted continuation must repeat registered AGT-906 preparation and current exact
+model/image/body-count/capacity qualification through captured-only transport. Historical
+source/image delivery is supplied evidence, not current model review. No network under database
+locks, no provider fallback or post-result conversational inference. Validate one actual
+contribution and atomically persist actual usage/execution reference, result artifact, same
+TaskRun/CE completion and one original WC-9C02621A return activity. Lost acknowledgment observes
+that same settlement. Empty calibrated corpus remains UNGROUNDED/advisory; retain exact selected
+WSID criteria, actually consulted revisions, covered images/artifacts, omissions, model/provider and
+original/current execution references. Then send actual findings to the original routing chat for
+actual author dispositions. Neither this author nor the repairer can manufacture them.
+
+### Cumulative historical uncertainty
+
+Keep the existing v1 retain-unknown treatment for original D170, and charge all recorded usage plus
+unresolved bounded reservations under the canonical budget owner across aliases/days. Do not invent
+a hard upper bound for unrestricted historical effects or convert UNKNOWN to zero. Fresh native
+authorization must explicitly permit the separately bounded opportunity to coexist with that
+disclosed uncertainty, as v1 required; otherwise refuse before reservation. The new per-task ceiling
+covers all present-candidate attempts, not each continuation separately. This does not claim
+complete historical daily headroom or retrospectively close D170.
+
+### Additional acceptance and regression obligations
+
+AC-1 through AC-7 remain unchanged. AC-4 now also requires expired v1 refusal plus at most one
+separately authorized same-candidate continuation, atomic races/rollback, changed current native
+authority and credential aliases, canceled/unknown send refusal, exact ordinal/cumulative
+accounting, indexed inventory completeness/overflow/change between pages, duplicate observation,
+stale worker callbacks and one result return. AC-6/AC-7 require the real deployed Critic result and
+original routing author response; supplied captures, source tests, client assessment, gate receipts
+and deployment alone cannot fulfill them.
+
+Rollback disables new continuation admission, fences revoked/canceled reservations and preserves
+immutable old/new effects/results; it never reinstates an older unfenced writer, clears history,
+resets an allowance or reruns an uncertain send. Existing kernel/schema/transport contracts are
+reused; future scale beyond the explicit recovery inventory ceilings requires admitted work under
+this existing repair scope, not silent truncation.
+
 ## Current recovery contract (October 26)
 
 The original request-to-dispatch defect is repaired in protected PR 6606.

@@ -6,6 +6,82 @@ status: active
 Backlog: BI-BCBCA8D1. Workroom: WC-6CCF8DAB.
 Design: docs/superpowers/specs/2026-10-25-original-ux-critic-engagement-handoff-design.md.
 
+## November 5 admitted recovery design and combined delivery
+
+Existing BI-BCBCA8D1 / WC-6CCF8DAB; normal large DESIGN admission IRD-394EEFB4853C. Governing option
+decision DI-6CBDE763DC55. This sequence supersedes the earlier parser-only publication sequence. The
+canonical design section November5 same-candidate continuation amendment is the single contract; do
+not duplicate its numeric policy in implementation notes. This remains planning, not approved
+coverage, implementation admission or execution authority.
+
+Original417 queued lease5DF/task299F was normally cancelled before admission on November5; canonical
+integration is UNRUN. Retain 71source tests, both webtypes,85hostguards and exact CLIENT417
+provenance under417. Do not reuse its old f6 gate or call withdrawal a PASS. Keep the same
+branch/worktree and original CE/task identities.
+
+1. DESIGN — canonical contract and native review (internal sequencing). Amend the existing spec and
+   this plan, reconcile the ten-PR/appetite history and current large shape, and bind immutable
+   source/current baseline. Use current native independent
+   research/design/architecture/security/data/UX/domain/plan obligations as actually returned;
+   obtain exact packets rather than inventing a review route. Refresh plan_backlog_coverage for this
+   one atomic deliverable and quote the unchanged AC-1..AC-7. No implementation until current
+   readiness allows it. Funding scope is unresolved; do not change allocation or budget.
+2. RED — closure and bounded inventory (internal sequencing). Claim exact implementation paths
+   first; use source graph and colocated tests for engagement-present-assessment/worker/policy,
+   capture/fence and native handler seams. Add meaningful failing real-PostgreSQL cases for complete
+   indexed task/alias inventory, terminal outer audit and captured-scope linkage, generation/unknown
+   rejection, overflow/cursor failures/concurrent inserts, one claimant/rollback and stale fence
+   callbacks. Verify no network under locks. Do not fabricate physical lease cleanup.
+3. GREEN — shared execution contract (internal sequencing). Extend the existing native
+   request_coworker_engagement action with the separately versioned continuation relation described
+   by the canonical design. Reuse immutable old policy/binding, existing TaskRun current
+   reservation/fence, create-only captured artifacts and result return. Factor common bounded
+   capture/current-authority/admission/settlement ports instead of cloning worker or initiative
+   recovery; preserve existing ordinary and initiative v1 behavior. Each new path must be claimed
+   and impact-resolved before editing. Add one prospective operation with exact current native
+   authorization, private same-call scope, cumulative accounting and create-before-send ledger;
+   duplicates observe and unknown sends refuse.
+4. CONTRIBUTION — worker/result/visible state (internal sequencing). Retain actual
+   optional-idle-flag parser correction. Run the registered Critic with current preparation and
+   immutable original materials, fresh count/qualification/capacity and at most one generation.
+   Reuse first-failure retention; expose accurate unallocated-versus-consumed diagnostic states and
+   actionable native remedy. Atomically persist one actual validated result/usage and original-room
+   return. Cover cancellation/revocation and late callbacks after every external await.
+5. VERIFY — final immutable combined source (internal sequencing). Run affected integration/unit
+   suites, both web TypeScript programs, style-drift-guard and generated doc-index freshness.
+   Resolve every graph-linked test before Red; expand verification when missing/stale. The inherited
+   impact contract also names authority/adapter tests and docs-impact decisions for
+   ai-agent-meta-model, initiative-readiness-runbook, mcp-tool-packs,
+   mcp-tool-surface-ergonomics-audit and how-governed-work-runs; update affected docs or record
+   supported not-affected reasons, never an exemption. Claim generated writers before generation and
+   release after they stop. Obtain one exact final-source canonical integration run and independent
+   code review. The changed final head earns its own evidence.
+6. DELIVER — one atomic reviewed change. Publish a ready DCO-signed PR only after current
+   shape/readiness and exact checks, protected merge queue and pr:health. Parser alone does not
+   fulfill the original expired request; combine with the admitted continuation if scope permits.
+   Canonical release coordinator owns signed containing release, request_self_upgrade and
+   served-source/CAN-TEST evidence. No hand-built live image, provider/config/grant change or
+   self-approved authority.
+7. ACCEPT — actual supported original task continuation. Re-read current
+   eligibility/authorization/native decision and ordinary capacity; make one supported request with
+   durable once-only marker. On uncertain acknowledgment observe only. Capture real persisted
+   AGT-906 execution/engagement/result/artifact references, selected WSID criteria, actual reviewed
+   source/images and explicit empty calibration/advisory limits. Return the real result to
+   WC-9C02621A and original routing chat, then obtain actual author dispositions with explicit
+   current-code crosswalk. Preserve CE724/f52 distinction and D170 UNKNOWN. Only then prepare typed
+   contractual completion evidence and independent live acceptance. No source merge closes this
+   objective.
+
+All phases implement the existing atomic original-engagement-handoff deliverable under BI-BCBCA8D1;
+none is independently outcome-complete. Existing historical plan coverage is not refreshed approval
+for this amendment. Record fresh immutable native coverage after current design/baseline review, and
+retain the returned receipt ID here. No new independently shippable backlog or competing branch is
+proposed.
+
+Rollback and no-replay: see canonical amendment. Disable new admission on defect; retain consumed
+reservations/uncertain effect upper bounds and all old/new history. Never reset CE state or reuse a
+previously sent generation. Runtime failure remains a failed/unrun verification, not acceptance.
+
 ## Scope and acceptance
 
 This is one atomic correction to the existing engagement execution contract,
