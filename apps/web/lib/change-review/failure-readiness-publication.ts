@@ -4,6 +4,7 @@ import { validateFailureAnalysis } from "./failure-analysis";
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { CHANGE_REVIEW_POLICY_VERSION, CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "./semantic-change-review";
 import { findCurrentSemanticFailure, resolveWorkroomReviewExemption } from "./semantic-review-policy-exemption";
+import { describeReviewIneligibility, loadProviderAvailability, readReceiptEligibility, unavailableProviders } from "./review-provider-ineligibility";
 
 /**
  * Why publication is refused. `workroom_identity_incomplete` is repairable by
@@ -43,10 +44,14 @@ export async function checkWorkroomFailureReadiness(capsuleId: string): Promise<
     && isRecord(row.details.result) && row.details.result.decision === "fail")) {
     return { mayPublish: false, code: "failure_review_required", reason: "A failed current review requires repair; a publication exception cannot override it." };
   }
+  let ineligible: ReturnType<typeof readReceiptEligibility> = [];
   for (const row of rows) {
     const receipt = row.details;
     if (!isRecord(receipt) || receipt.sourceHeadSha !== room.headSha) continue;
-    if (isRecord(receipt.result) && receipt.result.decision === "inconclusive") break;
+    if (isRecord(receipt.result) && receipt.result.decision === "inconclusive") {
+      ineligible = readReceiptEligibility(receipt.result.routingEligibility);
+      break;
+    }
     if (receipt.schemaVersion !== CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION || receipt.policyVersion !== CHANGE_REVIEW_POLICY_VERSION
       || receipt.disposition !== "reviewed" || !isRecord(receipt.result) || receipt.result.decision !== "pass"
       || !isRecord(receipt.result.failureAnalysisReview) || receipt.result.failureAnalysisReview.adequate !== true
@@ -62,5 +67,9 @@ export async function checkWorkroomFailureReadiness(capsuleId: string): Promise<
   }
   const exemption = await resolveWorkroomReviewExemption(capsuleId, room.id, room.headSha);
   if (exemption) return { mayPublish: true, reason: "Operator-authorized DEV publication exception; native failure review UNRUN and client assessment independence UNVERIFIED.", ...exemption };
+  if (ineligible.length) {
+    const unavailable = unavailableProviders(await loadProviderAvailability().catch(() => []));
+    return { mayPublish: false, code: "failure_review_required", reason: describeReviewIneligibility(ineligible, unavailable) };
+  }
   return { mayPublish: false, code: "failure_review_required", reason: "No failure-analysis review exists for this final change." };
 }
