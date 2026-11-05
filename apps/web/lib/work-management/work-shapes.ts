@@ -31,7 +31,7 @@ import { GENERATED_WORK_SHAPES } from "./generated/index.generated";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { PLATFORM_REVIEW_SHAPES } from "./platform-review-shape";
 import { SOURCE_INQUIRY_SHAPES } from "./source-inquiry-shape";
-import { STANDING_SHAPES } from "./standing-operations-shapes";
+import { BACKLOG_STEWARD_WATCH_SHAPE_KEY, STANDING_SHAPES } from "./standing-operations-shapes";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 
 // Structural contracts and vocabularies have one portable owner. This module
@@ -158,9 +158,14 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
  * acceptance-verification steward, platform post-implementation review and
  * read-only source inquiry activities.
  */
+const {
+  [BACKLOG_STEWARD_WATCH_SHAPE_KEY]: BACKLOG_STEWARD_WATCH_SHAPE,
+  ...PRE_EXISTING_STANDING_SHAPES
+} = STANDING_SHAPES;
+
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...SHAPES,
-  ...STANDING_SHAPES,
+  ...PRE_EXISTING_STANDING_SHAPES,
   ...COWORKER_STANDING_SHAPES,
   ...COWORKER_STANDING_SHAPES_OPERATE,
   ...COWORKER_STANDING_SHAPES_CRAFT,
@@ -169,6 +174,7 @@ const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...ACCEPTANCE_VERIFICATION_SHAPES,
   ...PLATFORM_REVIEW_SHAPES,
   ...SOURCE_INQUIRY_SHAPES,
+  [BACKLOG_STEWARD_WATCH_SHAPE_KEY]: BACKLOG_STEWARD_WATCH_SHAPE,
 };
 
 // A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its
