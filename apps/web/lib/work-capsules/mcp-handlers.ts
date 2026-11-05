@@ -67,13 +67,7 @@ import { parseScopeReleaseRequest } from "./scope-release-targets";
 import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
 import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { isRecord } from "@/lib/shared/coerce";
-type ToolContext = {
-  routeContext?: string;
-  agentId?: string;
-  threadId?: string;
-  taskRunId?: string;
-  authorityDecisionId?: string;
-} | undefined;
+type ToolContext = ToolExecutionContext | undefined;
 
 export function workCapsuleToolEnums() {
   return {
@@ -412,6 +406,12 @@ export async function createWorkCapsuleTool(
   // BI-CB3AEBBF: bind the named backlog item onto the column subject lookups
   // read, not just onto outcomeAnchor. See create-workroom-binding.ts.
   const resolvedActor = await actor(userId, context);
+  if (Object.hasOwn(params, "sessionRef")) {
+    const { createInitiallyAssignedWorkroom } = await import("./initial-workroom-assignment");
+    return createInitiallyAssignedWorkroom({ db: workCapsuleDb() as never, params,
+      actor: resolvedActor, context, input: { title, objective, source, idempotencyKey,
+        executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"), scope: parseScopeInput(params) } });
+  }
   const bound = await createWorkroomBoundToBacklogItem({
     db: workCapsuleDb() as unknown as BacklogBindingReader, params, title,
     create: (backlogItemId) => createWorkCapsule({

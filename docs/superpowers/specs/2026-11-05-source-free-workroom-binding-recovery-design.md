@@ -228,3 +228,59 @@ changed. This correction is prepared as an external review artifact during the
 drain; it is not committed source, native approval, renewed claim or permission
 to ignore the transition fence. A fresh ordinary claim follows actual terminal
 upgrade, NORMAL writes and canonical cohort proof.
+
+## Strict initial-assignment adapter
+
+The existing create_workroom tool accepts an optional sessionRef for a NEW
+external acceptance assignment. Its initial-workroom-assignment.ts adapter is
+restricted to the current registered acceptance-verification definition and the
+existing canonical external assistant/surface mapping. A locator is endorsed
+data, never a credential or proof of review independence. Calls without this
+field retain the existing creation path. Native task/fence contexts, unsupported
+surfaces, restricted work and missing current connection proof return a bounded
+accountable hold; they are not made external to fit this adapter.
+
+One real Read Committed transaction takes the existing canonical environment
+locks, serializes the idempotency key, revalidates current OAuth/human/grant
+intersection, creates the room and canonical WorkItem anchor, and establishes
+its actual owner and assistant admission. The same transaction records the existing
+acceptance-verifier role binding for that authenticated assistant. Each declared
+verification write and creation must be reachable through both current persisted
+agent grants and token scopes; alternatives within each tool retain the canonical
+OR semantics. A role binding grants no authority or review independence.
+It then checks the current exact room,
+canonical principals, owned lease and existing bounded lease/build/exemption
+dependencies before the final connection and room recheck. Canonical anchor
+ports accept that same transaction client. No global database fallback is used
+for these writes, and no fabricated old executor is passed as a transfer actor.
+The dependency reader deduplicates the single actual endorsed destination.
+
+The initial action record and room/anchor/participant writes commit together.
+Notifications run only after commit and remain best effort. A notification
+failure cannot turn a known committed assignment into an uncertain retry.
+Creation input/argument types live with the existing store contracts rather
+than growing the baselined store module.
+
+A duplicate request can only read one matching accepted initial assignment with
+its original owner, assistant, kind, locator, scope and action evidence. An old
+null executor, changed non-null assignment, changed actor or missing/ambiguous
+initial evidence stays held. The strict path never late-binds a legacy room or
+replays its failed approval. A genuine uniqueness race first rolls back the
+outer transaction, then performs one fresh winner reconciliation without
+creating again. The store must not query a winner on an aborted caller-owned
+transaction.
+
+Source-local adapter/dispatch and existing boundary suites pass; these qualified
+identity fixtures do not attest live identity or acceptance. The five PostgreSQL
+cases cover concurrent duplicates, complete rollback, both observed lock orders
+against the actual lease allocator, and an actual legacy uniqueness winner.
+They require an admitted disposable database and remain UNRUN until executed
+there. Final exact-tree qualification, independent review, protected publication
+and containing-runtime acceptance remain required.
+
+The general MCP tool-pack architecture page still describes the same pack
+composition, handler/grant ownership, consequence declaration and governed
+execution path. This adds no pack, tool, grant, authority scope or parallel
+executor. The field, strict transaction and compatibility limits belong here
+and in the existing tool definition; record that precise not-affected
+architecture-page disposition through the current documentation-impact writer.

@@ -220,6 +220,17 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
+  it("routes a source-free session endorsement to its transactional initializer", async () => {
+    const initial = await import("@/lib/work-capsules/initial-workroom-assignment");
+    const spy = vi.spyOn(initial, "createInitiallyAssignedWorkroom").mockResolvedValueOnce({ success: true, message: "Assigned", data: {} });
+    try {
+      const { createWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      const params = { title: "Acceptance", objective: "Verify served work", source: "manual", idempotencyKey: "qa:new", executorKind: "codex-desktop", sessionRef: "endorsed" };
+      expect((await createWorkCapsuleTool(params, "user-1", { agentId: "AGT-EXT-CODEX", authSource: "oauth", apiTokenId: "fixture-token" })).success).toBe(true);
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ params, actor: expect.objectContaining({ principalId: "principal-user", agentPrincipalId: "principal-agent" }) }));
+    } finally { spy.mockRestore(); }
+  });
+
   it("create_workroom rejects invalid scope metadata", async () => {
     const { executeTool } = await import("@/lib/mcp-tools");
     const result = await executeTool(

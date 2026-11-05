@@ -296,7 +296,7 @@ export function projectWorkroomRecovery(
   const assignmentBlocker = unboundExecutor ? {
     reason: "executor-assignment-unbound" as const,
     accountableOwner: { principalId: room.leaseHolderPrincipalId ?? null, role: "delivery-coordinator" as const },
-    nextAction: "The delivery coordinator must reconcile the current admitted assignment and the authenticated assistant's endorsed executor reference. No assignment or historical operation is completed by this read.",
+    nextAction: "Waiting for the coordinator to confirm who will carry out this work.",
     action: null,
   } : null;
   // This existing registered activity verifies the served install; it does not
