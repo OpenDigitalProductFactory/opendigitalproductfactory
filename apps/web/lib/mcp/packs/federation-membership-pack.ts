@@ -10,6 +10,11 @@
 // join file's one-time token never passes through the agent's own hands
 // beyond the file it was given.
 
+import {
+  INSTALLATION_ENVIRONMENT_CLASSES,
+  isInstallationEnvironmentClass,
+} from "@dpf/db/installation-operating-intent";
+
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
@@ -27,7 +32,7 @@ const definitions: ToolDefinition[] = [
         },
         environmentClass: {
           type: "string",
-          enum: ["production", "development", "test"],
+          enum: [...INSTALLATION_ENVIRONMENT_CLASSES],
           description: "The joining installation's environment class. The CA certifies it; it must match the class that installation declared, or its import is refused.",
         },
         extraSans: {
@@ -117,7 +122,7 @@ async function issueOrganizationJoinFileTool(
   const intendedPeer = typeof params["intendedPeer"] === "string" ? params["intendedPeer"].trim() : "";
   if (!intendedPeer) return { success: false, message: "intendedPeer is required.", data: { reason: "invalid-intended-peer" } };
   const environmentClass = params["environmentClass"];
-  if (environmentClass !== "production" && environmentClass !== "development" && environmentClass !== "test") {
+  if (!isInstallationEnvironmentClass(environmentClass)) {
     return { success: false, message: "environmentClass is required: production, development or test.", data: { reason: "environment-class-required" } };
   }
   const extraSans = Array.isArray(params["extraSans"]) ? params["extraSans"].filter((v): v is string => typeof v === "string") : [];
