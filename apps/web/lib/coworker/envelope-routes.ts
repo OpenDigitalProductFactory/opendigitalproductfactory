@@ -24,6 +24,11 @@ export function envelopeDeclineRoute(envelopeId: string): string {
   return `/api/agent/envelope/${encodeURIComponent(envelopeId)}/deny`;
 }
 
+/** DELETE target that withdraws the owner's standing ruling (BI-E5631708). */
+export function envelopeStandingRulingRoute(envelopeId: string): string {
+  return `/api/agent/envelope/${encodeURIComponent(envelopeId)}/standing-ruling`;
+}
+
 /** GET target for the delegating user's recorded outcome of one envelope. */
 export function envelopeStatusRoute(envelopeId: string): string {
   return `/api/agent/envelope/${encodeURIComponent(envelopeId)}`;
