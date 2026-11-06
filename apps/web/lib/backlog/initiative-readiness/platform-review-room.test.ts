@@ -5,7 +5,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ok, err } from "@/lib/shared/action-result";
-import { PLATFORM_REVIEW_SHAPE_REF } from "@/lib/work-management/platform-review-shape";
+import {
+  PLATFORM_DESIGN_REVIEW_SHAPE_REF,
+  PLATFORM_REVIEW_SHAPE_REF,
+} from "@/lib/work-management/platform-review-shape";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import {
@@ -24,19 +27,29 @@ const REVIEWER = "AGT-WS-REVIEW";
 const issuer = { userId: "user-admin", agentId: null };
 const repo = "OpenDigitalProductFactory/opendigitalproductfactory";
 
+const WRITER_BY_GATE: Record<string, string> = {
+  "post-implementation-review": "record_initiative_post_implementation_review",
+  "design-spec": "record_initiative_design_review",
+  "spec-approval": "record_initiative_design_review",
+  "architecture-review": "record_initiative_architecture_review",
+  "plan-review": "record_initiative_design_review",
+};
+
 function packet(over: { targetAgent?: string; gate?: string; itemId?: string } = {}) {
+  const gate = over.gate ?? "post-implementation-review";
+  const writer = WRITER_BY_GATE[gate] ?? "record_initiative_post_implementation_review";
   return {
     targetAgent: over.targetAgent ?? REVIEWER,
     objective: "Review the merged repair.",
-    questionPacketSummary: `Post-implementation review of ${ITEM}`,
-    requestKey: `initiative-readiness:${ITEM}:post-implementation-review:${"a".repeat(40)}`,
+    questionPacketSummary: `${gate} of ${ITEM}`,
+    requestKey: `initiative-readiness:${ITEM}:${gate}:${"a".repeat(40)}`,
     tier: 2,
     enteredVia: "handoff",
-    requiredToolNames: ["read_source_at_version", "record_initiative_post_implementation_review"],
+    requiredToolNames: ["read_source_at_version", writer],
     initiativeReviewBinding: {
-      writerToolName: over.gate === "plan-review" ? "record_initiative_design_review" : "record_initiative_post_implementation_review",
+      writerToolName: writer,
       itemId: over.itemId ?? ITEM,
-      gate: over.gate ?? "post-implementation-review",
+      gate,
       workroomRef: { kind: "workroom-head", workroomId: "WC-DELIVERY", repositoryFullName: repo, branchName: "fix/x", headSha: "2".repeat(40) },
       artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: repo, commitSha: "3".repeat(40), path: "apps/web/x.ts", providerBlobId: "4".repeat(40) },
     },
@@ -54,7 +67,13 @@ function routeDb(options: { agent?: Agent | null; room?: Awaited<ReturnType<Plat
     principal: { findFirst: vi.fn(async (args: { where: { kind: string } }) => ({ id: args.where.kind === "human" ? "P-OWNER" : "P-REVIEWER" })) },
     workroom: {
       findUnique: vi.fn(async () => options.room ?? null),
-      upsert: vi.fn(async () => ({ id: "room-1", capsuleId: platformReviewRoomCapsuleId(ITEM), status: "working", archivedAt: null, scopeClaims: [] })),
+      upsert: vi.fn(async (args: { create?: { capsuleId?: string } } = {}) => ({
+        id: "room-1",
+        capsuleId: args.create?.capsuleId ?? platformReviewRoomCapsuleId(ITEM),
+        status: "working",
+        archivedAt: null,
+        scopeClaims: [],
+      })),
       update: vi.fn(async () => ({})),
     },
     workroomActivity: {
@@ -103,6 +122,36 @@ describe("routing an owed review to the platform reviewer (BI-AA47C672)", () => 
     const db = routeDb();
     await expect(routeReviewToPlatformReviewer({ deps: routeDeps(db), itemId: ITEM, requestCoworker: packet({ gate: "plan-review" }), issuer, now: NOW }))
       .resolves.toEqual({ kind: "not-applicable" });
+    expect(db.workroom.upsert).not.toHaveBeenCalled();
+  });
+
+  it("hands an owed design-spec review to a per-gate platform room (BI-9CCB88C4)", async () => {
+    const db = routeDb();
+    const requestCoworker = packet({ gate: "design-spec" });
+    const outcome = await routeReviewToPlatformReviewer({
+      deps: routeDeps(db), itemId: ITEM, requestCoworker, issuer, now: NOW,
+    });
+    expect(outcome).toEqual({ kind: "routed", capsuleId: "WC-DSR-0B2C3F6D", targetAgent: REVIEWER, issued: "issued" });
+    const create = (db.workroom.upsert.mock.calls[0] as unknown as [{ where: unknown; create: Record<string, unknown> }])[0];
+    expect(create.where).toEqual({ idempotencyKey: `platform-review:design-spec:${ITEM}` });
+    expect(create.create).toEqual(expect.objectContaining({
+      capsuleId: "WC-DSR-0B2C3F6D", status: "working", source: "scheduled-steward",
+      outcomeAnchor: { kind: "backlog-item", id: ITEM },
+    }));
+    expect(create.create).not.toHaveProperty("backlogItemId");
+    expect(db.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      kind: PLATFORM_REVIEW_PACKET_KIND, recordedByAgentId: PLATFORM_REVIEW_ISSUER_ID,
+      payload: { itemId: ITEM, requestCoworker, issuer },
+    }) });
+  });
+
+  it("requires the architecture-review lane grant, not the PIR grant", async () => {
+    const db = routeDb({
+      agent: { agentId: REVIEWER, executionConfig: { executionType: "in_process" }, toolGrants: [{ grantKey: "initiative_design_review" }] },
+    });
+    await expect(routeReviewToPlatformReviewer({
+      deps: routeDeps(db), itemId: ITEM, requestCoworker: packet({ gate: "architecture-review" }), issuer, now: NOW,
+    })).resolves.toEqual({ kind: "ineligible", detail: expect.stringMatching(/initiative_architecture_review/) });
     expect(db.workroom.upsert).not.toHaveBeenCalled();
   });
 
@@ -185,6 +234,31 @@ describe("the platform review run's writer authority (BI-AA47C672)", () => {
   it("fails closed when the delivery actors cannot be read", async () => {
     const deps = { ...authorityDeps(), loadDeliveryActorIds: vi.fn(async () => err("too many rooms")) };
     await expect(loadPlatformReviewRunAuthority(deps as never, run())).resolves.toEqual(expect.objectContaining({ reason: "delivery-actors-unavailable" }));
+  });
+
+  it("admits a design-spec platform room run for the platform-issued packet (BI-9CCB88C4)", async () => {
+    const requestCoworker = packet({ gate: "design-spec" });
+    const deps = authorityDeps({
+      room: liveRoom({
+        capsuleId: "WC-DSR-0B2C3F6D",
+        idempotencyKey: `platform-review:design-spec:${ITEM}`,
+        scopeClaims: [
+          buildWorkShapeClaim(PLATFORM_DESIGN_REVIEW_SHAPE_REF, NOW),
+          buildWorkShapeRoleBindingsClaim({ "design-checklist-reviewer": `agent:${REVIEWER}` }, NOW),
+        ],
+      }),
+      issued: {
+        payload: { itemId: ITEM, requestCoworker, issuer },
+        recordedByAgentId: PLATFORM_REVIEW_ISSUER_ID,
+        recordedById: null,
+      },
+      current: [requestCoworker],
+    });
+    const authority = await loadPlatformReviewRunAuthority(
+      deps as never,
+      run({ a2aMetadata: { trigger: "scheduled", sourceRef: { kind: "scheduled-task", id: platformReviewDriveTaskId(ITEM, "design-spec") } } }),
+    );
+    expect(authority).toEqual(ok({ itemId: ITEM, binding: expect.objectContaining({ itemId: ITEM, gate: "design-spec" }) }));
   });
 });
 
