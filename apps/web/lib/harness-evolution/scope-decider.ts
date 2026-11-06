@@ -1,9 +1,10 @@
-// The live ScopeDecider: principle_decide through the in-process tool
-// executor, the same path Build Studio's decision service uses
-// (lib/build/decision-service.ts). Scoring is the kernel's; this adapter only
-// reads the recommendation, its confidence and the ledger id back.
+// The live ScopeDecider: principle_decide through the governed executor, so
+// the call passes the same authority, approval and audit monitor as every other
+// tool call (GPP C-9). Scoring is the kernel's; this adapter only reads the
+// recommendation, its confidence and the ledger id back.
 
-import { executeTool } from "@/lib/mcp-tools";
+import { currentUserContext } from "@/lib/govern/current-user-context";
+import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { err, ok } from "@/lib/shared/action-result";
 
 import type { ScopeDecider } from "./scope-verdict";
@@ -12,10 +13,15 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
-export function principleDecideScopeDecider(ownerUserId: string): ScopeDecider {
+export function principleDecideScopeDecider(ownerUserId: string, agentId?: string): ScopeDecider {
   return async (args) => {
     try {
-      const response = await executeTool("principle_decide", { ...args }, ownerUserId, { routeContext: "/platform/ai/skills" });
+      const userContext = await currentUserContext(ownerUserId);
+      if (!userContext) return err("The candidate's owner is no longer an active user.");
+      const response = await governedExecuteTool({
+        toolName: "principle_decide", rawParams: { ...args }, userId: ownerUserId, userContext,
+        source: "internal-mcp-session", context: { routeContext: "/platform/ai/skills", ...(agentId ? { agentId } : {}) },
+      });
       if (!response.success) return err(response.error ?? "principle_decide refused");
       const data = asRecord(response.data);
       const recommendation = asRecord(data.recommendation);
