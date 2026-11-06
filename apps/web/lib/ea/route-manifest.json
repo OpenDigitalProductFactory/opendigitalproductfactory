@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 684,
+  "routeCount": 685,
   "routes": [
     {
       "routePath": "/",
@@ -651,6 +651,22 @@
         "envelopeId"
       ],
       "file": "apps/web/app/api/agent/envelope/[envelopeId]/reraise/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]/standing-ruling",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "standing-ruling"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/standing-ruling/route.ts",
       "exposure": "authenticated"
     },
     {
