@@ -131,11 +131,12 @@ export function CoworkerEnvelopeApproval({
           setError(body.outcomeWarning);
           return;
         }
-        // BI-E5631708: keep the card so the owner sees the ruling and can undo it.
+        // BI-E5631708: keep the card so the owner sees the ruling and can undo
+        // it, or reads why this approval could not be made standing.
         if (body?.standing) {
           setStandingRecorded(body.standing.recorded);
           setStandingNote(body.standing.recorded ? COPY.standingRecorded : body.standing.message ?? null);
-          if (body.standing.recorded) return;
+          return;
         }
         // The admin's inbox holds no result for someone else's request: keep this card, settled.
         if (body?.onBehalf) {

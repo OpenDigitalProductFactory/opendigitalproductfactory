@@ -228,6 +228,16 @@ describe("CoworkerEnvelopeApproval", () => {
     expect((fetchMock.mock.calls[0][1] as RequestInit).body).toBeUndefined();
   });
 
+  it("keeps the card and says why when the server will not make it standing", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: false, message: "This approval covers this request only; it could not be made standing." } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={approval({ standingRulingOffered: true })} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Don't ask me again/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+    expect(await screen.findByText(/could not be made standing/)).toBeTruthy();
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Ask me again next time" })).toBeNull();
+  });
+
   it("makes the approval standing when the owner ticks it, then lets them undo it", async () => {
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: true } }), { status: 200 }))

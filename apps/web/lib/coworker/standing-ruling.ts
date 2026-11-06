@@ -33,6 +33,11 @@ import {
 
 export * from "./standing-ruling-policy";
 
+import {
+  fingerprintCoworkerApprovalBinding,
+  type CoworkerApprovalBinding,
+} from "@/lib/govern/authority/coworker-authority-decision";
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -45,7 +50,12 @@ type RulingRow = {
   delegatingUserId: string;
   manifestActionId: string;
   argsJson: unknown;
+  status?: string;
+  approvalBindingFingerprint?: string | null;
 };
+
+/** An approval that has been decided by a person and not withdrawn by them. */
+const RULED_APPROVAL_STATUSES = ["approved", "executed", "failed"] as const;
 
 export type StandingRulingDb = {
   coworkerActionEnvelope: {
@@ -60,7 +70,39 @@ const RULING_SELECT = {
   delegatingUserId: true,
   manifestActionId: true,
   argsJson: true,
+  status: true,
+  approvalBindingFingerprint: true,
 } as const;
+
+/**
+ * PROVENANCE (independent review of PR #6905). A ruling is trusted only where
+ * approveEnvelope can have written it: a server-minted authority envelope
+ * (its stored approvalBinding re-fingerprints to the row's own fingerprint and
+ * names this exact coworker, tool and owner), decided by a person (approved,
+ * executed or failed, never proposed), and approved by that owner in person
+ * (a humanApproval marker naming them, with no on-behalf decision). A screen
+ * envelope stores caller arguments verbatim and has no binding fingerprint, so
+ * a ruling-shaped value a coworker writes there is never read as a ruling, and
+ * a recovery copy of an approval is "proposed" until a person decides it.
+ */
+function rulingHasApprovalProvenance(row: RulingRow, ruling: StandingRuling): boolean {
+  const args = record(row.argsJson);
+  const binding = record(args?.approvalBinding);
+  const approval = record(args?.humanApproval);
+  if (!args || !binding || !approval || !row.approvalBindingFingerprint) return false;
+  if (!RULED_APPROVAL_STATUSES.includes(row.status as (typeof RULED_APPROVAL_STATUSES)[number])) return false;
+  if (approval.userId !== ruling.actionClass.delegatingUserId || "onBehalfOf" in approval || "by" in approval) return false;
+  if (
+    binding.actingAgentId !== ruling.actionClass.coworkerAgentId
+    || binding.actingHumanUserId !== ruling.actionClass.delegatingUserId
+    || binding.toolName !== ruling.actionClass.toolName
+  ) return false;
+  try {
+    return fingerprintCoworkerApprovalBinding(binding as unknown as CoworkerApprovalBinding) === row.approvalBindingFingerprint;
+  } catch {
+    return false;
+  }
+}
 
 function activeRulingWhere(call: { coworkerAgentIds: readonly string[]; toolName: string; delegatingUserId: string }) {
   return {
@@ -68,6 +110,15 @@ function activeRulingWhere(call: { coworkerAgentIds: readonly string[]; toolName
     delegatingUserId: call.delegatingUserId,
     manifestActionId: call.toolName,
     argsJson: { path: ["standingRuling", "state"], equals: "active" },
+  };
+}
+
+/** Only rows that could carry a genuine ruling, so forged rows cannot crowd them out. */
+function ruledApprovalWhere(call: { coworkerAgentIds: readonly string[]; toolName: string; delegatingUserId: string }) {
+  return {
+    ...activeRulingWhere(call),
+    status: { in: [...RULED_APPROVAL_STATUSES] },
+    approvalBindingFingerprint: { not: null },
   };
 }
 
@@ -86,9 +137,9 @@ export async function findStandingRuling(
   // A narrow store without the query has no rulings to offer: ask, as before.
   if (typeof db.coworkerActionEnvelope?.findMany !== "function") return null;
   const rows = await db.coworkerActionEnvelope.findMany({
-    where: activeRulingWhere({ ...call, coworkerAgentIds: ids }),
+    where: ruledApprovalWhere({ ...call, coworkerAgentIds: ids }),
     orderBy: { createdAt: "desc" },
-    take: 5,
+    take: 10,
     select: RULING_SELECT,
   });
   for (const row of rows) {
@@ -98,6 +149,7 @@ export async function findStandingRuling(
       && row.coworkerAgentId === ruling!.actionClass.coworkerAgentId
       && row.manifestActionId === ruling!.actionClass.toolName
       && row.delegatingUserId === ruling!.actionClass.delegatingUserId
+      && rulingHasApprovalProvenance(row, ruling!)
     ) {
       return { envelopeId: row.id, ruling: ruling! };
     }
