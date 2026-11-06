@@ -147,7 +147,7 @@ slice 2, each with its own budget.
 | AC-3 | OBJ-1 | A room with candidates gets one `harness-evolution-candidate` activity per UTC day, idempotent on `(harness-evolution, <capsuleId>:<day>)`, so the candidates are visible on the room's own timeline. |
 | AC-4 | OBJ-5 | Each run writes one proactive TaskRun per UTC day whose `progressPayload` holds the clamped budget (rooms, candidates per room, total candidates, probe replays, token cap) and the spend; the run's artifact lists cross-room recurrences (the same shape key and miss key in at least two rooms) as promotion candidates, and the configured ring-0 platform queue with each missing or terminal item's reason. |
 | AC-5 | OBJ-2 | The candidate derivation takes the layer and the miss-kind table as data, so an archetype layer supplies its own shapes and miss kinds without a second code path. |
-| AC-6 | OBJ-3 | Slice 2: a room's candidate edit is probed by the WorkPattern experiment runtime as a baseline-versus-candidate pair on that room's hermetic replay fixture, with no network route to a grader or rubric, within the room's caps, and the verdict (ADOPT or KEEP_BASE) is recorded on the room. |
+| AC-6 | OBJ-3 | Slice 3: a room's candidate edit is probed by the WorkPattern experiment runtime (as the `trace-replay-v1` fixture kind) as a baseline-versus-candidate pair on that room's hermetic replay fixture, with no network route to a grader or rubric, within the room's caps, and the verdict (ADOPT or KEEP_BASE) is recorded on the room. |
 | AC-7 | OBJ-4 | Slice 3: an ADOPT verdict changes the room's harness only through governed change (a shape version bump or a seed PR via `seed-pull-request.ts`), and every outcome writes an EXPERIENCE record keyed by room, shape and layer to the work-pattern effective ledger, which later runs in the same shape read. |
 | AC-8 | OBJ-4 | Slice 3: the aggregator proposes an edit for the shape or core layer only when the same edit has won its probe in at least two rooms. |
 | AC-9 | OBJ-5 | Slice 4: a weekly rollup lists each targeted miss key's recurrence per room and shape before and after its edit landed. |
@@ -158,9 +158,9 @@ slice 2, each with its own budget.
 | AC-14 | OBJ-3 | Slice 2: every probe records, for the baseline and each variant on the same recorded trace, the outcome (intents completed), the load per rung (human units, AI units, code-carried units, tokens) and the gate burden (refusals per success, recovery turns, share of refusals naming the exact next call). |
 | AC-15 | OBJ-3 | Slice 2: a variant that raises human load is never ADOPT, whatever its outcome; a variant that lowers the outcome, moves load up the ladder, or raises refusals per success without an outcome gain is KEEP_BASE; a variant that moves no load down and gains no outcome is KEEP_BASE. |
 | AC-16 | OBJ-3 | Slice 2: between passing variants of equal or better outcome and no more human load, the gate inside the tool wins, then a refusal naming the next call, then a permit; an ADOPT that moves load into code carries the condition that the code is verified against the real host before it lands. |
+| AC-17 | OBJ-1 | Slice 2: at least one live ring-0 candidate from slice 1's records completes a probe on the dev install, and its verdict (`harness-evolution-verdict` activity) is visible on the room with its deltas, its scope decision id and its variants. |
 | AC-18 | OBJ-2 | Slice 2: every miss, candidate, cross-room recurrence and verdict records its executor (Claude, Codex, Grok, Build Studio, in-platform coworker, human or unknown); a miss two or more executors share is a `core` edit, and one executor's miss is that executor's layer (`executor:<name>`). The tool miss key `tool:<toolName>:<refusal code>` is the one key detectors converge on. |
 | AC-19 | OBJ-5 | Slice 2: a candidate is probed only when it passes the BI-CE564FBB operating criteria: it recurs in two or more distinct runs, its shape repeats at least the weekly floor, it clears the cost-per-occurrence floor, it is not parked after two consecutive KEEP_BASE verdicts, its room is not inside its control limits, and the probe's spend does not exceed frequency × cost × horizon; every skipped candidate is recorded with its reason. |
-| AC-17 | OBJ-1 | Slice 2: at least one live ring-0 candidate from slice 1's records completes a probe on the dev install, and its verdict (`harness-evolution-verdict` activity) is visible on the room with its deltas, its scope decision id and its variants. |
 
 ## Design
 
@@ -390,7 +390,10 @@ decision service uses.
 gain from the first round: K=1 at about 8× tokens. K=5 cost about 40× and
 added only +3.3. So a candidate is screened before any replay is spent. The
 criteria live in `improvement-criteria.ts`, a local stub with BI-CE564FBB's
-defaults, until that item's typed configuration lands.
+defaults, until that item's typed configuration lands. The placeholders below
+are owned by this slice and retire when that configuration merges (#6895): the
+stub then re-exports `continual-improvement/operating-criteria`, with no change
+at the call sites.
 
 A candidate is skipped when any of these holds:
 
@@ -430,7 +433,11 @@ four replays per probe; the remainder is listed as `probe-budget`.
 **First real-data probe** (read-only dry run, 2026-10-28). WC-76590268 is a
 `delivery-medium` room with 7 days of `record_workroom_evidence` calls: 87
 calls, 55 refused `authority_denied`, 32 intents, all of them eventually
-completed. Its refusal message names no next call.
+completed. Its refusal message names no next call. The run's inputs and this
+table are recorded as evidence on BI-B8DAEB71, and its scope consult is
+DecisionInteraction DI-60AFDA89DD6D (`in-tool-resolution` recommended,
+composite 2.845, margin 0.131). It ran `probe.ts` read-only over that room's
+ToolExecution rows; it is not the live verdict AC-17 requires.
 
 | Option | AI units | Code units | Human units | Refusals per success | Judgement |
 | --- | --- | --- | --- | --- | --- |
@@ -515,8 +522,32 @@ escalated to a human. The probe reads it anyway, counting room-named human
 escalations, and reports the thin link instead of overstating it. Carrying
 the room's identity on DecisionInteraction is a follow-on.
 
+**Measurement gaps a verdict must not hide.** Until Codex's guardian turns
+reach ToolExecution (BI-1B0D1416) and DecisionInteraction carries the room's
+identity, a room's AI load and human escalations can be undercounted, which
+weakens AC-15's human-load veto for exactly those rooms. Slice 2 adopts
+nothing: its verdicts are advisory records, and the permit variant cannot
+steer (BI-6B610D94). Slice 3 must not compose an ADOPT from a room whose load
+sources were partial; closing both gaps is part of slice 3's entry criteria.
+
 ### Slice 3 — compose, library and promotion
 
+- **Editor.** A bounded editor writes one edit to the room's harness per
+  ADOPT candidate, under the Harness² Appendix H rules:
+  - The edit traces to the candidate's trajectory moments.
+  - Component priority: gate, hook or script first, then a skill with a
+    trigger line, then a sub-agent, then always-on prose last. Any always-on
+    text added cuts an equal amount, because `check-instruction-plane-size.mjs`
+    is shrink-only.
+  - It never changes the deliverable's shape.
+  - It never invents authority, identifiers or citations.
+  - Facts copied from the library are hypotheses and are re-verified.
+  - Where it can be avoided, the editor and the judge are not the worker's
+    model family.
+- **Replicated probe** (AC-6). The trace replay becomes the WorkPattern
+  `trace-replay-v1` fixture kind, so an edit is re-probed as replicated
+  baseline-versus-candidate pairs on the room's hermetic fixture, with no
+  network route to a grader or rubric, within the room's caps.
 - **Compose.** A room's ADOPT edits land through governed change: a shape
   version bump for shape-owned harness, or `skills/seed-pull-request.ts` for
   skills and prompts. Room-owned coworker controls (PR #5263) stay the room's.
@@ -766,8 +797,8 @@ BI-CE564FBB.
 | Slice | Item | Covers |
 | --- | --- | --- |
 | 1 | BI-49BC21C1: room-scoped candidates on ring-0 rooms, typed aggregator, budget and spend, decision scope and permit-gap hint | AC-1 – AC-5, AC-10 |
-| 2 | BI-B8DAEB71: per-room three-axis probe, scope verdict, kernel gaps, executor layer, verdict on the room | AC-6, AC-11, AC-14 – AC-19 |
-| 3 | Child of BI-49BC21C1: compose under GPP permits, scoped EXPERIENCE library, prose-to-vector accounting, cross-room promotion (depends on BI-6B610D94) | AC-7, AC-8, AC-12, AC-13 |
+| 2 | BI-B8DAEB71: per-room three-axis probe, scope verdict, kernel gaps, executor layer, verdict on the room | AC-11, AC-14 – AC-19 |
+| 3 | Child of BI-49BC21C1: compose under GPP permits, scoped EXPERIENCE library, prose-to-vector accounting, cross-room promotion (depends on BI-6B610D94) | AC-6, AC-7, AC-8, AC-12, AC-13 |
 | 4 | Child of BI-49BC21C1: weekly before/after rollup | AC-9 |
 
 This design stays `draft` until an independent reviewer passes its
