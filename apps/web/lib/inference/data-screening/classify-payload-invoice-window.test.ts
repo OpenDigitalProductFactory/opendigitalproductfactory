@@ -26,4 +26,19 @@ describe("an invoice in source code needs its value on a nearby line (BI-BC04FEB
     expect(result.dataEvidencedClasses).toContain("payments-finance");
     expect(result.overallSensitivity).toBe("restricted");
   });
+
+  // The window bounds only the bare-word path. An invoice followed by its own
+  // reference is a record wherever its amount sits, and a minified record is
+  // one line, so it is always inside the window.
+  const fields = Array.from({ length: 12 }, (_, i) => `  "field${i}": "value${i}",`).join("\n");
+  it.each([
+    [`const exported = {\n  "invoice": "INV-2001",\n${fields}\n  "total": 125.5\n};`],
+    [`const exported = {\n  invoice: 'A-77',\n${fields}\n  amountDue: "$125.00"\n};`],
+    [`export const data={vendor:"Acme",a:1,b:2,c:3,d:4,e:5,f:6,g:7,h:8,i:9,note:"invoice",total:125.5};`],
+    [`const rows = [\n  // invoice #4412 from the March export\n${fields}\n];`],
+  ])("keeps a spread-out or minified invoice record in source code restricted: %#", (content) => {
+    const result = classify(content);
+    expect(result.dataEvidencedClasses).toContain("payments-finance");
+    expect(result.overallSensitivity).toBe("restricted");
+  });
 });
