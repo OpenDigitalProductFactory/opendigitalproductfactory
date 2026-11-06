@@ -334,6 +334,9 @@ async function writeAuthorizationDecision(
             escalationReason: decision.escalation.reasonCode,
             escalationSteering: decision.escalation.steering,
             damaging: decision.escalation.damaging,
+            ...(decision.escalation.reasonCode === "steered-by-standing-ruling" && input.standingRulingEnvelopeId
+              ? { standingRulingEnvelopeId: input.standingRulingEnvelopeId }
+              : {}),
           }
         : {}),
     },

@@ -24,6 +24,7 @@
 //
 // Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1.
 
+import { standingRulingEligibility } from "@/lib/coworker/standing-ruling-policy";
 import type { prisma } from "@dpf/db";
 
 import { observeEnvelopeBacklog } from "@/lib/coworker/envelope-observability";
@@ -77,6 +78,8 @@ export type CoworkerEnvelopeRow = {
   consequence?: string | null;
   targetLabel?: string;
   taskRun: { a2aMetadata: unknown } | null;
+  /** The gate's recorded decision: decides whether "don't ask again" is offered. */
+  authorityDecision?: { rationale: unknown } | null;
 };
 
 /** The one status that can still be decided. Every other value in the
@@ -202,6 +205,9 @@ export function coworkerEnvelopeToAttentionItem(
     expiredUnanswered,
     decision,
     ...(reviewBinding ? { reviewBinding } : {}),
+    // BI-E5631708: offered only where the server would record it.
+    ...(standingRulingEligibility({ envelope: { ...row, argsJson: row.argsJson ?? null }, decisionRationale: row.authorityDecision?.rationale ?? null, onBehalf: false }).eligible
+      ? { standingRulingOffered: true } : {}),
     approveHref: envelopeApproveRoute(row.id),
     declineHref: envelopeDeclineRoute(row.id),
     reraiseHref: envelopeReraiseRoute(row.id),
@@ -322,6 +328,7 @@ export async function loadCoworkerEnvelopeItems(
       createdAt: true,
       argsJson: true,
       taskRun: { select: { a2aMetadata: true } },
+      authorityDecision: { select: { rationale: true } },
     },
   });
   const lapsed = await loadExpiredUnanswered(db, delegatingUserId, nowMs, envelopeId);

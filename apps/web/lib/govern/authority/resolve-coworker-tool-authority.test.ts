@@ -19,6 +19,7 @@ describe("explicit owner approval floor", () => {
     { initiativeReviewBinding: {} as never },
     { taskRunId: "TR-SCHED-1", toolName: "record_execution_evidence", roomMandatedTools: ["record_execution_evidence"] },
     { taskRunId: "TR-SCHED-1", agentId: "AGT-WS-PLATFORM", toolName: "create_knowledge_article" },
+    { standingRulingEnvelopeId: "ENV-RULED" },
   ])("withholds automatic steering when the current policy explicitly requires approval: %j", extra => {
     const input = { initiativeReviewBinding: null, roomAuthority: null, agentId: "agent", ...extra, hitlPolicy: " Always " };
     expect(resolveSteering({ ...input, hitlPolicy: null })).not.toBe("none");
