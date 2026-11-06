@@ -23,15 +23,19 @@ import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo
 import { parseQualificationExperimentState,
   parseQualificationVerificationEvidence, qualificationBindingDigest,
   verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { normalizeRepositoryArtifactRefInput } from "@/lib/backlog/initiative-readiness/artifact-ref-input";
+import { defaultArtifactRefInputDeps, initiativeWorkedExample, initiativeRetry } from "@/lib/backlog/initiative-readiness/worked-example";
 
 const artifactRefSchema = {
   type: "object",
+  description: "For a repository file pass just {path, headSha}: the server fills kind, the canonical repository, the full commit (a 7+ character prefix is expanded) and providerBlobId. The commit must be pushed.",
   properties: {
     kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit", "repo-commit-range"] },
     revisionId: { type: "string" },
     versionId: { type: "string" },
     repositoryFullName: { type: "string" },
     commitSha: { type: "string" },
+    headSha: { type: "string", description: "Alias of commitSha for a repository file." },
     path: { type: "string" },
     providerBlobId: { type: "string" },
     // BI-46E344FE: a post-implementation review of a merged repair's whole change.
@@ -39,7 +43,6 @@ const artifactRefSchema = {
       required: ["baseSha", "headSha"] } },
     digest: { type: "string" },
   },
-  required: ["kind"],
 };
 
 function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"] {
@@ -154,9 +157,9 @@ function gateGuidance(lane: Lane): string {
   return ` What satisfies the research gate depends on the item's profile — ${shapes.join(" | ")}.`;
 }
 
-function definitionBase(lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
+function definitionBase(name: string, lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
   return {
-    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)}`,
+    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)} Worked example: ${initiativeWorkedExample(name, lane)}`,
     requiredCapability: lane.capability,
     executionMode: "immediate",
     sideEffect: true,
@@ -167,52 +170,52 @@ const definitions: ToolDefinition[] = [
   {
     name: "record_initiative_evidence",
     inputSchema: inputSchemaFor("record_initiative_evidence", LANES.record_initiative_evidence),
-    ...definitionBase(LANES.record_initiative_evidence),
+    ...definitionBase("record_initiative_evidence", LANES.record_initiative_evidence),
   },
   {
     name: "record_initiative_design_review",
     inputSchema: inputSchemaFor("record_initiative_design_review", LANES.record_initiative_design_review),
-    ...definitionBase(LANES.record_initiative_design_review),
+    ...definitionBase("record_initiative_design_review", LANES.record_initiative_design_review),
   },
   {
     name: "record_initiative_architecture_review",
     inputSchema: inputSchemaFor("record_initiative_architecture_review", LANES.record_initiative_architecture_review),
-    ...definitionBase(LANES.record_initiative_architecture_review),
+    ...definitionBase("record_initiative_architecture_review", LANES.record_initiative_architecture_review),
   },
   {
     name: "record_initiative_data_review",
     inputSchema: inputSchemaFor("record_initiative_data_review", LANES.record_initiative_data_review),
-    ...definitionBase(LANES.record_initiative_data_review),
+    ...definitionBase("record_initiative_data_review", LANES.record_initiative_data_review),
   },
   {
     name: "record_initiative_ux_review",
     inputSchema: inputSchemaFor("record_initiative_ux_review", LANES.record_initiative_ux_review),
-    ...definitionBase(LANES.record_initiative_ux_review),
+    ...definitionBase("record_initiative_ux_review", LANES.record_initiative_ux_review),
   },
   {
     name: "record_initiative_security_review",
     inputSchema: inputSchemaFor("record_initiative_security_review", LANES.record_initiative_security_review),
-    ...definitionBase(LANES.record_initiative_security_review),
+    ...definitionBase("record_initiative_security_review", LANES.record_initiative_security_review),
   },
   {
     name: "record_initiative_compliance_review",
     inputSchema: inputSchemaFor("record_initiative_compliance_review", LANES.record_initiative_compliance_review),
-    ...definitionBase(LANES.record_initiative_compliance_review),
+    ...definitionBase("record_initiative_compliance_review", LANES.record_initiative_compliance_review),
   },
   {
     name: "record_initiative_domain_review",
     inputSchema: inputSchemaFor("record_initiative_domain_review", LANES.record_initiative_domain_review),
-    ...definitionBase(LANES.record_initiative_domain_review),
+    ...definitionBase("record_initiative_domain_review", LANES.record_initiative_domain_review),
   },
   {
     name: "record_initiative_post_implementation_review",
     inputSchema: inputSchemaFor("record_initiative_post_implementation_review", LANES.record_initiative_post_implementation_review),
-    ...definitionBase(LANES.record_initiative_post_implementation_review),
+    ...definitionBase("record_initiative_post_implementation_review", LANES.record_initiative_post_implementation_review),
   },
   {
     name: "record_initiative_archetype_review",
     inputSchema: inputSchemaFor("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
-    ...definitionBase(LANES.record_initiative_archetype_review),
+    ...definitionBase("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
   },
 ];
 
@@ -491,7 +494,9 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         ? binding.expectedCurrentBaselineId
         : params.baselineId;
       if (typeof baselineId !== "string" || !baselineId.trim() || !mappings) {
-        return { success: false, error: "malformed-receipt", message: "Objective mapping requires a current baselineId and non-empty objective/evidence mappings." };
+        return { success: false, error: "malformed-receipt", message: `Objective mapping requires a current baselineId and non-empty objective/evidence mappings. ${initiativeRetry(actionKey, params, {
+          baselineId: typeof baselineId === "string" && baselineId.trim() ? baselineId : "<current baselineId from get_backlog_item readiness>",
+          objectiveMappings: mappings ?? [{ objectiveId: "OBJ-1", evidenceRefs: ["<evidence activity id>"] }] })}` };
       }
       const result = await recordInitiativeObjectiveMappingProposal({
         taskRunId: context?.taskRunId ?? null,
@@ -510,7 +515,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         : { success: false, error: result.code, message: result.error };
     }
     if (operation !== "gate-receipt") {
-      return { success: false, error: "malformed-receipt", message: `${actionKey} does not support that operation.` };
+      return { success: false, error: "malformed-receipt", message: `${actionKey} does not support that operation. ${initiativeRetry(actionKey, params, { operation: "gate-receipt" })}` };
     }
     const gate = params.gate;
     const decision = params.decision;
@@ -518,18 +523,28 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       return { success: false, error: "gate-not-authorized", message: `${actionKey} cannot record that gate.` };
     }
     if (decision !== "pass" && decision !== "fail" && decision !== "not-applicable") {
-      return { success: false, error: "malformed-receipt", message: "decision must be pass, fail, or not-applicable." };
+      return { success: false, error: "malformed-receipt", message: `decision must be pass, fail, or not-applicable. ${initiativeRetry(actionKey, params, { decision: "pass" })}` };
     }
     if (!params.artifactRef || typeof params.artifactRef !== "object") {
-      return { success: false, error: "malformed-receipt", message: "artifactRef is required." };
+      return { success: false, error: "malformed-receipt", message: `artifactRef is required. ${initiativeRetry(actionKey, params, {
+        artifactRef: { path: "docs/superpowers/specs/<file>.md", headSha: "<40-hex output of git rev-parse HEAD>" } })}` };
+    }
+    if (!binding) {
+      // BI-DF34D948: complete a caller's {path, headSha} instead of refusing it.
+      const normalized = await normalizeRepositoryArtifactRefInput(params.artifactRef, await defaultArtifactRefInputDeps(),
+        { tool: actionKey, args: params });
+      if (!normalized.ok) return normalized.refusal;
+      params = { ...params, artifactRef: normalized.data.artifactRef };
     }
     const findings = parseFindings(params.findings);
     const resolvedFindingRefs = parseStringArray(params.resolvedFindingRefs);
     if (!findings || !resolvedFindingRefs) {
-      return { success: false, error: "malformed-receipt", message: "findings and resolvedFindingRefs must match the governed receipt schema." };
+      return { success: false, error: "malformed-receipt", message: `findings and resolvedFindingRefs must be arrays: findings is [] on a pass, and each failing finding is {issue, severity: "critical"|"important"}; resolvedFindingRefs is [] unless closing open finding ids. ${initiativeRetry(actionKey, params, {
+        findings: Array.isArray(params.findings) ? params.findings : [], resolvedFindingRefs: [] })}` };
     }
     const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
-    if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
+    if (dispositionError) return { success: false, error: "malformed-receipt", message: `${dispositionError} ${initiativeRetry(actionKey, params,
+      decision === "pass" ? { findings: [], resolvedFindingRefs } : { findings: findings.length ? findings : [{ issue: "<the blocking defect>", severity: "important" }], resolvedFindingRefs })}` };
     const qualificationEvidenceId = typeof params.qualificationEvidenceId === "string"
       ? params.qualificationEvidenceId.trim() : "";
     if (gate === "research" && decision === "pass" && resolvedFindingRefs.includes("IF-91E987DA433B0C82")
@@ -575,14 +590,14 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     const selectedProfile = params.profile;
     if (gate === "classification" && decision === "pass"
       && !(selectedProfile === "doc-only" || selectedProfile === "fix" || selectedProfile === "feature" || selectedProfile === "cross-domain" || selectedProfile === "archetype")) {
-      return { success: false, error: "malformed-receipt", message: "Passing classification requires a governed profile." };
+      return { success: false, error: "malformed-receipt", message: `Passing classification requires a governed profile (doc-only, fix, feature, cross-domain or archetype). ${initiativeRetry(actionKey, params, { profile: "fix" })}` };
     }
     if (gate === "spec-approval" && decision === "pass") {
       const profile = params.profile;
       const artifactRole = params.artifactRole;
       if (!(profile === "doc-only" || profile === "fix" || profile === "feature" || profile === "cross-domain" || profile === "archetype")
         || !(artifactRole === "design-spec" || artifactRole === "problem-statement" || artifactRole === "documentation-scope")) {
-        return { success: false, error: "malformed-receipt", message: "Passing spec approval requires profile and artifactRole." };
+        return { success: false, error: "malformed-receipt", message: `Passing spec approval requires profile and artifactRole. ${initiativeRetry(actionKey, params, { profile: "feature", artifactRole: "design-spec" })}` };
       }
       const approval = await recordInitiativeSpecApproval({
         itemId: String(params.itemId ?? ""),

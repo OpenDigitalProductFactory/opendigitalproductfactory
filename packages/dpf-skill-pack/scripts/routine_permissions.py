@@ -13,6 +13,7 @@ from datetime import date, datetime, time
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -79,6 +80,14 @@ def read_toml(path: Path) -> dict:
     return _load(path, 'toml')[0]
 
 
+def _key(value: str) -> str:
+    if not isinstance(value, str):
+        raise PermissionPlanError('Unsupported TOML key.')
+    # Codex desktop runtime replacement recognizes bare notify only. Standard
+    # bare keys also keep our output compatible with its other native writers.
+    return value if re.fullmatch(r'[A-Za-z0-9_-]+', value) else json.dumps(value)
+
+
 def _value(value) -> str:
     if isinstance(value, str): return json.dumps(value, ensure_ascii=False)
     if isinstance(value, bool): return 'true' if value else 'false'
@@ -86,7 +95,7 @@ def _value(value) -> str:
     if isinstance(value, float) and math.isfinite(value): return repr(value)
     if isinstance(value, (datetime, date, time)): return value.isoformat()
     if isinstance(value, list): return '[' + ', '.join(_value(x) for x in value) + ']'
-    if isinstance(value, dict): return '{' + ', '.join(json.dumps(k) + ' = ' + _value(v) for k,v in value.items()) + '}'
+    if isinstance(value, dict): return '{' + ', '.join(_key(k) + ' = ' + _value(v) for k,v in value.items()) + '}'
     raise PermissionPlanError('Unsupported TOML value; existing configuration was not changed.')
 
 
@@ -94,10 +103,10 @@ def dump_toml(data: dict) -> str:
     if tomllib is None: raise PermissionPlanError('TOML validation unavailable; configuration unchanged.')
     lines = []
     def table(value, path):
-        if path: lines.extend(['', '[' + '.'.join(json.dumps(x) for x in path) + ']'])
+        if path: lines.extend(['', '[' + '.'.join(_key(x) for x in path) + ']'])
         for k,v in value.items():
             if not isinstance(k,str): raise PermissionPlanError('Unsupported TOML key.')
-            if not isinstance(v,dict): lines.append(json.dumps(k) + ' = ' + _value(v))
+            if not isinstance(v,dict): lines.append(_key(k) + ' = ' + _value(v))
         for k,v in value.items():
             if isinstance(v,dict): table(v,[*path,k])
     table(data,[])
@@ -195,7 +204,14 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
         new=deepcopy(old)
         change(new)
         text=json.dumps(new,indent=2,ensure_ascii=False)+'\n' if kind=='json' else dump_toml(new)
-        if selected: files.append(PlannedFile(path,raw,raw if old==new and raw is not None else text.encode('utf-8'),client))
+        # BI-34E03B27: converge an existing quoted notify even on a semantic
+        # permission no-op. Otherwise a later desktop runtime update appends a
+        # duplicate root key. The validated serializer preserves all values.
+        quoted_notify = (kind == 'toml' and client == 'codex' and 'notify' in new
+                         and raw is not None and re.search(
+                             r"(?m)^[ \t]*(?:\"notify\"|'notify')[ \t]*=", raw.decode('utf-8-sig')) is not None)
+        unchanged = old == new and raw is not None and not quoted_notify
+        if selected: files.append(PlannedFile(path,raw,raw if unchanged else text.encode('utf-8'),client))
         return new
 
     # Only this named project's trust is created. An explicit untrusted decision

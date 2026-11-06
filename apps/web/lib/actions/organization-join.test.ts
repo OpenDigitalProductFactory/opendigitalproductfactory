@@ -33,7 +33,7 @@ beforeEach(() => {
 describe("organization join actions — session boundary", () => {
   it("refuses an unauthenticated caller and a caller without manage_platform before touching the federation code", async () => {
     mockAuth.mockResolvedValueOnce(null);
-    expect(await issueOrganizationJoinFileAction({ intendedPeer: "192.168.0.200" })).toMatchObject({ ok: false, error: "unauthorized" });
+    expect(await issueOrganizationJoinFileAction({ intendedPeer: "192.168.0.200", environmentClass: "development" })).toMatchObject({ ok: false, error: "unauthorized" });
     mockCan.mockReturnValueOnce(false);
     expect(await importOrganizationJoinFileAction("DPF_ORGANIZATION_JOIN_V2\n")).toMatchObject({ ok: false, error: "forbidden" });
     expect(mockIssue).not.toHaveBeenCalled();
@@ -43,20 +43,26 @@ describe("organization join actions — session boundary", () => {
 
 describe("issueOrganizationJoinFileAction", () => {
   it("mints through the portal with the request host as this authority's own address and returns the file once", async () => {
-    const result = await issueOrganizationJoinFileAction({ intendedPeer: " 192.168.0.200 " });
+    const result = await issueOrganizationJoinFileAction({ intendedPeer: " 192.168.0.200 ", environmentClass: "development" });
     expect(result).toEqual({ ok: true, data: { fileName: "organization-join-192.168.0.200-abcd1234.dpfjoin", content: "DPF_ORGANIZATION_JOIN_V2\n", intendedPeer: "192.168.0.200", expiresAt: EXPIRES } });
-    expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000" });
+    expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000" });
     expect(mockRevalidate).toHaveBeenCalledWith("/platform/federation-links");
   });
 
   it("maps the issuer's refusals to plain operator messages", async () => {
-    expect(await issueOrganizationJoinFileAction({ intendedPeer: "" })).toMatchObject({ ok: false, error: "invalid_input" });
+    expect(await issueOrganizationJoinFileAction({ intendedPeer: "", environmentClass: "development" })).toMatchObject({ ok: false, error: "invalid_input" });
     mockIssue.mockResolvedValueOnce({ issued: false, reason: "not-the-authority" });
-    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x" })).toMatchObject({ ok: false, error: "not_ready", message: expect.stringContaining("organization installation") });
+    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x", environmentClass: "development" })).toMatchObject({ ok: false, error: "not_ready", message: expect.stringContaining("organization installation") });
     mockIssue.mockResolvedValueOnce({ issued: false, reason: "own-address-unknown" });
-    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x" })).toMatchObject({ ok: false, error: "not_ready", message: expect.stringContaining("network address") });
+    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x", environmentClass: "development" })).toMatchObject({ ok: false, error: "not_ready", message: expect.stringContaining("network address") });
     mockIssue.mockResolvedValueOnce({ issued: false, reason: "ca-unreachable", detail: "ECONNREFUSED" });
-    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x" })).toMatchObject({ ok: false, error: "not_ready", message: expect.stringContaining("ECONNREFUSED") });
+    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x", environmentClass: "development" })).toMatchObject({ ok: false, error: "not_ready", message: expect.stringContaining("ECONNREFUSED") });
+  });
+
+  it("refuses to mint without a class for the joining installation (BI-0716C8A8)", async () => {
+    mockIssue.mockClear();
+    expect(await issueOrganizationJoinFileAction({ intendedPeer: "x", environmentClass: "staging" })).toMatchObject({ ok: false, error: "invalid_input", message: expect.stringContaining("production, development or test") });
+    expect(mockIssue).not.toHaveBeenCalled();
   });
 });
 

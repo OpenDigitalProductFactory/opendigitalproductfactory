@@ -1,6 +1,7 @@
 import { promptNamesTool, scheduledMandatoryToolNames } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
 export { scheduledMandatoryToolNames, WORKROOM_STAGE_EVIDENCE_TOOL } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
 import { isRecord } from "@/lib/shared/coerce";
+import { clampToolResultForModel, DEFAULT_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
@@ -38,7 +39,8 @@ export type ScheduledRunToolExecution = {
     success?: boolean;
     /** "approval_required" when the call opened a CoworkerActionEnvelope. */
     error?: string;
-    data?: { proposalId?: string; status?: string };
+    message?: string;
+    data?: { proposalId?: string; status?: string; [key: string]: unknown };
   };
 };
 
@@ -357,7 +359,22 @@ export function scheduledRequiredToolCorrection(input: {
   const tool = outcome.toolName;
   return { toolName: tool, message: `${tool} is attached to this run: it is in your tool list now. Your answer did not call it, and it is the only thing that records this run. `
     + `Call ${tool} now. If you could not do the work, call it with outcome "blocked" and say what blocked you. `
-    + `Do not say a tool is unavailable when it is in your tool list.` };
+    + `Do not say a tool is unavailable when it is in your tool list.` + gatheredResultsNote(input.executedTools) };
+}
+
+/**
+ * The correction is a fresh loop: it sees the first pass's final text, not its
+ * tool results. Without them a run that read its context and then ran out of
+ * time recorded "could not retrieve" over a read that had succeeded
+ * (BI-83B1EE05). Successful reads only, each within the model-facing cap.
+ */
+function gatheredResultsNote(executedTools: ScheduledRunToolExecution[]): string {
+  const reads = executedTools.filter((tool) => tool.result?.success === true && (tool.result.message || tool.result.data));
+  if (reads.length === 0) return "";
+  const perRead = Math.floor(DEFAULT_TOOL_RESULT_CHAR_CAP / reads.length);
+  const blocks = reads.map((tool) =>
+    `${tool.name}:\n${clampToolResultForModel({ success: true, message: tool.result!.message, data: tool.result!.data }, { maxChars: perRead, toolName: tool.name }).text}`);
+  return `\n\nYou already read this run; decide from these results instead of saying they could not be retrieved:\n${blocks.join("\n\n")}`;
 }
 
 export function detectScheduledRunFailure(input: {

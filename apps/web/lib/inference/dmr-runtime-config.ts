@@ -77,6 +77,32 @@ export function isQualifiedSpeculativeFlags(flags: unknown): boolean {
   return JSON.stringify(flags) === JSON.stringify(LOCAL_SPECULATIVE_RUNTIME_FLAGS);
 }
 
+/**
+ * Keep a GPU-served model out of host RAM (BI-37A470F0). Docker Model Runner
+ * adds `--no-mmap` only on macOS; elsewhere llama.cpp keeps the whole GGUF
+ * memory-mapped although every layer runs in VRAM (Windows RTX 4090, 27B Q4:
+ * 18.9 GB working set, 1.0 GB with the flag, VRAM unchanged). A CPU-only engine
+ * keeps the mapping: there the weights must be in RAM anyway and it shares the
+ * page cache.
+ */
+export const LOCAL_NO_MMAP_FLAG = "--no-mmap";
+const GPU_ENGINE = /^Running: llama\.cpp b\d+-(?:cuda|metal|vulkan|rocm)(?:\s|$)/;
+
+export function isGpuEngine(identity: unknown): boolean {
+  return typeof identity === "string" && GPU_ENGINE.test(identity);
+}
+
+/** The runtime flags the platform manages for the generation model, in a stable order. */
+export function managedGenerationFlags(opts: { noMmap: boolean; speculation: boolean }): string[] {
+  return [...(opts.noMmap ? [LOCAL_NO_MMAP_FLAG] : []), ...(opts.speculation ? LOCAL_SPECULATIVE_RUNTIME_FLAGS : [])];
+}
+
+/** True when `flags` is exactly one platform-managed combination (never an operator's own flags). */
+export function isManagedGenerationFlags(flags: unknown): boolean {
+  return [true, false].some((noMmap) => [true, false].some((speculation) =>
+    JSON.stringify(flags) === JSON.stringify(managedGenerationFlags({ noMmap, speculation }))));
+}
+
 /** The running llama.cpp engine identity from `/engines/status`, or null when unreadable. */
 export async function getLlamaCppEngineIdentity(apiRoot: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
   try {
@@ -139,10 +165,11 @@ export async function getLocalThinkingBudgetEvidence(
         !/^sha256:[a-f0-9]{64}$/.test(entry.ModelID ?? "")) return undefined;
     // Unknown flags may override the template/parser. A narrow observed config
     // is preferable to silently claiming support for an unverified override.
-    // The qualified speculation pair is accepted exactly: it changes how tokens
-    // are drafted, never the template or the reasoning parser.
+    // Platform-managed flags are accepted exactly: speculation changes how tokens
+    // are drafted and --no-mmap how weights are loaded, never the template or
+    // the reasoning parser.
     if (!entry.Config || Object.entries(entry.Config).some(([key, value]) => !LIFECYCLE_ONLY_CONFIG_KEYS.has(key) &&
-        !(key === "runtime-flags" && isQualifiedSpeculativeFlags(value)))) return undefined;
+        !(key === "runtime-flags" && isManagedGenerationFlags(value)))) return undefined;
     if (entry.Config.keep_alive !== undefined && typeof entry.Config.keep_alive !== "string") return undefined;
     const context = entry.Config["context-size"];
     if (context !== undefined && (typeof context !== "number" || !Number.isSafeInteger(context) || context <= 0)) return undefined;
