@@ -6632,7 +6632,8 @@
       "publishedPortal": false,
       "anchors": [
         "enumerating-workrooms-through-mcp",
-        "executor-and-invocation"
+        "executor-and-invocation",
+        "the-work-atlas-picture"
       ]
     },
     "docs/personas/README.md": {
@@ -12216,6 +12217,7 @@
         "agent-authority-overview",
         "tool-execution-log",
         "effective-permissions",
+        "knowledge-corpus-grants",
         "reading-decision-separation",
         "living-playbook-experiments",
         "tool-evaluation-pipeline",
@@ -13653,6 +13655,7 @@
         "key-concepts",
         "what-shows-up-here",
         "what-you-can-do",
+        "not-being-asked-the-same-thing-again",
         "how-long-a-coworkers-request-waits"
       ]
     },

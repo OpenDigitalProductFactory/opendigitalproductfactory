@@ -99,6 +99,8 @@ Its mode is the source of truth for receipt enforcement; a skill must not presen
 a shadow observation as an enforced refusal. This procedure applies to external
 Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
 
+**Name the range instead of pasting the diff (BI-FC2AF393).** `review_semantic_change` accepts `artifactSource: { baseSha, headSha }` in place of `artifact`. Use the merge base with `origin/main` as `baseSha` and the pushed head as `headSha`, and compute `diffDigest` as the sha256 of `git diff --binary <baseSha> <headSha>`. The server reads the same diff from its source checkout (the roots in `mergeSignalRoots`, normally `/host-dpf`). It reviews that diff only when both trees and the digest match and `headSha` is the Workroom's recorded head. Otherwise it refuses before reserving any review work, and a digest mismatch returns the server's digest. A diff over about 1.8 MB is refused with a pointer to BI-8FFEA2AA, which owns larger artifacts. Prefer this for any diff too large to paste reliably, and for republishing someone else's review.
+
 New requests use the role-bound v2 request contract and produce v3 receipts.
 Historical v1 requests and v2 receipts remain readable, but cannot satisfy a new
 role-bound review. Publication expects `code-change` by default. Document callers

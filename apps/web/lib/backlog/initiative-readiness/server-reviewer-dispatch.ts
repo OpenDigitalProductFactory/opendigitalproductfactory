@@ -333,19 +333,8 @@ export async function loadDesignPhaseOwedReviewRoutes(itemId: string, authorAgen
 
 /** The independent design-phase reviewer routes the implementation recovery issues now. */
 async function designPhaseOwedRecoveryRoutes(itemId: string, authorAgentId: string | null) {
-  const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
-  const item = await getBacklogItem({ itemId }, authorAgentId);
-  const decision = (item.data?.readiness as { decisions?: { implementation?: unknown } } | undefined)?.decisions?.implementation as
-    | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
-    | undefined;
-  if (!item.success || !decision) return null;
-  if (decision.verdict === "allowed") return [];
-  const { designPhaseReviewDecision } = await import("./design-phase-recovery");
-  const designPhase = designPhaseReviewDecision(decision);
-  if (!designPhase) return [];
-  const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
-  const recovery = await resolveTerminalInitiativeRecovery({ decision: designPhase, currentAgentId: authorAgentId, refusedWorkroomId: null });
-  return recovery.reviewerRoutes.filter((route) => route.independent);
+  const { designPhaseOwedRecoveryRoutes: load } = await import("./design-stage-review-issuer");
+  return load(itemId, authorAgentId);
 }
 
 type DispatchRecord = { id: string; recordedAt: Date; payload: Record<string, unknown> };

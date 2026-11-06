@@ -91,6 +91,14 @@ const INVOICE_CURRENCY_AMOUNT_PATTERN = new RegExp(
   "iu",
 );
 
+// BI-BC04FEBF: source code has no blank lines between statements, so a whole
+// diff hunk is one "paragraph". There, an invoice's value must sit within this
+// many lines of the mention, as it does in a real fixture or seed record.
+const SOURCE_INVOICE_RECORD_LINES = 3;
+
+const invoiceValueIn = (record: string) =>
+  INVOICE_LABELLED_VALUE_PATTERN.test(record) || INVOICE_CURRENCY_AMOUNT_PATTERN.test(record);
+
 const PAYMENT_RECORD_TEXT_MATCHER: Pick<RegExp, "test"> = {
   test(text) {
     if (NON_INVOICE_FINANCE_TEXT_PATTERN.test(text)) return true;
@@ -103,8 +111,11 @@ const PAYMENT_RECORD_TEXT_MATCHER: Pick<RegExp, "test"> = {
         hasInvoice = true;
         if (INVOICE_REFERENCE_PATTERN.test(details)) return true;
       }
-      return hasInvoice && (INVOICE_LABELLED_VALUE_PATTERN.test(paragraph)
-        || INVOICE_CURRENCY_AMOUNT_PATTERN.test(paragraph));
+      if (!hasInvoice) return false;
+      if (!SOURCE_CODE_VALUE_PATTERN.test(paragraph)) return invoiceValueIn(paragraph);
+      const lines = paragraph.split(/\r?\n/);
+      return lines.some((line, index) => /\binvoice\b/i.test(line) && invoiceValueIn(
+        lines.slice(Math.max(0, index - SOURCE_INVOICE_RECORD_LINES), index + SOURCE_INVOICE_RECORD_LINES + 1).join("\n")));
     });
   },
 };

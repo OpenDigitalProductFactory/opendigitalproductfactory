@@ -247,6 +247,19 @@ Agent tool availability is the **intersection** of two authority systems:
 
 An action is only possible if BOTH allow it. This prevents agents from exceeding their design scope, even when triggered by a user with broad permissions.
 
+### Knowledge Corpus Grants
+A coworker reads three bodies of knowledge, and each has its own grant:
+
+| Knowledge | Grant |
+|---|---|
+| Platform kernel (principles and doctrine) | `wiki_kernel_read` |
+| Your organization's knowledge | `wiki_org_read` |
+| Profession knowledge, for the coworker's own profession family | `wiki_profession_read` |
+
+Every coworker holds all three by default. Revoking one removes that knowledge from search, recall and decision tools for that coworker. If a coworker's job spans several professions, grant it `wiki_profession_read:<family>` once for each extra family.
+
+The coworker's record page shows its **Knowledge corpus** section: which grants it holds and which profession families it can read. The family limit starts in report-only mode, so a coworker that maps to no profession family still reads every family. Each of those reads is recorded, which lets you map the coworker before the limit is enforced. People are never limited by family.
+
 ## Reading Decision Separation
 
 The decision review inbox (`/platform/ai/founder-review`) opens with **Decision separation** — how
