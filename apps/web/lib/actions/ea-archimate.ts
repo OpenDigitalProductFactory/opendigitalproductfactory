@@ -123,12 +123,23 @@ export async function importArchimateFile(input: ImportInput): Promise<ImportRes
         toElementId: toId,
         relationshipTypeId: rtId,
         notationSlug: "archimate4",
-        properties: rel.archimateRelType ? { archimateRelType: rel.archimateRelType } : {},
+        properties: rel.role ? { role: rel.role } : {},
         createdById: userId,
       },
-      update: rel.archimateRelType ? { properties: { archimateRelType: rel.archimateRelType } } : {},
+      update: rel.role ? { properties: { role: rel.role } } : {},
     });
     relationshipsCreated++;
+  }
+
+  // A relationship type the importer does not know is reported, never coerced into a
+  // generic association (BI-E487F6D9).
+  for (const unknown of parsed.unknownRelationships) {
+    conformanceIssues.push({
+      elementName: unknown.archimateId,
+      issueType: "unknown_archimate_relationship_type",
+      severity: "warn",
+      message: `Unrecognised ArchiMate relationship type "${unknown.xmlType}". Not imported.`,
+    });
   }
 
   return {
@@ -194,6 +205,9 @@ export async function exportArchimateFile(input: ExportInput): Promise<ExportRes
     fromArchimateId: ((elements.find(e => e.id === rel.fromElementId)?.properties as Record<string, unknown>)?.archimateId as string) ?? rel.fromElementId,
     toArchimateId: ((elements.find(e => e.id === rel.toElementId)?.properties as Record<string, unknown>)?.archimateId as string) ?? rel.toElementId,
     slug: rel.relationshipType.slug,
+    role: typeof (rel.properties as Record<string, unknown>)?.role === "string"
+      ? ((rel.properties as Record<string, unknown>).role as string)
+      : undefined,
   }));
 
   const xml = generateArchimateXml({ modelName: `DPF Export - ${scopeRef}`, elements: generateElements, relationships: generateRels });
