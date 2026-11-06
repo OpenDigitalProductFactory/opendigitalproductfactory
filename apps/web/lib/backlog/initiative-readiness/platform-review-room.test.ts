@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ok, err } from "@/lib/shared/action-result";
 import {
+  PLATFORM_ARCHITECTURE_REVIEW_SHAPE_REF,
   PLATFORM_DESIGN_REVIEW_SHAPE_REF,
   PLATFORM_REVIEW_SHAPE_REF,
 } from "@/lib/work-management/platform-review-shape";
@@ -259,6 +260,83 @@ describe("the platform review run's writer authority (BI-AA47C672)", () => {
       run({ a2aMetadata: { trigger: "scheduled", sourceRef: { kind: "scheduled-task", id: platformReviewDriveTaskId(ITEM, "design-spec") } } }),
     );
     expect(authority).toEqual(ok({ itemId: ITEM, binding: expect.objectContaining({ itemId: ITEM, gate: "design-spec" }) }));
+  });
+
+  const DESIGN_STAGE_ROOM = {
+    "design-spec": { capsuleId: "WC-DSR-0B2C3F6D", role: "design-checklist-reviewer", shapeRef: PLATFORM_DESIGN_REVIEW_SHAPE_REF },
+    "spec-approval": { capsuleId: "WC-SAR-0B2C3F6D", role: "design-checklist-reviewer", shapeRef: PLATFORM_DESIGN_REVIEW_SHAPE_REF },
+    "architecture-review": { capsuleId: "WC-ARR-0B2C3F6D", role: "architecture-reviewer", shapeRef: PLATFORM_ARCHITECTURE_REVIEW_SHAPE_REF },
+  } as const;
+
+  function designStageLiveRoom(gate: keyof typeof DESIGN_STAGE_ROOM) {
+    const spec = DESIGN_STAGE_ROOM[gate];
+    return liveRoom({
+      capsuleId: spec.capsuleId,
+      idempotencyKey: `platform-review:${gate}:${ITEM}`,
+      scopeClaims: [
+        buildWorkShapeClaim(spec.shapeRef, NOW),
+        buildWorkShapeRoleBindingsClaim({ [spec.role]: `agent:${REVIEWER}` }, NOW),
+      ],
+    });
+  }
+
+  function designStageRun(gate: keyof typeof DESIGN_STAGE_ROOM) {
+    return run({
+      a2aMetadata: { trigger: "scheduled", sourceRef: { kind: "scheduled-task", id: platformReviewDriveTaskId(ITEM, gate) } },
+    });
+  }
+
+  function designStageAuthority(
+    gate: keyof typeof DESIGN_STAGE_ROOM,
+    options: { issued?: unknown; actors?: string[]; current?: unknown[] | null } = {},
+  ) {
+    const requestCoworker = packet({ gate });
+    return authorityDeps({
+      room: designStageLiveRoom(gate),
+      issued: options.issued === undefined
+        ? { payload: { itemId: ITEM, requestCoworker, issuer }, recordedByAgentId: PLATFORM_REVIEW_ISSUER_ID, recordedById: null }
+        : options.issued,
+      current: options.current === undefined ? [requestCoworker] : options.current,
+      actors: options.actors,
+    });
+  }
+
+  it.each(["spec-approval", "architecture-review"] as const)(
+    "admits a %s platform room run for the platform-issued packet (BI-9CCB88C4)",
+    async (gate) => {
+      const authority = await loadPlatformReviewRunAuthority(
+        designStageAuthority(gate) as never,
+        designStageRun(gate) as never,
+      );
+      expect(authority).toEqual(ok({ itemId: ITEM, binding: expect.objectContaining({ itemId: ITEM, gate }) }));
+    },
+  );
+
+  it.each([
+    ["design-spec", "WC-DSR", "a forged coworker-written packet", {
+      issued: { payload: { itemId: ITEM, requestCoworker: packet({ gate: "design-spec" }), issuer }, recordedByAgentId: REVIEWER, recordedById: null },
+    }, "packet-not-server-issued"],
+    ["spec-approval", "WC-SAR", "a forged coworker-written packet", {
+      issued: { payload: { itemId: ITEM, requestCoworker: packet({ gate: "spec-approval" }), issuer }, recordedByAgentId: REVIEWER, recordedById: null },
+    }, "packet-not-server-issued"],
+    ["architecture-review", "WC-ARR", "a forged coworker-written packet", {
+      issued: { payload: { itemId: ITEM, requestCoworker: packet({ gate: "architecture-review" }), issuer }, recordedByAgentId: REVIEWER, recordedById: null },
+    }, "packet-not-server-issued"],
+    ["design-spec", "WC-DSR", "a packet readiness no longer issues", { current: [] }, "packet-no-longer-owed"],
+    ["spec-approval", "WC-SAR", "a packet readiness no longer issues", { current: [] }, "packet-no-longer-owed"],
+    ["architecture-review", "WC-ARR", "a packet readiness no longer issues", { current: [] }, "packet-no-longer-owed"],
+    ["design-spec", "WC-DSR", "unreadable readiness", { current: null }, "packet-no-longer-owed"],
+    ["spec-approval", "WC-SAR", "unreadable readiness", { current: null }, "packet-no-longer-owed"],
+    ["architecture-review", "WC-ARR", "unreadable readiness", { current: null }, "packet-no-longer-owed"],
+    ["design-spec", "WC-DSR", "a delivery actor", { actors: [REVIEWER] }, "reviewer-delivered-item"],
+    ["spec-approval", "WC-SAR", "a delivery actor", { actors: [REVIEWER] }, "reviewer-delivered-item"],
+    ["architecture-review", "WC-ARR", "a delivery actor", { actors: [REVIEWER] }, "reviewer-delivered-item"],
+  ] as const)("refuses %s on %s: %s (BI-9CCB88C4)", async (gate, _capsule, _case, options, reason) => {
+    const authority = await loadPlatformReviewRunAuthority(
+      designStageAuthority(gate, options as { issued?: unknown; actors?: string[]; current?: unknown[] | null }) as never,
+      designStageRun(gate) as never,
+    );
+    expect(authority).toEqual(expect.objectContaining({ ok: false, reason }));
   });
 });
 

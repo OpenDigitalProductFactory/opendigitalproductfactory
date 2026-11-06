@@ -32,6 +32,26 @@ export async function designPhaseOwedRecoveryRoutes(
 }
 
 /**
+ * Keep the current steward packets from a recovered route list. Null or
+ * non-object packets are skipped so a missing packet cannot throw on the
+ * writer-admission re-derivation (BI-9CCB88C4).
+ */
+export function selectIssuedDesignStagePackets(
+  packets: Array<Record<string, unknown> | null | undefined>,
+  itemId: string,
+  gate?: string,
+): Array<Record<string, unknown>> {
+  return packets.filter((packet): packet is Record<string, unknown> => {
+    if (!packet || typeof packet !== "object" || Array.isArray(packet)) return false;
+    const binding = packet.initiativeReviewBinding as { gate?: unknown; itemId?: unknown } | undefined;
+    if (binding?.itemId !== itemId || typeof binding.gate !== "string" || !DESIGN_STAGE_STEWARD_GATES.has(binding.gate)) {
+      return false;
+    }
+    return gate === undefined || binding.gate === gate;
+  });
+}
+
+/**
  * The design-spec / spec-approval / architecture-review packets readiness
  * issues now for `issuer`. Null when readiness could not be read. Pass `gate`
  * to keep only that steward gate.
@@ -42,11 +62,9 @@ export async function issuedDesignStageReviewPackets(
   gate?: string,
 ): Promise<Array<Record<string, unknown>> | null> {
   const routes = await designPhaseOwedRecoveryRoutes(itemId, issuer.agentId, issuer.userId);
-  return routes && routes.map((route) => route.requestCoworker as unknown as Record<string, unknown>).filter((packet) => {
-    const binding = packet.initiativeReviewBinding as { gate?: unknown; itemId?: unknown } | undefined;
-    if (binding?.itemId !== itemId || typeof binding.gate !== "string" || !DESIGN_STAGE_STEWARD_GATES.has(binding.gate)) {
-      return false;
-    }
-    return gate === undefined || binding.gate === gate;
-  });
+  return routes && selectIssuedDesignStagePackets(
+    routes.map((route) => route.requestCoworker as unknown as Record<string, unknown> | null | undefined),
+    itemId,
+    gate,
+  );
 }
