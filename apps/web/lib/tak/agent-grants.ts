@@ -127,6 +127,11 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   // EP-WORKROOM-COMMS (BI-3F21C4D5): every coworker may read a room it is admitted
   // to (room admission is the real gate; this is the baseline capability).
   "work_room_read",
+  // BI-825D3487: the three knowledge corpora. Unlike the rest of this baseline,
+  // a revocation row removes one (lib/tak/corpus-read-scope.ts reads them).
+  "wiki_kernel_read",
+  "wiki_org_read",
+  "wiki_profession_read",
 ];
 /** Maps tools to grants. [] means identity-scoped universal access; absence means deny. */
 export const TOOL_TO_GRANTS: Record<string, string[]> = {
