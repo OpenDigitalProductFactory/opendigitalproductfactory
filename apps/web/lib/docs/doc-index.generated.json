@@ -12491,6 +12491,18 @@
         "troubleshooting"
       ]
     },
+    "docs/user-guide/codex-plugin-recovery.md": {
+      "publicHref": "/user-guide/codex-plugin-recovery/",
+      "portalHref": "/docs/codex-plugin-recovery",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "recover-codex-plugins-and-hook-trust",
+        "repeated-windows-notify-errors",
+        "hooks-marked-modified-after-an-update",
+        "verify-recovery"
+      ]
+    },
     "docs/user-guide/compliance/audits-and-corrective-actions.md": {
       "publicHref": "/user-guide/compliance/audits-and-corrective-actions/",
       "portalHref": "/docs/compliance/audits-and-corrective-actions",
@@ -13228,6 +13240,7 @@
         "overview",
         "workflow",
         "who-can-upgrade-outside-the-maintenance-window",
+        "when-the-scheduled-upgrade-runs",
         "when-work-is-still-running",
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
@@ -13640,6 +13653,7 @@
         "key-concepts",
         "what-shows-up-here",
         "what-you-can-do",
+        "not-being-asked-the-same-thing-again",
         "how-long-a-coworkers-request-waits"
       ]
     },

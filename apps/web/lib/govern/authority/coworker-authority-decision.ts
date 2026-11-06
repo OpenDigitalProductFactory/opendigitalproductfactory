@@ -134,6 +134,8 @@ export type CoworkerAuthorityInput = {
    * put a non-damaging, steered action in front of a human.
    */
   steering?: EscalationSteering;
+  /** BI-E5631708: the envelope carrying the standing ruling that steered this call. */
+  standingRulingEnvelopeId?: string;
   subject?: CoworkerAuthoritySubject | null;
   /** The Workroom the call runs in, for the receipt; null when unroomed. */
   room?: {

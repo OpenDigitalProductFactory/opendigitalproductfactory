@@ -219,6 +219,49 @@ describe("CoworkerEnvelopeApproval", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/inbox\?approval=.+#approval-result$/)));
   });
 
+  // BI-E5631708: an owner's written approval, made standing.
+  it("offers no standing choice unless the server says it applies, and sends no body without it", async () => {
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect((fetchMock.mock.calls[0][1] as RequestInit).body).toBeUndefined();
+  });
+
+  it("keeps the card and says why when the server will not make it standing", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: false, message: "This approval covers this request only; it could not be made standing." } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={approval({ standingRulingOffered: true })} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Don't ask me again/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+    expect(await screen.findByText(/could not be made standing/)).toBeTruthy();
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Ask me again next time" })).toBeNull();
+  });
+
+  it("makes the approval standing when the owner ticks it, then lets them undo it", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: true } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ revoked: 1 }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={approval({ standingRulingOffered: true })} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Don't ask me again when this coworker does this/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ makeStanding: true });
+    expect(await screen.findByText(/you won't be asked again when this coworker does this/)).toBeTruthy();
+    // The card stays so the ruling can be withdrawn on the spot.
+    expect(replace).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask me again next time" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[1]).toEqual([
+      "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/standing-ruling",
+      expect.objectContaining({ method: "DELETE" }),
+    ]);
+    expect(await screen.findByText(/you'll be asked again next time/)).toBeTruthy();
+  });
+
   it("declines through the envelope endpoint and never the proposal actions", async () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
