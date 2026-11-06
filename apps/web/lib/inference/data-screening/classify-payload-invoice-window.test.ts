@@ -41,4 +41,18 @@ describe("an invoice in source code needs its value on a nearby line (BI-BC04FEB
     expect(result.dataEvidencedClasses).toContain("payments-finance");
     expect(result.overallSensitivity).toBe("restricted");
   });
+
+  // The boundary, stated exactly. A bare `invoice` (no reference after it) whose
+  // only value is more than three lines away is NOT a payment record in source
+  // code. The platform owner accepted that residual risk for this change
+  // (DI-3981EF989BCA); this test pins it so any widening or narrowing is visible.
+  const gap = (n: number) => Array.from({ length: n }, (_, i) => `  const step${i} = run(${i});`).join("\n");
+  const bareRecord = (linesBetween: number) =>
+    `function seed() {\n  // invoice\n${gap(linesBetween)}\n  const total = "Total: $125.00";\n}`;
+  it("treats a bare invoice word with its value three lines away as a payment record", () => {
+    expect(classify(bareRecord(2)).dataEvidencedClasses).toContain("payments-finance");
+  });
+  it("does not treat a bare invoice word with its value four lines away as a payment record (owner-accepted gap)", () => {
+    expect(classify(bareRecord(3)).dataEvidencedClasses).not.toContain("payments-finance");
+  });
 });
