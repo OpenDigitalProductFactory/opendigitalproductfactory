@@ -202,6 +202,12 @@ export type AttentionEnvelopeApproval = {
   reviewBinding?: AttentionEnvelopeReviewBinding;
   /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
   decision: EnvelopeDecisionSummary;
+  /**
+   * BI-E5631708: the owner may make this approval standing ("don't ask again
+   * when this coworker does this"). Set only for a non-damaging request that
+   * reached a person solely because nothing recorded could steer it.
+   */
+  standingRulingOffered?: boolean;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;

@@ -257,6 +257,29 @@ function stubDb(
   };
 }
 
+describe("coworkerEnvelopeToAttentionItem — standing ruling offer (BI-E5631708)", () => {
+  const bound = {
+    argsJson: { approvalBinding: { actingHumanUserId: OWNER, actingAgentId: "AGT-WS-PORTFOLIO", toolName: "record_initiative_evidence" } },
+  };
+
+  it("offers \"don't ask again\" only for a non-damaging request nothing recorded could steer", () => {
+    const offered = coworkerEnvelopeToAttentionItem(envelope({
+      ...bound, authorityDecision: { rationale: { damaging: false, escalationReason: "unsteered-side-effect" } },
+    }), NOW).envelope;
+    expect(offered?.standingRulingOffered).toBe(true);
+
+    for (const rationale of [
+      { damaging: true, escalationReason: "damaging-consequence" },
+      { damaging: false, escalationReason: "declared-proposal" },
+      null,
+    ]) {
+      const withheld = coworkerEnvelopeToAttentionItem(envelope({ ...bound, authorityDecision: rationale ? { rationale } : null }), NOW).envelope;
+      expect(withheld?.standingRulingOffered).toBeUndefined();
+    }
+    expect(coworkerEnvelopeToAttentionItem(envelope(), NOW).envelope?.standingRulingOffered).toBeUndefined();
+  });
+});
+
 describe("loadCoworkerEnvelopeItems", () => {
   it.each([true, false])("shows a work name only when the actual reader has content access: %s", async (admitted) => {
     humanRoomAccess.mockClear();
