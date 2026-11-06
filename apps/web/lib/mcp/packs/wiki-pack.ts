@@ -14,7 +14,7 @@
 // used.
 
 import { getCwd } from "@/lib/shared/lazy-node";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -151,9 +151,24 @@ const definitions: ToolDefinition[] = [
 
 async function wikiQueryHandler(
   params: Record<string, unknown>,
+  userId: string,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
   const { searchWikiPages } = await import("@/lib/wiki/embeddings");
   const { prisma } = await import("@dpf/db");
+  // BI-825D3487: a coworker reads only the corpora its grants hold. A person
+  // (no coworker identity) is not family-limited, so no scope is passed.
+  const corpus = await import("@/lib/tak/corpus-read-scope");
+  const agentId = context?.agentId?.trim() || null;
+  const corpusScope = agentId ? await corpus.resolveCorpusReadScope(agentId) : null;
+  const scoped = corpusScope ? { corpusScope } : {};
+  const reportUnmapped = async (rows: Array<{ slug: string; organizationId: string | null }>) => {
+    const slugs = rows.filter((r) => r.organizationId === null && r.slug.startsWith("professions/")).map((r) => r.slug);
+    if (!agentId || !corpusScope?.reportOnlyUnmapped || slugs.length === 0) return;
+    await corpus.recordCorpusGrantReport({
+      agentId, userId, toolName: "wiki_query", slugs, threadId: context?.threadId, routeContext: context?.routeContext,
+    }).catch((err) => console.warn("[wiki_query] corpus-grant-report write failed:", err));
+  };
   const org = await prisma.organization
     .findFirst({ select: { id: true, wikiRetrievalMode: true } })
     .catch(() => null);
@@ -186,7 +201,9 @@ async function wikiQueryHandler(
       organizationId,
       limit,
       db: prisma,
+      ...scoped,
     });
+    await reportUnmapped(results);
     if (results.length === 0) {
       return { success: true, message: "No matching wiki pages found.", data: { results: [], retrievalMode: mode } };
     }
@@ -220,6 +237,7 @@ async function wikiQueryHandler(
       typeof params["professionKey"] === "string" && params["professionKey"].trim()
         ? [params["professionKey"].trim()]
         : undefined,
+    ...scoped,
   };
   if (typeof params["tier"] === "string") {
     searchArgs.principleTier = params["tier"];
@@ -231,6 +249,7 @@ async function wikiQueryHandler(
     searchArgs.principlePublic = params["publicOnly"];
   }
   const results = mode === "lexical" ? await (await import("@/lib/wiki/embeddings")).searchWikiPagesLexically(searchArgs) : await searchWikiPages(searchArgs);
+  await reportUnmapped(results);
   if (results.length === 0) {
     return { success: true, message: "No matching wiki pages found.", data: { results: [], retrievalMode: mode } };
   }
@@ -439,7 +458,7 @@ async function wikiIngestHandler(
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  wiki_query: (params) => wikiQueryHandler(params),
+  wiki_query: (params, userId, context) => wikiQueryHandler(params, userId, context),
   wiki_lint: (params) => wikiLintHandler(params),
   wiki_ingest: (params) => wikiIngestHandler(params),
 };

@@ -12217,6 +12217,7 @@
         "agent-authority-overview",
         "tool-execution-log",
         "effective-permissions",
+        "knowledge-corpus-grants",
         "reading-decision-separation",
         "living-playbook-experiments",
         "tool-evaluation-pipeline",
