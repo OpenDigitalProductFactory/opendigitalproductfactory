@@ -238,6 +238,23 @@ describe("an approval made standing (BI-E5631708)", () => {
       expect(await findStandingRuling(CALL)).toBeNull();
     });
 
+    it("keeps a genuine ruling after its approved request expires or is superseded", async () => {
+      for (const status of ["expired", "cancelled", "failed"]) {
+        store.envelopes = [envelope({
+          status,
+          argsJson: { approvalBinding: { ...BINDING }, standingRuling: forged, humanApproval: { userId: OWNER, approvedAt: "x" } },
+        })];
+        expect(await findStandingRuling(CALL)).toMatchObject({ envelopeId: "env-1" });
+      }
+    });
+
+    it("ignores a ruling on a request that expired or was cancelled before anyone approved it", async () => {
+      for (const status of ["expired", "cancelled"]) {
+        store.envelopes = [envelope({ status, argsJson: { approvalBinding: { ...BINDING }, standingRuling: forged } })];
+        expect(await findStandingRuling(CALL)).toBeNull();
+      }
+    });
+
     it("trusts the same ruling once it sits on the owner's approved authority request", async () => {
       store.envelopes = [envelope({
         status: "executed",

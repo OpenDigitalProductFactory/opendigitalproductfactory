@@ -54,8 +54,16 @@ type RulingRow = {
   approvalBindingFingerprint?: string | null;
 };
 
-/** An approval that has been decided by a person and not withdrawn by them. */
-const RULED_APPROVAL_STATUSES = ["approved", "executed", "failed"] as const;
+/**
+ * Statuses an owner-approved request can be in. A request reaches "expired" or
+ * "cancelled" after approval when its call lapses or recovery supersedes it;
+ * the ruling is about the action class, not that one call, so it still stands.
+ * The owner's own humanApproval marker (required below) is what proves a person
+ * decided: a request that expired or was cancelled while still proposed has
+ * none, and only approveEnvelope writes one onto a bound authority request.
+ * "Ask me again" (revokeStandingRuling) is how a ruling ends.
+ */
+const RULED_APPROVAL_STATUSES = ["approved", "executed", "failed", "expired", "cancelled"] as const;
 
 export type StandingRulingDb = {
   coworkerActionEnvelope: {
@@ -78,8 +86,8 @@ const RULING_SELECT = {
  * PROVENANCE (independent review of PR #6905). A ruling is trusted only where
  * approveEnvelope can have written it: a server-minted authority envelope
  * (its stored approvalBinding re-fingerprints to the row's own fingerprint and
- * names this exact coworker, tool and owner), decided by a person (approved,
- * executed or failed, never proposed), and approved by that owner in person
+ * names this exact coworker, tool and owner), decided by a person (any status
+ * after approval, never proposed), and approved by that owner in person
  * (a humanApproval marker naming them, with no on-behalf decision). A screen
  * envelope stores caller arguments verbatim and has no binding fingerprint, so
  * a ruling-shaped value a coworker writes there is never read as a ruling, and
