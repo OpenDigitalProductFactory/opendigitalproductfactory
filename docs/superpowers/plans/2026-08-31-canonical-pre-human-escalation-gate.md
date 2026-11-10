@@ -24,11 +24,18 @@ This is one atomic fix. None of the steps below is independently shippable: the 
 - [x] Repair independent review finding `cmwaec1ob0ckz01p0ykq07wdn`: a
       consult-required transition now verifies that the supplied `DI-*` exists
       in the DecisionInteraction ledger, rather than accepting format alone.
-- [ ] Obtain a clean exact-tree integration run and production build. The first
-      admitted run is preserved as failed evidence: three unrelated
+- [x] Obtain a clean exact-tree integration run. The first admitted run is
+      preserved as failed evidence: three unrelated
       `build-flow-state.test.ts` cases timed out under shared-run load, while
       the complete file passed locally (40/40) immediately afterward.
-- [ ] Record evidence, independent semantic review, push, create the PR, and verify PR health.
+- [x] Record evidence, pass independent semantic review, push, and create PR
+      #6940. The first review finding and its repaired-tree pass remain linked.
+- [x] Repair the production-build dependency exposed by CI on 2026-11-10:
+      `target-binding.test.ts` depended on wall-clock time after its migration
+      grace cutoff. The test now supplies its declared fixture time and passes
+      9/9 locally; runtime behavior is unchanged.
+- [ ] Observe the repaired-tree production build and merge-queue checks, then
+      merge PR #6940 and close the Workroom and BI.
 
 ## Traceability
 
