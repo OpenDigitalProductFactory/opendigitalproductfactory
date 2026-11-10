@@ -260,6 +260,14 @@ export type AttentionItem = {
    * can no longer run as proposed. Set only by the `agent-proposal` source
    * (convert-and-run, BI-04E5A511); the card then offers Decline only. */
   noLongerRunnable?: string;
+  /** Exact governed evidence behind a compliance-freshness decision. The
+   * source registry remains canonical; this read-model copy lets the card open
+   * and review the cited material without sending the owner to generic settings. */
+  complianceEvidence?: {
+    sourceKey: string;
+    url: string;
+    claims: Array<{ claimId: string; summary: string }>;
+  };
 };
 
 /**

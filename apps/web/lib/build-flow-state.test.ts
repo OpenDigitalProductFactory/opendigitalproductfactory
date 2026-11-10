@@ -16,6 +16,10 @@ vi.mock("@/lib/agent-event-bus", () => ({
   agentEventBus: { emit: vi.fn() },
 }));
 
+vi.mock("@/lib/build/sandbox/sandbox-build-gc", () => ({
+  releaseSandboxForTerminalBuild: vi.fn(async () => {}),
+}));
+
 vi.mock("@/lib/self-upgrade/completion", () => ({
   isFeatureBuildDeployed: vi.fn(),
 }));

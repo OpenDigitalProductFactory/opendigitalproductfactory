@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/ComplianceEvidenceReviewActions.tsx",
+      "apps/web/components/attention/WeeklyDigestPanel.tsx"
+    ]
+  },
+  "decidedOption": "contextual-review-inside-existing-card",
+  "decisionInteractionId": "DI-A8D18B2A7F04",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "contextual-review-inside-existing-card",
+      "external-source-link-only",
+      "separate-compliance-review-route"
+    ]
+  },
+  "authority": "The approved owner-workspace streamlining design requires the Friday digest to stay collapsed, routine recommendation/reversibility chrome to disappear, compliance evidence renewal to expose the exact source and a durable confirm-or-changed outcome, and conversation controls to dismiss on Escape (D-04, S-03, S-04, C-09). DI-A8D18B2A7F04 records the implementation fit choice under that scope.",
+  "limitations": "Workspace remains the canonical home and no route or navigation layer is added. The existing ExpandableCard, CollapsibleList, native details disclosure, and DPF theme tokens are reused. The contextual review keeps the source, claims, and action together; an external-link-only card cannot record an outcome, while a separate route adds a second mental model. Focus return and projection behavior have focused tests. Served-route measurement remains for the governed runtime because this worktree cannot resolve the pinned dpf-workroom artifact."
+}

@@ -43,6 +43,7 @@ const entry: OwnerAttentionEntry = {
       lead: "AI recommendation",
       text: "review the amount and recipient, then approve it if both are right.",
       specialistByline: "Finance",
+      visible: true,
     },
     choices: [{ kind: "open-in-context", label: "Review bill", href: "/finance/bills" }],
     tags: [

@@ -11,14 +11,14 @@ const INSIDE_WARNING_WINDOW = new Date("2026-09-01T12:00:00.000Z");
 const AFTER_60D_EXPIRY = new Date("2026-09-19T12:00:00.000Z");
 
 describe("loadComplianceSourceFreshnessItems", () => {
-  it("stays silent while every source is fresh", () => {
+  it("stays silent while every source is fresh", async () => {
     // A healthy source is not news. An inbox that lists fine things teaches
     // people to skim past it, which is how the real item gets missed.
-    expect(loadComplianceSourceFreshnessItems({ now: BEFORE_ANY_EXPIRY })).toEqual([]);
+    expect(await loadComplianceSourceFreshnessItems({ now: BEFORE_ANY_EXPIRY })).toEqual([]);
   });
 
-  it("warns before anything breaks, not after", () => {
-    const items = loadComplianceSourceFreshnessItems({ now: INSIDE_WARNING_WINDOW });
+  it("warns before anything breaks, not after", async () => {
+    const items = await loadComplianceSourceFreshnessItems({ now: INSIDE_WARNING_WINDOW });
     expect(items.length).toBe(3);
     for (const item of items) {
       expect(item.source).toBe("compliance-source-freshness");
@@ -32,8 +32,8 @@ describe("loadComplianceSourceFreshnessItems", () => {
     }
   });
 
-  it("escalates to overdue once the evidence has actually lapsed", () => {
-    const items = loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+  it("escalates to overdue once the evidence has actually lapsed", async () => {
+    const items = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
     expect(items.length).toBe(3);
     for (const item of items) {
       expect(item.triage.timeToAct).toBe("overdue");
@@ -44,16 +44,41 @@ describe("loadComplianceSourceFreshnessItems", () => {
     }
   });
 
-  it("routes to a person, because re-attesting vendor terms is judgement", () => {
-    const [item] = loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+  it("routes to a person, because re-attesting vendor terms is judgement", async () => {
+    const [item] = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
     expect(item.triage.decideEffort).toBe("judgment");
     expect(item.triage.residueReason).toBe("no-self-heal");
     expect(item.audience?.operator).toBe(true);
   });
 
-  it("gives each source a stable id so repeat loads do not duplicate cards", () => {
-    const first = loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
-    const second = loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+  it("carries the exact cited source and claims into the renewal task", async () => {
+    const [item] = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+    expect(item.complianceEvidence?.sourceKey).toBeTruthy();
+    expect(item.complianceEvidence?.url).toMatch(/^https:\/\//);
+    expect(item.complianceEvidence?.claims.length).toBeGreaterThan(0);
+    expect(item.actions[0]).toMatchObject({ label: "Open cited source" });
+  });
+
+  it("clears a warning after a person confirms the cited claims", async () => {
+    const db = {
+      rawSource: {
+        findMany: async () => [{
+          sourceKey: "openai/business-data-privacy",
+          retrievedAt: new Date("2026-09-19T12:00:00.000Z"),
+          locator: { review: { decision: "confirmed" } },
+        }],
+      },
+    };
+    const items = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY, db });
+
+    expect(items.map((item) => item.id)).not.toContain(
+      "compliance-source-freshness:openai/business-data-privacy",
+    );
+  });
+
+  it("gives each source a stable id so repeat loads do not duplicate cards", async () => {
+    const first = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+    const second = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
     expect(first.map((i) => i.id)).toEqual(second.map((i) => i.id));
     expect(new Set(first.map((i) => i.id)).size).toBe(first.length);
     expect(first[0]?.id.startsWith("compliance-source-freshness:")).toBe(true);
@@ -61,15 +86,15 @@ describe("loadComplianceSourceFreshnessItems", () => {
 });
 
 describe("the caller's clock is the only clock (BI-99909E53)", () => {
-  it("stamps createdAtIso from the injected `now`, so a pinned sweep clock reaches the whole item", () => {
-    const items = loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+  it("stamps createdAtIso from the injected `now`, so a pinned sweep clock reaches the whole item", async () => {
+    const items = await loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) expect(item.createdAtIso).toBe(AFTER_60D_EXPIRY.toISOString());
   });
 
-  it("renders the frozen-baseline state on the pinned instant: the final valid day reads \"lapses after today\"", () => {
+  it("renders the frozen-baseline state on the pinned instant: the final valid day reads \"lapses after today\"", async () => {
     // 2026-09-18T12:00Z is the instant .github/workflows/ux-route-sweep.yml pins.
-    const items = loadComplianceSourceFreshnessItems({ now: new Date("2026-09-18T12:00:00.000Z") });
+    const items = await loadComplianceSourceFreshnessItems({ now: new Date("2026-09-18T12:00:00.000Z") });
     expect(items.map((i) => i.context.includes("lapses after today"))).toEqual(items.map(() => true));
   });
 });

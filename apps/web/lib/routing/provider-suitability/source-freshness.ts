@@ -56,6 +56,7 @@ export type ComplianceSourceFreshness = {
   /** Whole days remaining. 0 = final valid day; negative = already lapsed. */
   daysUntilStale: number;
   status: ComplianceSourceFreshnessStatus;
+  claims: Array<{ claimId: string; summary: string }>;
 };
 
 export type ComplianceSourceFreshnessSummary = {
@@ -94,11 +95,14 @@ function isoDate(ms: number): string {
  *  `now` is injectable so callers can project a future horizon ("what lapses
  *  before the end of the quarter?") and so tests never depend on the real clock. */
 export function summarizeComplianceSourceFreshness(
-  options: { now?: Date } = {},
+  options: {
+    now?: Date;
+    sources?: Record<string, ProviderComplianceSourceEntry>;
+  } = {},
 ): ComplianceSourceFreshnessSummary {
   const now = options.now ?? new Date();
 
-  const sources = Object.values(PROVIDER_COMPLIANCE_SOURCE_REGISTRY)
+  const sources = Object.values(options.sources ?? PROVIDER_COMPLIANCE_SOURCE_REGISTRY)
     .map((entry): ComplianceSourceFreshness => {
       const source = entry as ProviderComplianceSourceEntry;
       const remaining = daysUntilStale(source, now);
@@ -114,6 +118,7 @@ export function summarizeComplianceSourceFreshness(
         staleFrom: isoDate(retrievedAtUtcMidnight + (source.maxAgeDays + 1) * MS_PER_DAY),
         daysUntilStale: remaining,
         status: classify(remaining),
+        claims: source.claims.map((claim) => ({ claimId: claim.claimId, summary: claim.summary })),
       };
     })
     .sort((a, b) => a.daysUntilStale - b.daysUntilStale);

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Owner Workspace Streamlining Design
 
 **Status:** Proposed for governed review

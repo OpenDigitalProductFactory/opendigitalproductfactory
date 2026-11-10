@@ -8,6 +8,16 @@
     "unavailable": "Approvals unavailable."
   },
   "result": "Approval result",
+  "complianceEvidence": {
+    "reviewClaims": "Review cited claims",
+    "openSource": "Open cited source →",
+    "confirm": "Confirm still valid",
+    "flagChanged": "Flag as changed"
+  },
+  "weeklyReview": {
+    "openDeferred": "Open deferred items",
+    "closeDeferred": "Close deferred items"
+  },
   "recent": "Recent approval results",
   "unavailable": "This request is not available in your Inbox.",
   "details": "Request details",

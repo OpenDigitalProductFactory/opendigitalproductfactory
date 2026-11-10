@@ -47,6 +47,9 @@ export type OwnerDecisionCard = {
     lead: "AI recommendation";
     text: string;
     specialistByline: string;
+    /** Default advice is retained for technical/audit readers but stays out of
+     * the owner summary unless this source has a specific recommendation. */
+    visible: boolean;
   };
   /** Honest attribution byline for an AI-authored item — AI-labeled, role as a
    *  thin label over the accountable identity (BI-AB12B3D3). Absent when the item
@@ -87,6 +90,7 @@ export function translateAttentionToOwnerDecision(
       lead: "AI recommendation",
       text: recommendationFor(item),
       specialistByline: specialistFor(item.source),
+      visible: hasSpecificRecommendation(item),
     },
     ...(item.author ? { byline: formatAttentionByline(item.author) } : {}),
     choices,
@@ -168,10 +172,24 @@ function tagsFor(item: AttentionItem, nowMs: number): OwnerDecisionTag[] {
   if (item.source === "approval-outbound" || item.source === "compliance-submission") {
     tags.push({ label: "Goes public", kind: "public" });
   }
-  if (!item.triage.irreversible) tags.push({ label: "Reversible", kind: "reversible" });
+  if (item.triage.irreversible) tags.push({ label: "Irreversible", kind: "reversible" });
   const due = dueLabel(item.triage.deadlineIso, nowMs);
   if (due) tags.push({ label: due, kind: "deadline" });
   return tags;
+}
+
+function hasSpecificRecommendation(item: AttentionItem): boolean {
+  return item.source === "approval-bill"
+    || item.source === "approval-expense"
+    || item.source === "approval-outbound"
+    || item.source === "compliance-submission"
+    || item.source === "approval-leave"
+    || item.source === "agent-proposal"
+    || item.source === "coworker-envelope"
+    || item.source === "research-proposal"
+    || item.source === "coworker-memory"
+    || item.source === "reservation-exception"
+    || item.source === "hospitality-capacity";
 }
 
 const MINUTE_MS = 60_000;
