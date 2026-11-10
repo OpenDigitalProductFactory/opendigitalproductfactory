@@ -521,7 +521,9 @@ export function projectBacklogItemReadiness(args: {
     ...args.item,
     recordedProfiles: own.current ? [own.current.profile] : [],
   });
-  const governed = profile !== null;
+  // Invalid persisted classification still owes a refusal; only absent legacy
+  // applicability may use the ungoverned terminal path.
+  const governed = profile !== null || args.item.workType != null;
   const evidence = receipts.states;
   const shape = readinessShapeFromWorkShape(args.item.workShape);
   // The derivations below serve the proportional gate table only, so they key on

@@ -27,6 +27,16 @@ export const agentTaskDispatch = jobs.createFunction(
     const gate = await gateAtEntry(step, "agent/task-dispatch");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    await step.run("reconcile-retained-foreground-work", async () => {
+      try {
+        const { reconcileForegroundWork } = await import("@/lib/agent/foreground-work-worker");
+        return await reconcileForegroundWork();
+      } catch (error) {
+        console.warn("[agent-task-dispatch] foreground wake reconciliation unavailable", error);
+        return { outcome: "unavailable" };
+      }
+    });
+
     await step.run("reconcile-acceptance-upgrade-wakeup", async () => {
       try {
         const { reconcileAcceptanceUpgradeWakeupFromStore } = await import(

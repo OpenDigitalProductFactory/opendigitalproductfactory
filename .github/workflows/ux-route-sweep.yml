@@ -8,6 +8,11 @@ permissions:
 on:
   workflow_call:
     inputs:
+      scenario:
+        description: "Existing runtime purpose: route measurement or retained-work qualification"
+        required: false
+        type: string
+        default: "route-sweep"
       update_baseline:
         description: "Measure and emit a fresh route-budget baseline"
         required: false
@@ -30,6 +35,11 @@ on:
         default: "2"
   workflow_dispatch:
     inputs:
+      scenario:
+        description: "Runtime verification scenario"
+        type: choice
+        options: ["route-sweep", "foreground-recovery"]
+        default: "route-sweep"
       update_baseline:
         description: "Measure and emit a fresh route-budget-baseline.json artifact to arm the ratchet"
         type: boolean
@@ -41,7 +51,7 @@ on:
         default: "2"
 
 concurrency:
-  group: ux-route-sweep-${{ github.ref }}
+  group: ux-route-sweep-${{ github.ref }}-${{ inputs.scenario || 'route-sweep' }}
   cancel-in-progress: true
 
 # What this gate does
@@ -103,6 +113,8 @@ jobs:
       NEXTAUTH_URL: http://localhost:3000
       UX_SWEEP_BASE_URL: http://localhost:3000
       UX_SWEEP_WORKERS: ${{ inputs.workers || '2' }}
+      DPF_UX_FIXTURE_PROFILE: ${{ inputs.scenario == 'foreground-recovery' && 'foreground-finance' || 'route-sweep' }}
+      DPF_FOREGROUND_RECOVERY_SCENARIO_CI: ${{ inputs.scenario == 'foreground-recovery' && '1' || '0' }}
       # Pinned measurement clock (BI-99909E53). Calendar-relative copy over
       # code-defined dates — the inbox's compliance-evidence "lapses in N days"
       # / "lapses after today" / "lapsed N days ago" — moved a frozen baseline
@@ -123,6 +135,19 @@ jobs:
           # checkout in audit-routing-invariants.yml, which runs the same
           # full seed and has been green with this flag set.
           lfs: true
+
+      - name: Validate runtime scenario
+        env:
+          RUNTIME_SCENARIO: ${{ inputs.scenario || 'route-sweep' }}
+          UPDATE_BASELINE: ${{ inputs.update_baseline }}
+        run: |
+          case "$RUNTIME_SCENARIO" in
+            route-sweep|foreground-recovery) ;;
+            *) echo "Unknown runtime verification scenario"; exit 1 ;;
+          esac
+          if [ "$RUNTIME_SCENARIO" = "foreground-recovery" ] && [ "$UPDATE_BASELINE" = "true" ]; then
+            echo "Recovery qualification does not emit a route-budget baseline"; exit 1
+          fi
 
       - name: Setup pnpm with cache
         uses: ./.github/actions/setup-pnpm
@@ -170,6 +195,18 @@ jobs:
       # Browser installation is independent of the portal build. Keep it ahead
       # of the artifact rendezvous so the build, fixture, and browser paths
       # overlap instead of extending the critical path serially.
+      - name: Prepare only untouched standard CI seed schedules
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --prepare-target
+
+      - name: Verify retained-work runtime isolation
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --check-target
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
@@ -215,6 +252,27 @@ jobs:
 
       # Poll with curl rather than adding a wait-on dependency just for this job
       # (the New Dependency Gate exists to stop exactly that kind of drive-by).
+      # Partial Postgres routing still delivers to the existing Inngest adapter.
+      # Keep that real event boundary available, without registering any apps.
+      - name: Start the existing coexistence event backend
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        run: |
+          docker run -d --name "dpf-foreground-inngest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --label "dpf.ci-run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --memory=1g --cpus=1 -p 127.0.0.1:8288:8288 \
+            inngest/inngest:v1.36.0 inngest dev --no-discovery --no-poll
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8288/health > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "The coexistence event backend did not become healthy"; exit 1
+
+      - name: Recheck retained-work isolation immediately before boot
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-fixtures.ts --check-target
+
       - name: Start the portal
         env:
           DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
@@ -222,12 +280,42 @@ jobs:
           # are awaited before the portal serves, and the fire-and-forget
           # self-heal reconcilers/watchdogs that mutate operational state
           # mid-crawl are disabled — same-tree sweeps measure the same portal.
-          DPF_MEASUREMENT_RUNTIME: "1"
+          DPF_MEASUREMENT_RUNTIME: ${{ inputs.scenario == 'foreground-recovery' && '0' || '1' }}
+          DPF_WORKFLOW_SCENARIO: ${{ inputs.scenario || 'route-sweep' }}
         run: |
-          if [ "$DPF_REUSED_BUILD" = "true" ]; then
-            (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js) &
+          if [ "$DPF_WORKFLOW_SCENARIO" = "foreground-recovery" ]; then
+            # Prior steps either validate the exact-source build artifact or
+            # complete this checkout's canonical production build. Bind the
+            # existing deployment metadata only after those steps succeed.
+            runtime_source_sha="$(git rev-parse HEAD)"
+            build_id=apps/web/.next/BUILD_ID
+            if [ "$DPF_REUSED_BUILD" = "true" ]; then
+              build_id=apps/web/.next/standalone/apps/web/.next/BUILD_ID
+            fi
+            if [ "$runtime_source_sha" != "$GITHUB_SHA" ] || [ ! -f "$build_id" ]; then
+              echo "The foreground runtime has no matching production build"; exit 1
+            fi
+            export DEPLOYED_SHA="$runtime_source_sha"
+            export DPF_JOBS_ENGINE=postgres
+            export DPF_JOBS_POSTGRES_FUNCTIONS=agent/foreground-work-run,agent/task-dispatch
+            export DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED=1
+            export DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED=0
+            export INNGEST_BASE_URL=http://127.0.0.1:8288
+            export INNGEST_DEV=1
+            export INNGEST_EVENT_KEY=synthetic-ci-event-key
+          fi
+          start_portal() {
+            if [ "$DPF_REUSED_BUILD" = "true" ]; then
+              (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js)
+            else
+              pnpm --filter web start
+            fi
+          }
+          if [ "$DPF_WORKFLOW_SCENARIO" = "foreground-recovery" ]; then
+            mkdir -p apps/web/test-results/foreground-work-recovery
+            start_portal > apps/web/test-results/foreground-work-recovery/portal.log 2>&1 &
           else
-            pnpm --filter web start &
+            start_portal &
           fi
           for i in $(seq 1 60); do
             if curl -sf http://localhost:3000/login > /dev/null; then
@@ -251,10 +339,18 @@ jobs:
       - name: Establish an authenticated session
         run: pnpm exec tsx e2e/auth-only.ts
 
+      - name: Verify retained work through authenticated HTTP and the owned queue
+        if: ${{ inputs.scenario == 'foreground-recovery' }}
+        env:
+          DPF_FOREGROUND_RECOVERY_SCENARIO_CI: "1"
+          DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/foreground-work-recovery-verification.ts
+
       # Provider-detail routes require a dynamic fixture and are excluded from
       # the broad route sweep. Exercise the local engine control explicitly in
       # this same governed portal; an unqualified host must retain Docker.
       - name: Verify local engine control on desktop and mobile
+        if: ${{ inputs.scenario != 'foreground-recovery' }}
         env:
           DPF_MEASUREMENT_RUNTIME: "1"
         run: >-
@@ -263,19 +359,19 @@ jobs:
           --output=apps/web/test-results/managed-inference-control
 
       - name: Run the sweep
-        if: ${{ inputs.update_baseline != true }}
+        if: ${{ inputs.update_baseline != true && inputs.scenario != 'foreground-recovery' }}
         run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS"
 
       # Exercise the actual served decision controls after the unchanged budget
       # sweep. Only run-scoped CI fixtures are used; server decisions are blocked.
       - name: Verify approval disclosure scenarios
-        if: ${{ inputs.update_baseline != true }}
+        if: ${{ inputs.update_baseline != true && inputs.scenario != 'foreground-recovery' }}
         env:
           DPF_APPROVAL_SCENARIO_CI: "1"
         run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/approval-disclosure-verification.ts
 
       - name: Verify provider recovery controls and synthetic Responses
-        if: ${{ inputs.update_baseline != true }}
+        if: ${{ inputs.update_baseline != true && inputs.scenario != 'foreground-recovery' }}
         env:
           DPF_PROVIDER_QUOTA_SCENARIO_CI: "1"
         run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/provider-quota-recovery-verification.ts
@@ -285,22 +381,33 @@ jobs:
       # the baseline is a reviewed engineering act, and this job has read-only
       # contents permission.
       - name: Measure and emit a fresh baseline
-        if: ${{ inputs.update_baseline == true }}
+        if: ${{ inputs.update_baseline == true && inputs.scenario != 'foreground-recovery' }}
         run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS" --update-baseline
 
       - name: Upload the fresh baseline
-        if: ${{ inputs.update_baseline == true }}
+        if: ${{ inputs.update_baseline == true && inputs.scenario != 'foreground-recovery' }}
         uses: actions/upload-artifact@v7
         with:
           name: ux-route-budget-baseline
           path: apps/web/lib/ux-budget/route-budget-baseline.json
           if-no-files-found: error
 
+      - name: Stop only this scenario's coexistence backend
+        if: ${{ always() && inputs.scenario == 'foreground-recovery' }}
+        run: |
+          backend_name="dpf-foreground-inngest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if docker inspect "$backend_name" > /dev/null 2>&1; then
+            mkdir -p apps/web/test-results/foreground-work-recovery
+            docker logs "$backend_name" > apps/web/test-results/foreground-work-recovery/event-backend.log 2>&1
+            docker stop --time 10 "$backend_name"
+            docker rm "$backend_name"
+          fi
+
       - name: Upload the budget report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ux-route-budget-report
+          name: ${{ inputs.scenario == 'foreground-recovery' && 'foreground-recovery-report' || 'ux-route-budget-report' }}
           path: |
             apps/web/lib/ux-budget/route-budget-report.json
             apps/web/test-results/ux-route-sweep/route-sweep-execution.json
@@ -308,6 +415,7 @@ jobs:
             apps/web/test-results/ux-route-sweep/approval-scenarios
             apps/web/test-results/ux-route-sweep/provider-quota-recovery
             apps/web/test-results/managed-inference-control
+            apps/web/test-results/foreground-work-recovery
           if-no-files-found: warn
 
       # Screenshots exist only for failed eligible routes. Keeping them out of green
@@ -316,6 +424,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ux-route-sweep-failure-diagnostics
+          name: ${{ inputs.scenario == 'foreground-recovery' && 'foreground-recovery-failure-diagnostics' || 'ux-route-sweep-failure-diagnostics' }}
           path: apps/web/test-results/ux-route-sweep/screenshots
           if-no-files-found: ignore

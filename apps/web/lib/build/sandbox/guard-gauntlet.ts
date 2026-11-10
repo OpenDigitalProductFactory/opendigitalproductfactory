@@ -37,6 +37,12 @@ const EXIT_SENTINEL = "__DPF_GAUNTLET_EXIT__";
 /** Repository paths taken from the base commit rather than the build's tree. */
 export const GRADER_PATHS = ["scripts"] as const;
 
+/**
+ * The build tree's generated Prisma client. It is gitignored, so the grader
+ * checkout lacks it and the preflight refuses the grader as source-only.
+ */
+const GRADER_GENERATED_CLIENT = "packages/db/generated";
+
 export type GuardGauntletOutcome =
   /** The gauntlet ran to a verdict. */
   | {
@@ -162,6 +168,7 @@ export function buildGraderTeardownCommand(workdir: string, graderDir: string): 
   return [
     `G=${quote(graderDir)}`,
     `{ [ ! -d "$G" ] || find "$G" -maxdepth 5 -type l -name node_modules -exec rm -f {} + ; }`,
+    `{ [ ! -L "$G/${GRADER_GENERATED_CLIENT}" ] || rm -f "$G/${GRADER_GENERATED_CLIENT}"; }`,
     `{ git -C ${quote(workdir)} worktree remove --force "$G" >/dev/null 2>&1 || true; }`,
     `rm -rf "$G"`,
     `{ git -C ${quote(workdir)} worktree prune >/dev/null 2>&1 || true; }`,
@@ -186,6 +193,11 @@ export function buildGraderSetupCommand(input: { workdir: string; graderDir: str
     `git -C "$W" worktree add --detach --force "$G" HEAD >/dev/null 2>&1`,
     `git -C "$G" checkout ${baseSha} -- ${GRADER_PATHS.map(quote).join(" ")}`,
     linkNodeModules,
+    `{ [ ! -d "$W/${GRADER_GENERATED_CLIENT}" ] || ln -sfn "$W/${GRADER_GENERATED_CLIENT}" "$G/${GRADER_GENERATED_CLIENT}"; }`,
+    // The checkout writes the lockfile now, so it reads as newer than the linked
+    // install and the preflight's compile-ready gate refuses the grader. The
+    // build tree's mtime is honest only for identical content.
+    `{ cmp -s "$W/pnpm-lock.yaml" "$G/pnpm-lock.yaml" && touch -r "$W/pnpm-lock.yaml" "$G/pnpm-lock.yaml" || true; }`,
   ].join(" && ");
 }
 

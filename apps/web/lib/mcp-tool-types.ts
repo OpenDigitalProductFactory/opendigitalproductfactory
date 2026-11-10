@@ -19,8 +19,14 @@ export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   /** Fresh catalog compiled by the original governed executor, never supplied by a tool caller. */
   governedReadToolCatalog?: () => Promise<ToolDefinition[]>;
+  /** Exact canonical definition selected by the original governed call.
+   * Unlike the read-only catalog, this also describes a mutating action. */
+  governedAuthorityTool?: () => ToolDefinition;
   /** Original executor's room binding; known unroomed is null, absence is unverified. */
   governedRoomAuthority?: () => RoomAuthorityContext | null;
+  /** Current OAuth delegation from the original executor, never tool arguments.
+   * Long-running handlers must still revalidate the credential and consent. */
+  connectionDelegation?: Readonly<{ authorityBindingId: string; agentId: string }>;
   routeContext?: string;
   agentId?: string;
   threadId?: string;
